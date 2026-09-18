@@ -7,7 +7,7 @@
 //
 // Contract: combat debug workspace (execution prompt §3, §5)
 import { describe, expect, test } from 'bun:test';
-import type { CombatState } from '@aikami/types';
+import type { CombatEvent, CombatState } from '@aikami/types';
 import { COMBAT_RULES_VERSION, createCombatState } from '@aikami/utils';
 import {
   buildCombatDebugActionSummary,
@@ -513,7 +513,8 @@ describe('evaluateCombatDebugAssertions', () => {
     const violations = evaluateCombatDebugAssertions({
       state,
       previousRevision: 4,
-      lastAcceptedCommandRevision: undefined,
+      events: [],
+      acceptedCommands: [],
     });
     expect(violations).toEqual([]);
   });
@@ -523,7 +524,8 @@ describe('evaluateCombatDebugAssertions', () => {
     const violations = evaluateCombatDebugAssertions({
       state,
       previousRevision: 5,
-      lastAcceptedCommandRevision: undefined,
+      events: [],
+      acceptedCommands: [],
     });
     expect(violations).toHaveLength(1);
     expect(violations[0]?.assertion).toBe('monotonic-revision');
@@ -538,7 +540,8 @@ describe('evaluateCombatDebugAssertions', () => {
     const violations = evaluateCombatDebugAssertions({
       state,
       previousRevision: 0,
-      lastAcceptedCommandRevision: undefined,
+      events: [],
+      acceptedCommands: [],
     });
     expect(violations.some((violation) => violation.assertion === 'budget-bounds')).toBe(true);
     expect(violations[0]?.detail).toContain(PLAYER_ID);
@@ -555,7 +558,31 @@ describe('evaluateCombatDebugAssertions', () => {
     const violations = evaluateCombatDebugAssertions({
       state,
       previousRevision: 0,
-      lastAcceptedCommandRevision: undefined,
+      events: [],
+      acceptedCommands: [],
+    });
+    expect(violations.some((violation) => violation.assertion === 'single-settlement')).toBe(true);
+  });
+
+  test('detects repeated settlement events after combat has ended', () => {
+    const settlementEvent: CombatEvent = {
+      kind: 'encounterSettled',
+      encounterId: 'emberwatch-encounter-1',
+      turnId: 'r2:player-hero',
+      stateRevision: 4,
+      round: 2,
+      settlementId: 'settle-1',
+      result: 'victory',
+      reasonCode: 'all_enemies_defeated',
+      victory: true,
+      objectiveResults: [],
+    };
+    const state = stateWithOverrides({ phase: 'ended', stateRevision: 4 });
+    const violations = evaluateCombatDebugAssertions({
+      state,
+      previousRevision: 3,
+      events: [settlementEvent, { ...settlementEvent }],
+      acceptedCommands: [],
     });
     expect(violations.some((violation) => violation.assertion === 'single-settlement')).toBe(true);
   });
@@ -565,7 +592,16 @@ describe('evaluateCombatDebugAssertions', () => {
     const violations = evaluateCombatDebugAssertions({
       state,
       previousRevision: 2,
-      lastAcceptedCommandRevision: 3,
+      events: [],
+      acceptedCommands: [
+        {
+          commandId: 'command-3',
+          commandType: 'COMBAT_ACTION',
+          stateRevision: 3,
+          duplicate: false,
+          replayCommand: undefined,
+        },
+      ],
     });
     expect(
       violations.some((violation) => violation.assertion === 'no-ordinary-command-during-reaction'),
@@ -577,7 +613,16 @@ describe('evaluateCombatDebugAssertions', () => {
     const violations = evaluateCombatDebugAssertions({
       state,
       previousRevision: 2,
-      lastAcceptedCommandRevision: 2,
+      events: [],
+      acceptedCommands: [
+        {
+          commandId: 'command-2',
+          commandType: 'COMBAT_ACTION',
+          stateRevision: 2,
+          duplicate: false,
+          replayCommand: undefined,
+        },
+      ],
     });
     expect(
       violations.some((violation) => violation.assertion === 'no-ordinary-command-during-reaction'),
@@ -592,7 +637,8 @@ describe('evaluateCombatDebugAssertions', () => {
     evaluateCombatDebugAssertions({
       state,
       previousRevision: 0,
-      lastAcceptedCommandRevision: undefined,
+      events: [],
+      acceptedCommands: [],
     });
     expect(state.combatants[PLAYER_ID]?.budget.movementRemaining).toBe(-3);
   });

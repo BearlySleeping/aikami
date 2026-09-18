@@ -138,17 +138,41 @@ describe('createCombatDebugFaultGateway: real mode', () => {
     expect(gateway.shortCircuitedRequestIds).toEqual(['real-2']);
   });
 
-  test('cancel forwards to a delegate whenever one is present', () => {
+  test('cancel forwards to a delegate only in real mode', () => {
     const cancelled: string[] = [];
     const delegate = makeDelegate({ cancel: (id) => cancelled.push(id) });
     createCombatDebugFaultGateway({ mode: 'real', delegate }).cancel('c1');
     createCombatDebugFaultGateway({ mode: 'disabled', delegate }).cancel('c2');
-    expect(cancelled).toEqual(['c1', 'c2']);
+    expect(cancelled).toEqual(['c1']);
   });
 
   test('cancel is a no-op without a delegate', () => {
     const gateway = createCombatDebugFaultGateway({ mode: 'real', delegate: undefined });
     expect(() => gateway.cancel('c1')).not.toThrow();
+  });
+});
+
+describe('createCombatDebugFaultGateway: cancellation', () => {
+  test('cancel settles a pending simulated timeout without waiting for its timer', async () => {
+    const gateway = createCombatDebugFaultGateway({
+      mode: 'timeout',
+      delegate: undefined,
+      timeoutMs: 60_000,
+    });
+    const result = gateway.interpretWithFallback(request('pending-timeout'));
+    gateway.cancel('pending-timeout');
+    await expect(result).resolves.toEqual({ ok: false, reason: 'refused' });
+  });
+
+  test('cancel settles a pending delayed-stale request', async () => {
+    const gateway = createCombatDebugFaultGateway({
+      mode: 'delayed-stale',
+      delegate: undefined,
+      delayMs: 60_000,
+    });
+    const result = gateway.interpretWithFallback(request('pending-stale'));
+    gateway.cancel('pending-stale');
+    await expect(result).resolves.toEqual({ ok: false, reason: 'refused' });
   });
 });
 

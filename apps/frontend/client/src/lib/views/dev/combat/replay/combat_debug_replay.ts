@@ -114,6 +114,7 @@ export const replayImportedReproduction = (
 export const compareReproduction = (options: {
   expected: CombatReplay;
   actual: CombatReplay;
+  matchedExpected: boolean | null;
 }): CombatDebugReplayComparison => {
   const { expected, actual } = options;
   const divergence = findFirstCombatDivergence(expected, actual);
@@ -122,7 +123,7 @@ export const compareReproduction = (options: {
     JSON.stringify(expected.finalState) === JSON.stringify(actual.finalState);
 
   return {
-    matched: firstDivergence === undefined && finalStatesEqual,
+    matched: options.matchedExpected !== false && firstDivergence === undefined && finalStatesEqual,
     firstDivergence,
     expectedEventCount: expected.events.length,
     actualEventCount: actual.events.length,

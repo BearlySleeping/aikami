@@ -12,8 +12,8 @@
 
 import {
   COMBAT_REPRODUCTION_MAX_BYTES,
-  COMBAT_REPRODUCTION_MAX_COMMANDS,
   COMBAT_REPRODUCTION_MAX_CHECKPOINTS,
+  COMBAT_REPRODUCTION_MAX_COMMANDS,
   COMBAT_REPRODUCTION_VERSION,
   CombatReproductionSchema,
   schemaCheck,
@@ -66,7 +66,8 @@ export const parseCombatReproduction = (value: unknown): CombatReproductionImpor
  * object goes through {@link parseCombatReproduction}.
  */
 export const parseCombatReproductionJson = (raw: string): CombatReproductionImportResult => {
-  if (raw.length > COMBAT_REPRODUCTION_MAX_BYTES) {
+  const byteLength = new TextEncoder().encode(raw).byteLength;
+  if (byteLength > COMBAT_REPRODUCTION_MAX_BYTES) {
     return { ok: false, error: 'Reproduction file exceeds the maximum size.' };
   }
   let parsed: unknown;
@@ -99,7 +100,14 @@ export const replayCombatReproduction = (
   }
 
   const divergence =
-    finalState === null && reproduction.commands.length > 0 ? replay.events.length : undefined;
+    expected === undefined
+      ? findExpectedEventDivergence({
+          actualEvents: replay.events,
+          expectedEvents: reproduction.expectedEvents,
+          initialRevision: reproduction.recordedInitialState.stateRevision,
+          commandCount: reproduction.commands.length,
+        })
+      : null;
 
   return {
     reproductionVersion: reproduction.reproductionVersion,
@@ -108,8 +116,41 @@ export const replayCombatReproduction = (
     replay,
     finalState,
     matchedExpected: matchedExpected ?? null,
-    divergence: divergence ?? null,
+    divergence,
   };
+};
+
+/** Maps the first event-log mismatch back to the command boundary that produced it. */
+const findExpectedEventDivergence = (options: {
+  readonly actualEvents: CombatReproduction['expectedEvents'];
+  readonly expectedEvents: CombatReproduction['expectedEvents'];
+  readonly initialRevision: number;
+  readonly commandCount: number;
+}): number | null => {
+  const sharedLength = Math.min(options.actualEvents.length, options.expectedEvents.length);
+  let mismatchIndex = sharedLength;
+  for (let index = 0; index < sharedLength; index++) {
+    if (
+      canonicalCombatJson(options.actualEvents[index]) !==
+      canonicalCombatJson(options.expectedEvents[index])
+    ) {
+      mismatchIndex = index;
+      break;
+    }
+  }
+
+  const sameLength = options.actualEvents.length === options.expectedEvents.length;
+  if (mismatchIndex === sharedLength && sameLength) {
+    return null;
+  }
+
+  const mismatchEvent =
+    options.actualEvents[mismatchIndex] ?? options.expectedEvents[mismatchIndex];
+  if (mismatchEvent === undefined || options.commandCount === 0) {
+    return null;
+  }
+  const commandIndex = mismatchEvent.stateRevision - options.initialRevision - 1;
+  return Math.max(0, Math.min(commandIndex, options.commandCount - 1));
 };
 
 /**

@@ -19,7 +19,7 @@
 //
 // Contract: combat debug workspace (execution plan §3–§8)
 
-import { BaseViewModelContainer } from '$components';
+import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
 import CombatSidebar from '$views/combat/combat_sidebar.svelte';
 import EnrichedLogEntry from '$views/combat/components/enriched_log_entry.svelte';
 import TurnTrackerHeader from '$views/combat/components/turn_tracker_header.svelte';
@@ -37,7 +37,10 @@ const { viewModel }: Props = $props();
 
 <svelte:window
   onkeydown={(event) => {
-    if (event.key === ' ') {
+    const target = event.target;
+    const isInteractive =
+      target instanceof Element && target.closest('textarea, input, select, button') !== null;
+    if (event.key === ' ' && !isInteractive) {
       event.preventDefault();
       viewModel.togglePause();
     }
@@ -282,15 +285,12 @@ const { viewModel }: Props = $props();
           <form
             class="space-y-2"
             onsubmit={(event) => {
-            event.preventDefault();
-            const bundle = new FormData(event.currentTarget).get('bundle');
-            if (typeof bundle === 'string') {
-              viewModel.importReproduction(bundle);
-            }
-          }}
+              event.preventDefault();
+              viewModel.submitReplayImport();
+            }}
           >
             <textarea
-              name="bundle"
+              bind:value={viewModel.replayImportText}
               class="textarea textarea-bordered w-full font-mono text-xs"
               rows="8"
               placeholder="Paste a reproduction bundle JSON"

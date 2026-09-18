@@ -252,7 +252,11 @@ const fixtureFactories: Record<
   initial: () => ({
     title: 'Initial',
     description: 'Fresh encounter — full HP, empty log, no queued rolls.',
-    initiativeEntries: baseRoster(),
+    initiativeEntries: rosterRows([
+      ['Player', 18, 100, 100, { isCurrentTurn: true }],
+      ['Goblin', 14, 80, 80, { combatRole: 'generic' }],
+      ['Skeleton', 10, 50, 50, { combatRole: 'rusher' }],
+    ]),
     turnState: turnPlayer(1),
     logEntries: [],
     queuedRolls: [],

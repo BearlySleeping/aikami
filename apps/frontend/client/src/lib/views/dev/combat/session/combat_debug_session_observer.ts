@@ -11,6 +11,7 @@
 //
 // Contract: combat debug workspace (execution prompt §2, §7, §8)
 
+import type { CombatEvent } from '@aikami/types';
 import {
   buildCombatDebugAcceptedTrace,
   buildCombatDebugEventTrace,
@@ -20,6 +21,7 @@ import {
 import type { BuildCombatDebugActionSummaryOptions } from '../inspector/combat_debug_inspector.ts';
 import type { CombatDebugTraceAppend } from '../trace/combat_debug_trace.ts';
 import type {
+  CombatDebugAcceptedCommandRecord,
   CombatDebugControllerRecord,
   CombatDebugControlOwner,
   CombatDebugFaultMode,
@@ -49,6 +51,12 @@ export type CombatDebugObserverHost = {
   applySnapshot(snapshot: CombatDebugSessionSnapshot): void;
   /** Appends one trace row through the bounded buffer. */
   appendTrace(entry: CombatDebugTraceAppend): void;
+  /** Retains committed events for temporal assertions and reproduction export. */
+  appendCommittedEvents(events: readonly CombatEvent[]): void;
+  /** Retains one accepted command with its request-time replay projection. */
+  recordAcceptedCommand(record: CombatDebugAcceptedCommandRecord): void;
+  /** Marks the run incomplete when an accepted request cannot be reconstructed. */
+  markReplayHistoryUnavailable(): void;
   /** Records the inputs for the action inspector's latest projection. */
   setLastActionOptions(options: BuildCombatDebugActionSummaryOptions | undefined): void;
   /** Appends one AI/controller decision record. */
@@ -70,6 +78,10 @@ export const createCombatDebugSessionObserver = (
   host: CombatDebugObserverHost,
 ): CombatDebugSessionObserver => {
   const current = (): boolean => host.isCurrent(generation);
+  const requestedCommands = new Map<
+    string,
+    { commandType: string; replayCommand: CombatDebugAcceptedCommandRecord['replayCommand'] }
+  >();
 
   return {
     onSnapshot: (snapshot) => {
@@ -83,6 +95,7 @@ export const createCombatDebugSessionObserver = (
       if (!current()) {
         return;
       }
+      host.appendCommittedEvents(events);
       for (const event of events) {
         const context = host.traceContext();
         host.appendTrace(
@@ -99,6 +112,18 @@ export const createCombatDebugSessionObserver = (
       if (!current()) {
         return;
       }
+      const requested = requestedCommands.get(accepted.commandId);
+      requestedCommands.delete(accepted.commandId);
+      if (requested === undefined || requested.replayCommand === undefined) {
+        host.markReplayHistoryUnavailable();
+      }
+      host.recordAcceptedCommand({
+        commandId: accepted.commandId,
+        commandType: requested?.commandType,
+        stateRevision: accepted.stateRevision,
+        duplicate: accepted.duplicate,
+        replayCommand: requested?.replayCommand,
+      });
       host.setLastActionOptions({
         commandId: accepted.commandId,
         acknowledgement: 'accepted',
@@ -150,6 +175,14 @@ export const createCombatDebugSessionObserver = (
     onCommandRequested: (requested) => {
       if (!current()) {
         return;
+      }
+      if (requested.commandId === undefined) {
+        host.markReplayHistoryUnavailable();
+      } else {
+        requestedCommands.set(requested.commandId, {
+          commandType: requested.commandType,
+          replayCommand: requested.replayCommand,
+        });
       }
       host.setLastActionOptions({
         ...(requested.commandId === undefined ? {} : { commandId: requested.commandId }),

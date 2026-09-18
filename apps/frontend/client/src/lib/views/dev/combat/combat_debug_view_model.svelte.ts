@@ -21,6 +21,7 @@
 //
 // Contract: combat debug workspace (execution prompt §1–§8)
 
+import type { EngineBridge } from '@aikami/frontend/engine';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
@@ -34,6 +35,7 @@ import {
   buildCombatDebugStepTrace,
   COMBAT_DEBUG_STATUS_LABELS,
 } from './combat_debug_projection.ts';
+import { createCombatDebugRecording } from './combat_debug_recording.ts';
 import {
   buildCombatDebugPresentationFixture,
   COMBAT_DEBUG_FIXTURE_NOTICE,
@@ -99,6 +101,10 @@ export type CombatDebugViewModelCapabilities = {
   readUrlSearch(): string;
   /** Writes a query string to history without a reload. */
   replaceUrl(query: string): void;
+  /** Reads the complete current URL after synchronization. */
+  readCurrentUrl(): string;
+  /** Writes text through the platform clipboard capability. */
+  writeClipboard(text: string): Promise<void>;
   /** Builds a live session; the composition supplies the heavy dependencies. */
   createLiveSession(options: {
     canvas: HTMLCanvasElement;
@@ -111,7 +117,7 @@ export type CombatDebugViewModelCapabilities = {
    * composition supplies it so the workspace renders the real combat UI rather
    * than reimplementing it, and this module never imports the combat feature.
    */
-  createProductionCombatViewModel(bridge: unknown): CombatViewModelInterface;
+  createProductionCombatViewModel(bridge: EngineBridge): CombatViewModelInterface;
   /** Notifies the UI that a live session status changed (announcements). */
   announce(message: string): void;
 };
@@ -164,6 +170,7 @@ export type CombatDebugViewModelInterface = BaseViewModelInterface & {
   // Replay
   readonly replayResultText: string | undefined;
   readonly replayComparison: CombatDebugReplayComparison | undefined;
+  replayImportText: string;
   // Scheduler controls
   readonly isPaused: boolean;
   readonly canStep: boolean;
@@ -192,7 +199,8 @@ export type CombatDebugViewModelInterface = BaseViewModelInterface & {
   exportReproduction(): string;
   downloadReproductionBundle(): void;
   importReproduction(text: string): void;
-  copyUrl(): void;
+  submitReplayImport(): void;
+  copyUrl(): Promise<void>;
   readonly exportText: string | undefined;
 };
 
@@ -264,6 +272,7 @@ class CombatDebugViewModel
 
   replayResultText = $state<string | undefined>(undefined);
   replayComparison = $state<CombatDebugReplayComparison | undefined>(undefined);
+  replayImportText = $state('');
 
   isPaused = $state(false);
   canStep = $state(false);
@@ -273,6 +282,7 @@ class CombatDebugViewModel
   private _session: CombatDebugSession | undefined;
   private _generation = 0;
   private _controllerRecords: CombatDebugControllerRecord[] = [];
+  private readonly _recording = createCombatDebugRecording();
   private _lastActionOptions:
     | import('./inspector/combat_debug_inspector.ts').BuildCombatDebugActionSummaryOptions
     | undefined;
@@ -327,7 +337,16 @@ class CombatDebugViewModel
   }
 
   setSeed(seed: number): void {
+    const liveSeedChanged = this.mode === 'live' && seed !== this.seed;
+    if (liveSeedChanged) {
+      this._disposeSession();
+      this._resetTrace();
+      this.state = undefined;
+    }
     this.seed = seed;
+    if (liveSeedChanged) {
+      this._invalidateSession();
+    }
     this._syncUrl();
   }
 
@@ -338,6 +357,7 @@ class CombatDebugViewModel
 
   setFaultMode(mode: CombatDebugFaultMode): void {
     this.faultMode = mode;
+    this._syncUrl();
   }
 
   setFixturePreset(preset: CombatDebugFixturePresetId): void {
@@ -381,7 +401,9 @@ class CombatDebugViewModel
     this.isPaused = false;
     this.canStep = false;
     this.status = 'idle';
+    this.seed = this.scenario.seed;
     this._invalidateSession();
+    this._syncUrl();
   }
 
   togglePause(): void {
@@ -395,6 +417,7 @@ class CombatDebugViewModel
       );
       return;
     }
+    this.canStep = false;
     this.status = this.engineReady ? 'ready' : 'idle';
     this._capabilities.announce('Debugger resumed — held commands released');
   }
@@ -461,6 +484,7 @@ class CombatDebugViewModel
     this.replayComparison = compareReproduction({
       expected,
       actual: result.replay,
+      matchedExpected: result.matchedExpected,
     });
     const divergence = this.replayComparison.firstDivergence;
     if (this.replayComparison.matched) {
@@ -474,8 +498,19 @@ class CombatDebugViewModel
     this.replayResultText = describeDivergence(divergence);
   }
 
-  copyUrl(): void {
+  submitReplayImport(): void {
+    this.importReproduction(this.replayImportText);
+  }
+
+  async copyUrl(): Promise<void> {
     this._syncUrl();
+    try {
+      await this._capabilities.writeClipboard(this._capabilities.readCurrentUrl());
+      this._capabilities.announce('Combat debug URL copied to clipboard');
+    } catch (error: unknown) {
+      this.warn('copyUrl:failed', { error: String(error) });
+      this._capabilities.announce('Unable to copy the combat debug URL');
+    }
   }
 
   // ── Derived inspector projections ──────────────────────────
@@ -538,12 +573,13 @@ class CombatDebugViewModel
     this.activeTab = parsed.config.tab;
     this.scenario = resolveCombatDebugScenario(parsed.config.scenarioId);
     this.seed = parsed.config.seed ?? this.scenario.seed;
-    this.faultMode = this.scenario.defaultFaultMode;
+    this.faultMode = parsed.config.fault;
     this.urlSnapshot = serializeCombatDebugUrlConfig({
       scenarioId: this.scenario.id,
       mode: this.mode,
       tab: this.activeTab,
       seed: this.seed,
+      fault: this.faultMode,
     });
   }
 
@@ -553,6 +589,7 @@ class CombatDebugViewModel
       mode: this.mode,
       tab: this.activeTab,
       seed: this.seed,
+      fault: this.faultMode,
     });
     this.urlSnapshot = query;
     this._capabilities.replaceUrl(query);
@@ -573,6 +610,9 @@ class CombatDebugViewModel
         isCurrent: (expected) => expected === this._generation,
         applySnapshot: (snapshot) => this._applySnapshot(snapshot),
         appendTrace: (entry) => this._appendTrace(entry),
+        appendCommittedEvents: (events) => this._recording.appendEvents(events),
+        recordAcceptedCommand: (record) => this._recording.recordAcceptedCommand(record),
+        markReplayHistoryUnavailable: () => this._recording.markHistoryUnavailable(),
         setLastActionOptions: (options) => {
           this._lastActionOptions = options;
         },
@@ -603,7 +643,7 @@ class CombatDebugViewModel
     this.engineReady = !session.disposed;
 
     // Render the PRODUCTION combat UI against the isolated session bridge.
-    const bridge = (session as { bridge?: unknown }).bridge;
+    const bridge = session.bridge;
     if (bridge !== undefined) {
       const combatViewModel = this._capabilities.createProductionCombatViewModel(bridge);
       this.combatViewModel = combatViewModel;
@@ -617,6 +657,7 @@ class CombatDebugViewModel
 
   private _applySnapshot(snapshot: CombatDebugSessionSnapshot): void {
     const previousRevision = this.revision;
+    this._recording.captureInitialState(snapshot.state);
     this.state = snapshot.state;
     this.revision = snapshot.revision;
     this.round = snapshot.round;
@@ -626,7 +667,8 @@ class CombatDebugViewModel
     this.assertions = evaluateCombatDebugAssertions({
       state: snapshot.state,
       previousRevision,
-      lastAcceptedCommandRevision: undefined,
+      events: this._recording.events,
+      acceptedCommands: this._recording.acceptedCommands,
     });
 
     this._appendTrace(
@@ -679,6 +721,8 @@ class CombatDebugViewModel
     this.traceEntries = [];
     this.traceDroppedCount = 0;
     this._controllerRecords = [];
+    this._lastActionOptions = undefined;
+    this._recording.reset();
   }
 
   private _disposeSession(): void {
@@ -704,11 +748,13 @@ class CombatDebugViewModel
 
   private _buildReproduction(): CombatReproduction | undefined {
     const state = this.state;
-    if (state === undefined) {
+    const recording = this._recording.snapshot();
+    if (state === undefined || recording === undefined) {
       return undefined;
     }
     return buildCombatDebugReproduction({
       state,
+      ...recording,
       scenarioId: this.scenario.id,
       scenarioVersion: this.scenario.version,
       requiresContentPack: this.scenario.requiresContentPack,

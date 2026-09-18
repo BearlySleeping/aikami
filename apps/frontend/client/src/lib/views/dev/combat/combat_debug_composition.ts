@@ -45,6 +45,13 @@ export const getCombatDebugViewModel = (
       const next = `${window.location.pathname}${query ? `?${query}` : ''}`;
       window.history.replaceState(window.history.state, '', next);
     },
+    readCurrentUrl: () => (typeof window === 'undefined' ? '' : window.location.href),
+    writeClipboard: async (text: string) => {
+      if (typeof navigator === 'undefined' || navigator.clipboard === undefined) {
+        throw new Error('Clipboard is unavailable.');
+      }
+      await navigator.clipboard.writeText(text);
+    },
     announce: (message: string) => {
       if (typeof document === 'undefined') {
         return;
@@ -59,7 +66,7 @@ export const getCombatDebugViewModel = (
     },
     createProductionCombatViewModel: (bridge) =>
       getCombatViewModel({ className: 'CombatDebugProductionCombatViewModel' }, () =>
-        Promise.resolve(bridge as never),
+        Promise.resolve(bridge),
       ),
     createLiveSession: (sessionOptions): CombatDebugSession =>
       new CombatDebugLiveSession({

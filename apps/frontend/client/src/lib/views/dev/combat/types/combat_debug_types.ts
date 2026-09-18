@@ -6,7 +6,7 @@
 //
 // Contract: combat debug workspace (execution prompt §2, §3, §5)
 
-import type { CombatReproduction } from '@aikami/types';
+import type { CombatCommand, CombatReproduction } from '@aikami/types';
 
 /** The three workspace modes. One ViewModel, one route, three explicit modes. */
 export const COMBAT_DEBUG_MODES = ['live', 'replay', 'fixtures'] as const;
@@ -130,11 +130,19 @@ export type CombatDebugUrlConfig = {
   readonly mode: CombatDebugMode;
   readonly tab: CombatDebugInspectorTab;
   readonly seed: number | undefined;
+  readonly fault: CombatDebugFaultMode;
+};
+
+/** One invalid URL field and the safe substitution applied for it. */
+export type CombatDebugUrlConfigError = {
+  readonly parameter: 'scenario' | 'mode' | 'tab' | 'seed' | 'fault';
+  readonly message: string;
 };
 
 /** Result of parsing a URL config; invalid params fall back safely. */
 export type CombatDebugUrlConfigResult = {
   readonly config: CombatDebugUrlConfig;
+  readonly errors: readonly CombatDebugUrlConfigError[];
   readonly error: string | undefined;
 };
 
@@ -145,6 +153,15 @@ export type CombatDebugControllerRecord = {
   readonly failureCode: string | undefined;
   readonly providerUsed: boolean;
   readonly rationale: string | undefined;
+};
+
+/** One engine-accepted bridge command correlated with its replay-safe command. */
+export type CombatDebugAcceptedCommandRecord = {
+  readonly commandId: string;
+  readonly commandType: string | undefined;
+  readonly stateRevision: number;
+  readonly duplicate: boolean;
+  readonly replayCommand: CombatCommand | undefined;
 };
 
 /** Development assertion identifiers surfaced when a violation is detected. */

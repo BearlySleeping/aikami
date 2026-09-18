@@ -17,19 +17,24 @@
 //
 // Contract: combat debug workspace (execution prompt §2, §6, §7)
 
+import { BASIC_MELEE_ABILITY_ID } from '@aikami/constants';
 import type {
   EngineBridge,
+  GameCommand,
   GameWorld,
   GameWorldOptions,
   TextureManager,
 } from '@aikami/frontend/engine';
-import type { CombatEvent, CombatState } from '@aikami/types';
+import type { CombatCommand, CombatState } from '@aikami/types';
 import { logger } from '$logger';
 import type { CombatDebugScenarioDefinition } from '../types/combat_debug_types.ts';
 import {
   type CombatDebugCommandGate,
   createCombatDebugCommandGate,
 } from './combat_debug_command_gate.ts';
+import type { CombatDebugSessionObserver } from './combat_debug_session_contract.ts';
+
+export type { CombatDebugSessionSnapshot } from './combat_debug_session_contract.ts';
 
 /** The runtime capabilities the session needs, injected by composition. */
 export type CombatDebugLiveSessionCapabilities = {
@@ -68,40 +73,9 @@ export type CombatDebugLiveSessionCapabilities = {
   }) => boolean;
 };
 
-/** A point-in-time authoritative view the workspace renders from. */
-export type CombatDebugSessionSnapshot = {
-  readonly state: CombatState;
-  readonly revision: number;
-  readonly round: number;
-  readonly phase: CombatState['phase'];
-  readonly activeCombatantId: string | undefined;
-};
-
 /** Callbacks the session raises; the ViewModel owns all reactive state. */
-export type CombatDebugLiveSessionObserver = {
-  onSnapshot(snapshot: CombatDebugSessionSnapshot): void;
-  onEvents(events: readonly CombatEvent[]): void;
-  /** A committed command the engine accepted, with its resulting revision. */
-  onCommandAccepted(accepted: {
-    commandId: string;
-    stateRevision: number;
-    duplicate: boolean;
-  }): void;
-  /** A refused command, with the precise admission/kernel cause. */
-  onCommandRejected(rejected: {
-    commandType: string;
-    reasonCode: string;
-    messageKey: string;
-    detail: string | undefined;
-  }): void;
-  /** A command the controller requested, before the engine answers. */
-  onCommandRequested(requested: {
-    commandType: string;
-    commandId: string | undefined;
-    basedOnRevision: number | undefined;
-  }): void;
+export type CombatDebugLiveSessionObserver = Omit<CombatDebugSessionObserver, 'onStatus'> & {
   onStatus(status: CombatDebugLiveSessionStatus): void;
-  onError(message: string): void;
 };
 
 /** Lifecycle status the session reports; mirrors the toolbar status set. */
@@ -203,6 +177,74 @@ export const buildSyntheticRoster = (
   ],
 });
 
+type ReplayableCombatBridgeCommand = Extract<
+  GameCommand,
+  {
+    type:
+      | 'COMBAT_ACTION'
+      | 'COMBAT_MOVE'
+      | 'COMBAT_END_TURN'
+      | 'COMBAT_INTERACT'
+      | 'COMBAT_REACTION_SELECTED';
+  }
+>;
+
+/** Projects a replay-safe kernel command only when the bridge carried every required fact. */
+export const projectCombatDebugReplayCommand = (
+  command: ReplayableCombatBridgeCommand,
+): CombatCommand | undefined => {
+  if (command.type === 'COMBAT_REACTION_SELECTED') {
+    return {
+      kind: 'resolveReaction',
+      combatantId: command.reactorId,
+      encounterRunId: command.encounterRunId,
+      windowId: command.windowId,
+      windowVersion: command.windowVersion,
+      choice: command.choice,
+      source: command.source,
+    };
+  }
+
+  const combatantId = command.combatantId;
+  if (combatantId === undefined) {
+    return undefined;
+  }
+  if (command.type === 'COMBAT_END_TURN') {
+    return { kind: 'endTurn', combatantId };
+  }
+  if (command.type === 'COMBAT_MOVE') {
+    if (command.path === undefined) {
+      return undefined;
+    }
+    return { kind: 'move', combatantId, path: command.path.map((cell) => ({ ...cell })) };
+  }
+  if (command.type === 'COMBAT_INTERACT') {
+    return {
+      kind: 'interactWithObject',
+      combatantId,
+      objectId: command.objectId,
+      affordanceId: command.affordanceId,
+      targetObjectId: command.targetObjectId ?? null,
+    };
+  }
+  if (command.action === 'DEFEND') {
+    return { kind: 'defend', combatantId };
+  }
+  if (command.action !== 'ATTACK' && command.action !== 'ABILITY') {
+    return undefined;
+  }
+  const abilityId = command.action === 'ATTACK' ? BASIC_MELEE_ABILITY_ID : command.abilityId;
+  if (abilityId === undefined) {
+    return undefined;
+  }
+  const rawTargetIds =
+    command.targetIds ?? (command.targetId === undefined ? [] : [command.targetId]);
+  if (!rawTargetIds.every((targetId) => typeof targetId === 'string')) {
+    return undefined;
+  }
+  return { kind: 'useAbility', combatantId, abilityId, targetIds: rawTargetIds };
+};
+
 /**
  * A single isolated real combat session. Create one per live workspace; call
  * {@link boot} once and {@link dispose} exactly once. It never reads private
@@ -216,12 +258,19 @@ export class CombatDebugLiveSession {
   private readonly _capabilities: CombatDebugLiveSessionCapabilities;
 
   private _gameWorld: GameWorld | undefined;
+  private _rawBridge: EngineBridge | undefined;
   private _bridge: EngineBridge | undefined;
   private _textureManager: TextureManager | undefined;
   private _disposed = false;
   private _unsubscribers: Array<() => void> = [];
   private _requestCounter = 0;
-  private readonly _pendingSnapshotRequests = new Map<string, (state: CombatState) => void>();
+  private readonly _pendingSnapshotRequests = new Map<
+    string,
+    {
+      resolve(state: CombatState): void;
+      reject(error: Error): void;
+    }
+  >();
   private readonly _commandGate: CombatDebugCommandGate = createCombatDebugCommandGate();
 
   constructor(options: CombatDebugLiveSessionOptions) {
@@ -287,6 +336,7 @@ export class CombatDebugLiveSession {
       // bridge so the debugger can hold the client → engine boundary. While the
       // gate is open this is a transparent pass-through; the raw bridge is used
       // for listener registration so event delivery is never gated.
+      this._rawBridge = bridge;
       this._bridge = this._commandGate.wrap(bridge);
       const workerConstructor = await resolveEcsWorker();
       if (this._disposed) {
@@ -328,21 +378,31 @@ export class CombatDebugLiveSession {
         }
         if (contentPack !== undefined) {
           this._observer.onStatus('starting-encounter');
-          this._capabilities.startAuthoredEncounter({
+          const started = this._capabilities.startAuthoredEncounter({
             contentPack,
             encounterId: this._scenario.battlefield.encounterId,
             seed: this._seed,
             send: (command) => bridge.send(command as never),
           });
+          if (!started) {
+            this._observer.onError('Unable to start the authored combat encounter.');
+            this._observer.onStatus('error');
+            return;
+          }
         }
       } else {
         this._observer.onStatus('starting-encounter');
-        this._capabilities.startSyntheticEncounter({
+        const started = this._capabilities.startSyntheticEncounter({
           encounterId: this._scenario.id,
           seed: this._seed,
           roster: buildSyntheticRoster(this._scenario),
           send: (command) => bridge.send(command as never),
         });
+        if (!started) {
+          this._observer.onError('Unable to start the synthetic combat encounter.');
+          this._observer.onStatus('error');
+          return;
+        }
       }
 
       this._observer.onStatus('ready');
@@ -358,13 +418,13 @@ export class CombatDebugLiveSession {
 
   /** Requests an authoritative snapshot of the live v2 state. */
   requestSnapshot(encounterId: string): Promise<CombatState> {
-    const bridge = this._bridge;
+    const bridge = this._rawBridge;
     if (!bridge) {
       return Promise.reject(new Error('Live session is not booted.'));
     }
     const requestId = `snap-${this._requestCounter++}`;
     return new Promise<CombatState>((resolve, reject) => {
-      this._pendingSnapshotRequests.set(requestId, resolve);
+      this._pendingSnapshotRequests.set(requestId, { resolve, reject });
       try {
         bridge.send({ type: 'COMBAT_STATE_SNAPSHOT_REQUESTED', requestId, encounterId });
       } catch (error: unknown) {
@@ -401,7 +461,12 @@ export class CombatDebugLiveSession {
     const gameWorld = this._gameWorld;
     gameWorld?.destroy();
     this._gameWorld = undefined;
+    this._rawBridge = undefined;
     this._bridge = undefined;
+    const disposalError = new Error('Combat debug session was disposed.');
+    for (const pending of this._pendingSnapshotRequests.values()) {
+      pending.reject(disposalError);
+    }
     this._pendingSnapshotRequests.clear();
   }
 
@@ -452,6 +517,7 @@ export class CombatDebugLiveSession {
             commandType,
             commandId: identity.commandId,
             basedOnRevision: identity.basedOnRevision,
+            replayCommand: projectCombatDebugReplayCommand(command),
           });
         }),
       );
@@ -462,14 +528,18 @@ export class CombatDebugLiveSession {
         const pending = this._pendingSnapshotRequests.get(event.requestId);
         if (pending) {
           this._pendingSnapshotRequests.delete(event.requestId);
-          pending(event.state);
+          pending.resolve(event.state);
         }
         this._emitSnapshot(event.state);
       }),
     );
     this._unsubscribers.push(
       bridge.on('COMBAT_STATE_SNAPSHOT_REJECTED', (event) => {
-        this._pendingSnapshotRequests.delete(event.requestId);
+        const pending = this._pendingSnapshotRequests.get(event.requestId);
+        if (pending) {
+          this._pendingSnapshotRequests.delete(event.requestId);
+          pending.reject(new Error(`Snapshot rejected: ${event.messageKey}`));
+        }
         this._observer.onError(`Snapshot rejected: ${event.messageKey}`);
       }),
     );

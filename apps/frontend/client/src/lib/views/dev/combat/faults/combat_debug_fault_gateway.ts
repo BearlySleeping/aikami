@@ -67,6 +67,34 @@ export const createCombatDebugFaultGateway = (
 ): CombatDebugFaultGateway => {
   const shortCircuited: string[] = [];
   const usesProvider = options.mode === 'real';
+  const pendingSimulations = new Map<
+    string,
+    {
+      timer: ReturnType<typeof setTimeout>;
+      resolve(result: IntentInterpreterResult): void;
+    }
+  >();
+
+  const simulateDelayedFailure = (
+    requestId: string,
+    delayMs: number,
+  ): Promise<IntentInterpreterResult> => {
+    if (delayMs <= 0) {
+      return Promise.resolve({ ok: false, reason: 'unparseable' });
+    }
+    return new Promise<IntentInterpreterResult>((resolve) => {
+      const superseded = pendingSimulations.get(requestId);
+      if (superseded !== undefined) {
+        clearTimeout(superseded.timer);
+        superseded.resolve({ ok: false, reason: 'refused' });
+      }
+      const timer = setTimeout(() => {
+        pendingSimulations.delete(requestId);
+        resolve({ ok: false, reason: 'unparseable' });
+      }, delayMs);
+      pendingSimulations.set(requestId, { timer, resolve });
+    });
+  };
 
   return {
     mode: options.mode,
@@ -99,8 +127,7 @@ export const createCombatDebugFaultGateway = (
         }
         case 'timeout': {
           shortCircuited.push(request.requestId);
-          await delay(options.timeoutMs ?? DEFAULT_TIMEOUT_MS);
-          return { ok: false, reason: 'unparseable' };
+          return simulateDelayedFailure(request.requestId, options.timeoutMs ?? DEFAULT_TIMEOUT_MS);
         }
         case 'malformed': {
           shortCircuited.push(request.requestId);
@@ -108,8 +135,7 @@ export const createCombatDebugFaultGateway = (
         }
         case 'delayed-stale': {
           shortCircuited.push(request.requestId);
-          await delay(options.delayMs ?? DEFAULT_DELAY_MS);
-          return { ok: false, reason: 'unparseable' };
+          return simulateDelayedFailure(request.requestId, options.delayMs ?? DEFAULT_DELAY_MS);
         }
         default: {
           shortCircuited.push(request.requestId);
@@ -119,17 +145,17 @@ export const createCombatDebugFaultGateway = (
     },
 
     cancel(requestId: string): void {
-      options.delegate?.cancel(requestId);
+      if (options.mode === 'real') {
+        options.delegate?.cancel(requestId);
+        return;
+      }
+      const pending = pendingSimulations.get(requestId);
+      if (pending === undefined) {
+        return;
+      }
+      clearTimeout(pending.timer);
+      pendingSimulations.delete(requestId);
+      pending.resolve({ ok: false, reason: 'refused' });
     },
   };
-};
-
-/** Promise delay; no-op in a non-timing test environment. */
-const delay = async (ms: number): Promise<void> => {
-  if (ms <= 0) {
-    return;
-  }
-  await new Promise<void>((resolve) => {
-    setTimeout(resolve, ms);
-  });
 };

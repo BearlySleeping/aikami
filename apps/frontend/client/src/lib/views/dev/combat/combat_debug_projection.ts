@@ -7,7 +7,13 @@
 //
 // Contract: combat debug workspace (execution prompt §4, §7, §8)
 
-import type { CombatReproduction, CombatState } from '@aikami/types';
+import type {
+  CombatCommand,
+  CombatEvent,
+  CombatReproduction,
+  CombatReproductionCheckpoint,
+  CombatState,
+} from '@aikami/types';
 import type { CombatDebugTraceAppend } from './trace/combat_debug_trace.ts';
 import type { CombatDebugControllerRecord, CombatDebugStatus } from './types/combat_debug_types.ts';
 
@@ -28,6 +34,11 @@ export const COMBAT_DEBUG_STATUS_LABELS: Record<CombatDebugStatus, string> = {
 /** Inputs for {@link buildCombatDebugReproduction}. */
 export type BuildCombatDebugReproductionOptions = {
   readonly state: CombatState;
+  readonly recordedInitialState: CombatState;
+  readonly commands: readonly CombatCommand[];
+  readonly checkpoints: readonly CombatReproductionCheckpoint[];
+  readonly expectedEvents: readonly CombatEvent[];
+  readonly replayHistoryAvailable: boolean;
   readonly scenarioId: string;
   readonly scenarioVersion: number;
   readonly requiresContentPack: boolean;
@@ -45,28 +56,42 @@ export type BuildCombatDebugReproductionOptions = {
  */
 export const buildCombatDebugReproduction = (
   options: BuildCombatDebugReproductionOptions,
-): CombatReproduction => ({
-  reproductionVersion: 1,
-  rulesVersion: options.state.rulesVersion,
-  scenarioId: options.scenarioId,
-  scenarioVersion: options.scenarioVersion,
-  ...(options.requiresContentPack ? { contentPackId: 'emberwatch' } : {}),
-  encounterRunId: options.encounterRunId ?? 'debug-run',
-  seed: String(options.seed),
-  recordedInitialState: options.state,
-  commands: [],
-  checkpoints: [],
-  expectedEvents: [],
-  controllerRecords: options.controllerRecords.map((record) => ({
-    ...(record.commandId === undefined ? {} : { commandId: record.commandId }),
-    controlOwner: record.controlOwner,
-    ...(record.failureCode === undefined ? {} : { failureCode: record.failureCode }),
-    providerUsed: record.providerUsed,
-    ...(record.rationale === undefined ? {} : { rationale: record.rationale }),
-  })),
-  complete: !options.traceIncomplete,
-  droppedTraceEntries: options.traceDroppedCount,
-});
+): CombatReproduction => {
+  const revisionHistoryComplete =
+    options.state.stateRevision ===
+    options.recordedInitialState.stateRevision + options.commands.length;
+  const hasReplayHistory =
+    options.commands.length > 0 &&
+    options.checkpoints.length > 0 &&
+    options.expectedEvents.length > 0;
+
+  return {
+    reproductionVersion: 1,
+    rulesVersion: options.recordedInitialState.rulesVersion,
+    scenarioId: options.scenarioId,
+    scenarioVersion: options.scenarioVersion,
+    ...(options.requiresContentPack ? { contentPackId: 'emberwatch' } : {}),
+    encounterRunId: options.encounterRunId ?? 'debug-run',
+    seed: String(options.seed),
+    recordedInitialState: structuredClone(options.recordedInitialState),
+    commands: options.commands.map((command) => structuredClone(command)),
+    checkpoints: options.checkpoints.map((checkpoint) => ({ ...checkpoint })),
+    expectedEvents: options.expectedEvents.map((event) => structuredClone(event)),
+    controllerRecords: options.controllerRecords.map((record) => ({
+      ...(record.commandId === undefined ? {} : { commandId: record.commandId }),
+      controlOwner: record.controlOwner,
+      ...(record.failureCode === undefined ? {} : { failureCode: record.failureCode }),
+      providerUsed: record.providerUsed,
+      ...(record.rationale === undefined ? {} : { rationale: record.rationale }),
+    })),
+    complete:
+      options.replayHistoryAvailable &&
+      revisionHistoryComplete &&
+      hasReplayHistory &&
+      !options.traceIncomplete,
+    droppedTraceEntries: options.traceDroppedCount,
+  };
+};
 
 /** Builds the trace row for an accepted command acknowledgement. */
 export const buildCombatDebugAcceptedTrace = (options: {

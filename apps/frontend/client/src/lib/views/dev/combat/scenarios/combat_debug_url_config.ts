@@ -8,11 +8,14 @@
 // Contract: combat debug workspace (execution prompt §4)
 
 import {
+  COMBAT_DEBUG_FAULT_MODES,
   COMBAT_DEBUG_INSPECTOR_TABS,
   COMBAT_DEBUG_MODES,
+  type CombatDebugFaultMode,
   type CombatDebugInspectorTab,
   type CombatDebugMode,
   type CombatDebugUrlConfig,
+  type CombatDebugUrlConfigError,
   type CombatDebugUrlConfigResult,
 } from '../types/combat_debug_types.ts';
 import {
@@ -26,13 +29,15 @@ const isCombatDebugMode = (value: string): value is CombatDebugMode =>
 const isInspectorTab = (value: string): value is CombatDebugInspectorTab =>
   (COMBAT_DEBUG_INSPECTOR_TABS as readonly string[]).includes(value);
 
+const isCombatDebugFaultMode = (value: string): value is CombatDebugFaultMode =>
+  (COMBAT_DEBUG_FAULT_MODES as readonly string[]).includes(value);
+
 /**
  * Parses a URLSearchParams-like record into a validated config. Unknown or
- * invalid values fall back to safe defaults and report a single concise error
- * so the UI can explain the substitution.
+ * invalid values fall back to safe defaults and report every substitution.
  */
 export const parseCombatDebugUrlConfig = (params: URLSearchParams): CombatDebugUrlConfigResult => {
-  const errors: string[] = [];
+  const errors: CombatDebugUrlConfigError[] = [];
 
   const rawScenario = params.get('scenario');
   let scenarioId = DEFAULT_COMBAT_DEBUG_SCENARIO_ID;
@@ -40,7 +45,10 @@ export const parseCombatDebugUrlConfig = (params: URLSearchParams): CombatDebugU
     if (findCombatDebugScenario(rawScenario)) {
       scenarioId = rawScenario;
     } else {
-      errors.push(`Unknown scenario "${rawScenario}"; using ${scenarioId}.`);
+      errors.push({
+        parameter: 'scenario',
+        message: `Unknown scenario "${rawScenario}"; using ${scenarioId}.`,
+      });
     }
   }
 
@@ -50,7 +58,7 @@ export const parseCombatDebugUrlConfig = (params: URLSearchParams): CombatDebugU
     if (isCombatDebugMode(rawMode)) {
       mode = rawMode;
     } else {
-      errors.push(`Unknown mode "${rawMode}"; using live.`);
+      errors.push({ parameter: 'mode', message: `Unknown mode "${rawMode}"; using live.` });
     }
   }
 
@@ -60,7 +68,7 @@ export const parseCombatDebugUrlConfig = (params: URLSearchParams): CombatDebugU
     if (isInspectorTab(rawTab)) {
       tab = rawTab;
     } else {
-      errors.push(`Unknown tab "${rawTab}"; using context.`);
+      errors.push({ parameter: 'tab', message: `Unknown tab "${rawTab}"; using context.` });
     }
   }
 
@@ -71,13 +79,30 @@ export const parseCombatDebugUrlConfig = (params: URLSearchParams): CombatDebugU
     if (Number.isFinite(parsed) && Number.isInteger(parsed)) {
       seed = parsed;
     } else {
-      errors.push(`Invalid seed "${rawSeed}"; using the scenario default.`);
+      errors.push({
+        parameter: 'seed',
+        message: `Invalid seed "${rawSeed}"; using the scenario default.`,
+      });
+    }
+  }
+
+  const rawFault = params.get('fault');
+  let fault: CombatDebugFaultMode = 'disabled';
+  if (rawFault !== null) {
+    if (isCombatDebugFaultMode(rawFault)) {
+      fault = rawFault;
+    } else {
+      errors.push({
+        parameter: 'fault',
+        message: `Unknown fault "${rawFault}"; using disabled.`,
+      });
     }
   }
 
   return {
-    config: { scenarioId, mode, tab, seed },
-    error: errors.length > 0 ? errors.join(' ') : undefined,
+    config: { scenarioId, mode, tab, seed, fault },
+    errors,
+    error: errors.length > 0 ? errors.map((entry) => entry.message).join(' ') : undefined,
   };
 };
 
@@ -90,5 +115,6 @@ export const serializeCombatDebugUrlConfig = (config: CombatDebugUrlConfig): str
   if (config.seed !== undefined) {
     params.set('seed', String(config.seed));
   }
+  params.set('fault', config.fault);
   return params.toString();
 };

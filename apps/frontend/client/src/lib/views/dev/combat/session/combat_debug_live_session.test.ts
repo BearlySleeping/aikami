@@ -6,7 +6,11 @@
 //
 // Contract: combat debug workspace (execution prompt §2, §6, §7)
 import { describe, expect, test } from 'bun:test';
-import { hashCombatDebugSeed, parseActiveCombatantId } from './combat_debug_live_session.ts';
+import {
+  hashCombatDebugSeed,
+  parseActiveCombatantId,
+  projectCombatDebugReplayCommand,
+} from './combat_debug_live_session.ts';
 
 describe('hashCombatDebugSeed', () => {
   test('is stable for the same input', () => {
@@ -51,5 +55,49 @@ describe('parseActiveCombatantId', () => {
 
   test('keeps everything after the first separator', () => {
     expect(parseActiveCombatantId('r2:emberwatch:goblin-1')).toBe('emberwatch:goblin-1');
+  });
+});
+
+describe('projectCombatDebugReplayCommand', () => {
+  test('projects an admitted end-turn command into the replay vocabulary', () => {
+    expect(
+      projectCombatDebugReplayCommand({
+        type: 'COMBAT_END_TURN',
+        combatantId: 'player',
+      }),
+    ).toEqual({ kind: 'endTurn', combatantId: 'player' });
+  });
+
+  test('retains the exact confirmed move path', () => {
+    expect(
+      projectCombatDebugReplayCommand({
+        type: 'COMBAT_MOVE',
+        combatantId: 'player',
+        cellX: 2,
+        cellY: 1,
+        path: [
+          { x: 1, y: 1 },
+          { x: 2, y: 1 },
+        ],
+      }),
+    ).toEqual({
+      kind: 'move',
+      combatantId: 'player',
+      path: [
+        { x: 1, y: 1 },
+        { x: 2, y: 1 },
+      ],
+    });
+  });
+
+  test('rejects a numeric target that cannot be reconstructed as an authored id', () => {
+    expect(
+      projectCombatDebugReplayCommand({
+        type: 'COMBAT_ACTION',
+        action: 'ATTACK',
+        combatantId: 'player',
+        targetId: 42,
+      }),
+    ).toBeUndefined();
   });
 });

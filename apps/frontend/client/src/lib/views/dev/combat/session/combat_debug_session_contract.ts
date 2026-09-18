@@ -9,7 +9,8 @@
 //
 // Contract: combat debug workspace (execution prompt §2, §6, §7)
 
-import type { CombatEvent, CombatState } from '@aikami/types';
+import type { EngineBridge } from '@aikami/frontend/engine';
+import type { CombatCommand, CombatEvent, CombatState } from '@aikami/types';
 
 /** A point-in-time authoritative view the workspace renders from. */
 export type CombatDebugSessionSnapshot = {
@@ -42,6 +43,7 @@ export type CombatDebugSessionObserver = {
     commandType: string;
     commandId: string | undefined;
     basedOnRevision: number | undefined;
+    replayCommand: CombatCommand | undefined;
   }): void;
   onStatus(status: string): void;
   onError(message: string): void;
@@ -49,6 +51,7 @@ export type CombatDebugSessionObserver = {
 
 /** Structural contract the ViewModel needs from a live session. */
 export type CombatDebugSession = {
+  readonly bridge: EngineBridge | undefined;
   boot(): Promise<void>;
   requestSnapshot(encounterId: string): Promise<CombatState>;
   dispose(): void;

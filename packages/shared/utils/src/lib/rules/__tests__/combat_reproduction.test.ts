@@ -117,6 +117,16 @@ describe('parseCombatReproductionJson', () => {
     }
   });
 
+  it('measures the import limit in UTF-8 bytes rather than UTF-16 code units', () => {
+    const raw = 'é'.repeat(Math.floor(COMBAT_REPRODUCTION_MAX_BYTES / 2) + 1);
+    expect(raw.length).toBeLessThan(COMBAT_REPRODUCTION_MAX_BYTES);
+    const result = parseCombatReproductionJson(raw);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toContain('maximum size');
+    }
+  });
+
   it('rejects invalid JSON', () => {
     const result = parseCombatReproductionJson('{ not json');
     expect(result.ok).toBe(false);
@@ -162,8 +172,24 @@ describe('replayCombatReproduction', () => {
   });
 
   it('reports null matchedExpected when no hash is recorded', () => {
-    const result = replayCombatReproduction(buildReproduction());
+    const reproduction = buildReproduction();
+    const replayed = replayCombatReproduction(reproduction);
+    const result = replayCombatReproduction({
+      ...reproduction,
+      expectedEvents: replayed.replay.events,
+    });
     expect(result.matchedExpected).toBeNull();
+    expect(result.divergence).toBeNull();
+  });
+
+  it('reports an event mismatch at its command boundary when no hash is recorded', () => {
+    const reproduction = buildReproduction();
+    const replayed = replayCombatReproduction(reproduction);
+    const expectedEvents = replayed.replay.events.filter(
+      (event) => event.stateRevision !== reproduction.recordedInitialState.stateRevision + 2,
+    );
+    const result = replayCombatReproduction({ ...reproduction, expectedEvents });
+    expect(result.divergence).toBe(1);
   });
 });
 

@@ -10,7 +10,8 @@
 // than a hand-built object shape.
 
 import { afterAll, describe, expect, test } from 'bun:test';
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { BASIC_COMBAT_ABILITIES, BASIC_MELEE_ABILITY_ID } from '@aikami/constants';
 import type { CombatCommand, CombatReproduction } from '@aikami/types';
@@ -22,7 +23,7 @@ import {
 } from '@aikami/utils';
 
 const CLI_PATH = join(import.meta.dir, '../replay_combat_reproduction.ts');
-const TEMP_ROOT = '/tmp/opencode/replay-combat-reproduction';
+const TEMP_ROOT = mkdtempSync(join(tmpdir(), 'aikami-replay-combat-reproduction-'));
 
 const PLAYER_ID = 'player-hero';
 const GOBLIN_ID = 'emberwatch:goblin-1';
@@ -125,7 +126,6 @@ const runCli = async (options: {
   readonly expectDivergence?: boolean;
   readonly fileName: string;
 }): Promise<CliRun> => {
-  mkdirSync(TEMP_ROOT, { recursive: true });
   const filePath = join(TEMP_ROOT, options.fileName);
   writeFileSync(filePath, options.bundleText);
 

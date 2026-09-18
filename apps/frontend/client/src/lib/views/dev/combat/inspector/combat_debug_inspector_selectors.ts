@@ -13,6 +13,7 @@
 
 import type {
   BattlefieldObject,
+  CombatEvent,
   CombatObjectiveState,
   CombatPhase,
   CombatState,
@@ -21,7 +22,10 @@ import type {
   ReactionWindow,
 } from '@aikami/types';
 import { parseActiveCombatantId } from '../session/combat_debug_live_session.ts';
-import type { CombatDebugAssertionViolation } from '../types/combat_debug_types.ts';
+import type {
+  CombatDebugAcceptedCommandRecord,
+  CombatDebugAssertionViolation,
+} from '../types/combat_debug_types.ts';
 
 // ---------------------------------------------------------------------------
 // Context tab
@@ -254,12 +258,10 @@ export type EvaluateCombatDebugAssertionsOptions = {
   readonly state: CombatState;
   /** Revision observed before this state; the monotonicity baseline. */
   readonly previousRevision: number;
-  /**
-   * Revision recorded for the last accepted ordinary command, when the
-   * workspace has observed one. Used (best-effort) to detect a command that was
-   * committed while a reaction window owns the encounter.
-   */
-  readonly lastAcceptedCommandRevision: number | undefined;
+  /** Full committed event history observed for this run. */
+  readonly events: readonly CombatEvent[];
+  /** Accepted-command metadata correlated by the live observer. */
+  readonly acceptedCommands: readonly CombatDebugAcceptedCommandRecord[];
 };
 
 /** Detects combatants whose budget or HP left the schema's legal envelope. */
@@ -293,14 +295,9 @@ const collectBudgetBoundViolations = (state: CombatState): CombatDebugAssertionV
  *
  * - `monotonic-revision` — `state.stateRevision >= previousRevision`.
  * - `budget-bounds` — non-negative movement and in-range HP unless downed.
- * - `single-settlement` — a settlement exists only once `phase === 'ended'`.
- * - `no-ordinary-command-during-reaction` — best-effort: `lastAcceptedCommandRevision`
- *   is only known to equal the observed revision when the workspace accepted an
- *   ordinary command at that revision, so a reaction-phase match is reported as
- *   a violation. A command accepted at the same revision before the reaction
- *   opened can be a false positive; the ViewModel is expected to pass
- *   `undefined` whenever it cannot prove the revision belongs to an ordinary
- *   commit.
+ * - `single-settlement` — settlement is terminal and emitted at most once.
+ * - `no-ordinary-command-during-reaction` — an accepted ordinary command must
+ *   not commit at the revision owned by an open reaction window.
  *
  * `snapshot-purity` is deliberately NOT reported: this function receives the
  * state by reference and cannot observe a pre-call snapshot without mutating or
@@ -310,7 +307,7 @@ const collectBudgetBoundViolations = (state: CombatState): CombatDebugAssertionV
 export const evaluateCombatDebugAssertions = (
   options: EvaluateCombatDebugAssertionsOptions,
 ): readonly CombatDebugAssertionViolation[] => {
-  const { state, previousRevision, lastAcceptedCommandRevision } = options;
+  const { state, previousRevision, events, acceptedCommands } = options;
   const violations: CombatDebugAssertionViolation[] = [];
 
   if (state.stateRevision < previousRevision) {
@@ -333,16 +330,28 @@ export const evaluateCombatDebugAssertions = (
     });
   }
 
-  if (
-    state.phase === 'reaction' &&
-    lastAcceptedCommandRevision !== undefined &&
-    lastAcceptedCommandRevision === state.stateRevision
-  ) {
+  const settlementEvents = events.filter((event) => event.kind === 'encounterSettled');
+  if (settlementEvents.length > 1) {
+    violations.push({
+      assertion: 'single-settlement',
+      detail: `Observed ${settlementEvents.length} encounter settlement events; expected exactly one terminal settlement.`,
+      revision: state.stateRevision,
+      commandId: undefined,
+    });
+  }
+
+  const ordinaryCommandDuringReaction = acceptedCommands.find(
+    (command) =>
+      command.commandType !== undefined &&
+      command.commandType !== 'COMBAT_REACTION_SELECTED' &&
+      command.stateRevision === state.stateRevision,
+  );
+  if (state.phase === 'reaction' && ordinaryCommandDuringReaction !== undefined) {
     violations.push({
       assertion: 'no-ordinary-command-during-reaction',
       detail: `An accepted command at revision ${state.stateRevision} coincides with an open reaction phase; a command committed during reaction suspension is a violation.`,
       revision: state.stateRevision,
-      commandId: undefined,
+      commandId: ordinaryCommandDuringReaction.commandId,
     });
   }
 

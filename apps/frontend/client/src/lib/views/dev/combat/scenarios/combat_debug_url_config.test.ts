@@ -20,12 +20,15 @@ describe('parseCombatDebugUrlConfig', () => {
       mode: 'live',
       tab: 'context',
       seed: undefined,
+      fault: 'disabled',
     });
   });
 
   test('parses valid params', () => {
     const result = parseCombatDebugUrlConfig(
-      new URLSearchParams('scenario=movement-geometry&mode=fixtures&tab=objects&seed=42'),
+      new URLSearchParams(
+        'scenario=movement-geometry&mode=fixtures&tab=objects&seed=42&fault=timeout',
+      ),
     );
     expect(result.error).toBeUndefined();
     expect(result.config).toEqual({
@@ -33,6 +36,7 @@ describe('parseCombatDebugUrlConfig', () => {
       mode: 'fixtures',
       tab: 'objects',
       seed: 42,
+      fault: 'timeout',
     });
   });
 
@@ -69,10 +73,15 @@ describe('parseCombatDebugUrlConfig', () => {
 
   test('accumulates one error per invalid parameter', () => {
     const result = parseCombatDebugUrlConfig(
-      new URLSearchParams('scenario=nope&mode=warp&tab=secret&seed=abc'),
+      new URLSearchParams('scenario=nope&mode=warp&tab=secret&seed=abc&fault=explode'),
     );
-    expect(result.error).toBeDefined();
-    expect((result.error ?? '').split(' ').length).toBeGreaterThanOrEqual(4);
+    expect(result.errors.map((error) => error.parameter)).toEqual([
+      'scenario',
+      'mode',
+      'tab',
+      'seed',
+      'fault',
+    ]);
   });
 
   test('negative integer seed is accepted', () => {
@@ -89,6 +98,7 @@ describe('serializeCombatDebugUrlConfig', () => {
       mode: 'replay' as const,
       tab: 'reactions' as const,
       seed: 99,
+      fault: 'delayed-stale' as const,
     };
     const parsed = parseCombatDebugUrlConfig(
       new URLSearchParams(serializeCombatDebugUrlConfig(config)),
@@ -103,6 +113,7 @@ describe('serializeCombatDebugUrlConfig', () => {
       mode: 'live',
       tab: 'context',
       seed: undefined,
+      fault: 'disabled',
     });
     expect(serialized).not.toContain('seed');
   });
@@ -113,10 +124,20 @@ describe('serializeCombatDebugUrlConfig', () => {
       mode: 'live',
       tab: 'context',
       seed: undefined,
+      fault: 'disabled',
     });
     const params = new URLSearchParams(serialized);
     expect(params.get('scenario')).toBe('basic-direct-turn');
     expect(params.get('mode')).toBe('live');
     expect(params.get('tab')).toBe('context');
+    expect(params.get('fault')).toBe('disabled');
+  });
+
+  test('invalid fault falls back to disabled and reports its own diagnostic', () => {
+    const result = parseCombatDebugUrlConfig(new URLSearchParams('fault=explode'));
+    expect(result.config.fault).toBe('disabled');
+    expect(result.errors).toEqual([
+      { parameter: 'fault', message: 'Unknown fault "explode"; using disabled.' },
+    ]);
   });
 });

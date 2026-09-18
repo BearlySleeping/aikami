@@ -16,16 +16,14 @@
 // components actually render.
 
 import { expect, test } from '@playwright/test';
-import { CombatDebugPage, CombatPage } from '$pom';
+import { CombatDebugPage } from '$pom';
 
 test.describe('Combat Enhancements — C-234 (fixtures mode)', () => {
-  let combat: CombatPage;
   let debug: CombatDebugPage;
 
   test.beforeEach(async ({ page }) => {
     debug = new CombatDebugPage(page);
     await debug.gotoFixtures();
-    combat = new CombatPage(page);
   });
 
   test.describe('Fixtures mode shell', () => {
@@ -93,7 +91,7 @@ test.describe('Combat Enhancements — C-234 (fixtures mode)', () => {
     });
 
     test('shows the defeated state for defeated combatants', async () => {
-      // The initial fixture roster authors a fallen skeleton.
+      await debug.setFixturePreset('victory');
       await expect(debug.fixtureInitiativeTracker).toContainText('Defeated');
     });
 
@@ -127,10 +125,8 @@ test.describe('Combat Enhancements — C-234 (fixtures mode)', () => {
     });
 
     test('renders no End Turn control in the read-only fixture', async () => {
-      // The fixtures deck passes `isEndTurnDisabled` and a no-op handler, so
-      // the button is present only on a player-held fixture turn. The point of
-      // this assertion is that a fixture never commits a turn.
-      await expect(debug.page.locator('.turn-tracker-header')).toHaveCount(1);
+      const endTurn = debug.fixtureTurnTracker.getByRole('button', { name: 'End Turn' });
+      await expect(endTurn).toBeDisabled();
     });
   });
 
@@ -160,7 +156,7 @@ test.describe('Combat Enhancements — C-234 (fixtures mode)', () => {
 
   test.describe('Retired route redirect', () => {
     test('the legacy enhancements URL lands on fixtures mode', async () => {
-      await combat.gotoCombatEnhancementsDev();
+      await debug.page.goto('/dev/combat-enhancements');
       await expect(debug.workspace).toBeVisible();
       await expect(debug.fixtureNotice).toBeVisible();
       await debug.expectUrlQuery({ mode: 'fixtures' });

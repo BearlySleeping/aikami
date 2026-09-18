@@ -107,7 +107,7 @@ entries.
 Replay a bundle with no browser and no engine:
 
 ```bash
-bun run replay:combat </path/to/combat-reproduction.json>
+bun run replay:combat -- /path/to/combat-reproduction.json
 ```
 
 Add `--expect-divergence` to make the command **succeed only when the replay
@@ -117,7 +117,8 @@ prints scenario id, run id, rules version, command count, event count, whether
 exists. It calls no AI, no network, and no content lookup.
 
 CLI: `scripts/src/lib/ops/replay_combat_reproduction.ts`. The same task is
-available through Moon as `bun moon run scripts:replay-combat -- <bundle.json>`.
+available through Moon as
+`bun moon run scripts:replay-combat -- /path/to/combat-reproduction.json`.
 
 ## Inspecting a rejection
 

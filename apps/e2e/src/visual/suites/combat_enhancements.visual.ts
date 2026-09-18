@@ -38,6 +38,7 @@ export default defineConfig({
   id: 'combat-enhancements',
   route: '/dev/combat',
   waitCondition: 'game_ready',
+  waitSelector: '[data-testid="combat-debug-fixture-notice"]',
   requiresAuth: false,
   cases: [
     {
@@ -61,6 +62,7 @@ Rate the overall layout, spacing, and readability. Check that the Aikami UI dark
 theme is applied correctly (bg-base-100 backgrounds, proper text contrast) and
 that the fixture notice is unmissable.`,
       schema: CombatEnhancementsSchema,
+      requiredTrueFields: ['fixtureNoticeVisible', 'elementsVisible'],
       setupHook: selectPreset('log-filled'),
     },
     {
@@ -74,6 +76,7 @@ Surge), each rendering its notation label and action label in a mono badge.
 Rate layout, badge sizing, wrapping and spacing. Note that this is a READ-ONLY
 projection — there must be no queue/remove/Roll-All controls.`,
       schema: CombatEnhancementsSchema,
+      requiredTrueFields: ['fixtureNoticeVisible', 'elementsVisible'],
       setupHook: selectPreset('dice-queue'),
     },
     {
@@ -89,6 +92,7 @@ It should show:
 
 Rate layout clarity, visual hierarchy, and readability of the HP bars.`,
       schema: CombatEnhancementsSchema,
+      requiredTrueFields: ['fixtureNoticeVisible', 'elementsVisible'],
       setupHook: selectPreset('initial'),
     },
     {
@@ -105,6 +109,7 @@ Each entry is a production EnrichedLogEntry and should render:
 Rate the rendering quality, colour contrast, and readability of the enriched
 entries.`,
       schema: CombatEnhancementsSchema,
+      requiredTrueFields: ['fixtureNoticeVisible', 'elementsVisible'],
       setupHook: selectPreset('log-filled'),
     },
     {
@@ -117,6 +122,7 @@ mid-word; wrapping and truncation must keep the layout readable.
 
 Score below 90 if any text overflows its card or collides with another element.`,
       schema: CombatEnhancementsSchema,
+      requiredTrueFields: ['fixtureNoticeVisible', 'elementsVisible'],
       setupHook: selectPreset('long-labels'),
     },
   ],
