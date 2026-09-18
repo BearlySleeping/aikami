@@ -98,7 +98,7 @@ const toSrcPath = (path: string) => toPosixPath(join(projectDirectory, 'src', pa
 // the (dev) sandbox routes from test/QA builds (M4). The build flag is the
 // single source of truth.
 // ---------------------------------------------------------------------------
-const devGateOverride = process.env.AIKAMI_INCLUDE_DEV_ROUTES;
+const devGateOverride = process.env.AIKAMI_INCLUDE_DEV_ROUTES ?? 'true'; // We want dev routes by default while early stage
 let includeDevRoutes: boolean;
 if (devGateOverride === 'true') {
   includeDevRoutes = true;
