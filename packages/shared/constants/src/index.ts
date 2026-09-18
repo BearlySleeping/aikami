@@ -45,6 +45,7 @@ export * from './lib/media_preparation.ts';
 export * from './lib/memory.ts';
 export * from './lib/music.ts';
 export * from './lib/openrouter_models.ts';
+export * from './lib/ort_runtime.ts';
 export * from './lib/project.ts';
 export * from './lib/provider_endpoints.ts';
 export * from './lib/providers.ts';

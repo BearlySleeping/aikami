@@ -1,0 +1,5 @@
+{
+  "version": 1,
+  "note": "Reviewed first-party ineffective dynamic imports. Remove entries as boundaries are repaired; never add without review.",
+  "firstPartyModules": []
+}

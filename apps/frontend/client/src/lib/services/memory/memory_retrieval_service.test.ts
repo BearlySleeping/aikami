@@ -299,7 +299,16 @@ describe('LocalEmbeddingBackend', () => {
     expect(mockTransformersEnvironment.allowLocalModels).toBe(true);
     expect(mockTransformersEnvironment.allowRemoteModels).toBe(false);
     expect(mockTransformersEnvironment.localModelPath).toBe('/models/');
-    expect(mockTransformersEnvironment.backends.onnx.wasm.wasmPaths).toBe('/ort/');
+    // ORT now resolves to the version-pinned distribution plane, never a
+    // bundled/hashed `_app/immutable` path or a bare `/ort/` directory.
+    const wasmPaths = mockTransformersEnvironment.backends.onnx.wasm.wasmPaths as {
+      mjs: string;
+      wasm: string;
+    };
+    expect(wasmPaths.wasm).toContain('/models/ort/');
+    expect(wasmPaths.wasm).toContain('ort-wasm-simd-threaded.jsep.wasm');
+    expect(wasmPaths.mjs).toContain('ort-wasm-simd-threaded.jsep.mjs');
+    expect(wasmPaths.wasm).not.toContain('_app/immutable');
   });
 });
 

@@ -35,4 +35,19 @@ export {
   type ProgressCallback,
   TauriAssetTransport,
 } from './lib/model_asset_store.ts';
+export {
+  configureLocalModelResolution,
+  configureOrtRuntime,
+  DEFAULT_ORT_DIST_ORIGIN,
+  ORT_DIST_PATH,
+  ORT_RUNTIME_VERSION,
+  ORT_VARIANT_FILES,
+  ORT_VARIANTS,
+  type OrtConfigurableEnv,
+  type OrtVariant,
+  ortDistDirectory,
+  ortRuntimeAssetUrl,
+  ortWasmPaths,
+  resolveOrtBaseUrl,
+} from './lib/ort_runtime.ts';
 export { createTransformersTextBackend } from './lib/text_llm_backend.ts';
