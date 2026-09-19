@@ -76,6 +76,74 @@ const recordingResolver = (options: {
 const HASH_A = 'a'.repeat(64);
 const HASH_B = 'b'.repeat(64);
 
+/**
+ * An audio job, built here rather than read from the authored brief.
+ *
+ * The 5.0.0 Emberwatch brief declares NO audio jobs — its authored beds are
+ * shipped recordings, not generated audio — so a test that needs to exercise
+ * the AUDIO provider-resolution and import-locator contracts cannot get a
+ * subject from it. Those contracts are C-519 behaviour and must stay covered
+ * regardless of what any one pack authors, so the subject is constructed.
+ *
+ * Modeled on the C-523 pilot's `gate_open` sfx job.
+ */
+const audioJobFixture = (
+  overrides: Partial<AssetBrief['jobs'][number]> = {},
+): AssetBrief['jobs'][number] => ({
+  id: 'gate_open',
+  phase: 'slice',
+  kind: 'sfx',
+  action: 'generate_if_missing',
+  subject: 'One old timber gate creak and gentle latch release.',
+  providerPreference: 'local_sfx',
+  preparationProfile: 'sfx_oneshot',
+  referenceIds: [],
+  candidateLimit: 2,
+  dependsOn: [],
+  binding: {
+    kind: 'audio_cue',
+    mapIds: ['village'],
+    targetIds: ['proposed_cue_gate_open'],
+    mode: 'proposed_pending_validation',
+    variant: null,
+  },
+  targetCanvas: null,
+  audio: {
+    durationSeconds: 2,
+    loop: false,
+    channels: 'mono',
+    instrumental: true,
+    requestedBpm: null,
+    requestedKey: null,
+    measuredBpm: null,
+    measuredKey: null,
+  },
+  releaseGates: [],
+  status: 'planned',
+  ...overrides,
+});
+
+/**
+ * The authored brief's profile map plus the audio profiles an audio fixture
+ * needs. The authored pack declares no audio profiles because it authors no
+ * audio jobs; a constructed audio job must therefore bring its own.
+ */
+const profilesWithAudio = (): AssetBrief['preparationProfiles'] => ({
+  ...readAuthoredBrief().preparationProfiles,
+  sfx_oneshot: 'single-shot audio cue; dry, short natural tail, no music or voices',
+});
+
+/**
+ * The audio budget a constructed audio job needs.
+ *
+ * The authored brief derives `maxRequestedAudioSecondsPerCandidatePass` from
+ * its audio jobs — and it has none, so the value is 0, which correctly refuses
+ * ANY audio request. A fixture that introduces an audio job must therefore
+ * declare the ceiling it is testing against, or every such item is blocked by
+ * a budget that exists precisely to say "this pack requests no audio".
+ */
+const AUDIO_BUDGET_SECONDS = 60;
+
 /** A minimal, schema-valid brief for budget/identity scenarios. */
 const fixtureBrief = (overrides: {
   candidateLimitPerItem?: number;
@@ -84,11 +152,13 @@ const fixtureBrief = (overrides: {
   jobs?: AssetBrief['jobs'];
   providerPreferences?: AssetBrief['providerPreferences'];
   references?: AssetBrief['references'];
+  preparationProfiles?: AssetBrief['preparationProfiles'];
 }): AssetBrief => {
   const authored = readAuthoredBrief();
   return {
     ...authored,
     id: 'fixture-brief',
+    preparationProfiles: overrides.preparationProfiles ?? authored.preparationProfiles,
     references: overrides.references ?? [],
     providerPreferences: overrides.providerPreferences ?? {
       local_image_reference: ['existing_sdcpp_profile_if_required_capabilities_pass'],
@@ -103,7 +173,12 @@ const fixtureBrief = (overrides: {
         action: 'generate_if_missing',
         subject: 'a stone well',
         providerPreference: 'local_image_reference',
-        preparationProfile: 'prop_alpha',
+        // Must be a profile the authored brief actually declares: the planner
+        // blocks any job naming an undeclared profile, which would pre-empt the
+        // budget and provider assertions these fixtures exist to exercise.
+        // `prop_alpha` was the C-523 pilot's name for this path; the 5.0.0
+        // overhaul renamed it to `prop-full-alpha-ground`.
+        preparationProfile: 'prop-full-alpha-ground',
         referenceIds: [],
         candidateLimit: 2,
         dependsOn: [],
@@ -140,9 +215,35 @@ const fixtureBrief = (overrides: {
 };
 
 describe('C-519 AC-1 (portable core): the plan is strict and honest', () => {
-  test('the authored brief yields 6 slice and 36 expansion items', async () => {
+  /**
+   * The brief's own phase partition, read from the authored file.
+   *
+   * Deliberately NOT a hard-coded count. This test previously asserted
+   * `6 slice / 36 expansion / 42 total`, which was true of the C-523 PILOT
+   * brief (`b3373a431`) and became false the moment the 5.0.0 overhaul
+   * re-phased the brief — the plan was correct and the test was stale, so it
+   * reported a defect where there was none.
+   *
+   * The C-519 contract is about the PARTITION, not about a number: every
+   * authored job lands in exactly one phase, the two plans together cover the
+   * brief exactly once, and each phase's item count is its authored member
+   * count. Those hold at 42 jobs and at 41, so re-phasing the brief cannot
+   * make this test lie.
+   *
+   * Counts that ARE architecturally meaningful are asserted separately, as
+   * named job sets rather than magic numbers (see the pilot-set and
+   * de-scoped-job tests below).
+   */
+  const authoredPhases = (authored: AssetBrief) => {
+    const slice = authored.jobs.filter((job) => job.phase === 'slice').map((job) => job.id);
+    const expansion = authored.jobs.filter((job) => job.phase === 'expansion').map((job) => job.id);
+    return { slice, expansion };
+  };
+
+  test('the authored brief partitions into two disjoint phases covering every job', async () => {
     const authored = readAuthoredBrief();
     const resolver = recordingResolver({ resolvable: { ward_base: HASH_A } });
+    const { slice: authoredSlice, expansion: authoredExpansion } = authoredPhases(authored);
 
     const slice = await buildGenerationPlan({
       brief: authored,
@@ -157,15 +258,125 @@ describe('C-519 AC-1 (portable core): the plan is strict and honest', () => {
       resolveReference: resolver.resolve,
     });
 
-    expect(slice.sliceItems).toBe(6);
-    expect(slice.expansionItems).toBe(36);
-    expect(slice.totalItems).toBe(42);
-    expect(slice.plannedItems).toBe(6);
-    expect(expansion.plannedItems).toBe(36);
+    // Each phase's plan reports the authored member count for that phase.
+    expect(slice.sliceItems).toBe(authoredSlice.length);
+    expect(slice.expansionItems).toBe(authoredExpansion.length);
+    expect(slice.totalItems).toBe(authored.jobs.length);
+    expect(slice.plannedItems).toBe(authoredSlice.length);
+    expect(expansion.plannedItems).toBe(authoredExpansion.length);
+
+    // The partition is total and disjoint: every job is in exactly one phase,
+    // and nothing is dropped or double-counted.
+    expect(new Set([...authoredSlice, ...authoredExpansion]).size).toBe(authored.jobs.length);
+    expect(authoredSlice.length + authoredExpansion.length).toBe(authored.jobs.length);
+    expect(authoredSlice.filter((id) => authoredExpansion.includes(id))).toEqual([]);
+
+    // Every job declares a phase the planner actually understands. An
+    // unrecognised phase string would silently fall outside both plans and
+    // shrink the total without failing anything.
+    expect(authored.jobs.every((job) => job.phase === 'slice' || job.phase === 'expansion')).toBe(
+      true,
+    );
 
     // Both outputs are machine-readable plans.
     expect(Value.Check(GenerationPlanSchema, slice)).toBe(true);
     expect(Value.Check(GenerationPlanSchema, expansion)).toBe(true);
+  }, 30_000);
+
+  test('job ids are unique, so a phase count cannot hide a duplicate', () => {
+    const authored = readAuthoredBrief();
+    const ids = authored.jobs.map((job) => job.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  test('the slice phase is the declared pilot set and nothing else', () => {
+    // The pilot is an architectural choice — three jobs that exercise every
+    // distinct preparation path (a prop with a mask, a prop with a variant
+    // set, and a portrait) before the batch commits to 38 more.
+    //
+    // Asserted by NAME, not by count: the count is a consequence of the set,
+    // and stating the set is what makes an accidental addition visible.
+    const authored = readAuthoredBrief();
+    expect(authoredPhases(authored).slice.sort()).toEqual([
+      'brazier',
+      'village_elder_neutral',
+      'well',
+    ]);
+  });
+
+  test('the de-scoped ending-state jobs are absent from the authored brief', () => {
+    // `ward_renewed`, `ward_without_magic` and `ward_shared` were authored as
+    // aligned edits of the accepted ward-tree base and all three failed QA (the
+    // generation canvas clipped the tree, so the results were not pixel-aligned
+    // and could not be swapped in without moving the trunk, the collision
+    // footprint and the silhouette).
+    //
+    // They are de-scoped from 5.0.0 rather than shipped as a partial. This
+    // guards the de-scope against an accidental reintroduction — including the
+    // tempting one of adding filler jobs to satisfy a count.
+    const authored = readAuthoredBrief();
+    const ids = new Set(authored.jobs.map((job) => job.id));
+    for (const deScoped of ['ward_renewed', 'ward_without_magic', 'ward_shared']) {
+      expect(ids.has(deScoped)).toBe(false);
+    }
+  });
+
+  test('every dependency names a job that exists in the brief', () => {
+    const authored = readAuthoredBrief();
+    const ids = new Set(authored.jobs.map((job) => job.id));
+    for (const job of authored.jobs) {
+      for (const dependency of job.dependsOn ?? []) {
+        expect(ids.has(dependency)).toBe(true);
+      }
+    }
+  });
+
+  test('the authored brief requests no audio, so its derived audio ceiling refuses audio', () => {
+    // `maxRequestedAudioSecondsPerCandidatePass` is DERIVED from the audio jobs
+    // the brief declares. The 5.0.0 pack authors no audio jobs — its beds are
+    // shipped recordings — so the derived ceiling is 0, and 0 is a real
+    // statement: this pack requests no generated audio.
+    //
+    // Pinned because the value is easy to mistake for an unset field and
+    // "helpfully" raised, which would silently re-permit generated audio in a
+    // pack whose audio provenance was deliberately settled elsewhere.
+    const authored = readAuthoredBrief();
+    expect(authored.summary.maxRequestedAudioSecondsPerCandidatePass).toBe(0);
+    expect(authored.jobs.some((job) => job.audio !== null)).toBe(false);
+
+    // …and the ceiling is load-bearing: an audio request against this pack's
+    // derived budget is refused by name, not silently dispatched.
+    //
+    // Asserted against the budget itself rather than through a plan item's
+    // blocker list: an item can carry several blockers, and which one is
+    // reported first is an ordering detail that has nothing to do with whether
+    // the ceiling works.
+    const derived = resolveBudget({ brief: authored });
+    expect(derived.maxRequestedAudioSecondsPerCandidatePass).toBe(0);
+
+    const blocker = enforceGenerationBudget({
+      budget: derived,
+      progress: {
+        itemCandidateCount: 0,
+        runCandidateCount: 0,
+        runSpendUsd: 0,
+        runDurationSeconds: 0,
+        runPixels: 0,
+        runRetainedBytes: 0,
+      },
+      cost: {
+        providerProfileId: 'owned_or_appropriately_licensed_recording_import',
+        providerMode: 'import',
+        estimatedSpendUsdPerCandidate: 0,
+        itemCandidateLimit: 2,
+        attempt: 1,
+        estimatedDurationSeconds: 2,
+        estimatedPixels: 0,
+        estimatedRetainedBytes: 0,
+      },
+      itemId: 'gate_open',
+    });
+    expect(blocker?.budget).toBe('maxRequestedAudioSecondsPerCandidatePass');
   }, 30_000);
 
   test('every required reference without verified bytes is a blocker with no invented hash', async () => {
@@ -226,9 +437,27 @@ describe('C-519 AC-1 (portable core): the plan is strict and honest', () => {
     expect(resolvedItems.every((item) => item.providerEngineId === 'comfyui')).toBe(true);
 
     // A declared-but-unshipped audio profile is never silently swapped in.
-    const blockedItems = plan.items.filter((item) => !item.dispatchable);
+    //
+    // Exercised on a CONSTRUCTED audio job: the authored brief declares no
+    // audio jobs (its beds are shipped recordings), so it cannot supply a
+    // subject for the audio provider-resolution contract.
+    const audioBrief = fixtureBrief({
+      jobs: [audioJobFixture()],
+      preparationProfiles: profilesWithAudio(),
+      summaryExtra: { maxRequestedAudioSecondsPerCandidatePass: AUDIO_BUDGET_SECONDS },
+      providerPreferences: {
+        ...authored.providerPreferences,
+        local_sfx: ['owned_or_appropriately_licensed_recording_import'],
+      },
+    });
+    const audioPlan = await buildGenerationPlan({
+      brief: audioBrief,
+      briefPath: 'fixture.json',
+      phase: 'slice',
+      resolveReference: recordingResolver({ resolvable: {} }).resolve,
+    });
     expect(
-      blockedItems.some((item) =>
+      audioPlan.items.some((item) =>
         item.blockers.some((blocker) => blocker.code === 'provider_requires_import'),
       ),
     ).toBe(true);
@@ -254,12 +483,12 @@ describe('C-519 AC-1 (portable core): the plan is strict and honest', () => {
 
   test('import-locator eligibility is not reused by a job without a locator', async () => {
     const authored = readAuthoredBrief();
-    const source = authored.jobs.find(
-      (job) => job.id === 'gate_open',
-    ) as AssetBrief['jobs'][number];
+    const source = audioJobFixture();
     const withoutLocator = { ...source, id: 'missing_import' };
     delete withoutLocator.importLocator;
     const brief = fixtureBrief({
+      preparationProfiles: profilesWithAudio(),
+      summaryExtra: { maxRequestedAudioSecondsPerCandidatePass: AUDIO_BUDGET_SECONDS },
       jobs: [
         { ...source, id: 'declared_import', importLocator: 'imports/gate.wav' },
         withoutLocator,
@@ -577,7 +806,11 @@ describe('C-519 AC-5 (portable core): every refusal names the ceiling it violate
     expect(pixelBlocker?.budget).toBe('maxPixels');
 
     const durationBlocker = enforceGenerationBudget({
-      budget: budget({ maxDurationSeconds: 10 }),
+      // The per-CANDIDATE-PASS audio ceiling is checked before the run-level
+      // duration ceiling, and the authored brief sets it to 0 (it requests no
+      // audio at all). Raised here so this case reaches the ceiling it means to
+      // test; the zero-ceiling behaviour has its own test below.
+      budget: budget({ maxDurationSeconds: 10, maxRequestedAudioSecondsPerCandidatePass: 600 }),
       progress,
       cost: {
         providerProfileId: 'ace_step_15_2b_turbo_profile',
