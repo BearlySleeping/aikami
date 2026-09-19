@@ -407,12 +407,8 @@
     ]
   },
   "apps/frontend/client/src/lib/services/dice/dice_service.svelte.ts": {
-    "orphaned": [
-      "DiceService.rollCheck",
-      "DiceService.setSeed",
-      "DiceServiceInterface",
-      "DiceServiceOptions"
-    ]
+    "orphaned": ["DiceService.rollCheck", "DiceServiceInterface", "DiceServiceOptions"],
+    "_comment": "DiceService.setSeed is still an orphan (only dice_service.test.ts calls it) but is currently masked: the dev combat debug toolbar calls its own ViewModel setSeed, and findProductionReferences falls back to a bare-method-name index for Class.method symbols, so that unrelated identifier reads as a production reference. Expect setSeed to reappear here once that fallback is narrowed."
   },
   "apps/frontend/client/src/lib/services/persona/persona_creation_text_stream.svelte.ts": {
     "orphaned": ["PersonaCreationTextStreamInterface", "PersonaCreationTextStreamService"]
@@ -623,12 +619,14 @@
   },
   "apps/frontend/client/src/lib/services/audio/tts_service.svelte.ts": {
     "orphaned": [
+      "TtsService.checkKokoroServer",
       "TtsService.isDemoMode",
       "TtsService.playAudioBuffer",
       "TtsService.updateSpatialPosition",
       "TtsServiceInterface",
       "TtsServiceOptions"
-    ]
+    ],
+    "_comment": "TtsService.checkKokoroServer is called by initialize() in its own file, which this guard deliberately does not count as production use. Its only external caller was the dev combat sandbox's devCheckKokoroServer action (combat_sandbox_view_model.svelte.ts), deleted when the combat debug workspace was consolidated into src/lib/views/dev/combat/. Remove this entry if a production or dev surface starts probing the Kokoro server again."
   },
   "apps/frontend/client/src/lib/services/audio/music_player_service.svelte.ts": {
     "orphaned": ["MusicPlayerServiceInterface", "MusicPlayerServiceOptions"]
