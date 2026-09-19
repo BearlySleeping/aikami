@@ -100,12 +100,14 @@ describe('guard-scan file group', () => {
     expect(patterns).not.toContain('!/scripts/**/dist/**');
   });
 
-  it('is consumed by both whole-tree guards, not re-inlined', () => {
-    // One negation list, two tasks. Re-inlining a bare `'/.pi/**/*'` into
-    // either task reintroduces the warning flood for that task only, which is
-    // exactly the kind of asymmetry a shared group prevents.
-    expect(countOccurrences(source, '@group(guard-scan)')).toBe(2);
-    // Each broad root appears once — inside the group, nowhere else.
+  it('is consumed by whole-tree guards, not re-inlined', () => {
+    // One negation list, N tasks. Re-inlining a bare `'/.pi/**/*'` into any task
+    // reintroduces the warning flood for that task only, which is exactly the
+    // kind of asymmetry a shared group prevents.
+    //
+    // Which task consumes which group is asserted per-task in
+    // `guard_registry.test.ts`; what belongs here is that the broad roots exist
+    // exactly once — inside the shared group, nowhere else.
     expect(countOccurrences(source, "- '/.pi/**/*'")).toBe(1);
     expect(countOccurrences(source, "- '/apps/**/*'")).toBe(1);
     expect(countOccurrences(source, "- '/packages/**/*'")).toBe(1);

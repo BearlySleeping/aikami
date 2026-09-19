@@ -1,9 +1,13 @@
 // scripts/src/lib/ops/guard_type_safety_helpers.ts
+//
+// File-selection helper for guard_type_safety.ts. The violation-identity
+// primitives (`simpleHash`, `identitiesMatch`) now live in the shared ratchet
+// framework, `scripts/src/lib/ops/guards/ratchet.ts` — they are not
+// type-safety-specific and three other guards needed the same behaviour.
+//
+// Re-exported here so the existing unit tests keep importing from this module.
 
-type ComparableViolationIdentity = {
-  rule: string;
-  hash: string;
-};
+export { identitiesMatch, simpleHash } from './guards/ratchet.ts';
 
 const EXCLUDED_DIR_NAMES = new Set([
   'node_modules',
@@ -27,32 +31,3 @@ export const isExcludedDir = (options: { name: string; relPath: string }): boole
   // project source.
   options.relPath === '.pi/workspaces' ||
   options.relPath.startsWith('.pi/workspaces/');
-
-/** Computes the stable non-cryptographic hash used in violation identities. */
-export const simpleHash = (input: string): string => {
-  let hash = 2166136261 >>> 0;
-  for (let i = 0; i < input.length; i++) {
-    hash ^= input.charCodeAt(i);
-    hash = Math.imul(hash, 16777619) >>> 0;
-  }
-  return hash.toString(16).padStart(8, '0').slice(0, 8);
-};
-
-/** Compares ordered violation identities without loading the executable guard. */
-export const identitiesMatch = (
-  current: readonly ComparableViolationIdentity[],
-  expected: readonly ComparableViolationIdentity[],
-): boolean => {
-  if (current.length !== expected.length) {
-    return false;
-  }
-  for (let i = 0; i < current.length; i++) {
-    if (current[i].rule !== expected[i].rule) {
-      return false;
-    }
-    if (current[i].hash !== expected[i].hash) {
-      return false;
-    }
-  }
-  return true;
-};

@@ -6,12 +6,13 @@
 //
 // M8 used to strip strings before searching for quoted import paths, which
 // erased the very specifiers it was meant to find. Detection here is AST-based
-// and shares `isRuntimeDependency` with guard_view_model_composition.ts, so
+// and shares `isRuntimeDependency` from guards/imports.ts with
+// guard_view_model_composition.ts and guard_service_conventions.ts, so
 // type-only contracts stay allowed and aliases/extensions/re-exports are
-// handled uniformly.
+// handled uniformly by one implementation.
 
 import ts from 'typescript';
-import { isRuntimeDependency } from './guard_view_model_composition.ts';
+import { isRuntimeDependency } from './guards/imports.ts';
 
 const specifierBasename = (specifier: string): string =>
   specifier.split(/[?#]/)[0].split('/').pop() ?? '';

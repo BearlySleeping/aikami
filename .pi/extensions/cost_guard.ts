@@ -39,6 +39,14 @@ import type { ExtensionAPI, ExtensionContext } from '@earendil-works/pi-coding-a
 import type { ContractWorkerRole } from '../../scripts/src/lib/agents/contract_pipeline/types';
 import { runPiScript } from './lib/bridge.ts';
 import {
+  assistantText,
+  assistantThinking,
+  computeTurnCost,
+  envBool,
+  envNumber,
+  toolCalls,
+} from './lib/cost_accounting.ts';
+import {
   createCycleTracker,
   createLoopTracker,
   DEFAULT_CYCLE_THRESHOLD,
@@ -101,105 +109,6 @@ const _pipelineExitInstruction = (): string =>
       'instead; nothing reads it.'
     : '';
 
-/** Convert model-registry cost (per 1M tokens) to per-token cost. */
-const PER_MILLION = 1_000_000;
-
-/** Parse a positive number from env, falling back when unset or malformed. */
-const _envNumber = (name: string, fallback: number): number => {
-  const parsed = Number(process.env[name] ?? '');
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-};
-
-/** Parse a boolean env var. Anything but the standard off-values enables. */
-const _envBool = (name: string, fallback: boolean): boolean => {
-  const raw = process.env[name];
-  if (raw === undefined || raw === '') {
-    return fallback;
-  }
-  return !['0', 'false', 'no', 'off'].includes(raw.toLowerCase());
-};
-
-/**
- * pi usage objects use `input`/`output`/`cacheRead`/`cacheWrite` field names.
- * Cost is already computed by pi when available; falls back to manual calc.
- */
-const _computeTurnCost = (
-  usage: {
-    input: number;
-    output: number;
-    cacheRead?: number;
-    cacheWrite?: number;
-    cost?: { total?: number };
-  },
-  pricing: { input: number; output: number; cacheRead?: number; cacheWrite?: number },
-): number => {
-  // Prefer pi's built-in cost calculation when available
-  if (usage.cost?.total !== undefined && usage.cost.total > 0) {
-    return usage.cost.total;
-  }
-
-  return (
-    (usage.input / PER_MILLION) * pricing.input +
-    (usage.output / PER_MILLION) * pricing.output +
-    ((usage.cacheRead ?? 0) / PER_MILLION) * (pricing.cacheRead ?? 0) +
-    ((usage.cacheWrite ?? 0) / PER_MILLION) * (pricing.cacheWrite ?? 0)
-  );
-};
-
-/** Flatten an assistant message's content into plain text for analysis. */
-const _assistantText = (content: unknown): string => {
-  if (typeof content === 'string') {
-    return content;
-  }
-  if (!Array.isArray(content)) {
-    return '';
-  }
-  return content
-    .map((block) => {
-      const b = block as { type?: string; text?: string } | undefined;
-      return b?.type === 'text' && typeof b.text === 'string' ? b.text : '';
-    })
-    .join('\n');
-};
-
-/**
- * Flatten an assistant message's REASONING blocks into plain text.
- *
- * 🔴 On DeepSeek this is where all the narration lives: across the 285 stored
- * sessions there are 27,783 `thinking` blocks against 18,113 `text` blocks,
- * and every degenerate turn on record had `text` completely empty. A collapse
- * check that reads only `text` therefore scores the worst turns zero — the
- * 2026-08-23 session emitted 169,607 characters of reasoning repeating one
- * sentence 177 times while `_assistantText` saw the empty string.
- */
-const _assistantThinking = (content: unknown): string => {
-  if (!Array.isArray(content)) {
-    return '';
-  }
-  return content
-    .map((block) => {
-      const b = block as { type?: string; thinking?: string; text?: string } | undefined;
-      if (b?.type !== 'thinking' && b?.type !== 'reasoning') {
-        return '';
-      }
-      return b.thinking ?? b.text ?? '';
-    })
-    .join('\n');
-};
-
-/** Extract an assistant message's tool calls for loop-signature purposes. */
-const _toolCalls = (content: unknown): { name: string; arguments: unknown }[] => {
-  if (!Array.isArray(content)) {
-    return [];
-  }
-  return content
-    .filter((block) => (block as { type?: string } | undefined)?.type === 'toolCall')
-    .map((block) => {
-      const b = block as { name?: string; arguments?: unknown };
-      return { name: b.name ?? '', arguments: b.arguments };
-    });
-};
-
 export default function (pi: ExtensionAPI) {
   let sessionCost = 0;
   // 🔴 Two flags, not one. These guard unrelated conditions, and sharing a
@@ -215,12 +124,12 @@ export default function (pi: ExtensionAPI) {
   const loopTracker = createLoopTracker();
   const cycleTracker = createCycleTracker();
 
-  const softCap = _envNumber('PI_SOFT_SPEND', 10.0);
-  const hardCap = _envNumber('PI_HARD_SPEND', 15.0);
-  const maxTurns = _envNumber('PI_MAX_TURNS', 1000);
-  const maxRunMs = _envNumber('PI_MAX_RUN_MINUTES', 240) * 60_000;
-  const repetitionGuard = _envBool('PI_REPETITION_GUARD', true);
-  const repetitionThreshold = _envNumber('PI_REPETITION_THRESHOLD', 6);
+  const softCap = envNumber('PI_SOFT_SPEND', 10.0);
+  const hardCap = envNumber('PI_HARD_SPEND', 15.0);
+  const maxTurns = envNumber('PI_MAX_TURNS', 1000);
+  const maxRunMs = envNumber('PI_MAX_RUN_MINUTES', 240) * 60_000;
+  const repetitionGuard = envBool('PI_REPETITION_GUARD', true);
+  const repetitionThreshold = envNumber('PI_REPETITION_THRESHOLD', 6);
   // 🔴 Reasoning blocks need their OWN, far higher threshold. The model drafts
   // code in them, and drafting legitimately repeats lines: measured over all
   // 27,783 stored reasoning blocks, healthy turns reach 37 repeats of
@@ -229,13 +138,13 @@ export default function (pi: ExtensionAPI) {
   // Reusing the text threshold of 6 here would have halted 44 healthy sessions
   // — one of them at turn 36 of 406 — which is exactly the mistake the turn and
   // time backstops below were already re-calibrated once to undo.
-  const thinkRepetitionThreshold = _envNumber('PI_THINK_REPETITION_THRESHOLD', 50);
-  const loopThreshold = _envNumber('PI_LOOP_THRESHOLD', DEFAULT_LOOP_THRESHOLD);
-  const cycleThreshold = _envNumber('PI_CYCLE_THRESHOLD', DEFAULT_CYCLE_THRESHOLD);
+  const thinkRepetitionThreshold = envNumber('PI_THINK_REPETITION_THRESHOLD', 50);
+  const loopThreshold = envNumber('PI_LOOP_THRESHOLD', DEFAULT_LOOP_THRESHOLD);
+  const cycleThreshold = envNumber('PI_CYCLE_THRESHOLD', DEFAULT_CYCLE_THRESHOLD);
   // How much a streaming message must GROW before it is re-scanned. Bounds the
   // mid-stream check to O(size/step) scans instead of one per token. 8 KB is
   // ~2k tokens: small enough to cut in early, large enough to stay cheap.
-  const streamScanBytes = _envNumber('PI_STREAM_SCAN_BYTES', 8192);
+  const streamScanBytes = envNumber('PI_STREAM_SCAN_BYTES', 8192);
 
   /**
    * Escalated response to a guard trip.
@@ -397,8 +306,8 @@ export default function (pi: ExtensionAPI) {
     if (partial.role !== 'assistant') {
       return;
     }
-    const thinking = _assistantThinking(partial.content);
-    const text = _assistantText(partial.content);
+    const thinking = assistantThinking(partial.content);
+    const text = assistantText(partial.content);
     const size = thinking.length + text.length;
     if (size < scannedAt + streamScanBytes) {
       return;
@@ -485,7 +394,7 @@ export default function (pi: ExtensionAPI) {
     const usage = message.usage;
     const pricing = ctx.model?.cost;
     if (usage?.input && pricing) {
-      sessionCost += _computeTurnCost(usage, pricing);
+      sessionCost += computeTurnCost(usage, pricing);
     }
 
     // ── Hard cap: abort ───────────────────────────────────
@@ -509,12 +418,12 @@ export default function (pi: ExtensionAPI) {
     // Distinct from the collapse check below, which only sees inside a single
     // message. Both known cases here had EMPTY text and repeated only their
     // tool call, so text analysis alone scores them zero.
-    const thinking = repetitionGuard ? _assistantThinking(content) : '';
+    const thinking = repetitionGuard ? assistantThinking(content) : '';
 
     if (repetitionGuard) {
       const signature = turnSignature({
-        text: _assistantText(content),
-        toolCalls: _toolCalls(content),
+        text: assistantText(content),
+        toolCalls: toolCalls(content),
         thinking,
       });
       const run = loopTracker.record(signature);
@@ -591,7 +500,7 @@ export default function (pi: ExtensionAPI) {
 
     // ── Repetition collapse: degenerate sampling, not a real loop ──
     if (repetitionGuard) {
-      const text = _assistantText(content);
+      const text = assistantText(content);
       const inText = maxRepeatedSegment(text);
       const inThinking = maxRepeatedSegment(thinking);
       // Each stream is judged against its own threshold, then the worse one

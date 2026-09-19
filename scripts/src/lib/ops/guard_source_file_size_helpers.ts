@@ -1,14 +1,21 @@
 // scripts/src/lib/ops/guard_source_file_size_helpers.ts
 //
-// Pure, dependency-free logic for guard_source_file_size.ts. Kept separate so
-// the thresholds, line counting, file classification, and baseline/exception
-// rules can be unit-tested without touching the repository's real source tree
-// or baseline files.
+// Pure logic for guard_source_file_size.ts: thresholds, line counting, file
+// classification, and the per-file assessment. Kept separate from the CLI so
+// the thresholds and classification can be unit-tested without touching the
+// repository's real source tree or its baseline/waiver files.
 //
-// This is a size guard, not an architecture proof: a small file can still be
-// badly designed. File size is only a proxy for "one cohesive responsibility",
-// and the guard is deliberately a ratchet on existing debt plus a hard stop on
-// brand-new oversized modules — not a mandate to split files cosmetically.
+// This is a size guard, not an architecture proof. A small file can still be
+// badly designed, and a large declarative table can be perfectly cohesive.
+// File size is only a proxy for "one cohesive responsibility"; the guard is
+// deliberately a ratchet on existing debt plus a hard stop on brand-new
+// oversized modules — not a mandate to split files cosmetically.
+//
+// The exemption/waiver policy (what a file is allowed to be, and who decided)
+// lives in guards/source_size_policy.ts. This module owns measurement.
+
+import ts from 'typescript';
+import type { FileStructure } from './guards/source_size_policy.ts';
 
 export type SourceKind = 'production' | 'test';
 
@@ -24,6 +31,11 @@ export type SizeBudget = {
  * single-responsibility pressure on long before a file becomes unmaintainable;
  * the hard limit at 800 is where a new module must be justified. Tests carry a
  * higher budget because table-driven cases and fixtures are legitimately long.
+ *
+ * 🔴 The limit is deliberately NOT the fix for a module that owns too much.
+ * See the measured distribution in `--report` mode and the threshold
+ * recommendation in .pi/skills/aikami-conventions/SKILL.md before changing it:
+ * raising the number moves the problem, it does not remove it.
  */
 export const PRODUCTION_BUDGET: SizeBudget = { warn: 500, hard: 800 };
 export const TEST_BUDGET: SizeBudget = { warn: 800, hard: 1500 };
@@ -96,8 +108,8 @@ const GENERATED_OUTPUT_DIR_NAMES = new Set([
   'build',
   // The local-stack's client build output (`apps/backend/local-stack/.build/`)
   // is gitignored generated output, same as `build`. Without it the guard
-  // scanned bundled Worker chunks and reported a multi-thousand-line
-  // "new oversized module" that no checkout contains — the failure was
+  // scanned bundled Worker chunks and reported a multi-thousand-line "new
+  // oversized module" that no checkout contains — the failure was
   // environment-dependent (present locally, absent in CI).
   '.build',
   'dist',
@@ -149,264 +161,130 @@ export const isExcludedDir = (options: { name: string; relPath: string }): boole
   );
 };
 
-// ── Exception records ────────────────────────────────────────────────────
-
-export type ExceptionKind = 'declarative' | 'generated' | 'kernel' | 'fixture' | 'other';
-
-export type SizeException = {
-  maxLines: number;
-  rationale: string;
-  owner: string;
-  kind: ExceptionKind;
-  /** Tracking issue for temporary debt (e.g. `C-123`). */
-  issue?: string;
-  /** ISO date (YYYY-MM-DD) by which temporary debt must be re-reviewed. */
-  reviewBy?: string;
-};
-
-export type ExceptionSet = Record<string, SizeException>;
-
-const EXCEPTION_KINDS = new Set<ExceptionKind>([
-  'declarative',
-  'generated',
-  'kernel',
-  'fixture',
-  'other',
-]);
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null && !Array.isArray(value);
-
-const isIsoDate = (value: string): boolean => /^\d{4}-\d{2}-\d{2}$/.test(value);
+// ── Structure analysis (for exemption classification) ────────────────────
 
 /**
- * Validates the exceptions file. Malformed entries are reported as errors (and
- * fail the guard) rather than silently ignored — a typo in a path must not
- * grant an unearned allowance.
+ * Counts the logic-bearing top-level declarations in a file.
+ *
+ * Used to verify a `declarative` exemption claim: a data table, a schema or a
+ * lookup map contains none, while a service kernel contains many. Without this
+ * check, "it is declarative" would be a label an agent could attach to any
+ * module to escape the limit.
+ *
+ * Counted as logic:
+ *   • `function` declarations;
+ *   • `class` declarations;
+ *   • arrow/function expressions bound to a top-level `const`.
+ *
+ * Not counted: object/array/string literals, `Type.Object({...})` schema
+ * calls, `sqliteTable(...)` calls, `as const` maps.
  */
-export const validateExceptions = (
-  raw: unknown,
-): { exceptions: ExceptionSet; errors: string[] } => {
-  const errors: string[] = [];
-  const exceptions: ExceptionSet = {};
-  if (raw === undefined) {
-    return { exceptions, errors };
-  }
-  if (!isRecord(raw)) {
-    return {
-      exceptions,
-      errors: ['exceptions file must be a JSON object keyed by repo-relative path'],
-    };
+export const analyseFileStructure = (content: string, fileName = 'file.ts'): FileStructure => {
+  const sourceFile = parseSourceFile(content, fileName);
+  if (sourceFile === undefined) {
+    // A file that cannot be parsed — or that parses with errors — cannot be
+    // shown to be declarative, so it may not claim a declarative exemption.
+    return { logicDeclarations: 1, exportedDeclarations: 1 };
   }
 
-  for (const [path, value] of Object.entries(raw)) {
-    if (path === '_comment' || path.startsWith('_')) {
+  let logicDeclarations = 0;
+  let exportedDeclarations = 0;
+
+  for (const statement of sourceFile.statements) {
+    const exported = isExported(statement);
+    if (ts.isFunctionDeclaration(statement) || ts.isClassDeclaration(statement)) {
+      logicDeclarations++;
+      if (exported) {
+        exportedDeclarations++;
+      }
       continue;
     }
-    if (!isRecord(value)) {
-      errors.push(`${path}: entry must be an object`);
+    if (!ts.isVariableStatement(statement)) {
       continue;
     }
-    const { maxLines, rationale, owner, kind, issue, reviewBy } = value;
-    if (typeof maxLines !== 'number' || !Number.isInteger(maxLines) || maxLines <= 0) {
-      errors.push(`${path}: "maxLines" must be a positive integer`);
-      continue;
+    for (const declaration of statement.declarationList.declarations) {
+      if (!isFunctionLike(declaration.initializer)) {
+        continue;
+      }
+      logicDeclarations++;
+      if (exported) {
+        exportedDeclarations++;
+      }
     }
-    if (typeof rationale !== 'string' || rationale.trim().length < 10) {
-      errors.push(`${path}: "rationale" must be a non-empty explanation (≥10 chars)`);
-      continue;
-    }
-    if (typeof owner !== 'string' || owner.trim().length === 0) {
-      errors.push(`${path}: "owner" (review owner) is required`);
-      continue;
-    }
-    if (typeof kind !== 'string' || !EXCEPTION_KINDS.has(kind as ExceptionKind)) {
-      errors.push(`${path}: "kind" must be one of ${[...EXCEPTION_KINDS].join(', ')}`);
-      continue;
-    }
-    if (issue !== undefined && (typeof issue !== 'string' || issue.trim().length === 0)) {
-      errors.push(`${path}: "issue" must be a non-empty string when present`);
-      continue;
-    }
-    if (reviewBy !== undefined && (typeof reviewBy !== 'string' || !isIsoDate(reviewBy))) {
-      errors.push(`${path}: "reviewBy" must be an ISO date (YYYY-MM-DD) when present`);
-      continue;
-    }
-    if (kind === 'other' && issue === undefined && reviewBy === undefined) {
-      errors.push(`${path}: kind "other" is temporary debt and needs an "issue" or "reviewBy"`);
-      continue;
-    }
-    exceptions[path] = {
-      maxLines,
-      rationale,
-      owner,
-      kind: kind as ExceptionKind,
-      ...(typeof issue === 'string' ? { issue } : {}),
-      ...(typeof reviewBy === 'string' ? { reviewBy } : {}),
-    };
   }
 
-  return { exceptions, errors };
-};
-
-// ── Baseline rules ───────────────────────────────────────────────────────
-
-export type Baseline = Record<string, number>;
-
-export type BaselineUpdateCheck = {
-  ok: boolean;
-  errors: string[];
+  return { logicDeclarations, exportedDeclarations };
 };
 
 /**
- * Ordinary `--update-baseline` may only shrink or remove existing allowances.
- * Adding a path (new debt) or raising a path's allowance is rejected; those
- * require a reviewed exception or a manual, reviewed baseline edit.
+ * Parses a file, or returns `undefined` when it cannot be parsed cleanly.
+ *
+ * `createSourceFile` is error-tolerant: it returns a tree with error nodes
+ * rather than throwing. A file with parse diagnostics is treated the same as a
+ * throw, because neither can be proven declarative.
  */
-export const validateBaselineReduction = (options: {
-  previous: Baseline;
-  next: Baseline;
-}): BaselineUpdateCheck => {
-  const errors: string[] = [];
-  for (const [path, value] of Object.entries(options.next)) {
-    const before = options.previous[path];
-    if (before === undefined) {
-      errors.push(
-        `new baseline entry ${path} (${value} lines) — add a reviewed exception instead of growing the baseline`,
-      );
-    } else if (value > before) {
-      errors.push(`${path} would grow from ${before} to ${value} lines`);
+const parseSourceFile = (content: string, fileName: string): ts.SourceFile | undefined => {
+  try {
+    const sourceFile = ts.createSourceFile(
+      fileName,
+      content,
+      ts.ScriptTarget.Latest,
+      true,
+      scriptKindFor(fileName),
+    );
+    const diagnostics = (sourceFile as { parseDiagnostics?: readonly unknown[] }).parseDiagnostics;
+    if (diagnostics !== undefined && diagnostics.length > 0) {
+      return undefined;
     }
+    return sourceFile;
+  } catch {
+    return undefined;
   }
-  return { ok: errors.length === 0, errors };
 };
 
 /**
- * Detects unauthorized baseline expansion against a trusted base revision.
- * Reductions and removals are allowed; any new path or larger value is not.
+ * The parser kind for a file, so JSX-bearing extensions are not misread.
+ *
+ * Parsing a `.jsx`/`.tsx` file as plain TypeScript rejects the JSX syntax, which
+ * would produce parse diagnostics and — through the caller's conservative
+ * "unparseable is logic-bearing" rule — silently make every `.jsx` file
+ * ineligible for a declarative exemption.
  */
-export const findBaselineExpansion = (options: {
-  trusted: Baseline;
-  current: Baseline;
-}): string[] => {
-  const expansions: string[] = [];
-  for (const [path, value] of Object.entries(options.current)) {
-    const trustedValue = options.trusted[path];
-    if (trustedValue === undefined) {
-      expansions.push(`${path} (${value} lines) was added`);
-    } else if (value > trustedValue) {
-      expansions.push(`${path} grew from ${trustedValue} to ${value} lines`);
-    }
+const scriptKindFor = (fileName: string): ts.ScriptKind => {
+  if (fileName.endsWith('.tsx')) {
+    return ts.ScriptKind.TSX;
   }
-  return expansions;
+  if (fileName.endsWith('.jsx')) {
+    return ts.ScriptKind.JSX;
+  }
+  if (/\.(js|mjs|cjs)$/.test(fileName)) {
+    return ts.ScriptKind.JS;
+  }
+  // `.ts`, `.svelte` (whose markup is stripped before analysis) and anything
+  // unrecognised: TypeScript is the widest grammar of the three.
+  return ts.ScriptKind.TS;
 };
 
-// ── Per-file assessment ──────────────────────────────────────────────────
+const isExported = (node: ts.Node): boolean =>
+  Boolean(
+    ts.canHaveModifiers(node) &&
+      ts.getModifiers(node)?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword),
+  );
 
-export type FileStatus = 'ok' | 'warning' | 'exception' | 'baselined' | 'reduction' | 'over-limit';
-
-export type Assessment = {
-  status: FileStatus;
-  /** Baseline or exception ceiling, when one applies. */
-  allowance?: number;
-  /** Lines over the applicable limit, or saved by a reduction. */
-  excess?: number;
-  detail: string;
+/** True when an expression is a function or arrow function, unwrapping casts. */
+const isFunctionLike = (expression: ts.Expression | undefined): boolean => {
+  if (!expression) {
+    return false;
+  }
+  let current = expression;
+  while (
+    ts.isAsExpression(current) ||
+    ts.isSatisfiesExpression(current) ||
+    ts.isParenthesizedExpression(current) ||
+    ts.isNonNullExpression(current) ||
+    ts.isTypeAssertionExpression(current)
+  ) {
+    current = current.expression;
+  }
+  return ts.isArrowFunction(current) || ts.isFunctionExpression(current);
 };
-
-/**
- * Resolves a single file against its exception, baseline entry, and budget.
- * Exception > baseline > budget, and a baseline entry that shrank is a
- * `reduction` (a failure until locked in via `--update-baseline`).
- */
-export const assessFile = (options: {
-  kind: SourceKind;
-  lines: number;
-  baselineLines?: number;
-  exception?: SizeException;
-}): Assessment => {
-  const { kind, lines, baselineLines, exception } = options;
-  const budget = budgetFor(kind);
-
-  if (exception) {
-    if (lines > exception.maxLines) {
-      return {
-        status: 'over-limit',
-        allowance: exception.maxLines,
-        excess: lines - exception.maxLines,
-        detail: `exceeds its reviewed exception ceiling (+${lines - exception.maxLines})`,
-      };
-    }
-    return {
-      status: 'exception',
-      allowance: exception.maxLines,
-      detail: 'within its reviewed exception ceiling',
-    };
-  }
-
-  if (baselineLines !== undefined) {
-    if (lines > baselineLines) {
-      return {
-        status: 'over-limit',
-        allowance: baselineLines,
-        excess: lines - baselineLines,
-        detail: `grew past its grandfathered baseline (+${lines - baselineLines})`,
-      };
-    }
-    if (lines < baselineLines) {
-      return {
-        status: 'reduction',
-        allowance: baselineLines,
-        excess: baselineLines - lines,
-        detail: `shrank from its baseline — run --update-baseline to lock the reduction in (saved ${baselineLines - lines})`,
-      };
-    }
-    return {
-      status: 'baselined',
-      allowance: baselineLines,
-      detail: 'matches its grandfathered baseline',
-    };
-  }
-
-  if (lines > budget.hard) {
-    return {
-      status: 'over-limit',
-      allowance: budget.hard,
-      excess: lines - budget.hard,
-      detail: `new oversized module over the hard limit (+${lines - budget.hard})`,
-    };
-  }
-  if (lines > budget.warn) {
-    return {
-      status: 'warning',
-      allowance: budget.warn,
-      excess: lines - budget.warn,
-      detail: `over the warning threshold (+${lines - budget.warn})`,
-    };
-  }
-  return { status: 'ok', detail: 'within budget' };
-};
-
-/** Stable, human-readable status label used in report output. */
-export const statusLabel = (status: FileStatus): string => {
-  switch (status) {
-    case 'ok':
-      return 'ok';
-    case 'warning':
-      return 'warn';
-    case 'exception':
-      return 'exception';
-    case 'baselined':
-      return 'baseline';
-    case 'reduction':
-      return 'reduction';
-    case 'over-limit':
-      return 'OVER';
-  }
-};
-
-/** Sort helper: largest first, then path for deterministic output. */
-export const bySizeDescending = (
-  a: { lines: number; path: string },
-  b: { lines: number; path: string },
-): number => b.lines - a.lines || a.path.localeCompare(b.path);
