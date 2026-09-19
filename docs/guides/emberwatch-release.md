@@ -188,3 +188,72 @@ trunk/collision footprint, the same overall silhouette and canvas, and only the
 authored state change. An ordinary prop regeneration cannot satisfy that — the
 canvas must be sized from the base rather than from a fixed tile budget, and the
 result must be diffed against the base to prove alignment before acceptance.
+
+## Immutable candidate lock
+
+Sealing is separate from publishing. Generation, acceptance and candidate
+creation happen once; staging and production then consume the lock instead of
+rebuilding content differently per environment.
+
+```bash
+bun scripts/src/lib/ops/emberwatch_candidate.ts --seal     # build + write the lock
+bun scripts/src/lib/ops/emberwatch_candidate.ts --verify   # re-derive and compare
+```
+
+The lock identifies content-addressed identity for every published group —
+manifest, maps, terrain atlas + definition, prop-atlas pages + metadata,
+portraits, enemy visuals, audio, pack data, asset seed, credits — plus the
+release-plane hashes (catalog root, shards, pack lock) and the rights and
+validation gate outcomes, keyed by **logical id** and folded into one
+`lockHash`.
+
+Two properties are deliberate:
+
+- `sealedAt` and `sourceDirty` are **excluded** from `lockHash`. Two seals of
+  identical content minutes apart are the same candidate, and a promotion must
+  not fail because a clock moved or a scratch file was edited.
+- `sourceCommit` **is** included. A different commit is a different candidate
+  even when the bytes happen to match, because the next rebuild would not be
+  reproducible.
+
+The lock carries no bucket, origin or environment. Those belong to the publish
+step; putting them here is exactly what would make the lock
+environment-specific, which is the thing it exists to prevent.
+
+Promotion compares `lockHash` and, on mismatch, `diffCandidateLocks` names the
+members that moved (`props/props.webp`, `maps/village.json`) rather than
+reporting a boolean.
+
+Current sealed candidate: `929833f4f083227dcba579d891e492c7947020cc66a63240c79fef2bca1dcf9c`
+(rights PASS 74/0, validation PASS).
+
+## Staging is blocked on a HUMAN infrastructure action
+
+The code correctly refuses the current staging environment. It is not
+provisionable from this repository:
+
+```
+❌ release target refused — nothing was written.
+   CATALOG_BUCKET="aikami-catalog" disagrees with the bucket declared for mode
+   "staging" ("aikami-staging-catalog").
+```
+
+`CATALOG_ORIGINS.staging.originUrl` is `null` **on purpose**: there is no public
+read origin for `aikami-staging-catalog`, and inventing one — or pointing
+staging at production to unblock testing — would make every staging
+verification a lie. A null origin fails closed with a message naming the bucket
+to provision; it is never a fallback.
+
+To unblock staging, a human must:
+
+1. Create a public R2 custom domain (or Worker route) for the
+   `aikami-staging-catalog` bucket. This needs Cloudflare DNS/API credentials;
+   the available token is bucket-scoped R2 only.
+2. Record the resulting URL in `CATALOG_ORIGINS.staging.originUrl`
+   (`packages/shared/constants/src/lib/infrastructure.ts`).
+3. Correct `CATALOG_BUCKET` to `aikami-staging-catalog` and set
+   `CATALOG_ORIGIN_URL` to the new origin, in `secrets/staging.enc.env` and the
+   generated `scripts/.env.staging`.
+
+Do not edit the encrypted secrets bundle by hand — use the repository's
+canonical secret-editing workflow once the real value is known.

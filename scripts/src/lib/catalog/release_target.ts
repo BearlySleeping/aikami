@@ -173,12 +173,15 @@ export const resolveReleaseTarget = (options: {
   origins?: Record<string, { bucketName: string; originUrl: string | null }>;
 }): ReleaseTarget => {
   const { mode, env } = options;
-  const origins =
-    options.origins ??
-    (CATALOG_ORIGINS as unknown as Record<
-      string,
-      { bucketName: string; originUrl: string | null }
-    >);
+  // Annotated explicitly rather than cast: `CATALOG_ORIGINS` is a const object
+  // with only the declared modes, so indexing it by an arbitrary mode string
+  // needs a widened view. Spelling that view out keeps the compiler checking the
+  // shape instead of asserting it.
+  const defaultOrigins: Record<string, { bucketName: string; originUrl: string | null }> = {
+    production: CATALOG_ORIGINS.production,
+    staging: CATALOG_ORIGINS.staging,
+  };
+  const origins = options.origins ?? defaultOrigins;
   const warnings: string[] = [];
 
   const expectedBucket = resolveBucketName({ bucketKey: 'catalog', mode });

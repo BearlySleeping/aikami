@@ -104,9 +104,13 @@ export const gate = (options: {
  * Excludes `sealedAt` and `sourceDirty` — see `CANDIDATE_LOCK_HASH_FIELDS`.
  */
 export const computeLockHash = (lock: Omit<CandidateLock, 'lockHash'>): string => {
+  // Indexed through the tuple of field names, so the compiler knows each key
+  // exists on the lock. No cast: `CANDIDATE_LOCK_HASH_FIELDS` is typed as keys
+  // of the lock, which is what keeps a newly added group from being silently
+  // excluded from the hash.
   const canonical: Record<string, unknown> = {};
   for (const field of CANDIDATE_LOCK_HASH_FIELDS) {
-    canonical[field] = (lock as unknown as Record<string, unknown>)[field];
+    canonical[field] = lock[field];
   }
   return sha256(JSON.stringify(canonical));
 };
