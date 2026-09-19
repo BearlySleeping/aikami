@@ -10,7 +10,12 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runCatalogPublish } from '../pipeline.ts';
-import { FakeR2Client, FIXTURE_HASHES, makeFixtureGameData } from './fixtures.ts';
+import {
+  FakeR2Client,
+  FIXTURE_HASHES,
+  makeFixtureGameData,
+  noPreviousRelease,
+} from './fixtures.ts';
 
 const ORIGIN_URL = 'https://assets.example.test';
 
@@ -39,6 +44,7 @@ describe('catalog publish pipeline (AC-1)', () => {
 
   test('uploads every catalog asset under a content-addressed key', async () => {
     const report = await runCatalogPublish({
+      releaseReader: noPreviousRelease,
       config: config(),
       client,
       gameDataDir,
@@ -61,7 +67,13 @@ describe('catalog publish pipeline (AC-1)', () => {
   });
 
   test('asset keys are content-addressed and immutable (no overwrite by design)', async () => {
-    await runCatalogPublish({ config: config(), client, gameDataDir, contentPacksDir });
+    await runCatalogPublish({
+      releaseReader: noPreviousRelease,
+      config: config(),
+      client,
+      gameDataDir,
+      contentPacksDir,
+    });
     const assets = [...client.objects.keys()].filter((k) => k.startsWith('assets/'));
     expect(assets).toHaveLength(7);
     // The thrust asset's key is derived from its sha256 — assert the exact
@@ -76,7 +88,13 @@ describe('catalog publish pipeline (AC-1)', () => {
   });
 
   test('applies correct MIME type and one-year immutable Cache-Control', async () => {
-    await runCatalogPublish({ config: config(), client, gameDataDir, contentPacksDir });
+    await runCatalogPublish({
+      releaseReader: noPreviousRelease,
+      config: config(),
+      client,
+      gameDataDir,
+      contentPacksDir,
+    });
     const assets = [...client.objects.entries()].filter(([key]) => key.startsWith('assets/'));
     expect(assets.length).toBeGreaterThan(0);
     // Assert EVERY asset, not just the first: file-read promise resolution
@@ -94,7 +112,13 @@ describe('catalog publish pipeline (AC-1)', () => {
   });
 
   test('only the mutable release pointer gets a short Cache-Control', async () => {
-    await runCatalogPublish({ config: config(), client, gameDataDir, contentPacksDir });
+    await runCatalogPublish({
+      releaseReader: noPreviousRelease,
+      config: config(),
+      client,
+      gameDataDir,
+      contentPacksDir,
+    });
     for (const [key, object] of client.objects) {
       if (key === 'index/v1/release.json') {
         expect(object.cacheControl).toBe('public, max-age=60');
@@ -106,6 +130,7 @@ describe('catalog publish pipeline (AC-1)', () => {
 
   test('re-run skips every object (idempotent) and exits ok', async () => {
     const first = await runCatalogPublish({
+      releaseReader: noPreviousRelease,
       config: config(),
       client,
       gameDataDir,
@@ -115,6 +140,7 @@ describe('catalog publish pipeline (AC-1)', () => {
     const putCountAfterFirst = client.putCount;
 
     const second = await runCatalogPublish({
+      releaseReader: noPreviousRelease,
       config: config(),
       client,
       gameDataDir,
@@ -136,6 +162,7 @@ describe('catalog publish pipeline (AC-1)', () => {
     void hThrust;
     // Simulate a partial run: pre-populate the bucket with 2 of the 4 assets.
     const first = await runCatalogPublish({
+      releaseReader: noPreviousRelease,
       config: config(),
       client,
       gameDataDir,
@@ -149,6 +176,7 @@ describe('catalog publish pipeline (AC-1)', () => {
     }
 
     const resume = await runCatalogPublish({
+      releaseReader: noPreviousRelease,
       config: config(),
       client,
       gameDataDir,
@@ -167,6 +195,7 @@ describe('catalog publish pipeline (AC-1)', () => {
   test('writes the index only after every asset upload succeeds', async () => {
     client.failOnKey = 'assets/';
     const report = await runCatalogPublish({
+      releaseReader: noPreviousRelease,
       config: config(),
       client,
       gameDataDir,
@@ -202,6 +231,7 @@ describe('catalog publish pipeline (AC-1)', () => {
     w(hashesPath, JSON.stringify(hashes));
 
     const report = await runCatalogPublish({
+      releaseReader: noPreviousRelease,
       config: config(),
       client,
       gameDataDir,
@@ -242,6 +272,7 @@ describe('catalog publish release consistency (C-496 AC-4)', () => {
   test('a shard upload failure prevents release pointer advancement', async () => {
     client.failOnKey = '/lpc.json';
     const report = await runCatalogPublish({
+      releaseReader: noPreviousRelease,
       config: config(),
       client,
       gameDataDir,
@@ -260,6 +291,7 @@ describe('catalog publish release consistency (C-496 AC-4)', () => {
     unlinkSync(join(gameDataDir, 'audio_tracks.json'));
 
     const report = await runCatalogPublish({
+      releaseReader: noPreviousRelease,
       config: config(),
       client,
       gameDataDir,
@@ -274,6 +306,7 @@ describe('catalog publish release consistency (C-496 AC-4)', () => {
     client.failOnKey = 'index/v1/release.json';
 
     const report = await runCatalogPublish({
+      releaseReader: noPreviousRelease,
       config: config(),
       client,
       gameDataDir,
@@ -287,6 +320,7 @@ describe('catalog publish release consistency (C-496 AC-4)', () => {
 
   test('a clean publish reports seed success and advances the release pointer', async () => {
     const report = await runCatalogPublish({
+      releaseReader: noPreviousRelease,
       config: config(),
       client,
       gameDataDir,
@@ -325,6 +359,7 @@ describe('catalog release pointer (C-496 AC-4)', () => {
 
   test('a successful publish writes a valid versioned release pointer', async () => {
     const report = await runCatalogPublish({
+      releaseReader: noPreviousRelease,
       config: config(),
       client,
       gameDataDir,
@@ -356,6 +391,7 @@ describe('catalog release pointer (C-496 AC-4)', () => {
   test('a shard failure never advances or clobbers an existing release pointer', async () => {
     // First, publish a complete release (pointer written).
     const first = await runCatalogPublish({
+      releaseReader: noPreviousRelease,
       config: config(),
       client,
       gameDataDir,
@@ -368,6 +404,7 @@ describe('catalog release pointer (C-496 AC-4)', () => {
     // Now inject a shard failure on a fresh run against the same bucket.
     client.failOnKey = '/lpc.json';
     const failed = await runCatalogPublish({
+      releaseReader: noPreviousRelease,
       config: config(),
       client,
       gameDataDir,

@@ -394,11 +394,12 @@ describe('pipeline integration — thumbnailHash lands in the republished index 
     writeFileSync(join(dir, 'lpc_credits_supplement.json'), JSON.stringify({ credits: [] }));
     writeFileSync(join(dir, 'audio_tracks.json'), JSON.stringify({ tracks: [] }));
 
-    const { FakeR2Client } = await import('./fixtures.ts');
+    const { FakeR2Client, noPreviousRelease } = await import('./fixtures.ts');
     const { runCatalogPublish } = await import('../pipeline.ts');
     const client = new FakeR2Client();
     const contentPacksDir = mkdtempSync(join(tmpdir(), 'catalog-thumb-empty-packs-'));
     const report = await runCatalogPublish({
+      releaseReader: noPreviousRelease,
       config: {
         accessKeyId: 'test',
         secretAccessKey: 'test',

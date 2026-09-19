@@ -19,7 +19,11 @@
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { ContentPackManifest, PreflightRightsEvidence } from '@aikami/schemas';
+import type {
+  ContentPackManifest,
+  PreflightRightsEvidence,
+  ReleaseDocumentReader,
+} from '@aikami/schemas';
 import {
   CatalogIndexRootSchema,
   ContentPackManifestSchema,
@@ -43,6 +47,7 @@ import { assetKey } from './content_address.ts';
 import { generateCatalogIndex } from './index_generation.ts';
 import { buildPackLock } from './pack_lock.ts';
 import { runAttributionPreflight } from './preflight.ts';
+import { resolvePreviousRelease } from './published_catalog.ts';
 import { runSeedPublish } from './seed_publish.ts';
 import { runThumbnailPhase } from './thumbnail_generation.ts';
 import { type R2ClientLike, uploadAssets } from './upload.ts';
@@ -50,6 +55,15 @@ import { type R2ClientLike, uploadAssets } from './upload.ts';
 export type CatalogPublishOptions = {
   config: CatalogConfig;
   client: R2ClientLike;
+  /**
+   * Reader for the previously published release graph.
+   *
+   * Defaults to HTTPS against `config.originUrl`. Injectable so a test can
+   * supply a fixture graph (to exercise carry-forward) or an explicit
+   * "no previous release" stub without reaching the network — the publish
+   * path must not depend on the internet to be testable.
+   */
+  releaseReader?: ReleaseDocumentReader;
   /** Override game-data dir (tests). */
   gameDataDir?: string;
   /** Override content-packs dir (tests). */
@@ -482,12 +496,38 @@ export const runCatalogPublish = async (
       elapsedMs: Date.now() - startedAt,
     };
   }
-
-  // 4. Generate index.
-  const { root, shards } = generateCatalogIndex({
+  // 4. Generate index — UNIONED with the previous VERIFIED release.
+  //
+  // This repo no longer holds the complete asset library (C-435 de-bundled it),
+  // so rebuilding the index purely from the local scan roots would replace the
+  // published catalog with the few dozen tags this checkout carries.
+  //
+  // Resolution is hash-verified through `resolveReleaseGraph` — the same
+  // resolver the production client boot path uses. A corrupt pointer or any
+  // integrity mismatch throws and the publish aborts: treating an unverifiable
+  // previous release as "absent" would turn corruption into silent data loss.
+  const previousRelease = await resolvePreviousRelease({
+    originUrl: config.originUrl,
+    reader: options.releaseReader,
+  });
+  if (!previousRelease) {
+    console.log(
+      '  🔗 previous release: none published at this origin — this index carries only its own entries',
+    );
+  } else {
+    console.log(
+      `  🔗 previous release: ${previousRelease.releaseId} (${previousRelease.entries.length} verified entr(ies))`,
+    );
+  }
+  const { root, shards, merge } = generateCatalogIndex({
     entries: entriesForIndex,
     originUrl: config.originUrl,
+    carriedEntries: previousRelease?.entries ?? [],
   });
+  console.log(
+    `  🔗 catalog merge: ${merge.carried} carried, ${merge.replaced} replaced, ` +
+      `${merge.added} added, ${merge.retired} retired — ${merge.total} total`,
+  );
 
   // Validate the root BEFORE constructing or uploading any index object —
   // an invalid index is worse than none (it produces 404s the client will

@@ -7,7 +7,18 @@
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import type { ReleaseDocumentReader } from '@aikami/schemas';
 import type { R2ClientLike } from '../upload.ts';
+
+/**
+ * A `ReleaseDocumentReader` that publishes no release.
+ *
+ * The publish pipeline resolves the previous release over HTTPS by default so
+ * it cannot truncate a live catalog. Tests that are not exercising
+ * carry-forward must supply this stub instead, or they would depend on the
+ * network and on `assets.example.test` resolving.
+ */
+export const noPreviousRelease: ReleaseDocumentReader = async () => undefined;
 
 export const makeFixtureGameData = (): string => {
   const dir = mkdtempSync(join(tmpdir(), 'catalog-fixture-'));

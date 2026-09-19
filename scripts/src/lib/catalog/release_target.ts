@@ -108,7 +108,6 @@ export type ReleaseTarget = {
   warnings: readonly string[];
 };
 
-
 /** Every bucket name any remote mode declares. */
 const declaredRemoteBuckets = (): string[] =>
   REMOTE_RELEASE_MODES.map((mode) => R2_BUCKETS.catalog[mode].bucketName);

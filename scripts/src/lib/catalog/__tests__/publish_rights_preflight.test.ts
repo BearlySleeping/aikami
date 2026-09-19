@@ -13,7 +13,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runCatalogPublish } from '../pipeline.ts';
-import { FakeR2Client, makeFixtureGameData } from './fixtures.ts';
+import { FakeR2Client, makeFixtureGameData, noPreviousRelease } from './fixtures.ts';
 
 type RightsEvidence = {
   evidenceUrl?: string;
@@ -60,6 +60,7 @@ describe('C-518 AC-5: the publish preflight requests missing rights evidence', (
     writeRights(gameDataDir, { 'lpc:hat:magic:celestial_adult:thrust': ALLOWED });
 
     const report = await runCatalogPublish({
+      releaseReader: noPreviousRelease,
       config: config(),
       client,
       gameDataDir,
@@ -86,6 +87,7 @@ describe('C-518 AC-5: the publish preflight requests missing rights evidence', (
     writeRights(gameDataDir, rights);
 
     const report = await runCatalogPublish({
+      releaseReader: noPreviousRelease,
       config: config(),
       client,
       gameDataDir,
@@ -109,6 +111,7 @@ describe('C-518 AC-5: the publish preflight requests missing rights evidence', (
     writeRights(gameDataDir, rights);
 
     const report = await runCatalogPublish({
+      releaseReader: noPreviousRelease,
       config: config(),
       client,
       gameDataDir,
@@ -133,6 +136,7 @@ describe('C-518 AC-5: the publish preflight requests missing rights evidence', (
     writeRights(gameDataDir, rights);
 
     const report = await runCatalogPublish({
+      releaseReader: noPreviousRelease,
       config: config(),
       client,
       gameDataDir,

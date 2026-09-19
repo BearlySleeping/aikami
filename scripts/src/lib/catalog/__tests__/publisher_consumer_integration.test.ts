@@ -20,7 +20,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { resolveReleaseGraph } from '@aikami/schemas';
 import { runCatalogPublish, runPackLockPublish } from '../pipeline.ts';
-import { FakeR2Client, makeFixtureGameData } from './fixtures.ts';
+import { FakeR2Client, makeFixtureGameData, noPreviousRelease } from './fixtures.ts';
 
 const ORIGIN_URL = 'https://assets.example.test';
 
@@ -208,6 +208,7 @@ describe('publisher → consumer release resolution (C-496)', () => {
     const client = new FakeR2Client();
 
     const report = await runCatalogPublish({
+      releaseReader: noPreviousRelease,
       config: {
         accessKeyId: 'test',
         secretAccessKey: 'test',
@@ -263,6 +264,7 @@ describe('publisher → consumer release resolution (C-496)', () => {
     const client = new FakeR2Client();
 
     const report = await runCatalogPublish({
+      releaseReader: noPreviousRelease,
       config: {
         accessKeyId: 'test',
         secretAccessKey: 'test',
@@ -307,6 +309,7 @@ describe('publisher → consumer release resolution (C-496)', () => {
     client.failOnKey = 'index/v1/release.json';
 
     const report = await runCatalogPublish({
+      releaseReader: noPreviousRelease,
       config: {
         accessKeyId: 'test',
         secretAccessKey: 'test',
