@@ -8,6 +8,7 @@ export * from './lib/auth/auth.ts';
 export * from './lib/capability.ts';
 export * from './lib/catalog/account.ts';
 export * from './lib/catalog/attribution_preflight.ts';
+export * from './lib/catalog/candidate_lock.ts';
 export * from './lib/catalog/catalog_index.ts';
 export * from './lib/catalog/catalog_stats.ts';
 export * from './lib/catalog/hash.ts';

@@ -1,0 +1,22 @@
+Phase 7 — origin/main client:build reproduction (executed, not inferred)
+
+Method (not a symlinked node_modules this time):
+  git worktree add -f /tmp/mainbuild2 origin/main
+  cd /tmp/mainbuild2 && bun install --frozen-lockfile
+  cd apps/frontend/client && bun run build
+
+origin/main HEAD: 8b3fe3aad8c84482c98cca993c3805fd159fdd8f
+
+Result: IDENTICAL FAILURE
+  Dev-route output present (1) — must not ship:
+    dev/
+  ✗ /tmp/mainbuild2/apps/frontend/client/build FAILED
+  ❌ check deploy assets failed (exit 1)
+  error: script "build:app" exited with code 1
+  × Task client:build failed to run.
+  error: script "build" exited with code 1
+
+Conclusion: the (dev) route leak in `client:build` is PRE-EXISTING on current
+origin/main and is NOT a regression owned by feat/emberwatch-rebuild-v5. It does
+not prevent this branch from being reviewed or merged, so its repair stays out
+of Emberwatch (per the Phase 7 instruction).

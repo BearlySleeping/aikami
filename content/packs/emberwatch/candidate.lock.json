@@ -1,0 +1,387 @@
+{
+  "schemaVersion": "candidate.lock.v1",
+  "sourceCommit": "00ecb4e30cbd0a72a172c4a805b7a703fbf7030b",
+  "sourceDirty": true,
+  "packId": "emberwatch",
+  "packVersion": "5.0.0",
+  "sealedAt": "2026-09-19T16:40:09.813Z",
+  "manifest": {
+    "count": 1,
+    "digest": "ea22e1f8d00885bc9e37fd42aa386e824e24d955c3f5b38723cb38ca3389cb5a",
+    "artifacts": [
+      {
+        "id": "manifest.json",
+        "sha256": "7778238a6aada250b576c2cce638ecdcb45e3c006c9a665811c0027cbaed2f93",
+        "sizeBytes": 106766
+      }
+    ]
+  },
+  "maps": {
+    "count": 5,
+    "digest": "1ae3901a9716fb2365a9d9b94da16f6e2a0b8578be136b600d8637c842b8cf7e",
+    "artifacts": [
+      {
+        "id": "maps/inn.json",
+        "sha256": "058d2a971142c58aacf990c21457b07ffa4e195ac5dc2361cf9e8f28dcddd3bb",
+        "sizeBytes": 45960
+      },
+      {
+        "id": "maps/merchant_shop.json",
+        "sha256": "c02172676227ae68f07f7fdaf88b240e5a138757e111f6718efe9ba14f8571d0",
+        "sizeBytes": 33542
+      },
+      {
+        "id": "maps/old_road.json",
+        "sha256": "3501f97f305a17cd573a0edf69861df567629bbe418b10a9608c5bbdf5faab70",
+        "sizeBytes": 193819
+      },
+      {
+        "id": "maps/ruined_shrine.json",
+        "sha256": "df0e4521594d200c45a42ef4c73982b2d2e207eba2833d204b6ed9b0de423ccd",
+        "sizeBytes": 105255
+      },
+      {
+        "id": "maps/village.json",
+        "sha256": "7cdd1373c8d55a920b206f006c1857fd546f166685ebd1e75b4b64c3d69735f2",
+        "sizeBytes": 223816
+      }
+    ]
+  },
+  "terrainAtlas": {
+    "count": 2,
+    "digest": "a699932c78266d3dceac8e98ba97808649b1419876884f2b148546996a1ce8a0",
+    "artifacts": [
+      {
+        "id": "tilesets/atlas.json",
+        "sha256": "e24ab42151c09174ee0c9d42cfd4997827f0e074f6ed76a19d90627baf43fd0a",
+        "sizeBytes": 43323
+      },
+      {
+        "id": "tilesets/atlas.webp",
+        "sha256": "99a5db5946b178fdcd6c62027d19b6d3493a9ab3b5021b40f2d3e6fcc143a105",
+        "sizeBytes": 144442
+      }
+    ]
+  },
+  "propAtlas": {
+    "count": 21,
+    "digest": "ebc40ba9bb7797c56c11f9a695a1585359d1225ef654c3fdc35d741212cb1c31",
+    "artifacts": [
+      {
+        "id": "props/birch.png",
+        "sha256": "4da562d00eaad1daa1b8ff51753f0a54af9d97d8cab379f7f7219a53d0cb0dc9",
+        "sizeBytes": 20191
+      },
+      {
+        "id": "props/chair.png",
+        "sha256": "51556dc173cdb5158e9c9f34a1e7c27974dc4e0e8022502e5c153690c3e2b757",
+        "sizeBytes": 3520
+      },
+      {
+        "id": "props/inn.png",
+        "sha256": "67e4518570b76de9a58cd2effe84af9e167ba83890547906dbfb9220106d7bad",
+        "sizeBytes": 97264
+      },
+      {
+        "id": "props/oak.png",
+        "sha256": "25180ca4526edf1f25b57b1cb5cfa9b34bf8f21fc4bd9bd95bf0a2cac51475eb",
+        "sizeBytes": 36127
+      },
+      {
+        "id": "props/prop_barrel.png",
+        "sha256": "f868b832672d3d07f441d50152c5905920dc6fd7ca953cdf45ce4093295fb64e",
+        "sizeBytes": 43550
+      },
+      {
+        "id": "props/prop_brazier.png",
+        "sha256": "252e02ad3ecfda1cd2ec2934653c26f841128e0c5549967fd738cb17e0ab261e",
+        "sizeBytes": 19650
+      },
+      {
+        "id": "props/prop_cart.png",
+        "sha256": "5f643e8b54eb79206ae8d0f649b89460b9c189201df1662750f1e60742f041e1",
+        "sizeBytes": 46592
+      },
+      {
+        "id": "props/prop_component.png",
+        "sha256": "11de538a0ff72f395589db58d4e8e547a04eeebf9e20400934a25a771a4bec12",
+        "sizeBytes": 27678
+      },
+      {
+        "id": "props/prop_gate.png",
+        "sha256": "ab8fcc5330442ccd6dfe92002e080981a464736d1e0c637a256ae5196ab74e6f",
+        "sizeBytes": 27980
+      },
+      {
+        "id": "props/prop_hearth.png",
+        "sha256": "043714312cab7f98e04d64075d6444ab300843227a06a9eeaf7aaa44dc6c10a3",
+        "sizeBytes": 27495
+      },
+      {
+        "id": "props/prop_notice_board.png",
+        "sha256": "ecbac9e148895d19fe0d2309c2a82ba899b1ad8cee646f6b5a99c05cf827da33",
+        "sizeBytes": 10487
+      },
+      {
+        "id": "props/prop_oil_pool.png",
+        "sha256": "f2f64f1577ac9110d1833e74110b19ffdace979be5fa8ee94bfc1b8edf45a056",
+        "sizeBytes": 15267
+      },
+      {
+        "id": "props/prop_receipt.png",
+        "sha256": "c34756783706e4e3e51c0465c97c57461cb1e7139289be713ab69e300dba0e8e",
+        "sizeBytes": 27205
+      },
+      {
+        "id": "props/prop_support.png",
+        "sha256": "945847767d89187ecc697f38030522e66c7495a6778cbf20fb9d33361760dced",
+        "sizeBytes": 51996
+      },
+      {
+        "id": "props/prop_ward_socket.png",
+        "sha256": "59f0a0d47b3d18231d830d997c6a8ad6f2e48261e2a44fe75a454a2760e4dd93",
+        "sizeBytes": 73824
+      },
+      {
+        "id": "props/shop.png",
+        "sha256": "7737c4278442bdfb0b05fc04aaa969881d713320cc5023548ab9ed4f1a834b7e",
+        "sizeBytes": 55890
+      },
+      {
+        "id": "props/shrine_arch.png",
+        "sha256": "2ac039e1c21fa27620188d8293c33271440e07c04f1e5f49a2865387aa7b0d57",
+        "sizeBytes": 34838
+      },
+      {
+        "id": "props/ward_large.png",
+        "sha256": "81c64a461fd78d0d6b36237603a0619becb62f7fd4df01f6102e4a263b7ce7e6",
+        "sizeBytes": 53373
+      },
+      {
+        "id": "props/ward_small_a.png",
+        "sha256": "1a73df9abcb96abdb82e58b8df7a184abe7403244db1653192312d14670e037c",
+        "sizeBytes": 18881
+      },
+      {
+        "id": "props/ward_small_b.png",
+        "sha256": "2720c51bc6768a37b6b6e742e8f25f19c0f8e1c5f886664bcb30b671bd30e47e",
+        "sizeBytes": 19423
+      },
+      {
+        "id": "props/ward_small_c.png",
+        "sha256": "99fcb1542fc25e24f8b2fcf6c68d6615e7b4c883d5b7dfd3a839d914d63f974d",
+        "sizeBytes": 18766
+      }
+    ]
+  },
+  "portraits": {
+    "count": 14,
+    "digest": "6e09c4ef0ac3cdc514bf31c38638b7fc4667ffb4b850e942e7cba6cc0b3b47bf",
+    "artifacts": [
+      {
+        "id": "portraits/emberwatch/apprentice_tess/neutral.png",
+        "sha256": "625b74a578d8256baeb49ef8dfbd826082bbc84fda62d58eb16177f280f4540a",
+        "sizeBytes": 245901
+      },
+      {
+        "id": "portraits/emberwatch/cartographer_ivo/neutral.png",
+        "sha256": "bb79c63e591b393bed2fe54eda352294b8fd538aaa398f8874661f40b34eb5a3",
+        "sizeBytes": 209506
+      },
+      {
+        "id": "portraits/emberwatch/innkeeper_sella/neutral.png",
+        "sha256": "d36ee00f819c7573a1e4f97c93fe3e65d8d108ab445f410e8eb00e47f81826b8",
+        "sizeBytes": 281223
+      },
+      {
+        "id": "portraits/emberwatch/merchant/neutral.png",
+        "sha256": "9589db7fc9813cdd6de55140c83af02d094121e006b47a24c9516f2172a5425f",
+        "sizeBytes": 298472
+      },
+      {
+        "id": "portraits/emberwatch/rollo_grasper/guarded.png",
+        "sha256": "f9ac5aa7b5d8776dd111239dd05e9f4a643734537d3aafbc9d7c1a3c6bb71f2d",
+        "sizeBytes": 349566
+      },
+      {
+        "id": "portraits/emberwatch/rollo_grasper/neutral.png",
+        "sha256": "88cd76e0fbc1e3060ef461ddb21056364237237630a94613ab2620cb1ff005a7",
+        "sizeBytes": 392341
+      },
+      {
+        "id": "portraits/emberwatch/rollo_grasper/relieved.png",
+        "sha256": "b0ea4ab081203521ca84214961dc1c75700eb8a08b4a4ab5705a09f984fee94a",
+        "sizeBytes": 306013
+      },
+      {
+        "id": "portraits/emberwatch/shrine_keeper_nemi/neutral.png",
+        "sha256": "1e528a4e4c62445611e01fc4ea9ac3cec79406a563db58c20391465a9534b320",
+        "sizeBytes": 218337
+      },
+      {
+        "id": "portraits/emberwatch/smith_orra/neutral.png",
+        "sha256": "a90663423d83689e65db1c5b5464d2c28ed8eab2bb6377e1ea2630c095f52b99",
+        "sizeBytes": 288254
+      },
+      {
+        "id": "portraits/emberwatch/village_elder/concerned.png",
+        "sha256": "444897d71afaf996e798838d1418559e9de51bb33f0b3aa95980b62d1b603939",
+        "sizeBytes": 313676
+      },
+      {
+        "id": "portraits/emberwatch/village_elder/neutral.png",
+        "sha256": "817dda6fd34f0f271b7fa6f1e11ed0dd5d93b6627631883ff8e3fa20740e3787",
+        "sizeBytes": 222664
+      },
+      {
+        "id": "portraits/emberwatch/village_elder/relieved.png",
+        "sha256": "b95b5aeac8dfa5586620672bf0f444c981f94b76b4f6429f29150d7ad7b0c2c2",
+        "sizeBytes": 290238
+      },
+      {
+        "id": "portraits/emberwatch/village_guard/neutral.png",
+        "sha256": "5b3839689c56aa5ff43ffe81af79d65af3dadcb392bc1f7fd4cc0bcd1e2bbe65",
+        "sizeBytes": 237173
+      },
+      {
+        "id": "portraits/emberwatch/woodcutter_ada/neutral.png",
+        "sha256": "154cbb9a4fd6ae36c33bcc173586136d8b7a676b9e02126ad10822f2764e15e9",
+        "sizeBytes": 255400
+      }
+    ]
+  },
+  "enemyVisuals": {
+    "count": 3,
+    "digest": "8e640c0fa41b9b578804cc2b7c62c72f84fb6e370db36637aaf2d96765ba6cf5",
+    "artifacts": [
+      {
+        "id": "enemies/ash_hound.png",
+        "sha256": "eb8c73033714703741b198fff73d0e2f46ce860f581d69e51bdcbd7ce0efc47e",
+        "sizeBytes": 43888
+      },
+      {
+        "id": "enemies/cinder_thrall.png",
+        "sha256": "6e34a0f898fb33b845acc7ec433b9e62ecaf2400be26216dbf1df61e58c07d8c",
+        "sizeBytes": 20657
+      },
+      {
+        "id": "enemies/ember_warden.png",
+        "sha256": "329f945a855b2a02882f840986686779d38fc62784aa7964a284d319a9ada73a",
+        "sizeBytes": 40002
+      }
+    ]
+  },
+  "audio": {
+    "count": 5,
+    "digest": "effe7faae8ca64017d1b02d2670463b468b9a7859045a3467238b6a94a78b1ae",
+    "artifacts": [
+      {
+        "id": "audio/emberwatch_combat.webm",
+        "sha256": "7989c905e85ef41948860ae0e7d042a9fc412ae478eb2ed2ee6b30e0634caf9a",
+        "sizeBytes": 1001415
+      },
+      {
+        "id": "audio/inn_hearth.webm",
+        "sha256": "a01b7aa92d2fc01cf9240e03d278a18c8e73da66567ae2f8cb2d601c8e08b4dc",
+        "sizeBytes": 1053806
+      },
+      {
+        "id": "audio/old_road.webm",
+        "sha256": "cb1c05a159a346322790efdfe31335225ddd3e37d3bd10cede4c03a4b8162ba1",
+        "sizeBytes": 1113622
+      },
+      {
+        "id": "audio/ruined_shrine.webm",
+        "sha256": "46fe67554780fda4ff516e6aea4b05e2a6713bf76811a09b50df58cff11e8ce7",
+        "sizeBytes": 1189628
+      },
+      {
+        "id": "audio/village_ward.webm",
+        "sha256": "22536060db87b024eaf717d57c8885067a7942052ecfef9ed8b51fc7766a5a98",
+        "sizeBytes": 1007750
+      }
+    ]
+  },
+  "packData": {
+    "count": 6,
+    "digest": "72ab014b7264cb67bfdcee3c589160472e0a4d4d100813fe831a73e99f0cabcb",
+    "artifacts": [
+      {
+        "id": "pack/manifest.json",
+        "sha256": "7778238a6aada250b576c2cce638ecdcb45e3c006c9a665811c0027cbaed2f93",
+        "sizeBytes": 106766
+      },
+      {
+        "id": "pack/maps/inn.json",
+        "sha256": "058d2a971142c58aacf990c21457b07ffa4e195ac5dc2361cf9e8f28dcddd3bb",
+        "sizeBytes": 45960
+      },
+      {
+        "id": "pack/maps/merchant_shop.json",
+        "sha256": "c02172676227ae68f07f7fdaf88b240e5a138757e111f6718efe9ba14f8571d0",
+        "sizeBytes": 33542
+      },
+      {
+        "id": "pack/maps/old_road.json",
+        "sha256": "3501f97f305a17cd573a0edf69861df567629bbe418b10a9608c5bbdf5faab70",
+        "sizeBytes": 193819
+      },
+      {
+        "id": "pack/maps/ruined_shrine.json",
+        "sha256": "df0e4521594d200c45a42ef4c73982b2d2e207eba2833d204b6ed9b0de423ccd",
+        "sizeBytes": 105255
+      },
+      {
+        "id": "pack/maps/village.json",
+        "sha256": "7cdd1373c8d55a920b206f006c1857fd546f166685ebd1e75b4b64c3d69735f2",
+        "sizeBytes": 223816
+      }
+    ]
+  },
+  "assetSeed": {
+    "count": 2,
+    "digest": "4bdeee55a4677deac3869fca3aa39d31676b2f85fdc98be828d540dbe450b677",
+    "artifacts": [
+      {
+        "id": "audio_tracks.json",
+        "sha256": "10fc46dd74e2abe77b35ed809b44cef9201ec0d221278d4c7a81ba83077fa42b",
+        "sizeBytes": 1277
+      },
+      {
+        "id": "offline_core.json",
+        "sha256": "97ba1ab5ad622c5d1db73bfc03e974d281a23b7ca63be101570908b014a14f3d",
+        "sizeBytes": 1889
+      }
+    ]
+  },
+  "credits": {
+    "count": 2,
+    "digest": "789832d2eaa11b3f3bd008886375f30a668fb1fed5f37565d775c58ab841895d",
+    "artifacts": [
+      {
+        "id": "asset_credits.json",
+        "sha256": "24381a7641b81da366edec49915c47da807f9d4f7fc6def5cb29350f3849b076",
+        "sizeBytes": 94695
+      },
+      {
+        "id": "project_licenses.json",
+        "sha256": "704a8cf5ae08af63900582837ec9a8a01283a61f43809f39ca7c64c95ece15ed",
+        "sizeBytes": 88457
+      }
+    ]
+  },
+  "catalogRootHash": "",
+  "catalogShards": {},
+  "packLockHash": "",
+  "rights": {
+    "passed": true,
+    "digest": "0fc424aaf15343e832dd7f7d36739b5fc6ca65ad3ff0161283cd803bea8bc0d9",
+    "summary": "74 artifacts, 0 blocked"
+  },
+  "validation": {
+    "passed": true,
+    "digest": "7778238a6aada250b576c2cce638ecdcb45e3c006c9a665811c0027cbaed2f93",
+    "summary": "5 maps, 76/95 props placed, 0 error(s)"
+  },
+  "lockHash": "929833f4f083227dcba579d891e492c7947020cc66a63240c79fef2bca1dcf9c"
+}
