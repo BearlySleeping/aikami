@@ -21,6 +21,7 @@
 import { resolve } from 'node:path';
 import { AUDIO_MIME_MAP, IMAGE_MIME_MAP, R2_BUCKETS } from '@aikami/constants';
 import { getScriptsEnv, initScriptsEnv } from '../env/scripts_env.ts';
+import { CATALOG_TEST_SEAM_ENV, resolveReleaseTarget } from './release_target.ts';
 
 // ---------------------------------------------------------------------------
 // Bucket / index layout constants
@@ -111,10 +112,21 @@ export const resolveCatalogConfig = (mode: string): CatalogConfig => {
   const accessKeyId = getScriptsEnv('CLOUD_FLARE_CATALOG_BUCKET_ACCESS_KEY_ID') ?? '';
   const secretAccessKey = getScriptsEnv('CLOUD_FLARE_CATALOG_BUCKET_SECRET_ACCESS_KEY') ?? '';
   const endpoint = getScriptsEnv('CLOUD_FLARE_CATALOG_BUCKET_ENDPOINT') ?? '';
-  const originUrlRaw = getScriptsEnv('CATALOG_ORIGIN_URL') ?? '';
-  // C-454: CATALOG_BUCKET env var override takes precedence (local testing),
-  // otherwise resolve from R2_BUCKETS.catalog by mode.
-  const bucket = getScriptsEnv('CATALOG_BUCKET') || resolveDefaultCatalogBucket(mode);
+
+  // C-454's `CATALOG_BUCKET` override used to take PRECEDENCE over the
+  // mode-aware resolution, which let `scripts/.env.staging` (declaring
+  // CATALOG_BUCKET=aikami-catalog) silently retarget a staging publish at the
+  // PRODUCTION bucket. The override is now validated by the release-target
+  // gate: a remote mode accepts only the bucket it declares, and any override
+  // must go through an explicit test seam that cannot name a remote bucket.
+  const target = resolveReleaseTarget({
+    mode,
+    env: {
+      catalogBucket: getScriptsEnv('CATALOG_BUCKET'),
+      catalogOriginUrl: getScriptsEnv('CATALOG_ORIGIN_URL'),
+      testSeam: getScriptsEnv(CATALOG_TEST_SEAM_ENV),
+    },
+  });
 
   const missing: string[] = [];
   if (!accessKeyId) {
@@ -126,9 +138,6 @@ export const resolveCatalogConfig = (mode: string): CatalogConfig => {
   if (!endpoint) {
     missing.push('CLOUD_FLARE_CATALOG_BUCKET_ENDPOINT');
   }
-  if (!originUrlRaw) {
-    missing.push('CATALOG_ORIGIN_URL');
-  }
   if (missing.length > 0) {
     throw new Error(
       `Catalog publish config missing: ${missing.join(', ')}. ` +
@@ -136,26 +145,12 @@ export const resolveCatalogConfig = (mode: string): CatalogConfig => {
     );
   }
 
-  // Validate + canonicalize the origin: new URL() rejects malformed or
-  // protocol-less values, and trailing slashes are stripped so index
-  // generation produces single-slash asset URLs (no double slashes when the
-  // consumer joins originUrl with a hash).
-  let originUrl: string;
-  try {
-    originUrl = new URL(originUrlRaw).toString().replace(/\/+$/, '');
-  } catch {
-    throw new Error(
-      `Catalog publish config invalid: CATALOG_ORIGIN_URL is not a valid URL ` +
-        `(${JSON.stringify(originUrlRaw)}). Set it in scripts/.env.{mode} (see scripts/.env.example).`,
-    );
-  }
-
   return {
     accessKeyId,
     secretAccessKey,
     endpoint,
-    bucket,
-    originUrl,
+    bucket: target.bucket,
+    originUrl: target.originUrl,
   };
 };
 

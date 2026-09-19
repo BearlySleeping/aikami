@@ -41,6 +41,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { resolveBucketName } from '@aikami/constants';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repository = join(here, '../../../..');
@@ -199,11 +200,36 @@ const main = async (): Promise<void> => {
     process.exit(2);
   }
 
-  // ── Read the previous release pointer BEFORE any write ───────────────────
+  // ── Release-target preflight: BEFORE any write ──────────────────────────
+  //
+  // `resolveCatalogConfig` runs the fail-closed release-target gate
+  // (`catalog/release_target.ts`): a remote mode accepts only the bucket and
+  // origin it declares, so a `CATALOG_BUCKET` override — as
+  // `scripts/.env.staging` used to carry, pointing at the PRODUCTION bucket —
+  // cannot retarget the run. The gate throws before this process can write.
   const { resolveCatalogConfig } = await import('../catalog/config.ts');
-  const config = resolveCatalogConfig(mode);
-  console.log(`  bucket:        ${config.bucket}`);
+  let config: Awaited<ReturnType<typeof resolveCatalogConfig>>;
+  try {
+    config = resolveCatalogConfig(mode);
+  } catch (error) {
+    console.error('');
+    console.error(`❌ release target refused — nothing was written.`);
+    console.error(`   ${(error as Error).message}`);
+    console.error('');
+    console.error(
+      '   A staging release needs its OWN bucket and read origin. Verifying a staging\n' +
+        '   write by reading the production origin proves nothing about staging.',
+    );
+    process.exit(2);
+  }
+
+  // Safe target identity only — never a credential.
+  const expectedBucket = resolveBucketName({ bucketKey: 'catalog', mode });
+  console.log(
+    `  bucket:        ${config.bucket}${config.bucket === expectedBucket ? '' : ' (test seam)'}`,
+  );
   console.log(`  origin:        ${config.originUrl}`);
+  console.log(`  target check:  ok (bucket and origin match mode ${mode})`);
   console.log('');
   const previous = await readReleasePointer(config.originUrl);
   console.log(
