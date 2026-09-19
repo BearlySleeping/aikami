@@ -66,18 +66,6 @@
     },
     "identities": ["v7:301dde02"]
   },
-  "apps/frontend/client/src/lib/views/dev/sandbox/combat/combat_sandbox_view_model.svelte.ts": {
-    "counts": {
-      "m9": 1
-    },
-    "identities": ["m9:c9cccbe9"]
-  },
-  "apps/frontend/client/src/lib/views/dev/sandbox/combat/combat_sandbox_view.svelte": {
-    "counts": {
-      "v6": 2
-    },
-    "identities": ["v6:46249b86", "v6:46249b86"]
-  },
   "apps/frontend/client/src/lib/views/dev/sandbox/environment/environment_sandbox_view_model.svelte.ts": {
     "counts": {
       "m9": 3

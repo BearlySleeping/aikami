@@ -701,16 +701,22 @@
       "worst": 22
     }
   },
-  "apps/frontend/client/src/lib/views/combat/combat_view_model.dev.svelte.ts": {
-    "counts": {
-      "excessive": 3,
-      "worst": 27
-    }
-  },
   "apps/frontend/client/src/lib/views/combat/combat_view_model.svelte.ts": {
     "counts": {
       "excessive": 3,
       "worst": 23
+    }
+  },
+  "apps/frontend/client/src/lib/views/dev/combat/scenarios/combat_debug_url_config.ts": {
+    "counts": {
+      "excessive": 1,
+      "worst": 22
+    }
+  },
+  "apps/frontend/client/src/lib/views/dev/combat/session/combat_debug_live_session.ts": {
+    "counts": {
+      "excessive": 2,
+      "worst": 20
     }
   },
   "apps/frontend/client/src/lib/views/dev/lpc_ai/lpc_ai_test_view_model.svelte.ts": {
