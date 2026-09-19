@@ -35,8 +35,13 @@
 //   2. bucket MUST NOT equal the other remote mode's declared bucket
 //   3. origin MUST NOT equal the other remote mode's origin, when that origin
 //      is resolvable from the sibling `scripts/.env.{otherMode}`
-//   4. origin MUST NOT equal any origin declared in
-//      `CATALOG_ORIGIN_FORBIDDEN_HOSTS` (a safety DENYLIST — see below)
+//   4. origin MUST NOT equal any origin in `CATALOG_ORIGIN_FORBIDDEN_HOSTS`,
+//      which is DERIVED from `CATALOG_ORIGINS` in `@aikami/constants` — the
+//      canonical per-mode origin identity table. Deriving it keeps the denylist
+//      from drifting from the identity it protects.
+//   5. origin MUST be provisioned. `CATALOG_ORIGINS[mode].originUrl === null`
+//      means the mode has no public read origin yet, which fails closed rather
+//      than falling back to production.
 //
 // An override is still available for LOCAL work, but only through an explicit
 // test seam that cannot name a remote bucket or origin. That keeps the local
@@ -54,7 +59,12 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { R2_BUCKETS, resolveBucketName } from '@aikami/constants';
+import {
+  CATALOG_ORIGINS,
+  PRODUCTION_CATALOG_ORIGINS,
+  R2_BUCKETS,
+  resolveBucketName,
+} from '@aikami/constants';
 
 const _here = fileURLToPath(import.meta.url);
 const REPO_ROOT = resolve(_here, '../../../..');
@@ -71,7 +81,7 @@ export type RemoteReleaseMode = (typeof REMOTE_RELEASE_MODES)[number];
  * publish that resolves to one of them would write production-visible bytes
  * while believing it was rehearsing.
  */
-export const CATALOG_ORIGIN_FORBIDDEN_HOSTS = ['assets.bearlysleeping.com'] as const;
+export const CATALOG_ORIGIN_FORBIDDEN_HOSTS: readonly string[] = PRODUCTION_CATALOG_ORIGINS;
 
 /**
  * The ONLY way to point a local run at a non-declared bucket.
@@ -155,8 +165,20 @@ export const resolveReleaseTarget = (options: {
     catalogOriginUrl?: string | undefined;
     testSeam?: string | undefined;
   };
+  /**
+   * Canonical origin identity table. Defaults to the committed one; injected by
+   * tests so a PROVISIONED origin can be exercised without editing the shipped
+   * table (which deliberately records staging as unprovisioned).
+   */
+  origins?: Record<string, { bucketName: string; originUrl: string | null }>;
 }): ReleaseTarget => {
   const { mode, env } = options;
+  const origins =
+    options.origins ??
+    (CATALOG_ORIGINS as unknown as Record<
+      string,
+      { bucketName: string; originUrl: string | null }
+    >);
   const warnings: string[] = [];
 
   const expectedBucket = resolveBucketName({ bucketKey: 'catalog', mode });
@@ -228,6 +250,21 @@ export const resolveReleaseTarget = (options: {
     throw new ReleaseTargetError(
       'origin-invalid',
       `CATALOG_ORIGIN_URL is not a valid URL (${JSON.stringify(originUrl)}).`,
+    );
+  }
+
+  // The canonical identity for this mode, when one is declared. `originUrl:
+  // null` means the mode has NO public read origin yet — fail closed rather
+  // than accept whatever the environment happens to say, because the only other
+  // origin available is production's.
+  const declared = origins[mode];
+  if (declared && declared.originUrl === null) {
+    throw new ReleaseTargetError(
+      'origin-not-provisioned',
+      `Mode ${JSON.stringify(mode)} has no declared catalog origin yet ` +
+        `(CATALOG_ORIGINS.${mode}.originUrl is null), so a ${mode} publish could not be ` +
+        'verified. Provision a public read origin for ' +
+        `\`${declared.bucketName}\` and record it in CATALOG_ORIGINS before publishing.`,
     );
   }
 

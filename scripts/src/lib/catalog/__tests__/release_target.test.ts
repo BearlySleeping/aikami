@@ -5,7 +5,7 @@
 // separation could be lost.
 
 import { describe, expect, test } from 'bun:test';
-import { R2_BUCKETS } from '@aikami/constants';
+import { CATALOG_ORIGINS, R2_BUCKETS } from '@aikami/constants';
 import {
   CATALOG_ORIGIN_FORBIDDEN_HOSTS,
   CATALOG_TEST_SEAM_ENV,
@@ -17,16 +17,32 @@ import {
 const STAGING_ORIGIN = 'https://staging-assets.example.test';
 const PRODUCTION_ORIGIN = `https://${CATALOG_ORIGIN_FORBIDDEN_HOSTS[0]}`;
 
+/**
+ * A PROVISIONED origin table.
+ *
+ * The committed `CATALOG_ORIGINS` records staging's origin as `null` on purpose
+ * — it genuinely is not provisioned, and the gate fails closed on that. These
+ * tests exercise the origin-validation rules, which only run for a provisioned
+ * mode, so the table is injected rather than edited. That keeps the shipped
+ * table honest and the rules covered.
+ */
+const PROVISIONED = {
+  production: { bucketName: 'aikami-catalog', originUrl: PRODUCTION_ORIGIN },
+  staging: { bucketName: 'aikami-staging-catalog', originUrl: STAGING_ORIGIN },
+};
+
 const staging = (env: Partial<Parameters<typeof resolveReleaseTarget>[0]['env']> = {}) =>
   resolveReleaseTarget({
     mode: 'staging',
     env: { catalogOriginUrl: STAGING_ORIGIN, ...env },
+    origins: PROVISIONED,
   });
 
 const production = (env: Partial<Parameters<typeof resolveReleaseTarget>[0]['env']> = {}) =>
   resolveReleaseTarget({
     mode: 'production',
     env: { catalogOriginUrl: PRODUCTION_ORIGIN, ...env },
+    origins: PROVISIONED,
   });
 
 /** Asserts the call throws a ReleaseTargetError carrying `code`. */
@@ -159,6 +175,25 @@ describe('release target — the read origin must not be production', () => {
     // Verifying a staging write by reading production proves nothing about
     // staging, and hides exactly the failure this gate exists to catch.
     expectRejection(() => staging({ catalogOriginUrl: PRODUCTION_ORIGIN }), 'origin-is-production');
+  });
+
+  test('a mode with NO provisioned origin fails closed, never falling back', () => {
+    // The committed table records staging's origin as null: there is no public
+    // URL for `aikami-staging-catalog`. That must refuse rather than accept
+    // whatever the environment says, because the only other origin available is
+    // production's — which is the bug this whole gate exists to catch.
+    expectRejection(
+      () => resolveReleaseTarget({ mode: 'staging', env: { catalogOriginUrl: STAGING_ORIGIN } }),
+      'origin-not-provisioned',
+    );
+  });
+
+  test('the shipped table records staging as unprovisioned and distinct', () => {
+    // Guards the invariant rather than trusting it: if someone fills this in
+    // without provisioning the real origin, staging verification becomes a lie.
+    expect(CATALOG_ORIGINS.staging.originUrl).toBeNull();
+    expect(CATALOG_ORIGINS.production.originUrl).not.toBeNull();
+    expect(CATALOG_ORIGINS.staging.bucketName).not.toBe(CATALOG_ORIGINS.production.bucketName);
   });
 
   test('production is allowed to read the production origin', () => {
