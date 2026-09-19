@@ -38,6 +38,7 @@ import type {
 } from '@aikami/schemas';
 import { PACK_LOCK_KEY, ReleasePlanSchema } from '@aikami/schemas';
 import { Value } from 'typebox/value';
+import { computeLockHash } from './candidate_lock.ts';
 import { ASSET_KEY_PREFIX, ROOT_INDEX_KEY } from './config.ts';
 import { generateCatalogIndex } from './index_generation.ts';
 import { resolvePreviousRelease } from './published_catalog.ts';
@@ -93,8 +94,11 @@ export const verifyCandidate = (options: {
 }): PhaseResult<CandidateVerification> => {
   const { sealed, rebuild } = options;
 
+  // Reuse the SAME hash function the seal uses. Reimplementing it here — as an
+  // earlier revision did, with a different key order — makes every candidate
+  // look tampered with, or (worse) lets a real tamper through.
   const { lockHash, ...rest } = sealed;
-  const recomputed = sha256(JSON.stringify(canonicalFields(rest)));
+  const recomputed = computeLockHash(rest);
   if (recomputed !== lockHash) {
     return phaseFail(
       'verifyCandidate',
@@ -132,15 +136,6 @@ export const verifyCandidate = (options: {
     sourceCommit: sealed.source.commit,
     sourceTree: sealed.source.tree,
   });
-};
-
-/** Field order must match the schema's hash field list exactly. */
-const canonicalFields = (lock: Omit<CandidateLock, 'lockHash'>): Record<string, unknown> => {
-  const out: Record<string, unknown> = {};
-  for (const key of Object.keys(lock).sort()) {
-    out[key] = lock[key as keyof typeof lock];
-  }
-  return out;
 };
 
 // ---------------------------------------------------------------------------
@@ -353,11 +348,15 @@ export const validateReleasePlan = (options: {
       'the merged catalog would be empty — refusing to publish',
     );
   }
-  if (plan.base && plan.merge.total < plan.merge.carried) {
+  // The invariant is about the MERGE, not about the base object: carried > 0
+  // means entries came from a previous release, and a total below that count
+  // means the merge dropped some. Checking `plan.base` instead would miss a
+  // plan whose base failed to resolve while the merge still claimed to carry.
+  if (plan.merge.carried > 0 && plan.merge.total < plan.merge.carried) {
     return phaseFail(
       'validateReleasePlan',
-      `the plan would drop catalog entries: base carries ${plan.merge.carried} but the merged ` +
-        `total is ${plan.merge.total}`,
+      `the plan would drop catalog entries: it carries ${plan.merge.carried} from the base but the ` +
+        `merged total is only ${plan.merge.total}`,
     );
   }
 

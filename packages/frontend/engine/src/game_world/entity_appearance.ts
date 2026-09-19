@@ -32,6 +32,15 @@ export type AppearanceLayer = {
   spritesheet?: Spritesheet;
   /** C-496 AC-3: compiled shared visual definition for this layer. */
   definition?: CompleteSpriteDefinition;
+  /**
+   * True when this layer is ONE authored image rather than an LPC sheet.
+   *
+   * Load-bearing for the per-frame path: without it the "legacy row/column"
+   * fallback would slice a static actor's single image into 64px cells and
+   * render one corner of it as the actor. A static layer has no sheet geometry
+   * to resolve, so it must be left alone entirely.
+   */
+  staticVisual?: boolean;
 };
 
 /** A fully loaded appearance staged off-scene, ready for an atomic commit. */
@@ -131,6 +140,71 @@ export class EntityAppearanceLoader {
       container.addChild(layer.sprite);
     }
     return { container, layers };
+  }
+
+  /**
+   * Loads ONE authored image as an actor's whole visual.
+   *
+   * The generic counterpart to {@link prepare} for actors that are not LPC
+   * humanoids — a hound, a construct, a creature. It produces the same
+   * {@link PreparedAppearance} shape, so `commit` and `disposePrepared` work
+   * unchanged and a caller never has to branch on which kind it holds.
+   *
+   * Movement semantics are explicit rather than pretended: one still image
+   * faces every direction, so the layer carries a synthetic recipe with no
+   * animation states. A pack that wants directional or animated art authors a
+   * sheet and uses the LPC path instead.
+   *
+   * Returns an EMPTY appearance (not a throw) when the image cannot be loaded,
+   * so the caller's existing "no layers resolved — keep the placeholder" path
+   * applies rather than a special case.
+   */
+  async prepareStatic(options: {
+    url: string;
+    width: number;
+    height: number;
+    /** Fraction of the image height at the actor's feet. Defaults to bottom. */
+    anchorY?: number;
+    /** Logical id for diagnostics and the synthetic recipe. */
+    id: string;
+  }): Promise<PreparedAppearance> {
+    const container = new Container();
+    container.eventMode = 'none';
+
+    let texture: Texture;
+    try {
+      texture = await this._loadTexture(options.url);
+    } catch (error) {
+      this._onLoadError?.({ url: options.url, error: String(error) });
+      return { container, layers: [] };
+    }
+
+    // Nearest-neighbour, matching every other game surface: a static actor is
+    // pixel art and must not be bilinearly smeared when scaled.
+    texture.source.scaleMode = 'nearest';
+
+    const sprite = new Sprite(texture);
+    sprite.eventMode = 'none';
+    sprite.anchor.set(0.5, options.anchorY ?? 1);
+    // The authored size is the actor's footprint; the texture may be a
+    // different resolution, so scale to the declared dimensions rather than
+    // assuming the file is already at gameplay size.
+    if (texture.width > 0 && texture.height > 0) {
+      sprite.scale.set(options.width / texture.width, options.height / texture.height);
+    }
+    container.addChild(sprite);
+
+    // A static image is not recoloured: LPC palettes map grayscale source art
+    // through a per-slot LUT, and there is no grayscale source here. An
+    // all-zero LUT is the identity, so the authored colours survive.
+    const recipe: LpcLayerRecipe = {
+      slot: options.id,
+      assetId: options.id,
+      layerRole: 'front',
+      hexPalette: new Uint8Array(1024),
+    };
+
+    return { container, layers: [{ sprite, recipe, texture, staticVisual: true }] };
   }
 
   /**
@@ -263,6 +337,12 @@ export const applyLpcFrameToEntry = (options: {
 
   for (const layer of layers) {
     if (!layer.texture) {
+      continue;
+    }
+
+    // A static actor is one whole image with no sheet to slice. Falling
+    // through would crop it to a single cell.
+    if (layer.staticVisual) {
       continue;
     }
 
