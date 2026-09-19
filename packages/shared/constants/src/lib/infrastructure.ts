@@ -162,7 +162,9 @@ export const resolveCatalogOrigin = (
  * parsed `URL.hostname`, and a denylist of full URLs would silently never
  * match — which is exactly the failure mode this list exists to prevent.
  */
-export const PRODUCTION_CATALOG_ORIGINS: readonly string[] = [CATALOG_ORIGINS.production.originUrl]
+export const PRODUCTION_CATALOG_ORIGINS: readonly string[] = (
+  [CATALOG_ORIGINS.production.originUrl] as readonly (string | null)[]
+)
   .filter((url): url is string => typeof url === 'string' && url.length > 0)
   .map((url) => new URL(url).hostname);
 
