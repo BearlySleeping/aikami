@@ -15,7 +15,7 @@
   },
   "devDependencies": {
     "astro": "7.3.3",
-    "wrangler": "4.132.0"
+    "wrangler": "4.135.0"
   },
   "dependencies": {
     "@aikami/constants": "workspace:*",
@@ -23,6 +23,6 @@
     "@aikami/schemas": "workspace:*",
     "@aikami/types": "workspace:*",
     "@aikami/utils": "workspace:*",
-    "@astrojs/starlight": "0.42.1"
+    "@astrojs/starlight": "0.42.2"
   }
 }

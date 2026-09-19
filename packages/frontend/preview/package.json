@@ -29,7 +29,7 @@
     "@aikami/schemas": "workspace:*",
     "@aikami/types": "workspace:*",
     "@aikami/utils": "workspace:*",
-    "pixi.js": "8.20.1"
+    "pixi.js": "8.21.0"
   },
   "devDependencies": {
     "svelte": "5.57.0",
