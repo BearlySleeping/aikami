@@ -1,28 +1,23 @@
 // scripts/src/lib/ops/__tests__/guard_source_file_size.test.ts
 //
-// Tests for the source-file-size guard: threshold boundaries, line counting,
-// classification, and the baseline/exception ratchet. The pure logic is tested
-// directly; the CLI modes are exercised against isolated fixture trees via the
-// AIKAMI_GUARD_ROOT / AIKAMI_GUARD_BASELINE / AIKAMI_GUARD_EXCEPTIONS env
-// overrides so the repository's real baseline is never touched.
+// CLI tests for the source-file-size guard: thresholds, the reduction-only
+// baseline ratchet, the permanent-exemption / temporary-waiver split, waiver
+// expiry, ceiling growth, and the trusted-base effective-allowance check that
+// closes the baseline→waiver laundering hole.
+//
+// Everything runs against isolated fixture trees via the AIKAMI_GUARD_ROOT /
+// AIKAMI_GUARD_BASELINE / AIKAMI_GUARD_EXEMPTIONS / AIKAMI_GUARD_WAIVERS env
+// overrides, so the repository's real policy files are never touched.
+//
+// The pure logic (thresholds, classification, dates, effective allowance) is
+// covered by guards_source_size_policy.test.ts and
+// guard_source_file_size_helpers.test.ts.
 
 import { afterAll, describe, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
-import {
-  assessFile,
-  budgetFor,
-  countPhysicalLines,
-  findBaselineExpansion,
-  isExcludedDir,
-  isGeneratedFile,
-  isSourceFile,
-  isTestFile,
-  validateBaselineReduction,
-  validateExceptions,
-} from '../guard_source_file_size_helpers.ts';
 
 const GUARD_PATH = resolve(import.meta.dir, '../guard_source_file_size.ts');
 const tempRoots: string[] = [];
@@ -39,6 +34,14 @@ afterAll(() => {
   }
 });
 
+/**
+ * Writes a file with exactly `lines` physical lines.
+ *
+ * The body is comment lines on purpose: a fixture must be *valid* TypeScript,
+ * because the exemption-classification check parses the file to prove a
+ * `declarative` claim (no logic declarations). Arbitrary filler text would be a
+ * syntax error, and an unparseable file cannot be proven declarative.
+ */
 const writeSource = (root: string, relPath: string, lines: number, ending = '\n'): string => {
   const full = join(root, relPath);
   mkdirSync(dirname(full), { recursive: true });
@@ -46,47 +49,107 @@ const writeSource = (root: string, relPath: string, lines: number, ending = '\n'
     writeFileSync(full, '');
     return full;
   }
-  const body = Array.from({ length: lines }, (_, index) => `line ${index + 1}`).join('\n');
+  const body = Array.from({ length: lines }, (_, index) => `// line ${index + 1}`).join('\n');
   writeFileSync(full, `${body}${ending}`);
   return full;
 };
 
-const writeBaselineFile = (root: string, baseline: Record<string, number>): string => {
-  const path = join(root, 'baseline.json');
-  writeFileSync(path, `${JSON.stringify(baseline, null, 2)}\n`);
+/**
+ * Policy files live under the fixture root at the SAME repo-relative path the
+ * real files use. The trusted-base check reads them with `git show <ref>:<path>`
+ * against the fixture's own git repo, so the path has to match on both sides.
+ */
+const POLICY_DIR = 'scripts/src/lib/ops';
+
+const writeJson = (root: string, relPath: string, value: unknown): string => {
+  const path = join(root, relPath);
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`);
   return path;
 };
+
+const waiver = (maxLines: number, overrides: Record<string, unknown> = {}) => ({
+  maxLines,
+  rationale: 'large mutable module pending a named decomposition',
+  owner: '@aikami/client',
+  issue: '#342',
+  reviewBy: '2026-12-31',
+  ...overrides,
+});
+
+const declarativeExemption = (maxLines: number) => ({
+  maxLines,
+  rationale: 'cohesive declarative table consumed as a single lookup dataset',
+  owner: '@aikami/platform',
+  kind: 'declarative',
+});
 
 type GuardRun = { status: number | null; stdout: string; stderr: string };
 
 const runGuard = (options: {
   root: string;
   args?: string[];
-  baselinePath?: string;
-  exceptions?: unknown;
+  /** Pass `undefined` to leave the on-disk baseline untouched. */
+  baseline?: unknown;
+  exemptions?: unknown;
+  waivers?: unknown;
+  legacyExceptions?: unknown;
   baseRef?: string;
+  today?: string;
 }): GuardRun => {
-  const baselinePath = options.baselinePath ?? join(options.root, 'baseline.json');
-  const exceptionsPath = join(options.root, 'exceptions.json');
-  if (options.exceptions !== undefined) {
-    writeFileSync(exceptionsPath, `${JSON.stringify(options.exceptions, null, 2)}\n`);
+  const paths = {
+    baseline: join(options.root, POLICY_DIR, 'baseline.json'),
+    exemptions: join(options.root, POLICY_DIR, 'exemptions.json'),
+    waivers: join(options.root, POLICY_DIR, 'waivers.json'),
+    legacy: join(options.root, POLICY_DIR, 'legacy_exceptions.json'),
+  };
+  if (options.baseline !== undefined) {
+    writeJson(options.root, `${POLICY_DIR}/baseline.json`, options.baseline);
   }
+  writeJson(options.root, `${POLICY_DIR}/exemptions.json`, options.exemptions ?? {});
+  writeJson(options.root, `${POLICY_DIR}/waivers.json`, options.waivers ?? {});
+  if (options.legacyExceptions !== undefined) {
+    writeJson(options.root, `${POLICY_DIR}/legacy_exceptions.json`, options.legacyExceptions);
+  } else {
+    rmSync(paths.legacy, { force: true });
+  }
+
   const env = {
     ...process.env,
     AIKAMI_GUARD_ROOT: options.root,
-    AIKAMI_GUARD_BASELINE: baselinePath,
-    AIKAMI_GUARD_EXCEPTIONS: exceptionsPath,
+    AIKAMI_GUARD_BASELINE: paths.baseline,
+    AIKAMI_GUARD_EXEMPTIONS: paths.exemptions,
+    AIKAMI_GUARD_WAIVERS: paths.waivers,
+    AIKAMI_GUARD_EXCEPTIONS: paths.legacy,
     AIKAMI_GUARD_BASE_REF: options.baseRef ?? '',
+    AIKAMI_GUARD_TODAY: options.today ?? '2026-09-18',
+    AIKAMI_GUARD_POLICY_AUTHORIZATION: '',
     BASE_REF: '',
   };
-  const result = spawnSync('bun', ['run', GUARD_PATH, ...(options.args ?? [])], {
-    env,
-    encoding: 'utf8',
-  });
+  const result = spawnGuard(env, options.args ?? []);
   if (result.error) {
     throw result.error;
   }
   return { status: result.status, stdout: result.stdout ?? '', stderr: result.stderr ?? '' };
+};
+
+/**
+ * Spawns the guard, retrying once when the process is killed by a signal.
+ *
+ * 🔴 `spawnSync` reports `status: null` with no `error` when the child was
+ * terminated rather than exiting — on a loaded CI runner that is resource
+ * pressure, not a guard verdict. This suite spawns the guard ~40 times and
+ * Windows runners were the ones to trip it. Retrying once keeps a killed
+ * process from being reported as a guard failure; a real non-zero exit still
+ * fails immediately.
+ */
+const spawnGuard = (env: NodeJS.ProcessEnv, args: string[]) => {
+  const attempt = () => spawnSync('bun', ['run', GUARD_PATH, ...args], { env, encoding: 'utf8' });
+  const first = attempt();
+  if (first.status === null && !first.error) {
+    return attempt();
+  }
+  return first;
 };
 
 const git = (root: string, args: string[]): void => {
@@ -100,227 +163,12 @@ const git = (root: string, args: string[]): void => {
 };
 
 const readBaseline = (root: string): Record<string, number> =>
-  JSON.parse(readFileSync(join(root, 'baseline.json'), 'utf8')) as Record<string, number>;
+  JSON.parse(readFileSync(join(root, POLICY_DIR, 'baseline.json'), 'utf8')) as Record<
+    string,
+    number
+  >;
 
-// ── Pure logic ───────────────────────────────────────────────────────────
-
-describe('countPhysicalLines', () => {
-  test('counts an empty file as zero lines', () => {
-    expect(countPhysicalLines('')).toBe(0);
-  });
-
-  test('does not add a phantom line for a trailing newline', () => {
-    expect(countPhysicalLines('a')).toBe(1);
-    expect(countPhysicalLines('a\n')).toBe(1);
-    expect(countPhysicalLines('a\nb\n')).toBe(2);
-  });
-
-  test('normalizes CRLF and lone CR', () => {
-    expect(countPhysicalLines('a\r\nb\r\n')).toBe(2);
-    expect(countPhysicalLines('a\rb')).toBe(2);
-  });
-
-  test('counts a lone newline as one blank line', () => {
-    expect(countPhysicalLines('\n')).toBe(1);
-  });
-});
-
-describe('budgets and thresholds', () => {
-  test('uses the documented production and test budgets', () => {
-    expect(budgetFor('production')).toEqual({ warn: 500, hard: 800 });
-    expect(budgetFor('test')).toEqual({ warn: 800, hard: 1500 });
-  });
-
-  test('production boundary is exact', () => {
-    expect(assessFile({ kind: 'production', lines: 500 }).status).toBe('ok');
-    expect(assessFile({ kind: 'production', lines: 501 }).status).toBe('warning');
-    expect(assessFile({ kind: 'production', lines: 800 }).status).toBe('warning');
-    expect(assessFile({ kind: 'production', lines: 801 }).status).toBe('over-limit');
-  });
-
-  test('test boundary is exact', () => {
-    expect(assessFile({ kind: 'test', lines: 800 }).status).toBe('ok');
-    expect(assessFile({ kind: 'test', lines: 801 }).status).toBe('warning');
-    expect(assessFile({ kind: 'test', lines: 1500 }).status).toBe('warning');
-    expect(assessFile({ kind: 'test', lines: 1501 }).status).toBe('over-limit');
-  });
-
-  test('baseline allows equality, fails growth, and requires reductions to be locked', () => {
-    expect(assessFile({ kind: 'production', lines: 900, baselineLines: 900 }).status).toBe(
-      'baselined',
-    );
-    expect(assessFile({ kind: 'production', lines: 901, baselineLines: 900 }).status).toBe(
-      'over-limit',
-    );
-    expect(assessFile({ kind: 'production', lines: 850, baselineLines: 900 }).status).toBe(
-      'reduction',
-    );
-  });
-
-  test('exception ceiling takes precedence over the baseline', () => {
-    const exception = {
-      maxLines: 1000,
-      rationale: 'cohesive declarative table',
-      owner: '@aikami/platform',
-      kind: 'declarative' as const,
-    };
-    expect(assessFile({ kind: 'production', lines: 1000, exception }).status).toBe('exception');
-    expect(assessFile({ kind: 'production', lines: 1001, exception }).status).toBe('over-limit');
-  });
-});
-
-describe('classification and exclusions', () => {
-  test('recognizes source formats', () => {
-    for (const name of ['a.ts', 'a.tsx', 'a.js', 'a.jsx', 'a.mjs', 'a.cjs', 'a.svelte']) {
-      expect(isSourceFile(name)).toBe(true);
-    }
-    expect(isSourceFile('a.json')).toBe(false);
-    expect(isSourceFile('a.md')).toBe(false);
-  });
-
-  test('recognizes generated conventions', () => {
-    expect(isGeneratedFile('apps/x/src/env.d.ts')).toBe(true);
-    expect(isGeneratedFile('.pi/generated-skills/foo/bar.ts')).toBe(true);
-    expect(isGeneratedFile('packages/x/src/generated/catalog.ts')).toBe(true);
-    expect(isGeneratedFile('packages/x/src/paraglide/messages.js')).toBe(true);
-    expect(isGeneratedFile('apps/x/src/lpc_asset_catalog_generated.ts')).toBe(true);
-    expect(isGeneratedFile('apps/x/src/catalog.generated.ts')).toBe(true);
-    expect(isGeneratedFile('apps/frontend/client/static/content.js')).toBe(true);
-    expect(isGeneratedFile('apps/x/src/foo.ts')).toBe(false);
-  });
-
-  test('recognizes tests', () => {
-    expect(isTestFile('apps/x/src/foo.test.ts')).toBe(true);
-    expect(isTestFile('apps/x/src/foo.spec.ts')).toBe(true);
-    expect(isTestFile('packages/x/src/__tests__/foo.ts')).toBe(true);
-    expect(isTestFile('packages/x/tests/foo.ts')).toBe(true);
-    expect(isTestFile('apps/e2e/specs/foo.ts')).toBe(true);
-    expect(isTestFile('apps/frontend/client/src/lib/test_preload.ts')).toBe(true);
-    expect(isTestFile('apps/x/src/foo.ts')).toBe(false);
-  });
-
-  test('excludes dependencies and only known generated-output roots', () => {
-    expect(isExcludedDir({ name: 'node_modules', relPath: 'apps/x/node_modules' })).toBe(true);
-    for (const name of ['build', 'dist', 'target', 'temp', 'tmp', 'vendor']) {
-      expect(isExcludedDir({ name, relPath: `apps/frontend/x/${name}` })).toBe(true);
-      expect(isExcludedDir({ name, relPath: `apps/frontend/x/src/${name}` })).toBe(false);
-    }
-    expect(isExcludedDir({ name: 'dist', relPath: 'scripts/dist' })).toBe(true);
-    expect(
-      isExcludedDir({ name: 'target', relPath: 'apps/frontend/client/src-tauri/target' }),
-    ).toBe(true);
-    expect(isExcludedDir({ name: '.svelte-kit', relPath: 'apps/x/.svelte-kit' })).toBe(true);
-    expect(isExcludedDir({ name: 'git', relPath: '.pi/git' })).toBe(true);
-    expect(isExcludedDir({ name: 'workspaces', relPath: '.pi/workspaces' })).toBe(true);
-    expect(isExcludedDir({ name: 'dist', relPath: 'scripts/src/lib/dist' })).toBe(false);
-    expect(isExcludedDir({ name: 'vendor', relPath: 'apps/x/src/views/vendor' })).toBe(false);
-    expect(isExcludedDir({ name: 'src', relPath: 'apps/x/src' })).toBe(false);
-  });
-});
-
-describe('baseline rules', () => {
-  test('allows reductions and removals', () => {
-    expect(
-      validateBaselineReduction({ previous: { 'a.ts': 900, 'b.ts': 900 }, next: { 'a.ts': 850 } })
-        .ok,
-    ).toBe(true);
-  });
-
-  test('rejects new debt', () => {
-    const result = validateBaselineReduction({ previous: {}, next: { 'a.ts': 900 } });
-    expect(result.ok).toBe(false);
-    expect(result.errors[0]).toContain('add a reviewed exception');
-  });
-
-  test('rejects increased allowances', () => {
-    const result = validateBaselineReduction({ previous: { 'a.ts': 900 }, next: { 'a.ts': 950 } });
-    expect(result.ok).toBe(false);
-  });
-
-  test('detects unauthorized expansion against a trusted revision', () => {
-    const expansions = findBaselineExpansion({
-      trusted: { 'a.ts': 900, 'b.ts': 900 },
-      current: { 'a.ts': 950, 'c.ts': 900 },
-    });
-    expect(expansions).toHaveLength(2);
-    expect(expansions.join('\n')).toContain('a.ts');
-    expect(expansions.join('\n')).toContain('c.ts');
-  });
-
-  test('permits reductions and removals against a trusted revision', () => {
-    expect(
-      findBaselineExpansion({ trusted: { 'a.ts': 900, 'b.ts': 900 }, current: { 'a.ts': 800 } }),
-    ).toEqual([]);
-  });
-});
-
-describe('exception validation', () => {
-  test('accepts a well-formed exception and ignores comments', () => {
-    const { exceptions, errors } = validateExceptions({
-      _comment: 'docs',
-      'apps/x/src/foo.ts': {
-        maxLines: 1200,
-        rationale: 'cohesive declarative table used as one lookup',
-        owner: '@aikami/platform',
-        kind: 'declarative',
-      },
-    });
-    expect(errors).toEqual([]);
-    expect(exceptions['apps/x/src/foo.ts']?.maxLines).toBe(1200);
-  });
-
-  test('accepts temporary debt with a tracking issue', () => {
-    const { errors } = validateExceptions({
-      'apps/x/src/foo.ts': {
-        maxLines: 1200,
-        rationale: 'temporary split pending a follow-up contract',
-        owner: '@aikami/platform',
-        kind: 'other',
-        issue: 'C-999',
-      },
-    });
-    expect(errors).toEqual([]);
-  });
-
-  test('rejects malformed entries', () => {
-    const cases: unknown[] = [
-      {
-        'a.ts': {
-          maxLines: 'lots',
-          rationale: 'long enough rationale',
-          owner: '@x',
-          kind: 'declarative',
-        },
-      },
-      { 'a.ts': { maxLines: 900, rationale: 'short', owner: '@x', kind: 'declarative' } },
-      {
-        'a.ts': {
-          maxLines: 900,
-          rationale: 'long enough rationale',
-          owner: '',
-          kind: 'declarative',
-        },
-      },
-      { 'a.ts': { maxLines: 900, rationale: 'long enough rationale', owner: '@x', kind: 'nope' } },
-      { 'a.ts': { maxLines: 900, rationale: 'long enough rationale', owner: '@x', kind: 'other' } },
-      {
-        'a.ts': {
-          maxLines: 900,
-          rationale: 'long enough rationale',
-          owner: '@x',
-          kind: 'other',
-          reviewBy: 'soon',
-        },
-      },
-    ];
-    for (const raw of cases) {
-      const { errors } = validateExceptions(raw);
-      expect(errors.length).toBeGreaterThan(0);
-    }
-  });
-});
-
-// ── CLI modes against isolated fixtures ──────────────────────────────────
+// ── Thresholds ───────────────────────────────────────────────────────────
 
 describe('guard CLI — thresholds', () => {
   test('a new file over the hard limit fails with a path diagnostic', () => {
@@ -359,46 +207,50 @@ describe('guard CLI — thresholds', () => {
   });
 });
 
-describe('guard CLI — ratchet', () => {
+// ── Baseline ratchet ─────────────────────────────────────────────────────
+
+describe('guard CLI — baseline ratchet', () => {
   test('an unchanged grandfathered file passes', () => {
     const root = createRoot();
     writeSource(root, 'apps/src/foo.ts', 900);
-    const baselinePath = writeBaselineFile(root, { 'apps/src/foo.ts': 900 });
-    expect(runGuard({ root, baselinePath }).status).toBe(0);
+    writeJson(root, `${POLICY_DIR}/baseline.json`, { 'apps/src/foo.ts': 900 });
+    expect(runGuard({ root }).status).toBe(0);
   });
 
   test('baseline growth fails', () => {
     const root = createRoot();
     writeSource(root, 'apps/src/foo.ts', 901);
-    const baselinePath = writeBaselineFile(root, { 'apps/src/foo.ts': 900 });
-    const run = runGuard({ root, baselinePath });
+    writeJson(root, `${POLICY_DIR}/baseline.json`, { 'apps/src/foo.ts': 900 });
+    const run = runGuard({ root });
     expect(run.status).toBe(1);
     expect(run.stderr).toContain('grew past its grandfathered baseline');
   });
 
-  test('a reduction must be locked in', () => {
+  test('a reduction must be locked in, then --update-baseline locks it', () => {
     const root = createRoot();
     writeSource(root, 'apps/src/foo.ts', 850);
-    const baselinePath = writeBaselineFile(root, { 'apps/src/foo.ts': 900 });
-    const run = runGuard({ root, baselinePath });
+    writeJson(root, `${POLICY_DIR}/baseline.json`, { 'apps/src/foo.ts': 900 });
+    const run = runGuard({ root });
     expect(run.status).toBe(1);
-    expect(run.stderr).toContain('--update-baseline');
+    expect(run.stdout).toContain('--update-baseline');
 
-    const update = runGuard({ root, args: ['--update-baseline'], baselinePath });
+    const update = runGuard({ root, args: ['--update-baseline'] });
     expect(update.status).toBe(0);
     expect(readBaseline(root)['apps/src/foo.ts']).toBe(850);
-    expect(runGuard({ root, baselinePath }).status).toBe(0);
+    expect(runGuard({ root }).status).toBe(0);
   });
 
   test('ordinary update refuses to add new debt', () => {
     const root = createRoot();
     writeSource(root, 'apps/src/foo.ts', 900);
-    writeBaselineFile(root, {});
+    writeJson(root, `${POLICY_DIR}/baseline.json`, {});
     const run = runGuard({ root, args: ['--update-baseline'] });
     expect(run.status).toBe(1);
-    expect(run.stderr).toContain('add a reviewed exception');
+    expect(run.stderr).toContain('reduction');
   });
 });
+
+// ── Bootstrap ────────────────────────────────────────────────────────────
 
 describe('guard CLI — bootstrap', () => {
   test('bootstrap records over-limit files once', () => {
@@ -413,17 +265,18 @@ describe('guard CLI — bootstrap', () => {
   test('bootstrap refuses to overwrite an existing baseline', () => {
     const root = createRoot();
     writeSource(root, 'apps/src/foo.ts', 900);
-    writeBaselineFile(root, { 'apps/src/foo.ts': 900 });
-    const run = runGuard({ root, args: ['--bootstrap-baseline'] });
-    expect(run.status).toBe(1);
+    writeJson(root, `${POLICY_DIR}/baseline.json`, { 'apps/src/foo.ts': 900 });
+    expect(runGuard({ root, args: ['--bootstrap-baseline'] }).status).toBe(1);
   });
 });
+
+// ── Rename and deletion ──────────────────────────────────────────────────
 
 describe('guard CLI — rename and deletion', () => {
   test('a rename cannot bypass the baseline', () => {
     const root = createRoot();
     writeSource(root, 'apps/src/new_name.ts', 900);
-    writeBaselineFile(root, { 'apps/src/old_name.ts': 900 });
+    writeJson(root, `${POLICY_DIR}/baseline.json`, { 'apps/src/old_name.ts': 900 });
     const run = runGuard({ root });
     expect(run.status).toBe(1);
     expect(run.stderr).toContain('new_name.ts:1 [size]');
@@ -433,7 +286,7 @@ describe('guard CLI — rename and deletion', () => {
 
   test('a deleted baselined file must be removed from the baseline', () => {
     const root = createRoot();
-    writeBaselineFile(root, { 'apps/src/gone.ts': 900 });
+    writeJson(root, `${POLICY_DIR}/baseline.json`, { 'apps/src/gone.ts': 900 });
     expect(runGuard({ root }).status).toBe(1);
     const update = runGuard({ root, args: ['--update-baseline'] });
     expect(update.status).toBe(0);
@@ -441,81 +294,324 @@ describe('guard CLI — rename and deletion', () => {
   });
 });
 
-describe('guard CLI — trusted base revision', () => {
-  test('rejects unauthorized baseline expansion against the trusted base revision', () => {
+// ── Permanent exemptions ─────────────────────────────────────────────────
+
+describe('guard CLI — permanent exemptions', () => {
+  test('a declarative exemption lifts the hard limit up to its ceiling', () => {
     const root = createRoot();
-    const baselinePath = join(root, 'scripts', 'src', 'lib', 'ops', 'baseline.json');
-    mkdirSync(dirname(baselinePath), { recursive: true });
-    writeSource(root, 'apps/src/big.ts', 950);
+    writeSource(root, 'apps/src/table.ts', 1000);
+    const exemptions = { 'apps/src/table.ts': declarativeExemption(1200) };
+    expect(runGuard({ root, exemptions }).status).toBe(0);
+    writeSource(root, 'apps/src/table.ts', 1300);
+    const over = runGuard({ root, exemptions });
+    expect(over.status).toBe(1);
+    expect(over.stderr).toContain('permanent declarative exemption ceiling');
+  });
+
+  test('a declarative exemption on a file containing logic is rejected', () => {
+    const root = createRoot();
+    const full = join(root, 'apps/src/logic.ts');
+    mkdirSync(dirname(full), { recursive: true });
+    writeFileSync(
+      full,
+      `${Array.from({ length: 900 }, () => '// padding').join('\n')}\nexport const doThing = () => 1;\nexport function other() {}\n`,
+    );
+    const run = runGuard({
+      root,
+      exemptions: { 'apps/src/logic.ts': declarativeExemption(1200) },
+    });
+    expect(run.status).toBe(1);
+    expect(run.stderr).toContain('declarative');
+    expect(run.stderr).toContain('logic');
+  });
+
+  test('a generated exemption without a verifiable source is rejected', () => {
+    const root = createRoot();
+    writeSource(root, 'apps/src/snapshot.ts', 900);
+    const run = runGuard({
+      root,
+      exemptions: {
+        'apps/src/snapshot.ts': {
+          maxLines: 1200,
+          rationale: 'generated catalog snapshot kept in parity by a test',
+          owner: '@aikami/platform',
+          kind: 'generated',
+        },
+      },
+    });
+    expect(run.status).toBe(1);
+    expect(run.stderr).toContain('needs a "source"');
+  });
+
+  test('a generated exemption whose source exists is accepted', () => {
+    const root = createRoot();
+    writeSource(root, 'apps/src/snapshot.ts', 900);
+    writeSource(root, 'apps/src/source_fixture.json', 3);
+    expect(
+      runGuard({
+        root,
+        exemptions: {
+          'apps/src/snapshot.ts': {
+            maxLines: 1200,
+            rationale: 'generated catalog snapshot kept in parity by a test',
+            owner: '@aikami/platform',
+            kind: 'generated',
+            source: 'apps/src/source_fixture.json',
+          },
+        },
+      }).status,
+    ).toBe(0);
+  });
+
+  test('an obsolete exemption is flagged', () => {
+    const root = createRoot();
+    const run = runGuard({
+      root,
+      exemptions: { 'apps/src/missing.ts': declarativeExemption(900) },
+    });
+    expect(run.status).toBe(1);
+    expect(run.stderr).toContain('obsolete exemption');
+  });
+
+  test('an exemption that no longer relaxes the hard limit is obsolete', () => {
+    const root = createRoot();
+    writeSource(root, 'apps/src/table.ts', 900);
+    const run = runGuard({
+      root,
+      exemptions: { 'apps/src/table.ts': declarativeExemption(700) },
+    });
+    expect(run.status).toBe(1);
+    expect(run.stderr).toContain('does not relax');
+  });
+});
+
+// ── Temporary waivers ────────────────────────────────────────────────────
+
+describe('guard CLI — temporary waivers', () => {
+  test('a current waiver lifts the hard limit up to its ceiling', () => {
+    const root = createRoot();
+    writeSource(root, 'apps/src/big.ts', 1000);
+    const waivers = { 'apps/src/big.ts': waiver(1200) };
+    expect(runGuard({ root, waivers }).status).toBe(0);
+  });
+
+  test('exceeding the waiver ceiling fails with the non-bypass remediation', () => {
+    const root = createRoot();
+    writeSource(root, 'apps/src/big.ts', 1272);
+    const run = runGuard({ root, waivers: { 'apps/src/big.ts': waiver(1200) } });
+    expect(run.status).toBe(1);
+    expect(run.stderr).toContain('exceeds its temporary waiver ceiling by 72 lines');
+    expect(run.stderr).toContain('identify a cohesive responsibility to extract');
+    expect(run.stderr).toContain('explicit human review');
+  });
+
+  test('an expired waiver fails with the exact actionable message', () => {
+    const root = createRoot();
+    writeSource(root, 'apps/src/big.ts', 1000);
+    const run = runGuard({
+      root,
+      waivers: { 'apps/src/big.ts': waiver(1200, { reviewBy: '2026-12-31' }) },
+      today: '2027-01-01',
+    });
+    expect(run.status).toBe(1);
+    expect(run.stderr).toContain('expired on 2026-12-31');
+    expect(run.stderr).toContain('obtain explicit human review for a renewed waiver');
+    expect(run.stderr).toContain('Do NOT extend reviewBy automatically');
+  });
+
+  test('a malformed reviewBy fails', () => {
+    const root = createRoot();
+    writeSource(root, 'apps/src/big.ts', 1000);
+    const run = runGuard({
+      root,
+      waivers: { 'apps/src/big.ts': waiver(1200, { reviewBy: 'soon' }) },
+    });
+    expect(run.status).toBe(1);
+    expect(run.stderr).toContain('real ISO date');
+  });
+
+  test('a waiver without an issue fails', () => {
+    const root = createRoot();
+    writeSource(root, 'apps/src/big.ts', 1000);
+    const run = runGuard({
+      root,
+      waivers: { 'apps/src/big.ts': waiver(1200, { issue: undefined }) },
+    });
+    expect(run.status).toBe(1);
+    expect(run.stderr).toContain('"issue" is required');
+  });
+
+  test('an obsolete waiver (file back under the hard limit) fails', () => {
+    const root = createRoot();
+    writeSource(root, 'apps/src/small.ts', 700);
+    const run = runGuard({ root, waivers: { 'apps/src/small.ts': waiver(1200) } });
+    expect(run.status).toBe(1);
+    expect(run.stderr).toContain('obsolete waiver');
+  });
+
+  test('a baseline entry and a waiver for the same path is a configuration error', () => {
+    const root = createRoot();
+    writeSource(root, 'apps/src/big.ts', 1000);
+    writeJson(root, `${POLICY_DIR}/baseline.json`, { 'apps/src/big.ts': 1000 });
+    const run = runGuard({ root, waivers: { 'apps/src/big.ts': waiver(1200) } });
+    expect(run.status).toBe(1);
+    expect(run.stderr).toContain('superseded');
+  });
+});
+
+// ── Trusted-base enforcement ─────────────────────────────────────────────
+
+describe('guard CLI — trusted base revision', () => {
+  const initRepo = (root: string, policy: Record<string, unknown>): void => {
     git(root, ['init', '-b', 'main']);
     git(root, ['config', 'user.email', 'test@test.invalid']);
     git(root, ['config', 'user.name', 'Test']);
-    writeFileSync(baselinePath, `${JSON.stringify({ 'apps/src/big.ts': 900 }, null, 2)}\n`);
+    for (const [name, value] of Object.entries(policy)) {
+      writeJson(root, `${POLICY_DIR}/${name}.json`, value);
+    }
     git(root, ['add', '-A']);
-    git(root, ['commit', '-m', 'trusted baseline']);
-    writeFileSync(baselinePath, `${JSON.stringify({ 'apps/src/big.ts': 950 }, null, 2)}\n`);
+    git(root, ['commit', '-m', 'trusted policy']);
+  };
 
-    const run = runGuard({ root, baselinePath, baseRef: 'HEAD' });
+  test('rejects a raised allowance against the trusted base', () => {
+    const root = createRoot();
+    writeSource(root, 'apps/src/big.ts', 1200);
+    initRepo(root, {
+      baseline: {},
+      exemptions: {},
+      waivers: { 'apps/src/big.ts': waiver(1200) },
+    });
+    // The branch raises the ceiling. The file itself did not change.
+    const run = runGuard({
+      root,
+      baseRef: 'HEAD',
+      waivers: { 'apps/src/big.ts': waiver(1300) },
+    });
     expect(run.status).toBe(1);
-    expect(run.stderr).toContain('unauthorized baseline expansion');
+    expect(run.stderr).toContain('unauthorized allowance expansion');
+    expect(run.stderr).toContain('guard-policy expansion');
+  });
+
+  test('rejects laundering a baseline entry into a larger waiver', () => {
+    const root = createRoot();
+    writeSource(root, 'apps/src/big.ts', 1160);
+    initRepo(root, {
+      // Trusted base: a grandfathered BASELINE entry of 1156 lines.
+      baseline: { 'apps/src/big.ts': 1156 },
+      exemptions: {},
+      waivers: {},
+    });
+
+    const run = runGuard({
+      root,
+      baseRef: 'HEAD',
+      // Branch: the same file, now expressed as a WAIVER of 1160 lines.
+      waivers: { 'apps/src/big.ts': waiver(1160) },
+    });
+    expect(run.status).toBe(1);
+    expect(run.stderr).toContain('unauthorized allowance expansion');
+    expect(run.stderr).toContain('1156 → 1160');
+  });
+
+  test('permits an allowance reduction against the trusted base', () => {
+    const root = createRoot();
+    writeSource(root, 'apps/src/big.ts', 1150);
+    initRepo(root, {
+      baseline: {},
+      exemptions: {},
+      waivers: { 'apps/src/big.ts': waiver(1200) },
+    });
+
+    const run = runGuard({
+      root,
+      baseRef: 'HEAD',
+      waivers: { 'apps/src/big.ts': waiver(1150) },
+    });
+    expect(run.status).toBe(0);
+  });
+
+  test('permits the legacy-exceptions → split-files migration unchanged', () => {
+    const root = createRoot();
+    writeSource(root, 'apps/src/big.ts', 1160);
+    initRepo(root, {
+      baseline: {},
+      exemptions: {},
+      waivers: {},
+      // Trusted base still has the pre-split single file.
+      legacy_exceptions: { 'apps/src/big.ts': { maxLines: 1160 } },
+    });
+
+    const run = runGuard({
+      root,
+      baseRef: 'HEAD',
+      waivers: { 'apps/src/big.ts': waiver(1160) },
+    });
+    expect(run.status).toBe(0);
+  });
+
+  test('a new waiver on a path with no prior allowance is an expansion', () => {
+    const root = createRoot();
+    writeSource(root, 'apps/src/new_big.ts', 900);
+    initRepo(root, { baseline: {}, exemptions: {}, waivers: {} });
+
+    const run = runGuard({
+      root,
+      baseRef: 'HEAD',
+      waivers: { 'apps/src/new_big.ts': waiver(900) },
+    });
+    expect(run.status).toBe(1);
+    expect(run.stderr).toContain('unauthorized allowance expansion');
   });
 
   test('fails closed when an explicit base revision cannot be read', () => {
     const root = createRoot();
     writeSource(root, 'apps/src/fine.ts', 10);
-
     const run = runGuard({ root, baseRef: 'missing-ref' });
     expect(run.status).toBe(1);
-    expect(run.stdout).toContain('base-revision baseline check skipped (missing-ref)');
-    expect(run.stderr).toContain('could not verify the baseline against explicit base revision');
-  });
-});
-
-describe('guard CLI — exceptions', () => {
-  test('a valid exception lifts the hard limit up to its ceiling', () => {
-    const root = createRoot();
-    writeSource(root, 'apps/src/table.ts', 1000);
-    const exceptions = {
-      'apps/src/table.ts': {
-        maxLines: 1200,
-        rationale: 'cohesive declarative table used as a single lookup',
-        owner: '@aikami/platform',
-        kind: 'declarative',
-      },
-    };
-    expect(runGuard({ root, exceptions }).status).toBe(0);
-    writeSource(root, 'apps/src/table.ts', 1300);
-    const over = runGuard({ root, exceptions });
-    expect(over.status).toBe(1);
-    expect(over.stderr).toContain('reviewed exception ceiling');
+    expect(run.stdout).toContain('base-revision check skipped (missing-ref)');
+    expect(run.stderr).toContain('could not verify the source-size policy');
   });
 
-  test('malformed exceptions fail the guard', () => {
+  test('an authorized policy expansion is reported, not fatal', () => {
     const root = createRoot();
-    writeSource(root, 'apps/src/foo.ts', 900);
-    const run = runGuard({
-      root,
-      exceptions: { 'apps/src/foo.ts': { maxLines: 900, kind: 'declarative' } },
+    writeSource(root, 'apps/src/big.ts', 1200);
+    initRepo(root, {
+      baseline: {},
+      exemptions: {},
+      waivers: { 'apps/src/big.ts': waiver(1200) },
     });
-    expect(run.status).toBe(1);
-    expect(run.stderr).toContain('malformed');
-  });
 
-  test('obsolete exceptions are flagged', () => {
-    const root = createRoot();
-    const exceptions = {
-      'apps/src/missing.ts': {
-        maxLines: 900,
-        rationale: 'cohesive declarative table used as a single lookup',
-        owner: '@aikami/platform',
-        kind: 'declarative',
-      },
+    const paths = {
+      baseline: join(root, POLICY_DIR, 'baseline.json'),
+      exemptions: join(root, POLICY_DIR, 'exemptions.json'),
+      waivers: join(root, POLICY_DIR, 'waivers.json'),
+      legacy: join(root, POLICY_DIR, 'legacy_exceptions.json'),
     };
-    const run = runGuard({ root, exceptions });
-    expect(run.status).toBe(1);
-    expect(run.stderr).toContain('obsolete exception');
+    // Write the raised ceiling directly; the helper's `waivers` option would
+    // overwrite it, and this test is about the authorization channel.
+    writeJson(root, `${POLICY_DIR}/waivers.json`, { 'apps/src/big.ts': waiver(1300) });
+
+    const result = spawnSync('bun', ['run', GUARD_PATH, '--base-ref=HEAD'], {
+      env: {
+        ...process.env,
+        AIKAMI_GUARD_ROOT: root,
+        AIKAMI_GUARD_BASELINE: paths.baseline,
+        AIKAMI_GUARD_EXEMPTIONS: paths.exemptions,
+        AIKAMI_GUARD_WAIVERS: paths.waivers,
+        AIKAMI_GUARD_EXCEPTIONS: paths.legacy,
+        AIKAMI_GUARD_TODAY: '2026-09-18',
+        AIKAMI_GUARD_POLICY_AUTHORIZATION: 'guard-policy-approved',
+        BASE_REF: '',
+        AIKAMI_GUARD_BASE_REF: '',
+      },
+      encoding: 'utf8',
+    });
+    expect(result.status).toBe(0);
+    expect(result.stderr).toContain('GUARD POLICY CHANGE (authorized)');
   });
 });
+
+// ── Exclusions and determinism ───────────────────────────────────────────
 
 describe('guard CLI — exclusions and determinism', () => {
   test('generated, build, and dependency files are not scanned', () => {
@@ -544,10 +640,35 @@ describe('guard CLI — exclusions and determinism', () => {
     const root = createRoot();
     writeSource(root, 'apps/src/a.ts', 600);
     writeSource(root, 'apps/src/b.ts', 900);
-    const baselinePath = writeBaselineFile(root, { 'apps/src/b.ts': 900 });
-    const first = runGuard({ root, baselinePath, args: ['--show-all'] });
-    const second = runGuard({ root, baselinePath, args: ['--show-all'] });
+    writeJson(root, `${POLICY_DIR}/baseline.json`, { 'apps/src/b.ts': 900 });
+    const first = runGuard({ root, args: ['--show-all'] });
+    const second = runGuard({ root, args: ['--show-all'] });
     expect(first.stdout).toBe(second.stdout);
     expect(first.stdout).toContain('Source file size report');
+  });
+
+  test('--report prints the threshold distribution', () => {
+    const root = createRoot();
+    writeSource(root, 'apps/src/small.ts', 100);
+    writeSource(root, 'apps/src/mid.ts', 650);
+    writeSource(root, 'apps/src/big.ts', 850);
+    writeSource(root, 'apps/src/waived.ts', 1000);
+    writeSource(root, 'apps/src/table.ts', 2000);
+    writeSource(root, 'apps/src/x.test.ts', 900);
+
+    const run = runGuard({
+      root,
+      args: ['--report'],
+      baseline: { 'apps/src/big.ts': 850 },
+      waivers: { 'apps/src/waived.ts': waiver(1200) },
+      exemptions: { 'apps/src/table.ts': declarativeExemption(2500) },
+    });
+    expect(run.status).toBe(0);
+    expect(run.stdout).toContain('THRESHOLD DISTRIBUTION');
+    expect(run.stdout).toContain('Mutable production implementation');
+    expect(run.stdout).toContain('Permanent exemptions');
+    expect(run.stdout).toContain('Temporary waivers');
+    expect(run.stdout).toContain('Waiver calibration');
+    expect(run.stdout).toContain('Largest files overall');
   });
 });

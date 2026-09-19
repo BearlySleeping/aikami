@@ -28,6 +28,7 @@
 // bridge (scripts/src/lib/pi/); keeping it dependency-light keeps the bridge
 // invocation cheap.
 import { spawnSync } from 'node:child_process';
+import { isWholeRepoGuardTask, validateConstituentTasks } from '../../ops/guards/registry.ts';
 import { reportInfraIssue } from '../../ops/infra_report.ts';
 import type { GateOutcome } from './gate_outcome.ts';
 import { getRequiredChecks } from './validation_policy.ts';
@@ -83,16 +84,23 @@ const gateResult = (options: { outcome: GateOutcome; output?: string }): PrePush
  * A command runner, injectable so tests never shell out.
  * Returns the exit status plus combined output.
  */
-export type GateRunner = (options: { command: string; args: string[]; cwd: string }) => {
+export type GateRunner = (options: {
+  command: string;
+  args: string[];
+  cwd: string;
+  /** Extra environment for this step only. */
+  env?: Record<string, string>;
+}) => {
   status: number | null;
   output: string;
   spawnFailed: boolean;
 };
 
-const defaultRunner: GateRunner = ({ command, args, cwd }) => {
+const defaultRunner: GateRunner = ({ command, args, cwd, env }) => {
   const result = spawnSync(command, args, {
     cwd,
     encoding: 'utf8',
+    env: env === undefined ? process.env : { ...process.env, ...env },
     // Windows: `bun` may resolve through a .cmd shim.
     shell: process.platform === 'win32',
     windowsHide: true,
@@ -110,23 +118,23 @@ const truncate = (text: string, limit: number = MAX_GATE_OUTPUT_CHARS): string =
     : `${text.slice(0, limit)}\n… (${text.length - limit} more characters truncated)`;
 
 /**
- * Named tasks that make up the `:validate` aggregate (see
- * `.moon/tasks/all.yml`'s `validate` task and `scripts/moon.yml`'s `guard`
- * task). Kept in sync by hand — these are stable structural targets, not
- * derived from the affected-file graph, so there is no single source to
- * read them from at runtime without shelling out to `moon` again.
+ * Named tasks that make up the `:validate` aggregate.
+ *
+ * 🔴 DERIVED from the guard registry, not maintained here. This list used to be
+ * hand-written and had already drifted: it knew `guard-mvvm-conventions`,
+ * `guard-service-conventions`, `guard-image-component`, `guard-data-plane` and
+ * `guard-type-safety`, but not `guard-orphaned-capability`,
+ * `guard-test-boundary`, `guard-view-model-composition`,
+ * `guard-source-file-size`, `guard-cognitive-complexity` or
+ * `guard-policy-diff`. A guard could therefore fail `moon run :validate` and
+ * the attribution pass below would not know it existed, handing the review
+ * captain an opaque blob instead of a named check.
+ *
+ * `scripts/src/lib/ops/__tests__/guard_registry.test.ts` pins the registry
+ * against `.moon/tasks/all.yml`'s `validate` task and
+ * `.moon/tasks/scripts.yml`'s `guard` task, so the three cannot diverge again.
  */
-const VALIDATE_CONSTITUENT_TASKS = [
-  { task: ':lint', label: 'Lint' },
-  { task: ':format', label: 'Format' },
-  { task: ':typecheck', label: 'Typecheck' },
-  { task: 'scripts:guard-mvvm-conventions', label: 'Guard: MVVM conventions' },
-  { task: 'scripts:guard-service-conventions', label: 'Guard: service conventions' },
-  { task: 'scripts:guard-image-component', label: 'Guard: image component' },
-  { task: 'scripts:guard-data-plane', label: 'Guard: data plane' },
-  { task: 'scripts:guard-type-safety', label: 'Guard: type safety' },
-  { task: 'scripts:validate-agent-guidance', label: 'Agent guidance' },
-] as const;
+const VALIDATE_CONSTITUENT_TASKS = validateConstituentTasks();
 
 const GATE_SETUP_FAILURE_PATTERNS = [
   /(?:script|module) not found ["'`]?moon\b/i,
@@ -162,12 +170,21 @@ const attributeValidateFailure = (options: {
   affected: readonly string[];
   fallback: string;
 }): string => {
+  const baseArg = options.affected.find((arg) => arg.startsWith('--base='));
+  const base = baseArg?.slice('--base='.length);
   const failing: { label: string; task: string; output: string }[] = [];
   for (const { task, label } of VALIDATE_CONSTITUENT_TASKS) {
+    // A whole-repo guard must be re-run without `--affected`: its inputs span
+    // the repository, and gating it on the affected graph is exactly the bug
+    // that let oversized files reach main (see .github/workflows/pr-checks.yml).
+    const args = isWholeRepoGuardTask(task)
+      ? ['moon', 'run', task]
+      : ['moon', 'run', task, ...options.affected];
     const result = options.run({
       command: 'bun',
-      args: ['moon', 'run', task, ...options.affected],
+      args,
       cwd: options.cwd,
+      ...(base === undefined ? {} : { env: { AIKAMI_GUARD_BASE_REF: base } }),
     });
     // Best-effort: a spawn hiccup or an unrelated setup failure on the
     // re-run must not hide the original diagnostic — just skip attributing it.
@@ -188,6 +205,68 @@ const attributeValidateFailure = (options: {
     .map(({ label, task, output }) => `### ${label} (${task})\n${truncate(output, perTaskBudget)}`)
     .join('\n\n');
   return truncate(attributed);
+};
+
+/** One step in the gate: a labelled moon invocation and whether it is a verdict. */
+type GateStep = {
+  label: string;
+  args: readonly string[];
+  verdict: boolean;
+  env?: Record<string, string>;
+};
+
+/**
+ * Builds the ordered gate steps for a profile.
+ *
+ * Order matters: `:fix` first (it mutates), then the read-only checks, then the
+ * sanctioned contraction, and `:validate` last as the verdict.
+ *
+ * 🔴 A whole-repo guard runs WITHOUT `--affected`. Its inputs span the
+ * repository, so the affected-project graph is the wrong gate: on a base whose
+ * diff resolves to nothing it would be skipped entirely. See
+ * `.github/workflows/pr-checks.yml`.
+ *
+ * The contraction step is not a verdict: it can legitimately refuse (there is
+ * real growth to fix) and `:validate` reports that properly.
+ */
+const buildGateSteps = (options: {
+  profile: import('./validation_policy.ts').ValidationProfile;
+  affected: readonly string[];
+  baseEnv: Record<string, string>;
+}): GateStep[] => {
+  const steps: GateStep[] = [];
+  const addedTasks = new Set<string>();
+
+  for (const check of getRequiredChecks(options.profile)) {
+    if (addedTasks.has(check.task)) {
+      continue;
+    }
+    addedTasks.add(check.task);
+    const concurrencyArgs = check.task === ':fix' ? ['--concurrency', '8'] : [];
+    steps.push({
+      label: check.task,
+      args: isWholeRepoGuardTask(check.task)
+        ? ['moon', 'run', check.task]
+        : ['moon', 'run', check.task, ...options.affected, ...concurrencyArgs],
+      verdict: check.task !== ':fix',
+      env: options.baseEnv,
+    });
+  }
+
+  steps.push({
+    label: 'scripts:guard-contract',
+    args: ['moon', 'run', 'scripts:guard-contract'],
+    verdict: false,
+  });
+
+  steps.push({
+    label: ':validate',
+    args: ['moon', 'run', ':validate', ...options.affected],
+    verdict: true,
+    env: options.baseEnv,
+  });
+
+  return steps;
 };
 
 /**
@@ -220,36 +299,19 @@ export const runPrePushGate = (options: {
   profile?: import('./validation_policy.ts').ValidationProfile;
 }): PrePushGateResult => {
   const run = options.runner ?? defaultRunner;
-  const affected = ['--affected', `--base=${options.base}`];
-  const profile = options.profile ?? 'pre_publication';
-
-  // AC-2: Derive required checks from shared policy.
-  const policyChecks = getRequiredChecks(profile);
-  const steps: { label: string; args: readonly string[]; verdict: boolean }[] = [];
-  const addedTasks = new Set<string>();
-
-  for (const check of policyChecks) {
-    if (addedTasks.has(check.task)) {
-      continue;
-    }
-    addedTasks.add(check.task);
-    const concurrencyArgs = check.task === ':fix' ? ['--concurrency', '8'] : [];
-    steps.push({
-      label: check.task,
-      args: ['moon', 'run', check.task, ...affected, ...concurrencyArgs],
-      verdict: check.task !== ':fix',
-    });
-  }
-
-  // `:fix` is mutating, so use the read-only aggregate as its final verdict.
-  steps.push({
-    label: ':validate',
-    args: ['moon', 'run', ':validate', ...affected],
-    verdict: true,
+  const steps = buildGateSteps({
+    profile: options.profile ?? 'pre_publication',
+    affected: ['--affected', `--base=${options.base}`],
+    baseEnv: { AIKAMI_GUARD_BASE_REF: options.base },
   });
 
   for (const step of steps) {
-    const result = run({ command: 'bun', args: [...step.args], cwd: options.cwd });
+    const result = run({
+      command: 'bun',
+      args: [...step.args],
+      cwd: options.cwd,
+      ...(step.env === undefined ? {} : { env: step.env }),
+    });
 
     // 🔴 Distinguish "the gate found problems" from "the gate could not run".
     // A missing moon binary or an unresolvable base ref is an infrastructure
@@ -282,7 +344,7 @@ export const runPrePushGate = (options: {
           ? attributeValidateFailure({
               run,
               cwd: options.cwd,
-              affected,
+              affected: ['--affected', `--base=${options.base}`],
               fallback: truncate(result.output),
             })
           : truncate(result.output);
