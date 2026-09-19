@@ -21,7 +21,7 @@
 // Run: bun scripts/src/lib/ops/install_emberwatch_audio.ts [--check]
 
 import { createHash } from 'node:crypto';
-import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -74,21 +74,6 @@ const main = (): void => {
       mkdirSync(dirname(destination), { recursive: true });
       copyFileSync(source, destination);
     }
-  }
-
-  if (!checkOnly) {
-    writeFileSync(
-      join(repository, 'apps/frontend/client/static/game-data/audio_tracks.json'),
-      `${JSON.stringify(
-        {
-          schemaVersion: 1,
-          packId: 'emberwatch',
-          tracks: installed.map((entry) => ({ tag: entry.tag, sha256: entry.sha256 })),
-        },
-        null,
-        2,
-      )}\n`,
-    );
   }
 
   console.log(

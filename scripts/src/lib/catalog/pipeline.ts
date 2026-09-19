@@ -47,7 +47,11 @@ import { assetKey } from './content_address.ts';
 import { generateCatalogIndex } from './index_generation.ts';
 import { buildPackLock } from './pack_lock.ts';
 import { runAttributionPreflight } from './preflight.ts';
+import { abortedReport, type CatalogPublishReport } from './publish_report.ts';
 import { resolvePreviousRelease } from './published_catalog.ts';
+
+export type { CatalogPublishReport } from './publish_report.ts';
+
 import {
   describeRightsGateFailure,
   loadAcknowledgedRightsTags,
@@ -73,50 +77,6 @@ export type CatalogPublishOptions = {
   gameDataDir?: string;
   /** Override content-packs dir (tests). */
   contentPacksDir?: string;
-};
-
-export type CatalogPublishReport = {
-  ok: boolean;
-  checkedCount: number;
-  unresolvedTags: readonly string[];
-  incompleteAttributionTags: readonly string[];
-  /** C-518 — tags with no declared rights evidence (only when the catalog declares any). */
-  missingRightsEvidenceTags?: readonly string[];
-  /** C-518 — tags whose declared rights evidence cannot substantiate publication. */
-  incompleteRightsTags?: readonly string[];
-  uploaded: number;
-  skipped: number;
-  failed: number;
-  bytesTransferred: number;
-  failedKeys: readonly string[];
-  /** Thumbnail phase stats (C-396 AC-5). */
-  thumbnails: {
-    generated: number;
-    skippedNonImage: number;
-    decodeFailedTags: readonly string[];
-    geometryFailedTags: readonly string[];
-    fallbackTags: readonly string[];
-    uploaded: number;
-    skipped: number;
-    failed: number;
-  };
-  rootKey: string;
-  shardKeys: readonly string[];
-  /** Seed/metadata publish stats (C-496 AC-4: seed failures block the release). */
-  seed: { uploaded: number; carried: number; failed: number };
-  /** Per-pack installed lock phase (C-523 AC-5). */
-  packLock: PackLockPublishReport;
-  /**
-   * The mutable legacy compatibility alias (`index/v1/pack_lock.json`),
-   * maintained only AFTER the immutable release is active. Reported separately
-   * because a failed alias write leaves the immutable release intact — it must
-   * never be conflated with release activation, and the report must not claim
-   * the alias was updated when it was not.
-   */
-  legacyAlias: { key: string; written: boolean; error?: string };
-  /** Whether the versioned release pointer was written this run (AC-4). */
-  releaseWritten: boolean;
-  elapsedMs: number;
 };
 
 /**
@@ -344,36 +304,11 @@ export const runCatalogPublish = async (
   if (!rightsGate.ok) {
     console.error(describeRightsGateFailure(rightsGate));
     console.error('   No objects were uploaded and no index was written.');
-    return {
-      ok: false,
+    return abortedReport({
       checkedCount: entries.length,
-      unresolvedTags: [],
-      incompleteAttributionTags: [],
       missingRightsEvidenceTags: rightsGate.blockedTags,
-      incompleteRightsTags: [],
-      uploaded: 0,
-      skipped: 0,
-      failed: 0,
-      bytesTransferred: 0,
-      failedKeys: [],
-      thumbnails: {
-        generated: 0,
-        skippedNonImage: 0,
-        decodeFailedTags: [],
-        geometryFailedTags: [],
-        fallbackTags: [],
-        uploaded: 0,
-        skipped: 0,
-        failed: 0,
-      },
-      rootKey: ROOT_INDEX_KEY,
-      shardKeys: [],
-      seed: { uploaded: 0, carried: 0, failed: 0 },
-      packLock: { written: false, key: PACK_LOCK_KEY, assetPins: 0, audioPins: 0 },
-      legacyAlias: { key: PACK_LOCK_KEY, written: false },
-      releaseWritten: false,
       elapsedMs: Date.now() - startedAt,
-    };
+    });
   }
 
   // C-518 AC-5: when the catalog declares rights evidence, the preflight asks

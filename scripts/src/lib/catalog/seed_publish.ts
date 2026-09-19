@@ -83,8 +83,8 @@ export const runSeedPublish = async (options: {
     } catch {
       // Absent locally. The previous release's verified copy is authoritative
       // and byte-identical to what the client already fetches.
-      const carriedKey = [...(carriedDependencies?.keys() ?? [])].find((key) =>
-        key.endsWith(`/${filename}`),
+      const carriedKey = [...(carriedDependencies?.keys() ?? [])].find((dependencyKey) =>
+        dependencyKey.endsWith(`/${filename}`),
       );
       const carriedBody = carriedKey ? carriedDependencies?.get(carriedKey) : undefined;
       if (!carriedBody) {
