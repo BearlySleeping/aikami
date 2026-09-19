@@ -133,6 +133,7 @@ export function generateVersionString(): string {
  *   - Deploy config (memory, cpu, region, serviceType)
  *   - Mode-specific .env.{mode} file hash (if exists)
  *   - moon build command (appName identifies the build task)
+ *   - Build-affecting flags from the ambient environment
  *
  * If ANY of these change, the checksum changes → redeploy needed.
  */
@@ -172,6 +173,15 @@ export function computeAppChecksum(
   // moon build command
   const buildTarget = `${appName}:build`;
 
+  // Build-affecting flags from the ambient environment. Without these a flag
+  // change produces the SAME checksum as the previous deploy, so the cache
+  // reports "up to date" and skips the rebuild — the opt-in silently does
+  // nothing. `AIKAMI_INCLUDE_DEV_ROUTES` changes the emitted route graph (see
+  // resolveIncludeDevRoutes), so it must be part of the identity.
+  const buildFlags = [
+    `AIKAMI_INCLUDE_DEV_ROUTES=${process.env.AIKAMI_INCLUDE_DEV_ROUTES ?? ''}`,
+  ].join(',');
+
   // Working tree dirty state — captures uncommitted changes that
   // don't appear in git ls-tree but DO affect the Docker build.
   const dirtyHash = dirtyTreeHash();
@@ -189,9 +199,10 @@ export function computeAppChecksum(
       `    .env.${mode}:            ${modeEnvHash ? `${modeEnvHash.slice(0, 16)}...` : '(missing)'}`,
     );
     log(`    build target:         ${buildTarget}`);
+    log(`    build flags:          ${buildFlags}`);
   }
 
-  const combined = `${sourceHash}:${dirtyHash}:${dockerfileHash}:${sha256(deployConfig)}:${modeEnvHash}:${buildTarget}`;
+  const combined = `${sourceHash}:${dirtyHash}:${dockerfileHash}:${sha256(deployConfig)}:${modeEnvHash}:${buildTarget}:${buildFlags}`;
   return sha256(combined);
 }
 

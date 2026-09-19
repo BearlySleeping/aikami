@@ -65,18 +65,6 @@
     "m8": 0,
     "m9": 0
   },
-  "apps/frontend/client/src/lib/views/dev/sandbox/combat/combat_sandbox_view.svelte": {
-    "v6": 2,
-    "v7": 0,
-    "m8": 0,
-    "m9": 0
-  },
-  "apps/frontend/client/src/lib/views/dev/sandbox/combat/combat_sandbox_view_model.svelte.ts": {
-    "v6": 0,
-    "v7": 0,
-    "m8": 0,
-    "m9": 1
-  },
   "apps/frontend/client/src/lib/views/dev/sandbox/environment/environment_sandbox_view.svelte": {
     "v6": 1,
     "v7": 0,

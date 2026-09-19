@@ -24,6 +24,7 @@ import { dirname, resolve } from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { logger } from '@aikami/logger';
+import { DEV_ROUTES_ENV_VAR, resolveIncludeDevRoutes } from './dev_routes_gate.ts';
 
 const CLIENT_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -97,7 +98,13 @@ run('check bundle', 'bun', ['scripts/check_bundle.ts']);
 //    output, byte-identical large binaries emitted at multiple paths, or a
 //    `(dev)` route that leaked into a production graph. A build that
 //    explicitly opts into dev routes passes --allow-dev-routes.
-const allowDevRoutes = process.env.AIKAMI_INCLUDE_DEV_ROUTES === 'true';
+//
+//    The decision comes from the same resolver the gate itself uses, so the
+//    guard can never disagree with the route graph that was actually built.
+const allowDevRoutes = resolveIncludeDevRoutes('build');
+if (allowDevRoutes) {
+  logger.info(`[build-client] ${DEV_ROUTES_ENV_VAR}=true — dev routes are expected in this build.`);
+}
 run('check deploy assets', 'bun', [
   'scripts/check_deploy_assets.ts',
   'build',
@@ -112,4 +119,13 @@ run('check ineffective dynamic imports', 'bun', ['scripts/check_ineffective_dyna
 // 6. Report bundle budgets (raw/gzip, totals, per-route initial closures) and
 //    ratchet tracked metrics. Kept after the guards so the report reflects an
 //    output that already passed the hard gates.
-run('report bundle budget', 'bun', ['scripts/report_bundle_budget.ts']);
+//
+//    When dev routes were deliberately included, the ratchet is skipped: the
+//    committed baseline measures the production route graph, so a sandbox build
+//    would otherwise always report a ~20% regression and fail the build. The
+//    flag comes from the same resolver the gate itself uses, so a normal build
+//    can never skip the ratchet by accident.
+run('report bundle budget', 'bun', [
+  'scripts/report_bundle_budget.ts',
+  ...(allowDevRoutes ? ['--expect-dev-routes'] : []),
+]);

@@ -84,29 +84,21 @@ test.describe('Chat Sandbox (/dev/chat)', () => {
 
 // ── Combat Sandbox ───────────────────────────────────────────────────────
 
+// MIGRATED (combat debug workspace consolidation): the old mock-HP sandbox
+// (DevToolsPanel `force-player-hp-to-1`, mock HP grid) is gone. `/dev/combat`
+// is now the production-backed debug workspace, so this block keeps the smoke
+// assertion only — the route responds and the workspace shell renders. Full
+// workspace behaviour is covered by `combat_debug.spec.ts`.
+
 test.describe('Combat Sandbox (/dev/combat)', () => {
-  test('should load the combat dev sandbox with mock HP values', async ({ authUser }) => {
+  test('should load the combat debug workspace shell', async ({ authUser }) => {
     const response = await authUser.goto('/dev/combat');
     expect(response?.status()).toBe(200);
 
-    // Player HP is shown in the sidebar HP card (compact HP bars)
-    // The HP values are displayed as spans inside the compact HP card
-    await expect(authUser.locator('.grid.grid-cols-2 .rounded')).toHaveCount(2);
-
-    // DevToolsPanel should be present
-    await expect(authUser.locator('[data-testid="dev-action-force-player-hp-to-1"]')).toBeVisible();
-  });
-
-  test('should update player HP to 1 via Force Player HP to 1 action', async ({ authUser }) => {
-    await authUser.goto('/dev/combat');
-    await authUser.waitForTimeout(1000);
-
-    // Click Force Player HP to 1
-    await clickDevAction(authUser, 'force-player-hp-to-1');
-
-    // Player HP should now show 1/100 in the sidebar
-    const playerHpRegion = authUser.locator('.grid.grid-cols-2 .rounded').first();
-    await expect(playerHpRegion).toContainText('1/');
+    // Workspace shell + toolbar render.
+    await expect(authUser.locator('[data-testid="combat-debug-view"]')).toBeVisible();
+    await expect(authUser.locator('[data-testid="combat-debug-toolbar"]')).toBeVisible();
+    await expect(authUser.locator('[data-testid="combat-debug-status"]')).toBeVisible();
   });
 });
 

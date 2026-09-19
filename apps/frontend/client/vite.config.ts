@@ -15,6 +15,7 @@ import { createLogger, defineConfig, type PluginOption } from 'vite';
 import devtoolsJson from 'vite-plugin-devtools-json';
 import { PORTS } from '../../../packages/shared/constants/src/index.ts';
 import { devIdentityPlugin } from '../../../scripts/src/lib/ops/dev_identity_plugin.ts';
+import { resolveIncludeDevRoutes, type ViteCommand } from './scripts/dev_routes_gate.ts';
 import {
   createDiagnosticCollector,
   diagnosticReportPlugin,
@@ -79,36 +80,39 @@ const toSrcPath = (path: string) => toPosixPath(join(projectDirectory, 'src', pa
 // Production builds must not ship the `(dev)` route group. SvelteKit 2.70 has
 // no `kit.routes` filter, so the gate points `files.routes` at a filtered
 // copy of the routes directory (`.svelte-kit/routes-prod`), materialized by
-// scripts/gate_dev_routes.ts before every build (M3). The flag is a build
-// flag, never a runtime check:
+// scripts/gate_dev_routes.ts before every build (M3). The decision is made
+// while resolving the config, never as a runtime check:
 //
 //   AIKAMI_INCLUDE_DEV_ROUTES=true   → always include `(dev)` (test builds)
 //   AIKAMI_INCLUDE_DEV_ROUTES=false  → always exclude `(dev)`
-//   unset                            → exclude (production route graph)
+//   unset                            → include when serving, exclude when building
 //
-// The default is EXCLUDE for every mode — including staging. Normal
-// distributable builds must not carry development sandboxes; a developer who
-// wants them opts in explicitly with AIKAMI_INCLUDE_DEV_ROUTES=true. The moon
-// test/dev tasks set that flag, so sandboxes remain available where they are
-// actually useful. Production additionally asserts zero dev-route entries in
-// the emitted manifest (scripts/check_bundle.ts post-build assertion).
+// The unset default is derived from Vite's `command`, so a dev server started
+// straight from source keeps the sandboxes with no configuration, while every
+// distributable build — staging included — ships the production route graph.
+// A developer who wants sandboxes in a build opts in explicitly with
+// AIKAMI_INCLUDE_DEV_ROUTES=true; the moon test/typecheck tasks set that flag
+// too. The decision itself lives in scripts/dev_routes_gate.ts, shared with
+// scripts/gate_dev_routes.ts so the two can never disagree.
 //
 // NODE_ENV is deliberately NOT consulted: moon sets NODE_ENV=production for
 // every build task regardless of target mode, so using it here would strip
-// the (dev) sandbox routes from test/QA builds (M4). The build flag is the
-// single source of truth.
+// the (dev) sandbox routes from test/QA builds (M4). Vite's own `command` is
+// the signal, and scripts/dev_routes_gate.ts is its single interpreter.
 // ---------------------------------------------------------------------------
-const devGateOverride = process.env.AIKAMI_INCLUDE_DEV_ROUTES ?? 'true'; // We want dev routes by default while early stage
-let includeDevRoutes: boolean;
-if (devGateOverride === 'true') {
-  includeDevRoutes = true;
-} else {
-  includeDevRoutes = false;
-}
-
 const FILTERED_ROUTES_DIR = join(projectDirectory, '.svelte-kit', 'routes-prod');
-let routesDir = 'src/routes';
-if (!includeDevRoutes) {
+
+/**
+ * Resolves `files.routes` for one Vite invocation.
+ *
+ * Deliberately called from inside the config callback rather than at module
+ * scope: only there is Vite's real `command` known, and the serve/build split
+ * is what keeps sandboxes in the dev server without leaking them into builds.
+ */
+const resolveRoutesDir = (command: ViteCommand): string => {
+  if (resolveIncludeDevRoutes(command)) {
+    return 'src/routes';
+  }
   // Guard (M3): a bare `vite build` without the gate script would point
   // `files.routes` at a missing directory and fail confusingly (or worse,
   // build from a stale copy). Fail fast with a clear remedy instead.
@@ -119,10 +123,12 @@ if (!includeDevRoutes) {
         'scripts/gate_dev_routes.ts --mode production first.',
     );
   }
-  routesDir = '.svelte-kit/routes-prod';
-}
+  return '.svelte-kit/routes-prod';
+};
 
-export default defineConfig(({ mode }) => {
+export default defineConfig(({ command, mode }) => {
+  const routesDir = resolveRoutesDir(command);
+
   // Expose the Vite mode to vite.config.ts (loaded later by the SvelteKit
   // plugin) so the dev-route build gate (C-418 Feature B) can exclude the
   // `(dev)` route group from production builds without a runtime check.

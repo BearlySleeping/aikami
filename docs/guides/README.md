@@ -21,6 +21,7 @@ Contributor workflows and operational runbooks. For formats and interfaces, see
 | [`TESTING.md`](TESTING.md) | Test strategy, layers, and known issues |
 | [`CI_CD.md`](CI_CD.md) | GitHub Actions, secrets, and release workflows |
 | [`contract-pipeline.md`](contract-pipeline.md) | How contracts are drafted, implemented, verified, and merged |
+| [`combat_debug_workspace.md`](combat_debug_workspace.md) | The `/dev/combat` workspace: live/replay/fixtures modes, reproduction bundles, headless replay |
 
 ## Data, content, and desktop
 

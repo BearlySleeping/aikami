@@ -26,8 +26,11 @@
 //
 // Usage:
 //   bun scripts/report_bundle_budget.ts [--update] [--build <dir>] [--manifest <path>]
+//   bun scripts/report_bundle_budget.ts --expect-dev-routes
 //
 // `--update` rewrites the baseline after an intentional change (review the diff).
+// `--expect-dev-routes` reports the metrics but skips the ratchet, for a build
+// that deliberately includes the `(dev)` sandbox routes (see the CLI docs below).
 
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
@@ -434,6 +437,13 @@ export const findAppEntrySource = (buildDir: string): string | undefined => {
  *
  * Hard gates are enforced elsewhere (check_deploy_assets / check_bundle); this
  * script reports the tracked metrics and fails only on a tracked regression.
+ *
+ * `--expect-dev-routes` reports the metrics without ratcheting. The committed
+ * baseline measures the production route graph, so a build that deliberately
+ * includes the `(dev)` sandbox routes is not comparable to it and would always
+ * look like a ~20% regression. `scripts/build_client.ts` passes this flag
+ * exactly when `resolveIncludeDevRoutes('build')` says the sandboxes were
+ * requested, so the ratchet still guards every ordinary build.
  */
 export const runCli = (argv: string[] = process.argv.slice(2)): number => {
   const flag = (name: string): string | undefined => {
@@ -441,9 +451,22 @@ export const runCli = (argv: string[] = process.argv.slice(2)): number => {
     return index >= 0 ? argv[index + 1] : undefined;
   };
   const update = argv.includes('--update');
+  const expectDevRoutes = argv.includes('--expect-dev-routes');
   const buildDir = resolve(flag('--build') ?? DEFAULT_BUILD_DIR);
   const manifestPath = resolve(flag('--manifest') ?? DEFAULT_MANIFEST);
   const baselinePath = resolve(flag('--baseline') ?? DEFAULT_BASELINE);
+
+  // Refuse rather than silently corrupt the ratchet: a dev-route build's numbers
+  // describe the sandbox route graph, and writing them into the production
+  // baseline would permanently raise the budget for every ordinary build.
+  if (update && expectDevRoutes) {
+    // biome-ignore lint/suspicious/noConsole: build script reports to stdout/stderr
+    console.error(
+      'report_bundle_budget: --update and --expect-dev-routes are mutually exclusive —\n' +
+        'a dev-route build must never be written into the production baseline.',
+    );
+    return 1;
+  }
 
   if (!existsSync(buildDir)) {
     // biome-ignore lint/suspicious/noConsole: build script reports to stdout/stderr
@@ -467,6 +490,21 @@ export const runCli = (argv: string[] = process.argv.slice(2)): number => {
 
   // biome-ignore lint/suspicious/noConsole: build script reports to stdout/stderr
   console.log(formatBudget(budget));
+
+  if (expectDevRoutes) {
+    // biome-ignore lint/suspicious/noConsole: build script reports to stdout/stderr
+    console.log(
+      [
+        'report_bundle_budget: --expect-dev-routes — ratchet skipped.',
+        '  This build deliberately includes the `(dev)` sandbox routes, and the committed',
+        '  baseline measures the production route graph. The numbers above are therefore',
+        '  informational only; they are not comparable to the baseline and are not',
+        '  written to it.',
+        '',
+      ].join('\n'),
+    );
+    return 0;
+  }
 
   if (update) {
     const baseline: BudgetBaseline = { version: 1, budget };

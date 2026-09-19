@@ -1,192 +1,165 @@
 // apps/e2e/tests/client/combat_enhancements.spec.ts
 // C-234 Combat Enhancement: Dice & Initiative — E2E functional tests
 //
-// Tests the 5 new UI features:
-// 1. Multi-dice quick menu (presets, custom input, queue badges, roll all)
-// 2. Initiative tracker (sorting, current-turn highlight, defeated state)
-// 3. Turn tracking header (banner, action economy dots)
-// 4. Enriched combat log (dice bold, damage colors, icons)
-// 5. Quick-dice in chat (dialogue dice button)
+// REPOINTED (combat debug workspace consolidation): the standalone
+// `/dev/combat-enhancements` sandbox was DELETED and replaced by a 307 redirect
+// to `/dev/combat?mode=fixtures`. Fixtures mode renders the SAME production
+// components (TurnTrackerHeader, InitiativeTracker, EnrichedLogEntry,
+// DiceQuickMenu) from typed fixture projections, with a persistent
+// "Presentation fixture — no live simulation" banner.
 //
-// Uses the extended CombatPage POM with new locators.
+// The dice QUEUE INTERACTION (queueing / removing / rolling / custom notation)
+// belonged to the deleted sandbox's local state — the fixture projection is
+// read-only (`Queued dice (read-only fixture projection)`), so those assertions
+// are now PRESENTATION-ONLY and are tracked under the C-234 visual suite
+// (`combat_enhancements.visual.ts`). What remains here is what the production
+// components actually render.
 
 import { expect, test } from '@playwright/test';
-import { CombatPage } from '$pom';
+import { CombatDebugPage } from '$pom';
 
-test.describe('Combat Enhancements — C-234', () => {
-  let combat: CombatPage;
+test.describe('Combat Enhancements — C-234 (fixtures mode)', () => {
+  let debug: CombatDebugPage;
 
   test.beforeEach(async ({ page }) => {
-    combat = new CombatPage(page);
-    await combat.gotoCombatEnhancementsDev();
+    debug = new CombatDebugPage(page);
+    await debug.gotoFixtures();
   });
 
-  // ── 1. Dice Quick Menu ──
+  test.describe('Fixtures mode shell', () => {
+    test('renders the persistent no-live-simulation notice', async () => {
+      await debug.expectFixtureNotice();
+    });
+
+    test('renders the production turn tracker, initiative tracker and enriched log', async () => {
+      await debug.expectFixtureDeck();
+      await expect(debug.fixtureLogHeading).toBeVisible();
+      await expect(debug.fixtureDiceHeading).toBeVisible();
+    });
+
+    test('does not boot an engine session in fixtures mode', async () => {
+      await debug.expectNoLiveCanvas();
+    });
+
+    test('switches fixture presets via the workspace selector', async () => {
+      await debug.expectFixturePreset('initial');
+      await debug.setFixturePreset('dice-queue');
+      await debug.expectFixturePreset('dice-queue');
+      // The projection follows the selector: dice-queue authors five rolls.
+      await expect(debug.fixtureDiceBadges).toHaveCount(5);
+    });
+  });
+
+  // ── 1. Dice Quick Menu (fixture projection) ──
 
   test.describe('Dice Quick Menu', () => {
-    test('should render the dice quick menu', async () => {
-      await expect(combat.diceQuickMenu).toBeVisible();
+    test('renders the read-only queued-dice projection', async () => {
+      await debug.setFixturePreset('dice-queue');
+      await expect(debug.fixtureDiceHeading).toBeVisible();
+      const badges = debug.fixtureDiceBadges;
+      await expect(badges).toHaveCount(5);
+      await expect(badges.first()).toContainText(/d\d+|d100/);
     });
 
-    test('should render dice preset buttons', async () => {
-      const presetButtons = combat.page.locator('.dice-quick-menu .grid button');
-      await expect(presetButtons).toHaveCount(8);
-    });
-
-    test('should queue a dice roll when preset clicked', async () => {
-      const d20Button = combat.diceQuickMenu.locator('button:has-text("d20")');
-      await d20Button.click();
-
-      await expect(combat.diceQueuedBadges).toContainText('d20');
-    });
-
-    test('should queue multiple rolls and show badges', async () => {
-      const d20Button = combat.diceQuickMenu.locator('button').filter({ hasText: /^d20$/ });
-      const d6Button = combat.diceQuickMenu.locator('button').filter({ hasText: /^d6$/ });
-
-      await d20Button.click();
-      await d6Button.click();
-      await d6Button.click();
-
-      const badges = combat.diceQueuedBadges;
-      await expect(badges).toHaveCount(3);
-    });
-
-    test('should remove a queued roll via badge close button', async () => {
-      const d20Button = combat.diceQuickMenu.locator('button:has-text("d20")');
-      await d20Button.click();
-
-      let badges = combat.diceQueuedBadges;
-      await expect(badges).toHaveCount(1);
-
-      // Click the first badge's close button
-      const closeBtn = badges.locator('button');
-      await closeBtn.click();
-
-      badges = combat.diceQueuedBadges;
-      await expect(badges).toHaveCount(0);
-    });
-
-    test('should show Roll All button when dice are queued', async () => {
-      const d20Button = combat.diceQuickMenu.locator('button:has-text("d20")');
-      await d20Button.click();
-
-      await expect(combat.diceRollAllButton).toBeVisible();
-      await expect(combat.diceRollAllButton).toContainText('Roll All');
-    });
-
-    test('should resolve queued rolls on Roll All click', async () => {
-      const d20Button = combat.diceQuickMenu.locator('button:has-text("d20")');
-      await d20Button.click();
-      await d20Button.click();
-
-      await combat.diceRollAllButton.click();
-      // After rolling, badges should be cleared
-      await combat.page.waitForTimeout(2000);
-      await expect(combat.diceQueuedBadges).toHaveCount(0);
-    });
-
-    test('should accept custom dice notation input', async () => {
-      await combat.diceCustomInput.fill('3d8');
-      await combat.diceCustomAddButton.click();
-
-      await expect(combat.diceQueuedBadges).toContainText('3d8');
-    });
-
-    test('should show error for invalid custom notation', async () => {
-      await combat.diceCustomInput.fill('invalid');
-      await combat.diceCustomAddButton.click();
-
-      // The error message should appear
-      await expect(combat.page.locator('.dice-quick-menu .text-error')).toBeVisible();
+    test('queued dice carry their notation label and action label', async () => {
+      await debug.setFixturePreset('dice-queue');
+      await expect(debug.fixtureDiceBadges.first()).toContainText('Attack');
     });
   });
 
-  // ── 2. Initiative Tracker ──
+  // ── 2. Initiative Tracker (fixture projection) ──
 
   test.describe('Initiative Tracker', () => {
-    test('should render the initiative tracker', async () => {
-      await expect(combat.initiativeTracker).toBeVisible();
+    test('renders the production initiative tracker', async () => {
+      await expect(debug.fixtureInitiativeTracker).toBeVisible();
     });
 
-    test('should show combatant names and initiative values', async () => {
-      await expect(combat.initiativeTracker).toContainText('Initiative');
-      await expect(combat.initiativeTracker).toContainText('Player');
+    test('shows combatant names and initiative values', async () => {
+      await expect(debug.fixtureInitiativeTracker).toContainText('Initiative');
+      await expect(debug.fixtureInitiativeTracker).toContainText('Player');
+      await expect(debug.fixtureInitiativeTracker).toContainText('(Init:');
     });
 
-    test('should highlight current turn combatant', async () => {
-      const currentEntry = combat.page.locator('.initiative-tracker .bg-primary\\/10');
-      await expect(currentEntry).toBeVisible();
+    test('highlights the current-turn combatant', async () => {
+      const currentEntry = debug.fixtureInitiativeTracker.locator('.bg-primary\\/10');
+      await expect(currentEntry.first()).toBeVisible();
     });
 
-    test('should show HP bars for alive combatants', async () => {
-      // Most entries have HP bars (progress elements)
-      const hpBars = combat.initiativeTracker.locator('progress');
-      const count = await hpBars.count();
-      expect(count).toBeGreaterThan(0);
+    test('shows HP bars for alive combatants', async () => {
+      const hpBars = debug.fixtureInitiativeTracker.locator('progress');
+      await expect(hpBars.first()).toBeVisible();
     });
 
-    test('should show defeated state for defeated combatants', async () => {
-      // The skeleton entry should be defeated
-      await expect(combat.initiativeTracker).toContainText('Defeated');
+    test('shows the defeated state for defeated combatants', async () => {
+      await debug.setFixturePreset('victory');
+      await expect(debug.fixtureInitiativeTracker).toContainText('Defeated');
     });
 
-    test('should collapse and expand on header click', async () => {
-      // The initiative tracker header is clickable (collapse wired by parent)
-      await expect(combat.initiativeTrackerHeader).toBeVisible();
-      await expect(combat.initiativeTrackerHeader).toBeEnabled();
+    test('exposes a collapsible header', async () => {
+      const header = debug.fixtureInitiativeTracker.locator('button').first();
+      await expect(header).toBeVisible();
+      await expect(header).toBeEnabled();
     });
   });
 
-  // ── 3. Turn Tracker Header ──
+  // ── 3. Turn Tracker Header (fixture projection) ──
 
   test.describe('Turn Tracker Header', () => {
-    test('should render the turn tracker on combat view', async () => {
-      const header = combat.turnTrackerHeader;
-      await expect(header).toBeVisible();
+    test('renders the production turn-tracker header', async () => {
+      await expect(debug.fixtureTurnTracker).toBeVisible();
     });
 
-    test('should show "Your Turn" or "Enemy Turn" banner', async () => {
-      await expect(combat.turnTrackerHeader).toContainText(/Your Turn|Enemy Turn/);
+    test('shows "Your Turn" or "Enemy Turn" banner', async () => {
+      await expect(debug.fixtureTurnTracker).toContainText(/Your Turn|Enemy Turn/);
     });
 
-    test('should show action economy dots', async () => {
-      await expect(combat.turnTrackerHeader).toContainText('Action');
-      await expect(combat.turnTrackerHeader).toContainText('Quick');
-      await expect(combat.turnTrackerHeader).toContainText('Reaction');
+    test('shows the action economy dots', async () => {
+      await expect(debug.fixtureTurnTracker).toContainText('Move');
+      await expect(debug.fixtureTurnTracker).toContainText('Action');
+      await expect(debug.fixtureTurnTracker).toContainText('Quick');
+      await expect(debug.fixtureTurnTracker).toContainText('Reaction');
     });
 
-    test('should show End Turn button during player turn', async () => {
-      const endTurnBtn = combat.page.locator('.turn-tracker-header button:has-text("End Turn")');
-      await expect(endTurnBtn).toBeVisible();
-      await expect(endTurnBtn).toBeEnabled();
+    test('shows the turn number', async () => {
+      await expect(debug.fixtureTurnTracker).toContainText(/Turn \d+/);
     });
 
-    test('should show turn number', async () => {
-      await expect(combat.turnTrackerHeader).toContainText(/Turn \d+/);
+    test('renders no End Turn control in the read-only fixture', async () => {
+      const endTurn = debug.fixtureTurnTracker.getByRole('button', { name: 'End Turn' });
+      await expect(endTurn).toBeDisabled();
     });
   });
 
-  // ── 4. Enriched Combat Log ──
+  // ── 4. Enriched Combat Log (fixture projection) ──
 
   test.describe('Enriched Combat Log', () => {
-    test('should render enriched log entries in the combat log', async () => {
-      // Sandbox section 4 has preset combat log examples
-      const enrichedEntry = combat.page.locator('.enriched-log-entry');
-      await expect(enrichedEntry.first()).toBeVisible();
+    test('renders enriched log entries from the production component', async () => {
+      await debug.setFixturePreset('log-filled');
+      await expect(debug.fixtureEnrichedLogEntries.first()).toBeVisible();
     });
 
-    test('should bold dice values in log entries', async () => {
-      const boldDice = combat.page.locator('.enriched-log-entry .font-bold.font-mono');
+    test('bolds dice values in log entries', async () => {
+      await debug.setFixturePreset('log-filled');
+      const boldDice = debug.page.locator('.enriched-log-entry .font-bold.font-mono');
       await expect(boldDice.first()).toBeVisible();
+    });
+
+    test('colour-codes the damage type and shows the damage value', async () => {
+      await debug.setFixturePreset('log-filled');
+      const entries = debug.fixtureEnrichedLogEntries;
+      await expect(entries.first()).toContainText(/slashing|piercing|fire/);
+      await expect(entries.first()).toContainText(/\[\d+ dmg\]/);
     });
   });
 
-  // ── 5. Quick-Dice in Dialogue ──
+  // ── 5. Replacement route (redirect) ──
 
-  test.describe('Quick-Dice in Chat', () => {
-    test('should load the combat-enhancements sandbox page', async () => {
-      await expect(combat.page.locator('h1')).toContainText('Combat Enhancements');
+  test.describe('Retired route redirect', () => {
+    test('the legacy enhancements URL lands on fixtures mode', async () => {
+      await debug.page.goto('/dev/combat-enhancements');
+      await expect(debug.workspace).toBeVisible();
+      await expect(debug.fixtureNotice).toBeVisible();
+      await debug.expectUrlQuery({ mode: 'fixtures' });
     });
   });
 });

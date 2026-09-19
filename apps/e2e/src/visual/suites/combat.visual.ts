@@ -1,11 +1,17 @@
 // apps/e2e/src/visual/suites/combat.visual.ts
 // Combat UI — declarative visual test suite.
 //
-// Port of combat_visual.spec.ts. Captures the combat overlay in
-// various game states (initial, log-filled, low-hp, victory, defeat)
-// using the /dev/combat sandbox with ?state= query params.
+// MIGRATED (combat debug workspace consolidation): the five sandbox state
+// cases (initial / log-filled / low-hp / victory / defeat) + the long-labels
+// probe now capture the workspace's FIXTURES mode. Fixture presets are
+// UI-selected, so each case carries a `setupHook` that drives the workspace
+// preset selector (`#combat-debug-fixture`) instead of a `?state=` param.
 //
-// Contract: C-166, C-164, C-145, C-335 (production-route cases), C-516 AC-10
+// The production `/game` cases (overlay, v2 tactical, highlights, intent,
+// AI-offline, companion, environment preview/resolved) are UNTOUCHED.
+//
+// Contract: C-166, C-164, C-145, C-335 (production-route cases), C-516 AC-10,
+//           combat debug workspace consolidation
 
 import { CombatIntentSchema, CombatV2HighlightsSchema } from '@aikami/schemas';
 import type { Page } from 'playwright';
@@ -488,21 +494,53 @@ const startCompanionEncounter = async (page: Page): Promise<void> => {
   await page.waitForTimeout(750);
 };
 
+/**
+ * Factory for the workspace fixtures-mode setup hook.
+ *
+ * Fixture presets are UI-SELECTED (the URL contract carries scenario / mode /
+ * tab / seed only), so the preset must be chosen after the workspace shell
+ * mounts. The hook waits on the fixture deck's production surfaces rather than
+ * a fixed delay.
+ */
+const selectFixturePreset =
+  (preset: string) =>
+  async (page: Page): Promise<void> => {
+    await page.waitForSelector('[data-testid="combat-debug-fixture-notice"]', {
+      state: 'visible',
+      timeout: 30_000,
+    });
+    await page.selectOption('#combat-debug-fixture', preset);
+    await page.waitForTimeout(500);
+    await page.waitForSelector('.initiative-tracker', {
+      state: 'visible',
+      timeout: 15_000,
+    });
+    await page.waitForTimeout(500);
+  };
+
 // ── Prompt shared by all cases ───────────────────────────────
 
 const COMBAT_PROMPT = [
-  'This is a screenshot from the Aikami game combat UI (/dev/combat sandbox).',
+  'This is a screenshot from the Aikami combat debug workspace',
+  '(/dev/combat) in FIXTURES mode. It renders the production combat',
+  'components (turn tracker, initiative tracker, enriched combat log,',
+  'queued-dice badges) from typed fixture projections — there is NO live',
+  'simulation, and a persistent "Presentation fixture — no live simulation"',
+  'banner says so.',
   '',
   'EXPECTED ELEMENTS:',
-  '- Combat sidebar or overlay with player and enemy HP bars.',
-  '- Action buttons (Attack, Defend, Flee) or combat log entries.',
-  '- Character stats display (HP, ATK, DEF, etc.).',
+  '- The workspace shell: header, toolbar (Mode / Scenario / Seed / Provider',
+  '  fault / Fixture preset), and the fixture notice banner.',
+  '- A production Turn Tracker header with the action-economy dots.',
+  '- A production Initiative tracker listing combatants with HP bars.',
+  '- A production Enriched combat log (or the explicit "No log entries" note).',
   '- Dark fantasy-themed styling with Aikami UI components.',
   '',
   'EVALUATE:',
-  '- Is the combat UI rendered and visible?',
-  '- Are HP bars present and displaying health values?',
-  '- Are action buttons or combat log entries visible?',
+  '- Is the fixture notice banner visible and unambiguous?',
+  '- Are the initiative tracker and turn tracker rendered with real values?',
+  '- Are the log entries / empty-state honest (no placeholder pretending to be',
+  '  a live fight)?',
   '- Is the layout structurally sound (no overlapping, no cut-off elements)?',
   '',
   'Return ONLY valid JSON matching the schema.',
@@ -512,11 +550,17 @@ const COMBAT_PROMPT = [
 
 const STATE_PROMPTS: Record<string, string> = {
   initial:
-    'This should show the initial combat state — both characters at full HP with action buttons visible.',
-  'log-filled': 'The combat log should have multiple entries showing attack/damage history.',
-  'low-hp': 'The player HP bar should be critically low (red/danger zone).',
-  victory: 'A victory banner or message should be visible indicating combat was won.',
-  defeat: 'A defeat banner or game over message should be visible.',
+    'The "initial" fixture: full-HP roster (Player 75/100, Goblin 42/80, a defeated Skeleton), an empty log and no queued rolls.',
+  'log-filled':
+    'The "log-filled" fixture: several enriched log entries covering hits, misses, crits, damage types and a plain-text line.',
+  'low-hp':
+    'The "low-hp" fixture: the player is near death (3/100) with a downed ally and a bleeding status effect.',
+  victory:
+    'The "victory" fixture: the enemy is at 0 HP and marked defeated; the log states the final blow.',
+  defeat:
+    'The "defeat" fixture: the player is at 0 HP and marked downed; the enemy holds the turn.',
+  'long-labels':
+    'The "long-labels" fixture: overlong actor names and verbose damage descriptions that must wrap or truncate without breaking the layout.',
 };
 
 // ── Suite ────────────────────────────────────────────────────
@@ -540,43 +584,57 @@ export default defineConfig({
   cases: [
     {
       name: 'Combat — Initial State',
-      searchParams: { state: 'initial' },
+      searchParams: { mode: 'fixtures' },
       prompt: [COMBAT_PROMPT, '', STATE_PROMPTS.initial].join('\n'),
       schema: CombatSchema,
       mask: COMBAT_MASK_SELECTORS,
       screenshotSelector: 'body',
+      setupHook: selectFixturePreset('initial'),
     },
     {
       name: 'Combat — Log Filled',
-      searchParams: { state: 'log-filled' },
+      searchParams: { mode: 'fixtures' },
       prompt: [COMBAT_PROMPT, '', STATE_PROMPTS['log-filled']].join('\n'),
       schema: CombatSchema,
       mask: COMBAT_MASK_SELECTORS,
       screenshotSelector: 'body',
+      setupHook: selectFixturePreset('log-filled'),
     },
     {
       name: 'Combat — Low HP',
-      searchParams: { state: 'low-hp' },
+      searchParams: { mode: 'fixtures' },
       prompt: [COMBAT_PROMPT, '', STATE_PROMPTS['low-hp']].join('\n'),
       schema: CombatSchema,
       mask: COMBAT_MASK_SELECTORS,
       screenshotSelector: 'body',
+      setupHook: selectFixturePreset('low-hp'),
     },
     {
       name: 'Combat — Victory',
-      searchParams: { state: 'victory' },
+      searchParams: { mode: 'fixtures' },
       prompt: [COMBAT_PROMPT, '', STATE_PROMPTS.victory].join('\n'),
       schema: CombatSchema,
       mask: COMBAT_MASK_SELECTORS,
       screenshotSelector: 'body',
+      setupHook: selectFixturePreset('victory'),
     },
     {
       name: 'Combat — Defeat',
-      searchParams: { state: 'defeat' },
+      searchParams: { mode: 'fixtures' },
       prompt: [COMBAT_PROMPT, '', STATE_PROMPTS.defeat].join('\n'),
       schema: CombatSchema,
       mask: COMBAT_MASK_SELECTORS,
       screenshotSelector: 'body',
+      setupHook: selectFixturePreset('defeat'),
+    },
+    {
+      name: 'Combat — Long Labels',
+      searchParams: { mode: 'fixtures' },
+      prompt: [COMBAT_PROMPT, '', STATE_PROMPTS['long-labels']].join('\n'),
+      schema: CombatSchema,
+      mask: COMBAT_MASK_SELECTORS,
+      screenshotSelector: 'body',
+      setupHook: selectFixturePreset('long-labels'),
     },
     // ── Production Route Case (C-335 AC-7, C-500) ─────────
     {

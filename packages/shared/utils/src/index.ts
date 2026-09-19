@@ -32,6 +32,7 @@ export * from './lib/rules/combat_morale.ts';
 export * from './lib/rules/combat_objectives.ts';
 export * from './lib/rules/combat_reactions.ts';
 export * from './lib/rules/combat_replay.ts';
+export * from './lib/rules/combat_reproduction.ts';
 export * from './lib/rules/combat_settlement.ts';
 export * from './lib/rules/combat_spatial.ts';
 export * from './lib/rules/combat_tactical.ts';
