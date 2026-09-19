@@ -25,16 +25,22 @@ import { CANDIDATE_LOCK_HASH_FIELDS } from '@aikami/schemas';
 export const sha256 = (bytes: Buffer | string): string =>
   createHash('sha256').update(bytes).digest('hex');
 
+/** Sorts by logical id — the canonical order every digest is taken in. */
+const byId = (a: CandidateArtifact, b: CandidateArtifact): number => {
+  if (a.id < b.id) {
+    return -1;
+  }
+  return a.id > b.id ? 1 : 0;
+};
+
 /** Rolls a sorted artifact list into a stable digest. */
 export const digestGroup = (artifacts: readonly CandidateArtifact[]): string => {
-  const lines = [...artifacts]
-    .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
-    .map((artifact) => `${artifact.id}:${artifact.sha256}`);
+  const lines = [...artifacts].sort(byId).map((artifact) => `${artifact.id}:${artifact.sha256}`);
   return sha256(lines.join('\n'));
 };
 
 export const group = (artifacts: readonly CandidateArtifact[]): CandidateGroup => {
-  const sorted = [...artifacts].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  const sorted = [...artifacts].sort(byId);
   return { count: sorted.length, digest: digestGroup(sorted), artifacts: sorted };
 };
 
@@ -174,9 +180,9 @@ export const diffCandidateLocks = (options: {
     if (a.digest === b.digest) {
       continue;
     }
-    const byId = (g: CandidateGroup) => new Map(g.artifacts.map((x) => [x.id, x.sha256]));
-    const ma = byId(a);
-    const mb = byId(b);
+    const indexGroup = (g: CandidateGroup) => new Map(g.artifacts.map((x) => [x.id, x.sha256]));
+    const ma = indexGroup(a);
+    const mb = indexGroup(b);
     changedGroups.push({
       group: name,
       added: [...mb.keys()].filter((id) => !ma.has(id)).sort(),

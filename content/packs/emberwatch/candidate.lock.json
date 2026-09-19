@@ -1,10 +1,10 @@
 {
   "schemaVersion": "candidate.lock.v1",
-  "sourceCommit": "00ecb4e30cbd0a72a172c4a805b7a703fbf7030b",
+  "sourceCommit": "5aaf25c916625ce516383e2df3f8e204bf408cea",
   "sourceDirty": true,
   "packId": "emberwatch",
   "packVersion": "5.0.0",
-  "sealedAt": "2026-09-19T16:40:09.813Z",
+  "sealedAt": "2026-09-19T17:18:46.997Z",
   "manifest": {
     "count": 1,
     "digest": "ea22e1f8d00885bc9e37fd42aa386e824e24d955c3f5b38723cb38ca3389cb5a",
@@ -383,5 +383,5 @@
     "digest": "7778238a6aada250b576c2cce638ecdcb45e3c006c9a665811c0027cbaed2f93",
     "summary": "5 maps, 76/95 props placed, 0 error(s)"
   },
-  "lockHash": "929833f4f083227dcba579d891e492c7947020cc66a63240c79fef2bca1dcf9c"
+  "lockHash": "b29da95e2449fdbc7a96f9b35500baae14fe077186e6c5e5c08c5be56f859d7c"
 }
