@@ -48,6 +48,11 @@ import { generateCatalogIndex } from './index_generation.ts';
 import { buildPackLock } from './pack_lock.ts';
 import { runAttributionPreflight } from './preflight.ts';
 import { resolvePreviousRelease } from './published_catalog.ts';
+import {
+  describeRightsGateFailure,
+  loadAcknowledgedRightsTags,
+  runRightsGate,
+} from './rights_gate.ts';
 import { runSeedPublish } from './seed_publish.ts';
 import { runThumbnailPhase } from './thumbnail_generation.ts';
 import { type R2ClientLike, uploadAssets } from './upload.ts';
@@ -98,7 +103,7 @@ export type CatalogPublishReport = {
   rootKey: string;
   shardKeys: readonly string[];
   /** Seed/metadata publish stats (C-496 AC-4: seed failures block the release). */
-  seed: { uploaded: number; failed: number };
+  seed: { uploaded: number; carried: number; failed: number };
   /** Per-pack installed lock phase (C-523 AC-5). */
   packLock: PackLockPublishReport;
   /**
@@ -326,6 +331,51 @@ export const runCatalogPublish = async (
   // 2. Preflight — hard gate before any upload.
   const creditsByTag = loadCreditsByTag(gameDataDir);
 
+  // 2.5. Rights gate — a licence that forbids this distribution stops the
+  // publish HERE, before a byte is uploaded. The attribution preflight proves a
+  // licence was DECLARED; this proves the declared licence permits the
+  // distribution. 5.0.0's locally generated art is non-commercial, so this is
+  // the gate that actually blocks it.
+  const rightsGate = runRightsGate({
+    entries,
+    creditsByTag,
+    acknowledgedTags: loadAcknowledgedRightsTags(gameDataDir),
+  });
+  if (!rightsGate.ok) {
+    console.error(describeRightsGateFailure(rightsGate));
+    console.error('   No objects were uploaded and no index was written.');
+    return {
+      ok: false,
+      checkedCount: entries.length,
+      unresolvedTags: [],
+      incompleteAttributionTags: [],
+      missingRightsEvidenceTags: rightsGate.blockedTags,
+      incompleteRightsTags: [],
+      uploaded: 0,
+      skipped: 0,
+      failed: 0,
+      bytesTransferred: 0,
+      failedKeys: [],
+      thumbnails: {
+        generated: 0,
+        skippedNonImage: 0,
+        decodeFailedTags: [],
+        geometryFailedTags: [],
+        fallbackTags: [],
+        uploaded: 0,
+        skipped: 0,
+        failed: 0,
+      },
+      rootKey: ROOT_INDEX_KEY,
+      shardKeys: [],
+      seed: { uploaded: 0, carried: 0, failed: 0 },
+      packLock: { written: false, key: PACK_LOCK_KEY, assetPins: 0, audioPins: 0 },
+      legacyAlias: { key: PACK_LOCK_KEY, written: false },
+      releaseWritten: false,
+      elapsedMs: Date.now() - startedAt,
+    };
+  }
+
   // C-518 AC-5: when the catalog declares rights evidence, the preflight asks
   // for it — an asset whose intended-use rights are absent or `unknown` is
   // reported before a byte is uploaded. Catalogs without the block keep the
@@ -374,7 +424,7 @@ export const runCatalogPublish = async (
       },
       rootKey: ROOT_INDEX_KEY,
       shardKeys: [],
-      seed: { uploaded: 0, failed: 0 },
+      seed: { uploaded: 0, carried: 0, failed: 0 },
       packLock: { written: false, key: PACK_LOCK_KEY, assetPins: 0, audioPins: 0 },
       legacyAlias: { key: PACK_LOCK_KEY, written: false },
       releaseWritten: false,
@@ -418,7 +468,7 @@ export const runCatalogPublish = async (
       },
       rootKey: ROOT_INDEX_KEY,
       shardKeys: [],
-      seed: { uploaded: 0, failed: 0 },
+      seed: { uploaded: 0, carried: 0, failed: 0 },
       packLock: { written: false, key: PACK_LOCK_KEY, assetPins: 0, audioPins: 0 },
       legacyAlias: { key: PACK_LOCK_KEY, written: false },
       releaseWritten: false,
