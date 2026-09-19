@@ -21,6 +21,14 @@ on:
       - "scripts/src/lib/agents/evaluation/**"
       - "scripts/src/lib/herdr/**"
       - "scripts/src/lib/env/**"
+      # The guard registry, the guards themselves and their tests. The
+      # registry-parity assertions in this suite read the files below, so a
+      # change to ANY of them must re-run this matrix — otherwise the parity
+      # test silently stops covering the thing it exists to pin.
+      - "scripts/src/lib/ops/**"
+      - ".moon/tasks/**"
+      - "docs/contracts/STRICTNESS_COVERAGE_MATRIX.md"
+      - ".github/workflows/pr-checks.yml"
       - "scripts/package.json"
       - "package.json"
       - "bun.lock"
@@ -34,6 +42,14 @@ on:
       - "scripts/src/lib/agents/evaluation/**"
       - "scripts/src/lib/herdr/**"
       - "scripts/src/lib/env/**"
+      # The guard registry, the guards themselves and their tests. The
+      # registry-parity assertions in this suite read the files below, so a
+      # change to ANY of them must re-run this matrix — otherwise the parity
+      # test silently stops covering the thing it exists to pin.
+      - "scripts/src/lib/ops/**"
+      - ".moon/tasks/**"
+      - "docs/contracts/STRICTNESS_COVERAGE_MATRIX.md"
+      - ".github/workflows/pr-checks.yml"
       - "scripts/package.json"
       - "package.json"
       - "bun.lock"

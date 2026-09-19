@@ -42,6 +42,25 @@ describe('compareLintSeverities', () => {
     linter: { rules: { complexity: { [rule]: level } } },
   });
 
+  /** Asserts one row of the severity matrix below. */
+  const expectSeverityVerdict = (entry: {
+    from?: string;
+    to?: string;
+    expect: 'relaxed' | 'tightened' | 'none';
+  }): void => {
+    const before = entry.from === undefined ? {} : config('rule', entry.from);
+    const after = entry.to === undefined ? {} : config('rule', entry.to);
+    const { relaxed, tightened } = compareLintSeverities({ before, after });
+    const label = `${entry.from ?? 'unset'} → ${entry.to ?? 'unset'}`;
+    const expected = {
+      relaxed: { relaxed: 1, tightened: 0 },
+      tightened: { relaxed: 0, tightened: 1 },
+      none: { relaxed: 0, tightened: 0 },
+    }[entry.expect];
+    expect(relaxed, label).toHaveLength(expected.relaxed);
+    expect(tightened, label).toHaveLength(expected.tightened);
+  };
+
   test('detects a relaxed severity', () => {
     const { relaxed, tightened } = compareLintSeverities({
       before: config('noExcessiveCognitiveComplexity', 'error'),
@@ -74,6 +93,46 @@ describe('compareLintSeverities', () => {
       after: config('noNestedTernary', 'error'),
     });
     expect(tightened).toHaveLength(1);
+  });
+
+  test('a NEWLY configured `off` is a RELAXATION, not a tightening', () => {
+    // 🔴 `unset` means "whatever the preset says", and the preset cannot be
+    // resolved from a config diff. Calling an explicit `off` a tightening would
+    // let "explicitly disable a rule the preset was enforcing" sail through as a
+    // no-relaxation refactor.
+    const { relaxed, tightened } = compareLintSeverities({
+      before: {},
+      after: config('noNestedTernary', 'off'),
+    });
+    expect(relaxed).toEqual(['complexity/noNestedTernary: (unset) → off']);
+    expect(tightened).toEqual([]);
+  });
+
+  test('a newly configured `info` is below the enforcement line, so it is a relaxation', () => {
+    const { relaxed, tightened } = compareLintSeverities({
+      before: {},
+      after: config('noForEach', 'info'),
+    });
+    expect(relaxed).toHaveLength(1);
+    expect(tightened).toEqual([]);
+  });
+
+  test('the full severity matrix', () => {
+    const cases: { from?: string; to?: string; expect: 'relaxed' | 'tightened' | 'none' }[] = [
+      { from: undefined, to: 'off', expect: 'relaxed' },
+      { from: undefined, to: 'info', expect: 'relaxed' },
+      { from: undefined, to: 'warn', expect: 'tightened' },
+      { from: undefined, to: 'error', expect: 'tightened' },
+      { from: 'error', to: 'warn', expect: 'relaxed' },
+      { from: 'warn', to: 'off', expect: 'relaxed' },
+      { from: 'off', to: 'warn', expect: 'tightened' },
+      { from: 'warn', to: 'error', expect: 'tightened' },
+      { from: 'error', to: 'error', expect: 'none' },
+      { from: 'off', to: 'off', expect: 'none' },
+    ];
+    for (const entry of cases) {
+      expectSeverityVerdict(entry);
+    }
   });
 
   test('flags removal of a rule that was stricter than warn', () => {
@@ -164,6 +223,16 @@ describe('classifyPolicyChange', () => {
       changedPaths: ['scripts/src/lib/ops/guard_source_file_size.ts'],
     });
     expect(report.verdict).toBe('policy-refactor');
+  });
+
+  test('a newly configured lint `off` is policy-expansion', () => {
+    const report = classifyPolicyChange({
+      changedPaths: ['biome.json'],
+      biomeBefore: {},
+      biomeAfter: { linter: { rules: { complexity: { noForEach: 'off' } } } },
+    });
+    expect(report.verdict).toBe('policy-expansion');
+    expect(report.relaxedLintRules).toHaveLength(1);
   });
 
   test('a refactor that also reduces an allowance is still debt-reduction', () => {

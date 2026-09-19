@@ -188,6 +188,12 @@ tasks:
       - 'src/lib/ops/guard_*'
       - 'src/lib/theme/**/*'
       - 'package.json'
+      # The registry parity test reads these, so a change to any of them must
+      # re-run this suite rather than silently leaving the assertion stale.
+      - '/.moon/tasks/**/*'
+      - '/.github/workflows/pr-checks.yml'
+      - '/docs/contracts/STRICTNESS_COVERAGE_MATRIX.md'
+      - '/.pi/skills/aikami-conventions/SKILL.md'
       - '@group(configs)'
     options:
       mergeArgs: 'replace'
@@ -246,6 +252,10 @@ tasks:
   # C-475 AC-5: agent guidance drift checks — manifest coverage, reference
   # resolution, canonical example structure, and generator reproducibility.
   # Runs in moon ci. No network, AI, or service dependencies.
+  #
+  # Note: the guard-registry parity assertions live in
+  # `scripts:automation-unit`, not here, because they read the guard registry and
+  # the Moon task file rather than agent guidance.
   validate-agent-guidance:
     command: 'bun run src/lib/ops/validate_agent_guidance.ts'
     inputs:

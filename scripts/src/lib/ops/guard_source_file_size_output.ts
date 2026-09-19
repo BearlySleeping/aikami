@@ -134,16 +134,19 @@ export const printThresholdReport = (options: {
   const tests: ScannedFile[] = [];
 
   for (const file of files) {
-    if (file.kind === 'test') {
-      tests.push(file);
-      continue;
-    }
+    // An exemption or waiver is checked BEFORE the test/production split: a
+    // test file can carry one, and counting it as an ordinary test would hide
+    // the allowance from the distribution the report exists to show.
     if (exemptPaths.has(file.path)) {
       exempted.push(file);
       continue;
     }
     if (waiverPaths.has(file.path)) {
       waived.push(file);
+      continue;
+    }
+    if (file.kind === 'test') {
+      tests.push(file);
       continue;
     }
     mutable.push(file);
@@ -176,10 +179,14 @@ export const printThresholdReport = (options: {
     console.log('  (none)');
   }
 
-  const near = waiverRows.filter((file) => file.lines <= 900).length;
-  const far = waiverRows.filter((file) => file.lines > 1200).length;
+  // Calibration is about the CEILINGS the policy grants, not the current size
+  // of the files — a file can sit well under a very high ceiling, and it is the
+  // ceiling that a boundary move would have to cover.
+  const ceilingOf = (file: ScannedFile): number => waivers[file.path]?.maxLines ?? file.lines;
+  const near = waiverRows.filter((file) => ceilingOf(file) <= 900).length;
+  const far = waiverRows.filter((file) => ceilingOf(file) > 1200).length;
   console.log(
-    `\nWaiver calibration: ${near} waiver(s) sit at or below 900 lines (the boundary would cover them),`,
+    `\nWaiver calibration: ${near} waiver ceiling(s) sit at or below 900 lines (the boundary would cover them),`,
   );
   console.log(`                   ${far} sit above 1200 (no boundary move would help).`);
 

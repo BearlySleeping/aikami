@@ -266,6 +266,50 @@ describe('CI workflow parity', () => {
   });
 });
 
+describe('automation-ci workflow parity', () => {
+  // 🔴 The registry-parity assertions live in `scripts:automation-unit`, which
+  // `.github/workflows/automation-ci.yml` runs on three operating systems behind
+  // a `paths:` filter. If the filter does not cover a file the parity test
+  // READS, a change to that file never triggers the suite and the assertion
+  // silently stops covering it — the same drift the registry exists to remove.
+  const AUTOMATION_CI = readFileSync(
+    resolve(REPO_ROOT, '.github/workflows/automation-ci.yml'),
+    'utf8',
+  );
+
+  const coveredByPathFilter = (candidate: string): boolean => {
+    const patterns = [...AUTOMATION_CI.matchAll(/^\s+- "([^"]+)"$/gm)].map(
+      (match) => match[1] ?? '',
+    );
+    return patterns.some((pattern) => {
+      if (pattern.endsWith('/**')) {
+        return candidate.startsWith(pattern.slice(0, -2));
+      }
+      return pattern === candidate;
+    });
+  };
+
+  test('every file the registry parity test reads triggers the matrix', () => {
+    for (const path of [
+      'scripts/src/lib/ops/guards/registry.ts',
+      'scripts/src/lib/ops/__tests__/guard_registry.test.ts',
+      '.moon/tasks/scripts.yml',
+      '.moon/tasks/all.yml',
+      'docs/contracts/STRICTNESS_COVERAGE_MATRIX.md',
+      '.github/workflows/pr-checks.yml',
+      '.pi/skills/aikami-conventions/SKILL.md',
+    ]) {
+      expect(coveredByPathFilter(path), `${path} must trigger automation-ci`).toBe(true);
+    }
+  });
+
+  test('the path filter is declared for both pull_request and push', () => {
+    const pathLists = [...AUTOMATION_CI.matchAll(/^ {4}paths:\n((?: {6}- .*\n)+)/gm)];
+    expect(pathLists).toHaveLength(2);
+    expect(pathLists[0]?.[1]).toBe(pathLists[1]?.[1]);
+  });
+});
+
 describe('coverage-matrix parity', () => {
   const documentedGuards = GUARDS.filter((guard) => guard.documented);
 

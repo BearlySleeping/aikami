@@ -230,7 +230,7 @@ const parseSourceFile = (content: string, fileName: string): ts.SourceFile | und
       content,
       ts.ScriptTarget.Latest,
       true,
-      fileName.endsWith('.svelte') ? ts.ScriptKind.TS : ts.ScriptKind.TSX,
+      scriptKindFor(fileName),
     );
     const diagnostics = (sourceFile as { parseDiagnostics?: readonly unknown[] }).parseDiagnostics;
     if (diagnostics !== undefined && diagnostics.length > 0) {
@@ -240,6 +240,29 @@ const parseSourceFile = (content: string, fileName: string): ts.SourceFile | und
   } catch {
     return undefined;
   }
+};
+
+/**
+ * The parser kind for a file, so JSX-bearing extensions are not misread.
+ *
+ * Parsing a `.jsx`/`.tsx` file as plain TypeScript rejects the JSX syntax, which
+ * would produce parse diagnostics and — through the caller's conservative
+ * "unparseable is logic-bearing" rule — silently make every `.jsx` file
+ * ineligible for a declarative exemption.
+ */
+const scriptKindFor = (fileName: string): ts.ScriptKind => {
+  if (fileName.endsWith('.tsx')) {
+    return ts.ScriptKind.TSX;
+  }
+  if (fileName.endsWith('.jsx')) {
+    return ts.ScriptKind.JSX;
+  }
+  if (/\.(js|mjs|cjs)$/.test(fileName)) {
+    return ts.ScriptKind.JS;
+  }
+  // `.ts`, `.svelte` (whose markup is stripped before analysis) and anything
+  // unrecognised: TypeScript is the widest grammar of the three.
+  return ts.ScriptKind.TS;
 };
 
 const isExported = (node: ts.Node): boolean =>

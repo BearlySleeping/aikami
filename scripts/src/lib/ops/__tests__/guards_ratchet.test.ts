@@ -193,6 +193,31 @@ describe('diffAllowances — numeric allowance ratchet', () => {
     ).toEqual([]);
   });
 
+  test('a zero allowance is the same statement as an absent one', () => {
+    // 🔴 A pre-framework baseline recorded every rule explicitly, including its
+    // zeros. Without this, a representation migration reports hundreds of
+    // `allowance removed (was 0 lines)` non-events and buries the real signal.
+    const dropped = diffAllowances({ trusted: { 'a.ts': 0 }, current: {} });
+    expect(dropped.expansions).toEqual([]);
+    expect(dropped.reductions).toEqual([]);
+
+    const added = diffAllowances({ trusted: {}, current: { 'a.ts': 0 } });
+    expect(added.expansions).toEqual([]);
+    expect(added.reductions).toEqual([]);
+  });
+
+  test('a real allowance replacing a recorded zero is still an expansion', () => {
+    const diff = diffAllowances({ trusted: { 'a.ts': 0 }, current: { 'a.ts': 900 } });
+    expect(diff.expansions).toHaveLength(1);
+    expect(diff.expansions[0]?.kind).toBe('new-file');
+  });
+
+  test('dropping a real allowance to zero is still a reduction', () => {
+    const diff = diffAllowances({ trusted: { 'a.ts': 900 }, current: { 'a.ts': 0 } });
+    expect(diff.reductions).toHaveLength(1);
+    expect(diff.reductions[0]?.kind).toBe('removed');
+  });
+
   test('contractAllowances never writes an entry that was not already accepted', () => {
     const next = contractAllowances({
       baseline: { 'a.ts': 900 },

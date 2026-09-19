@@ -18,7 +18,6 @@
 import { describe, expect, it } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { wholeRepoGuardTasks } from '../guards/registry.ts';
 
 const REPO_ROOT = import.meta.dir ? resolve(import.meta.dir, '../../../../..') : resolve('.');
 const TASKS_FILE = join(REPO_ROOT, '.moon/tasks/scripts.yml');
@@ -101,16 +100,14 @@ describe('guard-scan file group', () => {
     expect(patterns).not.toContain('!/scripts/**/dist/**');
   });
 
-  it('is consumed by every whole-tree guard, not re-inlined', () => {
+  it('is consumed by whole-tree guards, not re-inlined', () => {
     // One negation list, N tasks. Re-inlining a bare `'/.pi/**/*'` into any task
     // reintroduces the warning flood for that task only, which is exactly the
     // kind of asymmetry a shared group prevents.
     //
-    // The count is derived from the guard registry rather than hard-coded: a
-    // new whole-repo guard must consume the group, and that is asserted here.
-    const wholeRepoCount = wholeRepoGuardTasks().length;
-    expect(countOccurrences(source, '@group(guard-scan)')).toBeGreaterThanOrEqual(wholeRepoCount);
-    // Each broad root appears once — inside the group, nowhere else.
+    // Which task consumes which group is asserted per-task in
+    // `guard_registry.test.ts`; what belongs here is that the broad roots exist
+    // exactly once — inside the shared group, nowhere else.
     expect(countOccurrences(source, "- '/.pi/**/*'")).toBe(1);
     expect(countOccurrences(source, "- '/apps/**/*'")).toBe(1);
     expect(countOccurrences(source, "- '/packages/**/*'")).toBe(1);

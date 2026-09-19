@@ -66,6 +66,52 @@ describe('collectModuleImports', () => {
     expect(imports[0]?.typeOnly).toBe(true);
     expect(imports[1]?.typeOnly).toBe(false);
   });
+
+  test('distinguishes an awaited dynamic import from a floating one', () => {
+    // 🔴 The documented rule is about `await import()`. A floating
+    // `import(x).then(…)` is the same construct but NOT the same rule, so the
+    // distinction has to be recorded rather than assumed.
+    const imports = collectModuleImports({
+      source: [
+        "const a = await import('$views/awaited');",
+        "await import('$views/awaited-then').then((m) => m);",
+        "import('$views/floating').then((m) => m);",
+        "import('$views/floating-plain');",
+      ].join('\n'),
+    });
+    const bySpecifier = new Map(imports.map((entry) => [entry.specifier, entry.awaited]));
+    expect(bySpecifier.get('$views/awaited')).toBe(true);
+    expect(bySpecifier.get('$views/awaited-then')).toBe(true);
+    expect(bySpecifier.get('$views/floating')).toBe(false);
+    expect(bySpecifier.get('$views/floating-plain')).toBe(false);
+  });
+
+  test('a static import is never awaited', () => {
+    expect(collectModuleImports({ source: "import 'a';\n" })[0]?.awaited).toBe(false);
+  });
+
+  test('the fingerprint is the enclosing statement, whitespace-normalized', () => {
+    const imports = collectModuleImports({
+      source: "const lazy = await import(\n  '$views/x',\n);\n",
+    });
+    expect(imports[0]?.fingerprint).toBe("const lazy = await import( '$views/x', );");
+  });
+
+  test('the fingerprint survives re-indentation and line movement', () => {
+    const indented = collectModuleImports({
+      source: "function f() {\n  const x = await import('$views/x');\n}\n",
+    });
+    const moved = collectModuleImports({
+      source: "\n\nfunction f() {\n\t\tconst x = await import('$views/x');\n}\n",
+    });
+    expect(indented[0]?.fingerprint).toBe(moved[0]?.fingerprint);
+  });
+
+  test('the fingerprint changes when the call itself changes', () => {
+    const first = collectModuleImports({ source: "const x = await import('$views/a');\n" });
+    const second = collectModuleImports({ source: "const x = await import('$views/b');\n" });
+    expect(first[0]?.fingerprint).not.toBe(second[0]?.fingerprint);
+  });
 });
 
 describe('isRuntimeDependency', () => {
@@ -128,9 +174,17 @@ describe('findImport / findImports', () => {
     expect(findImports(dynamic, { matches: () => true })).toEqual([]);
   });
 
-  test('staticOnly: false reaches dynamic imports', () => {
+  test('kind selects one import kind, and never both', () => {
+    // 🔴 `kind` is a selector, not an on/off switch. An option that merely
+    // disabled the filter made "check the dynamic imports" mean "check every
+    // import", which turned the M9/S12 dynamic-import rules into a false
+    // positive on every static import in the file.
     const mixed = collectModuleImports({ source: "import 'a';\nawait import('b');\n" });
-    expect(findImports(mixed, { matches: () => true })).toHaveLength(1);
-    expect(findImports(mixed, { matches: () => true, staticOnly: false })).toHaveLength(2);
+    expect(findImports(mixed, { matches: () => true }).map((entry) => entry.specifier)).toEqual([
+      'a',
+    ]);
+    expect(
+      findImports(mixed, { matches: () => true, kind: 'dynamic' }).map((entry) => entry.specifier),
+    ).toEqual(['b']);
   });
 });

@@ -329,54 +329,79 @@ export const diffAllowances = (options: {
   const files = new Set([...Object.keys(options.trusted), ...Object.keys(options.current)]);
 
   for (const file of [...files].sort()) {
-    const before = options.trusted[file];
-    const after = options.current[file];
-    if (after === undefined) {
-      if (before !== undefined) {
-        reductions.push({
-          file,
-          rule: 'lines',
-          kind: 'removed',
-          before,
-          after: 0,
-          detail: `allowance removed (was ${before} lines)`,
-        });
-      }
+    const change = classifyAllowanceChange({
+      file,
+      before: options.trusted[file] ?? 0,
+      after: options.current[file] ?? 0,
+    });
+    if (change === undefined) {
       continue;
     }
-    if (before === undefined) {
-      expansions.push({
-        file,
-        rule: 'lines',
-        kind: 'new-file',
-        before: 0,
-        after,
-        detail: `new allowance of ${after} lines`,
-      });
-      continue;
-    }
-    if (after > before) {
-      expansions.push({
-        file,
-        rule: 'lines',
-        kind: 'increase',
-        before,
-        after,
-        detail: `allowance raised ${before} → ${after} lines (+${after - before})`,
-      });
-    } else if (after < before) {
-      reductions.push({
-        file,
-        rule: 'lines',
-        kind: 'decrease',
-        before,
-        after,
-        detail: `allowance lowered ${before} → ${after} lines`,
-      });
-    }
+    (change.kind === 'increase' || change.kind === 'new-file' ? expansions : reductions).push(
+      change,
+    );
   }
 
   return { expansions, reductions, stale };
+};
+
+/**
+ * Classifies one path's allowance change, or `undefined` when nothing changed.
+ *
+ * 🔴 A `0` allowance and an ABSENT allowance are the same statement — "this rule
+ * is not accepted here". A pre-framework baseline recorded every rule
+ * explicitly, including its zeros, so without this a representation migration
+ * reports hundreds of `allowance removed (was 0 lines)` non-events and buries
+ * the real signal in the CI summary.
+ */
+const classifyAllowanceChange = (options: {
+  file: string;
+  before: number;
+  after: number;
+}): RatchetChange | undefined => {
+  const before = options.before === 0 ? undefined : options.before;
+  const after = options.after === 0 ? undefined : options.after;
+  if (before === after) {
+    return undefined;
+  }
+  if (before === undefined) {
+    return {
+      file: options.file,
+      rule: 'lines',
+      kind: 'new-file',
+      before: 0,
+      after: after ?? 0,
+      detail: `new allowance of ${after} lines`,
+    };
+  }
+  if (after === undefined) {
+    return {
+      file: options.file,
+      rule: 'lines',
+      kind: 'removed',
+      before,
+      after: 0,
+      detail: `allowance removed (was ${before} lines)`,
+    };
+  }
+  if (after > before) {
+    return {
+      file: options.file,
+      rule: 'lines',
+      kind: 'increase',
+      before,
+      after,
+      detail: `allowance raised ${before} → ${after} lines (+${after - before})`,
+    };
+  }
+  return {
+    file: options.file,
+    rule: 'lines',
+    kind: 'decrease',
+    before,
+    after,
+    detail: `allowance lowered ${before} → ${after} lines`,
+  };
 };
 
 /** Reduction-only contraction of a numeric-allowance map. */

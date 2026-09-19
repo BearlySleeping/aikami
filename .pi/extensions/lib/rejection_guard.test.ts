@@ -21,6 +21,10 @@ describe('compareVersions', () => {
 
   test('treats a non-numeric segment as unknown rather than guessing', () => {
     expect(compareVersions('0.1.3-beta.1', '0.1.3')).toBe(0);
+    // 🔴 `Number.parseInt('4-beta')` would return 4, which would read a
+    // prerelease of the next version as newer than the affected one and
+    // silently uninstall the workaround before the fix shipped.
+    expect(compareVersions('0.1.4-beta.1', '0.1.3')).toBe(0);
   });
 });
 
@@ -37,6 +41,10 @@ describe('isWorkaroundStillNeeded', () => {
     expect(isWorkaroundStillNeeded('0.1.4')).toBe(false);
     expect(isWorkaroundStillNeeded('0.2.0')).toBe(false);
     expect(isWorkaroundStillNeeded('1.0.0')).toBe(false);
+  });
+
+  test('a prerelease of the next version keeps the handler (conservative)', () => {
+    expect(isWorkaroundStillNeeded('0.1.4-beta.1')).toBe(true);
   });
 
   test('an unknown version installs the handler (conservative)', () => {

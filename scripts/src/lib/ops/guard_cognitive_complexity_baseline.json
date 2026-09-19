@@ -2132,13 +2132,13 @@
   "scripts/src/lib/ops/guard_orphaned_capability.ts": {
     "counts": {
       "excessive": 6,
-      "worst": 55
+      "worst": 54
     }
   },
   "scripts/src/lib/ops/guard_service_conventions.ts": {
     "counts": {
-      "excessive": 2,
-      "worst": 41
+      "excessive": 1,
+      "worst": 37
     }
   },
   "scripts/src/lib/ops/guard_source_file_size_helpers.ts": {
