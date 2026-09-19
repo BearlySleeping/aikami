@@ -38,6 +38,11 @@
 
 # ── Guard policy: the definition of "passing" ──────────────────────────────
 
+# This file itself: whoever can change who reviews guard policy can change guard
+# policy. The registry lists `.github/CODEOWNERS` as a guard-policy path, so it
+# is owned like one.
+/.github/CODEOWNERS                      @snorreks
+
 # Guard implementations and the shared ratchet framework.
 /scripts/src/lib/ops/guard_*            @snorreks
 /scripts/src/lib/ops/guards/            @snorreks
