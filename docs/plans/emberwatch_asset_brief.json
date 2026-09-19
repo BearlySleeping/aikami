@@ -6,10 +6,10 @@
   "status": "proposed",
   "baseline": {
     "repository": "BearlySleeping/aikami",
-    "commit": "1b1d72d07eda937d61fd2148ca10b1f0cd3defcd",
+    "commit": "60c010b85e7ed3df6e159d83dda50fd02f19948f",
     "packId": "emberwatch",
     "packVersion": "5.0.0",
-    "reviewedAt": "2026-09-18"
+    "reviewedAt": "2026-09-19"
   },
   "execution": {
     "defaultMode": "plan",
@@ -371,40 +371,6 @@
       "releaseGates": [
         "exact_hash_accepted",
         "native_game_review"
-      ],
-      "status": "planned"
-    },
-    {
-      "id": "ward_renewed",
-      "phase": "expansion",
-      "kind": "prop_state",
-      "action": "edit",
-      "subject": "Edit the accepted ward-tree base: restrained amber light follows the existing cracks and branches, returning vitality without changing roots, silhouette, framing or ground contact.",
-      "providerPreference": "local_image_reference",
-      "preparationProfile": "prop-full-alpha-ground",
-      "referenceIds": [
-        "approved_style",
-        "ward_base"
-      ],
-      "candidateLimit": 2,
-      "dependsOn": [],
-      "binding": {
-        "kind": "ending_prop",
-        "mapIds": [
-          "village"
-        ],
-        "targetIds": [
-          "ward_tree_landmark"
-        ],
-        "mode": "proposed_pending_validation",
-        "variant": "ward_renewed"
-      },
-      "targetCanvas": null,
-      "audio": null,
-      "releaseGates": [
-        "exact_hash_accepted",
-        "aligned_state_swap",
-        "authoritative_ending_binding"
       ],
       "status": "planned"
     },
@@ -1181,74 +1147,6 @@
       "status": "planned"
     },
     {
-      "id": "ward_without_magic",
-      "phase": "expansion",
-      "kind": "prop_state",
-      "action": "edit",
-      "subject": "Edit the accepted ward-tree base: strip every amber glow and leaf vein light so the tree reads as an ordinary, faintly grey woodland tree; keep roots, silhouette, framing and ground contact identical.",
-      "providerPreference": "local_image_reference",
-      "preparationProfile": "prop-full-alpha-ground",
-      "referenceIds": [
-        "approved_style",
-        "ward_base"
-      ],
-      "candidateLimit": 2,
-      "dependsOn": [],
-      "binding": {
-        "kind": "ending_prop",
-        "mapIds": [
-          "village"
-        ],
-        "targetIds": [
-          "ward_tree_landmark"
-        ],
-        "mode": "proposed_pending_validation",
-        "variant": "ward_without_magic"
-      },
-      "targetCanvas": null,
-      "audio": null,
-      "releaseGates": [
-        "exact_hash_accepted",
-        "aligned_state_swap",
-        "authoritative_ending_binding"
-      ],
-      "status": "planned"
-    },
-    {
-      "id": "ward_shared",
-      "phase": "expansion",
-      "kind": "prop_state",
-      "action": "edit",
-      "subject": "Edit the accepted ward-tree base: the amber light spreads outward into a ring of small lit grove saplings at the base; keep roots, silhouette, framing and ground contact identical.",
-      "providerPreference": "local_image_reference",
-      "preparationProfile": "prop-full-alpha-ground",
-      "referenceIds": [
-        "approved_style",
-        "ward_base"
-      ],
-      "candidateLimit": 2,
-      "dependsOn": [],
-      "binding": {
-        "kind": "ending_prop",
-        "mapIds": [
-          "village"
-        ],
-        "targetIds": [
-          "ward_tree_landmark"
-        ],
-        "mode": "proposed_pending_validation",
-        "variant": "ward_shared"
-      },
-      "targetCanvas": null,
-      "audio": null,
-      "releaseGates": [
-        "exact_hash_accepted",
-        "aligned_state_swap",
-        "authoritative_ending_binding"
-      ],
-      "status": "planned"
-    },
-    {
       "id": "ash_hound_visual",
       "phase": "expansion",
       "kind": "prop",
@@ -1829,9 +1727,9 @@
   ],
   "summary": {
     "sliceItems": 3,
-    "expansionItems": 41,
-    "totalItems": 44,
-    "maxCandidates": 88,
+    "expansionItems": 38,
+    "totalItems": 41,
+    "maxCandidates": 82,
     "maxRequestedAudioSecondsPerCandidatePass": 0
   },
   "releaseGates": [

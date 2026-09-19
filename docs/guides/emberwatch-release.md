@@ -160,3 +160,31 @@ letting the painter overflow. Reuse or re-art an existing semantic terrain first
 - Ambience and SFX are a separate lane. No shipped local model serves them
   (`stable_audio_open_1_0_profile` is declared but not installed), so those jobs
   are out of scope until a provider exists.
+
+## De-scoped: ending-state visual swaps (Emberwatch 5.0.0)
+
+`ward_renewed`, `ward_without_magic` and `ward_shared` were authored as aligned
+edits of the accepted ward-tree base (`ward_large.png`). All three failed QA:
+the generation canvas clipped the large tree, so the results were not
+pixel-aligned with the base and could not be swapped in without moving the
+trunk, the collision footprint and the silhouette.
+
+**Decision: de-scoped from 5.0.0, not shipped as a partial.**
+
+The jobs are removed from `docs/plans/emberwatch_asset_brief.json` rather than
+left `planned`, because a planned job is a claim that 5.0.0 ships this art. The
+runtime never consumed ending art either: the `fading_ward` endings carry
+`title`, `narration`, `reactionDialogueKey` and `worldStateFlag`, and no visual
+binding. Removing the jobs therefore removes the only place the pack implied the
+art existed.
+
+Ending states are **narrative-only** in 5.0.0. `ward_large.png` renders
+identically for every ending, and nothing in the manifest, the runtime or the
+tests claims otherwise.
+
+Re-introducing them requires a large-canvas/aligned-edit preparation that
+preserves, in one pass: the same source tree, the same pixel origin, the same
+trunk/collision footprint, the same overall silhouette and canvas, and only the
+authored state change. An ordinary prop regeneration cannot satisfy that — the
+canvas must be sized from the base rather than from a fixed tile budget, and the
+result must be diffed against the base to prove alignment before acceptance.

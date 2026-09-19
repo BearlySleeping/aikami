@@ -100,38 +100,6 @@ const prop = (options: {
   status: 'planned',
 });
 
-const alignedState = (options: {
-  id: string;
-  subject: string;
-  variant: string;
-  references: string[];
-}): Job => ({
-  id: options.id,
-  phase: 'expansion',
-  kind: 'prop_state',
-  action: 'edit',
-  subject: options.subject,
-  providerPreference: 'local_image_reference',
-  // An ending-state edit is still an engine render on a flat ground, so it goes
-  // through the same luminance/ground-plane extraction as any other prop. The
-  // native-alpha profile only applies to art that ALREADY carries real alpha.
-  preparationProfile: 'prop-full-alpha-ground',
-  referenceIds: options.references,
-  candidateLimit: 2,
-  dependsOn: [],
-  binding: {
-    kind: 'ending_prop',
-    mapIds: ['village'],
-    targetIds: ['ward_tree_landmark'],
-    mode: 'proposed_pending_validation',
-    variant: options.variant,
-  },
-  targetCanvas: null,
-  audio: null,
-  releaseGates: ['exact_hash_accepted', 'aligned_state_swap', 'authoritative_ending_binding'],
-  status: 'planned',
-});
-
 const portrait = (options: {
   id: string;
   npcId: string;
@@ -330,14 +298,6 @@ const main = (): void => {
       variant: 'neutral',
       phase: 'slice',
     }),
-    alignedState({
-      id: 'ward_renewed',
-      subject:
-        'Edit the accepted ward-tree base: restrained amber light follows the existing cracks and branches, returning vitality without changing roots, silhouette, framing or ground contact.',
-      variant: 'ward_renewed',
-      references: ['approved_style', 'ward_base'],
-    }),
-
     // Expansion: dedicated art for every prop the audit found reusing another
     // object's artwork.
     prop({
@@ -537,22 +497,25 @@ const main = (): void => {
       targetIds: ['ward_grove_a'],
       canvas: [96, 112],
     }),
-
-    // Aligned ending-state swaps.
-    alignedState({
-      id: 'ward_without_magic',
-      subject:
-        'Edit the accepted ward-tree base: strip every amber glow and leaf vein light so the tree reads as an ordinary, faintly grey woodland tree; keep roots, silhouette, framing and ground contact identical.',
-      variant: 'ward_without_magic',
-      references: ['approved_style', 'ward_base'],
-    }),
-    alignedState({
-      id: 'ward_shared',
-      subject:
-        'Edit the accepted ward-tree base: the amber light spreads outward into a ring of small lit grove saplings at the base; keep roots, silhouette, framing and ground contact identical.',
-      variant: 'ward_shared',
-      references: ['approved_style', 'ward_base'],
-    }),
+    // ── De-scoped from Emberwatch 5.0.0: ending-state visual swaps ────────
+    //
+    // `ward_renewed`, `ward_without_magic` and `ward_shared` were authored as
+    // aligned edits of the accepted ward-tree base, and all three failed QA:
+    // the generation canvas clipped the large tree, so the results were not
+    // pixel-aligned with the base and could not be swapped in without moving
+    // the trunk, the collision footprint and the silhouette.
+    //
+    // They are REMOVED from the brief rather than left `planned`. A planned job
+    // is a claim that 5.0.0 ships this art, and it does not. The runtime never
+    // consumed ending art either — the `fading_ward` endings carry title,
+    // narration, reaction dialogue and a world-state flag, and no visual
+    // binding — so removing them here removes the only place the pack implied
+    // the art existed.
+    //
+    // Re-introducing them requires a large-canvas/aligned-edit preparation that
+    // preserves source tree, pixel origin, trunk/collision footprint and
+    // overall silhouette. Until that exists, ending states are narrative-only
+    // and are documented as such in docs/guides/emberwatch-release.md.
 
     // Hostile authored visuals.
     hostileVisual({
