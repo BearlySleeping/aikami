@@ -291,26 +291,6 @@ export const runCatalogPublish = async (
   // 2. Preflight — hard gate before any upload.
   const creditsByTag = loadCreditsByTag(gameDataDir);
 
-  // 2.5. Rights gate — a licence that forbids this distribution stops the
-  // publish HERE, before a byte is uploaded. The attribution preflight proves a
-  // licence was DECLARED; this proves the declared licence permits the
-  // distribution. 5.0.0's locally generated art is non-commercial, so this is
-  // the gate that actually blocks it.
-  const rightsGate = runRightsGate({
-    entries,
-    creditsByTag,
-    acknowledgedTags: loadAcknowledgedRightsTags(gameDataDir),
-  });
-  if (!rightsGate.ok) {
-    console.error(describeRightsGateFailure(rightsGate));
-    console.error('   No objects were uploaded and no index was written.');
-    return abortedReport({
-      checkedCount: entries.length,
-      missingRightsEvidenceTags: rightsGate.blockedTags,
-      elapsedMs: Date.now() - startedAt,
-    });
-  }
-
   // C-518 AC-5: when the catalog declares rights evidence, the preflight asks
   // for it — an asset whose intended-use rights are absent or `unknown` is
   // reported before a byte is uploaded. Catalogs without the block keep the
@@ -369,6 +349,35 @@ export const runCatalogPublish = async (
   console.log(
     `✅ Attribution preflight passed — ${preflight.checkedCount} assets checked, 0 unresolved.`,
   );
+
+  // 2.6. Rights gate — does what was DECLARED permit this distribution?
+  //
+  // Ordered AFTER the attribution preflight on purpose: the preflight asks
+  // "was anything declared?", this asks "may we ship what was declared?".
+  // Running it first would relabel an undeclared tag as a licensing problem.
+  //
+  // A generator model's own terms are NOT the artifact's terms. This reads the
+  // OUTPUT classification, corroborated against pinned evidence — see
+  // model_rights_evidence.ts and rights_gate.ts.
+  // 2.5. Rights gate — a licence that forbids this distribution stops the
+  // publish HERE, before a byte is uploaded. The attribution preflight proves a
+  // licence was DECLARED; this proves the declared licence permits the
+  // distribution. 5.0.0's locally generated art is non-commercial, so this is
+  // the gate that actually blocks it.
+  const rightsGate = runRightsGate({
+    entries,
+    creditsByTag,
+    acknowledgedTags: loadAcknowledgedRightsTags(gameDataDir),
+  });
+  if (!rightsGate.ok) {
+    console.error(describeRightsGateFailure(rightsGate));
+    console.error('   No objects were uploaded and no index was written.');
+    return abortedReport({
+      checkedCount: entries.length,
+      missingRightsEvidenceTags: rightsGate.blockedTags,
+      elapsedMs: Date.now() - startedAt,
+    });
+  }
 
   // 3. Upload assets (idempotent by content-addressed key).
   const uploadReport = await uploadAssets({
