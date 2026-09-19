@@ -74,8 +74,10 @@ tasks:
     command: 'bun run dev'
     preset: 'server'
     env:
-      # C-418 Feature B: dev server must keep the (dev) sandbox routes even
-      # when CI sets NODE_ENV=production (the gate strips them otherwise).
+      # C-418 Feature B: belt-and-braces. The dev-route gate already includes
+      # `(dev)` for a Vite `serve` command, but pinning the flag here keeps the
+      # sandboxes present even if this task is ever run through a wrapper that
+      # presents itself as a build.
       AIKAMI_INCLUDE_DEV_ROUTES: 'true'
   build:
     # `bun run build` in package.json wraps back to `moon run client:build`
@@ -93,6 +95,7 @@ tasks:
       # the ratchets, so a baseline edit must invalidate the build cache.
       - 'scripts/build_client.ts'
       - 'scripts/gate_dev_routes.ts'
+      - 'scripts/dev_routes_gate.ts'
       - 'scripts/check_bundle.ts'
       - 'scripts/check_deploy_assets.ts'
       - 'scripts/check_ineffective_dynamic_imports.ts'
@@ -115,11 +118,13 @@ tasks:
       - '/packages/frontend/*/src/**/*'
     options:
       cache: true
-      # The dev-route gate defaults to EXCLUDE for every mode, including
-      # staging: a normal distributable build never ships the `(dev)` sandbox
-      # routes. Opt in for a QA/dev build with AIKAMI_INCLUDE_DEV_ROUTES=true
-      # (the `dev`/`test`/`typecheck` tasks do). `scripts/check_deploy_assets.ts`
-      # fails a normal build if `(dev)` output leaks back in.
+      # The dev-route gate excludes `(dev)` from every build — staging
+      # included: a normal distributable build never ships the `(dev)` sandbox
+      # routes. The dev server keeps them with no configuration (the gate is
+      # command-derived), and a QA/dev *build* opts in with
+      # AIKAMI_INCLUDE_DEV_ROUTES=true (the `test`/`typecheck` tasks do).
+      # `scripts/check_deploy_assets.ts` fails a normal build if `(dev)` output
+      # leaks back in.
     outputs:
       - '.svelte-kit'
       - 'build'
@@ -143,10 +148,10 @@ tasks:
       runInCI: true
     env:
       # Typecheck is a development-time check over the full source tree,
-      # including the `(dev)` sandbox routes. The build gate defaults to
-      # excluding them, which would point `files.routes` at
-      # `.svelte-kit/routes-prod` and make `./$types` unresolvable from
-      # `src/routes`. Opt in exactly as `dev`/`test` do.
+      # including the `(dev)` sandbox routes. `svelte-kit sync` resolves this
+      # config with `command: 'build'`, which would otherwise point
+      # `files.routes` at `.svelte-kit/routes-prod` and make `./$types`
+      # unresolvable from `src/routes`. Opt in exactly as `dev`/`test` do.
       AIKAMI_INCLUDE_DEV_ROUTES: 'true'
   test:
     command: 'bun run test:unit'
