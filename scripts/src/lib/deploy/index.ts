@@ -51,6 +51,7 @@ import { applyMigrations } from '../../../../apps/backend/cloudflare/src/lib/db/
 import { reconcileBucket } from '../../../../apps/backend/cloudflare/src/lib/storage/sync.ts';
 import { c, error, log, ok, parseCliArgs, setLogQuiet, warn } from '../cli_utils';
 import { getScriptsEnv, initScriptsEnv } from '../env/scripts_env';
+import { cleanBuildOutput } from './build_output';
 import { checkDeployCache, generateVersionString } from './cache';
 import { deployCloudflareWorker } from './cloudflare';
 import {
@@ -440,6 +441,19 @@ async function main(): Promise<void> {
     try {
       log(`  🏗️  Building ${c.cyan}${moonTarget}:build${c.reset} (for ${appName})...`);
       const forceFlag = isForce ? ' --force' : '';
+
+      // 🔴 The adapter's output directory MUST start empty. moon hydrates a
+      // cached task's `outputs` by copying the archived tree in WITHOUT
+      // removing files that are not in it, so a cache hit overlays this build
+      // onto the previous one. Measured: a dev-route build (301 files, with
+      // `build/dev/`) followed by a cached production build left 385 files,
+      // two `app.*.js` entries and `build/dev/` still present — which then
+      // fails the deploy-asset guard on a build that correctly excluded the
+      // sandboxes. A real (non-cached) run is clean because the adapter
+      // rimrafs these paths itself; this covers the hydrated path, where
+      // nothing else can.
+      cleanBuildOutput(appName);
+
       // env option is cross-platform — VAR=value prefix is bash-only and breaks on Windows
       // live: stream moon's output so CI watchers see the build progressing
       // (moon build can take minutes on a cold cache).

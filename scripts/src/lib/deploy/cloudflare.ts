@@ -32,7 +32,11 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import type { AppId } from '@aikami/types';
 import { toMode } from '@aikami/utils';
-import { c, log, ok } from '../cli_utils';
+import {
+  DEV_ROUTES_ENV_VAR,
+  resolveIncludeDevRoutes,
+} from '../../../../apps/frontend/client/scripts/dev_routes_gate.ts';
+import { c, log, ok, warn } from '../cli_utils';
 import { initScriptsEnv } from '../env/scripts_env';
 import { checkDeployCache, generateVersionString, saveDeployCache } from './cache';
 import {
@@ -248,6 +252,13 @@ export function ensureHeadersFile(config: AppConfig, appRoot: string): void {
  * is the last thing between the generated tree and Cloudflare's 25 MiB asset
  * limit, so it runs unconditionally for apps that provide one.
  *
+ * A dev-route build is the one case where the guard's `(dev)` assertion must be
+ * relaxed, because the output is exactly what the caller asked for. The
+ * decision comes from the same resolver `build_client.ts` and
+ * `vite.config.ts` use, so this last gate cannot disagree with the build that
+ * actually ran — an opt-in build that passes its own guard must not then be
+ * rejected here.
+ *
  * @returns true when a guard ran (and passed); false when the app has none.
  */
 export function runDeployAssetGuard(config: AppConfig, appRoot: string): boolean {
@@ -256,8 +267,17 @@ export function runDeployAssetGuard(config: AppConfig, appRoot: string): boolean
     return false;
   }
   const buildDir = config.cloudflare?.buildOutputDir ?? 'build';
+
+  const allowDevRoutes = resolveIncludeDevRoutes('build');
+  if (allowDevRoutes) {
+    warn(`  ⚠️  ${DEV_ROUTES_ENV_VAR}=true — this deploy SHIPS the (dev) sandbox routes.`);
+  }
+
   log(`  🔎 Checking deployment assets (${buildDir}) before upload...`);
-  run(`bun scripts/check_deploy_assets.ts ${buildDir}`, { cwd: appRoot });
+  run(
+    `bun scripts/check_deploy_assets.ts ${buildDir}${allowDevRoutes ? ' --allow-dev-routes' : ''}`,
+    { cwd: appRoot },
+  );
   return true;
 }
 
