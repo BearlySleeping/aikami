@@ -79,6 +79,7 @@
     "deps:check": "syncpack lint --dependency-types prod,dev",
     "preview": "bun run scripts/src/lib/ops/preview_client.ts",
     "herdr:preview": "bun run scripts/src/lib/ops/preview_client.ts",
+    "replay:combat": "bun run scripts/src/lib/ops/replay_combat_reproduction.ts",
     "contract": "bun run scripts/src/lib/agents/contract_pipeline.ts",
     "contract:pipeline": "bun run scripts/src/lib/agents/contract_pipeline.ts",
     "stack": "bun run --cwd apps/backend/local-stack init --",

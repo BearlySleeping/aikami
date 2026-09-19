@@ -8,7 +8,7 @@
 // These pin the pure logic so a refactor cannot quietly disable the ratchets.
 
 import { afterEach, describe, expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -25,6 +25,7 @@ import {
   formatBudget,
   measureBundleBudget,
   parseRouteTable,
+  runCli,
   transitiveClosure,
 } from '../scripts/report_bundle_budget.ts';
 
@@ -157,10 +158,7 @@ describe('measureBundleBudget', () => {
     mkdirSync(join(buildDir, '_app/immutable/workers'), { recursive: true });
     writeFileSync(join(buildDir, 'node.js'), '1234');
     writeFileSync(join(buildDir, 'shared.css'), '123456');
-    writeFileSync(
-      join(buildDir, '_app/immutable/workers/speech_worker-Ab12_cd3.js'),
-      '12345678',
-    );
+    writeFileSync(join(buildDir, '_app/immutable/workers/speech_worker-Ab12_cd3.js'), '12345678');
     const manifest = {
       '.svelte-kit/generated/build/client-optimized/nodes/0.js': {
         file: 'node.js',
@@ -257,6 +255,72 @@ describe('formatBudget', () => {
     expect(output).toContain('largest 0.001 MiB raw');
     expect(output).toContain('Initial dependency closure (static)');
     expect(output).toContain('/game');
+  });
+});
+
+// The ratchet must not fire on a build that deliberately includes the `(dev)`
+// sandbox routes: the committed baseline measures the production route graph,
+// so a sandbox build always looks like a large regression. These pin both
+// halves — that the flag is what suppresses it, and that the flag can never be
+// used to launder those numbers into the baseline.
+describe('runCli dev-route opt-in', () => {
+  /**
+   * Writes a minimal measurable build, then derives the baseline from a real
+   * measurement so the fixture cannot drift from the measurement code.
+   */
+  const fixture = (baselineOf: (measured: BundleBudget) => BundleBudget): string[] => {
+    const buildDir = temporaryBuild();
+    const entryPath = join(buildDir, '_app/immutable/entry/app.abc12345.js');
+    mkdirSync(join(buildDir, '_app/immutable/entry'), { recursive: true });
+    writeFileSync(join(buildDir, 'node.js'), 'x'.repeat(4000));
+    writeFileSync(entryPath, '{"nodes":{"/":[0],"/game":[0],"/settings":[0]}}');
+
+    const manifest = {
+      '.svelte-kit/generated/build/client-optimized/nodes/0.js': { file: 'node.js' },
+    };
+    const manifestPath = join(buildDir, 'manifest.json');
+    writeFileSync(manifestPath, JSON.stringify(manifest));
+
+    const measured = measureBundleBudget({
+      buildDir,
+      manifest,
+      appEntrySource: readFileSync(entryPath, 'utf8'),
+    });
+
+    const baselinePath = join(buildDir, 'baseline.json');
+    writeFileSync(baselinePath, JSON.stringify({ version: 1, budget: baselineOf(measured) }));
+
+    return ['--build', buildDir, '--manifest', manifestPath, '--baseline', baselinePath];
+  };
+
+  /** A baseline far below what the fixture measures — a real regression. */
+  const regressed = (measured: BundleBudget): BundleBudget => ({
+    ...measured,
+    totalJsBytes: Math.floor(measured.totalJsBytes / 4),
+  });
+
+  test('fails on a regression without the flag', () => {
+    expect(runCli(fixture(regressed))).toBe(1);
+  });
+
+  test('passes with --expect-dev-routes, reporting instead of ratcheting', () => {
+    expect(runCli([...fixture(regressed), '--expect-dev-routes'])).toBe(0);
+  });
+
+  test('still ratchets an unchanged build, flag or not', () => {
+    expect(runCli(fixture((measured) => measured))).toBe(0);
+    expect(runCli([...fixture((measured) => measured), '--expect-dev-routes'])).toBe(0);
+  });
+
+  test('refuses to combine --update with --expect-dev-routes', () => {
+    const args = fixture(regressed);
+    const baselinePath = args[args.indexOf('--baseline') + 1] as string;
+    const before = readFileSync(baselinePath, 'utf8');
+
+    expect(runCli([...args, '--update', '--expect-dev-routes'])).toBe(1);
+
+    // The point of the refusal: a sandbox build must never reach the baseline.
+    expect(readFileSync(baselinePath, 'utf8')).toBe(before);
   });
 });
 

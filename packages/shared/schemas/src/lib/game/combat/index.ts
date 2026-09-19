@@ -18,5 +18,6 @@ export {
   EncounterRunIdSchema,
 } from './combat_reaction';
 export * from './combat_replay';
+export * from './combat_reproduction';
 export * from './combat_state';
 export * from './combat_validation';

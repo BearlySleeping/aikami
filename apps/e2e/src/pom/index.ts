@@ -6,6 +6,7 @@ export { CatalogPreviewPage } from './catalog_preview_page';
 export { ChatModesPage } from './chat_modes_page';
 export { ClientChatPage } from './client_chat_page';
 export { ClientNavigation } from './client_navigation';
+export { CombatDebugPage } from './combat_debug_page';
 export { CombatPage } from './combat_page';
 export { CommunityPage } from './community_page';
 export { CyoaPage } from './cyoa_page';

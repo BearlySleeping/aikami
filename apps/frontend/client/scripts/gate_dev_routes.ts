@@ -13,14 +13,16 @@
 // the wrong routes dir in the `bun run build --mode <mode>` passthrough case.
 //
 // Usage: `bun scripts/gate_dev_routes.ts [--mode <mode>]` (run before
-// `vite build`). `--mode` mirrors the vite build mode so the exclusion
-// decision here matches vite.config.ts exactly.
+// `vite build`). `--mode` mirrors the vite build mode. The include/exclude
+// decision itself comes from scripts/dev_routes_gate.ts — the same resolver
+// vite.config.ts uses — so the two can never disagree.
 
 import { cpSync, existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { logger } from '@aikami/logger';
+import { DEV_ROUTE_GROUP, resolveIncludeDevRoutes } from './dev_routes_gate.ts';
 
 // `new URL(...).pathname` keeps the URL form of the path, which on Windows is
 // a leading-slash drive path (`/C:/...`) that fs rejects. fileURLToPath is the
@@ -28,7 +30,7 @@ import { logger } from '@aikami/logger';
 const projectDirectory = fileURLToPath(new URL('..', import.meta.url));
 const sourceRoutes = join(projectDirectory, 'src', 'routes');
 const outputRoutes = join(projectDirectory, '.svelte-kit', 'routes-prod');
-const excludedDir = '(dev)';
+const excludedDir = DEV_ROUTE_GROUP;
 
 // Accept an explicit `--mode <mode>` (mirrors `vite build --mode <mode>`).
 // A bare `vite build` defaults to production, so this script does too.
@@ -39,19 +41,16 @@ const cliMode =
     : process.argv.find((arg) => arg.startsWith('--mode='))?.slice('--mode='.length);
 
 const buildMode = cliMode || process.env.AIKAMI_BUILD_MODE || 'production';
-const devGateOverride = process.env.AIKAMI_INCLUDE_DEV_ROUTES;
-// Default is EXCLUDE for every mode. Normal distributable builds (including
-// staging) ship the production route graph; development sandboxes require an
-// explicit AIKAMI_INCLUDE_DEV_ROUTES=true opt-in, which the moon dev/test tasks
-// set. must match vite.config.ts's decision exactly.
-let includeDevRoutes: boolean;
-if (devGateOverride === 'true') {
-  includeDevRoutes = true;
-} else {
-  includeDevRoutes = false;
-}
 
-// Keep vite.config.ts and this script on the same decision.
+// This script only ever runs on the build path (scripts/build_client.ts step 1),
+// so it resolves the shared decision for `command: 'build'`. Normal
+// distributable builds (including staging) ship the production route graph;
+// development sandboxes require an explicit AIKAMI_INCLUDE_DEV_ROUTES=true
+// opt-in. Going through the shared resolver — rather than re-deriving the rule
+// here — is what keeps this script and vite.config.ts from ever disagreeing.
+const includeDevRoutes = resolveIncludeDevRoutes('build');
+
+// Publish the resolved mode so vite.config.ts's `??=` sees the real build mode.
 process.env.AIKAMI_BUILD_MODE = buildMode;
 
 // Remove any previous filtered copy so the build can never read stale files.
