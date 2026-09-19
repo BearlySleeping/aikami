@@ -70,7 +70,8 @@
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { resolve, sep } from 'node:path';
 import ts from 'typescript';
-import { collectModuleImports, findImport } from './guards/imports.ts';
+import { isAllowlistedSpecifier, VIEW_MODEL_ALLOWLIST } from './guards/allowlist.ts';
+import { collectModuleImports, findImport, findImports } from './guards/imports.ts';
 import type { RatchetRuleSpec, RatchetViolation } from './guards/ratchet.ts';
 import { simpleHash } from './guards/ratchet.ts';
 import { printHardViolations, runRatchet } from './guards/ratchet_runner.ts';
@@ -482,57 +483,48 @@ const checkViewModel = (file: string): void => {
     });
   }
 
-  const strippedContent = stripStringsAndComments(content);
+  const scriptImports = collectModuleImports({ source: content, fileName: file });
 
-  // M9 allowlist: dynamic imports that are explicitly permitted.
-  // See svelte-conventions/SKILL.md dynamic-import table.
+  // M9: `await import()` outside the documented allowlist.
   //
-  // `@aikami/frontend-preview` is listed alongside `@aikami/frontend/engine`
-  // because it is the package the hub is meant to import from, and its
-  // MapPreview/WalkSandbox entrypoints pull the engine (and therefore PixiJS)
-  // transitively: the engine root barrel value-imports `pixi.js` through
-  // `pixi_app.ts` and `game_world.ts`. Importing it statically would put
-  // PixiJS in the hub's Cloudflare Worker server bundle, which
-  // `server_bundle_purity.test.ts` exists to prevent.
-  const allowlistPatterns = [
-    /@aikami\/frontend\/engine/,
-    /@aikami\/frontend-preview/,
-    /onnxruntime-web/,
-    /kokoro-js/,
-    /pixi\.js/,
-    /@tauri-apps/,
-    /\?worker&type=module/,
-    /eruda/,
-  ];
-  const dynamicImportMatches = [...strippedContent.matchAll(/\bawait\s+import\s*\(/g)];
-  const dynamicImportCount = dynamicImportMatches.length;
-  // Count allowlisted dynamic imports by reading each call's SPECIFIER from the
-  // original content. Matching the allowlist against `strippedContent` cannot
-  // work: string stripping removes the specifier itself, so no allowlist entry
-  // ever matched and the list was effectively dead — every legitimate dynamic
-  // import counted as a violation (which is why existing files carry baselined
-  // `m9` counts for imports the allowlist already names).
-  const allowlistedCount = [
-    ...content.matchAll(/\bawait\s+import\s*\(\s*['"]([^'"]+)['"]/g),
-  ].filter((match) => allowlistPatterns.some((pattern) => pattern.test(match[1] ?? ''))).length;
-  const effectiveCount = Math.max(0, dynamicImportCount - allowlistedCount);
-  // Heuristic: report the last `effectiveCount` occurrences — a best-effort
-  // pointer, since which specific call is "non-allowlisted" isn't tracked.
-  for (const match of dynamicImportMatches.slice(dynamicImportCount - effectiveCount)) {
+  // 🔴 The detection is AST-based and the allowlist is exact. Before this, the
+  // allowlist was a list of unanchored regexes, so `@aikami/frontend/engine-evil`
+  // satisfied `/@aikami\/frontend\/engine/` and `evil-eruda-wrapper` satisfied
+  // `/eruda/` — a naming convention, not an allowlist. And the violations were
+  // identified by the constant `m9:dynamic-import`, so swapping one prohibited
+  // import for another at the same count left the identity array unchanged and
+  // passed the ratchet.
+  for (const entry of findImports(scriptImports, {
+    matches: (specifier) => !isAllowlistedSpecifier(specifier, VIEW_MODEL_ALLOWLIST),
+    kind: 'dynamic',
+    awaited: true,
+  })) {
     ratchetViolations.push({
       file: relPath(file),
       rule: 'm9',
-      message:
-        'M9 uses `await import()` — only valid per the allowlist in svelte-conventions/SKILL.md',
-      line: lineOf(content, match.index),
-      identity: simpleHash('m9:dynamic-import'),
+      message: `M9 uses \`await import(${entry.specifier === '' ? '<non-literal>' : `'${entry.specifier}'`})\` — only valid per the allowlist in svelte-conventions/SKILL.md`,
+      line: entry.line,
+      identity: simpleHash(`m9:${entry.specifier}:${entry.fingerprint}`),
     });
   }
 };
 
-// ── Main ─────────────────────────────────────────────────────────────────
+// ── Scan ─────────────────────────────────────────────────────────────────
 
-const main = (): void => {
+/**
+ * Runs the full scan and returns what it found.
+ *
+ * Exported so a test (and a one-off identity migration) can exercise the REAL
+ * collectors instead of re-implementing them — a migration that recomputes
+ * identities from a copy of the logic can silently disagree with the guard.
+ * The module-level arrays are reset first, so repeated calls are idempotent.
+ */
+export const collectViolations = (): {
+  hard: RatchetViolation[];
+  ratcheted: RatchetViolation[];
+} => {
+  violations.length = 0;
+  ratchetViolations.length = 0;
   for (const root of APP_ROOTS) {
     for (const file of walk(root, (n) => n.endsWith('_view.svelte'))) {
       checkView(file);
@@ -541,11 +533,18 @@ const main = (): void => {
       checkViewModel(file);
     }
   }
+  return { hard: violations, ratcheted: ratchetViolations };
+};
+
+// ── Main ─────────────────────────────────────────────────────────────────
+
+const main = (): void => {
+  const { hard, ratcheted } = collectViolations();
 
   const hardFailures = printHardViolations({
     name: 'mvvm-conventions',
-    violations,
-    heading: `🔴 mvvm-conventions guard failed — ${violations.length} hard violation(s). V0–V5, M1–M7 and M10 have no baseline: fix them.`,
+    violations: hard,
+    heading: `🔴 mvvm-conventions guard failed — ${hard.length} hard violation(s). V0–V5, M1–M7 and M10 have no baseline: fix them.`,
   });
 
   runRatchet({
@@ -554,7 +553,7 @@ const main = (): void => {
     baselinePath: BASELINE_PATH,
     baselineRelPath: BASELINE_REL_PATH,
     rules: RULES,
-    violations: ratchetViolations,
+    violations: ratcheted,
     hardFailures,
     identityAware: true,
     args: process.argv.slice(2),

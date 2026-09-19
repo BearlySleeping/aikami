@@ -210,7 +210,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
-          CHECK_STATUS: ${{ steps.moon.outcome }}
+          # Same combined status as the report step: the sticky comment must not
+          # say "passing" when the whole-repo guard step failed.
+          CHECK_STATUS: ${{ steps.moon.outcome == 'success' && steps.guards.outcome || 'failure' }}
         run: bun run scripts/src/lib/ci/post_pr_comment.ts --body "$RUNNER_TEMP/pr-comment.md"
 
       - name: Enforce Moon CI result

@@ -67,12 +67,16 @@ export const relFromRoot = (path: string): string => relative(ROOT, path).split(
 
 // ── Parsing ──────────────────────────────────────────────────────────────
 
-const readJson = (path: string, label: string): unknown => {
+/**
+ * Reads a policy file, returning the failure as a value rather than throwing.
+ *
+ * 🔴 `loadPolicy` is called at the top of the guard's entry point; a throw there
+ * escapes as an unhandled stack trace instead of the guard's own actionable
+ * "malformed policy files" report.
+ */
+const readJson = (path: string, label: string): { value: unknown; error?: string } => {
   const result = readJsonFileSafe(path, label);
-  if (!result.ok) {
-    throw new Error(result.error);
-  }
-  return result.value;
+  return result.ok ? { value: result.value } : { value: undefined, error: result.error };
 };
 
 type AllowanceParse = { ok: true; baseline: AllowanceBaseline } | { ok: false; error: string };
@@ -129,22 +133,29 @@ export const today = (): string => process.env.AIKAMI_GUARD_TODAY ?? todayIso();
 
 export const loadPolicy = (): Policy => {
   const errors: string[] = [];
-  const baselineParse = parseAllowanceBaseline(
-    readJson(BASELINE_PATH, relFromRoot(BASELINE_PATH)),
-    relFromRoot(BASELINE_PATH),
-  );
+  const empty: Policy = { baseline: {}, exemptions: {}, waivers: {}, errors };
+
+  const baselineRaw = readJson(BASELINE_PATH, relFromRoot(BASELINE_PATH));
+  if (baselineRaw.error !== undefined) {
+    return { ...empty, errors: [baselineRaw.error] };
+  }
+  const baselineParse = parseAllowanceBaseline(baselineRaw.value, relFromRoot(BASELINE_PATH));
   if (!baselineParse.ok) {
-    return { baseline: {}, exemptions: {}, waivers: {}, errors: [baselineParse.error] };
+    return { ...empty, errors: [baselineParse.error] };
   }
 
-  const exemptionParse = validateExemptions(
-    readJson(EXEMPTIONS_PATH, relFromRoot(EXEMPTIONS_PATH)),
-  );
+  const exemptionsRaw = readJson(EXEMPTIONS_PATH, relFromRoot(EXEMPTIONS_PATH));
+  if (exemptionsRaw.error !== undefined) {
+    return { ...empty, errors: [exemptionsRaw.error] };
+  }
+  const exemptionParse = validateExemptions(exemptionsRaw.value);
   errors.push(...exemptionParse.errors);
 
-  const waiverParse = validateWaivers(readJson(WAIVERS_PATH, relFromRoot(WAIVERS_PATH)), {
-    today: today(),
-  });
+  const waiversRaw = readJson(WAIVERS_PATH, relFromRoot(WAIVERS_PATH));
+  if (waiversRaw.error !== undefined) {
+    return { ...empty, errors: [waiversRaw.error] };
+  }
+  const waiverParse = validateWaivers(waiversRaw.value, { today: today() });
   errors.push(...waiverParse.errors);
 
   return {
@@ -161,8 +172,15 @@ export const loadPolicy = (): Policy => {
  * Detected separately from `loadPolicy` so the message is the actionable one
  * rather than a generic parse failure.
  */
-export const expiredWaivers = (): { path: string; reviewBy: string }[] =>
-  validateWaivers(readJson(WAIVERS_PATH, relFromRoot(WAIVERS_PATH)), { today: today() }).expired;
+export const expiredWaivers = (): { path: string; reviewBy: string }[] => {
+  const raw = readJson(WAIVERS_PATH, relFromRoot(WAIVERS_PATH));
+  if (raw.error !== undefined) {
+    // `loadPolicy` has already reported the read failure; returning nothing here
+    // avoids reporting the same file twice.
+    return [];
+  }
+  return validateWaivers(raw.value, { today: today() }).expired;
+};
 
 // ── Configuration checks ─────────────────────────────────────────────────
 

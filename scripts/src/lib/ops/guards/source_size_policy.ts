@@ -185,7 +185,7 @@ export const validateExemptions = (
     }
     if (kind === 'generated' && source === undefined) {
       errors.push(
-        `${path}: kind "generated" needs a "source" naming the generator or fixture it is derived from, or a filename that matches a documented generated convention`,
+        `${path}: kind "generated" needs a "source" naming the generator or fixture it is derived from`,
       );
       continue;
     }

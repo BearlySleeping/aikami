@@ -70,7 +70,7 @@
     "counts": {
       "m9": 1
     },
-    "identities": ["m9:588a43d6"]
+    "identities": ["m9:c9cccbe9"]
   },
   "apps/frontend/client/src/lib/views/dev/sandbox/combat/combat_sandbox_view.svelte": {
     "counts": {
@@ -82,7 +82,7 @@
     "counts": {
       "m9": 3
     },
-    "identities": ["m9:588a43d6", "m9:588a43d6", "m9:588a43d6"]
+    "identities": ["m9:0ebfcc0e", "m9:2b5c454b", "m9:c9cccbe9"]
   },
   "apps/frontend/client/src/lib/views/dev/sandbox/environment/environment_sandbox_view.svelte": {
     "counts": {
@@ -94,7 +94,7 @@
     "counts": {
       "m9": 2
     },
-    "identities": ["m9:588a43d6", "m9:588a43d6"]
+    "identities": ["m9:2b5c454b", "m9:d0479108"]
   },
   "apps/frontend/client/src/lib/views/dev/sandbox/party_follow/party_follow_sandbox_view.svelte": {
     "counts": {
@@ -169,25 +169,25 @@
     "counts": {
       "m9": 2
     },
-    "identities": ["m9:588a43d6", "m9:588a43d6"]
+    "identities": ["m9:4aafc085", "m9:a0dc41d3"]
   },
   "apps/frontend/client/src/routes/(dev)/dev/lpc-walk/lpc_walk_view_model.svelte.ts": {
     "counts": {
       "m9": 1
     },
-    "identities": ["m9:588a43d6"]
+    "identities": ["m9:a0dc41d3"]
   },
   "apps/frontend/client/src/routes/(dev)/dev/tauri-test/tauri_test_view_model.svelte.ts": {
     "counts": {
       "m9": 3
     },
-    "identities": ["m9:588a43d6", "m9:588a43d6", "m9:588a43d6"]
+    "identities": ["m9:07d87336", "m9:4a75dc9d", "m9:a29a2d68"]
   },
   "apps/frontend/hub/src/lib/views/catalog/catalog_asset_view_model.svelte.ts": {
     "counts": {
       "m9": 1
     },
-    "identities": ["m9:588a43d6"]
+    "identities": ["m9:84fbf295"]
   },
   "apps/frontend/hub/src/lib/views/catalog/catalog_asset_view.svelte": {
     "counts": {
@@ -199,7 +199,7 @@
     "counts": {
       "m9": 1
     },
-    "identities": ["m9:588a43d6"]
+    "identities": ["m9:84fbf295"]
   },
   "apps/frontend/hub/src/lib/views/sandbox/walk_sandbox_view.svelte": {
     "counts": {

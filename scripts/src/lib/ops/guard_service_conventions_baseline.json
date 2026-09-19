@@ -4,21 +4,20 @@
       "s12": 7
     },
     "identities": [
-      "s12:6ba02184",
-      "s12:6ba02184",
-      "s12:6ba02184",
-      "s12:6ba02184",
-      "s12:6ba02184",
-      "s12:6ba02184",
-      "s12:6ba02184"
+      "s12:346d6b0c",
+      "s12:36e6cad8",
+      "s12:8f4afe8b",
+      "s12:8f4afe8b",
+      "s12:ad3f876d",
+      "s12:c4f85cdd",
+      "s12:c4f85cdd"
     ]
   },
   "apps/frontend/client/src/lib/services/auth/auth_service.svelte.ts": {
     "counts": {
-      "s11": 1,
-      "s12": 1
+      "s11": 1
     },
-    "identities": ["s11:5a13815b", "s12:6ba02184"]
+    "identities": ["s11:5a13815b"]
   },
   "apps/frontend/client/src/lib/services/config/config_service.svelte.ts": {
     "counts": {
@@ -29,85 +28,34 @@
   "apps/frontend/client/src/lib/services/game/game_boot_service.svelte.ts": {
     "counts": {
       "s11": 1,
-      "s12": 25
+      "s12": 18
     },
     "identities": [
       "s11:5a13815b",
-      "s12:6ba02184",
-      "s12:6ba02184",
-      "s12:6ba02184",
-      "s12:6ba02184",
-      "s12:6ba02184",
-      "s12:6ba02184",
-      "s12:6ba02184",
-      "s12:6ba02184",
-      "s12:6ba02184",
-      "s12:6ba02184",
-      "s12:6ba02184",
-      "s12:6ba02184",
-      "s12:6ba02184",
-      "s12:6ba02184",
-      "s12:6ba02184",
-      "s12:6ba02184",
-      "s12:6ba02184",
-      "s12:6ba02184",
-      "s12:6ba02184",
-      "s12:6ba02184",
-      "s12:6ba02184",
-      "s12:6ba02184",
-      "s12:6ba02184",
-      "s12:6ba02184",
-      "s12:6ba02184"
+      "s12:190e2598",
+      "s12:190e2598",
+      "s12:29f22f32",
+      "s12:45a26825",
+      "s12:57decc1e",
+      "s12:710854a1",
+      "s12:7f92b4be",
+      "s12:7f92b4be",
+      "s12:8d223f4d",
+      "s12:99a386af",
+      "s12:99a386af",
+      "s12:99a386af",
+      "s12:99a386af",
+      "s12:99a386af",
+      "s12:b43a0086",
+      "s12:d33d029e",
+      "s12:df45b562",
+      "s12:df45b562"
     ]
-  },
-  "apps/frontend/client/src/lib/services/game/game_engine_service.svelte.ts": {
-    "counts": {
-      "s12": 4
-    },
-    "identities": ["s12:6ba02184", "s12:6ba02184", "s12:6ba02184", "s12:6ba02184"]
-  },
-  "apps/frontend/client/src/lib/services/game/game_mode_service.svelte.ts": {
-    "counts": {
-      "s12": 1
-    },
-    "identities": ["s12:6ba02184"]
   },
   "apps/frontend/client/src/lib/services/game/game_overlay_service.svelte.ts": {
     "counts": {
-      "s12": 7
+      "s12": 5
     },
-    "identities": [
-      "s12:6ba02184",
-      "s12:6ba02184",
-      "s12:6ba02184",
-      "s12:6ba02184",
-      "s12:6ba02184",
-      "s12:6ba02184",
-      "s12:6ba02184"
-    ]
-  },
-  "apps/frontend/client/src/lib/services/game/inventory_service.svelte.ts": {
-    "counts": {
-      "s12": 1
-    },
-    "identities": ["s12:6ba02184"]
-  },
-  "apps/frontend/client/src/lib/services/game/player_state_service.svelte.ts": {
-    "counts": {
-      "s12": 1
-    },
-    "identities": ["s12:6ba02184"]
-  },
-  "apps/frontend/client/src/lib/services/game/quest_state_service.svelte.ts": {
-    "counts": {
-      "s12": 2
-    },
-    "identities": ["s12:6ba02184", "s12:6ba02184"]
-  },
-  "apps/frontend/client/src/lib/services/game/world_state_service.svelte.ts": {
-    "counts": {
-      "s12": 1
-    },
-    "identities": ["s12:6ba02184"]
+    "identities": ["s12:7c798956", "s12:7c798956", "s12:7c798956", "s12:9a41876c", "s12:b43a0086"]
   }
 }

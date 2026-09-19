@@ -237,7 +237,10 @@ export const extractExports = (content: string): string[] => {
         if (element.isTypeOnly || statement.isTypeOnly) {
           continue;
         }
-        exports.add(element.propertyName?.text ?? element.name.text);
+        // `element.name` is the PUBLIC runtime name. For `export { internal as
+        // publicName }` the property name is `internal`, which is not what a
+        // consumer sees and not what the reference index records.
+        exports.add(element.name.text);
       }
       continue;
     }
@@ -314,18 +317,35 @@ export const extractExports = (content: string): string[] => {
  *   - *.d.ts declaration files
  *   - apps/e2e/
  */
+/**
+ * Check if a reference is in a production (non-test, non-declaration) file.
+ *
+ * Returns false for:
+ *   - *.test.ts, *.spec.ts
+ *   - __tests__/ directories
+ *   - *.d.ts declaration files
+ *   - anything under `apps/e2e/`
+ *
+ * 🔴 Every check is anchored to a path SEGMENT, and the path is normalised to a
+ * leading slash first. The e2e check used to be `includes('/apps/e2e/')`, which
+ * silently missed a repo-relative `apps/e2e/src/pom/x.ts` — the walker happens
+ * to pass absolute paths, so the branch looked exercised while a relative path
+ * (a fixture, a test, a future caller) fell through it and was reported as
+ * production code.
+ */
 export const isProductionFile = (filePath: string): boolean => {
   const normalized = filePath.replace(/\\/g, '/');
-  if (normalized.includes('/__tests__/')) {
+  const anchored = normalized.startsWith('/') ? normalized : `/${normalized}`;
+  if (anchored.includes('/__tests__/')) {
     return false;
   }
-  if (/\.(test|spec)\.(ts|svelte)$/.test(normalized)) {
+  if (/\.(test|spec)\.(ts|svelte)$/.test(anchored)) {
     return false;
   }
-  if (normalized.endsWith('.d.ts')) {
+  if (anchored.endsWith('.d.ts')) {
     return false;
   }
-  if (normalized.includes('/apps/e2e/')) {
+  if (anchored.includes('/apps/e2e/')) {
     return false;
   }
   return true;

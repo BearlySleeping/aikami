@@ -105,7 +105,8 @@ const LEVEL_RANK: Record<LintLevel, number> = { off: 0, info: 1, warn: 2, error:
  * A rule moving from `error` to `off` is a relaxation; the reverse is a
  * tightening. A rule that disappears entirely falls back to the preset — which
  * this cannot resolve — so removal is only flagged when the previous level was
- * stricter than `warn`.
+ * stricter than `warn`, and a newly configured level below `warn` is likewise
+ * reported as a relaxation rather than as a tightening.
  */
 export const compareLintSeverities = (options: {
   before: unknown;
@@ -125,7 +126,21 @@ export const compareLintSeverities = (options: {
       continue;
     }
     if (from === undefined) {
-      tightened.push(`${rule}: (unset) → ${to}`);
+      // 🔴 `unset` means "whatever the preset says", and the preset cannot be
+      // resolved from a config diff alone. So a NEWLY configured rule is
+      // classified by rank, in the conservative direction:
+      //
+      //   • a level below `warn` — notably an explicit `off` — can only weaken
+      //     enforcement or leave it unchanged, and is reported as a relaxation
+      //     so a human sees it. Calling it a tightening would let "explicitly
+      //     disable a rule that the preset was enforcing" sail through as a
+      //     no-relaxation refactor.
+      //   • `warn` and above is an explicit enforcement statement.
+      if (LEVEL_RANK[to] < LEVEL_RANK.warn) {
+        relaxed.push(`${rule}: (unset) → ${to}`);
+      } else {
+        tightened.push(`${rule}: (unset) → ${to}`);
+      }
       continue;
     }
     if (LEVEL_RANK[to] < LEVEL_RANK[from]) {

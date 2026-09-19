@@ -69,6 +69,14 @@ export type GuardMeta = {
   /** True when the guard records existing debt in a baseline it may only shrink. */
   ratcheted: boolean;
   /**
+   * Repo-relative path of the ratchet baseline, when `ratcheted`.
+   *
+   * Used by `guard_policy_diff.ts` to compare every ratchet's allowances, so a
+   * new ratcheted guard is classified automatically rather than needing its
+   * baseline added to a second list.
+   */
+  baseline?: string;
+  /**
    * True when the guard is a dependency of the `scripts:guard` aggregate.
    */
   aggregate: boolean;
@@ -99,6 +107,7 @@ export const GUARDS: readonly GuardMeta[] = [
     category: 'ratcheted-debt',
     wholeRepo: false,
     ratcheted: true,
+    baseline: 'scripts/src/lib/ops/guard_mvvm_conventions_baseline.json',
     aggregate: true,
     moonTask: true,
     documented: true,
@@ -121,6 +130,7 @@ export const GUARDS: readonly GuardMeta[] = [
     category: 'ratcheted-debt',
     wholeRepo: false,
     ratcheted: true,
+    baseline: 'scripts/src/lib/ops/guard_service_conventions_baseline.json',
     aggregate: true,
     moonTask: true,
     documented: true,
@@ -174,6 +184,7 @@ export const GUARDS: readonly GuardMeta[] = [
     category: 'ratcheted-debt',
     wholeRepo: true,
     ratcheted: true,
+    baseline: 'scripts/src/lib/ops/guard_type_safety_baseline.json',
     aggregate: true,
     moonTask: true,
     documented: true,
@@ -191,6 +202,7 @@ export const GUARDS: readonly GuardMeta[] = [
     category: 'ratcheted-debt',
     wholeRepo: false,
     ratcheted: true,
+    baseline: 'scripts/src/lib/ops/guard_orphaned_capability_baseline.json',
     aggregate: true,
     moonTask: true,
     documented: true,
@@ -224,6 +236,7 @@ export const GUARDS: readonly GuardMeta[] = [
     category: 'ratcheted-debt',
     wholeRepo: false,
     ratcheted: true,
+    baseline: 'scripts/src/lib/ops/guard_view_model_composition_baseline.json',
     aggregate: true,
     moonTask: true,
     documented: true,
@@ -241,6 +254,7 @@ export const GUARDS: readonly GuardMeta[] = [
     category: 'maintainability',
     wholeRepo: true,
     ratcheted: true,
+    baseline: 'scripts/src/lib/ops/guard_source_file_size_baseline.json',
     aggregate: true,
     moonTask: true,
     documented: true,
@@ -258,6 +272,7 @@ export const GUARDS: readonly GuardMeta[] = [
     category: 'maintainability',
     wholeRepo: true,
     ratcheted: true,
+    baseline: 'scripts/src/lib/ops/guard_cognitive_complexity_baseline.json',
     aggregate: true,
     moonTask: true,
     documented: true,

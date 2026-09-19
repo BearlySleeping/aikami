@@ -80,20 +80,34 @@ export const WORKAROUND = {
     'Delete this extension and its entry from .pi/settings.json once pi-deepinfra no longer renders from a stale ctx.',
 } as const;
 
-/** Dotted numeric comparison. Non-numeric parts sort before numeric ones. */
+/**
+ * Dotted numeric comparison.
+ *
+ * 🔴 A segment that is not purely numeric (a prerelease tag like `0.1.4-beta.1`)
+ * makes the whole comparison UNKNOWN, and the caller treats unknown as "still
+ * needed". `Number.parseInt('4-beta')` would happily return `4`, which would
+ * read a prerelease of the next version as newer than the affected one and
+ * silently uninstall the workaround before the fix actually shipped.
+ */
 export const compareVersions = (a: string, b: string): number => {
-  const left = a.split('.').map((part) => Number.parseInt(part, 10));
-  const right = b.split('.').map((part) => Number.parseInt(part, 10));
-  for (let index = 0; index < Math.max(left.length, right.length); index++) {
-    const l = left[index];
-    const r = right[index];
-    if (!Number.isFinite(l) || !Number.isFinite(r)) {
-      // A non-numeric segment (a prerelease tag, say) is not something this
-      // predicate can reason about — treat it as equal rather than guessing.
-      return 0;
+  const parse = (version: string): number[] | undefined => {
+    const parts = version.split('.');
+    if (!parts.every((part) => /^\d+$/.test(part))) {
+      return undefined;
     }
+    return parts.map((part) => Number(part));
+  };
+
+  const left = parse(a);
+  const right = parse(b);
+  if (left === undefined || right === undefined) {
+    return 0;
+  }
+  for (let index = 0; index < Math.max(left.length, right.length); index++) {
+    const l = left[index] ?? 0;
+    const r = right[index] ?? 0;
     if (l !== r) {
-      return (l ?? 0) - (r ?? 0);
+      return l - r;
     }
   }
   return 0;

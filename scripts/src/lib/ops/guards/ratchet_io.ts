@@ -13,6 +13,7 @@
 
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import * as nodePath from 'node:path';
 
 export type RefReadResult =
   | { status: 'ok'; value: unknown }
@@ -129,18 +130,49 @@ export const resolveBaseRef = (options: {
 };
 
 /**
+ * The path operations `relativeToRoot` needs. Injectable so the Windows and
+ * POSIX behaviours can both be tested from one host — a cross-platform bug in
+ * path handling must not need a Windows runner to be caught.
+ */
+export type PathOps = {
+  relative: (from: string, to: string) => string;
+  isAbsolute: (path: string) => boolean;
+  sep: string;
+};
+
+/**
  * Repo-relative POSIX path for a file inside the repository root.
+ *
  * Returns `undefined` when the path escapes the root (a fixture tree in
  * `$TMPDIR`, for example), which callers treat as "no trusted-base check
  * possible" rather than as an error.
+ *
+ * 🔴 Containment is decided with `path.relative`, not by string-prefix matching.
+ * A prefix test is wrong in three ways that all matter here:
+ *
+ *   • Windows paths mix `\` and `/`, so `startsWith(root + '/')` fails on a
+ *     perfectly valid in-repo `AIKAMI_GUARD_BASELINE` and the guard silently
+ *     falls back to the default baseline;
+ *   • a sibling directory whose name merely starts with the root
+ *     (`/repo-other` vs `/repo`) would pass a naive prefix test;
+ *   • a case-insensitive filesystem can spell the same root two ways.
+ *
+ * `path.relative` normalises separators and resolves `..` for us, and an
+ * absolute or `..`-leading result is the unambiguous "escaped the root" signal.
  */
-export const relativeToRoot = (root: string, absolutePath: string): string | undefined => {
-  const normalizedRoot = root.replace(/\/+$/, '');
-  if (!absolutePath.startsWith(`${normalizedRoot}/`)) {
+export const relativeToRoot = (
+  root: string,
+  absolutePath: string,
+  pathOps: PathOps = nodePath,
+): string | undefined => {
+  const relativePath = pathOps.relative(root, absolutePath);
+  if (relativePath === '') {
+    // The root itself is not a file; callers always pass a file path.
     return undefined;
   }
-  return absolutePath
-    .slice(normalizedRoot.length + 1)
-    .split('\\')
-    .join('/');
+  if (relativePath.startsWith('..') || pathOps.isAbsolute(relativePath)) {
+    return undefined;
+  }
+  // Callers use the result as a git path, which is always POSIX-separated.
+  return pathOps.sep === '/' ? relativePath : relativePath.split(pathOps.sep).join('/');
 };

@@ -99,26 +99,119 @@ type BiomeDiagnostic = {
 };
 
 /**
- * Parses `biome lint --reporter=json` output into complexity findings.
+ * Summary counters a `biome lint --reporter=json` report must carry.
  *
- * Tolerates any other diagnostics in the report (the caller passes `--only`,
- * but a config change must not make the guard crash) and any unexpected shape —
- * a malformed entry is skipped rather than aborting the whole ratchet.
+ * 🔴 These are what distinguishes "Biome measured the repository and found
+ * nothing" from "Biome did not run". A guard that treats an empty `diagnostics`
+ * array as a perfect score would silently report zero debt forever after a
+ * config change, a renamed rule, or a broken invocation.
  */
-export const parseBiomeComplexityReport = (raw: string): ComplexityFinding[] => {
+const REQUIRED_SUMMARY_COUNTERS = [
+  'changed',
+  'unchanged',
+  'errors',
+  'warnings',
+  'infos',
+  'skipped',
+] as const;
+
+export type BiomeReportCheck =
+  | { ok: true; diagnostics: readonly BiomeDiagnostic[]; filesExamined: number }
+  | { ok: false; reason: string };
+
+/**
+ * Validates that a string really is a Biome LINT report that examined files.
+ *
+ * Fail-closed by construction: every unexpected shape is an error rather than
+ * an empty result, because the caller cannot tell an empty result apart from a
+ * measurement that never happened.
+ */
+export const checkBiomeReport = (raw: string): BiomeReportCheck => {
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
-  } catch {
-    return [];
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return { ok: false, reason: `the report is not valid JSON: ${message}` };
   }
-  const diagnostics = (parsed as { diagnostics?: unknown }).diagnostics;
-  if (!Array.isArray(diagnostics)) {
-    return [];
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    return { ok: false, reason: 'the report is not a JSON object' };
   }
 
+  const { command, summary, diagnostics } = parsed as {
+    command?: unknown;
+    summary?: unknown;
+    diagnostics?: unknown;
+  };
+  if (command !== 'lint') {
+    return {
+      ok: false,
+      reason: `expected a \`lint\` report, got \`${String(command)}\` — the invocation or the Biome version changed`,
+    };
+  }
+  if (!Array.isArray(diagnostics)) {
+    return { ok: false, reason: 'the report has no `diagnostics` array' };
+  }
+  if (typeof summary !== 'object' || summary === null || Array.isArray(summary)) {
+    return { ok: false, reason: 'the report has no `summary` object' };
+  }
+
+  const counters = summary as Record<string, unknown>;
+  for (const key of REQUIRED_SUMMARY_COUNTERS) {
+    const value = counters[key];
+    if (typeof value !== 'number' || !Number.isInteger(value) || value < 0) {
+      return {
+        ok: false,
+        reason: `the report's summary.${key} is not a non-negative integer (got ${JSON.stringify(value)})`,
+      };
+    }
+  }
+
+  const filesExamined = Number(counters.changed) + Number(counters.unchanged);
+  if (filesExamined === 0) {
+    return {
+      ok: false,
+      reason:
+        'the report examined 0 files — Biome scanned nothing, so this is not a measurement of the repository',
+    };
+  }
+
+  // `--only` scopes the run to one rule, so any OTHER lint diagnostic means the
+  // invocation changed. Parse and format diagnostics are fine and are ignored.
+  const foreignLintCategories = [
+    ...new Set(
+      (diagnostics as BiomeDiagnostic[])
+        .map((entry) => entry?.category)
+        .filter(
+          (category): category is string =>
+            typeof category === 'string' &&
+            category.startsWith('lint/') &&
+            category !== RULE_CATEGORY,
+        ),
+    ),
+  ];
+  if (foreignLintCategories.length > 0) {
+    return {
+      ok: false,
+      reason: `the report contains lint diagnostics from other rules (${foreignLintCategories.join(', ')}) — the \`--only\` scope was lost`,
+    };
+  }
+
+  return { ok: true, diagnostics: diagnostics as BiomeDiagnostic[], filesExamined };
+};
+
+/**
+ * Extracts complexity findings from an already-validated report.
+ *
+ * An individual entry that cannot be read is skipped rather than aborting the
+ * scan: `checkBiomeReport` has already established that this IS a measurement,
+ * and one unreadable entry must not discard the rest of it.
+ */
+export const parseComplexityFindings = (
+  diagnostics: readonly BiomeDiagnostic[],
+): ComplexityFinding[] => {
   const findings: ComplexityFinding[] = [];
-  for (const entry of diagnostics as BiomeDiagnostic[]) {
+  for (const entry of diagnostics) {
     if (entry?.category !== RULE_CATEGORY) {
       continue;
     }
@@ -132,6 +225,26 @@ export const parseBiomeComplexityReport = (raw: string): ComplexityFinding[] => 
     findings.push({ file: path.split('\\').join('/'), line, score: Number(scoreMatch[1]) });
   }
   return findings;
+};
+
+/**
+ * Validates and parses in one step. Returns the failure reason instead of an
+ * empty finding list, so a caller cannot mistake the two.
+ */
+export const readBiomeComplexityReport = (
+  raw: string,
+):
+  | { ok: true; findings: ComplexityFinding[]; filesExamined: number }
+  | { ok: false; reason: string } => {
+  const check = checkBiomeReport(raw);
+  if (!check.ok) {
+    return { ok: false, reason: check.reason };
+  }
+  return {
+    ok: true,
+    findings: parseComplexityFindings(check.diagnostics),
+    filesExamined: check.filesExamined,
+  };
 };
 
 /** Folds findings into the two-rule per-file baseline. */
@@ -198,19 +311,19 @@ const runBiome = (): string => {
 
 const main = (): void => {
   const args = process.argv.slice(2);
-  const report = runBiome();
-  const findings = parseBiomeComplexityReport(report);
+  const report = readBiomeComplexityReport(runBiome());
 
-  if (findings.length === 0) {
-    // A silent empty report means Biome did not scan anything — a config or
-    // invocation change, not a repository that suddenly became simple. Treat it
-    // as a failure rather than as a perfect score.
+  // 🔴 A report that cannot be validated is NOT "zero complexity". Biome failing
+  // to run, a renamed rule, a lost `--only` scope or a malformed report must all
+  // fail closed rather than being baselined as a clean repository.
+  if (!report.ok) {
     console.error(
-      '❌ cognitive-complexity guard produced an empty Biome report — Biome scanned no files, or the rule id changed. Refusing to report a perfect score from a measurement that did not happen.',
+      `❌ cognitive-complexity guard could not trust the Biome report — ${report.reason}. Refusing to report a score from a measurement that did not happen.`,
     );
     process.exit(1);
   }
 
+  const { findings, filesExamined } = report;
   const violations: RatchetViolation[] = findings.map((finding) => ({
     file: finding.file,
     rule: 'excessive',
@@ -220,7 +333,7 @@ const main = (): void => {
 
   if (args.includes('--show-all')) {
     console.log(
-      `ℹ️  ${findings.length} excessive-complexity finding(s) across ${new Set(findings.map((finding) => finding.file)).size} file(s) (baseline ignored)`,
+      `ℹ️  ${findings.length} excessive-complexity finding(s) across ${new Set(findings.map((finding) => finding.file)).size} file(s) of ${filesExamined} examined (baseline ignored)`,
     );
   }
 

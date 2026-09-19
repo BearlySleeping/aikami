@@ -53,6 +53,7 @@
 
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { resolve, sep } from 'node:path';
+import { isAllowlistedSpecifier, SHARED_ALLOWLIST } from './guards/allowlist.ts';
 import { collectModuleImports, findImport, findImports } from './guards/imports.ts';
 import type { RatchetRuleSpec, RatchetViolation } from './guards/ratchet.ts';
 import { simpleHash } from './guards/ratchet.ts';
@@ -85,60 +86,6 @@ const violations: RatchetViolation[] = [];
 const ratchetViolations: RatchetViolation[] = [];
 
 const relPath = (file: string): string => file.replace(`${ROOT}/`, '').split(sep).join('/');
-
-// Blanks out comments and string/template literal contents (preserving
-// newlines) so regex matches never fire inside a comment or a string.
-const stripStringsAndComments = (source: string): string => {
-  let result = '';
-  let i = 0;
-  const n = source.length;
-  while (i < n) {
-    const c = source[i];
-    const c2 = source[i + 1];
-    if (c === '/' && c2 === '/') {
-      while (i < n && source[i] !== '\n') {
-        result += ' ';
-        i++;
-      }
-      continue;
-    }
-    if (c === '/' && c2 === '*') {
-      result += '  ';
-      i += 2;
-      while (i < n && !(source[i] === '*' && source[i + 1] === '/')) {
-        result += source[i] === '\n' ? '\n' : ' ';
-        i++;
-      }
-      if (i < n) {
-        result += '  ';
-        i += 2;
-      }
-      continue;
-    }
-    if (c === '"' || c === "'" || c === '`') {
-      const quote = c;
-      result += ' ';
-      i++;
-      while (i < n && source[i] !== quote) {
-        if (source[i] === '\\') {
-          result += '  ';
-          i += 2;
-          continue;
-        }
-        result += source[i] === '\n' ? '\n' : ' ';
-        i++;
-      }
-      if (i < n) {
-        result += ' ';
-        i++;
-      }
-      continue;
-    }
-    result += c;
-    i++;
-  }
-  return result;
-};
 
 const lineOf = (source: string, index: number): number => {
   let line = 1;
@@ -358,52 +305,56 @@ const checkService = (file: string): void => {
     });
   }
 
-  const strippedContent = stripStringsAndComments(content);
-  // S12 allowlist: dynamic imports that are explicitly permitted.
-  // See svelte-conventions/SKILL.md dynamic-import table.
-  const allowlistPatterns = [
-    /@aikami\/frontend\/engine/,
-    /onnxruntime-web/,
-    /kokoro-js/,
-    /pixi\.js/,
-    /@tauri-apps/,
-    /\?worker&type=module/,
-    /eruda/,
-  ];
-  const dynamicImportMatches = [...strippedContent.matchAll(/\bawait\s+import\s*\(/g)];
-  const dynamicImportCount = dynamicImportMatches.length;
-  const allowlistedCount = allowlistPatterns.reduce((count, pattern) => {
-    const matches = strippedContent.match(pattern);
-    return count + (matches ? matches.length : 0);
-  }, 0);
-  const effectiveCount = Math.max(0, dynamicImportCount - allowlistedCount);
-  // Heuristic: report the last `effectiveCount` occurrences — a best-effort
-  // pointer, since which specific call is "non-allowlisted" isn't tracked.
-  for (const match of dynamicImportMatches.slice(dynamicImportCount - effectiveCount)) {
+  // S12: `await import()` outside the documented allowlist — see
+  // guards/allowlist.ts for why the matching is exact rather than substring.
+  for (const entry of findImports(imports, {
+    matches: (specifier) => !isAllowlistedSpecifier(specifier, SHARED_ALLOWLIST),
+    kind: 'dynamic',
+    awaited: true,
+  })) {
     ratchetViolations.push({
       file: relPath(file),
       rule: 's12',
-      message:
-        'S12 uses `await import()` — only valid per the allowlist in svelte-conventions/SKILL.md',
-      line: lineOf(content, match.index),
-      identity: simpleHash('s12:dynamic-import'),
+      message: `S12 uses \`await import(${entry.specifier === '' ? '<non-literal>' : `'${entry.specifier}'`})\` — only valid per the allowlist in svelte-conventions/SKILL.md`,
+      line: entry.line,
+      identity: simpleHash(`s12:${entry.specifier}:${entry.fingerprint}`),
     });
   }
 };
 
-// ── Main ─────────────────────────────────────────────────────────────────
+// ── Scan ─────────────────────────────────────────────────────────────────
 
-const main = (): void => {
+/**
+ * Runs the full scan and returns what it found.
+ *
+ * Exported so a test (and a one-off identity migration) can exercise the REAL
+ * collectors instead of re-implementing them — a migration that recomputes
+ * identities from a copy of the logic can silently disagree with the guard.
+ * The module-level arrays are reset first, so repeated calls are idempotent.
+ */
+export const collectViolations = (): {
+  hard: RatchetViolation[];
+  ratcheted: RatchetViolation[];
+} => {
+  violations.length = 0;
+  ratchetViolations.length = 0;
   for (const root of APP_ROOTS) {
     for (const file of walk(root, (n) => n.endsWith('_service.svelte.ts'))) {
       checkService(file);
     }
   }
+  return { hard: violations, ratcheted: ratchetViolations };
+};
+
+// ── Main ─────────────────────────────────────────────────────────────────
+
+const main = (): void => {
+  const { hard, ratcheted } = collectViolations();
 
   const hardFailures = printHardViolations({
     name: 'service-conventions',
-    violations,
-    heading: `🔴 service-conventions guard failed — ${violations.length} hard violation(s). S1–S10 have no baseline: fix them.`,
+    violations: hard,
+    heading: `🔴 service-conventions guard failed — ${hard.length} hard violation(s). S1–S10 have no baseline: fix them.`,
   });
 
   runRatchet({
@@ -412,7 +363,7 @@ const main = (): void => {
     baselinePath: BASELINE_PATH,
     baselineRelPath: BASELINE_REL_PATH,
     rules: RULES,
-    violations: ratchetViolations,
+    violations: ratcheted,
     hardFailures,
     identityAware: true,
     args: process.argv.slice(2),

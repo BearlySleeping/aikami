@@ -137,6 +137,15 @@ describe('extractExports', () => {
     expect(extractExports('const value = 1;\nexport { value };\n')).toEqual(['value']);
   });
 
+  test('records the PUBLIC name of a renamed local re-export', () => {
+    // `export { internal as publicName }` — consumers see `publicName`, and that
+    // is the name the production reference index records, so that is the name
+    // the orphan check must look up.
+    expect(extractExports('const internal = 1;\nexport { internal as publicName };\n')).toEqual([
+      'publicName',
+    ]);
+  });
+
   test('includes an exported enum — it emits a real object', () => {
     expect(extractExports('export enum Mode { A, B }\n')).toEqual(['Mode']);
   });
@@ -168,6 +177,9 @@ describe('production file detection', () => {
     expect(isProductionFile('apps/frontend/client/src/lib/services/foo.spec.ts')).toBe(false);
     expect(isProductionFile('apps/frontend/client/src/lib/services/__tests__/foo.ts')).toBe(false);
     expect(isProductionFile('apps/frontend/client/src/lib/services/foo.d.ts')).toBe(false);
+    // A page object under apps/e2e/ that is NOT a *.spec.ts file, so this
+    // exercises the `/apps/e2e/` branch rather than the spec-file rule.
+    expect(isProductionFile('apps/e2e/src/pom/character_page.ts')).toBe(false);
     expect(isProductionFile('apps/e2e/tests/client/foo.spec.ts')).toBe(false);
   });
 });

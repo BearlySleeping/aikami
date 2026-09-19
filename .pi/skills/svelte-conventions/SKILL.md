@@ -123,6 +123,24 @@ imports are faster, simpler, and eliminate unnecessary async cascading.
 | **Dev-only tools** | `eruda` — must not ship to production |
 | **Platform-specific storage** | `IndexedDB` vs `localStorage` — runtime detection |
 
+🔴 **This table is the human-readable half of a machine-readable list.** The
+enforced entries live in `scripts/src/lib/ops/guards/allowlist.ts`
+(`SHARED_ALLOWLIST` for services, `VIEW_MODEL_ALLOWLIST` for ViewModels), and
+matching is **exact**:
+
+* an entry names a **package**, and matches that package or an explicit subpath
+  of it — `@aikami/frontend/engine` and `@aikami/frontend/engine/game_world`,
+  never `@aikami/frontend/engine-evil`;
+* `@tauri-apps` is a **scope**, matching `@tauri-apps/api`, never
+  `@tauri-apps-evil/api`;
+* `worker&type=module` is a **query marker**, matched as a whole parameter group.
+
+So a dependency whose name merely *contains* an allowlisted package does not
+qualify. Adding an entry widens what the guard accepts — that is a policy
+change and goes through the same review as a baseline change, not a per-file
+escape. If you need a new entry, surface it rather than adding one to make a
+guard failure go away.
+
 ---
 
 ## ViewModel Pattern
