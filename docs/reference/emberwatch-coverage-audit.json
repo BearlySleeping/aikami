@@ -7,10 +7,10 @@
   "packUpdatedAt": "2026-09-18T00:00:00.000Z",
   "generatedAt": "1980-01-01T00:00:00.000Z",
   "summary": {
-    "accepted/current": 132,
+    "accepted/current": 108,
     "acceptable-shared": 84,
     "placeholder/wrong-semantic-reuse": 0,
-    "missing": 0,
+    "missing": 2,
     "needs-regeneration": 1,
     "needs-map-layout-change": 0,
     "needs-runtime-capability": 3
@@ -30,8 +30,8 @@
     "audioCues": 8,
     "sourceImages": 21,
     "transitions": 8,
-    "catalogTags": 15,
-    "findings": 220
+    "catalogTags": 14,
+    "findings": 198
   },
   "findings": [
     {
@@ -1129,140 +1129,14 @@
     {
       "id": "atlas:frames",
       "surface": "atlas-frame",
-      "classification": "accepted/current",
-      "detail": "grid atlas declares 128 frames (expected 128)"
+      "classification": "missing",
+      "detail": "grid atlas.json is not built — run generate_emberwatch_atlas.ts"
     },
     {
       "id": "props-atlas:frames",
       "surface": "atlas-frame",
-      "classification": "accepted/current",
-      "detail": "prop atlas declares 21 frames for 21 source images"
-    },
-    {
-      "id": "prop-frame:prop_support.png",
-      "surface": "prop-frame",
-      "classification": "accepted/current",
-      "detail": "packed prop-atlas frame"
-    },
-    {
-      "id": "prop-frame:inn.png",
-      "surface": "prop-frame",
-      "classification": "accepted/current",
-      "detail": "packed prop-atlas frame"
-    },
-    {
-      "id": "prop-frame:shop.png",
-      "surface": "prop-frame",
-      "classification": "accepted/current",
-      "detail": "packed prop-atlas frame"
-    },
-    {
-      "id": "prop-frame:prop_ward_socket.png",
-      "surface": "prop-frame",
-      "classification": "accepted/current",
-      "detail": "packed prop-atlas frame"
-    },
-    {
-      "id": "prop-frame:shrine_arch.png",
-      "surface": "prop-frame",
-      "classification": "accepted/current",
-      "detail": "packed prop-atlas frame"
-    },
-    {
-      "id": "prop-frame:oak.png",
-      "surface": "prop-frame",
-      "classification": "accepted/current",
-      "detail": "packed prop-atlas frame"
-    },
-    {
-      "id": "prop-frame:birch.png",
-      "surface": "prop-frame",
-      "classification": "accepted/current",
-      "detail": "packed prop-atlas frame"
-    },
-    {
-      "id": "prop-frame:ward_large.png",
-      "surface": "prop-frame",
-      "classification": "accepted/current",
-      "detail": "packed prop-atlas frame"
-    },
-    {
-      "id": "prop-frame:prop_cart.png",
-      "surface": "prop-frame",
-      "classification": "accepted/current",
-      "detail": "packed prop-atlas frame"
-    },
-    {
-      "id": "prop-frame:prop_hearth.png",
-      "surface": "prop-frame",
-      "classification": "accepted/current",
-      "detail": "packed prop-atlas frame"
-    },
-    {
-      "id": "prop-frame:prop_component.png",
-      "surface": "prop-frame",
-      "classification": "accepted/current",
-      "detail": "packed prop-atlas frame"
-    },
-    {
-      "id": "prop-frame:prop_barrel.png",
-      "surface": "prop-frame",
-      "classification": "accepted/current",
-      "detail": "packed prop-atlas frame"
-    },
-    {
-      "id": "prop-frame:prop_receipt.png",
-      "surface": "prop-frame",
-      "classification": "accepted/current",
-      "detail": "packed prop-atlas frame"
-    },
-    {
-      "id": "prop-frame:prop_gate.png",
-      "surface": "prop-frame",
-      "classification": "accepted/current",
-      "detail": "packed prop-atlas frame"
-    },
-    {
-      "id": "prop-frame:prop_brazier.png",
-      "surface": "prop-frame",
-      "classification": "accepted/current",
-      "detail": "packed prop-atlas frame"
-    },
-    {
-      "id": "prop-frame:ward_small_a.png",
-      "surface": "prop-frame",
-      "classification": "accepted/current",
-      "detail": "packed prop-atlas frame"
-    },
-    {
-      "id": "prop-frame:ward_small_b.png",
-      "surface": "prop-frame",
-      "classification": "accepted/current",
-      "detail": "packed prop-atlas frame"
-    },
-    {
-      "id": "prop-frame:ward_small_c.png",
-      "surface": "prop-frame",
-      "classification": "accepted/current",
-      "detail": "packed prop-atlas frame"
-    },
-    {
-      "id": "prop-frame:prop_oil_pool.png",
-      "surface": "prop-frame",
-      "classification": "accepted/current",
-      "detail": "packed prop-atlas frame"
-    },
-    {
-      "id": "prop-frame:prop_notice_board.png",
-      "surface": "prop-frame",
-      "classification": "accepted/current",
-      "detail": "packed prop-atlas frame"
-    },
-    {
-      "id": "prop-frame:chair.png",
-      "surface": "prop-frame",
-      "classification": "accepted/current",
-      "detail": "packed prop-atlas frame"
+      "classification": "missing",
+      "detail": "prop atlas props.json is not built — run generate_emberwatch_props_atlas.ts"
     },
     {
       "id": "catalog-tag:index",
@@ -1337,12 +1211,6 @@
       "detail": "required by the pack at boot or during play"
     },
     {
-      "id": "catalog-tag:music:exploration:inn_hearth",
-      "surface": "catalog-tag",
-      "classification": "accepted/current",
-      "detail": "required by the pack at boot or during play"
-    },
-    {
       "id": "catalog-tag:music:exploration:old_road",
       "surface": "catalog-tag",
       "classification": "accepted/current",
@@ -1355,5 +1223,18 @@
       "detail": "required by the pack at boot or during play"
     }
   ],
-  "blockers": []
+  "blockers": [
+    {
+      "id": "atlas:frames",
+      "surface": "atlas-frame",
+      "classification": "missing",
+      "detail": "grid atlas.json is not built — run generate_emberwatch_atlas.ts"
+    },
+    {
+      "id": "props-atlas:frames",
+      "surface": "atlas-frame",
+      "classification": "missing",
+      "detail": "prop atlas props.json is not built — run generate_emberwatch_props_atlas.ts"
+    }
+  ]
 }

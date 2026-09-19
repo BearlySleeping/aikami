@@ -57,6 +57,12 @@ describe('portraitUrlToTag', () => {
       'portraits:emberwatch:rollo_grasper:guarded',
     );
   });
+
+  test('rejects URLs outside the published portrait catalog contract', () => {
+    expect(portraitUrlToTag('https://example.test/portrait.png')).toBeUndefined();
+    expect(portraitUrlToTag('/game-data/portraits/../secrets/portrait.png')).toBeUndefined();
+    expect(portraitUrlToTag('/game-data/portraits/emberwatch/npc/neutral.jpg')).toBeUndefined();
+  });
 });
 
 describe('resolveNpcAvatarUrl — pack-authored portraits', () => {

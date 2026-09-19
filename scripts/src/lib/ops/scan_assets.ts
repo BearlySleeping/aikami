@@ -16,6 +16,7 @@ import { createReadStream } from 'node:fs';
 import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { extname, join, relative, resolve, sep } from 'node:path';
 import { ASSET_CATEGORIES, categoryForPath, splitStateSegments } from '@aikami/constants';
+import type { CatalogAssetCredit } from '@aikami/schemas';
 import type { AssetEntry, AssetHashesFile, AssetManifest } from '@aikami/types';
 import { CONTENT_PACKS_DIR, GAME_DATA_DIR } from '../catalog/config.ts';
 
@@ -178,11 +179,7 @@ const hashFile = async (filePath: string): Promise<{ hash: string; sizeBytes: nu
 // ---------------------------------------------------------------------------
 
 /** One credit merged into asset_credits.json — a CatalogAssetEntry credit. */
-type MergedCredit = {
-  licenses: string[];
-  authors: string[];
-  sourceUrls: string[];
-  licenseNote?: string;
+type MergedCredit = CatalogAssetCredit & {
   /** Where the credit came from — lpc (CREDITS.csv), lpc-supplement, or project. */
   source: 'lpc' | 'lpc-supplement' | 'project';
 };

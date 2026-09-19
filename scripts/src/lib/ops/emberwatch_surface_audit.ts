@@ -96,10 +96,10 @@ export const runSurfaceAudit = (): {
   }
 
   /** A cell is walkable when its collision-layer GID is 0. */
-  const isWalkable = (map: MapJson, px: number, py: number): boolean | undefined => {
+  const isWalkable = (map: MapJson, px: number, py: number): boolean => {
     const collision = map.layers.find((layer) => layer.name === 'collision');
     if (!collision?.data) {
-      return undefined;
+      return false;
     }
     const col = Math.floor(px / map.tilewidth);
     const row = Math.floor(py / map.tileheight);

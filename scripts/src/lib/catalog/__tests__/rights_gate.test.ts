@@ -28,6 +28,12 @@ const ANIMA = MODEL_RIGHTS_EVIDENCE[0];
 if (!ANIMA) {
   throw new Error('the pinned evidence registry must contain the Anima record');
 }
+const ACE_STEP = MODEL_RIGHTS_EVIDENCE.find(
+  (record) => record.modelId === 'audio-ace-step-v1-3.5b',
+);
+if (!ACE_STEP) {
+  throw new Error('the pinned evidence registry must contain the ACE-Step record');
+}
 
 /** A generated-rights credit as the pipeline writes it. */
 const generatedCredit = (overrides: {
@@ -80,6 +86,36 @@ describe('the distinction the gate exists to make', () => {
       creditsByTag: {
         a: generatedCredit({ modelRedistribution: 'restricted' }),
         b: generatedCredit({ modelRedistribution: 'permitted' }),
+      },
+    });
+    expect(result.ok).toBe(true);
+    expect(result.blockedTags).toEqual([]);
+  });
+
+  test('the generated Emberwatch score resolves through pinned ACE-Step rights', () => {
+    const result = runRightsGate({
+      entries: entries(['music:exploration:village_ward']),
+      creditsByTag: {
+        'music:exploration:village_ward': {
+          licenses: ['Apache-2.0'],
+          rights: {
+            kind: 'generated',
+            generator: {
+              model: ACE_STEP.modelId,
+              revision: ACE_STEP.revision,
+              engine: 'ace-step',
+            },
+            modelUse: ACE_STEP.modelUse,
+            modelRedistribution: ACE_STEP.modelRedistribution,
+            outputRights: ACE_STEP.outputRights,
+            evidence: ACE_STEP.evidence,
+            upstream: {
+              id: ACE_STEP.upstream.id,
+              licenseName: ACE_STEP.upstream.licenseName,
+              outputRights: ACE_STEP.upstream.outputRights,
+            },
+          },
+        },
       },
     });
     expect(result.ok).toBe(true);

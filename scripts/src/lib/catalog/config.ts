@@ -21,7 +21,11 @@
 import { resolve } from 'node:path';
 import { AUDIO_MIME_MAP, IMAGE_MIME_MAP, R2_BUCKETS } from '@aikami/constants';
 import { getScriptsEnv, initScriptsEnv } from '../env/scripts_env.ts';
-import { CATALOG_TEST_SEAM_ENV, resolveReleaseTarget } from './release_target.ts';
+import {
+  CATALOG_TEST_SEAM_ENV,
+  type ReleaseTarget,
+  resolveReleaseTarget,
+} from './release_target.ts';
 
 // ---------------------------------------------------------------------------
 // Bucket / index layout constants
@@ -99,6 +103,8 @@ export type CatalogConfig = {
   bucket: string;
   /** Public origin base URL — injected configuration, never hardcoded. */
   originUrl: string;
+  /** Validated target identity, including warnings and test-seam state. */
+  releaseTarget?: ReleaseTarget;
 };
 
 /**
@@ -151,6 +157,7 @@ export const resolveCatalogConfig = (mode: string): CatalogConfig => {
     endpoint,
     bucket: target.bucket,
     originUrl: target.originUrl,
+    releaseTarget: target,
   };
 };
 

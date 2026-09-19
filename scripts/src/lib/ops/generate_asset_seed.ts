@@ -239,7 +239,7 @@ if (values.write) {
         s: entry.sizeBytes,
         c: entry.category,
         e: entry.ext,
-        l: [],
+        l: [...entry.licenses],
       });
       carried += 1;
     }

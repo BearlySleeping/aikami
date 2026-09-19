@@ -12,7 +12,11 @@ import merchantShopMap from '../../../../../../content/packs/emberwatch/maps/mer
 import oldRoadMap from '../../../../../../content/packs/emberwatch/maps/old_road.json';
 import villageMap from '../../../../../../content/packs/emberwatch/maps/village.json';
 import { checkPackAudioBindings } from '../media/audio_cue_binding.ts';
-import { ContentPackManifestSchema, PackConfigSchema } from './content_pack.ts';
+import {
+  ContentPackManifestSchema,
+  NpcPortraitVariantsSchema,
+  PackConfigSchema,
+} from './content_pack.ts';
 import { normaliseLegacyStep } from './onboarding_hints.ts';
 
 /** Minimal valid manifest fixture. */
@@ -570,6 +574,27 @@ describe('ContentPackManifestSchema', () => {
     expect(item.defenseBonus).toBe(5);
     expect(item.equipmentSlot).toBe('head');
     expect(item.attackBonus).toBeUndefined();
+  });
+});
+
+describe('NpcPortraitVariantsSchema', () => {
+  test('accepts published catalog-backed portrait paths', () => {
+    expect(
+      Value.Check(NpcPortraitVariantsSchema, {
+        neutral: '/game-data/portraits/emberwatch/village_elder/neutral.png',
+        concerned: 'portraits/emberwatch/village_elder/concerned.webp',
+      }),
+    ).toBe(true);
+  });
+
+  test('rejects absolute, traversal, and unsupported portrait URLs', () => {
+    for (const neutral of [
+      'https://example.test/neutral.png',
+      '/game-data/portraits/../secrets/neutral.png',
+      '/game-data/portraits/emberwatch/village_elder/neutral.jpg',
+    ]) {
+      expect(Value.Check(NpcPortraitVariantsSchema, { neutral })).toBe(false);
+    }
   });
 });
 

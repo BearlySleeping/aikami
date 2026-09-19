@@ -92,13 +92,6 @@ const targetPathFor = (job: BriefJob): string | undefined => {
  * Read from the synced prop table in the manifest, so acceptance and the prop
  * atlas can never disagree about the file name.
  */
-const propFrameFor = (targetId: string): string | undefined => {
-  const manifest = JSON.parse(readFileSync(join(packRoot, 'manifest.json'), 'utf8')) as {
-    props?: Record<string, { frame?: string }>;
-  };
-  return manifest.props?.[targetId]?.frame;
-};
-
 const main = (): void => {
   const args = process.argv.slice(2);
   const runFlag = args.indexOf('--run');
@@ -118,6 +111,10 @@ const main = (): void => {
 
   const brief = JSON.parse(readFileSync(briefPath, 'utf8')) as Brief;
   const jobsById = new Map(brief.jobs.map((job) => [job.id, job]));
+  const manifest = JSON.parse(readFileSync(join(packRoot, 'manifest.json'), 'utf8')) as {
+    props?: Record<string, { frame?: string }>;
+  };
+  const manifestProps = manifest.props ?? {};
 
   const validationPath = join(runDir, 'media-validation.json');
   const validations = existsSync(validationPath)
@@ -140,98 +137,127 @@ const main = (): void => {
   const installed: Record<string, unknown>[] = [];
   const skipped: Record<string, unknown>[] = [];
 
-  for (const record of jobRecords) {
-    if (record.status !== 'awaiting_review') {
-      skipped.push({ itemId: record.itemId, reason: `job status ${record.status}` });
-      continue;
-    }
-    const validation = passedByItem.get(record.itemId);
-    if (validation === undefined) {
-      skipped.push({ itemId: record.itemId, reason: 'no preparation report' });
-      continue;
-    }
-    if (!validation.report.machinePassed) {
-      const codes = validation.report.findings
-        .filter((f) => f.severity === 'error')
-        .map((f) => f.code)
-        .join(', ');
-      skipped.push({ itemId: record.itemId, reason: `machine gate rejected (${codes})` });
-      continue;
-    }
-
-    const job = jobsById.get(record.itemId);
-    if (job === undefined) {
-      skipped.push({ itemId: record.itemId, reason: 'not declared by the brief' });
-      continue;
-    }
-
-    let destination = targetPathFor(job);
-    if (destination === undefined && job.kind === 'prop') {
-      const frame = propFrameFor(job.binding.targetIds[0] ?? '');
-      if (frame !== undefined) {
-        destination = join(packRoot, 'props', frame);
+  let installFailed = false;
+  let installFailure: unknown;
+  try {
+    for (const record of jobRecords) {
+      if (record.status !== 'awaiting_review') {
+        skipped.push({ itemId: record.itemId, reason: `job status ${record.status}` });
+        continue;
       }
-    }
-    if (destination === undefined) {
-      skipped.push({ itemId: record.itemId, reason: 'no authoring path bound for this binding' });
-      continue;
-    }
+      const validation = passedByItem.get(record.itemId);
+      if (validation === undefined) {
+        skipped.push({ itemId: record.itemId, reason: 'no preparation report' });
+        continue;
+      }
+      if (!validation.report.machinePassed) {
+        const codes = validation.report.findings
+          .filter((f) => f.severity === 'error')
+          .map((f) => f.code)
+          .join(', ');
+        skipped.push({ itemId: record.itemId, reason: `machine gate rejected (${codes})` });
+        continue;
+      }
 
-    const staged = record.stagedPath;
-    if (staged === undefined || !existsSync(staged)) {
-      skipped.push({ itemId: record.itemId, reason: 'staged bytes are missing' });
-      continue;
-    }
+      const job = jobsById.get(record.itemId);
+      if (job === undefined) {
+        skipped.push({ itemId: record.itemId, reason: 'not declared by the brief' });
+        continue;
+      }
 
-    const stagedHash = sha256File(staged);
-    if (record.preparedHash !== undefined && stagedHash !== record.preparedHash) {
-      skipped.push({
+      if (job.binding.kind === 'npc_expression') {
+        const npcId = job.binding.targetIds[0];
+        const neutralPath = npcId ? join(packRoot, 'portraits', npcId, 'neutral.png') : undefined;
+        if (neutralPath === undefined || !existsSync(neutralPath)) {
+          skipped.push({
+            itemId: record.itemId,
+            reason: 'required neutral portrait is not installed',
+          });
+          continue;
+        }
+      }
+
+      let destination = targetPathFor(job);
+      if (destination === undefined && job.kind === 'prop') {
+        const frame = manifestProps[job.binding.targetIds[0] ?? '']?.frame;
+        if (frame !== undefined) {
+          destination = join(packRoot, 'props', frame);
+        }
+      }
+      if (destination === undefined) {
+        skipped.push({ itemId: record.itemId, reason: 'no authoring path bound for this binding' });
+        continue;
+      }
+
+      const staged = record.stagedPath;
+      if (staged === undefined || !existsSync(staged)) {
+        skipped.push({ itemId: record.itemId, reason: 'staged bytes are missing' });
+        continue;
+      }
+
+      const stagedHash = sha256File(staged);
+      if (record.preparedHash !== undefined && stagedHash !== record.preparedHash) {
+        skipped.push({
+          itemId: record.itemId,
+          reason: `staged bytes are not the prepared candidate (staged ${stagedHash.slice(0, 12)} vs recorded ${record.preparedHash.slice(0, 12)})`,
+        });
+        continue;
+      }
+
+      const existingHash = existsSync(destination) ? sha256File(destination) : undefined;
+      if (existingHash !== undefined && existingHash !== stagedHash && !force) {
+        skipped.push({
+          itemId: record.itemId,
+          reason: `destination already holds different bytes (${destination}) — pass --force to replace`,
+        });
+        continue;
+      }
+
+      if (apply) {
+        mkdirSync(dirname(destination), { recursive: true });
+        copyFileSync(staged, destination);
+      }
+      installed.push({
         itemId: record.itemId,
-        reason: `staged bytes are not the prepared candidate (staged ${stagedHash.slice(0, 12)} vs recorded ${record.preparedHash.slice(0, 12)})`,
+        candidateId: record.candidateId,
+        preparedHash: stagedHash,
+        installedAt: destination.slice(repository.length + 1),
+        replaced: existingHash !== undefined && existingHash !== stagedHash,
       });
-      continue;
     }
-
-    const existingHash = existsSync(destination) ? sha256File(destination) : undefined;
-    if (existingHash !== undefined && existingHash !== stagedHash && !force) {
-      skipped.push({
-        itemId: record.itemId,
-        reason: `destination already holds different bytes (${destination}) — pass --force to replace`,
-      });
-      continue;
-    }
-
-    if (apply) {
-      mkdirSync(dirname(destination), { recursive: true });
-      copyFileSync(staged, destination);
-    }
-    installed.push({
-      itemId: record.itemId,
-      candidateId: record.candidateId,
-      preparedHash: stagedHash,
-      installedAt: destination.slice(repository.length + 1),
-      replaced: existingHash !== undefined && existingHash !== stagedHash,
-    });
+  } catch (error) {
+    installFailed = true;
+    installFailure = error;
   }
 
   const recordPath = join(runDir, 'acceptance.json');
   if (apply) {
-    writeFileSync(
-      recordPath,
-      `${JSON.stringify(
-        {
-          schemaVersion: 1,
-          kind: 'emberwatch-acceptance',
-          runId,
-          briefId: brief.id,
-          acceptedAt: new Date().toISOString(),
-          installed,
-          skipped,
-        },
-        null,
-        2,
-      )}\n`,
-    );
+    try {
+      writeFileSync(
+        recordPath,
+        `${JSON.stringify(
+          {
+            schemaVersion: 1,
+            kind: 'emberwatch-acceptance',
+            runId,
+            briefId: brief.id,
+            acceptedAt: new Date().toISOString(),
+            installed,
+            skipped,
+          },
+          null,
+          2,
+        )}\n`,
+      );
+    } catch (recordError) {
+      if (!installFailed) {
+        throw recordError;
+      }
+      console.error(`Failed to persist partial acceptance record: ${String(recordError)}`);
+    }
+  }
+  if (installFailed) {
+    throw installFailure;
   }
 
   console.log(`Emberwatch acceptance — run ${runId}${apply ? '' : ' (dry run)'}`);

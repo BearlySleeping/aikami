@@ -247,8 +247,11 @@ export const resolveReleaseTarget = (options: {
   }
 
   let host: string;
+  let normalizedOrigin: string;
   try {
-    host = new URL(originUrl).hostname;
+    const parsedOrigin = new URL(originUrl);
+    host = parsedOrigin.hostname;
+    normalizedOrigin = parsedOrigin.toString().replace(/\/+$/, '');
   } catch {
     throw new ReleaseTargetError(
       'origin-invalid',
@@ -286,6 +289,18 @@ export const resolveReleaseTarget = (options: {
     );
   }
 
+  if (declared?.originUrl !== null && declared?.originUrl !== undefined) {
+    const normalizedDeclaredOrigin = new URL(declared.originUrl).toString().replace(/\/+$/, '');
+    if (normalizedOrigin !== normalizedDeclaredOrigin) {
+      throw new ReleaseTargetError(
+        'origin-override-rejected',
+        `CATALOG_ORIGIN_URL=${JSON.stringify(normalizedOrigin)} disagrees with the origin ` +
+          `declared for mode ${JSON.stringify(mode)} ` +
+          `(${JSON.stringify(normalizedDeclaredOrigin)}). Refusing to publish.`,
+      );
+    }
+  }
+
   const siblingOrigin = readSiblingEnvValue(sibling, 'CATALOG_ORIGIN_URL');
   if (siblingOrigin) {
     let siblingHost: string | undefined;
@@ -312,7 +327,7 @@ export const resolveReleaseTarget = (options: {
   return {
     mode,
     bucket,
-    originUrl: originUrl.replace(/\/+$/, ''),
+    originUrl: normalizedOrigin,
     expectedBucket,
     viaTestSeam,
     warnings,

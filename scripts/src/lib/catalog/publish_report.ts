@@ -10,7 +10,20 @@
 
 import { PACK_LOCK_KEY } from '@aikami/schemas';
 import { ROOT_INDEX_KEY } from './config.ts';
-import type { PackLockPublishReport } from './pipeline.ts';
+
+export type PackLockPublishReport = {
+  /** Whether a lock document was produced for the pack. */
+  written: boolean;
+  key: string;
+  /** Content hash of the uploaded lock bytes, when written. */
+  hash?: string;
+  /** Number of pinned image/definition assets. */
+  assetPins: number;
+  /** Number of pinned audio renditions. */
+  audioPins: number;
+  /** Whether the mutable compatibility alias was advanced. */
+  legacyAliasWritten?: boolean;
+};
 
 export type CatalogPublishReport = {
   ok: boolean;
@@ -21,6 +34,8 @@ export type CatalogPublishReport = {
   missingRightsEvidenceTags?: readonly string[];
   /** C-518 — tags whose declared rights evidence cannot substantiate publication. */
   incompleteRightsTags?: readonly string[];
+  /** Tags blocked by the rights gate despite having declared rights evidence. */
+  rightsBlockedTags?: readonly string[];
   uploaded: number;
   skipped: number;
   failed: number;
@@ -69,6 +84,7 @@ export const abortedReport = (options: {
   incompleteAttributionTags?: readonly string[];
   missingRightsEvidenceTags?: readonly string[];
   incompleteRightsTags?: readonly string[];
+  rightsBlockedTags?: readonly string[];
   elapsedMs: number;
 }): CatalogPublishReport => ({
   ok: false,
@@ -77,6 +93,7 @@ export const abortedReport = (options: {
   incompleteAttributionTags: options.incompleteAttributionTags ?? [],
   missingRightsEvidenceTags: options.missingRightsEvidenceTags ?? [],
   incompleteRightsTags: options.incompleteRightsTags ?? [],
+  rightsBlockedTags: options.rightsBlockedTags ?? [],
   uploaded: 0,
   skipped: 0,
   failed: 0,

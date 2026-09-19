@@ -502,10 +502,12 @@ const main = (): void => {
 
   // ── Catalog tags the pack needs ─────────────────────────────────────────
   const catalogTags = [
-    'index',
-    'emberwatch:manifest',
-    ...Object.keys(manifest.maps).map((id) => `emberwatch:maps:${id}`),
-    ...manifest.audio.bindings.map((b) => b.tag),
+    ...new Set([
+      'index',
+      'emberwatch:manifest',
+      ...Object.keys(manifest.maps).map((id) => `emberwatch:maps:${id}`),
+      ...manifest.audio.bindings.map((b) => b.tag),
+    ]),
   ];
   for (const tag of catalogTags) {
     findings.push({

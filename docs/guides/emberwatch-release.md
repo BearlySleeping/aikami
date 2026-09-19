@@ -65,9 +65,8 @@ bun run --cwd apps/backend/image generate:batch \
 - Each job's own `preparationProfile` is applied per job. A brief that mixes a
   prop (needs alpha extraction) with a portrait (keeps its own coverage) cannot
   be served by one global `--preparation-profile`.
-- Props render on a flat dark ground so `prop-full-alpha-ground` can derive true
-  alpha by luminance. An opaque light-ground render cannot be separated without a
-  colour key, which is not an approved removal.
+- Props render with native alpha so `prop-full-alpha-ground` preserves dark object
+  pixels. The ground plane must already be detached before preparation.
 - Run records are durable. After a failure use `--status <runId>`, then
   `--reconcile <itemId>=no-provider-work`, then `--resume <runId>` — never delete
   job state and regenerate blindly.
@@ -224,7 +223,7 @@ Promotion compares `lockHash` and, on mismatch, `diffCandidateLocks` names the
 members that moved (`props/props.webp`, `maps/village.json`) rather than
 reporting a boolean.
 
-Current sealed candidate: `929833f4f083227dcba579d891e492c7947020cc66a63240c79fef2bca1dcf9c`
+Current sealed candidate: `content/packs/emberwatch/candidate.lock.json`
 (rights PASS 74/0, validation PASS).
 
 ## Staging is blocked on a HUMAN infrastructure action

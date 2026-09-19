@@ -60,8 +60,8 @@ type Job = {
   status: string;
 };
 
-const DARK_GROUND =
-  'Render the object isolated and centred on a completely flat solid pure black background that fills every edge; no ground plane, no scenery, no floor, no cast shadow on the background, no lettering, no border. The object must sit on ONE centred footprint and occupy roughly the middle 55% of the frame, centred, with generous empty black background margin on all four sides — the object must never touch or cross the edge of the image, and its lowest point must be directly below its centre of mass so it stands on one centred footprint.';
+const TRANSPARENT_ISOLATION =
+  'Render the object isolated and centred with native transparency; no background, ground plane, scenery, floor, cast shadow, lettering or border. The object must sit on ONE centred footprint and occupy roughly the middle 55% of the frame, centred, with generous transparent margin on all four sides — the object must never touch or cross the edge of the image, and its lowest point must be directly below its centre of mass so it stands on one centred footprint.';
 
 const STYLE =
   'Warm muted woodland-fantasy palette, soft upper-left light, crisp readable silhouette at native game scale, hand-painted pixel-friendly rendering.';
@@ -81,7 +81,7 @@ const prop = (options: {
   phase: options.phase,
   kind: 'prop',
   action: 'generate_if_missing',
-  subject: `${options.subject} ${STYLE} ${DARK_GROUND}`,
+  subject: `${options.subject} ${STYLE} ${TRANSPARENT_ISOLATION}`,
   providerPreference: 'local_image_reference',
   preparationProfile: 'prop-full-alpha-ground',
   referenceIds: options.references ?? ['approved_style'],
@@ -144,7 +144,7 @@ const hostileVisual = (options: {
   phase: options.phase,
   kind: 'prop',
   action: 'generate_if_missing',
-  subject: `${options.subject} ${STYLE} ${DARK_GROUND}`,
+  subject: `${options.subject} ${STYLE} ${TRANSPARENT_ISOLATION}`,
   providerPreference: 'local_image_reference',
   preparationProfile: 'prop-full-alpha-ground',
   referenceIds: ['approved_style'],
@@ -262,7 +262,7 @@ const main = (): void => {
     'prop-native-alpha':
       'source already carries a real alpha channel; crop/origin preserved, ground rectangle removed, no colour key',
     'prop-full-alpha-ground':
-      'opaque render on a flat dark ground; alpha derived by luminance threshold and the ground plane detached by geometry',
+      'native-alpha isolated render; dark object pixels are preserved and any ground plane must already be detached',
     'portrait-original':
       'composed dialogue bust; keeps its own coverage and alpha, no ground-contact requirement',
     'lpc-sheet-native': 'LPC sheets only; nearest-neighbour resample at the 13x21 cell grid',
@@ -648,9 +648,9 @@ const main = (): void => {
       id: `portrait_${npcId}_neutral`,
       kind: 'approved_art',
       locator: `content/packs/emberwatch/portraits/${npcId}/neutral.png`,
-      resolution: 'optional',
+      resolution: 'required',
       sha256: null,
-      note: 'The accepted neutral portrait for this NPC. Optional at plan time (the emotion job can be planned before the neutral is installed) and required before the emotion variant is accepted.',
+      note: 'The accepted neutral portrait for this NPC. It must be installed before an emotion variant can be generated or accepted.',
     });
   }
   brief.references = references;
@@ -670,8 +670,8 @@ const main = (): void => {
   brief.notes = [
     `Rebased onto the pack ${manifest.version} baseline by scripts/src/lib/ops/rebase_emberwatch_brief.ts; the exact source revision is recorded in baseline.commit.`,
     'The audio lane is deliberately out of scope for this release: no shipped local SFX/ambience model exists (stable_audio_open_1_0_profile is declared but not installed) and the pack-local Emberwatch music is already accepted.',
-    'Every prop job renders on a flat dark ground so prop-full-alpha-ground can derive true alpha deterministically; an opaque light-ground render cannot be separated without a colour key, which is not an approved removal.',
-    'Enemy visual jobs produce authored non-humanoid art for ash_hound, cinder_thrall and ember_warden; they replace the placeholder humanoid LPC bodies.',
+    'Every prop job requests native transparency so prop-full-alpha-ground preserves dark object pixels; the ground plane must already be detached before deterministic preparation.',
+    'Enemy visual jobs prepare authored non-humanoid art for ash_hound, cinder_thrall and ember_warden for future runtime integration; the audited runtime status remains needs-runtime-capability.',
   ];
 
   const serialized = `${JSON.stringify(brief, null, 2)}\n`;

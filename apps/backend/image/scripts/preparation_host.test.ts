@@ -54,6 +54,14 @@ const groundRenderPng = (): Uint8Array =>
       x >= 20 && x <= 43 && y >= 12 && y <= 57 ? [220, 220, 210, 255] : [0, 0, 0, 255],
   });
 
+/** A native-alpha isolated prop whose object pixels are nearly black. */
+const darkIsolatedPropPng = (): Uint8Array =>
+  pngFrom({
+    width: 64,
+    height: 64,
+    paint: (x, y) => (x >= 20 && x <= 43 && y >= 12 && y <= 57 ? [4, 5, 6, 255] : [0, 0, 0, 0]),
+  });
+
 describe('C-520: PNG codec round trip', () => {
   test('encode then decode returns the same pixels', () => {
     const expected = new Uint8Array(5 * 3 * 4);
@@ -154,8 +162,8 @@ describe('C-520 AC-3: the host prepares a real candidate deterministically', () 
     ]);
   });
 
-  test('a full-alpha ground render is extracted by the ground profile', async () => {
-    const raw = groundRenderPng();
+  test('the ground profile preserves dark pixels from a native-alpha render', async () => {
+    const raw = darkIsolatedPropPng();
     const prepared = await prepareCandidate({
       rawBytes: raw,
       preparationProfileId: 'prop-full-alpha-ground',
@@ -164,6 +172,7 @@ describe('C-520 AC-3: the host prepares a real candidate deterministically', () 
     const decoded = decodePng(prepared.bytes);
     expect(decoded.width).toBeLessThan(64);
     expect(decoded.height).toBeLessThan(64);
+    expect(decoded.rgba.some((channel) => channel === 4)).toBe(true);
   });
 
   test('an unextracted ground render is rejected with a stable code', async () => {

@@ -47,10 +47,14 @@ import { assetKey } from './content_address.ts';
 import { generateCatalogIndex } from './index_generation.ts';
 import { buildPackLock } from './pack_lock.ts';
 import { runAttributionPreflight } from './preflight.ts';
-import { abortedReport, type CatalogPublishReport } from './publish_report.ts';
+import {
+  abortedReport,
+  type CatalogPublishReport,
+  type PackLockPublishReport,
+} from './publish_report.ts';
 import { resolvePreviousRelease } from './published_catalog.ts';
 
-export type { CatalogPublishReport } from './publish_report.ts';
+export type { CatalogPublishReport, PackLockPublishReport } from './publish_report.ts';
 
 import {
   describeRightsGateFailure,
@@ -107,25 +111,6 @@ const immutableIndexKey = (options: { name: string; hash: string }): string =>
  * A pack with no image pins yields `undefined` (the schema requires at least one
  * asset entry); that is not a publish failure, so the caller uploads nothing.
  */
-export type PackLockPublishReport = {
-  /** Whether a lock document was produced for the pack. */
-  written: boolean;
-  key: string;
-  /** Content hash of the uploaded lock bytes, when written. */
-  hash?: string;
-  /** Number of pinned image/definition assets. */
-  assetPins: number;
-  /** Number of pinned audio renditions. */
-  audioPins: number;
-  /**
-   * Whether the mutable `index/v1/pack_lock.json` compatibility alias was
-   * advanced. Set by `runCatalogPublish` after pointer advancement; absent from
-   * a standalone `runPackLockPublish`, which writes only the immutable
-   * revision. A false value never means the immutable release is corrupt.
-   */
-  legacyAliasWritten?: boolean;
-};
-
 type PackLockPublishArtifact = {
   report: PackLockPublishReport;
   body: Buffer | undefined;
@@ -359,11 +344,6 @@ export const runCatalogPublish = async (
   // A generator model's own terms are NOT the artifact's terms. This reads the
   // OUTPUT classification, corroborated against pinned evidence — see
   // model_rights_evidence.ts and rights_gate.ts.
-  // 2.5. Rights gate — a licence that forbids this distribution stops the
-  // publish HERE, before a byte is uploaded. The attribution preflight proves a
-  // licence was DECLARED; this proves the declared licence permits the
-  // distribution. 5.0.0's locally generated art is non-commercial, so this is
-  // the gate that actually blocks it.
   const rightsGate = runRightsGate({
     entries,
     creditsByTag,
@@ -374,7 +354,7 @@ export const runCatalogPublish = async (
     console.error('   No objects were uploaded and no index was written.');
     return abortedReport({
       checkedCount: entries.length,
-      missingRightsEvidenceTags: rightsGate.blockedTags,
+      rightsBlockedTags: rightsGate.blockedTags,
       elapsedMs: Date.now() - startedAt,
     });
   }

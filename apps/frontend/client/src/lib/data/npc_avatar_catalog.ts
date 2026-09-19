@@ -15,7 +15,7 @@
 /** biome-ignore-all lint/style/useNamingConvention: content-pack NPC ids use snake_case by design */
 
 import { expressionAssetTag } from '@aikami/constants';
-import type { ContentPackManifest } from '@aikami/schemas';
+import { type ContentPackManifest, isCatalogPortraitPath } from '@aikami/schemas';
 import { assetStore } from '$lib/services/assets/asset_store.svelte';
 import { logger } from '$logger';
 import { NPC_SPRITE_EXPRESSIONS } from './npc_sprite_expressions';
@@ -153,7 +153,10 @@ export const configureNpcPortraitSource = (manifest: ContentPackManifest | undef
  * `tagIncludesExtension`: `/game-data/portraits/emberwatch/x/neutral.png` →
  * `portraits:emberwatch:x:neutral`.
  */
-export const portraitUrlToTag = (url: string): string => {
+export const portraitUrlToTag = (url: string): string | undefined => {
+  if (!isCatalogPortraitPath(url)) {
+    return undefined;
+  }
   const withoutRoot = url.startsWith('/game-data/') ? url.slice('/game-data/'.length) : url;
   const withoutExt = withoutRoot.replace(/\.[^.]+$/, '');
   return withoutExt.replace(/\//g, ':');
@@ -184,7 +187,16 @@ const _resolvePackPortrait = (options: {
     if (url === undefined) {
       continue;
     }
-    const resolved = assetStore.resolveUrl(portraitUrlToTag(url));
+    const tag = portraitUrlToTag(url);
+    if (tag === undefined) {
+      logger.warn('NpcAvatarCatalog: pack portrait path is unsupported', {
+        npcId,
+        emotion,
+        url,
+      });
+      continue;
+    }
+    const resolved = assetStore.resolveUrl(tag);
     if (resolved) {
       logger.spam('npcAvatar.resolve:pack', { npcId, emotion, url });
       return resolved;

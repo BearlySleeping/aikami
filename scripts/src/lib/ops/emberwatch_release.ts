@@ -41,7 +41,6 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { resolveBucketName } from '@aikami/constants';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repository = join(here, '../../../..');
@@ -224,12 +223,24 @@ const main = async (): Promise<void> => {
   }
 
   // Safe target identity only — never a credential.
-  const expectedBucket = resolveBucketName({ bucketKey: 'catalog', mode });
+  const releaseTarget = config.releaseTarget;
+  if (releaseTarget === undefined) {
+    throw new Error('resolveCatalogConfig returned no validated release target');
+  }
+  const targetMatchesConfig =
+    config.bucket === releaseTarget.bucket && config.originUrl === releaseTarget.originUrl;
   console.log(
-    `  bucket:        ${config.bucket}${config.bucket === expectedBucket ? '' : ' (test seam)'}`,
+    `  bucket:        ${config.bucket}${releaseTarget.viaTestSeam ? ' (test seam)' : ''}`,
   );
   console.log(`  origin:        ${config.originUrl}`);
-  console.log(`  target check:  ok (bucket and origin match mode ${mode})`);
+  for (const warning of releaseTarget.warnings) {
+    console.warn(`  warning:       ${warning}`);
+  }
+  if (releaseTarget.viaTestSeam || !targetMatchesConfig) {
+    console.warn(`  target check:  rehearsal or mismatched target — not reported as ok`);
+  } else {
+    console.log(`  target check:  ok (bucket and origin match mode ${mode})`);
+  }
   console.log('');
   const previous = await readReleasePointer(config.originUrl);
   console.log(
@@ -442,7 +453,8 @@ const buildReport = (
   originUrl: config.originUrl,
   mode,
   applied: apply,
-  dirtyWorktree: allowDirty && git(['status', '--porcelain']).length > 0,
+  dirtyWorktree: git(['status', '--porcelain']).length > 0,
+  dirtyWorktreeAllowed: allowDirty,
   generatedAt: new Date().toISOString(),
   previousRelease: { key: previous.key, sha256: previous.sha256 ?? null, status: previous.status },
   newRelease:

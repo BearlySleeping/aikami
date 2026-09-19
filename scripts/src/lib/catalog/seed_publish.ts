@@ -80,7 +80,15 @@ export const runSeedPublish = async (options: {
 
     try {
       body = readFileSync(join(gameDataDir, filename));
-    } catch {
+    } catch (error) {
+      const errorCode =
+        error !== null && typeof error === 'object' && 'code' in error ? error.code : undefined;
+      if (errorCode !== 'ENOENT') {
+        failed++;
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(`  ❌ seed: ${filename} could not be read — ${message}`);
+        continue;
+      }
       // Absent locally. The previous release's verified copy is authoritative
       // and byte-identical to what the client already fetches.
       const carriedKey = [...(carriedDependencies?.keys() ?? [])].find((dependencyKey) =>

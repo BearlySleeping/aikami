@@ -449,17 +449,12 @@ const main = async (): Promise<number> => {
   const profileByItemId = new Map(
     plan.items.map((item) => [item.itemId, item.preparationProfile] as const),
   );
-  const anyResolvableProfile = [...profileByItemId.values()].some(
-    (id) => getPreparationProfile(id) !== undefined,
-  );
-  const perItemHook = anyResolvableProfile
-    ? buildPerItemPreparationHook({
-        profileByItemId,
-        resolveProfile: (id) => getPreparationProfile(id),
-        onRejected: (message) => console.error(message),
-        onUnresolved: (message) => console.error(message),
-      })
-    : undefined;
+  const perItemHook = buildPerItemPreparationHook({
+    profileByItemId,
+    resolveProfile: (id) => getPreparationProfile(id),
+    onRejected: (message) => console.error(message),
+    onUnresolved: (message) => console.error(message),
+  });
   const preparationHook =
     preparationProfile === undefined
       ? perItemHook

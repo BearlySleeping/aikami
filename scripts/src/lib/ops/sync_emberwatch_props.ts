@@ -70,7 +70,7 @@ const combatEnv = (
 ): Record<string, unknown> => ({
   durability,
   blocksMovement,
-  ...(cover === 'none' ? { blocksSight: false } : { blocksSight: false }),
+  blocksSight: false,
   cover,
   ...(affordances === undefined ? {} : { affordances }),
 });

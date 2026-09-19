@@ -109,6 +109,8 @@ const RETRIEVED_AT = '2026-09-19';
 
 const ANIMA_REVISION = 'f7382c4bf9d7ffe4ceea593a0adbb470c56dd79b';
 const ANIMA_DOCS = `https://huggingface.co/circlestone-labs/Anima/blob/${ANIMA_REVISION}`;
+const ACE_STEP_REVISION = '82cd0d7b6322bd28cd4e830fe675ddb6180ce36c';
+const ACE_STEP_DOCS = `https://huggingface.co/ACE-Step/ACE-Step-v1-3.5B/blob/${ACE_STEP_REVISION}`;
 
 /**
  * `image-anima-aesthetic-v1.1` — the model behind Emberwatch 5.0.0's generated
@@ -193,8 +195,40 @@ const ANIMA_RIGHTS: ModelRightsRecord = {
   ],
 };
 
+/** Apache-2.0 ACE-Step checkpoint used for the generated Emberwatch score. */
+const ACE_STEP_RIGHTS: ModelRightsRecord = {
+  modelId: 'audio-ace-step-v1-3.5b',
+  repo: 'ACE-Step/ACE-Step-v1-3.5B',
+  revision: ACE_STEP_REVISION,
+  licenseName: 'Apache License 2.0',
+  licenseUrl: `${ACE_STEP_DOCS}/README.md`,
+  modelUse: 'commercial',
+  modelRedistribution: 'permitted',
+  outputRights: 'commercial-permitted',
+  evidence: {
+    url: `${ACE_STEP_DOCS}/README.md`,
+    revision: ACE_STEP_REVISION,
+    retrievedAt: RETRIEVED_AT,
+    quote: 'License: Apache 2.0',
+  },
+  corroboratingEvidence: [],
+  upstream: {
+    id: 'ACE-Step/ACE-Step-v1-3.5B',
+    licenseName: 'Apache License 2.0',
+    licenseUrl: `${ACE_STEP_DOCS}/README.md`,
+    outputRights: 'commercial-permitted',
+    evidence: {
+      url: `${ACE_STEP_DOCS}/README.md`,
+      revision: ACE_STEP_REVISION,
+      retrievedAt: RETRIEVED_AT,
+      quote: 'License: Apache 2.0',
+    },
+  },
+  releaseConstraints: [],
+};
+
 /** Every model this repository generates publishable art with. */
-export const MODEL_RIGHTS_EVIDENCE: readonly ModelRightsRecord[] = [ANIMA_RIGHTS];
+export const MODEL_RIGHTS_EVIDENCE: readonly ModelRightsRecord[] = [ANIMA_RIGHTS, ACE_STEP_RIGHTS];
 
 /**
  * Resolves the rights record for a model at a PINNED revision.

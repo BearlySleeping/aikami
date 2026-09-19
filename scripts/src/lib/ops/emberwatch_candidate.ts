@@ -19,6 +19,7 @@ import { fileURLToPath } from 'node:url';
 import { type CandidateLock, CandidateLockSchema } from '@aikami/schemas';
 import { Value } from 'typebox/value';
 import {
+  CANDIDATE_GROUPS,
   type CandidateGroupName,
   diffCandidateLocks,
   gate,
@@ -149,21 +150,8 @@ const describe = (lock: CandidateLock): string =>
     `  pack            ${lock.packId} ${lock.packVersion}`,
     `  rights          ${lock.rights.passed ? 'PASS' : 'FAIL'} — ${lock.rights.summary}`,
     `  validation      ${lock.validation.passed ? 'PASS' : 'FAIL'} — ${lock.validation.summary}`,
-    ...(
-      [
-        'manifest',
-        'maps',
-        'terrainAtlas',
-        'propAtlas',
-        'portraits',
-        'enemyVisuals',
-        'audio',
-        'packData',
-        'assetSeed',
-        'credits',
-      ] as const
-    ).map((name) => {
-      const g = lock[name] as { count: number; digest: string };
+    ...CANDIDATE_GROUPS.map((name) => {
+      const g = lock[name];
       return `  ${name.padEnd(15)} ${String(g.count).padStart(3)} file(s)  ${g.digest.slice(0, 12)}…`;
     }),
   ].join('\n');
@@ -212,8 +200,11 @@ const main = (): void => {
     process.exit(1);
   }
 
-  if (!lock.rights.passed || !lock.validation.passed) {
+  if (lock.sourceDirty || !lock.rights.passed || !lock.validation.passed) {
     console.error('❌ refusing to seal — a gate failed:');
+    if (lock.sourceDirty) {
+      console.error('   sourceDirty: commit or otherwise clean the source tree before sealing.');
+    }
     console.error(describe(lock));
     process.exit(1);
   }

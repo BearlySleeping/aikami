@@ -15,6 +15,7 @@ import {
 } from '@aikami/frontend/services/base';
 import { resolveCompanionControlMode } from '@aikami/schemas';
 import type { ContentPackLootEntry } from '@aikami/types';
+import { configureNpcPortraitSource } from '$lib/data/npc_avatar_catalog';
 import { textGenerationService } from '../ai/text_generation_service.svelte';
 import { musicPlayerService } from '../audio/music_player_service.svelte';
 import type { CampaignServiceInterface } from '../campaign/campaign_service.svelte';
@@ -226,6 +227,7 @@ export class GameCompositionRoot
     if (this._initialized) {
       return;
     }
+    configureNpcPortraitSource(undefined);
 
     const t0 = performance.now();
 
@@ -277,13 +279,6 @@ export class GameCompositionRoot
       packId: contentPackId,
       resolveTag: assetTagResolver,
     });
-
-    // The pack's authored dialogue portraits become the avatar source for this
-    // session. Registered here — the one place the active pack is loaded — so
-    // every avatar consumer (dialogue overlay, combat view model, dev sandbox)
-    // reads the same pack without threading the manifest through each of them.
-    const { configureNpcPortraitSource } = await import('$lib/data/npc_avatar_catalog');
-    configureNpcPortraitSource(contentPack.manifest);
 
     // ── C-331 AC-1: content pack is the single source of item truth ──
     inventoryService.configureCatalog({
@@ -624,10 +619,19 @@ export class GameCompositionRoot
       this.warn('initialize:operation-recovery-failed', { error: String(error) });
     }
 
-    this._initialized = true;
-
-    const elapsed = performance.now() - t0;
-    this.debug('initialize:complete', { elapsedMs: elapsed });
+    // Configure the process-wide portrait source only after every fallible
+    // initialization phase has completed. If finalization itself fails, clear
+    // the source even though the root never reached `_initialized`.
+    try {
+      configureNpcPortraitSource(contentPack.manifest);
+      this._initialized = true;
+      const elapsed = performance.now() - t0;
+      this.debug('initialize:complete', { elapsedMs: elapsed });
+    } catch (error) {
+      this._initialized = false;
+      configureNpcPortraitSource(undefined);
+      throw error;
+    }
   }
 
   /**
@@ -697,6 +701,7 @@ export class GameCompositionRoot
    * Safe to call on an uninitialized root.
    */
   async dispose(): Promise<void> {
+    configureNpcPortraitSource(undefined);
     if (!this._initialized) {
       return;
     }

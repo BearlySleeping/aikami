@@ -9,7 +9,7 @@
 
 import { describe, expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { CatalogAssetEntry } from '@aikami/schemas';
@@ -566,5 +566,23 @@ describe('runSeedPublish — completeness, not leniency', () => {
     const entry = report.objects.find((o) => o.key.endsWith('/lpc_credits.json'));
     expect(entry?.hash).toBe(sha256(fresh));
     expect(entry?.carried).toBe(false);
+  });
+
+  test('a local read error is reported instead of carrying stale bytes', async () => {
+    const client = new FakeR2Client();
+    const dir = makePartialGameData();
+    const assetSeedPath = join(dir, 'asset_seed.json');
+    rmSync(assetSeedPath);
+    mkdirSync(assetSeedPath);
+    const stale = '{"sv":1,"r":["stale"]}';
+
+    const report = await runSeedPublish({
+      client,
+      gameDataDir: dir,
+      carriedDependencies: new Map([[`seed/${sha256(stale)}/asset_seed.json`, bytes(stale)]]),
+    });
+
+    expect(report.failed).toBeGreaterThanOrEqual(1);
+    expect(report.objects.some((entry) => entry.key.endsWith('/asset_seed.json'))).toBe(false);
   });
 });

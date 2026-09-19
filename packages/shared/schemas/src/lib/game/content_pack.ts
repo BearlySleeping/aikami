@@ -156,6 +156,18 @@ export type NamedAppearanceComponent = Static<typeof NamedAppearanceComponentSch
 // NpcPortraits — authored dialogue busts
 // ---------------------------------------------------------------------------
 
+/** Published catalog path accepted for authored NPC portrait variants. */
+export const CATALOG_PORTRAIT_PATH_PATTERN =
+  /^(?:\/game-data\/)?portraits\/(?:[A-Za-z0-9][A-Za-z0-9_-]*\/)+[A-Za-z0-9][A-Za-z0-9_-]*\.(?:png|webp|svg)$/;
+
+export const CatalogPortraitPathSchema = Type.String({
+  pattern: CATALOG_PORTRAIT_PATH_PATTERN.source,
+  description: 'Published portrait path under the game-data portrait catalog',
+});
+
+export const isCatalogPortraitPath = (value: string): boolean =>
+  CATALOG_PORTRAIT_PATH_PATTERN.test(value);
+
 /**
  * The emotion variants a pack may author for one NPC.
  *
@@ -165,11 +177,11 @@ export type NamedAppearanceComponent = Static<typeof NamedAppearanceComponentSch
  */
 export const NpcPortraitVariantsSchema = Type.Object(
   {
-    neutral: Type.String({ minLength: 1, description: 'Default dialogue bust image URL' }),
-    concerned: Type.Optional(Type.String({ minLength: 1 })),
-    relieved: Type.Optional(Type.String({ minLength: 1 })),
-    guarded: Type.Optional(Type.String({ minLength: 1 })),
-    hostile: Type.Optional(Type.String({ minLength: 1 })),
+    neutral: CatalogPortraitPathSchema,
+    concerned: Type.Optional(CatalogPortraitPathSchema),
+    relieved: Type.Optional(CatalogPortraitPathSchema),
+    guarded: Type.Optional(CatalogPortraitPathSchema),
+    hostile: Type.Optional(CatalogPortraitPathSchema),
   },
   {
     additionalProperties: false,

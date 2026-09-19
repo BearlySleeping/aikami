@@ -10,6 +10,7 @@ import { join } from 'node:path';
 import { type CandidateLock, CandidateLockSchema } from '@aikami/schemas';
 import { Value } from 'typebox/value';
 import {
+  CANDIDATE_GROUPS,
   computeLockHash,
   diffCandidateLocks,
   digestGroup,
@@ -198,19 +199,8 @@ describe('promotion comparison names what moved', () => {
 
   test('every content group participates in the comparison', () => {
     // A group that is silently skipped would let a change through unnoticed.
-    const groups = [
-      'manifest',
-      'maps',
-      'terrainAtlas',
-      'propAtlas',
-      'portraits',
-      'enemyVisuals',
-      'audio',
-      'packData',
-      'assetSeed',
-      'credits',
-    ] as const;
-    for (const name of groups) {
+    expect(CANDIDATE_GROUPS.length).toBeGreaterThan(0);
+    for (const name of CANDIDATE_GROUPS) {
       const approved = sealCandidate(baseLock({ [name]: withMaps({ f: '1' }) }));
       const promoting = sealCandidate(baseLock({ [name]: withMaps({ f: '2' }) }));
       const diff = diffCandidateLocks({ approved, promoting });

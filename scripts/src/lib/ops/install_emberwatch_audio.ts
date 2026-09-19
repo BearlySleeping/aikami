@@ -70,7 +70,13 @@ const main = (): void => {
     const relative = runtimePathFor(tag, '.webm');
     const destination = join(repository, 'apps/frontend/client/static/game-data', relative);
     installed.push({ tag, path: relative, sha256: sourceHash });
-    if (!checkOnly) {
+    if (checkOnly) {
+      if (!existsSync(destination) || sha256(destination) !== sourceHash) {
+        throw new Error(
+          `install_emberwatch_audio: installed ${relative} is missing or differs from ${file}`,
+        );
+      }
+    } else {
       mkdirSync(dirname(destination), { recursive: true });
       copyFileSync(source, destination);
     }

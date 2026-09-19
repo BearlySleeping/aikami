@@ -200,6 +200,20 @@ describe('release target — the read origin must not be production', () => {
     expect(production().originUrl).toBe(PRODUCTION_ORIGIN);
   });
 
+  test('staging rejects a non-production origin that does not match its declaration', () => {
+    expectRejection(
+      () => staging({ catalogOriginUrl: 'https://other-staging.example.test' }),
+      'origin-override-rejected',
+    );
+  });
+
+  test('production rejects an origin that does not match its declaration', () => {
+    expectRejection(
+      () => production({ catalogOriginUrl: 'https://production-alias.example.test' }),
+      'origin-override-rejected',
+    );
+  });
+
   test('a missing origin is refused', () => {
     expectRejection(
       () => resolveReleaseTarget({ mode: 'staging', env: { catalogOriginUrl: '' } }),

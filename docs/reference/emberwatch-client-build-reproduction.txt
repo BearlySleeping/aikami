@@ -16,7 +16,11 @@ Result: IDENTICAL FAILURE
   × Task client:build failed to run.
   error: script "build" exited with code 1
 
-Conclusion: the (dev) route leak in `client:build` is PRE-EXISTING on current
-origin/main and is NOT a regression owned by feat/emberwatch-rebuild-v5. It does
-not prevent this branch from being reviewed or merged, so its repair stays out
-of Emberwatch (per the Phase 7 instruction).
+Baseline conclusion (superseded): this reproduction established that the dev
+route leak was present on origin/main rather than introduced by the Emberwatch
+work. That assessment no longer describes the final branch state.
+
+Final branch result: `client:build` completes with no `(dev)` route output in
+the deploy bundle. Commit f6f21e3a82ef90597328c1c46d4b541d343fbd1f fixed the
+inconsistent route-default handling that allowed development routes into the
+production build.

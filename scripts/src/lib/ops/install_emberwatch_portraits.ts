@@ -55,7 +55,8 @@ const main = (): void => {
     return;
   }
 
-  const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as {
+  const currentManifest = readFileSync(manifestPath, 'utf8');
+  const manifest = JSON.parse(currentManifest) as {
     npcs: Record<string, NpcEntry>;
   };
 
@@ -97,8 +98,15 @@ const main = (): void => {
     npc.portraits = { variants };
   }
 
-  if (!checkOnly) {
-    writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+  const serializedManifest = `${JSON.stringify(manifest, null, 2)}\n`;
+  if (checkOnly) {
+    if (currentManifest !== serializedManifest) {
+      throw new Error(
+        'install_emberwatch_portraits: manifest.json differs from the computed portrait bindings',
+      );
+    }
+  } else {
+    writeFileSync(manifestPath, serializedManifest);
   }
 
   console.log(
