@@ -126,14 +126,30 @@ const runGuard = (options: {
     AIKAMI_GUARD_POLICY_AUTHORIZATION: '',
     BASE_REF: '',
   };
-  const result = spawnSync('bun', ['run', GUARD_PATH, ...(options.args ?? [])], {
-    env,
-    encoding: 'utf8',
-  });
+  const result = spawnGuard(env, options.args ?? []);
   if (result.error) {
     throw result.error;
   }
   return { status: result.status, stdout: result.stdout ?? '', stderr: result.stderr ?? '' };
+};
+
+/**
+ * Spawns the guard, retrying once when the process is killed by a signal.
+ *
+ * 🔴 `spawnSync` reports `status: null` with no `error` when the child was
+ * terminated rather than exiting — on a loaded CI runner that is resource
+ * pressure, not a guard verdict. This suite spawns the guard ~40 times and
+ * Windows runners were the ones to trip it. Retrying once keeps a killed
+ * process from being reported as a guard failure; a real non-zero exit still
+ * fails immediately.
+ */
+const spawnGuard = (env: NodeJS.ProcessEnv, args: string[]) => {
+  const attempt = () => spawnSync('bun', ['run', GUARD_PATH, ...args], { env, encoding: 'utf8' });
+  const first = attempt();
+  if (first.status === null && !first.error) {
+    return attempt();
+  }
+  return first;
 };
 
 const git = (root: string, args: string[]): void => {
