@@ -22,7 +22,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { type CandidateLock, CandidateLockSchema } from '@aikami/schemas';
+import { CANDIDATE_GROUPS, type CandidateLock, CandidateLockSchema } from '@aikami/schemas';
 import { Value } from 'typebox/value';
 import {
   buildGroups,
@@ -270,17 +270,7 @@ const describe = (lock: CandidateLock): string =>
     `  pack            ${lock.packId} ${lock.packVersion}`,
     `  rights          ${lock.rights.passed ? 'PASS' : 'FAIL'} — ${lock.rights.summary}`,
     `  surface         ${lock.surface.passed ? 'PASS' : 'FAIL'} — ${lock.surface.summary}`,
-    ...(
-      [
-        'manifest',
-        'maps',
-        'terrainAtlas',
-        'propAtlas',
-        'portraits',
-        'enemyVisuals',
-        'audio',
-      ] as const
-    ).map((name) => {
+    ...CANDIDATE_GROUPS.map((name) => {
       const g = lock[name];
       return `  ${name.padEnd(15)} ${String(g.count).padStart(3)} file(s)  ${g.digest.slice(0, 12)}…`;
     }),

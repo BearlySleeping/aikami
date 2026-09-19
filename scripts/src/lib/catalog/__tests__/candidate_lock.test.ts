@@ -8,7 +8,7 @@ import { describe, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { type CandidateLock, CandidateLockSchema } from '@aikami/schemas';
+import { CANDIDATE_GROUPS, type CandidateLock, CandidateLockSchema } from '@aikami/schemas';
 import { Value } from 'typebox/value';
 import { declareGroups } from '../../ops/emberwatch_candidate.ts';
 import {
@@ -322,16 +322,11 @@ describe('comparison names what moved', () => {
   });
 
   test('every content group participates in the comparison', () => {
-    const names = [
-      'manifest',
-      'maps',
-      'terrainAtlas',
-      'propAtlas',
-      'portraits',
-      'enemyVisuals',
-      'audio',
-    ] as const;
-    for (const name of names) {
+    // Iterates the exported tuple rather than a hand-written copy: a group
+    // added to the schema but forgotten here would silently go uncompared,
+    // which is exactly the failure this test exists to catch.
+    expect(CANDIDATE_GROUPS.length).toBeGreaterThan(0);
+    for (const name of CANDIDATE_GROUPS) {
       const approved = sealCandidate(baseLock({ [name]: withMaps({ f: 'aa' }) }));
       const promoting = sealCandidate(baseLock({ [name]: withMaps({ f: 'bb' }) }));
       const diff = diffCandidateLocks({ approved, promoting });

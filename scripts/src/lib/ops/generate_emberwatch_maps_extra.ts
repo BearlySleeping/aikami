@@ -28,6 +28,7 @@ import {
   makeMap,
   makeRng,
   npc,
+  OLD_ROAD_ARRIVAL,
   prop,
   scatter,
   setTile,
@@ -212,8 +213,13 @@ export const buildOldRoad = (): { map: MapData; objectLayers: MapObjectLayer[] }
         // the map edges. ZoningSystem tests the player's position inclusively
         // against each transition rect, so a marker placed on the rect's corner
         // re-triggers the exit the instant the map loads (C-138).
-        spawn(1, 'old_road_from_village', 34 * 32, (H - 3) * 32),
-        spawn(2, 'old_road_to_shrine', 34 * 32, 2 * 32),
+        spawn(
+          1,
+          'old_road_from_village',
+          OLD_ROAD_ARRIVAL.fromVillage.x,
+          OLD_ROAD_ARRIVAL.fromVillage.y,
+        ),
+        spawn(2, 'old_road_to_shrine', OLD_ROAD_ARRIVAL.toShrine.x, OLD_ROAD_ARRIVAL.toShrine.y),
         npc(3, 'woodcutter_ada', 'Ada the Woodcutter', 'ada_greeting', 12 * 32, 10 * 32),
         npc(4, 'apprentice_tess', 'Tess the Apprentice', 'tess_greeting', 58 * 32, 12 * 32),
 
@@ -415,8 +421,8 @@ export const buildRuinedShrine = (): { map: MapData; objectLayers: MapObjectLaye
           1005,
           'old_road',
           'old_road_to_shrine',
-          34 * 32,
-          0,
+          OLD_ROAD_ARRIVAL.toShrine.x,
+          OLD_ROAD_ARRIVAL.toShrine.y,
           19 * 32,
           (H - 1) * 32,
           64,

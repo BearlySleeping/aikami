@@ -201,9 +201,17 @@ const main = (): void => {
   // CONTENT-PACK scan of the same bytes produces the prefixed form instead, and
   // both are real catalog tags — so both are credited, or one root's copy of the
   // identical file is classified from a stale entry.
-  for (const [, npc] of Object.entries(manifest.npcs)) {
+  for (const [npcId, npc] of Object.entries(manifest.npcs)) {
     for (const [variant, url] of Object.entries(npc.portraits?.variants ?? {})) {
-      const npcId = url.split('/')[4] ?? '';
+      // The NPC's manifest KEY is the identity. Deriving it from a URL segment
+      // (`url.split('/')[4]`) made the tag depend on the published path's shape,
+      // so a directory rename or a differently-nested portrait would silently
+      // produce a wrong or empty npcId and credit the wrong catalog tag — or
+      // credit nothing, leaving the real tag unclassified.
+      //
+      // `url` is still needed below to locate the file; it is simply no longer
+      // the source of the identity.
+      void url;
       additions[`portraits:emberwatch:${npcId}:${variant}`] = local;
       additions[`emberwatch:portraits:${npcId}:${variant}`] = local;
     }

@@ -34,6 +34,7 @@ import {
   makeMap,
   makeRng,
   npc,
+  OLD_ROAD_ARRIVAL,
   prop,
   scatter,
   setTile,
@@ -457,7 +458,17 @@ export const buildVillage = (): { map: MapData; objectLayers: MapObjectLayer[] }
       objects: [
         transition(1005, 'merchant_shop', 'shop_entrance', 12 * 32, 15 * 32, 0, 23 * 32, 32, 96),
         transition(1006, 'inn', 'inn_entrance', 14 * 32, 17 * 32, 63 * 32, 23 * 32, 32, 96),
-        transition(1007, 'old_road', 'old_road_from_village', 34 * 32, 35 * 32, 31 * 32, 0, 64, 32),
+        transition(
+          1007,
+          'old_road',
+          'old_road_from_village',
+          OLD_ROAD_ARRIVAL.fromVillage.x,
+          OLD_ROAD_ARRIVAL.fromVillage.y,
+          31 * 32,
+          0,
+          64,
+          32,
+        ),
       ],
     },
   ];

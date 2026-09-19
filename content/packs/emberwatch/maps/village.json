@@ -19242,7 +19242,7 @@
             {
               "name": "targetY",
               "type": "int",
-              "value": 1120
+              "value": 1056
             },
             {
               "name": "targetSpawnId",
