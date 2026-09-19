@@ -104,6 +104,14 @@ tasks:
       - 'scripts/report_bundle_budget.ts'
       - 'scripts/bundle_budget.baseline.json'
       - 'scripts/ineffective_dynamic_imports.baseline.json'
+      # 🔴 Load-bearing. The emitted route graph depends on this flag, so it MUST
+      # be part of the cache key. Without it moon serves a cached
+      # production-graph build for a dev-route request (and vice versa) purely
+      # on the ambient environment: `AIKAMI_INCLUDE_DEV_ROUTES=true bun moon run
+      # client:build -- --mode staging` printed `excluding (dev)` and `1 cached`,
+      # silently ignoring the opt-in. A `$`-prefixed input is moon's
+      # environment-variable input form.
+      - '$AIKAMI_INCLUDE_DEV_ROUTES'
       # 🔴 Load-bearing. Vite bundles these workspace packages FROM SOURCE via
       # TS path aliases — the emitted bundle contains their code, so their
       # files are real build inputs. They were previously absent from the hash,

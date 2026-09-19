@@ -119,4 +119,13 @@ run('check ineffective dynamic imports', 'bun', ['scripts/check_ineffective_dyna
 // 6. Report bundle budgets (raw/gzip, totals, per-route initial closures) and
 //    ratchet tracked metrics. Kept after the guards so the report reflects an
 //    output that already passed the hard gates.
-run('report bundle budget', 'bun', ['scripts/report_bundle_budget.ts']);
+//
+//    When dev routes were deliberately included, the ratchet is skipped: the
+//    committed baseline measures the production route graph, so a sandbox build
+//    would otherwise always report a ~20% regression and fail the build. The
+//    flag comes from the same resolver the gate itself uses, so a normal build
+//    can never skip the ratchet by accident.
+run('report bundle budget', 'bun', [
+  'scripts/report_bundle_budget.ts',
+  ...(allowDevRoutes ? ['--expect-dev-routes'] : []),
+]);
