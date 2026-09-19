@@ -442,11 +442,42 @@ export const runCatalogPublish = async (
       : entry,
   );
 
+  // 3.6. Resolve the previous VERIFIED release — BEFORE anything is written.
+  //
+  // Two phases depend on it: the seed phase carries forward a required
+  // dependency the checkout no longer holds, and the index phase unions the
+  // entries the live catalog already carries. This repo no longer holds the
+  // complete asset library (C-435 de-bundled it), so rebuilding from the local
+  // scan roots alone would replace the published catalog with the few dozen
+  // tags this checkout carries.
+  //
+  // Resolution is hash-verified through `resolveReleaseGraph` — the same
+  // resolver the production client boot path uses. A corrupt pointer or any
+  // integrity mismatch throws and the publish aborts: treating an unverifiable
+  // previous release as "absent" would turn corruption into silent data loss.
+  const previousRelease = await resolvePreviousRelease({
+    originUrl: config.originUrl,
+    reader: options.releaseReader,
+  });
+  if (!previousRelease) {
+    console.log(
+      '  🔗 previous release: none published at this origin — this index carries only its own entries',
+    );
+  } else {
+    console.log(
+      `  🔗 previous release: ${previousRelease.releaseId} (${previousRelease.entries.length} verified entr(ies))`,
+    );
+  }
+
   // 3.75. Upload seed/metadata files under immutable content-addressed keys.
   // These are published alongside the assets so the client can fetch the
   // compact boot seed, offline-core declaration, credits, and audio metadata
   // from the same R2 origin (C-435 follow-up: de-bundle everything from git).
-  const seedReport = await runSeedPublish({ client, gameDataDir });
+  const seedReport = await runSeedPublish({
+    client,
+    gameDataDir,
+    carriedDependencies: previousRelease?.dependencies,
+  });
 
   // 3.8. Publish the per-pack installed lock (C-523 AC-5) under an immutable
   // content-addressed key. The mutable compatibility alias is advanced only
@@ -496,29 +527,9 @@ export const runCatalogPublish = async (
       elapsedMs: Date.now() - startedAt,
     };
   }
-  // 4. Generate index — UNIONED with the previous VERIFIED release.
-  //
-  // This repo no longer holds the complete asset library (C-435 de-bundled it),
-  // so rebuilding the index purely from the local scan roots would replace the
-  // published catalog with the few dozen tags this checkout carries.
-  //
-  // Resolution is hash-verified through `resolveReleaseGraph` — the same
-  // resolver the production client boot path uses. A corrupt pointer or any
-  // integrity mismatch throws and the publish aborts: treating an unverifiable
-  // previous release as "absent" would turn corruption into silent data loss.
-  const previousRelease = await resolvePreviousRelease({
-    originUrl: config.originUrl,
-    reader: options.releaseReader,
-  });
-  if (!previousRelease) {
-    console.log(
-      '  🔗 previous release: none published at this origin — this index carries only its own entries',
-    );
-  } else {
-    console.log(
-      `  🔗 previous release: ${previousRelease.releaseId} (${previousRelease.entries.length} verified entr(ies))`,
-    );
-  }
+  // 4. Generate index — unioned with the previous VERIFIED release resolved in
+  // step 3.6 (see there for why an unverifiable release aborts rather than
+  // being treated as absent).
   const { root, shards, merge } = generateCatalogIndex({
     entries: entriesForIndex,
     originUrl: config.originUrl,
@@ -648,7 +659,10 @@ export const runCatalogPublish = async (
       // lock when one was produced — so the release graph names the lock the
       // client verifies audio against (C-523 AC-5).
       const dependencies = [
-        ...seedReport.objects,
+        // Project to the pointer's exact dependency shape: `additionalProperties:
+        // false` on ReleaseDependencySchema means the seed report's extra
+        // `carried` flag must not leak into the published graph.
+        ...seedReport.objects.map((object) => ({ key: object.key, hash: object.hash })),
         ...(packLockReport.written && packLockReport.hash
           ? [{ key: packLockReport.key, hash: packLockReport.hash }]
           : []),

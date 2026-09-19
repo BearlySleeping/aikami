@@ -9,6 +9,9 @@
 
 import { describe, expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { CatalogAssetEntry } from '@aikami/schemas';
 import type { CatalogEntry } from '../catalog_entries.ts';
 import { generateCatalogIndex } from '../index_generation.ts';
@@ -17,6 +20,8 @@ import {
   PreviousReleaseError,
   resolvePreviousRelease,
 } from '../published_catalog.ts';
+import { runSeedPublish } from '../seed_publish.ts';
+import { FakeR2Client } from './fixtures.ts';
 
 const ORIGIN = 'https://assets.example.test';
 
@@ -482,5 +487,84 @@ describe('resolvePreviousRelease — verified, or not at all', () => {
         },
       }),
     ).rejects.toBeInstanceOf(PreviousReleaseError);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// runSeedPublish — a required dependency is carried, never dropped
+// ---------------------------------------------------------------------------
+
+describe('runSeedPublish — completeness, not leniency', () => {
+  /** A game-data dir holding only the files a de-bundled checkout still has. */
+  const makePartialGameData = (): string => {
+    const dir = mkdtempSync(join(tmpdir(), 'carry-forward-seed-'));
+    writeFileSync(join(dir, 'asset_seed.json'), JSON.stringify({ sv: 1, r: [] }));
+    writeFileSync(join(dir, 'offline_core.json'), JSON.stringify({ tags: [] }));
+    writeFileSync(join(dir, 'asset_credits.json'), JSON.stringify({ credits: {} }));
+    writeFileSync(join(dir, 'audio_tracks.json'), JSON.stringify({ tracks: [] }));
+    // lpc_credits.json and lpc_credits_supplement.json are NOT here — the LPC
+    // library is no longer committed (C-435), exactly as in a real checkout.
+    return dir;
+  };
+
+  test('a file absent locally is carried from the previous verified release', async () => {
+    const client = new FakeR2Client();
+    const lpcCredits = '{"credits":{"sprites:lpc:body":{"licenses":["CC-BY-SA 3.0"]}}}';
+    const supplement = '{"credits":{"sprites:lpc:head":{"licenses":["CC-BY-SA 3.0"]}}}';
+    const carried = new Map<string, Uint8Array>([
+      [`seed/${sha256(lpcCredits)}/lpc_credits.json`, bytes(lpcCredits)],
+      [`seed/${sha256(supplement)}/lpc_credits_supplement.json`, bytes(supplement)],
+    ]);
+
+    const report = await runSeedPublish({
+      client,
+      gameDataDir: makePartialGameData(),
+      carriedDependencies: carried,
+    });
+
+    expect(report.failed).toBe(0);
+    expect(report.carried).toBe(2);
+    expect(report.uploaded).toBe(4);
+    // The carried objects keep their EXACT previous key and hash, so the new
+    // release pins byte-identical bytes to the ones already published.
+    expect(report.objects.find((o) => o.key.endsWith('/lpc_credits.json'))).toEqual({
+      key: `seed/${sha256(lpcCredits)}/lpc_credits.json`,
+      hash: sha256(lpcCredits),
+      carried: true,
+    });
+  });
+
+  test('a required dependency missing from BOTH sides fails the release', async () => {
+    const client = new FakeR2Client();
+
+    const report = await runSeedPublish({
+      client,
+      gameDataDir: makePartialGameData(),
+      carriedDependencies: new Map(),
+    });
+
+    // Two files are absent locally and unrepresented in the previous release:
+    // the release cannot be complete, and must say so rather than quietly
+    // publishing a graph with a hole in it.
+    expect(report.failed).toBe(2);
+    expect(report.carried).toBe(0);
+  });
+
+  test('a locally present file always wins over the carried copy', async () => {
+    const client = new FakeR2Client();
+    const stale = '{"credits":{"stale":true}}';
+    const dir = makePartialGameData();
+    const fresh = '{"credits":{"fresh":true}}';
+    writeFileSync(join(dir, 'lpc_credits.json'), fresh);
+
+    const report = await runSeedPublish({
+      client,
+      gameDataDir: dir,
+      carriedDependencies: new Map([[`seed/${sha256(stale)}/lpc_credits.json`, bytes(stale)]]),
+    });
+
+    const entry = report.objects.find((o) => o.key.endsWith('/lpc_credits.json'));
+    expect(entry?.hash).toBe(sha256(fresh));
+    expect(entry?.carried).toBe(false);
   });
 });
