@@ -51,7 +51,11 @@ const USAGE = `Emberwatch release orchestrator
 
 Options:
   --mode <staging|production>   Required. The release target.
-  --plan                        Read-only: checks + the intended step list. Default.
+  --build-candidate             Run the deterministic content build (install
+                              portraits/audio, regenerate atlas + maps, rescan)
+                              and SEAL a candidate. Mutates local artifacts and
+                              performs no remote write. Run this BEFORE --plan.
+--plan                        Read-only: checks + the intended step list. Default.
   --apply                       Execute every step, including the remote publish.
   --accept-run <runId>          Install the machine-passing candidates of a
                                 generate:batch run before rebuilding artifacts.
@@ -90,6 +94,7 @@ const apply = args.includes('--apply');
 const skipTests = args.includes('--skip-tests');
 const allowDirty = args.includes('--allow-dirty');
 const acceptRun = flagValue('--accept-run');
+const buildCandidate = args.includes('--build-candidate');
 
 const steps: StepResult[] = [];
 const record = (entry: StepResult): void => {
@@ -327,51 +332,63 @@ const main = async (): Promise<void> => {
     process.exit(audit.exitCode === 0 ? 0 : 2);
   }
 
-  // ── Apply: deterministic local rebuild ───────────────────────────────────
-  // Portraits and authored audio beds must be installed into the runtime
-  // game-data plane BEFORE the scan, or the catalog publishes a pack whose
-  // declared art and cues are absent and the installed pack lock refuses the
-  // release with `audio-cue-unpublished`.
-  if (
-    bun('install portraits', 'scripts/src/lib/ops/install_emberwatch_portraits.ts').status ===
-    'failed'
-  ) {
-    process.exit(1);
+  // ── Candidate construction — ONLY under --build-candidate ───────────────
+  //
+  // These steps are deterministic content BUILDING: they install authored
+  // portraits and audio into the runtime game-data plane, regenerate the
+  // terrain atlas, prop-atlas pages and canonical maps, and rescan the manifest.
+  //
+  // They must NOT run during --apply. A release promotes a candidate that was
+  // sealed once; rebuilding during publication is exactly how staging and
+  // production end up publishing different bytes while both report success.
+  // Building lives here, sealing lives in `emberwatch_candidate.ts`, and
+  // publishing consumes the seal.
+  if (buildCandidate) {
+    const buildSteps: [string, string][] = [
+      ['install portraits', 'scripts/src/lib/ops/install_emberwatch_portraits.ts'],
+      ['install authored audio beds', 'scripts/src/lib/ops/install_emberwatch_audio.ts'],
+      ['generate terrain/grid atlas', 'scripts/src/lib/ops/generate_emberwatch_atlas.ts'],
+      ['generate prop atlas pages', 'scripts/src/lib/ops/generate_emberwatch_props_atlas.ts'],
+      ['regenerate canonical maps', 'scripts/src/lib/ops/generate_emberwatch_maps.ts'],
+      ['scan manifest + hashes + credits', 'scripts/src/lib/ops/scan_assets.ts'],
+    ];
+    for (const [label, script] of buildSteps) {
+      if (bun(label, script).status === 'failed') {
+        process.exit(1);
+      }
+    }
+    const audit = bun('coverage audit', 'scripts/src/lib/ops/emberwatch_coverage_audit.ts');
+    if (audit.status === 'failed') {
+      console.error('❌ coverage audit reports blockers — refusing to seal.');
+      process.exit(2);
+    }
+    const seal = bun('seal candidate', 'scripts/src/lib/ops/emberwatch_candidate.ts', ['--seal']);
+    if (seal.status === 'failed') {
+      console.error('❌ candidate sealing failed.');
+      process.exit(1);
+    }
+    console.log('');
+    console.log('Candidate built and sealed. Review it, then:');
+    console.log(`  bun run emberwatch:release --mode ${mode} --plan`);
+    process.exit(0);
   }
-  if (
-    bun('install authored audio beds', 'scripts/src/lib/ops/install_emberwatch_audio.ts').status ===
-    'failed'
-  ) {
-    process.exit(1);
-  }
-  if (
-    bun('generate terrain/grid atlas', 'scripts/src/lib/ops/generate_emberwatch_atlas.ts')
-      .status === 'failed'
-  ) {
-    process.exit(1);
-  }
-  if (
-    bun('generate prop atlas pages', 'scripts/src/lib/ops/generate_emberwatch_props_atlas.ts')
-      .status === 'failed'
-  ) {
-    process.exit(1);
-  }
-  if (
-    bun('regenerate canonical maps', 'scripts/src/lib/ops/generate_emberwatch_maps.ts').status ===
-    'failed'
-  ) {
-    process.exit(1);
-  }
-  const audit = bun('coverage audit', 'scripts/src/lib/ops/emberwatch_coverage_audit.ts');
-  if (audit.status === 'failed') {
-    console.error('❌ coverage audit reports blockers — refusing to publish.');
+
+  // ── Candidate verification — REQUIRED before any publish ────────────────
+  //
+  // A publish consumes the sealed candidate. If the working tree no longer
+  // produces it, publishing would ship bytes nobody reviewed, so this refuses.
+  const candidateVerify = bun(
+    'verify sealed candidate',
+    'scripts/src/lib/ops/emberwatch_candidate.ts',
+    ['--verify'],
+  );
+  if (candidateVerify.status === 'failed') {
+    console.error(
+      '❌ the sealed candidate does not match the working tree — refusing to publish.\n' +
+        '   Build and seal a fresh candidate first:\n' +
+        '     bun run emberwatch:build-candidate',
+    );
     process.exit(2);
-  }
-  if (
-    bun('scan manifest + hashes + credits', 'scripts/src/lib/ops/scan_assets.ts').status ===
-    'failed'
-  ) {
-    process.exit(1);
   }
 
   if (!skipTests) {

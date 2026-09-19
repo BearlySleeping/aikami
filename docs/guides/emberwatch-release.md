@@ -215,16 +215,35 @@ Two properties are deliberate:
   even when the bytes happen to match, because the next rebuild would not be
   reproducible.
 
-The lock carries no bucket, origin or environment. Those belong to the publish
-step; putting them here is exactly what would make the lock
-environment-specific, which is the thing it exists to prevent.
+The lock carries no bucket, origin or environment, and no release-plane hashes.
+Those belong to a `ReleasePlan`/`ReleaseReceipt`; putting them here is exactly
+what would make the lock environment-specific, which is the thing it exists to
+prevent. An earlier revision filled them with `""`/`{}` placeholders, which let
+a content object claim to describe a published release it could not.
 
 Promotion compares `lockHash` and, on mismatch, `diffCandidateLocks` names the
 members that moved (`props/props.webp`, `maps/village.json`) rather than
 reporting a boolean.
 
-Current sealed candidate: `content/packs/emberwatch/candidate.lock.json`
-(rights PASS 74/0, validation PASS).
+### The lock is a release artifact, not a committed file
+
+A lock stored inside the commit it describes is circular — the commit contains
+the lock, the lock contains the commit SHA, so editing the lock changes the SHA
+it records. The earlier revision "solved" this by committing a lock that pointed
+at an older commit, which is permanently stale the instant it is committed and
+describes a source tree nobody is promoting.
+
+The lock is therefore written to `.local/releases/candidate-<lockHash>.json`
+(gitignored, alongside the existing `.local/catalog/` workspace plane) from a
+**clean** committed tree. `source.commit` is then genuinely the commit the bytes
+came from, and `source.tree` (`git rev-parse <commit>^{tree}`) lets anyone
+re-derive the source set independently.
+
+Sealing refuses a dirty tree. There is deliberately no `--allow-dirty`: a
+candidate intended for staging or production must correspond to a committed
+source state, or nobody else can reproduce it. The schema has no `sourceDirty`
+field for the same reason — a field that can only hold one value is not
+information.
 
 ## Staging is blocked on a HUMAN infrastructure action
 

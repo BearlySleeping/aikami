@@ -1,15 +1,25 @@
 // scripts/src/lib/catalog/candidate_lock.ts
 //
-// Seals a release candidate into an immutable lock.
+// Seals a release candidate into an immutable, environment-neutral lock.
 //
-// The lock is the artifact that makes "promote the SAME candidate" checkable
-// rather than asserted: it records content-addressed identity for every group
-// the release publishes, keyed by LOGICAL id, and folds them into one hash that
-// staging and production both compare.
+// See `@aikami/schemas` `candidate_lock.ts` for why the candidate is a separate
+// object from a ReleasePlan/ReleaseReceipt, and why the lock is a release
+// artifact under `.local/releases/` rather than a committed file.
 //
-// It carries no bucket, no origin and no environment. Those belong to the
-// publish step; putting them here would make the lock environment-specific,
-// which is the thing it exists to prevent.
+// ── Membership is declared, not inferred from the filesystem ───────────────
+//
+// The earlier revision discovered members by walking directories and silently
+// filtering out anything that did not exist. That made two real bugs invisible:
+//
+//   * the terrain-atlas group hashed a path that did not exist, so it sealed as
+//     an EMPTY group — and an empty group cannot notice that a different atlas
+//     is being promoted;
+//   * three seed files were declared in code and only two hashed, and the
+//     mismatch was never reported.
+//
+// Membership is therefore DERIVED FROM THE MANIFEST — the pack's own declaration
+// of what it ships — and every expected member is compared against what was
+// actually hashed. A `required` member that is absent fails sealing.
 
 import { createHash } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
@@ -18,9 +28,11 @@ import type {
   CandidateArtifact,
   CandidateGate,
   CandidateGroup,
+  CandidateGroupName,
   CandidateLock,
+  CandidateMemberRole,
 } from '@aikami/schemas';
-import { CANDIDATE_LOCK_HASH_FIELDS } from '@aikami/schemas';
+import { CANDIDATE_GROUPS, CANDIDATE_LOCK_HASH_FIELDS } from '@aikami/schemas';
 
 export const sha256 = (bytes: Buffer | string): string =>
   createHash('sha256').update(bytes).digest('hex');
@@ -35,7 +47,7 @@ const byId = (a: CandidateArtifact, b: CandidateArtifact): number => {
 
 /** Rolls a sorted artifact list into a stable digest. */
 export const digestGroup = (artifacts: readonly CandidateArtifact[]): string => {
-  const lines = [...artifacts].sort(byId).map((artifact) => `${artifact.id}:${artifact.sha256}`);
+  const lines = [...artifacts].sort(byId).map((a) => `${a.id}:${a.sha256}`);
   return sha256(lines.join('\n'));
 };
 
@@ -44,71 +56,158 @@ export const group = (artifacts: readonly CandidateArtifact[]): CandidateGroup =
   return { count: sorted.length, digest: digestGroup(sorted), artifacts: sorted };
 };
 
-/**
- * Hashes every file under `root`, keyed by its path relative to `root`.
- *
- * The logical id is the RELATIVE path, not the absolute one: an absolute path
- * embeds a checkout location, so the same content in a worktree and in CI would
- * produce different locks.
- */
-export const hashTree = (options: {
-  root: string;
-  /** Prefix for logical ids, so ids stay unique across groups. */
-  idPrefix?: string;
-  /** Only include files matching one of these extensions. */
+// ---------------------------------------------------------------------------
+// Declared membership
+// ---------------------------------------------------------------------------
+
+/** One declared group member, with the role that decides whether absence fails. */
+export type DeclaredMember = {
+  id: string;
+  /** Absolute path, or null for a member supplied by the base release. */
+  path: string | null;
+  role: CandidateMemberRole;
+  /**
+   * True when the member is a directory: every file beneath it is hashed under
+   * `id/` prefixes. Used for collections the manifest names as a whole.
+   */
+  tree?: boolean;
+  /** Only include files with these extensions when `tree` is set. */
   extensions?: readonly string[];
-}): CandidateArtifact[] => {
-  const { root, idPrefix = '', extensions } = options;
-  if (!existsSync(root)) {
-    return [];
-  }
-  const artifacts: CandidateArtifact[] = [];
-  const walk = (dir: string): void => {
-    for (const name of readdirSync(dir).sort()) {
-      const full = join(dir, name);
-      if (statSync(full).isDirectory()) {
-        walk(full);
-        continue;
-      }
-      if (extensions && !extensions.some((ext) => name.endsWith(ext))) {
-        continue;
-      }
-      const bytes = readFileSync(full);
-      artifacts.push({
-        id: `${idPrefix}${relative(root, full).split('\\').join('/')}`,
-        sha256: sha256(bytes),
-        sizeBytes: bytes.length,
-      });
-    }
-  };
-  walk(root);
-  return artifacts;
 };
 
-/** Hashes an explicit list of files, keyed by a caller-supplied logical id. */
-export const hashFiles = (files: readonly { id: string; path: string }[]): CandidateArtifact[] =>
-  files
-    .filter((file) => existsSync(file.path))
-    .map((file) => {
-      const bytes = readFileSync(file.path);
-      return { id: file.id, sha256: sha256(bytes), sizeBytes: bytes.length };
-    });
+export type DeclaredGroup = {
+  name: CandidateGroupName;
+  members: readonly DeclaredMember[];
+};
+
+/** A required member that could not be hashed. */
+export type MissingRequired = { group: CandidateGroupName; id: string; reason: string };
+
+const hashMember = (member: DeclaredMember): CandidateArtifact[] => {
+  if (member.path === null) {
+    return [];
+  }
+  if (!existsSync(member.path)) {
+    return [];
+  }
+  if (member.tree) {
+    const artifacts: CandidateArtifact[] = [];
+    const walk = (dir: string): void => {
+      for (const name of readdirSync(dir).sort()) {
+        const full = join(dir, name);
+        if (statSync(full).isDirectory()) {
+          walk(full);
+          continue;
+        }
+        if (member.extensions && !member.extensions.some((ext) => name.endsWith(ext))) {
+          continue;
+        }
+        const bytes = readFileSync(full);
+        artifacts.push({
+          id: `${member.id}/${relative(member.path as string, full)
+            .split('\\')
+            .join('/')}`,
+          sha256: sha256(bytes),
+          sizeBytes: bytes.length,
+        });
+      }
+    };
+    walk(member.path);
+    return artifacts;
+  }
+  const bytes = readFileSync(member.path);
+  return [{ id: member.id, sha256: sha256(bytes), sizeBytes: bytes.length }];
+};
+
+export type BuiltGroup = {
+  group: CandidateGroup;
+  missingRequired: readonly MissingRequired[];
+};
+
+/**
+ * Hashes one declared group and reports every REQUIRED member that is absent.
+ *
+ * `optional` members that are missing are simply absent; `derived-at-release`
+ * and `carried-from-base-release` members are not candidate content and are
+ * excluded from the group entirely — declaring them here is how the seal knows
+ * not to expect them.
+ */
+export const buildGroup = (declared: DeclaredGroup): BuiltGroup => {
+  const artifacts: CandidateArtifact[] = [];
+  const missingRequired: MissingRequired[] = [];
+
+  for (const member of declared.members) {
+    if (member.role === 'derived-at-release' || member.role === 'carried-from-base-release') {
+      continue;
+    }
+    const hashed = hashMember(member);
+    if (hashed.length === 0) {
+      if (member.role === 'required') {
+        missingRequired.push({
+          group: declared.name,
+          id: member.id,
+          reason: member.path === null ? 'no path resolved from the manifest' : 'not present',
+        });
+      }
+      continue;
+    }
+    artifacts.push(...hashed);
+  }
+
+  return { group: group(artifacts), missingRequired };
+};
+
+/** Builds every group, collecting all missing-required findings. */
+export const buildGroups = (
+  declared: readonly DeclaredGroup[],
+): { groups: Record<string, CandidateGroup>; missingRequired: MissingRequired[] } => {
+  const groups: Record<string, CandidateGroup> = {};
+  const missingRequired: MissingRequired[] = [];
+  for (const spec of declared) {
+    const built = buildGroup(spec);
+    groups[spec.name] = built.group;
+    missingRequired.push(...built.missingRequired);
+  }
+  return { groups, missingRequired };
+};
+
+// ---------------------------------------------------------------------------
+// Hashing and sealing
+// ---------------------------------------------------------------------------
 
 export const gate = (options: {
   passed: boolean;
-  digest?: string;
+  /** The report the digest identifies. Canonicalised before hashing. */
+  report: unknown;
   summary: string;
 }): CandidateGate => ({
   passed: options.passed,
-  digest: options.digest ?? '',
+  digest: sha256(JSON.stringify(canonicalReport(options.report))),
   summary: options.summary,
 });
 
 /**
- * Folds the lock into its hash.
+ * Canonicalises a report before hashing.
  *
- * Excludes `sealedAt` and `sourceDirty` — see `CANDIDATE_LOCK_HASH_FIELDS`.
+ * Object keys are sorted recursively so two runs producing the same findings in
+ * a different insertion order share a digest — and two runs producing different
+ * findings cannot.
  */
+export const canonicalReport = (value: unknown): unknown => {
+  if (Array.isArray(value)) {
+    return value.map(canonicalReport);
+  }
+  if (value !== null && typeof value === 'object') {
+    const source = value as Record<string, unknown>;
+    const out: Record<string, unknown> = {};
+    for (const key of Object.keys(source).sort()) {
+      out[key] = canonicalReport(source[key]);
+    }
+    return out;
+  }
+  return value;
+};
+
 export const computeLockHash = (lock: Omit<CandidateLock, 'lockHash'>): string => {
   // Indexed through the tuple of field names, so the compiler knows each key
   // exists on the lock. No cast: `CANDIDATE_LOCK_HASH_FIELDS` is typed as keys
@@ -126,41 +225,26 @@ export const sealCandidate = (lock: Omit<CandidateLock, 'lockHash'>): CandidateL
   lockHash: computeLockHash(lock),
 });
 
-/** Every content group, for a promotion comparison that names what changed. */
-export const CANDIDATE_GROUPS = [
-  'manifest',
-  'maps',
-  'terrainAtlas',
-  'propAtlas',
-  'portraits',
-  'enemyVisuals',
-  'audio',
-  'packData',
-  'assetSeed',
-  'credits',
-] as const satisfies readonly (keyof CandidateLock)[];
-
-export type CandidateGroupName = (typeof CANDIDATE_GROUPS)[number];
+// ---------------------------------------------------------------------------
+// Comparison
+// ---------------------------------------------------------------------------
 
 export type CandidateDiff = {
   identical: boolean;
-  /** Groups whose digest differs, with the members that moved. */
   changedGroups: readonly {
     group: CandidateGroupName;
     added: readonly string[];
     removed: readonly string[];
     modified: readonly string[];
   }[];
-  /** Release-plane differences (root/shard/pack-lock hashes). */
-  releasePlane: readonly string[];
+  sourceChanged: boolean;
 };
 
 /**
- * Compares two locks and names every difference.
+ * Compares two candidate locks and names every difference.
  *
- * Promotion must fail on ANY candidate byte difference, so this returns the
- * precise members rather than a boolean: "the candidates differ" is not
- * actionable, "prop_atlas page 3 changed" is.
+ * Returns the precise members rather than a boolean: "the candidates differ" is
+ * not actionable, "prop_atlas page 3 changed" is.
  */
 export const diffCandidateLocks = (options: {
   approved: CandidateLock;
@@ -174,9 +258,12 @@ export const diffCandidateLocks = (options: {
     modified: readonly string[];
   }[] = [];
 
+  // Driven by the schema's exported tuple rather than by sniffing the lock's
+  // keys: a group added to the schema is then automatically compared, and a
+  // non-group field can never be mistaken for one.
   for (const name of CANDIDATE_GROUPS) {
-    const a = approved[name] as CandidateGroup;
-    const b = promoting[name] as CandidateGroup;
+    const a: CandidateGroup = approved[name];
+    const b: CandidateGroup = promoting[name];
     if (a.digest === b.digest) {
       continue;
     }
@@ -191,29 +278,14 @@ export const diffCandidateLocks = (options: {
     });
   }
 
-  const releasePlane: string[] = [];
-  for (const field of ['catalogRootHash', 'packLockHash'] as const) {
-    if (approved[field] !== promoting[field]) {
-      releasePlane.push(
-        `${field}: ${approved[field] || '(none)'} → ${promoting[field] || '(none)'}`,
-      );
-    }
-  }
-  const shardKeys = new Set([
-    ...Object.keys(approved.catalogShards),
-    ...Object.keys(promoting.catalogShards),
-  ]);
-  for (const key of [...shardKeys].sort()) {
-    const a = approved.catalogShards[key] ?? '(none)';
-    const b = promoting.catalogShards[key] ?? '(none)';
-    if (a !== b) {
-      releasePlane.push(`shard ${key}: ${a} → ${b}`);
-    }
-  }
-
   return {
-    identical: changedGroups.length === 0 && releasePlane.length === 0,
+    identical:
+      changedGroups.length === 0 &&
+      approved.source.commit === promoting.source.commit &&
+      approved.source.tree === promoting.source.tree,
     changedGroups,
-    releasePlane,
+    sourceChanged:
+      approved.source.commit !== promoting.source.commit ||
+      approved.source.tree !== promoting.source.tree,
   };
 };
