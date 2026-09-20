@@ -2592,6 +2592,12 @@
           "snapshot": "legacy-catalog-order-v1"
         }
       },
+      "visual": {
+        "kind": "static",
+        "url": "/content-packs/emberwatch/enemies/ash_hound.png",
+        "width": 214,
+        "height": 192
+      },
       "isVendor": false,
       "combatStats": {
         "hitPoints": 9,
@@ -2644,6 +2650,12 @@
           "snapshot": "legacy-catalog-order-v1"
         }
       },
+      "visual": {
+        "kind": "static",
+        "url": "/content-packs/emberwatch/enemies/cinder_thrall.png",
+        "width": 102,
+        "height": 166
+      },
       "isVendor": false,
       "combatStats": {
         "hitPoints": 12,
@@ -2695,6 +2707,12 @@
           "source": "manifest:appearanceLayers",
           "snapshot": "legacy-catalog-order-v1"
         }
+      },
+      "visual": {
+        "kind": "static",
+        "url": "/content-packs/emberwatch/enemies/ember_warden.png",
+        "width": 106,
+        "height": 259
       },
       "isVendor": false,
       "combatStats": {

@@ -44,6 +44,44 @@ const sha256 = (path: string): string =>
 /** `music:exploration:village_ward` → `music/exploration/village_ward.webm`. */
 const runtimePathFor = (tag: string, ext: string): string => `${tag.replace(/:/g, '/')}${ext}`;
 
+/**
+ * Installs one authored audio bed under its pinned tag.
+ *
+ * A tag whose manifest pin disagrees with the file on disk is a producer
+ * defect: publishing it would ship bytes the client is required to refuse.
+ */
+const installCue = (options: {
+  tag: string;
+  file: string;
+  pinned: Map<string, string>;
+  checkOnly: boolean;
+}): { tag: string; path: string; sha256: string } => {
+  const source = join(packAudio, options.file);
+  if (!existsSync(source)) {
+    throw new Error(`install_emberwatch_audio: ${source} is missing`);
+  }
+  const sourceHash = sha256(source);
+  const declared = options.pinned.get(options.tag);
+  if (declared !== undefined && declared !== sourceHash) {
+    throw new Error(
+      `install_emberwatch_audio: ${options.file} hashes ${sourceHash.slice(0, 12)} but the manifest pins ${declared.slice(0, 12)} for ${options.tag} — refusing to publish bytes that do not satisfy the pin`,
+    );
+  }
+  const relative = runtimePathFor(options.tag, '.webm');
+  const destination = join(repository, 'apps/frontend/client/static/game-data', relative);
+  if (options.checkOnly) {
+    if (!existsSync(destination) || sha256(destination) !== sourceHash) {
+      throw new Error(
+        `install_emberwatch_audio: installed ${relative} is missing or differs from ${options.file}`,
+      );
+    }
+  } else {
+    mkdirSync(dirname(destination), { recursive: true });
+    copyFileSync(source, destination);
+  }
+  return { tag: options.tag, path: relative, sha256: sourceHash };
+};
+
 const main = (): void => {
   const checkOnly = process.argv.includes('--check');
   const manifest = JSON.parse(
@@ -54,33 +92,7 @@ const main = (): void => {
     (manifest.audio?.bindings ?? []).map((binding) => [binding.tag, binding.sha256]),
   );
 
-  const installed: { tag: string; path: string; sha256: string }[] = [];
-  for (const [tag, file] of CUES) {
-    const source = join(packAudio, file);
-    if (!existsSync(source)) {
-      throw new Error(`install_emberwatch_audio: ${source} is missing`);
-    }
-    const sourceHash = sha256(source);
-    const declared = pinned.get(tag);
-    if (declared !== undefined && declared !== sourceHash) {
-      throw new Error(
-        `install_emberwatch_audio: ${file} hashes ${sourceHash.slice(0, 12)} but the manifest pins ${declared.slice(0, 12)} for ${tag} — refusing to publish bytes that do not satisfy the pin`,
-      );
-    }
-    const relative = runtimePathFor(tag, '.webm');
-    const destination = join(repository, 'apps/frontend/client/static/game-data', relative);
-    installed.push({ tag, path: relative, sha256: sourceHash });
-    if (checkOnly) {
-      if (!existsSync(destination) || sha256(destination) !== sourceHash) {
-        throw new Error(
-          `install_emberwatch_audio: installed ${relative} is missing or differs from ${file}`,
-        );
-      }
-    } else {
-      mkdirSync(dirname(destination), { recursive: true });
-      copyFileSync(source, destination);
-    }
-  }
+  const installed = CUES.map(([tag, file]) => installCue({ tag, file, pinned, checkOnly }));
 
   console.log(
     `install_emberwatch_audio: ${installed.length} authored bed(s) published under their pinned tags${checkOnly ? ' (check only)' : ''}`,

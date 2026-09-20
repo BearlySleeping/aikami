@@ -7,13 +7,13 @@
   "packUpdatedAt": "2026-09-18T00:00:00.000Z",
   "generatedAt": "1980-01-01T00:00:00.000Z",
   "summary": {
-    "accepted/current": 108,
+    "accepted/current": 134,
     "acceptable-shared": 84,
     "placeholder/wrong-semantic-reuse": 0,
-    "missing": 2,
+    "missing": 0,
     "needs-regeneration": 1,
     "needs-map-layout-change": 0,
-    "needs-runtime-capability": 3
+    "needs-runtime-capability": 0
   },
   "counts": {
     "maps": 5,
@@ -31,7 +31,7 @@
     "sourceImages": 21,
     "transitions": 8,
     "catalogTags": 14,
-    "findings": 198
+    "findings": 219
   },
   "findings": [
     {
@@ -751,8 +751,8 @@
     {
       "id": "enemy-visual:ash_hound",
       "surface": "enemy-visual",
-      "classification": "needs-runtime-capability",
-      "detail": "Ash Hound renders as a generic humanoid LPC body (body/bodies_male, hair/plain_adult, torso/chainmail_male, legs/pants_male, feet/boots/basic_male, head/heads/human_male) — no authored hostile visual"
+      "classification": "accepted/current",
+      "detail": "authored static visual (/content-packs/emberwatch/enemies/ash_hound.png)"
     },
     {
       "id": "portrait:ash_hound",
@@ -775,8 +775,8 @@
     {
       "id": "enemy-visual:cinder_thrall",
       "surface": "enemy-visual",
-      "classification": "needs-runtime-capability",
-      "detail": "Cinder Thrall renders as a generic humanoid LPC body (body/bodies_male, hair/plain_adult, torso/chainmail_male, legs/pants_male, feet/boots/basic_male, head/heads/human_male) — no authored hostile visual"
+      "classification": "accepted/current",
+      "detail": "authored static visual (/content-packs/emberwatch/enemies/cinder_thrall.png)"
     },
     {
       "id": "portrait:cinder_thrall",
@@ -799,8 +799,8 @@
     {
       "id": "enemy-visual:ember_warden",
       "surface": "enemy-visual",
-      "classification": "needs-runtime-capability",
-      "detail": "Ember Warden renders as a generic humanoid LPC body (body/bodies_male, hair/plain_adult, torso/chainmail_male, legs/pants_male, feet/boots/basic_male, head/heads/human_male) — no authored hostile visual"
+      "classification": "accepted/current",
+      "detail": "authored static visual (/content-packs/emberwatch/enemies/ember_warden.png)"
     },
     {
       "id": "portrait:ember_warden",
@@ -1129,14 +1129,140 @@
     {
       "id": "atlas:frames",
       "surface": "atlas-frame",
-      "classification": "missing",
-      "detail": "grid atlas.json is not built — run generate_emberwatch_atlas.ts"
+      "classification": "accepted/current",
+      "detail": "grid atlas declares 128 frames (expected 128)"
     },
     {
       "id": "props-atlas:frames",
       "surface": "atlas-frame",
-      "classification": "missing",
-      "detail": "prop atlas props.json is not built — run generate_emberwatch_props_atlas.ts"
+      "classification": "accepted/current",
+      "detail": "prop atlas declares 21 frames for 21 source images"
+    },
+    {
+      "id": "prop-frame:prop_support.png",
+      "surface": "prop-frame",
+      "classification": "accepted/current",
+      "detail": "packed prop-atlas frame"
+    },
+    {
+      "id": "prop-frame:inn.png",
+      "surface": "prop-frame",
+      "classification": "accepted/current",
+      "detail": "packed prop-atlas frame"
+    },
+    {
+      "id": "prop-frame:shop.png",
+      "surface": "prop-frame",
+      "classification": "accepted/current",
+      "detail": "packed prop-atlas frame"
+    },
+    {
+      "id": "prop-frame:prop_ward_socket.png",
+      "surface": "prop-frame",
+      "classification": "accepted/current",
+      "detail": "packed prop-atlas frame"
+    },
+    {
+      "id": "prop-frame:shrine_arch.png",
+      "surface": "prop-frame",
+      "classification": "accepted/current",
+      "detail": "packed prop-atlas frame"
+    },
+    {
+      "id": "prop-frame:oak.png",
+      "surface": "prop-frame",
+      "classification": "accepted/current",
+      "detail": "packed prop-atlas frame"
+    },
+    {
+      "id": "prop-frame:birch.png",
+      "surface": "prop-frame",
+      "classification": "accepted/current",
+      "detail": "packed prop-atlas frame"
+    },
+    {
+      "id": "prop-frame:ward_large.png",
+      "surface": "prop-frame",
+      "classification": "accepted/current",
+      "detail": "packed prop-atlas frame"
+    },
+    {
+      "id": "prop-frame:prop_cart.png",
+      "surface": "prop-frame",
+      "classification": "accepted/current",
+      "detail": "packed prop-atlas frame"
+    },
+    {
+      "id": "prop-frame:prop_hearth.png",
+      "surface": "prop-frame",
+      "classification": "accepted/current",
+      "detail": "packed prop-atlas frame"
+    },
+    {
+      "id": "prop-frame:prop_component.png",
+      "surface": "prop-frame",
+      "classification": "accepted/current",
+      "detail": "packed prop-atlas frame"
+    },
+    {
+      "id": "prop-frame:prop_barrel.png",
+      "surface": "prop-frame",
+      "classification": "accepted/current",
+      "detail": "packed prop-atlas frame"
+    },
+    {
+      "id": "prop-frame:prop_receipt.png",
+      "surface": "prop-frame",
+      "classification": "accepted/current",
+      "detail": "packed prop-atlas frame"
+    },
+    {
+      "id": "prop-frame:prop_gate.png",
+      "surface": "prop-frame",
+      "classification": "accepted/current",
+      "detail": "packed prop-atlas frame"
+    },
+    {
+      "id": "prop-frame:prop_brazier.png",
+      "surface": "prop-frame",
+      "classification": "accepted/current",
+      "detail": "packed prop-atlas frame"
+    },
+    {
+      "id": "prop-frame:ward_small_a.png",
+      "surface": "prop-frame",
+      "classification": "accepted/current",
+      "detail": "packed prop-atlas frame"
+    },
+    {
+      "id": "prop-frame:ward_small_b.png",
+      "surface": "prop-frame",
+      "classification": "accepted/current",
+      "detail": "packed prop-atlas frame"
+    },
+    {
+      "id": "prop-frame:ward_small_c.png",
+      "surface": "prop-frame",
+      "classification": "accepted/current",
+      "detail": "packed prop-atlas frame"
+    },
+    {
+      "id": "prop-frame:prop_oil_pool.png",
+      "surface": "prop-frame",
+      "classification": "accepted/current",
+      "detail": "packed prop-atlas frame"
+    },
+    {
+      "id": "prop-frame:prop_notice_board.png",
+      "surface": "prop-frame",
+      "classification": "accepted/current",
+      "detail": "packed prop-atlas frame"
+    },
+    {
+      "id": "prop-frame:chair.png",
+      "surface": "prop-frame",
+      "classification": "accepted/current",
+      "detail": "packed prop-atlas frame"
     },
     {
       "id": "catalog-tag:index",
@@ -1223,18 +1349,5 @@
       "detail": "required by the pack at boot or during play"
     }
   ],
-  "blockers": [
-    {
-      "id": "atlas:frames",
-      "surface": "atlas-frame",
-      "classification": "missing",
-      "detail": "grid atlas.json is not built — run generate_emberwatch_atlas.ts"
-    },
-    {
-      "id": "props-atlas:frames",
-      "surface": "atlas-frame",
-      "classification": "missing",
-      "detail": "prop atlas props.json is not built — run generate_emberwatch_props_atlas.ts"
-    }
-  ]
+  "blockers": []
 }

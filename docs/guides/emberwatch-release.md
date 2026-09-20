@@ -245,6 +245,47 @@ source state, or nobody else can reproduce it. The schema has no `sourceDirty`
 field for the same reason — a field that can only hold one value is not
 information.
 
+## Visual validation: a required HUMAN gate (level C)
+
+The release has two independent gates, and they must not be conflated:
+
+| Gate | What it proves | Who runs it |
+|---|---|---|
+| Programmatic | every reference resolves, every landing is walkable, the candidate matches the source | CI (`bun moon ci --base=origin/main`, `scripts:automation-unit`, `client:test-browser`) |
+| **Visual** | the maps actually *look* right | **a human, on a GPU-capable browser** |
+
+This PR deliberately does **not** claim a programmatic visual gate. The
+headless lanes available in CI do not provide working WebGL for the PixiJS
+render path — that has been established repeatedly, and re-testing headless
+flags is not a productive use of a release pass. So the visual gate is level C
+of the three options (existing CI lane / explicit GPU Playwright lane /
+documented human acceptance): **documented human acceptance**.
+
+### The human checklist (run before `--apply` on any remote mode)
+
+Boot the client from the candidate commit and walk all five maps. Confirm:
+
+- **Terrain** — grass/dirt/path/water read as distinct surfaces; no
+  fallback-grass squares where a terrain should be.
+- **Large props and buildings** — the inn, shop, smithy, cottages, ward tree and
+  gate render at their authored footprints; nothing floats or sinks.
+- **Occlusion** — the ward-tree canopy draws over the player; building roofs
+  draw over actors inside them.
+- **Water and bridges** — the stream reads as water and is impassable; the stone
+  bridge is the only dry crossing.
+- **NPC appearance** — every story NPC renders as an authored LPC composition,
+  not a generic humanoid stand-in.
+- **Portraits** — every dialogue bust resolves, with `neutral` as the fallback
+  for an unavailable expression.
+- **No missing frames** — no magenta/blank placeholder tiles or sprites.
+- **Static hostile visuals** — `ash_hound`, `cinder_thrall` and `ember_warden`
+  render as their authored art, not as LPC humanoids.
+- **All eight transitions** — walk each of the eight edges; each lands on a
+  walkable cell, does not re-trigger, and does not bounce back.
+
+Record the result in the release report. A programmatic green is NOT a visual
+green, and this section exists so that distinction cannot be quietly lost.
+
 ## Staging is blocked on a HUMAN infrastructure action
 
 The code correctly refuses the current staging environment. It is not

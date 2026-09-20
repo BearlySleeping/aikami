@@ -345,6 +345,19 @@ describe('receipts report activation and alias degradation separately', () => {
     expect(r.releaseId).toBe('');
   });
 
+  test('the receipt records the publisher\u2019s own release id, never an invented one', () => {
+    const published = receipt({
+      ok: true,
+      releaseWritten: true,
+      releaseId: '2026-09-20T00:00:00.000Z',
+    });
+    expect(published.releaseId).toBe('2026-09-20T00:00:00.000Z');
+    // A publisher that never reached the activation phase supplies none, and a
+    // receipt that fabricated a timestamp could not name the pointer a rollback
+    // has to re-point.
+    expect(receipt({ ok: false, releaseWritten: false }).releaseId).toBe('');
+  });
+
   test('a post-activation alias failure does NOT deactivate the release', () => {
     // The immutable release is valid and active; the alias is a separate,
     // degraded concern. Rolling back a valid release would be wrong.

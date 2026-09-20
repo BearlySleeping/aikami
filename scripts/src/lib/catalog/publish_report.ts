@@ -68,6 +68,11 @@ export type CatalogPublishReport = {
   legacyAlias: { key: string; written: boolean; error?: string };
   /** Whether the versioned release pointer was written this run (AC-4). */
   releaseWritten: boolean;
+  /**
+   * The release id this run pinned into the pointer, when one was produced.
+   * Absent for a publish that refused before the activation phase.
+   */
+  releaseId?: string;
   elapsedMs: number;
 };
 

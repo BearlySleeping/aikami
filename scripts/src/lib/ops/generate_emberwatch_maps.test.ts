@@ -7,6 +7,7 @@
 // the maps are ever regenerated.
 
 import { describe, expect, test } from 'bun:test';
+import type { SceneTransition } from '@aikami/schemas';
 import { buildInn, buildShop, buildVillage } from './emberwatch_map_retained.ts';
 import type { MapObjectLayer } from './emberwatch_map_shared.ts';
 import { buildOldRoad, buildRuinedShrine } from './generate_emberwatch_maps_extra.ts';
@@ -197,20 +198,25 @@ describe('Emberwatch transition fallbacks clear the reciprocal exit', () => {
     ruined_shrine: buildRuinedShrine,
   } as const;
 
+  /**
+   * One authored transition as the world index reads it: the production
+   * destination shape (`SceneTransition`) plus the source rect geometry the
+   * fallback guards below measure against.
+   *
+   * `targetSpawnId` is optional in the schema; the index normalises an absent
+   * marker to the empty string, so the local shape narrows it to `string`.
+   */
+  type WorldTransition = Pick<SceneTransition, 'targetMap' | 'targetX' | 'targetY'> & {
+    targetSpawnId: string;
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+  };
+
   /** Every transition rect and every arrival marker, keyed by map. */
   const world = (() => {
-    const transitions = new Map<
-      string,
-      Array<{
-        targetMap: string;
-        targetX: number;
-        targetY: number;
-        x: number;
-        y: number;
-        w: number;
-        h: number;
-      }>
-    >();
+    const transitions = new Map<string, WorldTransition[]>();
     const markers = new Map<string, Array<{ spawnId: string; x: number; y: number }>>();
     for (const [mapId, build] of Object.entries(builds)) {
       const { objectLayers } = build();

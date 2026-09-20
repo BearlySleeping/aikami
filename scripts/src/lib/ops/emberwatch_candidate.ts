@@ -27,6 +27,7 @@ import { Value } from 'typebox/value';
 import {
   buildGroups,
   type DeclaredGroup,
+  type DeclaredMember,
   diffCandidateLocks,
   gate,
   sealCandidate,
@@ -76,6 +77,130 @@ type PackManifest = {
   audio?: { bindings?: { tag?: string }[] };
 };
 
+/** The manifest group: the pack's own descriptor, always required. */
+const manifestGroup = (): DeclaredGroup => ({
+  name: 'manifest',
+  members: [{ id: 'manifest.json', path: join(PACK_ROOT, 'manifest.json'), role: 'required' }],
+});
+
+/** Exactly the maps the manifest declares. */
+const mapsGroup = (manifest: PackManifest): DeclaredGroup => ({
+  name: 'maps',
+  members: Object.entries(manifest.maps ?? {}).map(([mapId, entry]) => ({
+    id: `maps/${mapId}.json`,
+    path: entry.file
+      ? resolvePackUrl(`/content-packs/emberwatch/${entry.file}`)
+      : join(PACK_ROOT, 'maps', `${mapId}.json`),
+    role: 'required' as const,
+  })),
+});
+
+/**
+ * Terrain atlas — texture + frame definition, both required.
+ *
+ * The earlier revision hashed a nonexistent directory here, so the group
+ * sealed EMPTY and could not notice a different atlas being promoted.
+ */
+const terrainAtlasGroup = (manifest: PackManifest): DeclaredGroup => {
+  const members: DeclaredMember[] = [];
+  if (manifest.atlas?.textureUrl) {
+    members.push({
+      id: 'tilesets/atlas.webp',
+      path: resolveGameDataUrl(manifest.atlas.textureUrl),
+      role: 'required',
+    });
+  }
+  if (manifest.atlas?.spritesheetUrl) {
+    members.push({
+      id: 'tilesets/atlas.json',
+      path: resolveGameDataUrl(manifest.atlas.spritesheetUrl),
+      role: 'required',
+    });
+  }
+  return { name: 'terrainAtlas', members };
+};
+
+/** Prop atlases — every page the manifest declares, plus the source art tree. */
+const propAtlasGroup = (manifest: PackManifest): DeclaredGroup => {
+  const members: DeclaredMember[] = [];
+  for (const [index, page] of (manifest.propAtlases ?? []).entries()) {
+    if (page.textureUrl) {
+      members.push({
+        id: `props/page${index}.webp`,
+        path: resolveGameDataUrl(page.textureUrl),
+        role: 'required',
+      });
+    }
+    if (page.spritesheetUrl) {
+      members.push({
+        id: `props/page${index}.json`,
+        path: resolveGameDataUrl(page.spritesheetUrl),
+        role: 'required',
+      });
+    }
+  }
+  const propsPagesPath = join(GAME_DATA, 'sprites/tilesets/props.pages.json');
+  if (existsSync(propsPagesPath)) {
+    members.push({ id: 'props/pages.json', path: propsPagesPath, role: 'optional' });
+  }
+  members.push({
+    id: 'props-src',
+    path: join(PACK_ROOT, 'props'),
+    role: 'optional',
+    tree: true,
+    extensions: IMAGES,
+  });
+  return { name: 'propAtlas', members };
+};
+
+/** Portraits — every variant the manifest binds, scoped to this pack. */
+const portraitsGroup = (manifest: PackManifest): DeclaredGroup => {
+  const members: DeclaredMember[] = [];
+  for (const npc of Object.values(manifest.npcs ?? {})) {
+    for (const url of Object.values(npc.portraits?.variants ?? {})) {
+      members.push({
+        id: `portraits/${url.split('/portraits/')[1] ?? url}`,
+        path: resolveGameDataUrl(url),
+        role: 'required',
+      });
+    }
+  }
+  return { name: 'portraits', members };
+};
+
+/** Authored non-LPC world art. */
+const enemyVisualsGroup = (): DeclaredGroup => ({
+  name: 'enemyVisuals',
+  members: [
+    {
+      id: 'enemies',
+      path: join(PACK_ROOT, 'enemies'),
+      role: 'optional',
+      tree: true,
+      extensions: IMAGES,
+    },
+  ],
+});
+
+/** Every authored cue the manifest binds, resolved to the file that exists. */
+const audioGroup = (manifest: PackManifest): DeclaredGroup => {
+  const members: DeclaredMember[] = [];
+  for (const binding of manifest.audio?.bindings ?? []) {
+    const [, , name] = (binding.tag ?? '').split(':');
+    if (!name) {
+      continue;
+    }
+    for (const ext of MEDIA) {
+      const candidate = join(PACK_ROOT, 'audio', `${name}${ext}`);
+      if (existsSync(candidate)) {
+        members.push({ id: `audio/${name}${ext}`, path: candidate, role: 'required' });
+        break;
+      }
+    }
+  }
+  return { name: 'audio', members };
+};
+
 /**
  * Declares every group from the MANIFEST.
  *
@@ -83,128 +208,15 @@ type PackManifest = {
  * to find. That distinction is what makes "a required member is missing" a
  * decidable failure rather than a silently smaller group.
  */
-export const declareGroups = (manifest: PackManifest): DeclaredGroup[] => {
-  const groups: DeclaredGroup[] = [];
-
-  // ── manifest ──────────────────────────────────────────────────────────
-  groups.push({
-    name: 'manifest',
-    members: [{ id: 'manifest.json', path: join(PACK_ROOT, 'manifest.json'), role: 'required' }],
-  });
-
-  // ── maps — exactly the maps the manifest declares ─────────────────────
-  groups.push({
-    name: 'maps',
-    members: Object.entries(manifest.maps ?? {}).map(([mapId, entry]) => ({
-      id: `maps/${mapId}.json`,
-      path: entry.file
-        ? resolvePackUrl(`/content-packs/emberwatch/${entry.file}`)
-        : join(PACK_ROOT, 'maps', `${mapId}.json`),
-      role: 'required' as const,
-    })),
-  });
-
-  // ── terrain atlas — texture + frame definition, both required ─────────
-  // The earlier revision hashed a nonexistent directory here, so the group
-  // sealed EMPTY and could not notice a different atlas being promoted.
-  const atlasMembers = [];
-  if (manifest.atlas?.textureUrl) {
-    atlasMembers.push({
-      id: 'tilesets/atlas.webp',
-      path: resolveGameDataUrl(manifest.atlas.textureUrl),
-      role: 'required' as const,
-    });
-  }
-  if (manifest.atlas?.spritesheetUrl) {
-    atlasMembers.push({
-      id: 'tilesets/atlas.json',
-      path: resolveGameDataUrl(manifest.atlas.spritesheetUrl),
-      role: 'required' as const,
-    });
-  }
-  groups.push({ name: 'terrainAtlas', members: atlasMembers });
-
-  // ── prop atlases — every page the manifest declares, plus source art ──
-  const propMembers = [];
-  for (const [index, page] of (manifest.propAtlases ?? []).entries()) {
-    if (page.textureUrl) {
-      propMembers.push({
-        id: `props/page${index}.webp`,
-        path: resolveGameDataUrl(page.textureUrl),
-        role: 'required' as const,
-      });
-    }
-    if (page.spritesheetUrl) {
-      propMembers.push({
-        id: `props/page${index}.json`,
-        path: resolveGameDataUrl(page.spritesheetUrl),
-        role: 'required' as const,
-      });
-    }
-  }
-  const propsPagesPath = join(GAME_DATA, 'sprites/tilesets/props.pages.json');
-  if (existsSync(propsPagesPath)) {
-    propMembers.push({ id: 'props/pages.json', path: propsPagesPath, role: 'optional' as const });
-  }
-  propMembers.push({
-    id: 'props-src',
-    path: join(PACK_ROOT, 'props'),
-    role: 'optional' as const,
-    tree: true,
-    extensions: IMAGES,
-  });
-  groups.push({ name: 'propAtlas', members: propMembers });
-
-  // ── portraits — every variant the manifest binds, scoped to this pack ──
-  const portraitMembers = [];
-  for (const npc of Object.values(manifest.npcs ?? {})) {
-    for (const url of Object.values(npc.portraits?.variants ?? {})) {
-      portraitMembers.push({
-        id: `portraits/${url.split('/portraits/')[1] ?? url}`,
-        path: resolveGameDataUrl(url),
-        role: 'required' as const,
-      });
-    }
-  }
-  groups.push({ name: 'portraits', members: portraitMembers });
-
-  // ── enemy visuals — authored non-LPC world art ────────────────────────
-  groups.push({
-    name: 'enemyVisuals',
-    members: [
-      {
-        id: 'enemies',
-        path: join(PACK_ROOT, 'enemies'),
-        role: 'optional',
-        tree: true,
-        extensions: IMAGES,
-      },
-    ],
-  });
-
-  // ── audio — every authored cue the manifest binds ─────────────────────
-  const audioMembers = [];
-  for (const binding of manifest.audio?.bindings ?? []) {
-    const tag = binding.tag ?? '';
-    const [, , name] = tag.split(':');
-    if (name) {
-      for (const ext of MEDIA) {
-        const candidate = join(PACK_ROOT, 'audio', `${name}${ext}`);
-        if (existsSync(candidate)) {
-          audioMembers.push({
-            id: `audio/${name}${ext}`,
-            path: candidate,
-            role: 'required' as const,
-          });
-          break;
-        }
-      }
-    }
-  }
-  groups.push({ name: 'audio', members: audioMembers });
-
-  return groups;
-};
+export const declareGroups = (manifest: PackManifest): DeclaredGroup[] => [
+  manifestGroup(),
+  mapsGroup(manifest),
+  terrainAtlasGroup(manifest),
+  propAtlasGroup(manifest),
+  portraitsGroup(manifest),
+  enemyVisualsGroup(),
+  audioGroup(manifest),
+];
 
 export type SealOutcome =
   | { ok: true; lock: CandidateLock; path: string }
@@ -279,102 +291,148 @@ const describe = (lock: CandidateLock): string =>
 const lockPath = (lockHash: string): string => join(RELEASE_PLANE, `candidate-${lockHash}.json`);
 const latestPath = (): string => join(RELEASE_PLANE, 'candidate.latest.json');
 
-const main = (): void => {
-  const verify = process.argv.includes('--verify');
-  const show = process.argv.includes('--show');
+/**
+ * The sealed candidate, or a refusal naming exactly where to look.
+ *
+ * Validation is delegated to `loadSealedCandidate` so a lock that has been
+ * edited (or that no longer re-derives) is refused with the same precise reason
+ * everywhere, instead of being read as if it were intact.
+ */
+const requireSealedCandidate = (): CandidateLock => {
+  const path = latestPath();
+  if (!existsSync(path)) {
+    console.error(`❌ no sealed candidate at ${path} — seal one first.`);
+    process.exit(1);
+  }
+  try {
+    return loadSealedCandidate();
+  } catch (error) {
+    console.error(`❌ ${error instanceof Error ? error.message : String(error)}`);
+    process.exit(1);
+  }
+};
 
-  if (show) {
-    if (!existsSync(latestPath())) {
-      console.error(`❌ no sealed candidate at ${latestPath()} — seal one first.`);
-      process.exit(1);
-    }
-    const sealed = JSON.parse(readFileSync(latestPath(), 'utf8')) as CandidateLock;
-    console.log(describe(sealed));
+/**
+ * A candidate must correspond to a committed source state, or nobody else can
+ * re-derive it. There is deliberately no --allow-dirty.
+ */
+const assertCleanWorktree = (): void => {
+  const dirty = git(['status', '--porcelain']);
+  if (dirty.length === 0) {
     return;
   }
+  console.error(
+    '❌ refusing to seal — the working tree has uncommitted changes.\n' +
+      '   A candidate must correspond to a committed source state, or nobody else can\n' +
+      '   re-derive it. Commit or stash first; there is deliberately no --allow-dirty.',
+  );
+  for (const line of dirty.split('\n').slice(0, 10)) {
+    console.error(`     ${line}`);
+  }
+  process.exit(1);
+};
 
-  const dirty = git(['status', '--porcelain']);
-  if (dirty.length > 0) {
+const assertNoMissingMembers = (missing: readonly string[]): void => {
+  if (missing.length === 0) {
+    return;
+  }
+  console.error(
+    `❌ refusing to seal — ${missing.length} REQUIRED member(s) declared by the manifest are absent:`,
+  );
+  for (const entry of missing) {
+    console.error(`     ${entry}`);
+  }
+  console.error(
+    '   A required member that cannot be hashed would seal a smaller candidate than the\n' +
+      '   pack declares, and nothing downstream could notice.',
+  );
+  process.exit(1);
+};
+
+const assertLockSchema = (lock: CandidateLock): void => {
+  if (Value.Check(CandidateLockSchema, lock)) {
+    return;
+  }
+  console.error('❌ the candidate lock failed CandidateLockSchema validation — NOT written.');
+  for (const error of [...Value.Errors(CandidateLockSchema, lock)].slice(0, 5)) {
+    console.error(`   ${error.instancePath || '/'}: ${error.message}`);
+  }
+  process.exit(1);
+};
+
+/** Prints exactly which groups moved, and how. */
+const reportLockDiff = (options: {
+  diff: ReturnType<typeof diffCandidateLocks>;
+  sealed: CandidateLock;
+  lock: CandidateLock;
+}): void => {
+  const { diff, sealed, lock } = options;
+  console.error('❌ the working tree no longer matches the sealed candidate:');
+  if (diff.sourceChanged) {
     console.error(
-      '❌ refusing to seal — the working tree has uncommitted changes.\n' +
-        '   A candidate must correspond to a committed source state, or nobody else can\n' +
-        '   re-derive it. Commit or stash first; there is deliberately no --allow-dirty.',
+      `   source: ${sealed.source.commit.slice(0, 10)} → ${lock.source.commit.slice(0, 10)}`,
     );
-    for (const line of dirty.split('\n').slice(0, 10)) {
-      console.error(`     ${line}`);
-    }
-    process.exit(1);
   }
-
-  const { lock, missing } = buildCandidateLock();
-
-  if (missing.length > 0) {
-    console.error(
-      `❌ refusing to seal — ${missing.length} REQUIRED member(s) declared by the manifest are absent:`,
-    );
-    for (const entry of missing) {
-      console.error(`     ${entry}`);
+  for (const changed of diff.changedGroups) {
+    console.error(`   ${changed.group}:`);
+    for (const id of changed.added) {
+      console.error(`     + ${id}`);
     }
-    console.error(
-      '   A required member that cannot be hashed would seal a smaller candidate than the\n' +
-        '   pack declares, and nothing downstream could notice.',
-    );
-    process.exit(1);
+    for (const id of changed.removed) {
+      console.error(`     - ${id}`);
+    }
+    for (const id of changed.modified) {
+      console.error(`     ~ ${id}`);
+    }
   }
+};
 
-  if (!Value.Check(CandidateLockSchema, lock)) {
-    console.error('❌ the candidate lock failed CandidateLockSchema validation — NOT written.');
-    for (const error of [...Value.Errors(CandidateLockSchema, lock)].slice(0, 5)) {
-      console.error(`   ${error.instancePath || '/'}: ${error.message}`);
-    }
-    process.exit(1);
+/** `--verify`: the working tree must still re-derive the sealed candidate. */
+const verifyAgainstSealed = (lock: CandidateLock): void => {
+  const sealed = requireSealedCandidate();
+  const diff = diffCandidateLocks({ approved: sealed, promoting: lock });
+  if (diff.identical) {
+    console.log(`✅ candidate verified — ${sealed.lockHash}`);
+    console.log(describe(lock));
+    return;
   }
+  reportLockDiff({ diff, sealed, lock });
+  process.exit(1);
+};
 
-  if (verify) {
-    if (!existsSync(latestPath())) {
-      console.error(`❌ no sealed candidate at ${latestPath()} — seal one first.`);
-      process.exit(1);
-    }
-    const sealed = JSON.parse(readFileSync(latestPath(), 'utf8')) as CandidateLock;
-    const diff = diffCandidateLocks({ approved: sealed, promoting: lock });
-    if (diff.identical) {
-      console.log(`✅ candidate verified — ${sealed.lockHash}`);
-      console.log(describe(lock));
-      return;
-    }
-    console.error('❌ the working tree no longer matches the sealed candidate:');
-    if (diff.sourceChanged) {
-      console.error(
-        `   source: ${sealed.source.commit.slice(0, 10)} → ${lock.source.commit.slice(0, 10)}`,
-      );
-    }
-    for (const changed of diff.changedGroups) {
-      console.error(`   ${changed.group}:`);
-      for (const id of changed.added) {
-        console.error(`     + ${id}`);
-      }
-      for (const id of changed.removed) {
-        console.error(`     - ${id}`);
-      }
-      for (const id of changed.modified) {
-        console.error(`     ~ ${id}`);
-      }
-    }
-    process.exit(1);
-  }
-
+/** Seals the candidate: gates first, then the two immutable lock artifacts. */
+const sealCandidateToDisk = (lock: CandidateLock): void => {
   if (!lock.rights.passed || !lock.surface.passed) {
     console.error('❌ refusing to seal — a gate failed:');
     console.error(describe(lock));
     process.exit(1);
   }
-
   mkdirSync(RELEASE_PLANE, { recursive: true });
   writeFileSync(lockPath(lock.lockHash), `${JSON.stringify(lock, null, 2)}\n`);
   writeFileSync(latestPath(), `${JSON.stringify(lock, null, 2)}\n`);
   console.log(`🔒 candidate sealed — ${lock.lockHash}`);
   console.log(describe(lock));
   console.log(`\n  written to ${lockPath(lock.lockHash)}`);
+};
+
+const main = (): void => {
+  const verify = process.argv.includes('--verify');
+
+  if (process.argv.includes('--show')) {
+    console.log(describe(requireSealedCandidate()));
+    return;
+  }
+
+  assertCleanWorktree();
+  const { lock, missing } = buildCandidateLock();
+  assertNoMissingMembers(missing);
+  assertLockSchema(lock);
+
+  if (verify) {
+    verifyAgainstSealed(lock);
+    return;
+  }
+  sealCandidateToDisk(lock);
 };
 
 /** Loads the sealed candidate, or throws with a precise reason. */

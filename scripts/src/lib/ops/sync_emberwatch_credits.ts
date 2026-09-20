@@ -35,6 +35,13 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { MODEL_RIGHTS_EVIDENCE, type ModelRightsRecord } from '../catalog/model_rights_evidence.ts';
 
+/** The parts of the pack manifest this script reads. */
+type PackManifest = {
+  props: Record<string, { frame: string; provenance?: { source?: string } }>;
+  npcs: Record<string, { portraits?: { variants: Record<string, string> } }>;
+  audio?: { bindings?: { tag: string }[] };
+};
+
 const here = dirname(fileURLToPath(import.meta.url));
 const repository = join(here, '../../../..');
 const licensesPath = join(repository, 'scripts/src/lib/catalog/project_licenses.json');
@@ -166,94 +173,151 @@ const isDerivedGeneratedEntry = (credit: Credit): boolean =>
         author === 'ace-step (audio-ace-step-v1-3.5b)',
     ));
 
-const main = (): void => {
-  const checkOnly = process.argv.includes('--check');
-  const file = JSON.parse(readFileSync(licensesPath, 'utf8')) as {
-    credits: Record<string, Credit>;
-  };
-  const manifest = JSON.parse(readFileSync(join(packRoot, 'manifest.json'), 'utf8')) as {
-    props: Record<string, { frame: string; provenance?: { source?: string } }>;
-    npcs: Record<string, { portraits?: { variants: Record<string, string> } }>;
-    audio?: { bindings?: { tag: string }[] };
-  };
+/** The five Emberwatch maps, each a catalog tag the pack needs. */
+const MAP_IDS = ['village', 'inn', 'merchant_shop', 'old_road', 'ruined_shrine'] as const;
 
-  const local = localImageCredit();
-  const localAudio = localAudioCredit();
-  const legacyGeneratedAudioTags = new Set<string>();
-  const additions: Record<string, Credit> = {
-    // Packed atlas pages and their descriptors are project output.
-    'sprites:tilesets:props.webp': PROJECT,
-    'sprites:tilesets:props.json': PROJECT,
-    'sprites:tilesets:props.pages.json': PROJECT,
-  };
+/** Files in the pack's art directories that need a credit entry. */
+const PACK_FILE_PATTERN = /\.(png|webp|webm|ogg|mp3|wav)$/i;
 
-  for (const mapId of ['village', 'inn', 'merchant_shop', 'old_road', 'ruined_shrine']) {
-    additions[`emberwatch:maps:${mapId}`] = PROJECT;
+/** Packed atlas pages and their descriptors are project output. */
+const atlasCredits = (): Record<string, Credit> => ({
+  'sprites:tilesets:props.webp': PROJECT,
+  'sprites:tilesets:props.json': PROJECT,
+  'sprites:tilesets:props.pages.json': PROJECT,
+});
+
+const mapCredits = (): Record<string, Credit> =>
+  Object.fromEntries(MAP_IDS.map((mapId) => [`emberwatch:maps:${mapId}`, PROJECT]));
+
+/** The pack's authored audio beds, credited to the model that generated them. */
+const audioCredits = (options: {
+  manifest: PackManifest;
+  localAudio: Credit;
+  legacyGeneratedAudioTags: Set<string>;
+}): Record<string, Credit> => {
+  const credits: Record<string, Credit> = {};
+  for (const binding of options.manifest.audio?.bindings ?? []) {
+    credits[binding.tag] = options.localAudio;
+    options.legacyGeneratedAudioTags.add(binding.tag);
   }
+  return credits;
+};
 
-  for (const binding of manifest.audio?.bindings ?? []) {
-    additions[binding.tag] = localAudio;
-    legacyGeneratedAudioTags.add(binding.tag);
-  }
-
-  // Portraits are published from the GAME-DATA root (that is where the client
-  // resolves them), so their catalog tag carries no `emberwatch` segment. The
-  // CONTENT-PACK scan of the same bytes produces the prefixed form instead, and
-  // both are real catalog tags — so both are credited, or one root's copy of the
-  // identical file is classified from a stale entry.
-  for (const [npcId, npc] of Object.entries(manifest.npcs)) {
-    for (const [variant, url] of Object.entries(npc.portraits?.variants ?? {})) {
-      // The NPC's manifest KEY is the identity. Deriving it from a URL segment
-      // (`url.split('/')[4]`) made the tag depend on the published path's shape,
-      // so a directory rename or a differently-nested portrait would silently
-      // produce a wrong or empty npcId and credit the wrong catalog tag — or
-      // credit nothing, leaving the real tag unclassified.
-      //
-      // `url` is still needed below to locate the file; it is simply no longer
-      // the source of the identity.
-      void url;
-      additions[`portraits:emberwatch:${npcId}:${variant}`] = local;
-      additions[`emberwatch:portraits:${npcId}:${variant}`] = local;
+/**
+ * Portraits are published from the GAME-DATA root (that is where the client
+ * resolves them), so their catalog tag carries no `emberwatch` segment. The
+ * CONTENT-PACK scan of the same bytes produces the prefixed form instead, and
+ * both are real catalog tags — so both are credited, or one root's copy of the
+ * identical file is classified from a stale entry.
+ *
+ * The NPC's manifest KEY is the identity. Deriving it from a URL segment
+ * (`url.split('/')[4]`) made the tag depend on the published path's shape, so a
+ * directory rename or a differently-nested portrait would silently produce a
+ * wrong or empty npcId and credit the wrong catalog tag — or credit nothing,
+ * leaving the real tag unclassified.
+ */
+const portraitCredits = (options: {
+  manifest: PackManifest;
+  local: Credit;
+}): Record<string, Credit> => {
+  const credits: Record<string, Credit> = {};
+  for (const [npcId, npc] of Object.entries(options.manifest.npcs)) {
+    for (const variant of Object.keys(npc.portraits?.variants ?? {})) {
+      credits[`portraits:emberwatch:${npcId}:${variant}`] = options.local;
+      credits[`emberwatch:portraits:${npcId}:${variant}`] = options.local;
     }
   }
+  return credits;
+};
 
-  // Every file actually present in the pack's art directories, so an unused or
-  // newly added file cannot slip past the preflight. The licence follows the
-  // provenance the prop table records — never a blanket licence.
+/** The credit one pack file earns, following the prop table's own provenance. */
+const packFileCredit = (options: {
+  dir: string;
+  name: string;
+  localFrames: ReadonlySet<string>;
+  local: Credit;
+  localAudio: Credit;
+}): Credit => {
+  if (options.dir === 'audio') {
+    return options.localAudio;
+  }
+  const stem = options.name.replace(/\.[^.]+$/, '');
+  return options.localFrames.has(stem) ? options.local : PROJECT;
+};
+
+/**
+ * Every file actually present in the pack's art directories, so an unused or
+ * newly added file cannot slip past the preflight. The licence follows the
+ * provenance the prop table records — never a blanket licence.
+ */
+const sourceFileCredits = (options: {
+  manifest: PackManifest;
+  local: Credit;
+  localAudio: Credit;
+  legacyGeneratedAudioTags: Set<string>;
+}): Record<string, Credit> => {
   const localFrames = new Set(
-    Object.values(manifest.props)
+    Object.values(options.manifest.props)
       .filter((def) => (def.provenance?.source ?? '').startsWith('generated:local'))
       .map((def) => def.frame.replace(/\.png$/, '')),
   );
+  const credits: Record<string, Credit> = {};
   for (const dir of ['props', 'enemies', 'audio']) {
     const dirPath = join(packRoot, dir);
     if (!existsSync(dirPath)) {
       continue;
     }
     for (const name of readdirSync(dirPath).sort()) {
-      if (!/\.(png|webp|webm|ogg|mp3|wav)$/i.test(name)) {
+      if (!PACK_FILE_PATTERN.test(name)) {
         continue;
       }
       const stem = name.replace(/\.[^.]+$/, '');
-      let credit = PROJECT;
+      credits[`emberwatch:${dir}:${stem}`] = packFileCredit({
+        dir,
+        name,
+        localFrames,
+        local: options.local,
+        localAudio: options.localAudio,
+      });
       if (dir === 'audio') {
-        credit = localAudio;
-      } else if (localFrames.has(stem)) {
-        credit = local;
-      }
-      additions[`emberwatch:${dir}:${stem}`] = credit;
-      if (dir === 'audio') {
-        legacyGeneratedAudioTags.add(`emberwatch:${dir}:${stem}`);
+        options.legacyGeneratedAudioTags.add(`emberwatch:${dir}:${stem}`);
       }
     }
   }
+  return credits;
+};
 
+/** Every credit this pack adds, in the order the sidecar records them. */
+const buildCredits = (
+  manifest: PackManifest,
+): { additions: Record<string, Credit>; legacyGeneratedAudioTags: Set<string> } => {
+  const local = localImageCredit();
+  const localAudio = localAudioCredit();
+  const legacyGeneratedAudioTags = new Set<string>();
+  return {
+    additions: {
+      ...atlasCredits(),
+      ...mapCredits(),
+      ...audioCredits({ manifest, localAudio, legacyGeneratedAudioTags }),
+      ...portraitCredits({ manifest, local }),
+      ...sourceFileCredits({ manifest, local, localAudio, legacyGeneratedAudioTags }),
+    },
+    legacyGeneratedAudioTags,
+  };
+};
+
+/** Applies the additions to the sidecar in place, reporting what moved. */
+const mergeCredits = (options: {
+  credits: Record<string, Credit>;
+  additions: Record<string, Credit>;
+  legacyGeneratedAudioTags: ReadonlySet<string>;
+}): { changed: number; changedTags: string[] } => {
   let changed = 0;
   const changedTags: string[] = [];
-  for (const [tag, credit] of Object.entries(additions)) {
-    const existing = file.credits[tag];
+  for (const [tag, credit] of Object.entries(options.additions)) {
+    const existing = options.credits[tag];
     if (existing === undefined) {
-      file.credits[tag] = credit;
+      options.credits[tag] = credit;
       changed += 1;
       changedTags.push(tag);
       continue;
@@ -266,13 +330,51 @@ const main = (): void => {
     // gate could not read as the artifact's output rights, so leaving it would
     // keep the whole pack blocked by a classification that does not apply.
     const isLegacyAudioPlaceholder =
-      legacyGeneratedAudioTags.has(tag) && JSON.stringify(existing) === JSON.stringify(PROJECT);
+      options.legacyGeneratedAudioTags.has(tag) &&
+      JSON.stringify(existing) === JSON.stringify(PROJECT);
     if (isDerivedGeneratedEntry(existing) || isLegacyAudioPlaceholder) {
-      file.credits[tag] = credit;
+      options.credits[tag] = credit;
       changed += 1;
       changedTags.push(tag);
     }
   }
+  return { changed, changedTags };
+};
+
+/**
+ * Writes the sidecar and restores the repository's formatter shape.
+ *
+ * The sidecar is a committed source file, so it must land in the repo's
+ * formatter's shape: `JSON.stringify` spacing is not Biome's JSON style, and a
+ * hand-shaped sidecar fails `scripts:lint` on every release run.
+ */
+const persistCredits = (file: { credits: Record<string, Credit> }): void => {
+  writeFileSync(licensesPath, `${JSON.stringify(file, null, 2)}\n`);
+  const format = Bun.spawnSync(['bunx', 'biome', 'check', '--write', licensesPath], {
+    cwd: repository,
+    stdout: 'ignore',
+    stderr: 'inherit',
+  });
+  if (format.exitCode !== 0) {
+    throw new Error('sync_emberwatch_credits: could not format project_licenses.json');
+  }
+};
+
+const main = (): void => {
+  const checkOnly = process.argv.includes('--check');
+  const file = JSON.parse(readFileSync(licensesPath, 'utf8')) as {
+    credits: Record<string, Credit>;
+  };
+  const manifest = JSON.parse(
+    readFileSync(join(packRoot, 'manifest.json'), 'utf8'),
+  ) as PackManifest;
+
+  const { additions, legacyGeneratedAudioTags } = buildCredits(manifest);
+  const { changed, changedTags } = mergeCredits({
+    credits: file.credits,
+    additions,
+    legacyGeneratedAudioTags,
+  });
 
   if (checkOnly) {
     if (changedTags.length > 0) {
@@ -286,18 +388,7 @@ const main = (): void => {
   }
 
   if (changed > 0) {
-    writeFileSync(licensesPath, `${JSON.stringify(file, null, 2)}\n`);
-    // The sidecar is a committed source file, so it must land in the repo's
-    // formatter's shape: `JSON.stringify` spacing is not Biome's JSON style,
-    // and a hand-shaped sidecar fails `scripts:lint` on every release run.
-    const format = Bun.spawnSync(['bunx', 'biome', 'check', '--write', licensesPath], {
-      cwd: repository,
-      stdout: 'ignore',
-      stderr: 'inherit',
-    });
-    if (format.exitCode !== 0) {
-      throw new Error('sync_emberwatch_credits: could not format project_licenses.json');
-    }
+    persistCredits(file);
   }
   console.log(
     `sync_emberwatch_credits: ${changed} credit(s) updated, ${Object.keys(file.credits).length} total`,

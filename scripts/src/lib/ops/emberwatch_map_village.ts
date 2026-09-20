@@ -66,7 +66,10 @@ const inBounds = (c: number, r: number): boolean => c >= 1 && c <= W - 2 && r >=
  * broken at each gate. One ring in, the treeline thins with irregular gaps, so
  * the boundary reads as woodland rather than a box.
  */
-const woodlandRim = (m: MapData, rng: () => number): void => {
+/**
+ * The outermost ring: forest floor, blocked by trunks, broken at each gate.
+ */
+const paintOuterRing = (m: MapData): void => {
   for (let c = 0; c < W; c++) {
     for (const r of [0, H - 1]) {
       setTile(m, c, r, G.PLANT);
@@ -79,7 +82,10 @@ const woodlandRim = (m: MapData, rng: () => number): void => {
       block(m, c, r);
     }
   }
+};
 
+/** Opens the four gates through the outer ring. */
+const openGates = (m: MapData): void => {
   for (const c of GATES.north) {
     setTile(m, c, 0, G.PATH);
     m.collision[c] = 0;
@@ -96,8 +102,10 @@ const woodlandRim = (m: MapData, rng: () => number): void => {
     setTile(m, W - 1, r, G.PATH);
     m.collision[r * W + W - 1] = 0;
   }
+};
 
-  // Gate mouths stay clear two cells in, so an arrival never lands on a trunk.
+/** Gate mouths stay clear two cells in, so an arrival never lands on a trunk. */
+const gateMouthCells = (): Set<number> => {
   const clear = new Set<number>();
   const mark = (c: number, r: number): void => {
     if (inBounds(c, r)) {
@@ -114,10 +122,15 @@ const woodlandRim = (m: MapData, rng: () => number): void => {
       mark(c, r);
     }
   }
+  return clear;
+};
 
+/** One ring in, the treeline thins with irregular gaps and the gate mouths stay open. */
+const thinTreeline = (m: MapData, rng: () => number, clear: Set<number>): void => {
+  const thinned = (c: number, r: number): boolean => clear.has(r * W + c) || rng() < 0.45;
   for (let c = 1; c < W - 1; c++) {
     for (const r of [1, H - 2]) {
-      if (clear.has(r * W + c) || rng() < 0.45) {
+      if (thinned(c, r)) {
         continue;
       }
       setTile(m, c, r, G.PLANT);
@@ -126,7 +139,7 @@ const woodlandRim = (m: MapData, rng: () => number): void => {
   }
   for (let r = 1; r < H - 1; r++) {
     for (const c of [1, W - 2]) {
-      if (clear.has(r * W + c) || rng() < 0.45) {
+      if (thinned(c, r)) {
         continue;
       }
       setTile(m, c, r, G.PLANT);
@@ -136,15 +149,21 @@ const woodlandRim = (m: MapData, rng: () => number): void => {
 };
 
 /**
- * The stream.
+ * The woodland rim.
  *
- * Enters from the north-east treeline, runs west inside the northern rim and
- * drains out through the west rim. It shapes the perimeter instead of sitting in
- * the middle of the map as a decorative pond. Collision stays semantic — water
- * blocks — and the only dry crossing is the stone bridge on the notice-board
- * approach.
+ * The outermost ring stays solid so an actor can never leave the map, but it is
+ * painted as forest floor and blocked with trunks — not a stone wall — and it is
+ * broken at each gate. One ring in, the treeline thins with irregular gaps, so
+ * the boundary reads as woodland rather than a box.
  */
-const stream = (m: MapData): void => {
+const woodlandRim = (m: MapData, rng: () => number): void => {
+  paintOuterRing(m);
+  openGates(m);
+  thinTreeline(m, rng, gateMouthCells());
+};
+
+/** The stream's channel, from the north-east treeline to the west rim. */
+const streamChannel = (): Array<[number, number]> => {
   const channel: Array<[number, number]> = [];
   for (let c = 60; c >= 40; c--) {
     channel.push([c, 2]);
@@ -161,8 +180,11 @@ const stream = (m: MapData): void => {
   for (let c = 25; c >= 2; c--) {
     channel.push([c, 12]);
   }
+  return channel;
+};
 
-  // Pass 1: lay the channel.
+/** Pass 1: lay the channel as water, blocked. */
+const layChannel = (m: MapData, channel: Array<[number, number]>): void => {
   for (const [c, r] of channel) {
     if (!inBounds(c, r)) {
       continue;
@@ -170,22 +192,27 @@ const stream = (m: MapData): void => {
     setTile(m, c, r, G.WATER);
     block(m, c, r);
   }
+};
 
-  // Pass 2: bank the channel. Done after the whole channel is laid, so a cell
-  // that is a neighbour of an EARLIER channel cell but becomes water itself is
-  // never banked — banking in the same pass left the terrain channel saying
-  // "gravel" on a cell whose tile is water.
+/**
+ * Pass 2: bank the channel. Done after the whole channel is laid, so a cell
+ * that is a neighbour of an EARLIER channel cell but becomes water itself is
+ * never banked — banking in the same pass left the terrain channel saying
+ * "gravel" on a cell whose tile is water.
+ */
+const bankChannel = (m: MapData, channel: Array<[number, number]>): void => {
+  const neighbours = [
+    [1, 0],
+    [-1, 0],
+    [0, 1],
+    [0, -1],
+  ] as const;
   m.terrainOverrides = m.terrainOverrides ?? [];
   for (const [c, r] of channel) {
     if (!inBounds(c, r)) {
       continue;
     }
-    for (const [dc, dr] of [
-      [1, 0],
-      [-1, 0],
-      [0, 1],
-      [0, -1],
-    ] as const) {
+    for (const [dc, dr] of neighbours) {
       const nc = c + dc;
       const nr = r + dr;
       if (!inBounds(nc, nr)) {
@@ -200,8 +227,10 @@ const stream = (m: MapData): void => {
       m.terrainOverrides.push([nc, nr, 'gravel']);
     }
   }
+};
 
-  // Stone bridge: the only dry crossing of the stream.
+/** The stone bridge: the only dry crossing of the stream. */
+const buildStreamBridge = (m: MapData): void => {
   for (const c of [39, 40, 41]) {
     for (const r of [7, 8]) {
       setTile(m, c, r, G.BRIDGE);
@@ -210,7 +239,98 @@ const stream = (m: MapData): void => {
   }
 };
 
+/**
+ * The stream.
+ *
+ * Enters from the north-east treeline, runs west inside the northern rim and
+ * drains out through the west rim. It shapes the perimeter instead of sitting in
+ * the middle of the map as a decorative pond. Collision stays semantic — water
+ * blocks — and the only dry crossing is the stone bridge on the notice-board
+ * approach.
+ */
+const stream = (m: MapData): void => {
+  const channel = streamChannel();
+  layChannel(m, channel);
+  bankChannel(m, channel);
+  buildStreamBridge(m);
+};
+
 type DoorSide = 'north' | 'south' | 'east' | 'west';
+
+/** The building's wall ring. */
+const paintShell = (
+  m: MapData,
+  c0: number,
+  r0: number,
+  w: number,
+  h: number,
+  wall: number,
+): void => {
+  for (let c = c0; c <= c0 + w - 1; c++) {
+    setTile(m, c, r0, wall);
+    setTile(m, c, r0 + h - 1, wall);
+    block(m, c, r0);
+    block(m, c, r0 + h - 1);
+  }
+  for (let r = r0 + 1; r <= r0 + h - 2; r++) {
+    setTile(m, c0, r, wall);
+    setTile(m, c0 + w - 1, r, wall);
+    block(m, c0, r);
+    block(m, c0 + w - 1, r);
+  }
+};
+
+/** The roofed interior. */
+const paintInterior = (m: MapData, c0: number, r0: number, w: number, h: number): void => {
+  for (let r = r0 + 1; r <= r0 + h - 2; r++) {
+    for (let c = c0 + 1; c <= c0 + w - 2; c++) {
+      setTile(m, c, r, G.ROOF);
+      block(m, c, r);
+    }
+  }
+};
+
+/** The two-tile door and the two-cell landing in front of it. */
+const doorPlacement = (options: {
+  c0: number;
+  r0: number;
+  w: number;
+  h: number;
+  doorSide: DoorSide;
+}): { doorCells: Array<[number, number]>; landingCells: Array<[number, number]> } => {
+  const { c0, r0, w, h, doorSide } = options;
+  const doorCells: Array<[number, number]> = [];
+  const landingCells: Array<[number, number]> = [];
+  if (doorSide === 'south' || doorSide === 'north') {
+    const doorRow = doorSide === 'south' ? r0 + h - 1 : r0;
+    const step = doorSide === 'south' ? 1 : -1;
+    const midC = c0 + Math.floor(w / 2);
+    for (const c of [midC - 1, midC]) {
+      doorCells.push([c, doorRow]);
+      landingCells.push([c, doorRow + step], [c, doorRow + step * 2]);
+    }
+    return { doorCells, landingCells };
+  }
+  const doorCol = doorSide === 'east' ? c0 + w - 1 : c0;
+  const step = doorSide === 'east' ? 1 : -1;
+  const midR = r0 + Math.floor(h / 2);
+  for (const r of [midR - 1, midR]) {
+    doorCells.push([doorCol, r]);
+    landingCells.push([doorCol + step, r], [doorCol + step * 2, r]);
+  }
+  return { doorCells, landingCells };
+};
+
+/** Opens a set of cells to stone floor, leaving out-of-bounds cells untouched. */
+const openCells = (m: MapData, cells: Array<[number, number]>): void => {
+  for (const [c, r] of cells) {
+    if (!inBounds(c, r)) {
+      continue;
+    }
+    setTile(m, c, r, G.STONE_FLOOR);
+    m.collision[r * W + c] = 0;
+  }
+};
 
 /**
  * A walled building shell with a two-tile door on the given side and a
@@ -225,90 +345,30 @@ const building = (
   wall: number,
   doorSide: DoorSide,
 ): void => {
-  for (let c = c0; c <= c0 + w - 1; c++) {
-    setTile(m, c, r0, wall);
-    setTile(m, c, r0 + h - 1, wall);
-    block(m, c, r0);
-    block(m, c, r0 + h - 1);
-  }
-  for (let r = r0 + 1; r <= r0 + h - 2; r++) {
-    setTile(m, c0, r, wall);
-    setTile(m, c0 + w - 1, r, wall);
-    block(m, c0, r);
-    block(m, c0 + w - 1, r);
-  }
-  for (let r = r0 + 1; r <= r0 + h - 2; r++) {
-    for (let c = c0 + 1; c <= c0 + w - 2; c++) {
-      setTile(m, c, r, G.ROOF);
-      block(m, c, r);
-    }
-  }
-
-  const midC = c0 + Math.floor(w / 2);
-  const midR = r0 + Math.floor(h / 2);
-  const doorCells: Array<[number, number]> = [];
-  const landingCells: Array<[number, number]> = [];
-  if (doorSide === 'south' || doorSide === 'north') {
-    const doorRow = doorSide === 'south' ? r0 + h - 1 : r0;
-    const step = doorSide === 'south' ? 1 : -1;
-    for (const c of [midC - 1, midC]) {
-      doorCells.push([c, doorRow]);
-      landingCells.push([c, doorRow + step], [c, doorRow + step * 2]);
-    }
-  } else {
-    const doorCol = doorSide === 'east' ? c0 + w - 1 : c0;
-    const step = doorSide === 'east' ? 1 : -1;
-    for (const r of [midR - 1, midR]) {
-      doorCells.push([doorCol, r]);
-      landingCells.push([doorCol + step, r], [doorCol + step * 2, r]);
-    }
-  }
-  for (const [c, r] of doorCells) {
-    if (!inBounds(c, r)) {
-      continue;
-    }
-    setTile(m, c, r, G.STONE_FLOOR);
-    m.collision[r * W + c] = 0;
-  }
-  for (const [c, r] of landingCells) {
-    if (!inBounds(c, r)) {
-      continue;
-    }
-    setTile(m, c, r, G.STONE_FLOOR);
-    m.collision[r * W + c] = 0;
-  }
+  paintShell(m, c0, r0, w, h, wall);
+  paintInterior(m, c0, r0, w, h);
+  const { doorCells, landingCells } = doorPlacement({ c0, r0, w, h, doorSide });
+  openCells(m, doorCells);
+  openCells(m, landingCells);
 };
 
-export const buildVillage = (): { map: MapData; objectLayers: MapObjectLayer[] } => {
-  const m = makeMap(W, H);
-  const rng = makeRng(0xe6b1);
-
-  woodlandRim(m, rng);
-
-  // ── Primary routes ───────────────────────────────────────────────────────
-  // North–south, three cells clear, north gate to south gate.
+/**
+ * ── Primary routes ─────────────────────────────────────────────────────────
+ * North–south, three cells clear, north gate to south gate; then east–west,
+ * three cells clear, gate to gate.
+ */
+const paintPrimaryRoutes = (m: MapData): void => {
   fillRect(m, 31, 1, 33, H - 2, G.PATH);
-  // East–west, three cells clear, gate to gate.
   fillRect(m, 1, 23, W - 2, 25, G.PATH);
+};
 
-  // ── The square ───────────────────────────────────────────────────────────
-  // The gravel plaza is a terrain-channel material with no baked tile GID, so
-  // it is written as a terrain override; the stone paving over it is a tile.
-  const overrides: Array<[number, number, string]> = [];
-  for (let r = 18; r <= 30; r++) {
-    for (let c = 26; c <= 39; c++) {
-      overrides.push([c, r, 'gravel']);
-    }
-  }
-  fillRect(m, 28, 20, 37, 28, G.STONE_FLOOR);
-  // Earth apron under the ward tree.
-  for (let r = 21; r <= 26; r++) {
-    for (let c = 29; c <= 35; c++) {
-      overrides.push([c, r, 'earth']);
-    }
-  }
-
-  // ── Secondary routes (≥2 cells) ──────────────────────────────────────────
+/**
+ * ── Secondary routes (≥2 cells) ────────────────────────────────────────────
+ *
+ * Order matters against the paved square: smith's approach overlaps the square
+ * paving, and the road is painted FIRST so the paving is what a walker sees.
+ */
+const paintSecondaryRoutes = (m: MapData): void => {
   // Smith's approach: east–west link, then north to the yard.
   fillRect(m, 3, 28, 30, 29, G.PATH);
   fillRect(m, 7, 26, 8, 28, G.PATH);
@@ -322,54 +382,81 @@ export const buildVillage = (): { map: MapData; objectLayers: MapObjectLayer[] }
   fillRect(m, 41, 10, 46, 11, G.PATH);
   // Well approach: west from the square.
   fillRect(m, 23, 22, 26, 23, G.PATH);
+};
 
-  // ── Pads ─────────────────────────────────────────────────────────────────
+/** ── Pads ─────────────────────────────────────────────────────────────────── */
+const paintPads = (m: MapData): void => {
   fillRect(m, 17, 21, 22, 25, G.STONE_FLOOR); // well
   fillRect(m, 43, 8, 47, 12, G.STONE_FLOOR); // notice board
   fillRect(m, 4, 27, 14, 30, G.STONE_FLOOR); // smith's yard
   fillRect(m, 47, 20, 56, 22, G.STONE_FLOOR); // inn forecourt
   fillRect(m, 47, 33, 56, 34, G.STONE_FLOOR); // shop landing
   fillRect(m, 30, 21, 34, 24, G.STONE_FLOOR); // ward tree apron
+};
 
-  // ── Buildings ────────────────────────────────────────────────────────────
+/** The five building shells, in placement order. */
+const placeBuildings = (m: MapData): void => {
   building(m, 47, 12, 9, 8, G.STONE_WALL, 'south'); // the inn (east)
   building(m, 47, 26, 9, 7, G.WOOD_WALL, 'south'); // the shop (south-east)
   building(m, 4, 30, 9, 7, G.STONE_WALL, 'north'); // the smithy (west)
   building(m, 5, 15, 8, 6, G.WOOD_WALL, 'south'); // cottage (north-west)
   building(m, 16, 15, 7, 6, G.WOOD_WALL, 'south'); // cottage (north)
+};
 
-  stream(m);
+/**
+ * The gravel plaza and the earth apron, as terrain overrides.
+ *
+ * The gravel plaza is a terrain-channel material with no baked tile GID, so it
+ * is written as a terrain override; the stone paving over it is a tile.
+ */
+const squareOverrides = (): Array<[number, number, string]> => {
+  const overrides: Array<[number, number, string]> = [];
+  for (let r = 18; r <= 30; r++) {
+    for (let c = 26; c <= 39; c++) {
+      overrides.push([c, r, 'gravel']);
+    }
+  }
+  // Earth apron under the ward tree.
+  for (let r = 21; r <= 26; r++) {
+    for (let c = 29; c <= 35; c++) {
+      overrides.push([c, r, 'earth']);
+    }
+  }
+  return overrides;
+};
 
-  // ── Ground variation and woodland stands ─────────────────────────────────
-  scatter(m, rng, 2, 2, W - 3, H - 3, G.GRASS, G.GRASS_DARK, 0.14);
-  scatter(m, rng, 2, 2, W - 3, H - 3, G.GRASS, G.GRASS_VARIANT, 0.06);
-
-  m.terrainOverrides = [...(m.terrainOverrides ?? []), ...overrides];
-
-  // ── Containment re-asserted ──────────────────────────────────────────────
-  // Pads and paths above may have re-opened rim cells; the rim stays solid
-  // except at the gates.
+/** The rim stays solid except at the gates, whatever the pads and paths painted. */
+const sealRimExceptGates = (m: MapData): void => {
+  const north = GATES.north as readonly number[];
+  const south = GATES.south as readonly number[];
+  const west = GATES.west as readonly number[];
+  const east = GATES.east as readonly number[];
   for (let c = 0; c < W; c++) {
-    if (!(GATES.north as readonly number[]).includes(c)) {
+    if (!north.includes(c)) {
       block(m, c, 0);
     }
-    if (!(GATES.south as readonly number[]).includes(c)) {
+    if (!south.includes(c)) {
       block(m, c, H - 1);
     }
   }
   for (let r = 0; r < H; r++) {
-    if (!(GATES.west as readonly number[]).includes(r)) {
+    if (!west.includes(r)) {
       block(m, 0, r);
     }
-    if (!(GATES.east as readonly number[]).includes(r)) {
+    if (!east.includes(r)) {
       block(m, W - 1, r);
     }
   }
-  // The gate mouths are cleared across the FULL primary-road corridor (three
-  // cells), not just the two gate columns: the road fill runs after the rim
-  // thinning, so a corridor cell painted back to a walkable path must not keep
-  // the rim's collision — the engine's content audit requires collision to
-  // match manifest walkability exactly.
+};
+
+/**
+ * The gate mouths are cleared across the FULL primary-road corridor (three
+ * cells), not just the two gate columns: the road fill runs after the rim
+ * thinning, so a corridor cell painted back to a walkable path must not keep
+ * the rim's collision — the engine's content audit requires collision to
+ * match manifest walkability exactly.
+ */
+const clearGateCorridors = (m: MapData): void => {
   for (const c of [31, 32]) {
     for (let r = 0; r <= 2; r++) {
       m.collision[r * W + c] = 0;
@@ -383,13 +470,19 @@ export const buildVillage = (): { map: MapData; objectLayers: MapObjectLayer[] }
   for (let r = 1; r <= H - 2; r++) {
     m.collision[r * W + 33] = 0;
   }
-  // The stream must never be re-opened by the road fills above.
+};
+
+/** The stream must never be re-opened by the road fills above… */
+const resealWater = (m: MapData): void => {
   for (let i = 0; i < W * H; i++) {
     if (m.ground[i] === G.WATER) {
       m.collision[i] = 1;
     }
   }
-  // …and the bridge stays open after that.
+};
+
+/** …and the bridge stays open after that. */
+const reopenBridge = (m: MapData): void => {
   for (const c of [39, 40, 41]) {
     for (const r of [7, 8]) {
       if (m.ground[r * W + c] === G.BRIDGE) {
@@ -397,16 +490,48 @@ export const buildVillage = (): { map: MapData; objectLayers: MapObjectLayer[] }
       }
     }
   }
+};
 
-  // ── Overhead canopy over the ward tree ───────────────────────────────────
-  // Canopies may overlap actors; the trunk/base footprint is what collides.
-  m.overheadExtra = [
-    [30, 20, G.ROOF],
-    [31, 20, G.ROOF],
-    [32, 20, G.ROOF],
-    [33, 20, G.ROOF],
-    [34, 20, G.ROOF],
-  ];
+/** Containment re-asserted: pads and paths may have re-opened rim cells. */
+const reassertContainment = (m: MapData): void => {
+  sealRimExceptGates(m);
+  clearGateCorridors(m);
+  resealWater(m);
+  reopenBridge(m);
+};
+
+/** The ward tree's overhead canopy. Canopies may overlap actors. */
+const wardTreeCanopy = (): Array<[number, number, number]> => [
+  [30, 20, G.ROOF],
+  [31, 20, G.ROOF],
+  [32, 20, G.ROOF],
+  [33, 20, G.ROOF],
+  [34, 20, G.ROOF],
+];
+
+export const buildVillage = (): { map: MapData; objectLayers: MapObjectLayer[] } => {
+  const m = makeMap(W, H);
+  const rng = makeRng(0xe6b1);
+
+  woodlandRim(m, rng);
+  paintPrimaryRoutes(m);
+  // The square is paved between the two override passes; the paving overlaps
+  // smith's approach, and must be written AFTER it to win.
+  const overrides = squareOverrides();
+  fillRect(m, 28, 20, 37, 28, G.STONE_FLOOR);
+  paintSecondaryRoutes(m);
+  paintPads(m);
+  placeBuildings(m);
+  stream(m);
+
+  // ── Ground variation and woodland stands ─────────────────────────────────
+  scatter(m, rng, 2, 2, W - 3, H - 3, G.GRASS, G.GRASS_DARK, 0.14);
+  scatter(m, rng, 2, 2, W - 3, H - 3, G.GRASS, G.GRASS_VARIANT, 0.06);
+
+  m.terrainOverrides = [...(m.terrainOverrides ?? []), ...overrides];
+
+  reassertContainment(m);
+  m.overheadExtra = wardTreeCanopy();
 
   const objectLayers: MapObjectLayer[] = [
     {

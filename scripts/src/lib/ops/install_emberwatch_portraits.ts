@@ -46,6 +46,65 @@ const VARIANTS = ['neutral', 'concerned', 'relieved', 'guarded', 'hostile'] as c
 
 type NpcEntry = { portraits?: { variants: Record<string, string> } };
 
+/** Copies one authored variant into the runtime plane, or verifies it is there. */
+const installVariant = (options: {
+  npcId: string;
+  variant: string;
+  source: string;
+  checkOnly: boolean;
+}): void => {
+  const destination = join(runtimeRoot, options.npcId, `${options.variant}.png`);
+  if (options.checkOnly) {
+    return;
+  }
+  mkdirSync(dirname(destination), { recursive: true });
+  copyFileSync(options.source, destination);
+};
+
+/** The variants this NPC authors, and the files they came from. */
+const collectVariants = (options: {
+  npcId: string;
+  npcDir: string;
+  checkOnly: boolean;
+  installed: { npcId: string; variant: string; source: string }[];
+}): Record<string, string> => {
+  const variants: Record<string, string> = {};
+  for (const variant of VARIANTS) {
+    const source = join(options.npcDir, `${variant}.png`);
+    if (!existsSync(source)) {
+      continue;
+    }
+    variants[variant] = runtimeUrl(options.npcId, variant);
+    options.installed.push({ npcId: options.npcId, variant, source });
+    installVariant({ npcId: options.npcId, variant, source, checkOnly: options.checkOnly });
+  }
+  return variants;
+};
+
+/**
+ * Rewrites one NPC's portrait binding to match what is authored.
+ *
+ * No portrait authored means the binding must be ABSENT, never an empty block
+ * the schema would reject (`variants.neutral` is required).
+ */
+const bindNpcPortraits = (options: {
+  npcId: string;
+  npc: NpcEntry;
+  variants: Record<string, string>;
+}): void => {
+  const { npcId, npc, variants } = options;
+  if (Object.keys(variants).length === 0) {
+    delete npc.portraits;
+    return;
+  }
+  if (variants.neutral === undefined) {
+    throw new Error(
+      `install_emberwatch_portraits: ${npcId} has no neutral portrait — neutral is required by the schema`,
+    );
+  }
+  npc.portraits = { variants };
+};
+
 const main = (): void => {
   const checkOnly = process.argv.includes('--check');
   if (!existsSync(sourceRoot)) {
@@ -66,36 +125,11 @@ const main = (): void => {
     if (!existsSync(npcDir)) {
       continue;
     }
-    const variants: Record<string, string> = {};
-    for (const variant of VARIANTS) {
-      const source = join(npcDir, `${variant}.png`);
-      if (!existsSync(source)) {
-        continue;
-      }
-      variants[variant] = runtimeUrl(npcId, variant);
-      installed.push({ npcId, variant, source });
-      if (!checkOnly) {
-        const destination = join(runtimeRoot, npcId, `${variant}.png`);
-        mkdirSync(dirname(destination), { recursive: true });
-        copyFileSync(source, destination);
-      }
-    }
+    const variants = collectVariants({ npcId, npcDir, checkOnly, installed });
     const npc = manifest.npcs[npcId];
-    if (npc === undefined) {
-      continue;
+    if (npc !== undefined) {
+      bindNpcPortraits({ npcId, npc, variants });
     }
-    if (Object.keys(variants).length === 0) {
-      // No portrait authored: the binding must be absent, never an empty block
-      // the schema would reject (variants.neutral is required).
-      delete npc.portraits;
-      continue;
-    }
-    if (variants.neutral === undefined) {
-      throw new Error(
-        `install_emberwatch_portraits: ${npcId} has no neutral portrait — neutral is required by the schema`,
-      );
-    }
-    npc.portraits = { variants };
   }
 
   const serializedManifest = `${JSON.stringify(manifest, null, 2)}\n`;

@@ -89,6 +89,28 @@ export const PLAYER_CLASS_AVATAR_SPRITE_MAP: Readonly<Record<string, string>> = 
 const _reportedMissing = new Set<string>();
 const _reportedClamped = new Set<string>();
 
+/**
+ * Logs a resolution diagnostic at most once per key. This getter re-evaluates
+ * on every reactive expression change, so a repeated miss must not spam.
+ */
+const _reportOnce = (options: {
+  seen: Set<string>;
+  key: string;
+  level: 'error' | 'warn';
+  message: string;
+  context: Record<string, unknown>;
+}): void => {
+  if (options.seen.has(options.key)) {
+    return;
+  }
+  options.seen.add(options.key);
+  if (options.level === 'error') {
+    logger.error(options.message, options.context);
+    return;
+  }
+  logger.warn(options.message, options.context);
+};
+
 /** Asserts a sprite folder is registered and returns its expression list. */
 const _getAvailableExpressions = (sprite: string): readonly string[] =>
   NPC_SPRITE_EXPRESSIONS[sprite] ?? [];
@@ -259,47 +281,47 @@ export const resolveNpcAvatarUrl = (options: {
 
   const sprite = NPC_AVATAR_SPRITE_MAP[npcId] ?? PERSONA_AVATAR_SPRITE_MAP[personaId ?? ''];
   if (!sprite) {
-    const key = `missing:${npcId}:${personaId ?? ''}`;
-    if (!_reportedMissing.has(key)) {
-      _reportedMissing.add(key);
-      logger.error('NpcAvatarCatalog: no avatar portrait configured for NPC', {
+    _reportOnce({
+      seen: _reportedMissing,
+      key: `missing:${npcId}:${personaId ?? ''}`,
+      level: 'error',
+      message: 'NpcAvatarCatalog: no avatar portrait configured for NPC',
+      context: {
         npcId,
         npcName,
         personaId,
         hint: 'Add an entry to NPC_AVATAR_SPRITE_MAP or set personaId on the NPC spawn point.',
-      });
-    }
+      },
+    });
     return PLACEHOLDER_AVATAR_URL;
   }
 
   const available = _getAvailableExpressions(sprite);
   if (available.length === 0) {
-    const key = `unknown-sprite:${sprite}`;
-    if (!_reportedMissing.has(key)) {
-      _reportedMissing.add(key);
-      logger.error('NpcAvatarCatalog: portrait sprite folder not registered', {
+    _reportOnce({
+      seen: _reportedMissing,
+      key: `unknown-sprite:${sprite}`,
+      level: 'error',
+      message: 'NpcAvatarCatalog: portrait sprite folder not registered',
+      context: {
         npcId,
         npcName,
         sprite,
         hint: `Create portraits/npc/${sprite}/neutral.webp and register its expressions in NPC_SPRITE_EXPRESSIONS.`,
-      });
-    }
+      },
+    });
     return PLACEHOLDER_AVATAR_URL;
   }
 
   const clamped = available.includes(expression) ? expression : DEFAULT_EXPRESSION;
   if (clamped !== expression) {
-    const key = `clamped:${sprite}:${expression}`;
-    if (!_reportedClamped.has(key)) {
-      _reportedClamped.add(key);
-      logger.warn('NpcAvatarCatalog: expression unavailable for sprite, clamped to neutral', {
-        npcId,
-        npcName,
-        sprite,
-        requested: expression,
-        available,
-      });
-    }
+    _reportOnce({
+      seen: _reportedClamped,
+      key: `clamped:${sprite}:${expression}`,
+      level: 'warn',
+      message: 'NpcAvatarCatalog: expression unavailable for sprite, clamped to neutral',
+      context: { npcId, npcName, sprite, requested: expression, available },
+    });
   }
 
   // Resolve through the asset store (cache → R2 → null)

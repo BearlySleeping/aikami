@@ -9,7 +9,7 @@
 // biome-ignore-all lint/style/useNamingConvention: stage identifiers use snake_case per GameBootStage type
 
 import { DEFAULT_LPC_RECIPE } from '@aikami/constants';
-import type { EngineBridge, GameWorld } from '@aikami/frontend/engine';
+import type { ContentPackLoaderInterface, EngineBridge, GameWorld } from '@aikami/frontend/engine';
 import { createLpcPipeline, projectLpcCatalog } from '@aikami/frontend/engine/content';
 import {
   BaseFrontendClass,
@@ -25,6 +25,7 @@ import { transition } from '../campaign/boot_state_machine.ts';
 import { campaignService } from '../campaign/campaign_service.svelte';
 import { campaignStorage as campaignStorageRepo } from '../campaign/campaign_storage.svelte';
 import { personaService } from '../persona/persona_service.svelte';
+import { actorVisualResolverFor } from './actor_visual_presentation.ts';
 import { sampleTruthVariant } from './dramatic_structure_service';
 import { equipmentService } from './equipment_service.svelte.ts';
 import { gameEngineService } from './game_engine_service.svelte';
@@ -128,6 +129,7 @@ class GameBootService
   private _bridge: EngineBridge | undefined;
   private _gameWorld: GameWorld | undefined;
   private _clearContentPackCache: (() => void) | undefined;
+  private _contentPack: ContentPackLoaderInterface | undefined;
 
   /** Registry-backed tag resolver (C-434). */
   private _resolveTag: ((tag: string) => string | null) | undefined;
@@ -783,6 +785,7 @@ class GameBootService
       return;
     }
     this._clearContentPackCache = clearContentPackCache;
+    this._contentPack = pack;
 
     // Validate pack has a starting map
     const startMap = pack.getStartingMap();
@@ -916,16 +919,13 @@ class GameBootService
       bridge: this._bridge,
       recipeResolver: pipeline.recipeResolver,
       assetUrlResolver: pipeline.assetUrlResolver,
-      // C-400: forward the projected catalog so the worker resolves the
-      // same slot/assetId sequences as the main-thread resolver.
+      actorVisualResolver: actorVisualResolverFor(() => this._contentPack),
+      // C-400: the worker resolves the same slot/assetId sequences.
       lpcCatalog: pipeline.catalog,
-      // C-374: merge equipped items onto the player's base LPC render
       equipmentRecipeProvider: () => equipmentService.buildLpcRecipes(),
       textureManager,
-      // C-375 AC-1: deterministic prop frame resolution (spritesheet-based,
-      // fallbackTile on miss) — never the global Texture.from cache.
+      // C-375 AC-1: prop frame resolution with fallbackTile on miss.
       propFrameResolver: this._propFrameResolverHandle?.resolver,
-      // C-434: registry-backed tag resolver for maps and tilesets.
       resolveTag: this._resolveTag,
       releaseUrl: this._releaseUrl,
     });

@@ -151,6 +151,206 @@ const readSiblingEnvValue = (mode: string, key: string): string | undefined => {
 const siblingRemoteMode = (mode: RemoteReleaseMode): RemoteReleaseMode =>
   mode === 'staging' ? 'production' : 'staging';
 
+/** The canonical per-mode origin identity table, widened for arbitrary mode strings. */
+type OriginTable = Record<string, { bucketName: string; originUrl: string | null }>;
+
+type ReleaseTargetEnv = {
+  catalogBucket?: string | undefined;
+  catalogOriginUrl?: string | undefined;
+  testSeam?: string | undefined;
+};
+
+const defaultOrigins = (): OriginTable => ({
+  production: CATALOG_ORIGINS.production,
+  staging: CATALOG_ORIGINS.staging,
+});
+
+/** Step 1: the mode must declare a catalog bucket at all. */
+const expectedBucketFor = (mode: string): string => {
+  const expectedBucket = resolveBucketName({ bucketKey: 'catalog', mode });
+  if (expectedBucket) {
+    return expectedBucket;
+  }
+  throw new ReleaseTargetError(
+    'no-declared-bucket',
+    `No catalog bucket is declared for mode ${JSON.stringify(mode)}. ` +
+      `Declared modes: ${REMOTE_RELEASE_MODES.join(', ')}.`,
+  );
+};
+
+/**
+ * Step 2: the bucket is DERIVED from the mode, and an override that disagrees
+ * is only ever legitimate as an explicit local rehearsal.
+ */
+const resolveReleaseBucket = (options: {
+  mode: string;
+  env: ReleaseTargetEnv;
+  expectedBucket: string;
+  warnings: string[];
+}): { bucket: string; viaTestSeam: boolean } => {
+  const { mode, env, expectedBucket, warnings } = options;
+  const override = env.catalogBucket?.trim();
+  if (!override || override === expectedBucket) {
+    return { bucket: expectedBucket, viaTestSeam: false };
+  }
+  if (env.testSeam !== '1') {
+    throw new ReleaseTargetError(
+      'bucket-override-rejected',
+      `CATALOG_BUCKET=${JSON.stringify(override)} disagrees with the bucket declared for ` +
+        `mode ${JSON.stringify(mode)} (${JSON.stringify(expectedBucket)}). Refusing to ` +
+        'publish: a configuration override must not retarget a remote mode. Remove ' +
+        'CATALOG_BUCKET from scripts/.env.' +
+        `${mode} (and from secrets/${mode}.enc.env), or set ${CATALOG_TEST_SEAM_ENV}=1 to ` +
+        'rehearse against a scratch bucket.',
+    );
+  }
+  if ((declaredRemoteBuckets() as string[]).includes(override)) {
+    throw new ReleaseTargetError(
+      'test-seam-names-remote-bucket',
+      `The test seam may not name a declared remote bucket (${JSON.stringify(override)}). ` +
+        `Declared remote buckets: ${declaredRemoteBuckets().join(', ')}.`,
+    );
+  }
+  warnings.push(
+    `test seam active (${CATALOG_TEST_SEAM_ENV}=1): writing to scratch bucket ${JSON.stringify(override)} instead of ${JSON.stringify(expectedBucket)}`,
+  );
+  return { bucket: override, viaTestSeam: true };
+};
+
+/**
+ * Step 3: a bucket must never be shared between two remote modes, so a swapped
+ * or copy-pasted env file cannot make staging write production.
+ */
+const assertBucketNotSharedWithSibling = (mode: string, bucket: string): void => {
+  const sibling = siblingRemoteMode(mode as RemoteReleaseMode);
+  if (bucket !== R2_BUCKETS.catalog[sibling].bucketName) {
+    return;
+  }
+  throw new ReleaseTargetError(
+    'bucket-shared-with-other-mode',
+    `Mode ${JSON.stringify(mode)} resolved to ${JSON.stringify(bucket)}, which is the bucket ` +
+      `declared for ${JSON.stringify(sibling)}. Refusing to publish.`,
+  );
+};
+
+/**
+ * Steps 4–5: the read origin must be present, parseable and PROVISIONED for
+ * this mode. `originUrl: null` means the mode has no public read origin yet —
+ * fail closed rather than accept whatever the environment happens to say,
+ * because the only other origin available is production's.
+ */
+const resolveReleaseOrigin = (options: {
+  mode: string;
+  env: ReleaseTargetEnv;
+  origins: OriginTable;
+}): { host: string; originUrl: string } => {
+  const { mode, env, origins } = options;
+  const originUrl = env.catalogOriginUrl?.trim() ?? '';
+  if (!originUrl) {
+    throw new ReleaseTargetError(
+      'origin-missing',
+      `CATALOG_ORIGIN_URL is not set for mode ${JSON.stringify(mode)}. Set it in ` +
+        `scripts/.env.${mode} (see scripts/.env.example).`,
+    );
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(originUrl);
+  } catch {
+    throw new ReleaseTargetError(
+      'origin-invalid',
+      `CATALOG_ORIGIN_URL is not a valid URL (${JSON.stringify(originUrl)}).`,
+    );
+  }
+  const declared = origins[mode];
+  if (declared?.originUrl === null) {
+    throw new ReleaseTargetError(
+      'origin-not-provisioned',
+      `Mode ${JSON.stringify(mode)} has no declared catalog origin yet ` +
+        `(CATALOG_ORIGINS.${mode}.originUrl is null), so a ${mode} publish could not be ` +
+        'verified. Provision a public read origin for ' +
+        `\`${declared.bucketName}\` and record it in CATALOG_ORIGINS before publishing.`,
+    );
+  }
+  return { host: parsed.hostname, originUrl: parsed.toString().replace(/\/+$/, '') };
+};
+
+/**
+ * Step 6: a non-production mode must never read the production catalog —
+ * verifying a staging write by reading production proves nothing about staging.
+ */
+const assertOriginNotForbiddenHost = (mode: string, host: string): void => {
+  if (
+    mode === 'production' ||
+    !(CATALOG_ORIGIN_FORBIDDEN_HOSTS as readonly string[]).includes(host)
+  ) {
+    return;
+  }
+  throw new ReleaseTargetError(
+    'origin-is-production',
+    `Mode ${JSON.stringify(mode)} resolved its read origin to ${JSON.stringify(host)}, which ` +
+      'serves the production catalog. A non-production release must have its own read ' +
+      `origin — verifying a ${mode} write against production is not verification. Set ` +
+      `CATALOG_ORIGIN_URL in scripts/.env.${mode} to the ${mode} catalog origin.`,
+  );
+};
+
+/** Step 7: the origin must equal the one this mode declares, when it declares one. */
+const assertOriginMatchesDeclared = (options: {
+  mode: string;
+  originUrl: string;
+  declared: { originUrl: string | null } | undefined;
+}): void => {
+  const { mode, originUrl, declared } = options;
+  if (declared?.originUrl === null || declared?.originUrl === undefined) {
+    return;
+  }
+  const normalizedDeclaredOrigin = new URL(declared.originUrl).toString().replace(/\/+$/, '');
+  if (normalizedDeclaredOrigin === originUrl) {
+    return;
+  }
+  throw new ReleaseTargetError(
+    'origin-override-rejected',
+    `CATALOG_ORIGIN_URL=${JSON.stringify(originUrl)} disagrees with the origin ` +
+      `declared for mode ${JSON.stringify(mode)} ` +
+      `(${JSON.stringify(normalizedDeclaredOrigin)}). Refusing to publish.`,
+  );
+};
+
+/** Step 8: the two remote modes must not share one catalog origin. */
+const assertOriginNotSharedWithSibling = (options: {
+  mode: string;
+  host: string;
+  warnings: string[];
+}): void => {
+  const { mode, host, warnings } = options;
+  const sibling = siblingRemoteMode(mode as RemoteReleaseMode);
+  const siblingOrigin = readSiblingEnvValue(sibling, 'CATALOG_ORIGIN_URL');
+  if (!siblingOrigin) {
+    if (mode !== 'production') {
+      warnings.push(
+        `scripts/.env.${sibling} is absent, so the ${mode} origin could not be compared against ` +
+          `${sibling}'s. Only the denylist and bucket checks protect this run.`,
+      );
+    }
+    return;
+  }
+  let siblingHost: string | undefined;
+  try {
+    siblingHost = new URL(siblingOrigin).hostname;
+  } catch {
+    siblingHost = undefined;
+  }
+  if (siblingHost && siblingHost === host) {
+    throw new ReleaseTargetError(
+      'origin-shared-with-other-mode',
+      `Mode ${JSON.stringify(mode)} and ${JSON.stringify(sibling)} both resolve their read ` +
+        `origin to ${JSON.stringify(host)}. Refusing to publish: the two modes would share ` +
+        'one catalog.',
+    );
+  }
+};
+
 /**
  * Resolves and VALIDATES the release target for a mode.
  *
@@ -160,174 +360,31 @@ const siblingRemoteMode = (mode: RemoteReleaseMode): RemoteReleaseMode =>
 export const resolveReleaseTarget = (options: {
   mode: string;
   /** Raw values, injected so tests need not mutate `process.env`. */
-  env: {
-    catalogBucket?: string | undefined;
-    catalogOriginUrl?: string | undefined;
-    testSeam?: string | undefined;
-  };
+  env: ReleaseTargetEnv;
   /**
    * Canonical origin identity table. Defaults to the committed one; injected by
    * tests so a PROVISIONED origin can be exercised without editing the shipped
    * table (which deliberately records staging as unprovisioned).
    */
-  origins?: Record<string, { bucketName: string; originUrl: string | null }>;
+  origins?: OriginTable;
 }): ReleaseTarget => {
   const { mode, env } = options;
-  // Annotated explicitly rather than cast: `CATALOG_ORIGINS` is a const object
-  // with only the declared modes, so indexing it by an arbitrary mode string
-  // needs a widened view. Spelling that view out keeps the compiler checking the
-  // shape instead of asserting it.
-  const defaultOrigins: Record<string, { bucketName: string; originUrl: string | null }> = {
-    production: CATALOG_ORIGINS.production,
-    staging: CATALOG_ORIGINS.staging,
-  };
-  const origins = options.origins ?? defaultOrigins;
+  const origins = options.origins ?? defaultOrigins();
   const warnings: string[] = [];
 
-  const expectedBucket = resolveBucketName({ bucketKey: 'catalog', mode });
-  if (!expectedBucket) {
-    throw new ReleaseTargetError(
-      'no-declared-bucket',
-      `No catalog bucket is declared for mode ${JSON.stringify(mode)}. ` +
-        `Declared modes: ${REMOTE_RELEASE_MODES.join(', ')}.`,
-    );
-  }
+  const expectedBucket = expectedBucketFor(mode);
+  const { bucket, viaTestSeam } = resolveReleaseBucket({ mode, env, expectedBucket, warnings });
+  assertBucketNotSharedWithSibling(mode, bucket);
 
-  const override = env.catalogBucket?.trim();
-  let bucket = expectedBucket;
-  let viaTestSeam = false;
-
-  if (override && override !== expectedBucket) {
-    // An override that disagrees with the mode's declaration is only ever
-    // legitimate as an explicit local rehearsal.
-    if (env.testSeam !== '1') {
-      throw new ReleaseTargetError(
-        'bucket-override-rejected',
-        `CATALOG_BUCKET=${JSON.stringify(override)} disagrees with the bucket declared for ` +
-          `mode ${JSON.stringify(mode)} (${JSON.stringify(expectedBucket)}). Refusing to ` +
-          'publish: a configuration override must not retarget a remote mode. Remove ' +
-          'CATALOG_BUCKET from scripts/.env.' +
-          `${mode} (and from secrets/${mode}.enc.env), or set ${CATALOG_TEST_SEAM_ENV}=1 to ` +
-          'rehearse against a scratch bucket.',
-      );
-    }
-    if ((declaredRemoteBuckets() as string[]).includes(override)) {
-      throw new ReleaseTargetError(
-        'test-seam-names-remote-bucket',
-        `The test seam may not name a declared remote bucket (${JSON.stringify(override)}). ` +
-          `Declared remote buckets: ${declaredRemoteBuckets().join(', ')}.`,
-      );
-    }
-    bucket = override;
-    viaTestSeam = true;
-    warnings.push(
-      `test seam active (${CATALOG_TEST_SEAM_ENV}=1): writing to scratch bucket ${JSON.stringify(override)} instead of ${JSON.stringify(expectedBucket)}`,
-    );
-  }
-
-  // Cross-mode: a bucket must never be shared between two remote modes, so a
-  // swapped or copy-pasted env file cannot make staging write production.
-  const sibling = siblingRemoteMode(mode as RemoteReleaseMode);
-  const siblingBucket = R2_BUCKETS.catalog[sibling].bucketName;
-  if (bucket === siblingBucket) {
-    throw new ReleaseTargetError(
-      'bucket-shared-with-other-mode',
-      `Mode ${JSON.stringify(mode)} resolved to ${JSON.stringify(bucket)}, which is the bucket ` +
-        `declared for ${JSON.stringify(sibling)}. Refusing to publish.`,
-    );
-  }
-
-  const originUrl = env.catalogOriginUrl?.trim() ?? '';
-  if (!originUrl) {
-    throw new ReleaseTargetError(
-      'origin-missing',
-      `CATALOG_ORIGIN_URL is not set for mode ${JSON.stringify(mode)}. Set it in ` +
-        `scripts/.env.${mode} (see scripts/.env.example).`,
-    );
-  }
-
-  let host: string;
-  let normalizedOrigin: string;
-  try {
-    const parsedOrigin = new URL(originUrl);
-    host = parsedOrigin.hostname;
-    normalizedOrigin = parsedOrigin.toString().replace(/\/+$/, '');
-  } catch {
-    throw new ReleaseTargetError(
-      'origin-invalid',
-      `CATALOG_ORIGIN_URL is not a valid URL (${JSON.stringify(originUrl)}).`,
-    );
-  }
-
-  // The canonical identity for this mode, when one is declared. `originUrl:
-  // null` means the mode has NO public read origin yet — fail closed rather
-  // than accept whatever the environment happens to say, because the only other
-  // origin available is production's.
-  const declared = origins[mode];
-  if (declared && declared.originUrl === null) {
-    throw new ReleaseTargetError(
-      'origin-not-provisioned',
-      `Mode ${JSON.stringify(mode)} has no declared catalog origin yet ` +
-        `(CATALOG_ORIGINS.${mode}.originUrl is null), so a ${mode} publish could not be ` +
-        'verified. Provision a public read origin for ' +
-        `\`${declared.bucketName}\` and record it in CATALOG_ORIGINS before publishing.`,
-    );
-  }
-
-  // A non-production mode must never read the production catalog: verifying a
-  // staging write by reading production proves nothing about staging.
-  if (
-    mode !== 'production' &&
-    (CATALOG_ORIGIN_FORBIDDEN_HOSTS as readonly string[]).includes(host)
-  ) {
-    throw new ReleaseTargetError(
-      'origin-is-production',
-      `Mode ${JSON.stringify(mode)} resolved its read origin to ${JSON.stringify(host)}, which ` +
-        'serves the production catalog. A non-production release must have its own read ' +
-        `origin — verifying a ${mode} write against production is not verification. Set ` +
-        `CATALOG_ORIGIN_URL in scripts/.env.${mode} to the ${mode} catalog origin.`,
-    );
-  }
-
-  if (declared?.originUrl !== null && declared?.originUrl !== undefined) {
-    const normalizedDeclaredOrigin = new URL(declared.originUrl).toString().replace(/\/+$/, '');
-    if (normalizedOrigin !== normalizedDeclaredOrigin) {
-      throw new ReleaseTargetError(
-        'origin-override-rejected',
-        `CATALOG_ORIGIN_URL=${JSON.stringify(normalizedOrigin)} disagrees with the origin ` +
-          `declared for mode ${JSON.stringify(mode)} ` +
-          `(${JSON.stringify(normalizedDeclaredOrigin)}). Refusing to publish.`,
-      );
-    }
-  }
-
-  const siblingOrigin = readSiblingEnvValue(sibling, 'CATALOG_ORIGIN_URL');
-  if (siblingOrigin) {
-    let siblingHost: string | undefined;
-    try {
-      siblingHost = new URL(siblingOrigin).hostname;
-    } catch {
-      siblingHost = undefined;
-    }
-    if (siblingHost && siblingHost === host) {
-      throw new ReleaseTargetError(
-        'origin-shared-with-other-mode',
-        `Mode ${JSON.stringify(mode)} and ${JSON.stringify(sibling)} both resolve their read ` +
-          `origin to ${JSON.stringify(host)}. Refusing to publish: the two modes would share ` +
-          'one catalog.',
-      );
-    }
-  } else if (mode !== 'production') {
-    warnings.push(
-      `scripts/.env.${sibling} is absent, so the ${mode} origin could not be compared against ` +
-        `${sibling}'s. Only the denylist and bucket checks protect this run.`,
-    );
-  }
+  const origin = resolveReleaseOrigin({ mode, env, origins });
+  assertOriginNotForbiddenHost(mode, origin.host);
+  assertOriginMatchesDeclared({ mode, originUrl: origin.originUrl, declared: origins[mode] });
+  assertOriginNotSharedWithSibling({ mode, host: origin.host, warnings });
 
   return {
     mode,
     bucket,
-    originUrl: normalizedOrigin,
+    originUrl: origin.originUrl,
     expectedBucket,
     viaTestSeam,
     warnings,

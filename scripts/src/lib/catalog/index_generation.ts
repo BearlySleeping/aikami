@@ -119,6 +119,108 @@ const buildShardDocument = (options: {
 };
 
 /**
+ * One category's entries, grouped. Insertion order is the merged entry order.
+ */
+const groupByCategory = (
+  entries: readonly CatalogAssetEntry[],
+): Map<string, CatalogAssetEntry[]> => {
+  const byCategory = new Map<string, CatalogAssetEntry[]>();
+  for (const entry of entries) {
+    const list = byCategory.get(entry.category) ?? [];
+    list.push(entry);
+    byCategory.set(entry.category, list);
+  }
+  return byCategory;
+};
+
+type ShardedCategory = {
+  shards: GeneratedShard[];
+  categories: CatalogIndexRoot['categories'];
+};
+
+/**
+ * Shards ONE category: the whole category when it fits the gzip budget,
+ * otherwise split by subcategory.
+ */
+const shardCategory = (options: {
+  category: string;
+  entries: readonly CatalogAssetEntry[];
+  publishedAt: string;
+  originUrl: string;
+}): ShardedCategory => {
+  const { category, entries, publishedAt, originUrl } = options;
+  const wholeJson = JSON.stringify(
+    buildShardDocument({
+      id: category,
+      category: category as CatalogCategory,
+      entries,
+      publishedAt,
+      originUrl,
+    }),
+    null,
+    2,
+  );
+  const wholeSize = gzipBytes(wholeJson);
+  if (wholeSize <= SHARD_MAX_GZIP_BYTES) {
+    return {
+      shards: [
+        {
+          id: category,
+          category,
+          key: `index/v1/${category}.json`,
+          json: wholeJson,
+          gzipBytes: wholeSize,
+        },
+      ],
+      categories: [{ id: category, count: entries.length }],
+    };
+  }
+  return splitCategoryBySubcategory(options);
+};
+
+/** Over budget — split by subcategory, refusing a subcategory that is still too big. */
+const splitCategoryBySubcategory = (options: {
+  category: string;
+  entries: readonly CatalogAssetEntry[];
+  publishedAt: string;
+  originUrl: string;
+}): ShardedCategory => {
+  const { category, publishedAt, originUrl } = options;
+  const bySubcategory = new Map<string, CatalogAssetEntry[]>();
+  for (const entry of options.entries) {
+    const group = entry.subcategory ?? '__base';
+    bySubcategory.set(group, [...(bySubcategory.get(group) ?? []), entry]);
+  }
+
+  const shards: GeneratedShard[] = [];
+  const categories: CatalogIndexRoot['categories'] = [];
+  const groups = [...bySubcategory.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  for (const [subcategory, subEntries] of groups) {
+    const id = `${category}__${shardIdFragment(subcategory)}`;
+    const json = JSON.stringify(
+      buildShardDocument({
+        id,
+        category: category as CatalogCategory,
+        entries: subEntries,
+        publishedAt,
+        originUrl,
+      }),
+      null,
+      2,
+    );
+    const size = gzipBytes(json);
+    if (size > SHARD_MAX_GZIP_BYTES) {
+      throw new Error(
+        `Category ${category} subcategory shard ${id} is ${size} bytes gzipped — over the 1 MB budget`,
+      );
+    }
+    shards.push({ id, category, key: `index/v1/${id}.json`, json, gzipBytes: size });
+    categories.push({ id, count: subEntries.length });
+  }
+  return { shards, categories };
+};
+
+/**
  * Generate the root index and category shards for a catalog entry list.
  *
  * Splits any category whose gzipped shard exceeds SHARD_MAX_GZIP_BYTES by
@@ -162,68 +264,20 @@ export const generateCatalogIndex = (options: {
     retire: options.retireTags,
   });
 
-  const byCategory = new Map<string, CatalogAssetEntry[]>();
-  for (const entry of merged) {
-    const list = byCategory.get(entry.category) ?? [];
-    list.push(entry);
-    byCategory.set(entry.category, list);
-  }
+  const byCategory = groupByCategory(merged);
 
   const shards: GeneratedShard[] = [];
   const categories: CatalogIndexRoot['categories'] = [];
 
   for (const category of [...byCategory.keys()].sort((a, b) => a.localeCompare(b))) {
-    const categoryEntries = byCategory.get(category) ?? [];
-    const wholeShard = buildShardDocument({
-      id: category,
-      category: category as CatalogCategory,
-      entries: categoryEntries,
+    const sharded = shardCategory({
+      category,
+      entries: byCategory.get(category) ?? [],
       publishedAt,
       originUrl,
     });
-    const wholeJson = JSON.stringify(wholeShard, null, 2);
-
-    if (gzipBytes(wholeJson) <= SHARD_MAX_GZIP_BYTES) {
-      shards.push({
-        id: category,
-        category,
-        key: `index/v1/${category}.json`,
-        json: wholeJson,
-        gzipBytes: gzipBytes(wholeJson),
-      });
-      categories.push({ id: category, count: categoryEntries.length });
-      continue;
-    }
-
-    // Over budget — split by subcategory.
-    const bySubcategory = new Map<string, CatalogAssetEntry[]>();
-    for (const entry of categoryEntries) {
-      const group = entry.subcategory ?? '__base';
-      const list = bySubcategory.get(group) ?? [];
-      list.push(entry);
-      bySubcategory.set(group, list);
-    }
-    for (const [subcategory, subEntries] of [...bySubcategory.entries()].sort((a, b) =>
-      a[0].localeCompare(b[0]),
-    )) {
-      const id = `${category}__${shardIdFragment(subcategory)}`;
-      const shard = buildShardDocument({
-        id,
-        category: category as CatalogCategory,
-        entries: subEntries,
-        publishedAt,
-        originUrl,
-      });
-      const json = JSON.stringify(shard, null, 2);
-      const size = gzipBytes(json);
-      if (size > SHARD_MAX_GZIP_BYTES) {
-        throw new Error(
-          `Category ${category} subcategory shard ${id} is ${size} bytes gzipped — over the 1 MB budget`,
-        );
-      }
-      shards.push({ id, category, key: `index/v1/${id}.json`, json, gzipBytes: size });
-      categories.push({ id, count: subEntries.length });
-    }
+    shards.push(...sharded.shards);
+    categories.push(...sharded.categories);
   }
 
   const root: CatalogIndexRoot = {

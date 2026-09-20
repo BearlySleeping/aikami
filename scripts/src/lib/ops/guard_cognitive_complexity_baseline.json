@@ -182,7 +182,7 @@
   "apps/backend/image/scripts/generate_batch.ts": {
     "counts": {
       "excessive": 1,
-      "worst": 75
+      "worst": 59
     }
   },
   "apps/backend/image/scripts/png_codec.ts": {
@@ -1093,14 +1093,14 @@
   },
   "packages/frontend/engine/src/game_world.ts": {
     "counts": {
-      "excessive": 6,
+      "excessive": 5,
       "worst": 39
     }
   },
   "packages/frontend/engine/src/game_world/entity_appearance.ts": {
     "counts": {
       "excessive": 1,
-      "worst": 47
+      "worst": 31
     }
   },
   "packages/frontend/engine/src/game_world/frame_renderer.ts": {
@@ -1883,22 +1883,10 @@
       "worst": 20
     }
   },
-  "scripts/src/lib/catalog/index_generation.ts": {
-    "counts": {
-      "excessive": 1,
-      "worst": 16
-    }
-  },
   "scripts/src/lib/catalog/lpc_credits.ts": {
     "counts": {
       "excessive": 2,
       "worst": 20
-    }
-  },
-  "scripts/src/lib/catalog/pipeline.ts": {
-    "counts": {
-      "excessive": 1,
-      "worst": 34
     }
   },
   "scripts/src/lib/catalog/upload.ts": {
@@ -2087,12 +2075,6 @@
       "worst": 23
     }
   },
-  "scripts/src/lib/ops/emberwatch_map_retained.ts": {
-    "counts": {
-      "excessive": 1,
-      "worst": 40
-    }
-  },
   "scripts/src/lib/ops/emberwatch_map_shared.ts": {
     "counts": {
       "excessive": 1,
@@ -2113,8 +2095,8 @@
   },
   "scripts/src/lib/ops/generate_emberwatch_maps_extra.ts": {
     "counts": {
-      "excessive": 2,
-      "worst": 21
+      "excessive": 1,
+      "worst": 18
     }
   },
   "scripts/src/lib/ops/generate_emberwatch_maps.ts": {

@@ -103,6 +103,35 @@ type ShardDocument = { entries?: CatalogAssetEntry[] };
  * @throws {PreviousReleaseError} When a pointer exists but is corrupt, or any
  *   pinned object fails its integrity check. The caller must abort.
  */
+/** The entries one verified shard document contributes, or a refusal. */
+const entriesOfVerifiedShard = (options: {
+  shardKey: string;
+  releaseId: string;
+  bytes: Uint8Array | undefined;
+}): CatalogAssetEntry[] => {
+  const { shardKey, releaseId, bytes } = options;
+  // The pointer names the shard; the graph holds its VERIFIED bytes. Reading
+  // by key from `documents` (not re-fetching) is what makes the entries
+  // provably the ones the hash covered.
+  if (!bytes) {
+    throw new PreviousReleaseError(
+      'previous-release-incomplete',
+      `Verified release ${releaseId} pins shard ${shardKey} but the resolver did not ` +
+        'retain it. Refusing to publish with a partial view of the previous catalog.',
+    );
+  }
+  try {
+    const parsed = JSON.parse(new TextDecoder().decode(bytes)) as ShardDocument;
+    return parsed.entries ?? [];
+  } catch (error) {
+    throw new PreviousReleaseError(
+      'previous-release-corrupt-shard',
+      `Shard ${shardKey} of verified release ${releaseId} is not valid JSON: ` +
+        `${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+};
+
 export const resolvePreviousRelease = async (options: {
   originUrl: string;
   reader?: ReleaseDocumentReader;
@@ -126,36 +155,13 @@ export const resolvePreviousRelease = async (options: {
     return undefined;
   }
 
-  const entries: CatalogAssetEntry[] = [];
-  const seenShardKeys = new Set<string>();
-
-  for (const shard of graph.pointer.shards) {
-    // The pointer names the shard; the graph holds its VERIFIED bytes. Reading
-    // by key from `documents` (not re-fetching) is what makes the entries
-    // provably the ones the hash covered.
-    const bytes = graph.documents.get(shard.key);
-    if (!bytes) {
-      throw new PreviousReleaseError(
-        'previous-release-incomplete',
-        `Verified release ${graph.releaseId} pins shard ${shard.key} but the resolver did not ` +
-          'retain it. Refusing to publish with a partial view of the previous catalog.',
-      );
-    }
-    seenShardKeys.add(shard.key);
-    let parsed: ShardDocument;
-    try {
-      parsed = JSON.parse(new TextDecoder().decode(bytes)) as ShardDocument;
-    } catch (error) {
-      throw new PreviousReleaseError(
-        'previous-release-corrupt-shard',
-        `Shard ${shard.key} of verified release ${graph.releaseId} is not valid JSON: ` +
-          `${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
-    for (const entry of parsed.entries ?? []) {
-      entries.push(entry);
-    }
-  }
+  const entries = graph.pointer.shards.flatMap((shard) =>
+    entriesOfVerifiedShard({
+      shardKey: shard.key,
+      releaseId: graph.releaseId,
+      bytes: graph.documents.get(shard.key),
+    }),
+  );
 
   const dependencies = new Map<string, Uint8Array>();
   for (const dependency of graph.pointer.dependencies) {

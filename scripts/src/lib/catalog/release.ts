@@ -369,6 +369,8 @@ export const validateReleasePlan = (options: {
 
 export type PublishReportLike = {
   ok: boolean;
+  /** The release id the publisher pinned into the pointer, when it got that far. */
+  releaseId?: string;
   rootKey?: string;
   shardKeys?: readonly string[];
   seed?: { uploaded: number; carried: number; failed: number };
@@ -405,7 +407,9 @@ export const buildReceipt = (options: {
   bucket: options.plan.target.bucket,
   originUrl: options.plan.target.originUrl,
   previousReleaseId: options.previousReleaseId,
-  releaseId: options.report.releaseWritten ? new Date().toISOString() : '',
+  // The publisher's OWN release id: a receipt that invented its own would not
+  // name the pointer a rollback has to re-point.
+  releaseId: options.report.releaseId ?? '',
   catalogRootHash: options.plan.catalogRootHash,
   catalogShards: options.plan.catalogShards,
   dependencies: [],

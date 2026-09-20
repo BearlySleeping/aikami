@@ -63,6 +63,86 @@ export type SeedPublishReport = {
  * @param options.carriedDependencies - Verified dependencies of the previous
  *   release, keyed by catalog key, from `resolvePreviousRelease`.
  */
+type SeedObject = { key: string; hash: string; carried: boolean };
+
+const errorCodeOf = (error: unknown): unknown =>
+  error !== null && typeof error === 'object' && 'code' in error ? error.code : undefined;
+
+const messageOf = (error: unknown): string =>
+  error instanceof Error ? error.message : String(error);
+
+/**
+ * The previous release's verified copy of one seed file, keyed by the exact
+ * existing catalog key (dependency keys are hashed, so the file name is the
+ * only stable part).
+ */
+const carriedSeedBody = (
+  carriedDependencies: ReadonlyMap<string, Uint8Array> | undefined,
+  filename: string,
+): Uint8Array | undefined => {
+  const carriedKey = [...(carriedDependencies?.keys() ?? [])].find((dependencyKey) =>
+    dependencyKey.endsWith(`/${filename}`),
+  );
+  return carriedKey ? carriedDependencies?.get(carriedKey) : undefined;
+};
+
+/**
+ * Resolves one seed file's bytes: the candidate's own copy first, then the
+ * previous verified release's immutable copy.
+ *
+ * Absent from both is a FAILURE, not a skip — see the module header: making it
+ * non-fatal would publish a graph with a hole in it.
+ */
+const resolveSeedBody = (options: {
+  filename: string;
+  gameDataDir: string;
+  carriedDependencies: ReadonlyMap<string, Uint8Array> | undefined;
+}): { ok: true; body: Uint8Array; carried: boolean } | { ok: false; reason: string } => {
+  try {
+    return {
+      ok: true,
+      body: readFileSync(join(options.gameDataDir, options.filename)),
+      carried: false,
+    };
+  } catch (error) {
+    if (errorCodeOf(error) !== 'ENOENT') {
+      return { ok: false, reason: `could not be read — ${messageOf(error)}` };
+    }
+  }
+  const carriedBody = carriedSeedBody(options.carriedDependencies, options.filename);
+  if (!carriedBody) {
+    return {
+      ok: false,
+      reason:
+        'is absent from this candidate AND from the previous verified release — the new ' +
+        'release would be incomplete.',
+    };
+  }
+  return { ok: true, body: carriedBody, carried: true };
+};
+
+/** Uploads one seed file under its immutable content-addressed key. */
+const storeSeedFile = async (options: {
+  client: R2ClientLike;
+  filename: string;
+  body: Uint8Array;
+  carried: boolean;
+}): Promise<{ ok: true; object: SeedObject } | { ok: false; error: string }> => {
+  const hash = createHash('sha256').update(options.body).digest('hex');
+  const key = `${SEED_KEY_PREFIX}${hash}/${options.filename}`;
+  try {
+    await options.client.putObject({
+      key,
+      body: options.body,
+      contentType: 'application/json',
+      cacheControl: ASSET_CACHE_CONTROL,
+    });
+  } catch (error) {
+    return { ok: false, error: messageOf(error) };
+  }
+  return { ok: true, object: { key, hash, carried: options.carried } };
+};
+
 export const runSeedPublish = async (options: {
   client: R2ClientLike;
   gameDataDir?: string;
@@ -72,62 +152,33 @@ export const runSeedPublish = async (options: {
   let uploaded = 0;
   let carried = 0;
   let failed = 0;
-  const objects: { key: string; hash: string; carried: boolean }[] = [];
+  const objects: SeedObject[] = [];
 
   for (const filename of SEED_FILES) {
-    let body: Uint8Array;
-    let reusedFromPrevious = false;
-
-    try {
-      body = readFileSync(join(gameDataDir, filename));
-    } catch (error) {
-      const errorCode =
-        error !== null && typeof error === 'object' && 'code' in error ? error.code : undefined;
-      if (errorCode !== 'ENOENT') {
-        failed++;
-        const message = error instanceof Error ? error.message : String(error);
-        console.error(`  ❌ seed: ${filename} could not be read — ${message}`);
-        continue;
-      }
-      // Absent locally. The previous release's verified copy is authoritative
-      // and byte-identical to what the client already fetches.
-      const carriedKey = [...(carriedDependencies?.keys() ?? [])].find((dependencyKey) =>
-        dependencyKey.endsWith(`/${filename}`),
-      );
-      const carriedBody = carriedKey ? carriedDependencies?.get(carriedKey) : undefined;
-      if (!carriedBody) {
-        failed++;
-        console.error(
-          `  ❌ seed: ${filename} is absent from this candidate AND from the previous ` +
-            'verified release — the new release would be incomplete.',
-        );
-        continue;
-      }
-      body = carriedBody;
-      reusedFromPrevious = true;
-    }
-
-    const hash = createHash('sha256').update(body).digest('hex');
-    const key = `${SEED_KEY_PREFIX}${hash}/${filename}`;
-    try {
-      await client.putObject({
-        key,
-        body,
-        contentType: 'application/json',
-        cacheControl: ASSET_CACHE_CONTROL,
-      });
-      objects.push({ key, hash, carried: reusedFromPrevious });
-      if (reusedFromPrevious) {
-        carried++;
-        console.log(`  🔗 seed: ${filename} carried forward from the previous release`);
-      } else {
-        uploaded++;
-        console.log(`  📄 seed: ${filename} (${(body.length / 1024).toFixed(1)} KB)`);
-      }
-    } catch (error) {
+    const resolved = resolveSeedBody({ filename, gameDataDir, carriedDependencies });
+    if (!resolved.ok) {
       failed++;
-      const message = error instanceof Error ? error.message : String(error);
-      console.warn(`  ⚠ seed: ${filename} upload failed — ${message}`);
+      console.error(`  ❌ seed: ${filename} ${resolved.reason}`);
+      continue;
+    }
+    const stored = await storeSeedFile({
+      client,
+      filename,
+      body: resolved.body,
+      carried: resolved.carried,
+    });
+    if (!stored.ok) {
+      failed++;
+      console.warn(`  ⚠ seed: ${filename} upload failed — ${stored.error}`);
+      continue;
+    }
+    objects.push(stored.object);
+    if (resolved.carried) {
+      carried++;
+      console.log(`  🔗 seed: ${filename} carried forward from the previous release`);
+    } else {
+      uploaded++;
+      console.log(`  📄 seed: ${filename} (${(resolved.body.length / 1024).toFixed(1)} KB)`);
     }
   }
 

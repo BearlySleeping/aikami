@@ -16,7 +16,6 @@
 // A non-zero failure count exits non-zero (AC-1). The run reports
 // uploaded/skipped/failed counts, bytes transferred, and elapsed time.
 
-import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type {
@@ -29,7 +28,6 @@ import {
   ContentPackManifestSchema,
   InstalledPackLockSchema,
   PACK_LOCK_KEY,
-  ReleasePointerSchema,
 } from '@aikami/schemas';
 import { Value } from 'typebox/value';
 import { type CatalogEntry, loadCatalogEntries } from './catalog_entries.ts';
@@ -44,6 +42,7 @@ import {
   ROOT_INDEX_KEY,
 } from './config.ts';
 import { assetKey } from './content_address.ts';
+import { immutableIndexKey, publishIndexAndActivate, sha256Hex } from './index_activation.ts';
 import { generateCatalogIndex } from './index_generation.ts';
 import { buildPackLock } from './pack_lock.ts';
 import { runAttributionPreflight } from './preflight.ts';
@@ -82,23 +81,6 @@ export type CatalogPublishOptions = {
   /** Override content-packs dir (tests). */
   contentPacksDir?: string;
 };
-
-/**
- * Key of the versioned release pointer document (C-496 AC-4).
- *
- * Written atomically only after every required object, shard, seed file and
- * the root index are confirmed uploaded; the previous complete release stays
- * readable at this key until then.
- */
-const RELEASE_POINTER_KEY = 'index/v1/release.json';
-
-/** SHA-256 hex digest of a UTF-8 string. */
-const sha256Hex = (value: string): string =>
-  createHash('sha256').update(value, 'utf8').digest('hex');
-
-/** Content-addressed key of one immutable index revision. */
-const immutableIndexKey = (options: { name: string; hash: string }): string =>
-  `${INDEX_KEY_PREFIX}revisions/${options.hash}/${options.name}.json`;
 
 /**
  * The per-pack installed lock phase (C-523 AC-5).
@@ -254,6 +236,51 @@ export const buildUploadItems = (options: {
     localPath: join(entry.rootDir, entry.path),
     ext: entry.ext,
   }));
+};
+
+/**
+ * The post-publish console summary. Formatting lives here so the orchestration
+ * body stays a sequence of phases rather than a sequence of interpolations.
+ */
+const logPublishSummary = (options: {
+  uploadReport: { uploaded: number; skipped: number; failed: number; bytesTransferred: number };
+  thumbnails: {
+    generated: number;
+    uploaded: number;
+    skipped: number;
+    failed: number;
+    skippedNonImage: number;
+    fallbackTags: readonly unknown[];
+  };
+  rootKey: string;
+  shardCount: number;
+  failedIndexKeys: readonly string[];
+  legacyAlias: { written: boolean; error?: string };
+  elapsedMs: number;
+}): void => {
+  const { uploadReport, thumbnails, legacyAlias } = options;
+  const indexSuffix =
+    options.failedIndexKeys.length > 0
+      ? ` — ${options.failedIndexKeys.length} index object(s) FAILED`
+      : '';
+  const aliasSuffix = legacyAlias.error ? ` — ${legacyAlias.error}` : '';
+  console.log('');
+  console.log(
+    `📤 ${uploadReport.uploaded} uploaded, ${uploadReport.skipped} skipped, ${uploadReport.failed} failed`,
+  );
+  console.log(
+    `   bytes transferred: ${(uploadReport.bytesTransferred / (1024 * 1024)).toFixed(1)} MB`,
+  );
+  console.log(
+    `🖼  thumbnails: ${thumbnails.generated} generated (${thumbnails.uploaded} uploaded, ${thumbnails.skipped} skipped, ${thumbnails.failed} failed), ` +
+      `${thumbnails.skippedNonImage} non-image skipped, ` +
+      `${thumbnails.fallbackTags.length} fallback-geometry`,
+  );
+  console.log(`📇 index: ${options.rootKey} (root, ${options.shardCount} shard(s))${indexSuffix}`);
+  console.log(
+    `🔗 legacy pack-lock alias: ${legacyAlias.written ? 'updated' : `not updated${aliasSuffix}`}`,
+  );
+  console.log(`⏱  elapsed: ${(options.elapsedMs / 1000).toFixed(1)}s`);
 };
 
 /**
@@ -547,135 +574,19 @@ export const runCatalogPublish = async (
   // 5. Upload the index LAST — all generated shards first, then the root,
   // so the root (the document consumers fetch first) is the final object
   // written. A partial publish therefore never leaves a root pointing at
-  // missing shards.
-  const rootJson = JSON.stringify(root, null, 2);
-  const rootHash = sha256Hex(rootJson);
-  const rootKey = immutableIndexKey({ name: 'catalog', hash: rootHash });
-  const immutableShards = shards.map((shard) => {
-    const hash = sha256Hex(shard.json);
-    return {
-      ...shard,
-      hash,
-      key: immutableIndexKey({ name: shard.id, hash }),
-    };
+  // missing shards. `publishIndexAndActivate` owns that ordering and the
+  // activation decision; this function owns the phases before it.
+  const activation = await publishIndexAndActivate({
+    client,
+    root,
+    shards,
+    releaseId,
+    seedReport,
+    packLockReport,
+    packLockBody,
   });
-
-  const failedIndexKeys: string[] = [];
-  const putIndexObject = async (object: {
-    key: string;
-    json: string;
-    cacheControl?: string;
-  }): Promise<void> => {
-    try {
-      await client.putObject({
-        key: object.key,
-        body: Buffer.from(object.json, 'utf8'),
-        contentType: 'application/json',
-        cacheControl: object.cacheControl ?? ASSET_CACHE_CONTROL,
-      });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      console.error(`  ❌ Index upload failed: ${object.key} — ${message}`);
-      failedIndexKeys.push(object.key);
-    }
-  };
-
-  // Upload every shard first.
-  for (const shard of immutableShards) {
-    await putIndexObject({ key: shard.key, json: shard.json });
-  }
-
-  // The mutable legacy compatibility alias is maintained ONLY after the
-  // immutable release is active. Its outcome is tracked separately from
-  // `failedIndexKeys`: a failed alias write leaves the immutable release
-  // internally correct, so it must not be reported as a release failure — but
-  // the report must not claim the alias was updated either.
-  const legacyAlias: { key: string; written: boolean; error?: string } = {
-    key: PACK_LOCK_KEY,
-    written: false,
-  };
-  const writeLegacyAlias = async (body: string): Promise<void> => {
-    try {
-      await client.putObject({
-        key: PACK_LOCK_KEY,
-        body: Buffer.from(body, 'utf8'),
-        contentType: 'application/json',
-        cacheControl: INDEX_CACHE_CONTROL,
-      });
-      legacyAlias.written = true;
-    } catch (error) {
-      legacyAlias.error = error instanceof Error ? error.message : String(error);
-      console.warn(
-        `  ⚠ legacy pack-lock alias not updated (immutable release unaffected): ${legacyAlias.error}`,
-      );
-    }
-  };
-
-  // Only advance the release pointer (root) when every shard it references
-  // is confirmed uploaded — never a root pointing at missing shards. A shard
-  // failure leaves the previous complete release readable (C-496 AC-4).
-  let releaseWritten = false;
-  if (failedIndexKeys.length === 0) {
-    await putIndexObject({ key: rootKey, json: rootJson });
-
-    // Seed failures block the release too: a missing seed file means offline
-    // boot/credits data is incomplete, so the publish must not report ok.
-    const seedOk = seedReport.failed === 0;
-    const okSoFar = uploadReport.failed === 0 && failedIndexKeys.length === 0 && seedOk;
-
-    if (okSoFar && failedIndexKeys.length === 0) {
-      // Write the versioned release pointer LAST, pinning the exact root,
-      // shard and dependency revisions of this complete release. Writing it
-      // here (after every required object is confirmed) means readers fetch
-      // either the old complete release or the new complete release, never a
-      // mixture. On any failure the pointer is left untouched (AC-4).
-      // Dependencies pin every immutable seed file, plus the per-pack installed
-      // lock when one was produced — so the release graph names the lock the
-      // client verifies audio against (C-523 AC-5).
-      const dependencies = [
-        // Project to the pointer's exact dependency shape: `additionalProperties:
-        // false` on ReleaseDependencySchema means the seed report's extra
-        // `carried` flag must not leak into the published graph.
-        ...seedReport.objects.map((object) => ({ key: object.key, hash: object.hash })),
-        ...(packLockReport.written && packLockReport.hash
-          ? [{ key: packLockReport.key, hash: packLockReport.hash }]
-          : []),
-      ];
-      const releasePointer = {
-        schemaVersion: 'catalog.release.v1',
-        releaseId,
-        rootKey,
-        rootHash,
-        shards: immutableShards.map((shard) => ({
-          category: shard.id,
-          key: shard.key,
-          hash: shard.hash,
-        })),
-        dependencies,
-        publishedAt: releaseId,
-      };
-      if (Value.Check(ReleasePointerSchema, releasePointer)) {
-        await putIndexObject({
-          key: RELEASE_POINTER_KEY,
-          json: JSON.stringify(releasePointer, null, 2),
-          cacheControl: INDEX_CACHE_CONTROL,
-        });
-        // Activation point: the pointer is the authoritative surface. Only now
-        // is the mutable compatibility alias allowed to move.
-        releaseWritten = failedIndexKeys.length === 0;
-        if (releaseWritten && packLockBody) {
-          await writeLegacyAlias(packLockBody.toString('utf8'));
-          packLockReport = { ...packLockReport, legacyAliasWritten: legacyAlias.written };
-        }
-      } else {
-        console.error('  ⛔ Generated release pointer failed validation — release NOT advanced.');
-      }
-    }
-  } else {
-    console.error(
-      `  ⛔ ${failedIndexKeys.length} shard(s) failed — release pointer NOT advanced (previous release preserved).`,
-    );
-  }
+  const { rootKey, shardKeys, legacyAlias, releaseWritten, failedIndexKeys } = activation;
+  const finalPackLock = activation.packLock;
 
   const ok =
     uploadReport.failed === 0 &&
@@ -684,26 +595,15 @@ export const runCatalogPublish = async (
     releaseWritten;
 
   const elapsedMs = Date.now() - startedAt;
-  console.log('');
-  console.log(
-    `📤 ${uploadReport.uploaded} uploaded, ${uploadReport.skipped} skipped, ${uploadReport.failed} failed`,
-  );
-  console.log(
-    `   bytes transferred: ${(uploadReport.bytesTransferred / (1024 * 1024)).toFixed(1)} MB`,
-  );
-  console.log(
-    `🖼  thumbnails: ${thumbnailPhase.report.generated} generated (${thumbnailPhase.report.uploaded} uploaded, ${thumbnailPhase.report.skipped} skipped, ${thumbnailPhase.report.failed} failed), ` +
-      `${thumbnailPhase.report.skippedNonImage} non-image skipped, ` +
-      `${thumbnailPhase.report.fallbackTags.length} fallback-geometry`,
-  );
-  console.log(
-    `📇 index: ${rootKey} (root, ${immutableShards.length} shard(s))` +
-      `${failedIndexKeys.length > 0 ? ` — ${failedIndexKeys.length} index object(s) FAILED` : ''}`,
-  );
-  console.log(
-    `🔗 legacy pack-lock alias: ${legacyAlias.written ? 'updated' : `not updated${legacyAlias.error ? ` — ${legacyAlias.error}` : ''}`}`,
-  );
-  console.log(`⏱  elapsed: ${(elapsedMs / 1000).toFixed(1)}s`);
+  logPublishSummary({
+    uploadReport,
+    thumbnails: thumbnailPhase.report,
+    rootKey,
+    shardCount: shardKeys.length,
+    failedIndexKeys,
+    legacyAlias,
+    elapsedMs,
+  });
 
   return {
     ok,
@@ -723,11 +623,12 @@ export const runCatalogPublish = async (
     ],
     thumbnails: thumbnailPhase.report,
     rootKey,
-    shardKeys: immutableShards.map((shard) => shard.key),
+    shardKeys,
     seed: seedReport,
-    packLock: packLockReport,
+    packLock: finalPackLock,
     legacyAlias,
     releaseWritten,
+    releaseId,
     elapsedMs,
   };
 };
