@@ -84,6 +84,23 @@ tasks:
     # so direct calls still hit this task's cache/hashing. The real command
     # lives in the `build:app` script — see that script for `--mode` handling.
     command: 'bun run build:app'
+    deps:
+      # 🔴 Load-bearing ordering, not a convenience.
+      #
+      # `build` and `typecheck` both drive `svelte-kit sync` into the SAME
+      # `.svelte-kit/` directory, with DIFFERENT route sets: `typecheck` opts
+      # into the `(dev)` sandbox routes (AIKAMI_INCLUDE_DEV_ROUTES=true) while
+      # `build` runs the production dev-route gate, which excludes them. Run
+      # concurrently — which moon does by default — the build's sync rewrites
+      # `.svelte-kit/types` without the `(dev)` routes while svelte-check is
+      # reading them, and `typecheck` fails with `Cannot find module './$types'`
+      # from `src/routes/(dev)/+layout.svelte`.
+      #
+      # The race is latent: it only surfaces when the build cache is cold, so
+      # it appears and disappears with unrelated edits. Ordering build AFTER
+      # typecheck makes build the last writer, which is what its declared
+      # `outputs` (`.svelte-kit`, `build`) already assume.
+      - '~:typecheck'
     inputs:
       - '@group(sources)'
       - '@group(configs)'
