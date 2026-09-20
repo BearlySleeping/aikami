@@ -38,10 +38,13 @@ describe('Emberwatch authored audio pins', () => {
     expect(parsed.audio?.bindings.length).toBeGreaterThan(0);
   });
 
-  test('every non-published binding has local bytes that hash to its pin', () => {
+  test('every asset binding has local bytes that hash to its pin', () => {
     const parsed = manifest as {
       audio: {
-        bindings: readonly { cueId: string; tag: string; sha256: string }[];
+        bindings: readonly {
+          cueId: string;
+          source: { kind: 'asset'; tag: string; sha256: string } | { kind: 'silence' };
+        }[];
       };
     };
 
@@ -54,15 +57,37 @@ describe('Emberwatch authored audio pins', () => {
     expect(bytesByStem.size).toBeGreaterThan(0);
 
     for (const binding of parsed.audio.bindings) {
-      if (PUBLISHED_BED_CUE_IDS.has(binding.cueId)) {
+      // An intentional-silence binding claims no bytes, so there is nothing to
+      // hash. It is covered by construction — this is the invariant that
+      // replaced the phantom `bgm_explore`/`bgm_combat` pins.
+      if (binding.source.kind === 'silence') {
         continue;
       }
-      const stem = binding.tag.split(':').at(-1) ?? '';
+      const stem = binding.source.tag.split(':').at(-1) ?? '';
       const actual = bytesByStem.get(stem);
-      // Not allowlisted and no local artifact is a real failure — the pin
-      // would not resolve on a clean checkout.
+      // No local artifact is a real failure — the pin would not resolve on a
+      // clean checkout.
       expect(actual, `${binding.cueId} must ship a local artifact (${stem})`).toBeDefined();
-      expect(actual, `${binding.cueId} bytes must hash to its pin`).toBe(binding.sha256);
+      expect(actual, `${binding.cueId} bytes must hash to its pin`).toBe(binding.source.sha256);
+    }
+  });
+
+  test('no binding claims bytes for a cue the pack never authored', () => {
+    // The two shared fallback beds have no bytes anywhere. They must be
+    // declared as intentional silence rather than pinning a hash for content
+    // that does not exist.
+    const parsed = manifest as {
+      audio: {
+        bindings: readonly {
+          cueId: string;
+          source: { kind: string; tag?: string; sha256?: string };
+        }[];
+      };
+    };
+    for (const cueId of PUBLISHED_BED_CUE_IDS) {
+      const binding = parsed.audio.bindings.find((candidate) => candidate.cueId === cueId);
+      expect(binding, `${cueId} must be declared`).toBeDefined();
+      expect(binding?.source, `${cueId} must not claim asset bytes`).toEqual({ kind: 'silence' });
     }
   });
 
@@ -79,13 +104,13 @@ describe('the audio installer covers every binding the pack is required to ship'
   /**
    * The installer walks a hard-coded CUES list, so a manifest binding it does
    * not know about would be silently uncovered: the pack lock would carry a
-   * cue with no bytes and nothing would report it. The installer now proves
+   * cue with no bytes and nothing would report it. The installer proves
    * coverage before its first write.
    *
-   * Only bindings the pack is REQUIRED to ship must be covered. A binding
-   * declared `optional` with a `silence` fallback is by definition one the
-   * pack may omit — that is the declared policy for the shared beds, not a
-   * gap — so the rule is: covered, OR explicitly optional-and-silent.
+   * Only asset-backed bindings need coverage. An intentional-silence binding
+   * declares that the pack ships no bytes for that cue, so it is covered by
+   * construction — there is nothing to install and nothing to omit. That is
+   * now a property of the schema, not a policy inferred from strings.
    */
   const INSTALLER_SOURCES = [
     'village_ward',
@@ -95,38 +120,38 @@ describe('the audio installer covers every binding the pack is required to ship'
     'emberwatch_combat',
   ];
 
-  test('every required binding has an installer source, and optional beds are declared as such', () => {
+  test('every asset binding has an installer source', () => {
     const parsed = manifest as {
       audio: {
         bindings: readonly {
           cueId: string;
-          tag: string;
-          resolution?: string;
-          fallback?: string;
+          source: { kind: 'asset'; tag: string } | { kind: 'silence' };
         }[];
       };
     };
     const covered = new Set(INSTALLER_SOURCES);
 
     for (const binding of parsed.audio.bindings) {
-      const stem = binding.tag.split(':').at(-1) ?? '';
-      if (covered.has(stem)) {
+      if (binding.source.kind === 'silence') {
         continue;
       }
-      // Uncovered is only legitimate when the pack explicitly declares that it
-      // may omit the cue AND that omission degrades to silence. Anything else
-      // is a binding the installer would silently drop.
-      expect(
-        { resolution: binding.resolution, fallback: binding.fallback },
-        `${binding.cueId} is uncovered and is not declared optional+silence`,
-      ).toEqual({ resolution: 'optional', fallback: 'silence' });
+      const stem = binding.source.tag.split(':').at(-1) ?? '';
+      expect(covered.has(stem), `${binding.cueId} is uncovered (${stem})`).toBe(true);
     }
   });
 
   test('no installer source is dead: each one satisfies a declared binding', () => {
-    const parsed = manifest as { audio: { bindings: readonly { tag: string }[] } };
+    const parsed = manifest as {
+      audio: {
+        bindings: readonly {
+          source: { kind: 'asset'; tag: string } | { kind: 'silence' };
+        }[];
+      };
+    };
     const declaredStems = new Set(
-      parsed.audio.bindings.map((binding) => binding.tag.split(':').at(-1) ?? ''),
+      parsed.audio.bindings.flatMap((binding) =>
+        binding.source.kind === 'asset' ? [binding.source.tag.split(':').at(-1) ?? ''] : [],
+      ),
     );
     for (const stem of INSTALLER_SOURCES) {
       expect(declaredStems.has(stem), `${stem} has an installer source but no binding`).toBe(true);

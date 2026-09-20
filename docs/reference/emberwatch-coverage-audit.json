@@ -7,7 +7,7 @@
   "packUpdatedAt": "2026-09-18T00:00:00.000Z",
   "generatedAt": "1980-01-01T00:00:00.000Z",
   "summary": {
-    "accepted/current": 134,
+    "accepted/current": 132,
     "acceptable-shared": 84,
     "placeholder/wrong-semantic-reuse": 0,
     "missing": 0,
@@ -30,8 +30,8 @@
     "audioCues": 8,
     "sourceImages": 21,
     "transitions": 8,
-    "catalogTags": 14,
-    "findings": 219
+    "catalogTags": 12,
+    "findings": 217
   },
   "findings": [
     {
@@ -752,7 +752,7 @@
       "id": "enemy-visual:ash_hound",
       "surface": "enemy-visual",
       "classification": "accepted/current",
-      "detail": "authored static visual (/content-packs/emberwatch/enemies/ash_hound.png)"
+      "detail": "authored static visual (/emberwatch/enemies/ash_hound.png)"
     },
     {
       "id": "portrait:ash_hound",
@@ -776,7 +776,7 @@
       "id": "enemy-visual:cinder_thrall",
       "surface": "enemy-visual",
       "classification": "accepted/current",
-      "detail": "authored static visual (/content-packs/emberwatch/enemies/cinder_thrall.png)"
+      "detail": "authored static visual (/emberwatch/enemies/cinder_thrall.png)"
     },
     {
       "id": "portrait:cinder_thrall",
@@ -800,7 +800,7 @@
       "id": "enemy-visual:ember_warden",
       "surface": "enemy-visual",
       "classification": "accepted/current",
-      "detail": "authored static visual (/content-packs/emberwatch/enemies/ember_warden.png)"
+      "detail": "authored static visual (/emberwatch/enemies/ember_warden.png)"
     },
     {
       "id": "portrait:ember_warden",
@@ -956,13 +956,13 @@
       "id": "audio:bed.explore",
       "surface": "audio-cue",
       "classification": "accepted/current",
-      "detail": "music \"bed.explore\" → tag music:exploration:bgm_explore (sha256 cf4233978d79…)"
+      "detail": "music \"bed.explore\" → intentional silence (no bytes)"
     },
     {
       "id": "audio:bed.combat",
       "surface": "audio-cue",
       "classification": "accepted/current",
-      "detail": "music \"bed.combat\" → tag music:combat:bgm_combat (sha256 506679f49699…)"
+      "detail": "music \"bed.combat\" → intentional silence (no bytes)"
     },
     {
       "id": "audio:village.music",
@@ -1302,18 +1302,6 @@
     },
     {
       "id": "catalog-tag:emberwatch:maps:ruined_shrine",
-      "surface": "catalog-tag",
-      "classification": "accepted/current",
-      "detail": "required by the pack at boot or during play"
-    },
-    {
-      "id": "catalog-tag:music:exploration:bgm_explore",
-      "surface": "catalog-tag",
-      "classification": "accepted/current",
-      "detail": "required by the pack at boot or during play"
-    },
-    {
-      "id": "catalog-tag:music:combat:bgm_combat",
       "surface": "catalog-tag",
       "classification": "accepted/current",
       "detail": "required by the pack at boot or during play"

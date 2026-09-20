@@ -119,7 +119,12 @@ export type PackManifest = {
   evidence: { id: string; label: string; discoverableAt: string }[];
   encounters: Record<string, { mapId: string; enemyNpcIds: string[]; environment?: unknown }>;
   audio: {
-    bindings: { cueId: string; target: string; context: string; tag: string; sha256: string }[];
+    bindings: {
+      cueId: string;
+      target: string;
+      context: string;
+      source: { kind: 'asset'; tag: string; sha256: string } | { kind: 'silence' };
+    }[];
   };
 };
 
@@ -542,7 +547,13 @@ export const checkAudioCues = (input: CoverageInputs): Finding[] =>
     id: `audio:${binding.cueId}`,
     surface: 'audio-cue',
     classification: 'accepted/current',
-    detail: `${binding.target} "${binding.context}" → tag ${binding.tag} (sha256 ${binding.sha256.slice(0, 12)}…)`,
+    // An intentional-silence cue names no bytes, so there is no tag or hash to
+    // report. Saying so is the honest detail — the alternative would be to
+    // print a hash for content that does not exist.
+    detail:
+      binding.source.kind === 'silence'
+        ? `${binding.target} "${binding.context}" → intentional silence (no bytes)`
+        : `${binding.target} "${binding.context}" → tag ${binding.source.tag} (sha256 ${binding.source.sha256.slice(0, 12)}…)`,
   }));
 
 /** RULE: every authoring source image shipped in the pack. */
@@ -615,7 +626,7 @@ export const catalogTagsOf = (manifest: PackManifest): string[] => [
     'index',
     'emberwatch:manifest',
     ...Object.keys(manifest.maps).map((id) => `emberwatch:maps:${id}`),
-    ...manifest.audio.bindings.map((b) => b.tag),
+    ...manifest.audio.bindings.flatMap((b) => (b.source.kind === 'asset' ? [b.source.tag] : [])),
   ]),
 ];
 

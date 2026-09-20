@@ -149,7 +149,11 @@ const scanDir = async (
 
   return {
     manifest: {
-      scannedAt: new Date().toISOString(),
+      // Filled in by the caller from the committed file when the scan found no
+      // semantic change — see `preservedScannedAt`. A placeholder here keeps
+      // `scannedAt` first in the serialized object, matching the committed
+      // format.
+      scannedAt: '',
       count: Object.keys(assets).length,
       assets,
       byCategory,
@@ -202,6 +206,41 @@ const readJsonSidecar = async <T>(filePath: string): Promise<T | null> => {
 };
 
 /**
+ * The `scannedAt` already committed for this sidecar, or `fallback`.
+ *
+ * `scannedAt` is truthful metadata about when a scan last found a difference,
+ * not part of the artifact's identity. Preserving it when nothing changed is
+ * what makes a second identical scan a no-op instead of a tracked-file diff.
+ */
+const preservedScannedAt = async (filePath: string, fallback: string): Promise<string> => {
+  const existing = await readJsonSidecar<{ scannedAt?: unknown }>(filePath);
+  return typeof existing?.scannedAt === 'string' && existing.scannedAt.length > 0
+    ? existing.scannedAt
+    : fallback;
+};
+
+/**
+ * Writes `content` only when it differs from what is already on disk.
+ *
+ * Returns whether a write happened. This is the whole determinism guarantee:
+ * an unchanged scan produces byte-identical output, so the second run compares
+ * equal and writes nothing. Without it, a generated artifact would dirty the
+ * tree on every run purely because time passed, and the release model — clean
+ * committed source, deterministic rebuild, seal — could not hold.
+ */
+const writeIfChanged = async (filePath: string, content: string): Promise<boolean> => {
+  try {
+    if ((await readFile(filePath, 'utf8')) === content) {
+      return false;
+    }
+  } catch {
+    // Missing or unreadable — fall through and write.
+  }
+  await writeFile(filePath, content, 'utf-8');
+  return true;
+};
+
+/**
  * Merge the three committed attribution sources into asset_credits.json:
  *   - lpc_credits.json          — CREDITS.csv join, keyed by output tag (collector)
  *   - lpc_credits_supplement.json — LPC library-level declarations for tags
@@ -213,50 +252,69 @@ const readJsonSidecar = async <T>(filePath: string): Promise<T | null> => {
  * asset_credits.json, and its preflight hard-fails on any catalog tag
  * present in none of the three sources (C-395 AC-4).
  */
+/**
+ * Merges one attribution source into `credits`, never overriding a tag an
+ * earlier (more authoritative) source already resolved.
+ *
+ * Extracted so the three-source merge reads as three calls rather than three
+ * copies of the same nested loop — the precedence rule lives in one place.
+ */
+const mergeCreditSource = (options: {
+  credits: Record<string, MergedCredit>;
+  source: Record<string, Omit<MergedCredit, 'source'>> | undefined;
+  label: MergedCredit['source'];
+  /** When true, this source may replace an existing entry. */
+  override: boolean;
+}): void => {
+  const { credits, source, label, override } = options;
+  if (!source) {
+    return;
+  }
+  for (const [tag, credit] of Object.entries(source)) {
+    if (override || !credits[tag]) {
+      credits[tag] = { ...credit, source: label };
+    }
+  }
+};
+
 const writeCreditsSidecar = async (creditRootDir: string): Promise<void> => {
   const credits: Record<string, MergedCredit> = {};
+  type SourceFile = { credits: Record<string, Omit<MergedCredit, 'source'>> };
 
-  const lpcCredits = await readJsonSidecar<{
-    credits: Record<string, Omit<MergedCredit, 'source'>>;
-  }>(join(creditRootDir, 'lpc_credits.json'));
-  if (lpcCredits) {
-    for (const [tag, credit] of Object.entries(lpcCredits.credits)) {
-      credits[tag] = { ...credit, source: 'lpc' };
-    }
-  }
-
-  const supplement = await readJsonSidecar<{
-    credits: Record<string, Omit<MergedCredit, 'source'>>;
-  }>(join(creditRootDir, 'lpc_credits_supplement.json'));
-  if (supplement) {
-    for (const [tag, credit] of Object.entries(supplement.credits)) {
-      // The supplement must never override a real CREDITS.csv resolution.
-      if (!credits[tag]) {
-        credits[tag] = { ...credit, source: 'lpc-supplement' };
-      }
-    }
-  }
-
-  const projectPath = resolve(join(import.meta.dirname, '../catalog/project_licenses.json'));
-  const project = await readJsonSidecar<{
-    credits: Record<string, Omit<MergedCredit, 'source'>>;
-  }>(projectPath);
-  if (project) {
-    for (const [tag, credit] of Object.entries(project.credits)) {
-      if (!credits[tag]) {
-        credits[tag] = { ...credit, source: 'project' };
-      }
-    }
-  }
+  // Precedence: CREDITS.csv resolution, then the library-level supplement, then
+  // the project's own declaration. Only the first may replace an existing tag.
+  mergeCreditSource({
+    credits,
+    source: (await readJsonSidecar<SourceFile>(join(creditRootDir, 'lpc_credits.json')))?.credits,
+    label: 'lpc',
+    override: true,
+  });
+  mergeCreditSource({
+    credits,
+    source: (await readJsonSidecar<SourceFile>(join(creditRootDir, 'lpc_credits_supplement.json')))
+      ?.credits,
+    label: 'lpc-supplement',
+    override: false,
+  });
+  mergeCreditSource({
+    credits,
+    source: (
+      await readJsonSidecar<SourceFile>(
+        resolve(join(import.meta.dirname, '../catalog/project_licenses.json')),
+      )
+    )?.credits,
+    label: 'project',
+    override: false,
+  });
 
   const creditsPath = join(creditRootDir, 'asset_credits.json');
   const creditsFile: AssetCreditsFile = {
-    scannedAt: new Date().toISOString(),
+    scannedAt: await preservedScannedAt(creditsPath, new Date().toISOString()),
     credits,
   };
-  await writeFile(creditsPath, JSON.stringify(creditsFile, null, 2), 'utf-8');
+  const wrote = await writeIfChanged(creditsPath, JSON.stringify(creditsFile, null, 2));
   console.log(
-    `scan_assets: asset_credits.json emitted — ${Object.keys(credits).length} tags with attribution`,
+    `scan_assets: asset_credits.json ${wrote ? 'emitted' : 'unchanged'} — ${Object.keys(credits).length} tags with attribution`,
   );
 };
 
@@ -288,20 +346,21 @@ for (const { dir: rootDir, label } of SCAN_ROOTS) {
   const { manifest, hashes } = await scanDir(rootDir, { categoryOverride });
 
   const manifestPath = join(rootDir, 'manifest.json');
-  await writeFile(manifestPath, JSON.stringify(manifest, null, 2), 'utf-8');
+  // One scan timestamp, shared by every sidecar this run rewrites, and
+  // preserved from the committed file when the scan found nothing new.
+  const scannedAt = await preservedScannedAt(manifestPath, new Date().toISOString());
+  manifest.scannedAt = scannedAt;
+  const manifestWrote = await writeIfChanged(manifestPath, JSON.stringify(manifest, null, 2));
 
   // C-373: hash sidecar — tag → sha256 + sizeBytes.
   const hashesPath = join(rootDir, 'asset_hashes.json');
-  const hashesFile: AssetHashesFile = {
-    scannedAt: manifest.scannedAt,
-    hashes,
-  };
-  await writeFile(hashesPath, JSON.stringify(hashesFile), 'utf-8');
+  const hashesFile: AssetHashesFile = { scannedAt, hashes };
+  const hashesWrote = await writeIfChanged(hashesPath, JSON.stringify(hashesFile));
 
   // C-395 AC-4: merge attribution sources into asset_credits.json.
   await writeCreditsSidecar(rootDir);
 
   console.log(
-    `scan_assets: ${label} done — ${manifest.count} assets indexed, ${Object.keys(hashes).length} hashes emitted`,
+    `scan_assets: ${label} done — ${manifest.count} assets indexed, ${Object.keys(hashes).length} hashes emitted, manifest ${manifestWrote ? 'written' : 'unchanged'}, hashes ${hashesWrote ? 'written' : 'unchanged'}`,
   );
 }

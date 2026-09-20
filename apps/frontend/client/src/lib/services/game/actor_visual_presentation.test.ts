@@ -111,8 +111,14 @@ describe('the shipped proof encounter resolves authored static visuals', () => {
       if (visual?.kind !== 'static') {
         throw new Error('unreachable: asserted above');
       }
-      // The URL must be the pack's own published path, not a foreign host.
-      expect(visual.url).toContain(`/content-packs/emberwatch/enemies/${npcId}.png`);
+      // The URL must be the pack's own published path, not a foreign host, and
+      // it must NOT carry a `/content-packs` prefix: `assetTagResolver` derives
+      // its lookup tag from this exact path via `pathToTag`, and that prefix
+      // would produce `content-packs:emberwatch:enemies:<id>`, which matches no
+      // published row. The tag would silently miss and the renderer would fall
+      // back to a raw URL that nothing serves.
+      expect(visual.url).toBe(`/emberwatch/enemies/${npcId}.png`);
+      expect(visual.url).not.toContain('/content-packs/');
       expect(visual.width).toBeGreaterThan(0);
       expect(visual.height).toBeGreaterThan(0);
     });

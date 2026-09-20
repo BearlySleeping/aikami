@@ -110,32 +110,32 @@ const main = (): void => {
     audio?: {
       bindings: {
         cueId: string;
-        tag: string;
-        sha256: string;
-        resolution?: string;
-        fallback?: string;
+        source: { kind: 'asset'; tag: string; sha256: string } | { kind: 'silence' };
       }[];
     };
   };
 
   const bindings = manifest.audio?.bindings ?? [];
-  const pinned = new Map(bindings.map((binding) => [binding.tag, binding.sha256]));
+  const pinned = new Map(
+    bindings.flatMap((binding) =>
+      binding.source.kind === 'asset' ? [[binding.source.tag, binding.source.sha256] as const] : [],
+    ),
+  );
 
   // Coverage is proved BEFORE the first mutation. A manifest binding with no
   // installer source entry would otherwise be silently uncovered: the loop
   // below only walks CUES, so a pin the installer does not know about would
   // never be reported and the pack lock would carry a cue with no bytes.
   //
-  // Only bindings the pack is REQUIRED to ship must be covered. A binding
-  // declared `optional` with a `silence` fallback is by definition one the
-  // pack may omit — `bed.explore`/`bed.combat` are exactly that: generic
-  // fallback beds the Emberwatch pack does not author, so their absence is
-  // the declared policy rather than a gap. Anything else must be covered.
+  // Only asset-backed bindings need coverage. An intentional-silence binding
+  // declares that the pack ships no bytes for that cue, so it is covered by
+  // construction — there is nothing to install and nothing to omit. This is
+  // now a property of the schema rather than a policy the installer infers
+  // from `resolution`/`fallback` strings.
   const covered = new Set(CUES.map(([tag]) => tag));
   const uncovered = bindings
-    .filter((binding) => !covered.has(binding.tag))
-    .filter((binding) => !(binding.resolution === 'optional' && binding.fallback === 'silence'))
-    .map((binding) => binding.tag)
+    .flatMap((binding) => (binding.source.kind === 'asset' ? [binding.source.tag] : []))
+    .filter((tag) => !covered.has(tag))
     .sort();
   if (uncovered.length > 0) {
     throw new Error(

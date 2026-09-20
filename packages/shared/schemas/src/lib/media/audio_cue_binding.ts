@@ -6,8 +6,14 @@
 // specific map/context, instead of relying on the resolver's generic
 // "first manifest entry whose tags overlap" heuristic. Each binding names a
 // stable `cueId`, a `target` bus, a `context` (a map id, `combat`, or a
-// scripted predicate id), the registry `tag` of the accepted rendition, and
-// the SHA-256 of the installed bytes.
+// scripted predicate id), and a `source` — either the registry `tag` plus the
+// SHA-256 of the accepted rendition's bytes, or an explicit declaration that
+// the cue plays nothing.
+//
+// The `source` distinction is deliberate. A SHA-256 asserts something about
+// immutable bytes, so a binding may only carry one when those bytes exist. A
+// cue the pack leaves silent has no bytes and therefore no asset identity; it
+// must not name a tag or pin a hash for content that was never produced.
 //
 // The section is optional and versioned (`pack.audio.v1`): a manifest without
 // an `audio` key keeps loading unchanged, and the absence of the section is
@@ -51,13 +57,67 @@ export type AudioCueFallback = (typeof AUDIO_CUE_FALLBACKS)[number];
 export const PACK_AUDIO_BINDINGS_SCHEMA_VERSION = 'pack.audio.v1' as const;
 
 /**
- * One authored cue binding.
+ * Where a cue's bytes come from.
+ *
+ * A SHA-256 is an assertion about immutable bytes, so a binding may only carry
+ * one when bytes actually exist. A cue the pack deliberately leaves silent has
+ * no bytes and therefore no asset identity — it must not name a tag or pin a
+ * hash for content that was never produced.
+ */
+export const AUDIO_CUE_SOURCE_KINDS = ['asset', 'silence'] as const;
+
+/** How a cue sources its bytes. */
+export type AudioCueSourceKind = (typeof AUDIO_CUE_SOURCE_KINDS)[number];
+
+/**
+ * An asset-backed cue source: real, publishable bytes.
+ *
+ * `tag` and `sha256` are both required. A tag alone is availability metadata,
+ * not proof of the bytes, and a hash without a tag names nothing.
+ */
+export const AudioAssetSourceSchema = Type.Object(
+  {
+    kind: Type.Literal('asset'),
+    /** Registry tag of the accepted rendition (never a first-match tag). */
+    tag: Type.String({ minLength: 1 }),
+    /** SHA-256 of the installed rendition bytes; the cue-miss check. */
+    sha256: GenerationSha256Schema,
+  },
+  { additionalProperties: false },
+);
+
+/** An asset-backed cue source, as validated. */
+export type AudioAssetSource = Static<typeof AudioAssetSourceSchema>;
+
+/**
+ * An intentional-silence cue source: no bytes exist and none are claimed.
+ *
+ * `additionalProperties: false` is load-bearing here. A silence source that
+ * also carried a `tag` or `sha256` would be asserting bytes that do not exist,
+ * which is exactly the dishonesty this shape exists to make unrepresentable.
+ */
+export const AudioSilenceSourceSchema = Type.Object(
+  { kind: Type.Literal('silence') },
+  { additionalProperties: false },
+);
+
+/** An intentional-silence cue source, as validated. */
+export type AudioSilenceSource = Static<typeof AudioSilenceSourceSchema>;
+
+/** A cue's byte source. */
+export const AudioCueSourceSchema = Type.Union([AudioAssetSourceSchema, AudioSilenceSourceSchema]);
+
+/** A cue's byte source, as validated. */
+export type AudioCueSource = Static<typeof AudioCueSourceSchema>;
+
+/**
+ * An asset-backed cue binding.
  *
  * `additionalProperties: false` — an unknown key is a typo in an authored
  * pack field, and silently ignoring it is exactly the failure mode this
  * section exists to prevent.
  */
-export const PackAudioCueBindingSchema = Type.Object(
+export const AudioAssetCueBindingSchema = Type.Object(
   {
     /** Authored cue identity — stable across repacks. */
     cueId: Type.String({ minLength: 1 }),
@@ -65,10 +125,8 @@ export const PackAudioCueBindingSchema = Type.Object(
     target: Type.Enum(AUDIO_CUE_TARGETS),
     /** Map id, or `combat`, or a scripted predicate id. */
     context: Type.String({ minLength: 1 }),
-    /** Registry tag of the accepted rendition (never a first-match tag). */
-    tag: Type.String({ minLength: 1 }),
-    /** SHA-256 of the installed rendition bytes; the cue-miss check. */
-    sha256: GenerationSha256Schema,
+    /** The accepted rendition's tag and hash. */
+    source: AudioAssetSourceSchema,
     /** `required` cues must resolve or the pack fails validation. */
     resolution: Type.Enum(AUDIO_CUE_RESOLUTIONS),
     /** Declared behavior when the cue cannot resolve. */
@@ -79,8 +137,60 @@ export const PackAudioCueBindingSchema = Type.Object(
   { additionalProperties: false },
 );
 
+/**
+ * An intentional-silence cue binding.
+ *
+ * The `resolution`/`fallback` literals are structural, not conventional: a cue
+ * with no bytes can never be `required` (nothing could satisfy it) and can only
+ * degrade to `silence`. Encoding that here makes `required` + silence and
+ * silence + `declared_cue` unrepresentable rather than merely discouraged.
+ */
+export const AudioSilenceCueBindingSchema = Type.Object(
+  {
+    /** Authored cue identity — stable across repacks. */
+    cueId: Type.String({ minLength: 1 }),
+    /** Which bus the cue plays on. */
+    target: Type.Enum(AUDIO_CUE_TARGETS),
+    /** Map id, or `combat`, or a scripted predicate id. */
+    context: Type.String({ minLength: 1 }),
+    /** No bytes exist for this cue. */
+    source: AudioSilenceSourceSchema,
+    /** A cue with no bytes can never be required. */
+    resolution: Type.Literal('optional'),
+    /** A cue with no bytes can only degrade to silence. */
+    fallback: Type.Literal('silence'),
+  },
+  { additionalProperties: false },
+);
+
+/**
+ * One authored cue binding.
+ *
+ * A union rather than one object with optional fields, so the asset/silence
+ * distinction is checked by the schema instead of by convention.
+ */
+export const PackAudioCueBindingSchema = Type.Union([
+  AudioAssetCueBindingSchema,
+  AudioSilenceCueBindingSchema,
+]);
+
 /** An authored cue binding, as validated. */
 export type PackAudioCueBinding = Static<typeof PackAudioCueBindingSchema>;
+
+/** An authored cue binding that names real bytes. */
+export type AudioAssetCueBinding = Static<typeof AudioAssetCueBindingSchema>;
+
+/** An authored cue binding that intentionally plays nothing. */
+export type AudioSilenceCueBinding = Static<typeof AudioSilenceCueBindingSchema>;
+
+/**
+ * Narrows a binding to its asset form.
+ *
+ * A type predicate rather than a cast: callers that need the tag/hash must
+ * handle the silence case explicitly, which is the whole point of the union.
+ */
+export const isAssetCueBinding = (binding: PackAudioCueBinding): binding is AudioAssetCueBinding =>
+  binding.source.kind === 'asset';
 
 /** The optional, versioned audio section of a content pack manifest. */
 export const PackAudioBindingsSchema = Type.Object(

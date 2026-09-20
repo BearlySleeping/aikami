@@ -108,23 +108,37 @@ export type CatalogConfig = {
 };
 
 /**
- * Resolve the catalog publish configuration from the environment.
+ * The read-only identity of a release target: where a release would live and
+ * be read from, with no write credentials involved.
  *
- * @param mode - AIKAMI mode used to load scripts/.env.{mode} credentials.
+ * Deliberately separate from {@link CatalogConfig}. Answering "what would
+ * happen, and where?" must not require the ability to make it happen — an
+ * operator reviewing a plan, or CI checking one, should not need R2 write
+ * credentials to see the exact target.
  */
-export const resolveCatalogConfig = (mode: string): CatalogConfig => {
+export type CatalogTarget = {
+  /** R2 bucket name the release targets. */
+  bucket: string;
+  /** Public origin base URL — injected configuration, never hardcoded. */
+  originUrl: string;
+  /** Validated target identity, including warnings and test-seam state. */
+  releaseTarget: ReleaseTarget;
+};
+
+/**
+ * Resolve the read-only release target for a mode.
+ *
+ * Performs the full safety gate — canonical origin identity, sibling-origin
+ * and forbidden-production-host checks, origin provisioning — and requires no
+ * credentials. A mode whose declared origin is `null` (staging today) fails
+ * closed here, because there is no usable read origin from which to resolve a
+ * base release. That is a different failure from "the operator has no write
+ * credentials", and the two must not collapse into one message.
+ *
+ * @param mode - AIKAMI mode used to load scripts/.env.{mode}.
+ */
+export const resolveCatalogTarget = (mode: string): CatalogTarget => {
   initScriptsEnv(mode);
-
-  const accessKeyId = getScriptsEnv('CLOUD_FLARE_CATALOG_BUCKET_ACCESS_KEY_ID') ?? '';
-  const secretAccessKey = getScriptsEnv('CLOUD_FLARE_CATALOG_BUCKET_SECRET_ACCESS_KEY') ?? '';
-  const endpoint = getScriptsEnv('CLOUD_FLARE_CATALOG_BUCKET_ENDPOINT') ?? '';
-
-  // C-454's `CATALOG_BUCKET` override used to take PRECEDENCE over the
-  // mode-aware resolution, which let `scripts/.env.staging` (declaring
-  // CATALOG_BUCKET=aikami-catalog) silently retarget a staging publish at the
-  // PRODUCTION bucket. The override is now validated by the release-target
-  // gate: a remote mode accepts only the bucket it declares, and any override
-  // must go through an explicit test seam that cannot name a remote bucket.
   const target = resolveReleaseTarget({
     mode,
     env: {
@@ -133,6 +147,23 @@ export const resolveCatalogConfig = (mode: string): CatalogConfig => {
       testSeam: getScriptsEnv(CATALOG_TEST_SEAM_ENV),
     },
   });
+  return { bucket: target.bucket, originUrl: target.originUrl, releaseTarget: target };
+};
+
+/**
+ * Resolve the catalog publish configuration from the environment.
+ *
+ * Adds write credentials to {@link resolveCatalogTarget}. Only a path that
+ * actually writes should call this.
+ *
+ * @param mode - AIKAMI mode used to load scripts/.env.{mode} credentials.
+ */
+export const resolveCatalogConfig = (mode: string): CatalogConfig => {
+  const target = resolveCatalogTarget(mode);
+
+  const accessKeyId = getScriptsEnv('CLOUD_FLARE_CATALOG_BUCKET_ACCESS_KEY_ID') ?? '';
+  const secretAccessKey = getScriptsEnv('CLOUD_FLARE_CATALOG_BUCKET_SECRET_ACCESS_KEY') ?? '';
+  const endpoint = getScriptsEnv('CLOUD_FLARE_CATALOG_BUCKET_ENDPOINT') ?? '';
 
   const missing: string[] = [];
   if (!accessKeyId) {
@@ -157,7 +188,7 @@ export const resolveCatalogConfig = (mode: string): CatalogConfig => {
     endpoint,
     bucket: target.bucket,
     originUrl: target.originUrl,
-    releaseTarget: target,
+    releaseTarget: target.releaseTarget,
   };
 };
 

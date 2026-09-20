@@ -46,7 +46,12 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { resolveCatalogConfig } from '../catalog/config.ts';
+import {
+  type CatalogConfig,
+  type CatalogTarget,
+  resolveCatalogConfig,
+  resolveCatalogTarget,
+} from '../catalog/config.ts';
 import { runCatalogPublish } from '../catalog/pipeline.ts';
 import type { PublishReportLike } from '../catalog/release.ts';
 import { buildReceipt } from '../catalog/release.ts';
@@ -108,7 +113,14 @@ type Invocation = {
 type PackIdentity = { manifestVersion: string; indexVersion: string | undefined };
 
 type TargetContext = {
-  config: Awaited<ReturnType<typeof resolveCatalogConfig>>;
+  /**
+   * Read-only target identity — bucket, read origin, safety warnings.
+   *
+   * Deliberately NOT write credentials. A plan must be reviewable without the
+   * ability to execute it, so the target is resolved once here and write
+   * credentials are loaded only on the path that actually writes.
+   */
+  target: CatalogTarget;
   releaseTarget: ReleaseTarget;
 };
 
@@ -223,9 +235,9 @@ const assertCleanForApply = (options: {
  * The gate throws before this process can write.
  */
 const preflightTarget = (mode: string): TargetContext => {
-  let config: ReturnType<typeof resolveCatalogConfig>;
+  let target: CatalogTarget;
   try {
-    config = resolveCatalogConfig(mode);
+    target = resolveCatalogTarget(mode);
   } catch (error) {
     console.error('');
     console.error('❌ release target refused — nothing was written.');
@@ -237,11 +249,7 @@ const preflightTarget = (mode: string): TargetContext => {
     );
     process.exit(2);
   }
-  const releaseTarget = config.releaseTarget;
-  if (releaseTarget === undefined) {
-    throw new Error('resolveCatalogConfig returned no validated release target');
-  }
-  return { config, releaseTarget };
+  return { target, releaseTarget: target.releaseTarget };
 };
 
 const printTarget = (options: {
@@ -249,13 +257,13 @@ const printTarget = (options: {
   target: TargetContext;
   previous: ReleasePointer;
 }): void => {
-  const { config, releaseTarget } = options.target;
+  const { target, releaseTarget } = options.target;
   const targetMatchesConfig =
-    config.bucket === releaseTarget.bucket && config.originUrl === releaseTarget.originUrl;
+    target.bucket === releaseTarget.bucket && target.originUrl === releaseTarget.originUrl;
   console.log(
-    `  bucket:        ${config.bucket}${releaseTarget.viaTestSeam ? ' (test seam)' : ''}`,
+    `  bucket:        ${target.bucket}${releaseTarget.viaTestSeam ? ' (test seam)' : ''}`,
   );
-  console.log(`  origin:        ${config.originUrl}`);
+  console.log(`  origin:        ${target.originUrl}`);
   for (const warning of releaseTarget.warnings) {
     console.warn(`  warning:       ${warning}`);
   }
@@ -338,11 +346,38 @@ const buildAndSealCandidate = (io: StepRecorder, mode: string): void => {
     ['regenerate canonical maps', 'scripts/src/lib/ops/generate_emberwatch_maps.ts'],
     ['scan manifest + hashes + credits', 'scripts/src/lib/ops/scan_assets.ts'],
   ];
+  const treeBefore = io.git(['status', '--porcelain']);
   for (const [label, script] of buildSteps) {
     if (io.bun(label, script).status === 'failed') {
       process.exit(1);
     }
   }
+
+  // A seal is only meaningful against a tree the operator has seen. If the
+  // build changed tracked artifacts, the candidate would be sealed from a
+  // source state that exists nowhere in git — `sourceCommit` would name a
+  // commit that does not reproduce the sealed bytes, and the next rebuild
+  // would differ. Stop here and hand the diff back for review instead.
+  //
+  // The build is idempotent by construction, so on a clean tree this is a
+  // no-op; it fires exactly when a content change produced new artifacts.
+  const treeAfter = io.git(['status', '--porcelain']);
+  if (treeAfter !== treeBefore) {
+    console.error('');
+    console.error('❌ candidate source changed during build — refusing to seal.');
+    console.error('   The generated artifacts now differ from the committed source, so a');
+    console.error('   seal would name a commit that does not reproduce these bytes.');
+    console.error('');
+    console.error('   Review and commit the generated artifacts, then rerun:');
+    console.error('     bun run emberwatch:build-candidate');
+    console.error('');
+    console.error('   Changed paths:');
+    for (const line of treeAfter.split('\n').filter((entry) => entry.trim().length > 0)) {
+      console.error(`     ${line}`);
+    }
+    process.exit(2);
+  }
+
   const audit = io.bun('coverage audit', 'scripts/src/lib/ops/emberwatch_coverage_audit.ts');
   if (audit.status === 'failed') {
     console.error('❌ coverage audit reports blockers — refusing to seal.');
@@ -356,6 +391,52 @@ const buildAndSealCandidate = (io: StepRecorder, mode: string): void => {
   console.log('');
   console.log('Candidate built and sealed. Review it, then:');
   console.log(`  bun run emberwatch:release --mode ${mode} --plan`);
+};
+
+/**
+ * Loads write credentials and proves they target the identity the plan used.
+ *
+ * The plan is built from a read-only target; this is the only place that needs
+ * the ability to write. Re-resolving the target here (rather than trusting the
+ * credential environment) means a credential set that names a different bucket
+ * or origin is refused instead of silently publishing somewhere the operator
+ * never reviewed.
+ *
+ * @param mode - AIKAMI mode whose `scripts/.env.{mode}` holds the credentials.
+ * @param planned - The read-only target the plan was built from.
+ */
+const resolveWriteConfig = (mode: string, planned: CatalogTarget): CatalogConfig => {
+  let config: CatalogConfig;
+  try {
+    config = resolveCatalogConfig(mode);
+  } catch (error) {
+    console.error('');
+    console.error('❌ write credentials unavailable — nothing was written.');
+    console.error(`   ${(error as Error).message}`);
+    console.error('');
+    console.error(
+      '   The plan above is read-only and was produced without credentials. Applying\n' +
+        '   it needs R2 write access for the target it named.',
+    );
+    process.exit(2);
+  }
+
+  // The credential environment must resolve to the SAME target the plan used.
+  // `resolveCatalogConfig` re-runs the full safety gate, so this also re-proves
+  // canonical origin identity rather than assuming the earlier check still holds.
+  if (config.bucket !== planned.bucket || config.originUrl !== planned.originUrl) {
+    console.error('');
+    console.error(
+      '❌ write configuration does not match the planned target — nothing was written.',
+    );
+    console.error(`   planned: bucket ${planned.bucket}, origin ${planned.originUrl}`);
+    console.error(`   write:   bucket ${config.bucket}, origin ${config.originUrl}`);
+    console.error('');
+    console.error('   Refusing to publish to a target the plan did not describe.');
+    process.exit(2);
+  }
+
+  return config;
 };
 
 /** `--plan`: report the intended steps, touching nothing. */
@@ -411,7 +492,7 @@ const runPlanMode = async (options: {
       apply: false,
       dirtyWorktree: options.dirty,
       dirtyWorktreeAllowed: options.invocation.allowDirty,
-      config: options.target.config,
+      config: options.target.target,
       previous: options.previous,
       steps: options.io.steps,
       ...planFields,
@@ -468,12 +549,21 @@ const applyRelease = async (options: {
 
   assertValidationPasses(options.io, options.invocation.skipTests);
 
+  // ── Write credentials: loaded only now, on the path that writes ────────
+  //
+  // Everything above — target identity, candidate verification, base-release
+  // resolution, plan construction and validation — is read-only and ran
+  // without credentials. This is the first point that needs the ability to
+  // write, and the resolved config is checked against the identity the plan
+  // was built from, so a credential set cannot retarget the publish.
+  const writeConfig = resolveWriteConfig(options.invocation.mode, options.target.target);
+
   // ── Publish: the typed pipeline, in process ────────────────────────────
   let publishReport: PublishReportLike;
   try {
     publishReport = (await runCatalogPublish({
-      config: options.target.config,
-      client: createR2Client(options.target.config),
+      config: writeConfig,
+      client: createR2Client(writeConfig),
     })) as PublishReportLike;
   } catch (error) {
     console.error(`❌ publish threw before reporting — ${(error as Error).message}`);
@@ -490,12 +580,12 @@ const applyRelease = async (options: {
 
   // ── Verify ─────────────────────────────────────────────────────────────
   const verification = await verifyPublishedRelease({
-    originUrl: options.target.config.originUrl,
+    originUrl: options.target.target.originUrl,
     previous: options.previous,
     plannedRootHash: plan.catalogRootHash,
   });
   recordVerification(options.io, {
-    originUrl: options.target.config.originUrl,
+    originUrl: options.target.target.originUrl,
     previous: options.previous,
     verification,
   });
@@ -528,7 +618,7 @@ const applyRelease = async (options: {
       apply: true,
       dirtyWorktree: options.dirty,
       dirtyWorktreeAllowed: options.invocation.allowDirty,
-      config: options.target.config,
+      config: options.target.target,
       previous: options.previous,
       after: verification.after,
       steps: options.io.steps,
@@ -576,7 +666,7 @@ const main = async (): Promise<void> => {
   }
 
   const target = preflightTarget(invocation.mode);
-  const previous = await readReleasePointer(target.config.originUrl);
+  const previous = await readReleasePointer(target.target.originUrl);
   printTarget({ mode: invocation.mode, target, previous });
 
   assertReadOnlyChecks(io);

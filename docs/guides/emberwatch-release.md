@@ -108,12 +108,56 @@ bun scripts/src/lib/ops/generate_emberwatch_props_atlas.ts
 bun scripts/src/lib/ops/generate_emberwatch_maps.ts
 ```
 
-### 6. Audit, scan, validate, publish
+### 6. Commit the generated artifacts, then reseal
+
+`bun run emberwatch:build-candidate` runs the whole deterministic build — install
+portraits and audio, regenerate the atlas and maps, rescan the manifest — and
+then seals. It is **idempotent**: on an unchanged tree it rewrites nothing, so a
+second run is a no-op and the seal is reproducible.
+
+When a content change *does* produce new artifacts, the build stops before
+sealing and hands the diff back:
+
+```text
+❌ candidate source changed during build — refusing to seal.
+   Review and commit the generated artifacts, then rerun:
+     bun run emberwatch:build-candidate
+```
+
+That refusal is the point. Sealing from a tree that differs from the committed
+source would name a `sourceCommit` that does not reproduce the sealed bytes.
 
 ```bash
-bun run emberwatch:audit                 # must report 0 blockers
-bun scripts/src/lib/ops/scan_assets.ts   # refresh manifest/hashes/credits
-bun run emberwatch:release --mode staging --apply
+bun run emberwatch:build-candidate   # build; refuses to seal if it changed tracked files
+git status --short                  # review the generated diff
+git add -A && git commit -m '...'   # commit it
+bun run emberwatch:build-candidate   # now a no-op build, then seals
+```
+
+`scannedAt` in the generated sidecars is **metadata, not identity**: it is
+preserved from the committed file when a scan finds nothing new, so an identical
+scan cannot dirty the tree by the clock alone.
+
+### 7. Audit, plan, validate, publish
+
+```bash
+bun run emberwatch:audit                    # must report 0 blockers
+bun run emberwatch:release --mode staging --plan    # read-only; NO credentials needed
+bun run emberwatch:release --mode staging --apply   # needs R2 write credentials
+```
+
+`--plan` resolves the target, reads the previous release, verifies the candidate
+and builds the exact `ReleasePlan` **without write credentials**. Reviewing a
+plan must not require the ability to execute it. `--apply` is the only path that
+loads write credentials, and it re-proves that they target the same bucket and
+origin the plan named — a credential set cannot retarget a publish.
+
+The two failure modes are reported distinctly, because they mean different
+things:
+
+```text
+origin not provisioned    the mode has no public read origin (staging today)
+write credentials absent  the operator or CI cannot write to a valid target
 ```
 
 ## Guarantees the orchestrator enforces
@@ -215,8 +259,7 @@ Two properties are deliberate:
   even when the bytes happen to match, because the next rebuild would not be
   reproducible.
 
-The lock carries no bucket, origin or environment, and no release-plane hashes.
-Those belong to a `ReleasePlan`/`ReleaseReceipt`; putting them here is exactly
+The lock carries no bucket, origin or environment, and no release-plane hashes.Those belong to a `ReleasePlan`/`ReleaseReceipt`; putting them here is exactly
 what would make the lock environment-specific, which is the thing it exists to
 prevent. An earlier revision filled them with `""`/`{}` placeholders, which let
 a content object claim to describe a published release it could not.
@@ -244,6 +287,54 @@ candidate intended for staging or production must correspond to a committed
 source state, or nobody else can reproduce it. The schema has no `sourceDirty`
 field for the same reason — a field that can only hold one value is not
 information.
+
+## Audio cues: asset-backed, intentional silence, and fallback
+
+A pack authors its music through `pack.audio.v1`. Each binding declares a
+`source`, and the distinction is load-bearing:
+
+```jsonc
+// Asset-backed: real, publishable bytes. Tag AND hash are both required —
+// a tag alone is availability metadata, not proof of the bytes.
+{ "cueId": "village.music", "source": { "kind": "asset",
+    "tag": "music:exploration:village_ward", "sha256": "22536060…" },
+  "resolution": "required", "fallback": "declared_cue", "fallbackCueId": "bed.explore" }
+
+// Intentional silence: no bytes exist and none are claimed.
+{ "cueId": "bed.explore", "source": { "kind": "silence" },
+  "resolution": "optional", "fallback": "silence" }
+```
+
+A SHA-256 is an assertion about immutable bytes, so a binding may only carry one
+when those bytes exist. A cue the pack leaves silent has no asset identity; it
+must not name a tag or pin a hash for content that was never produced. The
+schema makes the dishonest shapes unrepresentable rather than merely
+discouraged:
+
+| Shape | Result |
+|---|---|
+| `required` + real bytes | valid |
+| `optional` + real bytes | valid |
+| `optional` + silence, no asset identity | valid |
+| `required` + silence | **invalid** — nothing could ever satisfy it |
+| silence source carrying a `tag` or `sha256` | **invalid** — asserts nonexistent bytes |
+| asset source missing its `sha256` | **invalid** |
+
+The two shared fallback beds (`bed.explore`, `bed.combat`) are intentional
+silence. They previously pinned hashes for audio that exists nowhere in the
+repository or the runtime plane — a claim the content model could not keep.
+
+**Fallback chains still terminate correctly.** `village.music` → `bed.explore`
+→ silence: when the primary cue cannot resolve, the declared fallback is
+consulted, and a silence fallback resolves to silence without looking for
+renditions. A silence binding can never be `required` and can never declare a
+`declared_cue` fallback, so a chain cannot be built that promises bytes it does
+not have.
+
+The installer proves coverage **before its first write**: every asset-backed
+binding must have a corresponding installer source entry, and every cue is
+resolved (pin-checked) before any cue is copied. `--check` compares destination
+**bytes**, not existence.
 
 ## Visual validation: a required HUMAN gate (level C)
 

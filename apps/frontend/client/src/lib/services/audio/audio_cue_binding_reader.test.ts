@@ -21,8 +21,7 @@ const villageBinding: PackAudioCueBinding = {
   cueId: 'village.music',
   target: 'music',
   context: 'village',
-  tag: 'music:exploration:village-theme',
-  sha256: HASH,
+  source: { kind: 'asset', tag: 'music:exploration:village-theme', sha256: HASH },
   resolution: 'required',
   fallback: 'silence',
 };
@@ -35,8 +34,7 @@ const bindings: PackAudioBindings = {
       cueId: 'inn.music',
       target: 'music',
       context: 'inn',
-      tag: 'music:tavern:inn-theme',
-      sha256: HASH,
+      source: { kind: 'asset', tag: 'music:tavern:inn-theme', sha256: HASH },
       resolution: 'optional',
       fallback: 'declared_cue',
       fallbackCueId: 'village.music',
@@ -45,8 +43,7 @@ const bindings: PackAudioBindings = {
       cueId: 'shrine.music',
       target: 'music',
       context: 'ruined_shrine',
-      tag: 'music:mysterious:shrine-theme',
-      sha256: HASH,
+      source: { kind: 'asset', tag: 'music:mysterious:shrine-theme', sha256: HASH },
       resolution: 'optional',
       fallback: 'declared_cue',
       fallbackCueId: 'missing.cue',
@@ -55,8 +52,7 @@ const bindings: PackAudioBindings = {
       cueId: 'combat.music',
       target: 'music',
       context: 'combat',
-      tag: 'music:combat:emberwatch-battle',
-      sha256: HASH,
+      source: { kind: 'asset', tag: 'music:combat:emberwatch-battle', sha256: HASH },
       resolution: 'optional',
       fallback: 'silence',
     },
@@ -82,8 +78,7 @@ describe('parsePackAudioBindings', () => {
           cueId: 'inn.music',
           target: 'music',
           context: 'inn',
-          tag: 'music:tavern:inn-theme',
-          sha256: HASH,
+          source: { kind: 'asset', tag: 'music:tavern:inn-theme', sha256: HASH },
           resolution: 'optional',
           fallback: 'declared_cue',
           fallbackCueId: 'village.music',
@@ -168,7 +163,9 @@ describe('selectAudioCue', () => {
     });
     expect(outcome.kind).toBe('bound');
     expect(outcome.binding?.cueId).toBe('village.music');
-    expect(outcome.binding?.sha256).toBe(HASH);
+    expect(
+      outcome.binding?.source.kind === 'asset' ? outcome.binding.source.sha256 : undefined,
+    ).toBe(HASH);
     expect(outcome.required).toBe(true);
   });
 

@@ -16,13 +16,24 @@ import {
 
 const HASH = 'a'.repeat(64);
 
+/** An asset-backed binding: real bytes, named by tag and pinned by hash. */
 const binding = (overrides: Record<string, unknown> = {}): Record<string, unknown> => ({
   cueId: 'village.music',
   target: 'music',
   context: 'village',
-  tag: 'music:exploration:village-theme',
-  sha256: HASH,
+  source: { kind: 'asset', tag: 'music:exploration:village-theme', sha256: HASH },
   resolution: 'required',
+  fallback: 'silence',
+  ...overrides,
+});
+
+/** An intentional-silence binding: no bytes exist and none are claimed. */
+const silenceBinding = (overrides: Record<string, unknown> = {}): Record<string, unknown> => ({
+  cueId: 'bed.explore',
+  target: 'music',
+  context: 'bed.explore',
+  source: { kind: 'silence' },
+  resolution: 'optional',
   fallback: 'silence',
   ...overrides,
 });
@@ -41,13 +52,21 @@ describe('PackAudioCueBindingSchema', () => {
     expect(Value.Check(PackAudioCueBindingSchema, binding({ tagg: 'music:x' }))).toBe(false);
   });
 
-  test('rejects a missing sha256', () => {
-    const { sha256: _omitted, ...rest } = binding();
-    expect(Value.Check(PackAudioCueBindingSchema, rest)).toBe(false);
+  test('rejects a missing sha256 on an asset source', () => {
+    const candidate = binding({ source: { kind: 'asset', tag: 'music:x' } });
+    expect(Value.Check(PackAudioCueBindingSchema, candidate)).toBe(false);
+  });
+
+  test('rejects a missing tag on an asset source', () => {
+    const candidate = binding({ source: { kind: 'asset', sha256: HASH } });
+    expect(Value.Check(PackAudioCueBindingSchema, candidate)).toBe(false);
   });
 
   test('rejects a non-hex sha256', () => {
-    expect(Value.Check(PackAudioCueBindingSchema, binding({ sha256: 'Z'.repeat(64) }))).toBe(false);
+    const candidate = binding({
+      source: { kind: 'asset', tag: 'music:x', sha256: 'Z'.repeat(64) },
+    });
+    expect(Value.Check(PackAudioCueBindingSchema, candidate)).toBe(false);
   });
 
   test('rejects an unknown target', () => {
@@ -99,7 +118,11 @@ describe('checkPackAudioBindings', () => {
     const result = parse(
       section([
         binding(),
-        binding({ cueId: 'village.ambient', target: 'ambient', tag: 'ambient:nature' }),
+        binding({
+          cueId: 'village.ambient',
+          target: 'ambient',
+          source: { kind: 'asset', tag: 'ambient:nature', sha256: HASH },
+        }),
         binding({ cueId: 'combat.music', target: 'music', context: 'combat' }),
       ]),
     );
@@ -195,5 +218,71 @@ describe('checkPackAudioBindings', () => {
     );
     const [issue] = checkPackAudioBindings(result);
     expect(issue?.message).toMatch(/different cueId/);
+  });
+});
+
+/**
+ * The asset/silence distinction is the point of the `source` union.
+ *
+ * A SHA-256 is an assertion about immutable bytes. Before this model the
+ * Emberwatch pack pinned hashes for two fallback beds whose bytes exist
+ * nowhere — a claim the content model could not keep. These tests make that
+ * class of dishonesty unrepresentable rather than merely discouraged.
+ */
+describe('audio cue source — asset vs intentional silence', () => {
+  test('a required cue backed by real bytes is valid', () => {
+    expect(Value.Check(PackAudioCueBindingSchema, binding())).toBe(true);
+  });
+
+  test('an optional cue backed by real bytes is valid', () => {
+    expect(Value.Check(PackAudioCueBindingSchema, binding({ resolution: 'optional' }))).toBe(true);
+  });
+
+  test('an optional silence cue with no asset identity is valid', () => {
+    expect(Value.Check(PackAudioCueBindingSchema, silenceBinding())).toBe(true);
+  });
+
+  test('a required silence-only cue is invalid — nothing could ever satisfy it', () => {
+    expect(Value.Check(PackAudioCueBindingSchema, silenceBinding({ resolution: 'required' }))).toBe(
+      false,
+    );
+  });
+
+  test('a silence cue that also claims a tag is invalid — it would assert nonexistent bytes', () => {
+    const candidate = silenceBinding({
+      source: { kind: 'silence', tag: 'music:exploration:bgm_explore' },
+    });
+    expect(Value.Check(PackAudioCueBindingSchema, candidate)).toBe(false);
+  });
+
+  test('a silence cue that also claims a sha256 is invalid', () => {
+    const candidate = silenceBinding({ source: { kind: 'silence', sha256: HASH } });
+    expect(Value.Check(PackAudioCueBindingSchema, candidate)).toBe(false);
+  });
+
+  test('a silence cue cannot declare a declared_cue fallback — it has no bytes to fall back from', () => {
+    const candidate = silenceBinding({ fallback: 'declared_cue', fallbackCueId: 'other' });
+    expect(Value.Check(PackAudioCueBindingSchema, candidate)).toBe(false);
+  });
+
+  test('an asset source with a missing hash is invalid', () => {
+    const candidate = binding({ source: { kind: 'asset', tag: 'music:x' } });
+    expect(Value.Check(PackAudioCueBindingSchema, candidate)).toBe(false);
+  });
+
+  test('an unknown source kind is invalid', () => {
+    const candidate = binding({ source: { kind: 'stream', url: 'https://example.test/x' } });
+    expect(Value.Check(PackAudioCueBindingSchema, candidate)).toBe(false);
+  });
+
+  test('a silence cue may be the declared fallback of an asset cue — a terminating chain', () => {
+    const result = Value.Parse(
+      PackAudioBindingsSchema,
+      section([
+        binding({ fallback: 'declared_cue', fallbackCueId: 'bed.explore' }),
+        silenceBinding(),
+      ]),
+    );
+    expect(checkPackAudioBindings(result)).toEqual([]);
   });
 });

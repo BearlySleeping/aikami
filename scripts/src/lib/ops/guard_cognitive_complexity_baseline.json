@@ -422,7 +422,7 @@
   "apps/frontend/client/src/lib/services/audio/authored_audio_cue_source.ts": {
     "counts": {
       "excessive": 1,
-      "worst": 24
+      "worst": 20
     }
   },
   "apps/frontend/client/src/lib/services/audio/scene_to_music_tags.ts": {

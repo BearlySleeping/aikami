@@ -68,8 +68,11 @@ const makeValidContentPacks = (gameDataDir: string): string => {
           cueId: 'village.music',
           target: 'music',
           context: 'village',
-          tag: 'music:exploration:village_ward',
-          sha256: hashOf(audioBytes),
+          source: {
+            kind: 'asset',
+            tag: 'music:exploration:village_ward',
+            sha256: hashOf(audioBytes),
+          },
           resolution: 'required',
           fallback: 'silence',
         },

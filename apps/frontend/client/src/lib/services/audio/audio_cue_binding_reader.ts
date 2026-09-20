@@ -22,6 +22,7 @@
 
 import { checkPackAudioBindings, PackAudioBindingsSchema } from '@aikami/schemas';
 import type {
+  AudioAssetSource,
   AudioCueTarget,
   PackAudioBindingIssue,
   PackAudioBindings,
@@ -154,10 +155,10 @@ const findAudioCueBinding = (options: {
  * playing corrupt or stale content.
  */
 const isRenditionInstalled = (options: {
-  binding: PackAudioCueBinding;
+  source: AudioAssetSource;
   installedRenditions: readonly InstalledAudioRendition[];
 }): { installed: boolean; miss?: AudioCueMissReason } => {
-  const declared = normalizeTag(options.binding.tag);
+  const declared = normalizeTag(options.source.tag);
   const candidate = options.installedRenditions.find(
     (rendition) => normalizeTag(rendition.tag) === declared,
   );
@@ -166,7 +167,7 @@ const isRenditionInstalled = (options: {
   }
   if (
     candidate.sha256 !== undefined &&
-    normalizeHash(candidate.sha256) !== normalizeHash(options.binding.sha256)
+    normalizeHash(candidate.sha256) !== normalizeHash(options.source.sha256)
   ) {
     return { installed: false, miss: 'hash-mismatch' };
   }
@@ -195,7 +196,14 @@ export const selectAudioCue = (options: {
     return { kind: 'unbound', binding: undefined, required: false };
   }
 
-  const primary = isRenditionInstalled({ binding, installedRenditions });
+  // An intentional-silence cue has no bytes to look for. It resolves to
+  // silence by declaration, not by a failed lookup — there is no tag to match
+  // and no hash to verify, because the pack never claimed any.
+  if (binding.source.kind === 'silence') {
+    return { kind: 'silence', binding: undefined, required: false };
+  }
+
+  const primary = isRenditionInstalled({ source: binding.source, installedRenditions });
   if (primary.installed) {
     return { kind: 'bound', binding, required: binding.resolution === 'required' };
   }
@@ -207,9 +215,20 @@ export const selectAudioCue = (options: {
     const fallbackBinding = bindings?.bindings.find(
       (candidate) => candidate.cueId === binding.fallbackCueId,
     );
+    // A fallback that is itself intentional silence is a valid, terminating
+    // chain (e.g. `village.music` -> `bed.explore` -> silence). It resolves to
+    // silence without consulting installed renditions.
+    if (fallbackBinding?.source.kind === 'silence') {
+      return {
+        kind: 'silence',
+        binding: undefined,
+        required: binding.resolution === 'required',
+        miss: primary.miss,
+      };
+    }
     if (
       fallbackBinding &&
-      isRenditionInstalled({ binding: fallbackBinding, installedRenditions }).installed
+      isRenditionInstalled({ source: fallbackBinding.source, installedRenditions }).installed
     ) {
       return {
         kind: 'fallback-cue',
