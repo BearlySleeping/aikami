@@ -45,17 +45,18 @@ const sha256 = (path: string): string =>
 const runtimePathFor = (tag: string, ext: string): string => `${tag.replace(/:/g, '/')}${ext}`;
 
 /**
- * Installs one authored audio bed under its pinned tag.
+ * Resolves one authored audio bed against its manifest pin, without writing.
  *
  * A tag whose manifest pin disagrees with the file on disk is a producer
  * defect: publishing it would ship bytes the client is required to refuse.
+ * Separated from the write so every cue can be validated before any of them
+ * is copied — a bad pin must not leave the runtime tree half-updated.
  */
-const installCue = (options: {
+const resolveCue = (options: {
   tag: string;
   file: string;
   pinned: Map<string, string>;
-  checkOnly: boolean;
-}): { tag: string; path: string; sha256: string } => {
+}): { tag: string; path: string; source: string; destination: string; sha256: string } => {
   const source = join(packAudio, options.file);
   if (!existsSync(source)) {
     throw new Error(`install_emberwatch_audio: ${source} is missing`);
@@ -67,32 +68,86 @@ const installCue = (options: {
       `install_emberwatch_audio: ${options.file} hashes ${sourceHash.slice(0, 12)} but the manifest pins ${declared.slice(0, 12)} for ${options.tag} — refusing to publish bytes that do not satisfy the pin`,
     );
   }
-  const relative = runtimePathFor(options.tag, '.webm');
-  const destination = join(repository, 'apps/frontend/client/static/game-data', relative);
-  if (options.checkOnly) {
-    if (!existsSync(destination) || sha256(destination) !== sourceHash) {
+  const path = runtimePathFor(options.tag, '.webm');
+  return {
+    tag: options.tag,
+    path,
+    source,
+    destination: join(repository, 'apps/frontend/client/static/game-data', path),
+    sha256: sourceHash,
+  };
+};
+
+/**
+ * Publishes one resolved cue, or verifies it under `--check`.
+ *
+ * `--check` compares BYTES, not existence: a destination that exists but holds
+ * different audio is exactly the drift this command exists to catch.
+ */
+const publishCue = (options: {
+  cue: ReturnType<typeof resolveCue>;
+  checkOnly: boolean;
+}): { tag: string; path: string; sha256: string } => {
+  const { cue, checkOnly } = options;
+  if (checkOnly) {
+    if (!existsSync(cue.destination) || sha256(cue.destination) !== cue.sha256) {
       throw new Error(
-        `install_emberwatch_audio: installed ${relative} is missing or differs from ${options.file}`,
+        `install_emberwatch_audio: installed ${cue.path} is missing or differs from ${cue.source}`,
       );
     }
   } else {
-    mkdirSync(dirname(destination), { recursive: true });
-    copyFileSync(source, destination);
+    mkdirSync(dirname(cue.destination), { recursive: true });
+    copyFileSync(cue.source, cue.destination);
   }
-  return { tag: options.tag, path: relative, sha256: sourceHash };
+  return { tag: cue.tag, path: cue.path, sha256: cue.sha256 };
 };
 
 const main = (): void => {
   const checkOnly = process.argv.includes('--check');
   const manifest = JSON.parse(
     readFileSync(join(repository, 'content/packs/emberwatch/manifest.json'), 'utf8'),
-  ) as { audio?: { bindings: { cueId: string; tag: string; sha256: string }[] } };
+  ) as {
+    audio?: {
+      bindings: {
+        cueId: string;
+        tag: string;
+        sha256: string;
+        resolution?: string;
+        fallback?: string;
+      }[];
+    };
+  };
 
-  const pinned = new Map(
-    (manifest.audio?.bindings ?? []).map((binding) => [binding.tag, binding.sha256]),
-  );
+  const bindings = manifest.audio?.bindings ?? [];
+  const pinned = new Map(bindings.map((binding) => [binding.tag, binding.sha256]));
 
-  const installed = CUES.map(([tag, file]) => installCue({ tag, file, pinned, checkOnly }));
+  // Coverage is proved BEFORE the first mutation. A manifest binding with no
+  // installer source entry would otherwise be silently uncovered: the loop
+  // below only walks CUES, so a pin the installer does not know about would
+  // never be reported and the pack lock would carry a cue with no bytes.
+  //
+  // Only bindings the pack is REQUIRED to ship must be covered. A binding
+  // declared `optional` with a `silence` fallback is by definition one the
+  // pack may omit — `bed.explore`/`bed.combat` are exactly that: generic
+  // fallback beds the Emberwatch pack does not author, so their absence is
+  // the declared policy rather than a gap. Anything else must be covered.
+  const covered = new Set(CUES.map(([tag]) => tag));
+  const uncovered = bindings
+    .filter((binding) => !covered.has(binding.tag))
+    .filter((binding) => !(binding.resolution === 'optional' && binding.fallback === 'silence'))
+    .map((binding) => binding.tag)
+    .sort();
+  if (uncovered.length > 0) {
+    throw new Error(
+      `install_emberwatch_audio: ${uncovered.length} manifest-pinned binding(s) have no installer source entry — refusing to publish a partially covered pack:\n` +
+        uncovered.map((tag) => `  ${tag}`).join('\n'),
+    );
+  }
+
+  // Resolve every cue first, then write. A cue that fails its pin check must
+  // not leave the earlier cues already copied into the runtime tree.
+  const resolved = CUES.map(([tag, file]) => resolveCue({ tag, file, pinned }));
+  const installed = resolved.map((cue) => publishCue({ cue, checkOnly }));
 
   console.log(
     `install_emberwatch_audio: ${installed.length} authored bed(s) published under their pinned tags${checkOnly ? ' (check only)' : ''}`,

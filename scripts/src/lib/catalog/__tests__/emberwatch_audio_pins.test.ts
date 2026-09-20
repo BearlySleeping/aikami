@@ -74,3 +74,62 @@ describe('Emberwatch authored audio pins', () => {
     }
   });
 });
+
+describe('the audio installer covers every binding the pack is required to ship', () => {
+  /**
+   * The installer walks a hard-coded CUES list, so a manifest binding it does
+   * not know about would be silently uncovered: the pack lock would carry a
+   * cue with no bytes and nothing would report it. The installer now proves
+   * coverage before its first write.
+   *
+   * Only bindings the pack is REQUIRED to ship must be covered. A binding
+   * declared `optional` with a `silence` fallback is by definition one the
+   * pack may omit — that is the declared policy for the shared beds, not a
+   * gap — so the rule is: covered, OR explicitly optional-and-silent.
+   */
+  const INSTALLER_SOURCES = [
+    'village_ward',
+    'inn_hearth',
+    'old_road',
+    'ruined_shrine',
+    'emberwatch_combat',
+  ];
+
+  test('every required binding has an installer source, and optional beds are declared as such', () => {
+    const parsed = manifest as {
+      audio: {
+        bindings: readonly {
+          cueId: string;
+          tag: string;
+          resolution?: string;
+          fallback?: string;
+        }[];
+      };
+    };
+    const covered = new Set(INSTALLER_SOURCES);
+
+    for (const binding of parsed.audio.bindings) {
+      const stem = binding.tag.split(':').at(-1) ?? '';
+      if (covered.has(stem)) {
+        continue;
+      }
+      // Uncovered is only legitimate when the pack explicitly declares that it
+      // may omit the cue AND that omission degrades to silence. Anything else
+      // is a binding the installer would silently drop.
+      expect(
+        { resolution: binding.resolution, fallback: binding.fallback },
+        `${binding.cueId} is uncovered and is not declared optional+silence`,
+      ).toEqual({ resolution: 'optional', fallback: 'silence' });
+    }
+  });
+
+  test('no installer source is dead: each one satisfies a declared binding', () => {
+    const parsed = manifest as { audio: { bindings: readonly { tag: string }[] } };
+    const declaredStems = new Set(
+      parsed.audio.bindings.map((binding) => binding.tag.split(':').at(-1) ?? ''),
+    );
+    for (const stem of INSTALLER_SOURCES) {
+      expect(declaredStems.has(stem), `${stem} has an installer source but no binding`).toBe(true);
+    }
+  });
+});
