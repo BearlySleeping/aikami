@@ -132,19 +132,33 @@ const flagValue = (args: string[], name: string): string | undefined => {
 };
 
 const parseInvocation = (args: string[]): Invocation => {
+  const buildCandidate = args.includes('--build-candidate');
+  const acceptRun = flagValue(args, '--accept-run');
   const mode = flagValue(args, '--mode');
   if (mode !== 'staging' && mode !== 'production') {
+    // A candidate build is LOCAL and mode-independent: it performs no remote
+    // write, so requiring a target mode would be a fiction. `staging` is used
+    // only for the "review it, then run …" hint it prints.
+    if (buildCandidate) {
+      return {
+        mode: 'staging',
+        apply: false,
+        skipTests: false,
+        allowDirty: false,
+        buildCandidate: true,
+        ...(acceptRun === undefined ? {} : { acceptRun }),
+      };
+    }
     console.error('❌ --mode must be staging or production.');
     console.error(USAGE);
     process.exit(4);
   }
-  const acceptRun = flagValue(args, '--accept-run');
   return {
     mode,
     apply: args.includes('--apply'),
     skipTests: args.includes('--skip-tests'),
     allowDirty: args.includes('--allow-dirty'),
-    buildCandidate: args.includes('--build-candidate'),
+    buildCandidate,
     ...(acceptRun === undefined ? {} : { acceptRun }),
   };
 };
@@ -551,21 +565,22 @@ const main = async (): Promise<void> => {
   assertVersionParity(pack);
   assertCleanForApply({ dirty, apply: invocation.apply, allowDirty: invocation.allowDirty });
 
+  // Building a candidate is an explicitly requested, LOCAL-ONLY operation: it
+  // performs no remote write, so it is handled before the release-target
+  // preflight (which exists to stop a WRITE from reaching the wrong bucket) and
+  // before the read-only plan branch. `bun run emberwatch:build-candidate`
+  // passes neither `--mode` nor `--apply`, and must still build.
+  if (invocation.buildCandidate) {
+    buildAndSealCandidate(io, invocation.mode);
+    process.exit(0);
+  }
+
   const target = preflightTarget(invocation.mode);
   const previous = await readReleasePointer(target.config.originUrl);
   printTarget({ mode: invocation.mode, target, previous });
 
   assertReadOnlyChecks(io);
   maybeAcceptRun(io, invocation);
-
-  // Building a candidate is an explicitly requested, local-only operation: it
-  // is handled BEFORE the read-only plan branch, so `--build-candidate` (which
-  // `bun run emberwatch:build-candidate` passes without `--apply`) actually
-  // builds instead of falling into the plan path.
-  if (invocation.buildCandidate) {
-    buildAndSealCandidate(io, invocation.mode);
-    process.exit(0);
-  }
 
   const shared = { io, invocation, target, previous, sourceCommit, pack, dirty };
   if (!invocation.apply) {
