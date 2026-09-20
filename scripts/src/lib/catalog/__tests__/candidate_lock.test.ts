@@ -148,6 +148,25 @@ describe('declared membership — absence is decidable', () => {
     expect(groups.terrainAtlas?.count).toBeGreaterThan(0);
     expect(groups.terrainAtlas?.digest).not.toBe(digestGroup([]));
   });
+
+  test('the audio and enemy-visual groups are NOT empty on the real pack', () => {
+    // Direct regression. When the audio binding schema moved `tag` under a
+    // discriminated `source`, `audioGroup` kept reading the removed
+    // `binding.tag`, so every lookup returned `undefined`, every binding was
+    // skipped, and the group sealed as EMPTY — a candidate that could not
+    // report a changed audio bed. The same class of bug is possible for any
+    // group derived from a manifest field, so both are pinned here.
+    //
+    // Asserted as non-empty rather than an exact count: the audio group lists
+    // one member per BINDING, and `inn_hearth` is bound by both `inn.music`
+    // and `merchant_shop.music`, so it appears twice. That duplication is
+    // pre-existing and orthogonal to this regression.
+    const { groups } = buildGroups(declareRealGroups());
+    expect(groups.audio?.count).toBeGreaterThan(0);
+    expect(groups.audio?.digest).not.toBe(digestGroup([]));
+    expect(groups.enemyVisuals?.count).toBe(3);
+    expect(groups.enemyVisuals?.digest).not.toBe(digestGroup([]));
+  });
 });
 
 /** The real pack's declaration, loaded the way the seal CLI loads it. */

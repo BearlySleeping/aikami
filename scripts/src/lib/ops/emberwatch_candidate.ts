@@ -74,7 +74,11 @@ type PackManifest = {
   propAtlases?: { textureUrl?: string; spritesheetUrl?: string }[];
   maps?: Record<string, { file?: string }>;
   npcs?: Record<string, { portraits?: { variants?: Record<string, string> } }>;
-  audio?: { bindings?: { tag?: string }[] };
+  audio?: {
+    bindings?: {
+      source?: { kind?: string; tag?: string };
+    }[];
+  };
 };
 
 /** The manifest group: the pack's own descriptor, always required. */
@@ -182,11 +186,15 @@ const enemyVisualsGroup = (): DeclaredGroup => ({
   ],
 });
 
-/** Every authored cue the manifest binds, resolved to the file that exists. */
+/** Every authored cue the manifest binds to real bytes, resolved to the file that exists. */
 const audioGroup = (manifest: PackManifest): DeclaredGroup => {
   const members: DeclaredMember[] = [];
   for (const binding of manifest.audio?.bindings ?? []) {
-    const [, , name] = (binding.tag ?? '').split(':');
+    // An intentional-silence cue names no bytes, so it contributes no member.
+    // Reading a removed `binding.tag` here would silently empty the whole
+    // group — which is exactly what happened when the source union landed.
+    const tag = binding.source?.kind === 'asset' ? binding.source.tag : undefined;
+    const [, , name] = (tag ?? '').split(':');
     if (!name) {
       continue;
     }

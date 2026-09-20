@@ -39,7 +39,7 @@ import { MODEL_RIGHTS_EVIDENCE, type ModelRightsRecord } from '../catalog/model_
 type PackManifest = {
   props: Record<string, { frame: string; provenance?: { source?: string } }>;
   npcs: Record<string, { portraits?: { variants: Record<string, string> } }>;
-  audio?: { bindings?: { tag: string }[] };
+  audio?: { bindings?: { source?: { kind?: string; tag?: string } }[] };
 };
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -197,8 +197,14 @@ const audioCredits = (options: {
 }): Record<string, Credit> => {
   const credits: Record<string, Credit> = {};
   for (const binding of options.manifest.audio?.bindings ?? []) {
-    credits[binding.tag] = options.localAudio;
-    options.legacyGeneratedAudioTags.add(binding.tag);
+    // Only asset-backed cues name bytes. An intentional-silence cue has no tag
+    // to credit, and crediting `undefined` would write a junk key.
+    const tag = binding.source?.kind === 'asset' ? binding.source.tag : undefined;
+    if (!tag) {
+      continue;
+    }
+    credits[tag] = options.localAudio;
+    options.legacyGeneratedAudioTags.add(tag);
   }
   return credits;
 };
