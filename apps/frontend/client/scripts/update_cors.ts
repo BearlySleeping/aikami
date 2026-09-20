@@ -2,9 +2,10 @@
 // apps/frontend/client/scripts/update_cors.ts
 
 /**
- * Regenerates the Tauri CSP `connect-src` allowlist in
+ * Regenerates the Tauri CSP `connect-src` and `img-src` allowlists in
  * apps/frontend/client/src-tauri/tauri.conf.json from the provider registry
- * in @aikami/constants (packages/shared/constants/src/lib/providers.ts).
+ * in @aikami/constants (packages/shared/constants/src/lib/providers.ts) and
+ * the per-mode catalog origins (…/lib/infrastructure.ts).
  *
  * Every TEXT_PROVIDERS / VOICE_PROVIDERS / IMAGE_PROVIDERS entry with a
  * fixed `apiBaseUrl` (openrouter.ai, api.openai.com, ...) is added as its
@@ -27,11 +28,30 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { IMAGE_PROVIDERS, TEXT_PROVIDERS, VOICE_PROVIDERS } from '@aikami/constants';
+import {
+  CATALOG_ORIGINS,
+  IMAGE_PROVIDERS,
+  TEXT_PROVIDERS,
+  VOICE_PROVIDERS,
+} from '@aikami/constants';
 import { logger } from '@aikami/logger';
 
 const CLIENT_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const TAURI_CONF_PATH = join(CLIENT_DIR, 'src-tauri', 'tauri.conf.json');
+
+/**
+ * Every PROVISIONED catalog origin.
+ *
+ * A packaged desktop build reads assets straight from the catalog origin for
+ * whichever mode it was built for, so both origins must be reachable — and
+ * `img-src` as well as `connect-src`, because PixiJS textures and `<img>`
+ * portraits are image loads, not fetches. Derived from `CATALOG_ORIGINS`
+ * rather than listed by hand: this list previously named only production, so a
+ * staging desktop build was CSP-blocked from its own catalog.
+ */
+const CATALOG_ORIGINS_ALLOWED: string[] = Object.values(CATALOG_ORIGINS)
+  .map((entry) => entry.originUrl)
+  .filter((url): url is string => typeof url === 'string' && url.length > 0);
 
 // Entries with no fixed provider origin behind them — Aikami's own hub
 // deployments, the CDN, the IPC scheme, and locally-run backend engines
@@ -46,7 +66,7 @@ const BASE_CONNECT_SRC = [
   'http://ipc.localhost',
   'https://hub.bearlysleeping.com',
   'https://hub.stg.bearlysleeping.com',
-  'https://assets.bearlysleeping.com',
+  ...CATALOG_ORIGINS_ALLOWED,
   'http://localhost:11434', // FIXED_PORTS.text (Ollama / llama.cpp default)
   'http://localhost:8188', // FIXED_PORTS.image (ComfyUI default)
   'http://localhost:8089', // FIXED_PORTS.voice (Kokoro default)
@@ -75,6 +95,19 @@ const buildConnectSrc = (): string => {
   return entries.join(' ');
 };
 
+/**
+ * The `img-src` allowlist.
+ *
+ * Same catalog origins as `connect-src` (see `CATALOG_ORIGINS_ALLOWED`) plus
+ * the local ComfyUI image server. Regenerated here rather than hand-edited so
+ * a newly provisioned mode cannot be reachable for fetches but blocked for
+ * textures — which is what happened to staging.
+ */
+const buildImgSrc = (): string =>
+  ["'self'", 'data:', 'blob:', 'tauri:', 'asset:', ...CATALOG_ORIGINS_ALLOWED, 'http://localhost:8188'].join(
+    ' ',
+  );
+
 type TauriConfig = {
   app: {
     security: {
@@ -92,15 +125,23 @@ if (!connectSrcMatch) {
   logger.error(`❌ No connect-src directive found in ${TAURI_CONF_PATH}`);
   process.exit(1);
 }
+const imgSrcMatch = csp.match(/img-src [^;]+/);
+if (!imgSrcMatch) {
+  logger.error(`❌ No img-src directive found in ${TAURI_CONF_PATH}`);
+  process.exit(1);
+}
 
 const newConnectSrc = `connect-src ${buildConnectSrc()}`;
-const newCsp = csp.replace(connectSrcMatch[0], newConnectSrc);
+const newImgSrc = `img-src ${buildImgSrc()}`;
+const newCsp = csp
+  .replace(connectSrcMatch[0], newConnectSrc)
+  .replace(imgSrcMatch[0], newImgSrc);
 
 if (newCsp === csp) {
-  logger.info('✅ tauri.conf.json connect-src already up to date.');
+  logger.info('✅ tauri.conf.json connect-src and img-src already up to date.');
   process.exit(0);
 }
 
 config.app.security.csp = newCsp;
 writeFileSync(TAURI_CONF_PATH, `${JSON.stringify(config, null, 2)}\n`, 'utf-8');
-logger.info(`✅ Updated connect-src in ${TAURI_CONF_PATH}`);
+logger.info(`✅ Updated connect-src and img-src in ${TAURI_CONF_PATH}`);

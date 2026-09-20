@@ -16,7 +16,15 @@
  *   infra               → Apply server-plane migrations against Cloudflare D1 (was database-migration)
  */
 
-import { D1_DATABASES, MODE_PROJECT_MAP, modes, R2_BUCKETS } from '@aikami/constants';
+import {
+  D1_DATABASES,
+  HUB_R2_BUCKET_KEYS,
+  MODE_PROJECT_MAP,
+  modes,
+  R2_BUCKETS,
+  type R2BucketEntry,
+  resolveCatalogOrigin,
+} from '@aikami/constants';
 import type { AppId } from '@aikami/types';
 
 export const ALL_SERVICE_TYPES = [
@@ -250,18 +258,19 @@ export const APP_CONFIG: Readonly<Record<AppId, AppConfig>> = {
           },
         ];
       },
-      r2Buckets: (mode) => {
-        const savesBucket = R2_BUCKETS.saves[mode as keyof typeof R2_BUCKETS.saves];
-        if (!savesBucket) {
-          return [];
-        }
-        return [
-          {
-            binding: savesBucket.binding,
-            bucketName: savesBucket.bucketName,
-          },
-        ];
-      },
+      // Every R2 plane the hub reads or writes (C-513: saves + catalog +
+      // uploads). This used to return ONLY the saves bucket, and
+      // `writeWranglerConfig` REPLACES the whole `r2_buckets` array — so the
+      // deployed hub had no `CATALOG_BUCKET` and no `UPLOADS_BUCKET` binding,
+      // and community asset publishing reported itself unavailable
+      // (`asset_community_env.ts` requires all three). Derived from
+      // `R2_BUCKETS` so each mode binds its OWN bucket: a staging hub must
+      // never be handed `aikami-catalog`.
+      r2Buckets: (mode) =>
+        HUB_R2_BUCKET_KEYS.flatMap((key) => {
+          const entry = (R2_BUCKETS[key] as Partial<Record<string, R2BucketEntry>>)[mode];
+          return entry ? [{ binding: entry.binding, bucketName: entry.bucketName }] : [];
+        }),
       // Public catalog origin the hub reads the static index from (C-396),
       // and the Better Auth cookie-scope domain — both plain vars (not
       // secrets), and both public strings anyone can already see in the
@@ -271,11 +280,26 @@ export const APP_CONFIG: Readonly<Record<AppId, AppConfig>> = {
       // injects `cloudflare.vars` into the deployed Worker's runtime env —
       // .env.{mode} feeds the Vite build only, so the "secret" value never
       // reached the running Worker regardless of whether it was set.
-      vars: (mode) => ({
-        CATALOG_ORIGIN_URL: 'https://assets.bearlysleeping.com',
-        BETTER_AUTH_COOKIE_DOMAIN:
-          mode === 'production' ? 'bearlysleeping.com' : 'stg.bearlysleeping.com',
-      }),
+      //
+      // CATALOG_ORIGIN_URL is DERIVED from `CATALOG_ORIGINS` rather than
+      // hardcoded. It used to be the production origin for every mode, which
+      // meant a staging hub read — and therefore rendered — the production
+      // catalog: the same class of bug as the staging publish target, one
+      // layer up. Deriving it makes the two impossible to disagree.
+      vars: (mode): Record<string, string> => {
+        const catalogOrigin = resolveCatalogOrigin(mode)?.originUrl;
+        const vars: Record<string, string> = {
+          BETTER_AUTH_COOKIE_DOMAIN:
+            mode === 'production' ? 'bearlysleeping.com' : 'stg.bearlysleeping.com',
+        };
+        // A mode with no declared origin (emulator/testing) gets no var at all,
+        // so the hub renders its explicit "not configured" state instead of
+        // silently reading someone else's catalog.
+        if (catalogOrigin) {
+          vars.CATALOG_ORIGIN_URL = catalogOrigin;
+        }
+        return vars;
+      },
       routes: {
         production: 'hub.bearlysleeping.com',
         staging: 'hub.stg.bearlysleeping.com',

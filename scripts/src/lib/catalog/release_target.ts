@@ -58,7 +58,6 @@
 
 import { existsSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import {
   CATALOG_ORIGINS,
   PRODUCTION_CATALOG_ORIGINS,
@@ -66,8 +65,16 @@ import {
   resolveBucketName,
 } from '@aikami/constants';
 
-const _here = fileURLToPath(import.meta.url);
-const REPO_ROOT = resolve(_here, '../../../..');
+/**
+ * Repo root, from the DIRECTORY of this module.
+ *
+ * `import.meta.dirname` — not `fileURLToPath(import.meta.url)`. Resolving
+ * `../../../..` from the FILE path is off by one: it lands on `<repo>/scripts`,
+ * so `readSiblingEnvValue` looked for `<repo>/scripts/scripts/.env.production`,
+ * never found it, and the cross-mode origin comparison silently degraded to a
+ * warning. `catalog/config.ts` already used the directory form.
+ */
+const REPO_ROOT = resolve(import.meta.dirname, '../../../..');
 
 /** Modes that address a real remote catalog. Emulator/testing never do. */
 export const REMOTE_RELEASE_MODES = ['staging', 'production'] as const;

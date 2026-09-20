@@ -125,15 +125,16 @@ export const HUB_R2_BUCKET_KEYS = ['saves', 'catalog', 'uploads'] as const;
  * never ran. Encoding the origin alongside the bucket makes that
  * misconfiguration a static contradiction rather than a runtime surprise.
  *
- * `originUrl: null` means the origin is NOT PROVISIONED. That is deliberate and
- * is the current staging state: there is no public URL for
- * `aikami-staging-catalog`, and inventing one — or pointing staging at
- * production to unblock testing — would make every staging verification a lie.
- * A null origin fails closed; it is never a fallback.
+ * `originUrl: null` means the origin is NOT PROVISIONED, and fails closed — it
+ * is never a fallback to production. That was staging's state until the
+ * `assets.stg.bearlysleeping.com` custom domain was attached to
+ * `aikami-staging-catalog`; the URL below is that real, verified origin.
  *
  * Provisioning a staging origin is a HUMAN infrastructure action: create a
  * public R2 custom domain (or Worker route) for `aikami-staging-catalog`, then
- * set the URL here and in the mode's environment.
+ * set the URL here and in the mode's environment. The two must agree —
+ * `resolveReleaseTarget` refuses a `CATALOG_ORIGIN_URL` that disagrees with
+ * this table, so a half-applied change is a hard failure, not a silent one.
  */
 export const CATALOG_ORIGINS = {
   production: {
@@ -142,9 +143,11 @@ export const CATALOG_ORIGINS = {
   },
   staging: {
     bucketName: 'aikami-staging-catalog',
-    // NOT PROVISIONED — see the doc comment. A staging publish cannot be
-    // verified until this is a real URL.
-    originUrl: null,
+    // PROVISIONED 2026-09-20: custom domain attached to `aikami-staging-catalog`
+    // (enabled, ownership active, SSL active). Distinct from production by
+    // construction — `PRODUCTION_CATALOG_ORIGINS` is derived from the entry
+    // above, so this hostname is automatically outside the denylist.
+    originUrl: 'https://assets.stg.bearlysleeping.com',
   },
 } as const satisfies Record<string, { bucketName: string; originUrl: string | null }>;
 
