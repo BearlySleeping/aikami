@@ -49,7 +49,7 @@ export const resolveIncludeDevRoutes = (
   command: ViteCommand,
   env: Record<string, string | undefined> = process.env,
 ): boolean => {
-  const override = env[DEV_ROUTES_ENV_VAR];
+  const override = env[DEV_ROUTES_ENV_VAR] ?? 'true'; // TODO: remove "?? 'true';" when we are stable
   if (override === 'true') {
     return true;
   }
