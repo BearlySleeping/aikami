@@ -1,6 +1,6 @@
 {
-  "scannedAt": "2026-08-26T14:59:28.568Z",
-  "count": 5,
+  "scannedAt": "2026-09-20T15:03:36.641Z",
+  "count": 50,
   "assets": {
     "index": {
       "tag": "index",
@@ -10,12 +10,324 @@
       "path": "index.json",
       "ext": ".json"
     },
+    "emberwatch:portraits:apprentice_tess:neutral": {
+      "tag": "emberwatch:portraits:apprentice_tess:neutral",
+      "category": "contentPacks",
+      "subcategory": "portraits/apprentice_tess",
+      "name": "neutral",
+      "path": "emberwatch/portraits/apprentice_tess/neutral.png",
+      "ext": ".png"
+    },
+    "emberwatch:portraits:village_guard:neutral": {
+      "tag": "emberwatch:portraits:village_guard:neutral",
+      "category": "contentPacks",
+      "subcategory": "portraits/village_guard",
+      "name": "neutral",
+      "path": "emberwatch/portraits/village_guard/neutral.png",
+      "ext": ".png"
+    },
+    "emberwatch:portraits:rollo_grasper:guarded": {
+      "tag": "emberwatch:portraits:rollo_grasper:guarded",
+      "category": "contentPacks",
+      "subcategory": "portraits/rollo_grasper",
+      "name": "guarded",
+      "path": "emberwatch/portraits/rollo_grasper/guarded.png",
+      "ext": ".png"
+    },
+    "emberwatch:portraits:rollo_grasper:relieved": {
+      "tag": "emberwatch:portraits:rollo_grasper:relieved",
+      "category": "contentPacks",
+      "subcategory": "portraits/rollo_grasper",
+      "name": "relieved",
+      "path": "emberwatch/portraits/rollo_grasper/relieved.png",
+      "ext": ".png"
+    },
+    "emberwatch:portraits:rollo_grasper:neutral": {
+      "tag": "emberwatch:portraits:rollo_grasper:neutral",
+      "category": "contentPacks",
+      "subcategory": "portraits/rollo_grasper",
+      "name": "neutral",
+      "path": "emberwatch/portraits/rollo_grasper/neutral.png",
+      "ext": ".png"
+    },
+    "emberwatch:portraits:merchant:neutral": {
+      "tag": "emberwatch:portraits:merchant:neutral",
+      "category": "contentPacks",
+      "subcategory": "portraits/merchant",
+      "name": "neutral",
+      "path": "emberwatch/portraits/merchant/neutral.png",
+      "ext": ".png"
+    },
+    "emberwatch:portraits:smith_orra:neutral": {
+      "tag": "emberwatch:portraits:smith_orra:neutral",
+      "category": "contentPacks",
+      "subcategory": "portraits/smith_orra",
+      "name": "neutral",
+      "path": "emberwatch/portraits/smith_orra/neutral.png",
+      "ext": ".png"
+    },
+    "emberwatch:portraits:cartographer_ivo:neutral": {
+      "tag": "emberwatch:portraits:cartographer_ivo:neutral",
+      "category": "contentPacks",
+      "subcategory": "portraits/cartographer_ivo",
+      "name": "neutral",
+      "path": "emberwatch/portraits/cartographer_ivo/neutral.png",
+      "ext": ".png"
+    },
+    "emberwatch:portraits:village_elder:concerned": {
+      "tag": "emberwatch:portraits:village_elder:concerned",
+      "category": "contentPacks",
+      "subcategory": "portraits/village_elder",
+      "name": "concerned",
+      "path": "emberwatch/portraits/village_elder/concerned.png",
+      "ext": ".png"
+    },
+    "emberwatch:portraits:village_elder:relieved": {
+      "tag": "emberwatch:portraits:village_elder:relieved",
+      "category": "contentPacks",
+      "subcategory": "portraits/village_elder",
+      "name": "relieved",
+      "path": "emberwatch/portraits/village_elder/relieved.png",
+      "ext": ".png"
+    },
+    "emberwatch:portraits:village_elder:neutral": {
+      "tag": "emberwatch:portraits:village_elder:neutral",
+      "category": "contentPacks",
+      "subcategory": "portraits/village_elder",
+      "name": "neutral",
+      "path": "emberwatch/portraits/village_elder/neutral.png",
+      "ext": ".png"
+    },
+    "emberwatch:portraits:shrine_keeper_nemi:neutral": {
+      "tag": "emberwatch:portraits:shrine_keeper_nemi:neutral",
+      "category": "contentPacks",
+      "subcategory": "portraits/shrine_keeper_nemi",
+      "name": "neutral",
+      "path": "emberwatch/portraits/shrine_keeper_nemi/neutral.png",
+      "ext": ".png"
+    },
+    "emberwatch:portraits:innkeeper_sella:neutral": {
+      "tag": "emberwatch:portraits:innkeeper_sella:neutral",
+      "category": "contentPacks",
+      "subcategory": "portraits/innkeeper_sella",
+      "name": "neutral",
+      "path": "emberwatch/portraits/innkeeper_sella/neutral.png",
+      "ext": ".png"
+    },
+    "emberwatch:portraits:woodcutter_ada:neutral": {
+      "tag": "emberwatch:portraits:woodcutter_ada:neutral",
+      "category": "contentPacks",
+      "subcategory": "portraits/woodcutter_ada",
+      "name": "neutral",
+      "path": "emberwatch/portraits/woodcutter_ada/neutral.png",
+      "ext": ".png"
+    },
+    "emberwatch:props:oak": {
+      "tag": "emberwatch:props:oak",
+      "category": "contentPacks",
+      "subcategory": "props",
+      "name": "oak",
+      "path": "emberwatch/props/oak.png",
+      "ext": ".png"
+    },
+    "emberwatch:props:prop_support": {
+      "tag": "emberwatch:props:prop_support",
+      "category": "contentPacks",
+      "subcategory": "props",
+      "name": "prop_support",
+      "path": "emberwatch/props/prop_support.png",
+      "ext": ".png"
+    },
+    "emberwatch:props:prop_receipt": {
+      "tag": "emberwatch:props:prop_receipt",
+      "category": "contentPacks",
+      "subcategory": "props",
+      "name": "prop_receipt",
+      "path": "emberwatch/props/prop_receipt.png",
+      "ext": ".png"
+    },
+    "emberwatch:props:prop_component": {
+      "tag": "emberwatch:props:prop_component",
+      "category": "contentPacks",
+      "subcategory": "props",
+      "name": "prop_component",
+      "path": "emberwatch/props/prop_component.png",
+      "ext": ".png"
+    },
+    "emberwatch:props:inn": {
+      "tag": "emberwatch:props:inn",
+      "category": "contentPacks",
+      "subcategory": "props",
+      "name": "inn",
+      "path": "emberwatch/props/inn.png",
+      "ext": ".png"
+    },
+    "emberwatch:props:prop_cart": {
+      "tag": "emberwatch:props:prop_cart",
+      "category": "contentPacks",
+      "subcategory": "props",
+      "name": "prop_cart",
+      "path": "emberwatch/props/prop_cart.png",
+      "ext": ".png"
+    },
+    "emberwatch:props:prop_barrel": {
+      "tag": "emberwatch:props:prop_barrel",
+      "category": "contentPacks",
+      "subcategory": "props",
+      "name": "prop_barrel",
+      "path": "emberwatch/props/prop_barrel.png",
+      "ext": ".png"
+    },
+    "emberwatch:props:birch": {
+      "tag": "emberwatch:props:birch",
+      "category": "contentPacks",
+      "subcategory": "props",
+      "name": "birch",
+      "path": "emberwatch/props/birch.png",
+      "ext": ".png"
+    },
+    "emberwatch:props:prop_ward_socket": {
+      "tag": "emberwatch:props:prop_ward_socket",
+      "category": "contentPacks",
+      "subcategory": "props",
+      "name": "prop_ward_socket",
+      "path": "emberwatch/props/prop_ward_socket.png",
+      "ext": ".png"
+    },
+    "emberwatch:props:chair": {
+      "tag": "emberwatch:props:chair",
+      "category": "contentPacks",
+      "subcategory": "props",
+      "name": "chair",
+      "path": "emberwatch/props/chair.png",
+      "ext": ".png"
+    },
+    "emberwatch:props:ward_small_a": {
+      "tag": "emberwatch:props:ward_small_a",
+      "category": "contentPacks",
+      "subcategory": "props",
+      "name": "ward_small_a",
+      "path": "emberwatch/props/ward_small_a.png",
+      "ext": ".png"
+    },
+    "emberwatch:props:shrine_arch": {
+      "tag": "emberwatch:props:shrine_arch",
+      "category": "contentPacks",
+      "subcategory": "props",
+      "name": "shrine_arch",
+      "path": "emberwatch/props/shrine_arch.png",
+      "ext": ".png"
+    },
+    "emberwatch:props:prop_oil_pool": {
+      "tag": "emberwatch:props:prop_oil_pool",
+      "category": "contentPacks",
+      "subcategory": "props",
+      "name": "prop_oil_pool",
+      "path": "emberwatch/props/prop_oil_pool.png",
+      "ext": ".png"
+    },
+    "emberwatch:props:ward_small_b": {
+      "tag": "emberwatch:props:ward_small_b",
+      "category": "contentPacks",
+      "subcategory": "props",
+      "name": "ward_small_b",
+      "path": "emberwatch/props/ward_small_b.png",
+      "ext": ".png"
+    },
+    "emberwatch:props:shop": {
+      "tag": "emberwatch:props:shop",
+      "category": "contentPacks",
+      "subcategory": "props",
+      "name": "shop",
+      "path": "emberwatch/props/shop.png",
+      "ext": ".png"
+    },
+    "emberwatch:props:prop_notice_board": {
+      "tag": "emberwatch:props:prop_notice_board",
+      "category": "contentPacks",
+      "subcategory": "props",
+      "name": "prop_notice_board",
+      "path": "emberwatch/props/prop_notice_board.png",
+      "ext": ".png"
+    },
+    "emberwatch:props:prop_hearth": {
+      "tag": "emberwatch:props:prop_hearth",
+      "category": "contentPacks",
+      "subcategory": "props",
+      "name": "prop_hearth",
+      "path": "emberwatch/props/prop_hearth.png",
+      "ext": ".png"
+    },
+    "emberwatch:props:prop_gate": {
+      "tag": "emberwatch:props:prop_gate",
+      "category": "contentPacks",
+      "subcategory": "props",
+      "name": "prop_gate",
+      "path": "emberwatch/props/prop_gate.png",
+      "ext": ".png"
+    },
+    "emberwatch:props:prop_brazier": {
+      "tag": "emberwatch:props:prop_brazier",
+      "category": "contentPacks",
+      "subcategory": "props",
+      "name": "prop_brazier",
+      "path": "emberwatch/props/prop_brazier.png",
+      "ext": ".png"
+    },
+    "emberwatch:props:ward_small_c": {
+      "tag": "emberwatch:props:ward_small_c",
+      "category": "contentPacks",
+      "subcategory": "props",
+      "name": "ward_small_c",
+      "path": "emberwatch/props/ward_small_c.png",
+      "ext": ".png"
+    },
+    "emberwatch:props:ward_large": {
+      "tag": "emberwatch:props:ward_large",
+      "category": "contentPacks",
+      "subcategory": "props",
+      "name": "ward_large",
+      "path": "emberwatch/props/ward_large.png",
+      "ext": ".png"
+    },
     "emberwatch:manifest": {
       "tag": "emberwatch:manifest",
       "category": "contentPacks",
       "subcategory": "",
       "name": "manifest",
       "path": "emberwatch/manifest.json",
+      "ext": ".json"
+    },
+    "emberwatch:enemies:ash_hound": {
+      "tag": "emberwatch:enemies:ash_hound",
+      "category": "contentPacks",
+      "subcategory": "enemies",
+      "name": "ash_hound",
+      "path": "emberwatch/enemies/ash_hound.png",
+      "ext": ".png"
+    },
+    "emberwatch:enemies:ember_warden": {
+      "tag": "emberwatch:enemies:ember_warden",
+      "category": "contentPacks",
+      "subcategory": "enemies",
+      "name": "ember_warden",
+      "path": "emberwatch/enemies/ember_warden.png",
+      "ext": ".png"
+    },
+    "emberwatch:enemies:cinder_thrall": {
+      "tag": "emberwatch:enemies:cinder_thrall",
+      "category": "contentPacks",
+      "subcategory": "enemies",
+      "name": "cinder_thrall",
+      "path": "emberwatch/enemies/cinder_thrall.png",
+      "ext": ".png"
+    },
+    "emberwatch:maps:old_road": {
+      "tag": "emberwatch:maps:old_road",
+      "category": "contentPacks",
+      "subcategory": "maps",
+      "name": "old_road",
+      "path": "emberwatch/maps/old_road.json",
       "ext": ".json"
     },
     "emberwatch:maps:inn": {
@@ -34,6 +346,14 @@
       "path": "emberwatch/maps/merchant_shop.json",
       "ext": ".json"
     },
+    "emberwatch:maps:ruined_shrine": {
+      "tag": "emberwatch:maps:ruined_shrine",
+      "category": "contentPacks",
+      "subcategory": "maps",
+      "name": "ruined_shrine",
+      "path": "emberwatch/maps/ruined_shrine.json",
+      "ext": ".json"
+    },
     "emberwatch:maps:village": {
       "tag": "emberwatch:maps:village",
       "category": "contentPacks",
@@ -41,6 +361,46 @@
       "name": "village",
       "path": "emberwatch/maps/village.json",
       "ext": ".json"
+    },
+    "emberwatch:audio:old_road": {
+      "tag": "emberwatch:audio:old_road",
+      "category": "contentPacks",
+      "subcategory": "audio",
+      "name": "old_road",
+      "path": "emberwatch/audio/old_road.webm",
+      "ext": ".webm"
+    },
+    "emberwatch:audio:inn_hearth": {
+      "tag": "emberwatch:audio:inn_hearth",
+      "category": "contentPacks",
+      "subcategory": "audio",
+      "name": "inn_hearth",
+      "path": "emberwatch/audio/inn_hearth.webm",
+      "ext": ".webm"
+    },
+    "emberwatch:audio:emberwatch_combat": {
+      "tag": "emberwatch:audio:emberwatch_combat",
+      "category": "contentPacks",
+      "subcategory": "audio",
+      "name": "emberwatch_combat",
+      "path": "emberwatch/audio/emberwatch_combat.webm",
+      "ext": ".webm"
+    },
+    "emberwatch:audio:village_ward": {
+      "tag": "emberwatch:audio:village_ward",
+      "category": "contentPacks",
+      "subcategory": "audio",
+      "name": "village_ward",
+      "path": "emberwatch/audio/village_ward.webm",
+      "ext": ".webm"
+    },
+    "emberwatch:audio:ruined_shrine": {
+      "tag": "emberwatch:audio:ruined_shrine",
+      "category": "contentPacks",
+      "subcategory": "audio",
+      "name": "ruined_shrine",
+      "path": "emberwatch/audio/ruined_shrine.webm",
+      "ext": ".webm"
     }
   },
   "byCategory": {
@@ -53,6 +413,70 @@
     "maps": [],
     "tilesets": [],
     "contentPacks": [
+      {
+        "tag": "emberwatch:audio:emberwatch_combat",
+        "category": "contentPacks",
+        "subcategory": "audio",
+        "name": "emberwatch_combat",
+        "path": "emberwatch/audio/emberwatch_combat.webm",
+        "ext": ".webm"
+      },
+      {
+        "tag": "emberwatch:audio:inn_hearth",
+        "category": "contentPacks",
+        "subcategory": "audio",
+        "name": "inn_hearth",
+        "path": "emberwatch/audio/inn_hearth.webm",
+        "ext": ".webm"
+      },
+      {
+        "tag": "emberwatch:audio:old_road",
+        "category": "contentPacks",
+        "subcategory": "audio",
+        "name": "old_road",
+        "path": "emberwatch/audio/old_road.webm",
+        "ext": ".webm"
+      },
+      {
+        "tag": "emberwatch:audio:ruined_shrine",
+        "category": "contentPacks",
+        "subcategory": "audio",
+        "name": "ruined_shrine",
+        "path": "emberwatch/audio/ruined_shrine.webm",
+        "ext": ".webm"
+      },
+      {
+        "tag": "emberwatch:audio:village_ward",
+        "category": "contentPacks",
+        "subcategory": "audio",
+        "name": "village_ward",
+        "path": "emberwatch/audio/village_ward.webm",
+        "ext": ".webm"
+      },
+      {
+        "tag": "emberwatch:enemies:ash_hound",
+        "category": "contentPacks",
+        "subcategory": "enemies",
+        "name": "ash_hound",
+        "path": "emberwatch/enemies/ash_hound.png",
+        "ext": ".png"
+      },
+      {
+        "tag": "emberwatch:enemies:cinder_thrall",
+        "category": "contentPacks",
+        "subcategory": "enemies",
+        "name": "cinder_thrall",
+        "path": "emberwatch/enemies/cinder_thrall.png",
+        "ext": ".png"
+      },
+      {
+        "tag": "emberwatch:enemies:ember_warden",
+        "category": "contentPacks",
+        "subcategory": "enemies",
+        "name": "ember_warden",
+        "path": "emberwatch/enemies/ember_warden.png",
+        "ext": ".png"
+      },
       {
         "tag": "emberwatch:manifest",
         "category": "contentPacks",
@@ -78,12 +502,308 @@
         "ext": ".json"
       },
       {
+        "tag": "emberwatch:maps:old_road",
+        "category": "contentPacks",
+        "subcategory": "maps",
+        "name": "old_road",
+        "path": "emberwatch/maps/old_road.json",
+        "ext": ".json"
+      },
+      {
+        "tag": "emberwatch:maps:ruined_shrine",
+        "category": "contentPacks",
+        "subcategory": "maps",
+        "name": "ruined_shrine",
+        "path": "emberwatch/maps/ruined_shrine.json",
+        "ext": ".json"
+      },
+      {
         "tag": "emberwatch:maps:village",
         "category": "contentPacks",
         "subcategory": "maps",
         "name": "village",
         "path": "emberwatch/maps/village.json",
         "ext": ".json"
+      },
+      {
+        "tag": "emberwatch:portraits:apprentice_tess:neutral",
+        "category": "contentPacks",
+        "subcategory": "portraits/apprentice_tess",
+        "name": "neutral",
+        "path": "emberwatch/portraits/apprentice_tess/neutral.png",
+        "ext": ".png"
+      },
+      {
+        "tag": "emberwatch:portraits:cartographer_ivo:neutral",
+        "category": "contentPacks",
+        "subcategory": "portraits/cartographer_ivo",
+        "name": "neutral",
+        "path": "emberwatch/portraits/cartographer_ivo/neutral.png",
+        "ext": ".png"
+      },
+      {
+        "tag": "emberwatch:portraits:innkeeper_sella:neutral",
+        "category": "contentPacks",
+        "subcategory": "portraits/innkeeper_sella",
+        "name": "neutral",
+        "path": "emberwatch/portraits/innkeeper_sella/neutral.png",
+        "ext": ".png"
+      },
+      {
+        "tag": "emberwatch:portraits:merchant:neutral",
+        "category": "contentPacks",
+        "subcategory": "portraits/merchant",
+        "name": "neutral",
+        "path": "emberwatch/portraits/merchant/neutral.png",
+        "ext": ".png"
+      },
+      {
+        "tag": "emberwatch:portraits:rollo_grasper:guarded",
+        "category": "contentPacks",
+        "subcategory": "portraits/rollo_grasper",
+        "name": "guarded",
+        "path": "emberwatch/portraits/rollo_grasper/guarded.png",
+        "ext": ".png"
+      },
+      {
+        "tag": "emberwatch:portraits:rollo_grasper:neutral",
+        "category": "contentPacks",
+        "subcategory": "portraits/rollo_grasper",
+        "name": "neutral",
+        "path": "emberwatch/portraits/rollo_grasper/neutral.png",
+        "ext": ".png"
+      },
+      {
+        "tag": "emberwatch:portraits:rollo_grasper:relieved",
+        "category": "contentPacks",
+        "subcategory": "portraits/rollo_grasper",
+        "name": "relieved",
+        "path": "emberwatch/portraits/rollo_grasper/relieved.png",
+        "ext": ".png"
+      },
+      {
+        "tag": "emberwatch:portraits:shrine_keeper_nemi:neutral",
+        "category": "contentPacks",
+        "subcategory": "portraits/shrine_keeper_nemi",
+        "name": "neutral",
+        "path": "emberwatch/portraits/shrine_keeper_nemi/neutral.png",
+        "ext": ".png"
+      },
+      {
+        "tag": "emberwatch:portraits:smith_orra:neutral",
+        "category": "contentPacks",
+        "subcategory": "portraits/smith_orra",
+        "name": "neutral",
+        "path": "emberwatch/portraits/smith_orra/neutral.png",
+        "ext": ".png"
+      },
+      {
+        "tag": "emberwatch:portraits:village_elder:concerned",
+        "category": "contentPacks",
+        "subcategory": "portraits/village_elder",
+        "name": "concerned",
+        "path": "emberwatch/portraits/village_elder/concerned.png",
+        "ext": ".png"
+      },
+      {
+        "tag": "emberwatch:portraits:village_elder:neutral",
+        "category": "contentPacks",
+        "subcategory": "portraits/village_elder",
+        "name": "neutral",
+        "path": "emberwatch/portraits/village_elder/neutral.png",
+        "ext": ".png"
+      },
+      {
+        "tag": "emberwatch:portraits:village_elder:relieved",
+        "category": "contentPacks",
+        "subcategory": "portraits/village_elder",
+        "name": "relieved",
+        "path": "emberwatch/portraits/village_elder/relieved.png",
+        "ext": ".png"
+      },
+      {
+        "tag": "emberwatch:portraits:village_guard:neutral",
+        "category": "contentPacks",
+        "subcategory": "portraits/village_guard",
+        "name": "neutral",
+        "path": "emberwatch/portraits/village_guard/neutral.png",
+        "ext": ".png"
+      },
+      {
+        "tag": "emberwatch:portraits:woodcutter_ada:neutral",
+        "category": "contentPacks",
+        "subcategory": "portraits/woodcutter_ada",
+        "name": "neutral",
+        "path": "emberwatch/portraits/woodcutter_ada/neutral.png",
+        "ext": ".png"
+      },
+      {
+        "tag": "emberwatch:props:birch",
+        "category": "contentPacks",
+        "subcategory": "props",
+        "name": "birch",
+        "path": "emberwatch/props/birch.png",
+        "ext": ".png"
+      },
+      {
+        "tag": "emberwatch:props:chair",
+        "category": "contentPacks",
+        "subcategory": "props",
+        "name": "chair",
+        "path": "emberwatch/props/chair.png",
+        "ext": ".png"
+      },
+      {
+        "tag": "emberwatch:props:inn",
+        "category": "contentPacks",
+        "subcategory": "props",
+        "name": "inn",
+        "path": "emberwatch/props/inn.png",
+        "ext": ".png"
+      },
+      {
+        "tag": "emberwatch:props:oak",
+        "category": "contentPacks",
+        "subcategory": "props",
+        "name": "oak",
+        "path": "emberwatch/props/oak.png",
+        "ext": ".png"
+      },
+      {
+        "tag": "emberwatch:props:prop_barrel",
+        "category": "contentPacks",
+        "subcategory": "props",
+        "name": "prop_barrel",
+        "path": "emberwatch/props/prop_barrel.png",
+        "ext": ".png"
+      },
+      {
+        "tag": "emberwatch:props:prop_brazier",
+        "category": "contentPacks",
+        "subcategory": "props",
+        "name": "prop_brazier",
+        "path": "emberwatch/props/prop_brazier.png",
+        "ext": ".png"
+      },
+      {
+        "tag": "emberwatch:props:prop_cart",
+        "category": "contentPacks",
+        "subcategory": "props",
+        "name": "prop_cart",
+        "path": "emberwatch/props/prop_cart.png",
+        "ext": ".png"
+      },
+      {
+        "tag": "emberwatch:props:prop_component",
+        "category": "contentPacks",
+        "subcategory": "props",
+        "name": "prop_component",
+        "path": "emberwatch/props/prop_component.png",
+        "ext": ".png"
+      },
+      {
+        "tag": "emberwatch:props:prop_gate",
+        "category": "contentPacks",
+        "subcategory": "props",
+        "name": "prop_gate",
+        "path": "emberwatch/props/prop_gate.png",
+        "ext": ".png"
+      },
+      {
+        "tag": "emberwatch:props:prop_hearth",
+        "category": "contentPacks",
+        "subcategory": "props",
+        "name": "prop_hearth",
+        "path": "emberwatch/props/prop_hearth.png",
+        "ext": ".png"
+      },
+      {
+        "tag": "emberwatch:props:prop_notice_board",
+        "category": "contentPacks",
+        "subcategory": "props",
+        "name": "prop_notice_board",
+        "path": "emberwatch/props/prop_notice_board.png",
+        "ext": ".png"
+      },
+      {
+        "tag": "emberwatch:props:prop_oil_pool",
+        "category": "contentPacks",
+        "subcategory": "props",
+        "name": "prop_oil_pool",
+        "path": "emberwatch/props/prop_oil_pool.png",
+        "ext": ".png"
+      },
+      {
+        "tag": "emberwatch:props:prop_receipt",
+        "category": "contentPacks",
+        "subcategory": "props",
+        "name": "prop_receipt",
+        "path": "emberwatch/props/prop_receipt.png",
+        "ext": ".png"
+      },
+      {
+        "tag": "emberwatch:props:prop_support",
+        "category": "contentPacks",
+        "subcategory": "props",
+        "name": "prop_support",
+        "path": "emberwatch/props/prop_support.png",
+        "ext": ".png"
+      },
+      {
+        "tag": "emberwatch:props:prop_ward_socket",
+        "category": "contentPacks",
+        "subcategory": "props",
+        "name": "prop_ward_socket",
+        "path": "emberwatch/props/prop_ward_socket.png",
+        "ext": ".png"
+      },
+      {
+        "tag": "emberwatch:props:shop",
+        "category": "contentPacks",
+        "subcategory": "props",
+        "name": "shop",
+        "path": "emberwatch/props/shop.png",
+        "ext": ".png"
+      },
+      {
+        "tag": "emberwatch:props:shrine_arch",
+        "category": "contentPacks",
+        "subcategory": "props",
+        "name": "shrine_arch",
+        "path": "emberwatch/props/shrine_arch.png",
+        "ext": ".png"
+      },
+      {
+        "tag": "emberwatch:props:ward_large",
+        "category": "contentPacks",
+        "subcategory": "props",
+        "name": "ward_large",
+        "path": "emberwatch/props/ward_large.png",
+        "ext": ".png"
+      },
+      {
+        "tag": "emberwatch:props:ward_small_a",
+        "category": "contentPacks",
+        "subcategory": "props",
+        "name": "ward_small_a",
+        "path": "emberwatch/props/ward_small_a.png",
+        "ext": ".png"
+      },
+      {
+        "tag": "emberwatch:props:ward_small_b",
+        "category": "contentPacks",
+        "subcategory": "props",
+        "name": "ward_small_b",
+        "path": "emberwatch/props/ward_small_b.png",
+        "ext": ".png"
+      },
+      {
+        "tag": "emberwatch:props:ward_small_c",
+        "category": "contentPacks",
+        "subcategory": "props",
+        "name": "ward_small_c",
+        "path": "emberwatch/props/ward_small_c.png",
+        "ext": ".png"
       },
       {
         "tag": "index",
@@ -94,6 +814,7 @@
         "ext": ".json"
       }
     ],
-    "portraits": []
+    "portraits": [],
+    "props": []
   }
 }

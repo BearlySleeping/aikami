@@ -162,7 +162,12 @@ export const buildPackLock = (options: {
 
   const audioAssets: { id: string; renditionHash: string }[] = [];
   for (const binding of manifest.audio?.bindings ?? []) {
-    const row = rowForTag(seedRows, binding.tag);
+    // An intentional-silence cue names no bytes, so there is nothing to pin.
+    // It is not an unpublished rendition — the pack never claimed one.
+    if (binding.source.kind === 'silence') {
+      continue;
+    }
+    const row = rowForTag(seedRows, binding.source.tag);
     if (!row) {
       // The cue's rendition was never published — leave it unpinned rather
       // than pinning a hash nothing serves.
@@ -170,25 +175,25 @@ export const buildPackLock = (options: {
         releaseId,
         packId: manifest.id,
         cueId: binding.cueId,
-        tag: binding.tag,
+        tag: binding.source.tag,
       });
       continue;
     }
     // The manifest names the bytes this cue must be; the published row names
     // the bytes it actually is. A disagreement is a producer defect — pinning
     // either hash would produce a lock the client must refuse.
-    if (row.hash.trim().toLowerCase() !== binding.sha256.trim().toLowerCase()) {
+    if (row.hash.trim().toLowerCase() !== binding.source.sha256.trim().toLowerCase()) {
       logger.error('buildPackLock:audio-hash-mismatch', {
         releaseId,
         packId: manifest.id,
         cueId: binding.cueId,
-        tag: binding.tag,
-        declared: binding.sha256,
+        tag: binding.source.tag,
+        declared: binding.source.sha256,
         published: row.hash,
       });
       throw new PackLockBuildError(
         'audio-hash-mismatch',
-        `Audio cue "${binding.cueId}" declares sha256 ${binding.sha256} but published tag "${binding.tag}" has hash ${row.hash}.`,
+        `Audio cue "${binding.cueId}" declares sha256 ${binding.source.sha256} but published tag "${binding.source.tag}" has hash ${row.hash}.`,
       );
     }
     audioAssets.push({ id: binding.cueId, renditionHash: row.hash });

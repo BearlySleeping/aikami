@@ -1,0 +1,1341 @@
+{
+  "schemaVersion": 1,
+  "kind": "emberwatch-coverage-audit",
+  "generatedBy": "scripts/src/lib/ops/emberwatch_coverage_audit.ts",
+  "packId": "emberwatch",
+  "packVersion": "5.0.0",
+  "packUpdatedAt": "2026-09-18T00:00:00.000Z",
+  "generatedAt": "1980-01-01T00:00:00.000Z",
+  "summary": {
+    "accepted/current": 132,
+    "acceptable-shared": 84,
+    "placeholder/wrong-semantic-reuse": 0,
+    "missing": 0,
+    "needs-regeneration": 1,
+    "needs-map-layout-change": 0,
+    "needs-runtime-capability": 0
+  },
+  "counts": {
+    "maps": 5,
+    "terrains": 6,
+    "bakedTiles": 48,
+    "corner16Terrains": 5,
+    "atlasCellsUsed": 128,
+    "atlasCellsTotal": 128,
+    "atlasCellsFree": 0,
+    "props": 95,
+    "npcs": 13,
+    "hostileNpcs": 4,
+    "evidence": 4,
+    "audioCues": 8,
+    "sourceImages": 21,
+    "transitions": 8,
+    "catalogTags": 12,
+    "findings": 217
+  },
+  "findings": [
+    {
+      "id": "map:village",
+      "surface": "map",
+      "classification": "accepted/current",
+      "detail": "64x48; 18 prop placements, 4 NPC placements, 3 transitions"
+    },
+    {
+      "id": "map:inn",
+      "surface": "map",
+      "classification": "accepted/current",
+      "detail": "28x20; 20 prop placements, 2 NPC placements, 1 transitions"
+    },
+    {
+      "id": "map:merchant_shop",
+      "surface": "map",
+      "classification": "accepted/current",
+      "detail": "24x18; 11 prop placements, 1 NPC placements, 1 transitions"
+    },
+    {
+      "id": "map:old_road",
+      "surface": "map",
+      "classification": "accepted/current",
+      "detail": "72x36; 24 prop placements, 2 NPC placements, 2 transitions"
+    },
+    {
+      "id": "map:ruined_shrine",
+      "surface": "map",
+      "classification": "accepted/current",
+      "detail": "40x36; 7 prop placements, 1 NPC placements, 1 transitions"
+    },
+    {
+      "id": "terrain:grass",
+      "surface": "terrain",
+      "classification": "accepted/current",
+      "detail": "fill; precedence 0; walkable=true"
+    },
+    {
+      "id": "terrain:dirt",
+      "surface": "terrain",
+      "classification": "accepted/current",
+      "detail": "corner16 (16 atlas cells); precedence 1; walkable=true"
+    },
+    {
+      "id": "terrain:water",
+      "surface": "terrain",
+      "classification": "accepted/current",
+      "detail": "corner16 (16 atlas cells); precedence 2; walkable=false"
+    },
+    {
+      "id": "terrain:gravel",
+      "surface": "terrain",
+      "classification": "accepted/current",
+      "detail": "corner16 (16 atlas cells); precedence 3; walkable=true"
+    },
+    {
+      "id": "terrain:earth",
+      "surface": "terrain",
+      "classification": "accepted/current",
+      "detail": "corner16 (16 atlas cells); precedence 4; walkable=true"
+    },
+    {
+      "id": "terrain:cobblestone",
+      "surface": "terrain",
+      "classification": "accepted/current",
+      "detail": "corner16 (16 atlas cells); precedence 5; walkable=true"
+    },
+    {
+      "id": "atlas:headroom",
+      "surface": "atlas-frame",
+      "classification": "needs-regeneration",
+      "detail": "128/128 atlas cells used (48 baked tiles + 5×16 corner16) — 0 free; a new corner16 terrain requires an explicit geometry change"
+    },
+    {
+      "id": "prop:ward_tree_landmark",
+      "surface": "prop",
+      "classification": "accepted/current",
+      "detail": "frame ward_large.png"
+    },
+    {
+      "id": "prop:ward_grove_a",
+      "surface": "prop",
+      "classification": "accepted/current",
+      "detail": "frame ward_small_a.png"
+    },
+    {
+      "id": "prop:ward_grove_b",
+      "surface": "prop",
+      "classification": "accepted/current",
+      "detail": "frame ward_small_b.png"
+    },
+    {
+      "id": "prop:ward_grove_c",
+      "surface": "prop",
+      "classification": "accepted/current",
+      "detail": "frame ward_small_c.png"
+    },
+    {
+      "id": "prop:village_well",
+      "surface": "prop",
+      "classification": "accepted/current",
+      "detail": "frame well.png"
+    },
+    {
+      "id": "prop:notice_board",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame prop_notice_board.png shared with road_notice"
+    },
+    {
+      "id": "prop:road_notice",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame prop_notice_board.png shared with notice_board"
+    },
+    {
+      "id": "prop:village_gate",
+      "surface": "prop",
+      "classification": "accepted/current",
+      "detail": "frame prop_gate.png"
+    },
+    {
+      "id": "prop:woodland_oak",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame oak.png shared with woodland_oak_2, woodland_oak_3, woodland_oak_4, shrine_oak, road_oak_0, road_oak_1, road_oak_2, road_oak_3, road_oak_4, road_oak_5, road_oak_6, road_oak_7, road_oak_8, road_oak_9, road_oak_10, road_oak_11, road_oak_12, road_oak_13, road_oak_14, road_oak_15, road_oak_16"
+    },
+    {
+      "id": "prop:woodland_oak_2",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame oak.png shared with woodland_oak, woodland_oak_3, woodland_oak_4, shrine_oak, road_oak_0, road_oak_1, road_oak_2, road_oak_3, road_oak_4, road_oak_5, road_oak_6, road_oak_7, road_oak_8, road_oak_9, road_oak_10, road_oak_11, road_oak_12, road_oak_13, road_oak_14, road_oak_15, road_oak_16"
+    },
+    {
+      "id": "prop:woodland_oak_3",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame oak.png shared with woodland_oak, woodland_oak_2, woodland_oak_4, shrine_oak, road_oak_0, road_oak_1, road_oak_2, road_oak_3, road_oak_4, road_oak_5, road_oak_6, road_oak_7, road_oak_8, road_oak_9, road_oak_10, road_oak_11, road_oak_12, road_oak_13, road_oak_14, road_oak_15, road_oak_16"
+    },
+    {
+      "id": "prop:woodland_oak_4",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame oak.png shared with woodland_oak, woodland_oak_2, woodland_oak_3, shrine_oak, road_oak_0, road_oak_1, road_oak_2, road_oak_3, road_oak_4, road_oak_5, road_oak_6, road_oak_7, road_oak_8, road_oak_9, road_oak_10, road_oak_11, road_oak_12, road_oak_13, road_oak_14, road_oak_15, road_oak_16"
+    },
+    {
+      "id": "prop:woodland_birch",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame birch.png shared with woodland_birch_2, shrine_birch, road_birch_0, road_birch_1, road_birch_2, road_birch_3, road_birch_4, road_birch_5, road_birch_6, road_birch_7, road_birch_8, road_birch_9, road_birch_10, road_birch_11, road_birch_12, road_birch_13, road_birch_14, road_birch_15, road_birch_16"
+    },
+    {
+      "id": "prop:woodland_birch_2",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame birch.png shared with woodland_birch, shrine_birch, road_birch_0, road_birch_1, road_birch_2, road_birch_3, road_birch_4, road_birch_5, road_birch_6, road_birch_7, road_birch_8, road_birch_9, road_birch_10, road_birch_11, road_birch_12, road_birch_13, road_birch_14, road_birch_15, road_birch_16"
+    },
+    {
+      "id": "prop:shrine_oak",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame oak.png shared with woodland_oak, woodland_oak_2, woodland_oak_3, woodland_oak_4, road_oak_0, road_oak_1, road_oak_2, road_oak_3, road_oak_4, road_oak_5, road_oak_6, road_oak_7, road_oak_8, road_oak_9, road_oak_10, road_oak_11, road_oak_12, road_oak_13, road_oak_14, road_oak_15, road_oak_16"
+    },
+    {
+      "id": "prop:shrine_birch",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame birch.png shared with woodland_birch, woodland_birch_2, road_birch_0, road_birch_1, road_birch_2, road_birch_3, road_birch_4, road_birch_5, road_birch_6, road_birch_7, road_birch_8, road_birch_9, road_birch_10, road_birch_11, road_birch_12, road_birch_13, road_birch_14, road_birch_15, road_birch_16"
+    },
+    {
+      "id": "prop:inn_barrel",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame prop_barrel.png shared with inn_barrel_2, waystation_barrel, shop_barrel, shop_barrel_2, shrine_barrel"
+    },
+    {
+      "id": "prop:inn_barrel_2",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame prop_barrel.png shared with inn_barrel, waystation_barrel, shop_barrel, shop_barrel_2, shrine_barrel"
+    },
+    {
+      "id": "prop:waystation_barrel",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame prop_barrel.png shared with inn_barrel, inn_barrel_2, shop_barrel, shop_barrel_2, shrine_barrel"
+    },
+    {
+      "id": "prop:shop_barrel",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame prop_barrel.png shared with inn_barrel, inn_barrel_2, waystation_barrel, shop_barrel_2, shrine_barrel"
+    },
+    {
+      "id": "prop:shop_barrel_2",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame prop_barrel.png shared with inn_barrel, inn_barrel_2, waystation_barrel, shop_barrel, shrine_barrel"
+    },
+    {
+      "id": "prop:shrine_barrel",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame prop_barrel.png shared with inn_barrel, inn_barrel_2, waystation_barrel, shop_barrel, shop_barrel_2"
+    },
+    {
+      "id": "prop:inn_crate",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame crate.png shared with shop_crate, shop_crate_2, shop_crate_3, waystation_crate, waystation_crate_2, shrine_crate, inn_hanging_crate"
+    },
+    {
+      "id": "prop:shop_crate",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame crate.png shared with inn_crate, shop_crate_2, shop_crate_3, waystation_crate, waystation_crate_2, shrine_crate, inn_hanging_crate"
+    },
+    {
+      "id": "prop:shop_crate_2",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame crate.png shared with inn_crate, shop_crate, shop_crate_3, waystation_crate, waystation_crate_2, shrine_crate, inn_hanging_crate"
+    },
+    {
+      "id": "prop:shop_crate_3",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame crate.png shared with inn_crate, shop_crate, shop_crate_2, waystation_crate, waystation_crate_2, shrine_crate, inn_hanging_crate"
+    },
+    {
+      "id": "prop:waystation_crate",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame crate.png shared with inn_crate, shop_crate, shop_crate_2, shop_crate_3, waystation_crate_2, shrine_crate, inn_hanging_crate"
+    },
+    {
+      "id": "prop:waystation_crate_2",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame crate.png shared with inn_crate, shop_crate, shop_crate_2, shop_crate_3, waystation_crate, shrine_crate, inn_hanging_crate"
+    },
+    {
+      "id": "prop:shrine_crate",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame crate.png shared with inn_crate, shop_crate, shop_crate_2, shop_crate_3, waystation_crate, waystation_crate_2, inn_hanging_crate"
+    },
+    {
+      "id": "prop:shop_counter_l",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame counter.png shared with shop_counter_r, shop_counter_m, inn_counter, inn_counter_2"
+    },
+    {
+      "id": "prop:shop_counter_r",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame counter.png shared with shop_counter_l, shop_counter_m, inn_counter, inn_counter_2"
+    },
+    {
+      "id": "prop:shop_counter_m",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame counter.png shared with shop_counter_l, shop_counter_r, inn_counter, inn_counter_2"
+    },
+    {
+      "id": "prop:inn_counter",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame counter.png shared with shop_counter_l, shop_counter_r, shop_counter_m, inn_counter_2"
+    },
+    {
+      "id": "prop:inn_counter_2",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame counter.png shared with shop_counter_l, shop_counter_r, shop_counter_m, inn_counter"
+    },
+    {
+      "id": "prop:inn_table",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame table.png shared with inn_table_2, inn_table_3"
+    },
+    {
+      "id": "prop:inn_table_2",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame table.png shared with inn_table, inn_table_3"
+    },
+    {
+      "id": "prop:inn_table_3",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame table.png shared with inn_table, inn_table_2"
+    },
+    {
+      "id": "prop:inn_chair",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame chair.png shared with inn_chair_2, inn_chair_3, inn_chair_4, inn_chair_5, inn_chair_6, shop_chair"
+    },
+    {
+      "id": "prop:inn_chair_2",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame chair.png shared with inn_chair, inn_chair_3, inn_chair_4, inn_chair_5, inn_chair_6, shop_chair"
+    },
+    {
+      "id": "prop:inn_chair_3",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame chair.png shared with inn_chair, inn_chair_2, inn_chair_4, inn_chair_5, inn_chair_6, shop_chair"
+    },
+    {
+      "id": "prop:inn_chair_4",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame chair.png shared with inn_chair, inn_chair_2, inn_chair_3, inn_chair_5, inn_chair_6, shop_chair"
+    },
+    {
+      "id": "prop:inn_chair_5",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame chair.png shared with inn_chair, inn_chair_2, inn_chair_3, inn_chair_4, inn_chair_6, shop_chair"
+    },
+    {
+      "id": "prop:inn_chair_6",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame chair.png shared with inn_chair, inn_chair_2, inn_chair_3, inn_chair_4, inn_chair_5, shop_chair"
+    },
+    {
+      "id": "prop:shop_chair",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame chair.png shared with inn_chair, inn_chair_2, inn_chair_3, inn_chair_4, inn_chair_5, inn_chair_6"
+    },
+    {
+      "id": "prop:inn_bed",
+      "surface": "prop",
+      "classification": "accepted/current",
+      "detail": "frame bed.png"
+    },
+    {
+      "id": "prop:inn_hearth",
+      "surface": "prop",
+      "classification": "accepted/current",
+      "detail": "frame prop_hearth.png"
+    },
+    {
+      "id": "prop:inn_shelf",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame bookshelf.png shared with shop_shelf, shop_shelf_2"
+    },
+    {
+      "id": "prop:shop_shelf",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame bookshelf.png shared with inn_shelf, shop_shelf_2"
+    },
+    {
+      "id": "prop:shop_shelf_2",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame bookshelf.png shared with inn_shelf, shop_shelf"
+    },
+    {
+      "id": "prop:yard_anvil",
+      "surface": "prop",
+      "classification": "accepted/current",
+      "detail": "frame anvil.png"
+    },
+    {
+      "id": "prop:inn_brazier",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame prop_brazier.png shared with shrine_brazier"
+    },
+    {
+      "id": "prop:shrine_brazier",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame prop_brazier.png shared with inn_brazier"
+    },
+    {
+      "id": "prop:inn_oil_pool",
+      "surface": "prop",
+      "classification": "accepted/current",
+      "detail": "frame prop_oil_pool.png (not placed by any map — encounter-only or unused)"
+    },
+    {
+      "id": "prop:inn_support",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame prop_support.png shared with waystation_support"
+    },
+    {
+      "id": "prop:waystation_support",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame prop_support.png shared with inn_support"
+    },
+    {
+      "id": "prop:inn_hanging_crate",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame crate.png shared with inn_crate, shop_crate, shop_crate_2, shop_crate_3, waystation_crate, waystation_crate_2, shrine_crate (not placed by any map — encounter-only or unused)"
+    },
+    {
+      "id": "prop:sella_receipt",
+      "surface": "prop",
+      "classification": "accepted/current",
+      "detail": "frame prop_receipt.png"
+    },
+    {
+      "id": "prop:tess_component",
+      "surface": "prop",
+      "classification": "accepted/current",
+      "detail": "frame prop_component.png"
+    },
+    {
+      "id": "prop:waystation_cart",
+      "surface": "prop",
+      "classification": "accepted/current",
+      "detail": "frame prop_cart.png"
+    },
+    {
+      "id": "prop:shrine_arch",
+      "surface": "prop",
+      "classification": "accepted/current",
+      "detail": "frame shrine_arch.png"
+    },
+    {
+      "id": "prop:ward_socket",
+      "surface": "prop",
+      "classification": "accepted/current",
+      "detail": "frame prop_ward_socket.png"
+    },
+    {
+      "id": "prop:road_oak_0",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame oak.png shared with woodland_oak, woodland_oak_2, woodland_oak_3, woodland_oak_4, shrine_oak, road_oak_1, road_oak_2, road_oak_3, road_oak_4, road_oak_5, road_oak_6, road_oak_7, road_oak_8, road_oak_9, road_oak_10, road_oak_11, road_oak_12, road_oak_13, road_oak_14, road_oak_15, road_oak_16"
+    },
+    {
+      "id": "prop:road_birch_0",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame birch.png shared with woodland_birch, woodland_birch_2, shrine_birch, road_birch_1, road_birch_2, road_birch_3, road_birch_4, road_birch_5, road_birch_6, road_birch_7, road_birch_8, road_birch_9, road_birch_10, road_birch_11, road_birch_12, road_birch_13, road_birch_14, road_birch_15, road_birch_16 (not placed by any map — encounter-only or unused)"
+    },
+    {
+      "id": "prop:road_oak_1",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame oak.png shared with woodland_oak, woodland_oak_2, woodland_oak_3, woodland_oak_4, shrine_oak, road_oak_0, road_oak_2, road_oak_3, road_oak_4, road_oak_5, road_oak_6, road_oak_7, road_oak_8, road_oak_9, road_oak_10, road_oak_11, road_oak_12, road_oak_13, road_oak_14, road_oak_15, road_oak_16 (not placed by any map — encounter-only or unused)"
+    },
+    {
+      "id": "prop:road_birch_1",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame birch.png shared with woodland_birch, woodland_birch_2, shrine_birch, road_birch_0, road_birch_2, road_birch_3, road_birch_4, road_birch_5, road_birch_6, road_birch_7, road_birch_8, road_birch_9, road_birch_10, road_birch_11, road_birch_12, road_birch_13, road_birch_14, road_birch_15, road_birch_16"
+    },
+    {
+      "id": "prop:road_oak_2",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame oak.png shared with woodland_oak, woodland_oak_2, woodland_oak_3, woodland_oak_4, shrine_oak, road_oak_0, road_oak_1, road_oak_3, road_oak_4, road_oak_5, road_oak_6, road_oak_7, road_oak_8, road_oak_9, road_oak_10, road_oak_11, road_oak_12, road_oak_13, road_oak_14, road_oak_15, road_oak_16"
+    },
+    {
+      "id": "prop:road_birch_2",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame birch.png shared with woodland_birch, woodland_birch_2, shrine_birch, road_birch_0, road_birch_1, road_birch_3, road_birch_4, road_birch_5, road_birch_6, road_birch_7, road_birch_8, road_birch_9, road_birch_10, road_birch_11, road_birch_12, road_birch_13, road_birch_14, road_birch_15, road_birch_16 (not placed by any map — encounter-only or unused)"
+    },
+    {
+      "id": "prop:road_oak_3",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame oak.png shared with woodland_oak, woodland_oak_2, woodland_oak_3, woodland_oak_4, shrine_oak, road_oak_0, road_oak_1, road_oak_2, road_oak_4, road_oak_5, road_oak_6, road_oak_7, road_oak_8, road_oak_9, road_oak_10, road_oak_11, road_oak_12, road_oak_13, road_oak_14, road_oak_15, road_oak_16 (not placed by any map — encounter-only or unused)"
+    },
+    {
+      "id": "prop:road_birch_3",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame birch.png shared with woodland_birch, woodland_birch_2, shrine_birch, road_birch_0, road_birch_1, road_birch_2, road_birch_4, road_birch_5, road_birch_6, road_birch_7, road_birch_8, road_birch_9, road_birch_10, road_birch_11, road_birch_12, road_birch_13, road_birch_14, road_birch_15, road_birch_16"
+    },
+    {
+      "id": "prop:road_oak_4",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame oak.png shared with woodland_oak, woodland_oak_2, woodland_oak_3, woodland_oak_4, shrine_oak, road_oak_0, road_oak_1, road_oak_2, road_oak_3, road_oak_5, road_oak_6, road_oak_7, road_oak_8, road_oak_9, road_oak_10, road_oak_11, road_oak_12, road_oak_13, road_oak_14, road_oak_15, road_oak_16"
+    },
+    {
+      "id": "prop:road_birch_4",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame birch.png shared with woodland_birch, woodland_birch_2, shrine_birch, road_birch_0, road_birch_1, road_birch_2, road_birch_3, road_birch_5, road_birch_6, road_birch_7, road_birch_8, road_birch_9, road_birch_10, road_birch_11, road_birch_12, road_birch_13, road_birch_14, road_birch_15, road_birch_16 (not placed by any map — encounter-only or unused)"
+    },
+    {
+      "id": "prop:road_oak_5",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame oak.png shared with woodland_oak, woodland_oak_2, woodland_oak_3, woodland_oak_4, shrine_oak, road_oak_0, road_oak_1, road_oak_2, road_oak_3, road_oak_4, road_oak_6, road_oak_7, road_oak_8, road_oak_9, road_oak_10, road_oak_11, road_oak_12, road_oak_13, road_oak_14, road_oak_15, road_oak_16 (not placed by any map — encounter-only or unused)"
+    },
+    {
+      "id": "prop:road_birch_5",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame birch.png shared with woodland_birch, woodland_birch_2, shrine_birch, road_birch_0, road_birch_1, road_birch_2, road_birch_3, road_birch_4, road_birch_6, road_birch_7, road_birch_8, road_birch_9, road_birch_10, road_birch_11, road_birch_12, road_birch_13, road_birch_14, road_birch_15, road_birch_16"
+    },
+    {
+      "id": "prop:road_oak_6",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame oak.png shared with woodland_oak, woodland_oak_2, woodland_oak_3, woodland_oak_4, shrine_oak, road_oak_0, road_oak_1, road_oak_2, road_oak_3, road_oak_4, road_oak_5, road_oak_7, road_oak_8, road_oak_9, road_oak_10, road_oak_11, road_oak_12, road_oak_13, road_oak_14, road_oak_15, road_oak_16"
+    },
+    {
+      "id": "prop:road_birch_6",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame birch.png shared with woodland_birch, woodland_birch_2, shrine_birch, road_birch_0, road_birch_1, road_birch_2, road_birch_3, road_birch_4, road_birch_5, road_birch_7, road_birch_8, road_birch_9, road_birch_10, road_birch_11, road_birch_12, road_birch_13, road_birch_14, road_birch_15, road_birch_16 (not placed by any map — encounter-only or unused)"
+    },
+    {
+      "id": "prop:road_oak_7",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame oak.png shared with woodland_oak, woodland_oak_2, woodland_oak_3, woodland_oak_4, shrine_oak, road_oak_0, road_oak_1, road_oak_2, road_oak_3, road_oak_4, road_oak_5, road_oak_6, road_oak_8, road_oak_9, road_oak_10, road_oak_11, road_oak_12, road_oak_13, road_oak_14, road_oak_15, road_oak_16 (not placed by any map — encounter-only or unused)"
+    },
+    {
+      "id": "prop:road_birch_7",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame birch.png shared with woodland_birch, woodland_birch_2, shrine_birch, road_birch_0, road_birch_1, road_birch_2, road_birch_3, road_birch_4, road_birch_5, road_birch_6, road_birch_8, road_birch_9, road_birch_10, road_birch_11, road_birch_12, road_birch_13, road_birch_14, road_birch_15, road_birch_16"
+    },
+    {
+      "id": "prop:road_oak_8",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame oak.png shared with woodland_oak, woodland_oak_2, woodland_oak_3, woodland_oak_4, shrine_oak, road_oak_0, road_oak_1, road_oak_2, road_oak_3, road_oak_4, road_oak_5, road_oak_6, road_oak_7, road_oak_9, road_oak_10, road_oak_11, road_oak_12, road_oak_13, road_oak_14, road_oak_15, road_oak_16"
+    },
+    {
+      "id": "prop:road_birch_8",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame birch.png shared with woodland_birch, woodland_birch_2, shrine_birch, road_birch_0, road_birch_1, road_birch_2, road_birch_3, road_birch_4, road_birch_5, road_birch_6, road_birch_7, road_birch_9, road_birch_10, road_birch_11, road_birch_12, road_birch_13, road_birch_14, road_birch_15, road_birch_16 (not placed by any map — encounter-only or unused)"
+    },
+    {
+      "id": "prop:road_oak_9",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame oak.png shared with woodland_oak, woodland_oak_2, woodland_oak_3, woodland_oak_4, shrine_oak, road_oak_0, road_oak_1, road_oak_2, road_oak_3, road_oak_4, road_oak_5, road_oak_6, road_oak_7, road_oak_8, road_oak_10, road_oak_11, road_oak_12, road_oak_13, road_oak_14, road_oak_15, road_oak_16 (not placed by any map — encounter-only or unused)"
+    },
+    {
+      "id": "prop:road_birch_9",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame birch.png shared with woodland_birch, woodland_birch_2, shrine_birch, road_birch_0, road_birch_1, road_birch_2, road_birch_3, road_birch_4, road_birch_5, road_birch_6, road_birch_7, road_birch_8, road_birch_10, road_birch_11, road_birch_12, road_birch_13, road_birch_14, road_birch_15, road_birch_16"
+    },
+    {
+      "id": "prop:road_oak_10",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame oak.png shared with woodland_oak, woodland_oak_2, woodland_oak_3, woodland_oak_4, shrine_oak, road_oak_0, road_oak_1, road_oak_2, road_oak_3, road_oak_4, road_oak_5, road_oak_6, road_oak_7, road_oak_8, road_oak_9, road_oak_11, road_oak_12, road_oak_13, road_oak_14, road_oak_15, road_oak_16"
+    },
+    {
+      "id": "prop:road_birch_10",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame birch.png shared with woodland_birch, woodland_birch_2, shrine_birch, road_birch_0, road_birch_1, road_birch_2, road_birch_3, road_birch_4, road_birch_5, road_birch_6, road_birch_7, road_birch_8, road_birch_9, road_birch_11, road_birch_12, road_birch_13, road_birch_14, road_birch_15, road_birch_16 (not placed by any map — encounter-only or unused)"
+    },
+    {
+      "id": "prop:road_oak_11",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame oak.png shared with woodland_oak, woodland_oak_2, woodland_oak_3, woodland_oak_4, shrine_oak, road_oak_0, road_oak_1, road_oak_2, road_oak_3, road_oak_4, road_oak_5, road_oak_6, road_oak_7, road_oak_8, road_oak_9, road_oak_10, road_oak_12, road_oak_13, road_oak_14, road_oak_15, road_oak_16 (not placed by any map — encounter-only or unused)"
+    },
+    {
+      "id": "prop:road_birch_11",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame birch.png shared with woodland_birch, woodland_birch_2, shrine_birch, road_birch_0, road_birch_1, road_birch_2, road_birch_3, road_birch_4, road_birch_5, road_birch_6, road_birch_7, road_birch_8, road_birch_9, road_birch_10, road_birch_12, road_birch_13, road_birch_14, road_birch_15, road_birch_16"
+    },
+    {
+      "id": "prop:road_oak_12",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame oak.png shared with woodland_oak, woodland_oak_2, woodland_oak_3, woodland_oak_4, shrine_oak, road_oak_0, road_oak_1, road_oak_2, road_oak_3, road_oak_4, road_oak_5, road_oak_6, road_oak_7, road_oak_8, road_oak_9, road_oak_10, road_oak_11, road_oak_13, road_oak_14, road_oak_15, road_oak_16"
+    },
+    {
+      "id": "prop:road_birch_12",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame birch.png shared with woodland_birch, woodland_birch_2, shrine_birch, road_birch_0, road_birch_1, road_birch_2, road_birch_3, road_birch_4, road_birch_5, road_birch_6, road_birch_7, road_birch_8, road_birch_9, road_birch_10, road_birch_11, road_birch_13, road_birch_14, road_birch_15, road_birch_16 (not placed by any map — encounter-only or unused)"
+    },
+    {
+      "id": "prop:road_oak_13",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame oak.png shared with woodland_oak, woodland_oak_2, woodland_oak_3, woodland_oak_4, shrine_oak, road_oak_0, road_oak_1, road_oak_2, road_oak_3, road_oak_4, road_oak_5, road_oak_6, road_oak_7, road_oak_8, road_oak_9, road_oak_10, road_oak_11, road_oak_12, road_oak_14, road_oak_15, road_oak_16 (not placed by any map — encounter-only or unused)"
+    },
+    {
+      "id": "prop:road_birch_13",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame birch.png shared with woodland_birch, woodland_birch_2, shrine_birch, road_birch_0, road_birch_1, road_birch_2, road_birch_3, road_birch_4, road_birch_5, road_birch_6, road_birch_7, road_birch_8, road_birch_9, road_birch_10, road_birch_11, road_birch_12, road_birch_14, road_birch_15, road_birch_16"
+    },
+    {
+      "id": "prop:road_oak_14",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame oak.png shared with woodland_oak, woodland_oak_2, woodland_oak_3, woodland_oak_4, shrine_oak, road_oak_0, road_oak_1, road_oak_2, road_oak_3, road_oak_4, road_oak_5, road_oak_6, road_oak_7, road_oak_8, road_oak_9, road_oak_10, road_oak_11, road_oak_12, road_oak_13, road_oak_15, road_oak_16"
+    },
+    {
+      "id": "prop:road_birch_14",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame birch.png shared with woodland_birch, woodland_birch_2, shrine_birch, road_birch_0, road_birch_1, road_birch_2, road_birch_3, road_birch_4, road_birch_5, road_birch_6, road_birch_7, road_birch_8, road_birch_9, road_birch_10, road_birch_11, road_birch_12, road_birch_13, road_birch_15, road_birch_16 (not placed by any map — encounter-only or unused)"
+    },
+    {
+      "id": "prop:road_oak_15",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame oak.png shared with woodland_oak, woodland_oak_2, woodland_oak_3, woodland_oak_4, shrine_oak, road_oak_0, road_oak_1, road_oak_2, road_oak_3, road_oak_4, road_oak_5, road_oak_6, road_oak_7, road_oak_8, road_oak_9, road_oak_10, road_oak_11, road_oak_12, road_oak_13, road_oak_14, road_oak_16 (not placed by any map — encounter-only or unused)"
+    },
+    {
+      "id": "prop:road_birch_15",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame birch.png shared with woodland_birch, woodland_birch_2, shrine_birch, road_birch_0, road_birch_1, road_birch_2, road_birch_3, road_birch_4, road_birch_5, road_birch_6, road_birch_7, road_birch_8, road_birch_9, road_birch_10, road_birch_11, road_birch_12, road_birch_13, road_birch_14, road_birch_16"
+    },
+    {
+      "id": "prop:road_oak_16",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame oak.png shared with woodland_oak, woodland_oak_2, woodland_oak_3, woodland_oak_4, shrine_oak, road_oak_0, road_oak_1, road_oak_2, road_oak_3, road_oak_4, road_oak_5, road_oak_6, road_oak_7, road_oak_8, road_oak_9, road_oak_10, road_oak_11, road_oak_12, road_oak_13, road_oak_14, road_oak_15"
+    },
+    {
+      "id": "prop:road_birch_16",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame birch.png shared with woodland_birch, woodland_birch_2, shrine_birch, road_birch_0, road_birch_1, road_birch_2, road_birch_3, road_birch_4, road_birch_5, road_birch_6, road_birch_7, road_birch_8, road_birch_9, road_birch_10, road_birch_11, road_birch_12, road_birch_13, road_birch_14, road_birch_15 (not placed by any map — encounter-only or unused)"
+    },
+    {
+      "id": "evidence:the_ledger",
+      "surface": "evidence-object",
+      "classification": "accepted/current",
+      "detail": "The Merchant's Repair Ledger at merchant_shop:shop_counter_l renders counter.png"
+    },
+    {
+      "id": "evidence:sella_receipt",
+      "surface": "evidence-object",
+      "classification": "accepted/current",
+      "detail": "Sella's Custody Receipt at inn:sella_receipt renders prop_receipt.png"
+    },
+    {
+      "id": "evidence:tess_component",
+      "surface": "evidence-object",
+      "classification": "accepted/current",
+      "detail": "Intact Ward Component at old_road:tess_component renders prop_component.png"
+    },
+    {
+      "id": "evidence:elders_seal",
+      "surface": "evidence-object",
+      "classification": "accepted/current",
+      "detail": "The Elder's Broken Seal at village:village_well renders well.png"
+    },
+    {
+      "id": "npc:village_elder",
+      "surface": "npc",
+      "classification": "accepted/current",
+      "detail": "Elder Thalia"
+    },
+    {
+      "id": "npc-appearance:village_elder",
+      "surface": "npc-appearance",
+      "classification": "accepted/current",
+      "detail": "6 LPC components: body/bodies_female, hair/bangs_adult, torso/clothes/robe_female, legs/pants_female, feet/shoes/basic_thin, head/heads/human/female_elderly"
+    },
+    {
+      "id": "portrait:village_elder",
+      "surface": "portrait",
+      "classification": "accepted/current",
+      "detail": "bound variants: neutral, concerned, relieved"
+    },
+    {
+      "id": "npc:rollo_grasper",
+      "surface": "npc",
+      "classification": "accepted/current",
+      "detail": "Rollo the Grasper (hostile)"
+    },
+    {
+      "id": "npc-appearance:rollo_grasper",
+      "surface": "npc-appearance",
+      "classification": "accepted/current",
+      "detail": "6 LPC components: body/bodies_male, hair/plain_adult, torso/chainmail_male, legs/pants_male, feet/boots/basic_male, head/heads/human_male"
+    },
+    {
+      "id": "portrait:rollo_grasper",
+      "surface": "portrait",
+      "classification": "accepted/current",
+      "detail": "bound variants: neutral, relieved, guarded"
+    },
+    {
+      "id": "npc:ash_hound",
+      "surface": "npc",
+      "classification": "accepted/current",
+      "detail": "Ash Hound (hostile)"
+    },
+    {
+      "id": "npc-appearance:ash_hound",
+      "surface": "npc-appearance",
+      "classification": "accepted/current",
+      "detail": "6 LPC components: body/bodies_male, hair/plain_adult, torso/chainmail_male, legs/pants_male, feet/boots/basic_male, head/heads/human_male"
+    },
+    {
+      "id": "enemy-visual:ash_hound",
+      "surface": "enemy-visual",
+      "classification": "accepted/current",
+      "detail": "authored static visual (/emberwatch/enemies/ash_hound.png)"
+    },
+    {
+      "id": "portrait:ash_hound",
+      "surface": "portrait",
+      "classification": "acceptable-shared",
+      "detail": "hostile NPC — no dialogue bust authored (combat-only)"
+    },
+    {
+      "id": "npc:cinder_thrall",
+      "surface": "npc",
+      "classification": "accepted/current",
+      "detail": "Cinder Thrall (hostile)"
+    },
+    {
+      "id": "npc-appearance:cinder_thrall",
+      "surface": "npc-appearance",
+      "classification": "accepted/current",
+      "detail": "6 LPC components: body/bodies_male, hair/plain_adult, torso/chainmail_male, legs/pants_male, feet/boots/basic_male, head/heads/human_male"
+    },
+    {
+      "id": "enemy-visual:cinder_thrall",
+      "surface": "enemy-visual",
+      "classification": "accepted/current",
+      "detail": "authored static visual (/emberwatch/enemies/cinder_thrall.png)"
+    },
+    {
+      "id": "portrait:cinder_thrall",
+      "surface": "portrait",
+      "classification": "acceptable-shared",
+      "detail": "hostile NPC — no dialogue bust authored (combat-only)"
+    },
+    {
+      "id": "npc:ember_warden",
+      "surface": "npc",
+      "classification": "accepted/current",
+      "detail": "Ember Warden (hostile)"
+    },
+    {
+      "id": "npc-appearance:ember_warden",
+      "surface": "npc-appearance",
+      "classification": "accepted/current",
+      "detail": "6 LPC components: body/bodies_male, hair/plain_adult, torso/chainmail_male, legs/pants_male, feet/boots/basic_male, head/heads/human_male"
+    },
+    {
+      "id": "enemy-visual:ember_warden",
+      "surface": "enemy-visual",
+      "classification": "accepted/current",
+      "detail": "authored static visual (/emberwatch/enemies/ember_warden.png)"
+    },
+    {
+      "id": "portrait:ember_warden",
+      "surface": "portrait",
+      "classification": "acceptable-shared",
+      "detail": "hostile NPC — no dialogue bust authored (combat-only)"
+    },
+    {
+      "id": "npc:merchant",
+      "surface": "npc",
+      "classification": "accepted/current",
+      "detail": "Mara the Merchant (vendor)"
+    },
+    {
+      "id": "npc-appearance:merchant",
+      "surface": "npc-appearance",
+      "classification": "accepted/current",
+      "detail": "6 LPC components: body/bodies_male, hair/long_adult, torso/clothes/vest_male, legs/pants_male, feet/shoes/basic_male, head/heads/human_male"
+    },
+    {
+      "id": "portrait:merchant",
+      "surface": "portrait",
+      "classification": "accepted/current",
+      "detail": "bound variants: neutral"
+    },
+    {
+      "id": "npc:village_guard",
+      "surface": "npc",
+      "classification": "accepted/current",
+      "detail": "Bram the Guard (companion)"
+    },
+    {
+      "id": "npc-appearance:village_guard",
+      "surface": "npc-appearance",
+      "classification": "acceptable-shared",
+      "detail": "legacy appearanceLayers [3, 123, 23, 22, 7, 95] — resolves through the catalog-order snapshot, not a declared component set"
+    },
+    {
+      "id": "portrait:village_guard",
+      "surface": "portrait",
+      "classification": "accepted/current",
+      "detail": "bound variants: neutral"
+    },
+    {
+      "id": "npc:innkeeper_sella",
+      "surface": "npc",
+      "classification": "accepted/current",
+      "detail": "Sella"
+    },
+    {
+      "id": "npc-appearance:innkeeper_sella",
+      "surface": "npc-appearance",
+      "classification": "accepted/current",
+      "detail": "6 LPC components: body/bodies_female, hair/bangs_bun_adult, torso/aprons/apron_female, legs/pants_female, feet/shoes/basic_thin, head/heads/human_female"
+    },
+    {
+      "id": "portrait:innkeeper_sella",
+      "surface": "portrait",
+      "classification": "accepted/current",
+      "detail": "bound variants: neutral"
+    },
+    {
+      "id": "npc:smith_orra",
+      "surface": "npc",
+      "classification": "accepted/current",
+      "detail": "Orra"
+    },
+    {
+      "id": "npc-appearance:smith_orra",
+      "surface": "npc-appearance",
+      "classification": "accepted/current",
+      "detail": "6 LPC components: body/bodies_muscular, hair/balding_adult, torso/aprons/apron_male, legs/pants_muscular, feet/boots/basic_male, head/heads/human_male"
+    },
+    {
+      "id": "portrait:smith_orra",
+      "surface": "portrait",
+      "classification": "accepted/current",
+      "detail": "bound variants: neutral"
+    },
+    {
+      "id": "npc:cartographer_ivo",
+      "surface": "npc",
+      "classification": "accepted/current",
+      "detail": "Ivo"
+    },
+    {
+      "id": "npc-appearance:cartographer_ivo",
+      "surface": "npc-appearance",
+      "classification": "accepted/current",
+      "detail": "6 LPC components: body/bodies_male, hair/curly_short_adult, torso/clothes/longsleeve/formal_male, legs/pants_male, feet/shoes/basic_male, head/heads/human_male"
+    },
+    {
+      "id": "portrait:cartographer_ivo",
+      "surface": "portrait",
+      "classification": "accepted/current",
+      "detail": "bound variants: neutral"
+    },
+    {
+      "id": "npc:shrine_keeper_nemi",
+      "surface": "npc",
+      "classification": "accepted/current",
+      "detail": "Nemi"
+    },
+    {
+      "id": "npc-appearance:shrine_keeper_nemi",
+      "surface": "npc-appearance",
+      "classification": "accepted/current",
+      "detail": "6 LPC components: body/bodies_female, hair/long_adult, torso/clothes/robe_female, legs/pants_female, feet/shoes/basic_thin, head/heads/human_female"
+    },
+    {
+      "id": "portrait:shrine_keeper_nemi",
+      "surface": "portrait",
+      "classification": "accepted/current",
+      "detail": "bound variants: neutral"
+    },
+    {
+      "id": "npc:apprentice_tess",
+      "surface": "npc",
+      "classification": "accepted/current",
+      "detail": "Tess"
+    },
+    {
+      "id": "npc-appearance:apprentice_tess",
+      "surface": "npc-appearance",
+      "classification": "accepted/current",
+      "detail": "6 LPC components: body/bodies_teen, hair/bob_adult, torso/clothes/shortsleeve/shortsleeve_female, legs/pants_teen, feet/boots/basic_thin, head/heads/human_female"
+    },
+    {
+      "id": "portrait:apprentice_tess",
+      "surface": "portrait",
+      "classification": "accepted/current",
+      "detail": "bound variants: neutral"
+    },
+    {
+      "id": "npc:woodcutter_ada",
+      "surface": "npc",
+      "classification": "accepted/current",
+      "detail": "Ada"
+    },
+    {
+      "id": "npc-appearance:woodcutter_ada",
+      "surface": "npc-appearance",
+      "classification": "accepted/current",
+      "detail": "6 LPC components: body/bodies_female, hair/high_ponytail/fg_adult, torso/clothes/longsleeve/longsleeves_cuffed_female, legs/pants_female, feet/boots/basic_thin, head/heads/human_female"
+    },
+    {
+      "id": "portrait:woodcutter_ada",
+      "surface": "portrait",
+      "classification": "accepted/current",
+      "detail": "bound variants: neutral"
+    },
+    {
+      "id": "audio:bed.explore",
+      "surface": "audio-cue",
+      "classification": "accepted/current",
+      "detail": "music \"bed.explore\" → intentional silence (no bytes)"
+    },
+    {
+      "id": "audio:bed.combat",
+      "surface": "audio-cue",
+      "classification": "accepted/current",
+      "detail": "music \"bed.combat\" → intentional silence (no bytes)"
+    },
+    {
+      "id": "audio:village.music",
+      "surface": "audio-cue",
+      "classification": "accepted/current",
+      "detail": "music \"village\" → tag music:exploration:village_ward (sha256 22536060db87…)"
+    },
+    {
+      "id": "audio:combat.music",
+      "surface": "audio-cue",
+      "classification": "accepted/current",
+      "detail": "music \"combat\" → tag music:combat:emberwatch_combat (sha256 7989c905e85e…)"
+    },
+    {
+      "id": "audio:inn.music",
+      "surface": "audio-cue",
+      "classification": "accepted/current",
+      "detail": "music \"inn\" → tag music:exploration:inn_hearth (sha256 a01b7aa92d2f…)"
+    },
+    {
+      "id": "audio:merchant_shop.music",
+      "surface": "audio-cue",
+      "classification": "accepted/current",
+      "detail": "music \"merchant_shop\" → tag music:exploration:inn_hearth (sha256 a01b7aa92d2f…)"
+    },
+    {
+      "id": "audio:old_road.music",
+      "surface": "audio-cue",
+      "classification": "accepted/current",
+      "detail": "music \"old_road\" → tag music:exploration:old_road (sha256 cb1c05a159a3…)"
+    },
+    {
+      "id": "audio:ruined_shrine.music",
+      "surface": "audio-cue",
+      "classification": "accepted/current",
+      "detail": "music \"ruined_shrine\" → tag music:exploration:ruined_shrine (sha256 46fe67554780…)"
+    },
+    {
+      "id": "source:birch.png",
+      "surface": "source-image",
+      "classification": "accepted/current",
+      "detail": "standalone authoring source in content/packs/emberwatch/props"
+    },
+    {
+      "id": "source:chair.png",
+      "surface": "source-image",
+      "classification": "accepted/current",
+      "detail": "standalone authoring source in content/packs/emberwatch/props"
+    },
+    {
+      "id": "source:inn.png",
+      "surface": "source-image",
+      "classification": "accepted/current",
+      "detail": "standalone authoring source in content/packs/emberwatch/props"
+    },
+    {
+      "id": "source:oak.png",
+      "surface": "source-image",
+      "classification": "accepted/current",
+      "detail": "standalone authoring source in content/packs/emberwatch/props"
+    },
+    {
+      "id": "source:prop_barrel.png",
+      "surface": "source-image",
+      "classification": "accepted/current",
+      "detail": "standalone authoring source in content/packs/emberwatch/props"
+    },
+    {
+      "id": "source:prop_brazier.png",
+      "surface": "source-image",
+      "classification": "accepted/current",
+      "detail": "standalone authoring source in content/packs/emberwatch/props"
+    },
+    {
+      "id": "source:prop_cart.png",
+      "surface": "source-image",
+      "classification": "accepted/current",
+      "detail": "standalone authoring source in content/packs/emberwatch/props"
+    },
+    {
+      "id": "source:prop_component.png",
+      "surface": "source-image",
+      "classification": "accepted/current",
+      "detail": "standalone authoring source in content/packs/emberwatch/props"
+    },
+    {
+      "id": "source:prop_gate.png",
+      "surface": "source-image",
+      "classification": "accepted/current",
+      "detail": "standalone authoring source in content/packs/emberwatch/props"
+    },
+    {
+      "id": "source:prop_hearth.png",
+      "surface": "source-image",
+      "classification": "accepted/current",
+      "detail": "standalone authoring source in content/packs/emberwatch/props"
+    },
+    {
+      "id": "source:prop_notice_board.png",
+      "surface": "source-image",
+      "classification": "accepted/current",
+      "detail": "standalone authoring source in content/packs/emberwatch/props"
+    },
+    {
+      "id": "source:prop_oil_pool.png",
+      "surface": "source-image",
+      "classification": "accepted/current",
+      "detail": "standalone authoring source in content/packs/emberwatch/props"
+    },
+    {
+      "id": "source:prop_receipt.png",
+      "surface": "source-image",
+      "classification": "accepted/current",
+      "detail": "standalone authoring source in content/packs/emberwatch/props"
+    },
+    {
+      "id": "source:prop_support.png",
+      "surface": "source-image",
+      "classification": "accepted/current",
+      "detail": "standalone authoring source in content/packs/emberwatch/props"
+    },
+    {
+      "id": "source:prop_ward_socket.png",
+      "surface": "source-image",
+      "classification": "accepted/current",
+      "detail": "standalone authoring source in content/packs/emberwatch/props"
+    },
+    {
+      "id": "source:shop.png",
+      "surface": "source-image",
+      "classification": "accepted/current",
+      "detail": "standalone authoring source in content/packs/emberwatch/props"
+    },
+    {
+      "id": "source:shrine_arch.png",
+      "surface": "source-image",
+      "classification": "accepted/current",
+      "detail": "standalone authoring source in content/packs/emberwatch/props"
+    },
+    {
+      "id": "source:ward_large.png",
+      "surface": "source-image",
+      "classification": "accepted/current",
+      "detail": "standalone authoring source in content/packs/emberwatch/props"
+    },
+    {
+      "id": "source:ward_small_a.png",
+      "surface": "source-image",
+      "classification": "accepted/current",
+      "detail": "standalone authoring source in content/packs/emberwatch/props"
+    },
+    {
+      "id": "source:ward_small_b.png",
+      "surface": "source-image",
+      "classification": "accepted/current",
+      "detail": "standalone authoring source in content/packs/emberwatch/props"
+    },
+    {
+      "id": "source:ward_small_c.png",
+      "surface": "source-image",
+      "classification": "accepted/current",
+      "detail": "standalone authoring source in content/packs/emberwatch/props"
+    },
+    {
+      "id": "atlas:frames",
+      "surface": "atlas-frame",
+      "classification": "accepted/current",
+      "detail": "grid atlas declares 128 frames (expected 128)"
+    },
+    {
+      "id": "props-atlas:frames",
+      "surface": "atlas-frame",
+      "classification": "accepted/current",
+      "detail": "prop atlas declares 21 frames for 21 source images"
+    },
+    {
+      "id": "prop-frame:prop_support.png",
+      "surface": "prop-frame",
+      "classification": "accepted/current",
+      "detail": "packed prop-atlas frame"
+    },
+    {
+      "id": "prop-frame:inn.png",
+      "surface": "prop-frame",
+      "classification": "accepted/current",
+      "detail": "packed prop-atlas frame"
+    },
+    {
+      "id": "prop-frame:shop.png",
+      "surface": "prop-frame",
+      "classification": "accepted/current",
+      "detail": "packed prop-atlas frame"
+    },
+    {
+      "id": "prop-frame:prop_ward_socket.png",
+      "surface": "prop-frame",
+      "classification": "accepted/current",
+      "detail": "packed prop-atlas frame"
+    },
+    {
+      "id": "prop-frame:shrine_arch.png",
+      "surface": "prop-frame",
+      "classification": "accepted/current",
+      "detail": "packed prop-atlas frame"
+    },
+    {
+      "id": "prop-frame:oak.png",
+      "surface": "prop-frame",
+      "classification": "accepted/current",
+      "detail": "packed prop-atlas frame"
+    },
+    {
+      "id": "prop-frame:birch.png",
+      "surface": "prop-frame",
+      "classification": "accepted/current",
+      "detail": "packed prop-atlas frame"
+    },
+    {
+      "id": "prop-frame:ward_large.png",
+      "surface": "prop-frame",
+      "classification": "accepted/current",
+      "detail": "packed prop-atlas frame"
+    },
+    {
+      "id": "prop-frame:prop_cart.png",
+      "surface": "prop-frame",
+      "classification": "accepted/current",
+      "detail": "packed prop-atlas frame"
+    },
+    {
+      "id": "prop-frame:prop_hearth.png",
+      "surface": "prop-frame",
+      "classification": "accepted/current",
+      "detail": "packed prop-atlas frame"
+    },
+    {
+      "id": "prop-frame:prop_component.png",
+      "surface": "prop-frame",
+      "classification": "accepted/current",
+      "detail": "packed prop-atlas frame"
+    },
+    {
+      "id": "prop-frame:prop_barrel.png",
+      "surface": "prop-frame",
+      "classification": "accepted/current",
+      "detail": "packed prop-atlas frame"
+    },
+    {
+      "id": "prop-frame:prop_receipt.png",
+      "surface": "prop-frame",
+      "classification": "accepted/current",
+      "detail": "packed prop-atlas frame"
+    },
+    {
+      "id": "prop-frame:prop_gate.png",
+      "surface": "prop-frame",
+      "classification": "accepted/current",
+      "detail": "packed prop-atlas frame"
+    },
+    {
+      "id": "prop-frame:prop_brazier.png",
+      "surface": "prop-frame",
+      "classification": "accepted/current",
+      "detail": "packed prop-atlas frame"
+    },
+    {
+      "id": "prop-frame:ward_small_a.png",
+      "surface": "prop-frame",
+      "classification": "accepted/current",
+      "detail": "packed prop-atlas frame"
+    },
+    {
+      "id": "prop-frame:ward_small_b.png",
+      "surface": "prop-frame",
+      "classification": "accepted/current",
+      "detail": "packed prop-atlas frame"
+    },
+    {
+      "id": "prop-frame:ward_small_c.png",
+      "surface": "prop-frame",
+      "classification": "accepted/current",
+      "detail": "packed prop-atlas frame"
+    },
+    {
+      "id": "prop-frame:prop_oil_pool.png",
+      "surface": "prop-frame",
+      "classification": "accepted/current",
+      "detail": "packed prop-atlas frame"
+    },
+    {
+      "id": "prop-frame:prop_notice_board.png",
+      "surface": "prop-frame",
+      "classification": "accepted/current",
+      "detail": "packed prop-atlas frame"
+    },
+    {
+      "id": "prop-frame:chair.png",
+      "surface": "prop-frame",
+      "classification": "accepted/current",
+      "detail": "packed prop-atlas frame"
+    },
+    {
+      "id": "catalog-tag:index",
+      "surface": "catalog-tag",
+      "classification": "accepted/current",
+      "detail": "required by the pack at boot or during play"
+    },
+    {
+      "id": "catalog-tag:emberwatch:manifest",
+      "surface": "catalog-tag",
+      "classification": "accepted/current",
+      "detail": "required by the pack at boot or during play"
+    },
+    {
+      "id": "catalog-tag:emberwatch:maps:village",
+      "surface": "catalog-tag",
+      "classification": "accepted/current",
+      "detail": "required by the pack at boot or during play"
+    },
+    {
+      "id": "catalog-tag:emberwatch:maps:inn",
+      "surface": "catalog-tag",
+      "classification": "accepted/current",
+      "detail": "required by the pack at boot or during play"
+    },
+    {
+      "id": "catalog-tag:emberwatch:maps:merchant_shop",
+      "surface": "catalog-tag",
+      "classification": "accepted/current",
+      "detail": "required by the pack at boot or during play"
+    },
+    {
+      "id": "catalog-tag:emberwatch:maps:old_road",
+      "surface": "catalog-tag",
+      "classification": "accepted/current",
+      "detail": "required by the pack at boot or during play"
+    },
+    {
+      "id": "catalog-tag:emberwatch:maps:ruined_shrine",
+      "surface": "catalog-tag",
+      "classification": "accepted/current",
+      "detail": "required by the pack at boot or during play"
+    },
+    {
+      "id": "catalog-tag:music:exploration:village_ward",
+      "surface": "catalog-tag",
+      "classification": "accepted/current",
+      "detail": "required by the pack at boot or during play"
+    },
+    {
+      "id": "catalog-tag:music:combat:emberwatch_combat",
+      "surface": "catalog-tag",
+      "classification": "accepted/current",
+      "detail": "required by the pack at boot or during play"
+    },
+    {
+      "id": "catalog-tag:music:exploration:inn_hearth",
+      "surface": "catalog-tag",
+      "classification": "accepted/current",
+      "detail": "required by the pack at boot or during play"
+    },
+    {
+      "id": "catalog-tag:music:exploration:old_road",
+      "surface": "catalog-tag",
+      "classification": "accepted/current",
+      "detail": "required by the pack at boot or during play"
+    },
+    {
+      "id": "catalog-tag:music:exploration:ruined_shrine",
+      "surface": "catalog-tag",
+      "classification": "accepted/current",
+      "detail": "required by the pack at boot or during play"
+    }
+  ],
+  "blockers": []
+}

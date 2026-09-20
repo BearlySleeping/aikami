@@ -724,9 +724,9 @@
         7,
         7,
         7,
-        7,
-        7,
-        7,
+        24,
+        24,
+        24,
         7,
         7,
         7,
@@ -879,6 +879,34 @@
         7,
         7,
         35,
+        7,
+        12,
+        11,
+        11,
+        12,
+        7,
+        7,
+        7,
+        7,
+        7,
+        7,
+        7,
+        7,
+        7,
+        7,
+        7,
+        7,
+        7,
+        7,
+        7,
+        7,
+        7,
+        7,
+        35,
+        7,
+        35,
+        7,
+        7,
         7,
         12,
         11,
@@ -902,34 +930,6 @@
         7,
         7,
         7,
-        35,
-        7,
-        35,
-        7,
-        7,
-        7,
-        12,
-        11,
-        11,
-        12,
-        7,
-        7,
-        7,
-        7,
-        7,
-        7,
-        7,
-        7,
-        7,
-        7,
-        7,
-        7,
-        7,
-        7,
-        7,
-        7,
-        7,
-        7,
         7,
         7,
         35,
@@ -943,69 +943,12 @@
         7,
         35,
         35,
-        7,
-        7,
-        7,
-        7,
-        7,
-        7,
-        7,
-        7,
-        7,
-        7,
-        7,
-        7,
-        7,
-        7,
-        7,
-        7,
-        35,
-        7,
-        7,
-        35,
-        7,
-        12,
-        11,
-        11,
-        12,
-        7,
-        7,
-        35,
-        35,
-        35,
-        7,
-        7,
-        35,
-        7,
-        7,
-        7,
-        7,
-        7,
-        35,
-        7,
-        7,
-        7,
-        7,
-        7,
-        7,
-        7,
-        7,
-        7,
-        7,
-        12,
-        11,
-        11,
-        12,
-        7,
-        7,
-        7,
-        7,
         27,
         7,
         7,
         7,
         7,
-        35,
+        7,
         7,
         7,
         7,
@@ -1019,6 +962,63 @@
         27,
         7,
         7,
+        35,
+        7,
+        12,
+        11,
+        11,
+        12,
+        7,
+        7,
+        35,
+        35,
+        35,
+        7,
+        7,
+        35,
+        7,
+        7,
+        7,
+        7,
+        7,
+        35,
+        7,
+        7,
+        7,
+        7,
+        7,
+        7,
+        7,
+        7,
+        7,
+        7,
+        12,
+        11,
+        11,
+        12,
+        7,
+        7,
+        7,
+        7,
+        7,
+        7,
+        7,
+        7,
+        7,
+        35,
+        6,
+        6,
+        6,
+        6,
+        7,
+        7,
+        7,
+        7,
+        7,
+        7,
+        7,
+        7,
+        7,
         7,
         12,
         11,
@@ -1034,10 +1034,10 @@
         7,
         35,
         7,
-        7,
-        7,
-        35,
-        7,
+        6,
+        6,
+        6,
+        6,
         7,
         7,
         7,
@@ -1062,10 +1062,10 @@
         7,
         7,
         7,
-        7,
-        7,
-        35,
-        7,
+        6,
+        6,
+        6,
+        6,
         35,
         7,
         35,
@@ -1090,10 +1090,10 @@
         7,
         7,
         35,
-        7,
-        35,
-        7,
-        7,
+        6,
+        6,
+        6,
+        6,
         7,
         7,
         7,
@@ -1119,8 +1119,8 @@
         12,
         12,
         12,
-        7,
-        7,
+        6,
+        6,
         12,
         12,
         12,
@@ -1300,9 +1300,9 @@
         7,
         7,
         7,
-        7,
-        7,
-        7,
+        24,
+        24,
+        24,
         7,
         7,
         7,
@@ -1455,6 +1455,34 @@
         7,
         7,
         35,
+        7,
+        12,
+        11,
+        11,
+        12,
+        7,
+        7,
+        7,
+        7,
+        7,
+        7,
+        7,
+        7,
+        7,
+        7,
+        7,
+        7,
+        7,
+        7,
+        7,
+        7,
+        7,
+        7,
+        35,
+        7,
+        35,
+        7,
+        7,
         7,
         12,
         11,
@@ -1478,34 +1506,6 @@
         7,
         7,
         7,
-        35,
-        7,
-        35,
-        7,
-        7,
-        7,
-        12,
-        11,
-        11,
-        12,
-        7,
-        7,
-        7,
-        7,
-        7,
-        7,
-        7,
-        7,
-        7,
-        7,
-        7,
-        7,
-        7,
-        7,
-        7,
-        7,
-        7,
-        7,
         7,
         7,
         35,
@@ -1519,69 +1519,12 @@
         7,
         35,
         35,
-        7,
-        7,
-        7,
-        7,
-        7,
-        7,
-        7,
-        7,
-        7,
-        7,
-        7,
-        7,
-        7,
-        7,
-        7,
-        7,
-        35,
-        7,
-        7,
-        35,
-        7,
-        12,
-        11,
-        11,
-        12,
-        7,
-        7,
-        35,
-        35,
-        35,
-        7,
-        7,
-        35,
-        7,
-        7,
-        7,
-        7,
-        7,
-        35,
-        7,
-        7,
-        7,
-        7,
-        7,
-        7,
-        7,
-        7,
-        7,
-        7,
-        12,
-        11,
-        11,
-        12,
-        7,
-        7,
-        7,
-        7,
         27,
         7,
         7,
         7,
         7,
-        35,
+        7,
         7,
         7,
         7,
@@ -1595,6 +1538,63 @@
         27,
         7,
         7,
+        35,
+        7,
+        12,
+        11,
+        11,
+        12,
+        7,
+        7,
+        35,
+        35,
+        35,
+        7,
+        7,
+        35,
+        7,
+        7,
+        7,
+        7,
+        7,
+        35,
+        7,
+        7,
+        7,
+        7,
+        7,
+        7,
+        7,
+        7,
+        7,
+        7,
+        12,
+        11,
+        11,
+        12,
+        7,
+        7,
+        7,
+        7,
+        7,
+        7,
+        7,
+        7,
+        7,
+        35,
+        6,
+        6,
+        6,
+        6,
+        7,
+        7,
+        7,
+        7,
+        7,
+        7,
+        7,
+        7,
+        7,
         7,
         12,
         11,
@@ -1610,10 +1610,10 @@
         7,
         35,
         7,
-        7,
-        7,
-        35,
-        7,
+        6,
+        6,
+        6,
+        6,
         7,
         7,
         7,
@@ -1638,10 +1638,10 @@
         7,
         7,
         7,
-        7,
-        7,
-        35,
-        7,
+        6,
+        6,
+        6,
+        6,
         35,
         7,
         35,
@@ -1666,10 +1666,10 @@
         7,
         7,
         35,
-        7,
-        35,
-        7,
-        7,
+        6,
+        6,
+        6,
+        6,
         7,
         7,
         7,
@@ -1695,8 +1695,8 @@
         12,
         12,
         12,
-        7,
-        7,
+        6,
+        6,
         12,
         12,
         12,
@@ -2445,9 +2445,9 @@
         0,
         0,
         0,
-        0,
-        0,
-        0,
+        1,
+        1,
+        1,
         0,
         0,
         0,
@@ -2894,7 +2894,7 @@
           "id": 1,
           "type": "npc",
           "x": 704,
-          "y": 160,
+          "y": 192,
           "width": 0,
           "height": 0,
           "properties": [
@@ -2923,8 +2923,8 @@
         {
           "id": 20,
           "type": "npc",
-          "x": 416,
-          "y": 256,
+          "x": 352,
+          "y": 96,
           "width": 0,
           "height": 0,
           "properties": [
@@ -2951,10 +2951,360 @@
           ]
         },
         {
-          "id": 2,
+          "id": 30,
+          "type": "prop",
+          "x": 320,
+          "y": 128,
+          "width": 0,
+          "height": 0,
+          "properties": [
+            {
+              "name": "propId",
+              "type": "string",
+              "value": "inn_counter"
+            },
+            {
+              "name": "propName",
+              "type": "string",
+              "value": "Service Counter"
+            },
+            {
+              "name": "frame",
+              "type": "string",
+              "value": "counter.png"
+            }
+          ]
+        },
+        {
+          "id": 31,
+          "type": "prop",
+          "x": 384,
+          "y": 128,
+          "width": 0,
+          "height": 0,
+          "properties": [
+            {
+              "name": "propId",
+              "type": "string",
+              "value": "inn_counter_2"
+            },
+            {
+              "name": "propName",
+              "type": "string",
+              "value": "Service Counter"
+            },
+            {
+              "name": "frame",
+              "type": "string",
+              "value": "counter.png"
+            }
+          ]
+        },
+        {
+          "id": 21,
+          "type": "prop",
+          "x": 448,
+          "y": 160,
+          "width": 0,
+          "height": 0,
+          "properties": [
+            {
+              "name": "propId",
+              "type": "string",
+              "value": "sella_receipt"
+            },
+            {
+              "name": "propName",
+              "type": "string",
+              "value": "Sella's Custody Receipt"
+            },
+            {
+              "name": "frame",
+              "type": "string",
+              "value": "prop_receipt.png"
+            }
+          ]
+        },
+        {
+          "id": 32,
+          "type": "prop",
+          "x": 128,
+          "y": 64,
+          "width": 0,
+          "height": 0,
+          "properties": [
+            {
+              "name": "propId",
+              "type": "string",
+              "value": "inn_hearth"
+            },
+            {
+              "name": "propName",
+              "type": "string",
+              "value": "Hearth"
+            },
+            {
+              "name": "frame",
+              "type": "string",
+              "value": "prop_hearth.png"
+            }
+          ]
+        },
+        {
+          "id": 33,
+          "type": "prop",
+          "x": 768,
+          "y": 96,
+          "width": 0,
+          "height": 0,
+          "properties": [
+            {
+              "name": "propId",
+              "type": "string",
+              "value": "inn_shelf"
+            },
+            {
+              "name": "propName",
+              "type": "string",
+              "value": "Storage Shelf"
+            },
+            {
+              "name": "frame",
+              "type": "string",
+              "value": "bookshelf.png"
+            }
+          ]
+        },
+        {
+          "id": 34,
+          "type": "prop",
+          "x": 128,
+          "y": 224,
+          "width": 0,
+          "height": 0,
+          "properties": [
+            {
+              "name": "propId",
+              "type": "string",
+              "value": "inn_table"
+            },
+            {
+              "name": "propName",
+              "type": "string",
+              "value": "Ale Table"
+            },
+            {
+              "name": "frame",
+              "type": "string",
+              "value": "table.png"
+            }
+          ]
+        },
+        {
+          "id": 35,
           "type": "prop",
           "x": 96,
-          "y": 96,
+          "y": 256,
+          "width": 0,
+          "height": 0,
+          "properties": [
+            {
+              "name": "propId",
+              "type": "string",
+              "value": "inn_chair"
+            },
+            {
+              "name": "propName",
+              "type": "string",
+              "value": "Chair"
+            },
+            {
+              "name": "frame",
+              "type": "string",
+              "value": "chair.png"
+            }
+          ]
+        },
+        {
+          "id": 36,
+          "type": "prop",
+          "x": 160,
+          "y": 256,
+          "width": 0,
+          "height": 0,
+          "properties": [
+            {
+              "name": "propId",
+              "type": "string",
+              "value": "inn_chair_2"
+            },
+            {
+              "name": "propName",
+              "type": "string",
+              "value": "Chair"
+            },
+            {
+              "name": "frame",
+              "type": "string",
+              "value": "chair.png"
+            }
+          ]
+        },
+        {
+          "id": 37,
+          "type": "prop",
+          "x": 128,
+          "y": 384,
+          "width": 0,
+          "height": 0,
+          "properties": [
+            {
+              "name": "propId",
+              "type": "string",
+              "value": "inn_table_2"
+            },
+            {
+              "name": "propName",
+              "type": "string",
+              "value": "Ale Table"
+            },
+            {
+              "name": "frame",
+              "type": "string",
+              "value": "table.png"
+            }
+          ]
+        },
+        {
+          "id": 38,
+          "type": "prop",
+          "x": 96,
+          "y": 416,
+          "width": 0,
+          "height": 0,
+          "properties": [
+            {
+              "name": "propId",
+              "type": "string",
+              "value": "inn_chair_3"
+            },
+            {
+              "name": "propName",
+              "type": "string",
+              "value": "Chair"
+            },
+            {
+              "name": "frame",
+              "type": "string",
+              "value": "chair.png"
+            }
+          ]
+        },
+        {
+          "id": 39,
+          "type": "prop",
+          "x": 160,
+          "y": 416,
+          "width": 0,
+          "height": 0,
+          "properties": [
+            {
+              "name": "propId",
+              "type": "string",
+              "value": "inn_chair_4"
+            },
+            {
+              "name": "propName",
+              "type": "string",
+              "value": "Chair"
+            },
+            {
+              "name": "frame",
+              "type": "string",
+              "value": "chair.png"
+            }
+          ]
+        },
+        {
+          "id": 40,
+          "type": "prop",
+          "x": 672,
+          "y": 384,
+          "width": 0,
+          "height": 0,
+          "properties": [
+            {
+              "name": "propId",
+              "type": "string",
+              "value": "inn_table_3"
+            },
+            {
+              "name": "propName",
+              "type": "string",
+              "value": "Ale Table"
+            },
+            {
+              "name": "frame",
+              "type": "string",
+              "value": "table.png"
+            }
+          ]
+        },
+        {
+          "id": 41,
+          "type": "prop",
+          "x": 640,
+          "y": 416,
+          "width": 0,
+          "height": 0,
+          "properties": [
+            {
+              "name": "propId",
+              "type": "string",
+              "value": "inn_chair_5"
+            },
+            {
+              "name": "propName",
+              "type": "string",
+              "value": "Chair"
+            },
+            {
+              "name": "frame",
+              "type": "string",
+              "value": "chair.png"
+            }
+          ]
+        },
+        {
+          "id": 42,
+          "type": "prop",
+          "x": 704,
+          "y": 416,
+          "width": 0,
+          "height": 0,
+          "properties": [
+            {
+              "name": "propId",
+              "type": "string",
+              "value": "inn_chair_6"
+            },
+            {
+              "name": "propName",
+              "type": "string",
+              "value": "Chair"
+            },
+            {
+              "name": "frame",
+              "type": "string",
+              "value": "chair.png"
+            }
+          ]
+        },
+        {
+          "id": 2,
+          "type": "prop",
+          "x": 768,
+          "y": 160,
           "width": 0,
           "height": 0,
           "properties": [
@@ -2971,7 +3321,7 @@
             {
               "name": "frame",
               "type": "string",
-              "value": "barrel.png"
+              "value": "prop_barrel.png"
             }
           ]
         },
@@ -2979,7 +3329,7 @@
           "id": 4,
           "type": "prop",
           "x": 768,
-          "y": 96,
+          "y": 512,
           "width": 0,
           "height": 0,
           "properties": [
@@ -2996,15 +3346,15 @@
             {
               "name": "frame",
               "type": "string",
-              "value": "barrel.png"
+              "value": "prop_barrel.png"
             }
           ]
         },
         {
           "id": 3,
           "type": "prop",
-          "x": 768,
-          "y": 480,
+          "x": 96,
+          "y": 512,
           "width": 0,
           "height": 0,
           "properties": [
@@ -3026,27 +3376,77 @@
           ]
         },
         {
-          "id": 21,
+          "id": 43,
           "type": "prop",
-          "x": 480,
-          "y": 256,
+          "x": 96,
+          "y": 480,
           "width": 0,
           "height": 0,
           "properties": [
             {
               "name": "propId",
               "type": "string",
-              "value": "sella_receipt"
+              "value": "inn_bed"
             },
             {
               "name": "propName",
               "type": "string",
-              "value": "Sella's Custody Receipt"
+              "value": "Guest Bed"
             },
             {
               "name": "frame",
               "type": "string",
-              "value": "notice_board.png"
+              "value": "bed.png"
+            }
+          ]
+        },
+        {
+          "id": 44,
+          "type": "prop",
+          "x": 512,
+          "y": 512,
+          "width": 0,
+          "height": 0,
+          "properties": [
+            {
+              "name": "propId",
+              "type": "string",
+              "value": "inn_brazier"
+            },
+            {
+              "name": "propName",
+              "type": "string",
+              "value": "Brazier"
+            },
+            {
+              "name": "frame",
+              "type": "string",
+              "value": "prop_brazier.png"
+            }
+          ]
+        },
+        {
+          "id": 45,
+          "type": "prop",
+          "x": 736,
+          "y": 288,
+          "width": 0,
+          "height": 0,
+          "properties": [
+            {
+              "name": "propId",
+              "type": "string",
+              "value": "inn_support"
+            },
+            {
+              "name": "propName",
+              "type": "string",
+              "value": "Rotting Support"
+            },
+            {
+              "name": "frame",
+              "type": "string",
+              "value": "prop_support.png"
             }
           ]
         },
@@ -3073,7 +3473,7 @@
       "visible": true,
       "objects": [
         {
-          "id": 5,
+          "id": 1005,
           "type": "transition",
           "x": 416,
           "y": 608,

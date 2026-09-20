@@ -12,7 +12,11 @@ import merchantShopMap from '../../../../../../content/packs/emberwatch/maps/mer
 import oldRoadMap from '../../../../../../content/packs/emberwatch/maps/old_road.json';
 import villageMap from '../../../../../../content/packs/emberwatch/maps/village.json';
 import { checkPackAudioBindings } from '../media/audio_cue_binding.ts';
-import { ContentPackManifestSchema, PackConfigSchema } from './content_pack.ts';
+import {
+  ContentPackManifestSchema,
+  NpcPortraitVariantsSchema,
+  PackConfigSchema,
+} from './content_pack.ts';
 import { normaliseLegacyStep } from './onboarding_hints.ts';
 
 /** Minimal valid manifest fixture. */
@@ -570,6 +574,27 @@ describe('ContentPackManifestSchema', () => {
     expect(item.defenseBonus).toBe(5);
     expect(item.equipmentSlot).toBe('head');
     expect(item.attackBonus).toBeUndefined();
+  });
+});
+
+describe('NpcPortraitVariantsSchema', () => {
+  test('accepts published catalog-backed portrait paths', () => {
+    expect(
+      Value.Check(NpcPortraitVariantsSchema, {
+        neutral: '/game-data/portraits/emberwatch/village_elder/neutral.png',
+        concerned: 'portraits/emberwatch/village_elder/concerned.webp',
+      }),
+    ).toBe(true);
+  });
+
+  test('rejects absolute, traversal, and unsupported portrait URLs', () => {
+    for (const neutral of [
+      'https://example.test/neutral.png',
+      '/game-data/portraits/../secrets/neutral.png',
+      '/game-data/portraits/emberwatch/village_elder/neutral.jpg',
+    ]) {
+      expect(Value.Check(NpcPortraitVariantsSchema, { neutral })).toBe(false);
+    }
   });
 });
 
@@ -1139,12 +1164,33 @@ describe('ContentPackManifestSchema — C-523 authored audio bindings', () => {
         cueId: 'village.music',
         target: 'music',
         context: 'village',
-        tag: 'music:exploration:village-theme',
-        sha256: 'c'.repeat(64),
+        source: { kind: 'asset', tag: 'music:exploration:village-theme', sha256: 'c'.repeat(64) },
         resolution: 'required',
         fallback: 'silence',
       },
     ],
+  };
+
+  /**
+   * The tag of an asset-backed binding, or `undefined` for intentional
+   * silence. Assertions must go through this rather than reading `.tag`
+   * directly, because the union deliberately has no such field on the
+   * silence arm.
+   */
+  const assetTag = (
+    binding: { source: { kind: string; tag?: string } } | undefined,
+  ): string | undefined => (binding?.source.kind === 'asset' ? binding.source.tag : undefined);
+
+  /** Looks up a declared binding, failing loudly when the pack omits it. */
+  const bindingFor = (
+    authored: { bindings: readonly { cueId: string }[] },
+    cueId: string,
+  ): { cueId: string; source: { kind: string; tag?: string; sha256?: string } } => {
+    const found = authored.bindings.find((binding) => binding.cueId === cueId);
+    if (found === undefined) {
+      throw new Error(`the shipped Emberwatch manifest must declare ${cueId}`);
+    }
+    return found as { cueId: string; source: { kind: string; tag?: string; sha256?: string } };
   };
 
   test('a manifest with no audio section still validates (every pack written before C-523)', () => {
@@ -1173,20 +1219,29 @@ describe('ContentPackManifestSchema — C-523 authored audio bindings', () => {
       );
     }
     // The headline cues are pinned to real accepted renditions.
-    const village = authored.bindings.find((binding) => binding.cueId === 'village.music');
-    expect(village?.tag).toBe('music:exploration:village_ward');
-    expect(village?.sha256).toBe(
+    const village = bindingFor(authored, 'village.music');
+    expect(assetTag(village)).toBe('music:exploration:village_ward');
+    expect(village.source.sha256).toBe(
       '22536060db87b024eaf717d57c8885067a7942052ecfef9ed8b51fc7766a5a98',
     );
-    const inn = authored.bindings.find((binding) => binding.cueId === 'inn.music');
-    expect(inn?.tag).toBe('music:exploration:inn_hearth');
-    const oldRoad = authored.bindings.find((binding) => binding.cueId === 'old_road.music');
-    expect(oldRoad?.tag).toBe('music:exploration:old_road');
-    const shrine = authored.bindings.find((binding) => binding.cueId === 'ruined_shrine.music');
-    expect(shrine?.tag).toBe('music:exploration:ruined_shrine');
-    const combat = authored.bindings.find((binding) => binding.cueId === 'combat.music');
-    expect(combat?.tag).toBe('music:combat:emberwatch_combat');
-    expect(combat?.resolution).toBe('required');
+    expect(assetTag(bindingFor(authored, 'inn.music'))).toBe('music:exploration:inn_hearth');
+    expect(assetTag(bindingFor(authored, 'old_road.music'))).toBe('music:exploration:old_road');
+    expect(assetTag(bindingFor(authored, 'ruined_shrine.music'))).toBe(
+      'music:exploration:ruined_shrine',
+    );
+    const combat = bindingFor(authored, 'combat.music');
+    expect(assetTag(combat)).toBe('music:combat:emberwatch_combat');
+    expect(combat.resolution).toBe('required');
+
+    // The two fallback beds are intentional silence: they must NOT claim a tag
+    // or a hash, because no bytes for them exist anywhere. This is the
+    // invariant that replaced the phantom `bgm_explore`/`bgm_combat` pins.
+    for (const cueId of ['bed.explore', 'bed.combat']) {
+      const bed = bindingFor(authored, cueId);
+      expect(bed.source).toEqual({ kind: 'silence' });
+      expect(bed.resolution).toBe('optional');
+      expect(bed.fallback).toBe('silence');
+    }
   });
 
   test('every declared_cue fallback names a cue the pack also declares', () => {
@@ -1219,12 +1274,32 @@ describe('ContentPackManifestSchema — C-523 authored audio bindings', () => {
     ).toThrow();
   });
 
-  test('rejects an audio binding missing its sha256', () => {
+  test('rejects an audio binding whose asset source is missing its sha256', () => {
     const [firstBinding] = audioSection.bindings;
     if (firstBinding === undefined) {
       throw new Error('the fixture must author at least one binding');
     }
-    const { sha256: _omitted, ...binding } = firstBinding;
+    const binding = {
+      ...firstBinding,
+      source: { kind: 'asset', tag: 'music:exploration:village-theme' },
+    };
+    expect(() =>
+      Value.Parse(ContentPackManifestSchema, {
+        ...validManifest,
+        audio: { ...audioSection, bindings: [binding] },
+      }),
+    ).toThrow();
+  });
+
+  test('rejects a silence binding that also claims a tag', () => {
+    const binding = {
+      cueId: 'bed.explore',
+      target: 'music',
+      context: 'bed.explore',
+      source: { kind: 'silence', tag: 'music:exploration:bgm_explore' },
+      resolution: 'optional',
+      fallback: 'silence',
+    };
     expect(() =>
       Value.Parse(ContentPackManifestSchema, {
         ...validManifest,

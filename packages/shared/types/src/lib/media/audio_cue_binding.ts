@@ -13,9 +13,17 @@ export type PackAudioBindings = Static<typeof PackAudioBindingsSchema>;
 export type PackAudioCueBinding = Static<typeof PackAudioCueBindingSchema>;
 
 export type {
+  AudioAssetCueBinding,
+  AudioAssetSource,
   AudioCueFallback,
   AudioCueResolution,
+  AudioCueSource,
+  AudioCueSourceKind,
   AudioCueTarget,
+  AudioSilenceCueBinding,
+  AudioSilenceSource,
   PackAudioBindingIssue,
   PackAudioBindingIssueCode,
 } from '@aikami/schemas';
+
+export { isAssetCueBinding } from '@aikami/schemas';

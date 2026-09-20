@@ -286,3 +286,33 @@ export const transition = (
     { name: 'targetSpawnId', type: 'string', value: targetSpawnId },
   ],
 });
+
+// ---------------------------------------------------------------------------
+// old_road arrival points
+// ---------------------------------------------------------------------------
+//
+// These are the coordinates a traveller lands on when they arrive at the Old
+// Road. They are declared ONCE because two different maps need them for two
+// different purposes:
+//
+//   • old_road itself places them as named arrival SPAWN MARKERS;
+//   • village and ruined_shrine declare them as the NUMERIC fallback on their
+//     outgoing transitions.
+//
+// The runtime prefers the named marker, so a disagreement between the two is
+// invisible until the fallback is used — and then it is a bounce-back bug. The
+// numeric pair previously read `35 * 32` and `0`, each exactly the origin of
+// old_road's reciprocal exit rectangle (y 1120-1152 and y 0-32). ZoningSystem
+// tests the player's position INCLUSIVELY against each transition rect, so
+// landing on a rect's corner re-triggers the exit the instant the map loads and
+// the player is thrown straight back (C-138).
+//
+// Each value therefore sits at least one rectangle-height clear of the edge it
+// arrives through. Sharing the constant is what stops the two from drifting
+// apart again.
+export const OLD_ROAD_ARRIVAL = {
+  /** Arriving from the village gate — south edge, clear of the y 1120 exit. */
+  fromVillage: { x: 34 * 32, y: 33 * 32 },
+  /** Arriving from the shrine gate — north edge, clear of the y 0-32 exit. */
+  toShrine: { x: 34 * 32, y: 2 * 32 },
+} as const;

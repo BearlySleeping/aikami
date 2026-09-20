@@ -19,6 +19,7 @@
 
 import { gzipSync } from 'node:zlib';
 import {
+  type CatalogAssetEntry,
   type CatalogCategory,
   type CatalogIndexRoot,
   CatalogIndexRootSchema,
@@ -27,6 +28,7 @@ import {
 } from '@aikami/schemas';
 import { Value } from 'typebox/value';
 import type { CatalogEntry } from './catalog_entries.ts';
+import { type MergeReport, mergeCatalogEntries } from './published_catalog.ts';
 
 export type { CatalogIndexRoot, CatalogIndexShard };
 
@@ -60,7 +62,7 @@ export type GeneratedShard = {
 
 const gzipBytes = (json: string): number => gzipSync(Buffer.from(json, 'utf8')).byteLength;
 
-const entryToShardEntry = (entry: CatalogEntry) => ({
+export const entryToShardEntry = (entry: CatalogEntry) => ({
   tag: entry.tag,
   hash: entry.hash,
   sizeBytes: entry.sizeBytes,
@@ -96,7 +98,8 @@ const shardIdFragment = (subcategory: string): string =>
 const buildShardDocument = (options: {
   id: string;
   category: CatalogCategory;
-  entries: readonly CatalogEntry[];
+  /** Already-projected shard entries, in the final wire shape. */
+  entries: readonly CatalogAssetEntry[];
   publishedAt: string;
   originUrl: string;
 }): CatalogIndexShard => {
@@ -107,7 +110,7 @@ const buildShardDocument = (options: {
     originUrl,
     id,
     category,
-    entries: entries.map(entryToShardEntry),
+    entries: [...entries],
   };
   if (!Value.Check(CatalogIndexShardSchema, shard)) {
     throw new Error(`Generated shard ${id} failed CatalogIndexShardSchema validation`);
@@ -116,11 +119,116 @@ const buildShardDocument = (options: {
 };
 
 /**
+ * One category's entries, grouped. Insertion order is the merged entry order.
+ */
+const groupByCategory = (
+  entries: readonly CatalogAssetEntry[],
+): Map<string, CatalogAssetEntry[]> => {
+  const byCategory = new Map<string, CatalogAssetEntry[]>();
+  for (const entry of entries) {
+    const list = byCategory.get(entry.category) ?? [];
+    list.push(entry);
+    byCategory.set(entry.category, list);
+  }
+  return byCategory;
+};
+
+type ShardedCategory = {
+  shards: GeneratedShard[];
+  categories: CatalogIndexRoot['categories'];
+};
+
+/**
+ * Shards ONE category: the whole category when it fits the gzip budget,
+ * otherwise split by subcategory.
+ */
+const shardCategory = (options: {
+  category: string;
+  entries: readonly CatalogAssetEntry[];
+  publishedAt: string;
+  originUrl: string;
+}): ShardedCategory => {
+  const { category, entries, publishedAt, originUrl } = options;
+  const wholeJson = JSON.stringify(
+    buildShardDocument({
+      id: category,
+      category: category as CatalogCategory,
+      entries,
+      publishedAt,
+      originUrl,
+    }),
+    null,
+    2,
+  );
+  const wholeSize = gzipBytes(wholeJson);
+  if (wholeSize <= SHARD_MAX_GZIP_BYTES) {
+    return {
+      shards: [
+        {
+          id: category,
+          category,
+          key: `index/v1/${category}.json`,
+          json: wholeJson,
+          gzipBytes: wholeSize,
+        },
+      ],
+      categories: [{ id: category, count: entries.length }],
+    };
+  }
+  return splitCategoryBySubcategory(options);
+};
+
+/** Over budget — split by subcategory, refusing a subcategory that is still too big. */
+const splitCategoryBySubcategory = (options: {
+  category: string;
+  entries: readonly CatalogAssetEntry[];
+  publishedAt: string;
+  originUrl: string;
+}): ShardedCategory => {
+  const { category, publishedAt, originUrl } = options;
+  const bySubcategory = new Map<string, CatalogAssetEntry[]>();
+  for (const entry of options.entries) {
+    const group = entry.subcategory ?? '__base';
+    bySubcategory.set(group, [...(bySubcategory.get(group) ?? []), entry]);
+  }
+
+  const shards: GeneratedShard[] = [];
+  const categories: CatalogIndexRoot['categories'] = [];
+  const groups = [...bySubcategory.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  for (const [subcategory, subEntries] of groups) {
+    const id = `${category}__${shardIdFragment(subcategory)}`;
+    const json = JSON.stringify(
+      buildShardDocument({
+        id,
+        category: category as CatalogCategory,
+        entries: subEntries,
+        publishedAt,
+        originUrl,
+      }),
+      null,
+      2,
+    );
+    const size = gzipBytes(json);
+    if (size > SHARD_MAX_GZIP_BYTES) {
+      throw new Error(
+        `Category ${category} subcategory shard ${id} is ${size} bytes gzipped — over the 1 MB budget`,
+      );
+    }
+    shards.push({ id, category, key: `index/v1/${id}.json`, json, gzipBytes: size });
+    categories.push({ id, count: subEntries.length });
+  }
+  return { shards, categories };
+};
+
+/**
  * Generate the root index and category shards for a catalog entry list.
  *
  * Splits any category whose gzipped shard exceeds SHARD_MAX_GZIP_BYTES by
  * subcategory (entries without a subcategory group under `__base`).
  *
+ * @param options.carriedEntries - Entries the published catalog already carries
+ *   that this publish does not produce. They are unioned back in (see
+ *   {@link mergeCatalogEntries}) so a pack-scoped publish cannot truncate the catalog.
  * @returns The root document + every shard, each with its object key and
  *   measured gzipped size.
  */
@@ -128,85 +236,63 @@ export const generateCatalogIndex = (options: {
   entries: readonly CatalogEntry[];
   originUrl: string;
   publishedAt?: string;
-}): { root: CatalogIndexRoot; shards: GeneratedShard[] } => {
+  /**
+   * Entries the published release already carries that this candidate does not
+   * produce. Unioned back in (see `mergeCatalogEntries`) so a pack-scoped
+   * publish cannot truncate the catalog.
+   */
+  carriedEntries?: readonly CatalogAssetEntry[];
+  /**
+   * Tags explicitly declared retired. Without one, a tag absent from `entries`
+   * is CARRIED FORWARD — a de-bundled checkout is not evidence of intent to
+   * delete.
+   */
+  retireTags?: readonly string[];
+}): {
+  root: CatalogIndexRoot;
+  shards: GeneratedShard[];
+  merge: MergeReport;
+} => {
   const { entries, originUrl } = options;
   const publishedAt = options.publishedAt ?? new Date().toISOString();
 
-  const byCategory = new Map<string, CatalogEntry[]>();
-  for (const entry of entries) {
-    const list = byCategory.get(entry.category) ?? [];
-    list.push(entry);
-    byCategory.set(entry.category, list);
-  }
+  // Merge GLOBALLY, before sharding, so the merge report describes the whole
+  // release and a retirement cannot be half-applied across shards.
+  const { entries: merged, report: merge } = mergeCatalogEntries({
+    local: entries.map(entryToShardEntry),
+    carried: options.carriedEntries ?? [],
+    retire: options.retireTags,
+  });
+
+  const byCategory = groupByCategory(merged);
 
   const shards: GeneratedShard[] = [];
   const categories: CatalogIndexRoot['categories'] = [];
 
-  for (const [category, categoryEntries] of [...byCategory.entries()].sort((a, b) =>
-    a[0].localeCompare(b[0]),
-  )) {
-    const wholeShard = buildShardDocument({
-      id: category,
-      category: category as CatalogCategory,
-      entries: categoryEntries,
+  for (const category of [...byCategory.keys()].sort((a, b) => a.localeCompare(b))) {
+    const sharded = shardCategory({
+      category,
+      entries: byCategory.get(category) ?? [],
       publishedAt,
       originUrl,
     });
-    const wholeJson = JSON.stringify(wholeShard, null, 2);
-
-    if (gzipBytes(wholeJson) <= SHARD_MAX_GZIP_BYTES) {
-      shards.push({
-        id: category,
-        category,
-        key: `index/v1/${category}.json`,
-        json: wholeJson,
-        gzipBytes: gzipBytes(wholeJson),
-      });
-      categories.push({ id: category, count: categoryEntries.length });
-      continue;
-    }
-
-    // Over budget — split by subcategory.
-    const bySubcategory = new Map<string, CatalogEntry[]>();
-    for (const entry of categoryEntries) {
-      const group = entry.subcategory ?? '__base';
-      const list = bySubcategory.get(group) ?? [];
-      list.push(entry);
-      bySubcategory.set(group, list);
-    }
-    for (const [subcategory, subEntries] of [...bySubcategory.entries()].sort((a, b) =>
-      a[0].localeCompare(b[0]),
-    )) {
-      const id = `${category}__${shardIdFragment(subcategory)}`;
-      const shard = buildShardDocument({
-        id,
-        category: category as CatalogCategory,
-        entries: subEntries,
-        publishedAt,
-        originUrl,
-      });
-      const json = JSON.stringify(shard, null, 2);
-      const size = gzipBytes(json);
-      if (size > SHARD_MAX_GZIP_BYTES) {
-        throw new Error(
-          `Category ${category} subcategory shard ${id} is ${size} bytes gzipped — over the 1 MB budget`,
-        );
-      }
-      shards.push({ id, category, key: `index/v1/${id}.json`, json, gzipBytes: size });
-      categories.push({ id, count: subEntries.length });
-    }
+    shards.push(...sharded.shards);
+    categories.push(...sharded.categories);
   }
 
   const root: CatalogIndexRoot = {
     schemaVersion: 1,
     publishedAt,
     originUrl,
-    totalCount: entries.length,
+    // Count the MERGED set, not the local candidate: the root's totalCount is
+    // what a client uses to size its download, and reporting the local subset
+    // would advertise a catalog that does not exist.
+    totalCount: merged.length,
     categories,
   };
   if (!Value.Check(CatalogIndexRootSchema, root)) {
     throw new Error('Generated root index failed CatalogIndexRootSchema validation');
   }
 
-  return { root, shards };
+  return { root, shards, merge };
 };

@@ -42,6 +42,11 @@
     "pre-commit": "bun run scripts/src/lib/ops/pre_commit.ts",
     "sync-workspace": "bun run scripts/src/lib/ops/sync_workspace.ts",
     "guard-workspace-boundary": "bun run scripts/src/lib/ops/guard_workspace_boundary.ts",
+    "emberwatch:release": "bun run scripts/src/lib/ops/emberwatch_release.ts",
+    "emberwatch:audit": "bun run scripts/src/lib/ops/emberwatch_coverage_audit.ts",
+    "emberwatch:accept": "bun run scripts/src/lib/ops/emberwatch_accept.ts",
+    "emberwatch:brief": "bun run scripts/src/lib/ops/rebase_emberwatch_brief.ts",
+    "emberwatch:props": "bun run scripts/src/lib/ops/sync_emberwatch_props.ts",
     "test:blackbox": "bun run scripts/src/lib/test_blackbox/run.ts",
     "herdr:start": "bun run scripts/src/lib/herdr/start.ts",
     "workspace:cleanup": "bun run scripts/src/lib/ops/workspace_cleanup.ts",
@@ -101,7 +106,9 @@
     "setup:env": "bun run decrypt-secrets --mode emulator",
     "encrypt-secrets": "bun run scripts/src/lib/ops/encrypt_secrets.ts",
     "sync-env": "bun run scripts/src/lib/ops/sync_env.ts",
-    "infra:report": "bun run scripts/src/lib/ops/infra_report_cli.ts"
+    "infra:report": "bun run scripts/src/lib/ops/infra_report_cli.ts",
+    "emberwatch:build-candidate": "bun run scripts/src/lib/ops/emberwatch_release.ts --build-candidate",
+    "emberwatch:candidate": "bun run scripts/src/lib/ops/emberwatch_candidate.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.13",

@@ -43,7 +43,7 @@ import {
 import { encodePng } from './png_codec.ts';
 
 describe('C-519 AC-1: --plan is strict, honest and side-effect free', () => {
-  test('the authored brief plans 6 slice / 36 expansion items and blocks on approved_style', async () => {
+  test('the authored brief plans a dispatchable slice and hashes every resolved reference', async () => {
     const scratch = makeScratch('plan');
     const spy = startFakeSdServer();
     try {
@@ -60,13 +60,79 @@ describe('C-519 AC-1: --plan is strict, honest and side-effect free', () => {
         spy.url,
       ]);
 
-      expect(result.exitCode).toBe(2);
+      // The authored brief is rebased and resolvable, so its slice plans
+      // cleanly. Counts are derived from the brief itself, never re-pinned:
+      // the previous version hardcoded 6/36 and went stale on the first
+      // rebase, turning a healthy brief into a red gate.
+      const brief = JSON.parse(readFileSync(AUTHORED_BRIEF, 'utf8')) as {
+        jobs: readonly { phase: string }[];
+      };
+      const sliceJobs = brief.jobs.filter((job) => job.phase === 'slice').length;
+      const expansionJobs = brief.jobs.length - sliceJobs;
+
+      expect(result.exitCode).toBe(0);
       const plan = parseJson(result.stdout);
       expect(Value.Check(GenerationPlanSchema, plan)).toBe(true);
-      expect(plan.sliceItems).toBe(6);
-      expect(plan.expansionItems).toBe(36);
-      expect(plan.plannedItems).toBe(6);
+      expect(plan.sliceItems).toBe(sliceJobs);
+      expect(plan.expansionItems).toBe(expansionJobs);
+      expect(plan.plannedItems).toBe(sliceJobs);
+      expect(plan.blockers).toEqual([]);
 
+      // Every required reference resolves to real bytes with a real hash.
+      const references = plan.references as readonly Record<string, unknown>[];
+      const required = references.filter((reference) => reference.resolution === 'required');
+      expect(required.length).toBeGreaterThan(0);
+      for (const reference of required) {
+        expect(reference.status, `${String(reference.id)} must resolve`).toBe('resolved');
+        expect(String(reference.sha256)).toMatch(/^[a-f0-9]{64}$/);
+      }
+
+      // Zero engine/model/download activity, and nothing written.
+      expect(spy.log.generations.length).toBe(0);
+      expect(existsSync(runsDir)).toBe(false);
+    } finally {
+      spy.stop();
+      cleanupScratch();
+    }
+  }, 60_000);
+
+  test('an unresolved required reference blocks the plan without dispatching', async () => {
+    const scratch = makeScratch('plan-blocked');
+    const spy = startFakeSdServer();
+    try {
+      // A brief whose required reference points at a document, not bytes. This
+      // is the behaviour the authored brief used to exercise by accident.
+      const brief = JSON.parse(readFileSync(AUTHORED_BRIEF, 'utf8')) as Record<string, unknown>;
+      brief.references = [
+        {
+          id: 'approved_style',
+          kind: 'approved_art',
+          locator: 'docs/plans/emberwatch_rebuild.md',
+          resolution: 'required',
+          sha256: null,
+          note: 'a Markdown section is guidance, not image bytes',
+        },
+      ];
+      brief.jobs = (brief.jobs as readonly Record<string, unknown>[])
+        .slice(0, 1)
+        .map((job) => ({ ...job, referenceIds: ['approved_style'] }));
+      const path = join(scratch, 'blocked.json');
+      writeFileSync(path, JSON.stringify(brief));
+
+      const result = await runCli([
+        '--manifest',
+        path,
+        '--plan',
+        '--phase',
+        'slice',
+        '--runs-dir',
+        join(scratch, 'runs'),
+        '--engine-url',
+        spy.url,
+      ]);
+
+      expect(result.exitCode).toBe(2);
+      const plan = parseJson(result.stdout);
       const blockers = plan.blockers as readonly Record<string, unknown>[];
       const styleBlockers = blockers.filter((blocker) => blocker.referenceId === 'approved_style');
       expect(styleBlockers.length).toBeGreaterThan(0);
@@ -79,20 +145,15 @@ describe('C-519 AC-1: --plan is strict, honest and side-effect free', () => {
       const approvedStyle = references.find((reference) => reference.id === 'approved_style');
       expect(approvedStyle?.status).toBe('unresolved');
       expect(approvedStyle?.sha256).toBeUndefined();
-      // …while a real artifact really is hashed.
-      const wardBase = references.find((reference) => reference.id === 'ward_base');
-      expect(String(wardBase?.sha256)).toMatch(/^[a-f0-9]{64}$/);
 
-      // Zero engine/model/download activity, and nothing written.
       expect(spy.log.generations.length).toBe(0);
-      expect(existsSync(runsDir)).toBe(false);
     } finally {
       spy.stop();
       cleanupScratch();
     }
   }, 60_000);
 
-  test('--phase expansion plans all 36 expansion items', async () => {
+  test('--phase expansion plans every expansion item', async () => {
     const scratch = makeScratch('plan-expansion');
     try {
       const result = await runCli([
@@ -104,11 +165,15 @@ describe('C-519 AC-1: --plan is strict, honest and side-effect free', () => {
         '--runs-dir',
         join(scratch, 'runs'),
       ]);
-      expect(result.exitCode).toBe(2);
+      expect(result.exitCode).toBe(0);
       const plan = parseJson(result.stdout);
-      expect(plan.plannedItems).toBe(36);
-      expect(plan.expansionItems).toBe(36);
-      expect(plan.sliceItems).toBe(6);
+      const brief = JSON.parse(readFileSync(AUTHORED_BRIEF, 'utf8')) as {
+        jobs: readonly { phase: string }[];
+      };
+      const sliceJobs = brief.jobs.filter((job) => job.phase === 'slice').length;
+      expect(plan.plannedItems).toBe(brief.jobs.length - sliceJobs);
+      expect(plan.expansionItems).toBe(brief.jobs.length - sliceJobs);
+      expect(plan.sliceItems).toBe(sliceJobs);
     } finally {
       cleanupScratch();
     }
@@ -1089,11 +1154,16 @@ describe('C-519 AC-9: shipped commands are the documented commands', () => {
       '--runs-dir',
       join(makeScratch('docs-command'), 'runs'),
     ]);
-    // Blocked plan (approved_style is unresolved), but the brief was found and
-    // validated — not a "file not found" invalid invocation.
-    expect(documentedRun.exitCode).toBe(2);
+    // The authored brief is rebased and resolvable, so the documented
+    // invocation plans cleanly — the brief was found and validated, not a
+    // "file not found" invalid invocation.
+    const documentedBrief = JSON.parse(readFileSync(AUTHORED_BRIEF, 'utf8')) as {
+      jobs: readonly { phase: string }[];
+    };
+    const documentedSlice = documentedBrief.jobs.filter((job) => job.phase === 'slice').length;
+    expect(documentedRun.exitCode).toBe(0);
     expect(documentedRun.stderr).not.toContain('file not found');
-    expect(parseJson(documentedRun.stdout).sliceItems).toBe(6);
+    expect(parseJson(documentedRun.stdout).sliceItems).toBe(documentedSlice);
     cleanupScratch();
   }, 60_000);
 });

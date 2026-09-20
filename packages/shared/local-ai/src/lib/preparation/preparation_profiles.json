@@ -29,16 +29,9 @@
     "version": "1.0.0",
     "role": "prop-sprite",
     "pixelGrid": "native",
-    "notes": "Source is a full-alpha render on a dark ground. Alpha is derived deterministically from luminance and the full-width ground rows at the bottom are detached by geometry — never by a colour key, because an opaque backdrop cannot be separated by colour alone.",
+    "notes": "Source must carry native alpha with the object already isolated. No luminance or colour threshold is applied, so dark object pixels survive; any ground plane must be detached before preparation.",
     "operations": [
       { "op": "decode-orient", "autoOrient": true },
-      {
-        "op": "alpha-extract",
-        "mode": "threshold",
-        "threshold": 16,
-        "despill": "none",
-        "detachGroundPlane": true
-      },
       {
         "op": "alpha-cleanup",
         "fringeThreshold": 24,

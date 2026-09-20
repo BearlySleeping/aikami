@@ -1,9 +1,9 @@
 {
   "id": "emberwatch",
   "name": "Emberwatch: The Fading Ward",
-  "version": "4.4.0",
-  "updatedAt": "2026-09-15T00:00:00.000Z",
-  "description": "The ward protecting Emberwatch is fading. Elder Thalia needs the Ward Wand to renew it \u2014 but the wand rests in the hands of a rogue at the inn. Persuade or fight to get it back.",
+  "version": "5.0.0",
+  "updatedAt": "2026-09-18T00:00:00.000Z",
+  "description": "The ward protecting Emberwatch is fading. Elder Thalia needs the Ward Wand to renew it — but the wand rests in the hands of a rogue at the inn. Persuade or fight to get it back.",
   "startingMapId": "village",
   "atlas": {
     "textureUrl": "/game-data/sprites/tilesets/atlas.webp",
@@ -509,7 +509,7 @@
       "frame": "char_hero_idle.png",
       "anchor": {
         "x": 0.5,
-        "y": 1.0
+        "y": 1
       },
       "collision": {
         "type": "rect",
@@ -522,256 +522,94 @@
     "ward_tree_landmark": {
       "name": "The Ward Tree",
       "frame": "ward_large.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
       "anchor": {
         "x": 0.5,
-        "y": 1.0
+        "y": 1
       },
       "isWalkable": false,
       "collision": {
         "type": "rect",
         "width": 44,
         "height": 22
-      },
-      "provenance": {
-        "source": "generated:gpt"
       }
     },
     "ward_grove_a": {
       "name": "Ward Grove (unlit)",
       "frame": "ward_small_a.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
       "anchor": {
         "x": 0.5,
-        "y": 1.0
+        "y": 1
       },
       "isWalkable": false,
       "collision": {
         "type": "rect",
         "width": 28,
         "height": 16
-      },
-      "provenance": {
-        "source": "generated:gpt"
       }
     },
     "ward_grove_b": {
       "name": "Ward Grove (lit)",
       "frame": "ward_small_b.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
       "anchor": {
         "x": 0.5,
-        "y": 1.0
+        "y": 1
       },
       "isWalkable": false,
       "collision": {
         "type": "rect",
         "width": 28,
         "height": 16
-      },
-      "provenance": {
-        "source": "generated:gpt"
       }
     },
     "ward_grove_c": {
       "name": "Ward Grove (lit)",
       "frame": "ward_small_c.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
       "anchor": {
         "x": 0.5,
-        "y": 1.0
+        "y": 1
       },
       "isWalkable": false,
       "collision": {
         "type": "rect",
         "width": 28,
         "height": 16
-      },
-      "provenance": {
-        "source": "generated:gpt"
-      }
-    },
-    "woodland_oak": {
-      "name": "Woodland Oak",
-      "frame": "oak.png",
-      "anchor": {
-        "x": 0.5,
-        "y": 1.0
-      },
-      "isWalkable": false,
-      "collision": {
-        "type": "rect",
-        "width": 30,
-        "height": 16
-      },
-      "provenance": {
-        "source": "generated:gpt"
-      }
-    },
-    "woodland_birch": {
-      "name": "Woodland Birch",
-      "frame": "birch.png",
-      "anchor": {
-        "x": 0.5,
-        "y": 1.0
-      },
-      "isWalkable": false,
-      "collision": {
-        "type": "rect",
-        "width": 22,
-        "height": 14
-      },
-      "provenance": {
-        "source": "generated:gpt"
       }
     },
     "village_well": {
       "name": "Old Stone Well",
       "frame": "well.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
       "anchor": {
         "x": 0.5,
-        "y": 1.0
+        "y": 1
       },
       "isWalkable": false,
       "collision": {
         "type": "rect",
         "width": 22,
         "height": 14
-      },
-      "provenance": {
-        "source": "generated:gpt"
       }
     },
     "notice_board": {
       "name": "Village Notice Board",
-      "frame": "notice_board.png",
-      "anchor": {
-        "x": 0.5,
-        "y": 1.0
-      },
-      "isWalkable": false,
-      "collision": {
-        "type": "rect",
-        "width": 20,
-        "height": 10
-      },
+      "frame": "prop_notice_board.png",
       "provenance": {
-        "source": "generated:gpt"
-      }
-    },
-    "village_gate": {
-      "name": "Emberwatch Village Gate",
-      "frame": "village_gate.png",
-      "anchor": {
-        "x": 0.5,
-        "y": 1.0
+        "source": "generated:local-sdcpp-anima"
       },
-      "isWalkable": true,
-      "provenance": {
-        "source": "generated:gpt"
-      }
-    },
-    "inn_barrel": {
-      "name": "Barrel",
-      "frame": "barrel.png",
-      "anchor": {
-        "x": 0.5,
-        "y": 1.0
-      },
-      "isWalkable": false,
-      "collision": {
-        "type": "rect",
-        "width": 20,
-        "height": 20
-      },
-      "provenance": {
-        "source": "generated:gpt"
-      }
-    },
-    "inn_barrel_2": {
-      "name": "Barrel",
-      "frame": "barrel.png",
-      "anchor": {
-        "x": 0.5,
-        "y": 1.0
-      },
-      "isWalkable": false,
-      "collision": {
-        "type": "rect",
-        "width": 20,
-        "height": 20
-      },
-      "provenance": {
-        "source": "generated:gpt"
-      }
-    },
-    "inn_crate": {
-      "name": "Crate",
-      "frame": "crate.png",
-      "anchor": {
-        "x": 0.5,
-        "y": 1.0
-      },
-      "isWalkable": false,
-      "collision": {
-        "type": "rect",
-        "width": 22,
-        "height": 22
-      },
-      "provenance": {
-        "source": "generated:gpt"
-      }
-    },
-    "shop_counter_l": {
-      "name": "Counter",
-      "frame": "counter.png",
-      "anchor": {
-        "x": 0.5,
-        "y": 1.0
-      },
-      "isWalkable": false,
-      "collision": {
-        "type": "rect",
-        "width": 28,
-        "height": 18
-      },
-      "provenance": {
-        "source": "generated:gpt"
-      }
-    },
-    "shop_counter_r": {
-      "name": "Counter",
-      "frame": "counter.png",
-      "anchor": {
-        "x": 0.5,
-        "y": 1.0
-      },
-      "isWalkable": false,
-      "collision": {
-        "type": "rect",
-        "width": 28,
-        "height": 18
-      },
-      "provenance": {
-        "source": "generated:gpt"
-      }
-    },
-    "shop_crate": {
-      "name": "Crate",
-      "frame": "crate.png",
-      "anchor": {
-        "x": 0.5,
-        "y": 1.0
-      },
-      "isWalkable": false,
-      "collision": {
-        "type": "rect",
-        "width": 22,
-        "height": 22
-      },
-      "provenance": {
-        "source": "generated:gpt"
-      }
-    },
-    "sella_receipt": {
-      "name": "Sella's Custody Receipt",
-      "frame": "notice_board.png",
       "anchor": {
         "x": 0.5,
         "y": 1
@@ -781,14 +619,707 @@
         "type": "rect",
         "width": 20,
         "height": 10
-      },
-      "provenance": {
-        "source": "generated:gpt"
       }
     },
-    "tess_component": {
-      "name": "Intact Ward Component",
+    "road_notice": {
+      "name": "Road Marker",
+      "frame": "prop_notice_board.png",
+      "provenance": {
+        "source": "generated:local-sdcpp-anima"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 20,
+        "height": 10
+      }
+    },
+    "village_gate": {
+      "name": "Emberwatch Village Gate",
+      "frame": "prop_gate.png",
+      "provenance": {
+        "source": "generated:local-sdcpp-anima"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": true
+    },
+    "woodland_oak": {
+      "name": "Woodland Oak",
+      "frame": "oak.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 30,
+        "height": 16
+      }
+    },
+    "woodland_oak_2": {
+      "name": "Woodland Oak",
+      "frame": "oak.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 30,
+        "height": 16
+      }
+    },
+    "woodland_oak_3": {
+      "name": "Woodland Oak",
+      "frame": "oak.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 30,
+        "height": 16
+      }
+    },
+    "woodland_oak_4": {
+      "name": "Woodland Oak",
+      "frame": "oak.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 30,
+        "height": 16
+      }
+    },
+    "woodland_birch": {
+      "name": "Woodland Birch",
+      "frame": "birch.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 14
+      }
+    },
+    "woodland_birch_2": {
+      "name": "Woodland Birch",
+      "frame": "birch.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 14
+      }
+    },
+    "shrine_oak": {
+      "name": "Woodland Oak",
+      "frame": "oak.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 30,
+        "height": 16
+      }
+    },
+    "shrine_birch": {
+      "name": "Woodland Birch",
+      "frame": "birch.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 14
+      }
+    },
+    "inn_barrel": {
+      "name": "Barrel",
+      "frame": "prop_barrel.png",
+      "provenance": {
+        "source": "generated:local-sdcpp-anima"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 20,
+        "height": 20
+      }
+    },
+    "inn_barrel_2": {
+      "name": "Barrel",
+      "frame": "prop_barrel.png",
+      "provenance": {
+        "source": "generated:local-sdcpp-anima"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 20,
+        "height": 20
+      }
+    },
+    "waystation_barrel": {
+      "name": "Waystation Barrel",
+      "frame": "prop_barrel.png",
+      "provenance": {
+        "source": "generated:local-sdcpp-anima"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 20,
+        "height": 20
+      }
+    },
+    "shop_barrel": {
+      "name": "Barrel",
+      "frame": "prop_barrel.png",
+      "provenance": {
+        "source": "generated:local-sdcpp-anima"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 20,
+        "height": 20
+      }
+    },
+    "shop_barrel_2": {
+      "name": "Barrel",
+      "frame": "prop_barrel.png",
+      "provenance": {
+        "source": "generated:local-sdcpp-anima"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 20,
+        "height": 20
+      }
+    },
+    "shrine_barrel": {
+      "name": "Barrel",
+      "frame": "prop_barrel.png",
+      "provenance": {
+        "source": "generated:local-sdcpp-anima"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 20,
+        "height": 20
+      }
+    },
+    "inn_crate": {
+      "name": "Crate",
       "frame": "crate.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 22
+      }
+    },
+    "shop_crate": {
+      "name": "Crate",
+      "frame": "crate.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 22
+      }
+    },
+    "shop_crate_2": {
+      "name": "Crate",
+      "frame": "crate.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 22
+      }
+    },
+    "shop_crate_3": {
+      "name": "Crate",
+      "frame": "crate.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 22
+      }
+    },
+    "waystation_crate": {
+      "name": "Crate",
+      "frame": "crate.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 22
+      }
+    },
+    "waystation_crate_2": {
+      "name": "Crate",
+      "frame": "crate.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 22
+      }
+    },
+    "shrine_crate": {
+      "name": "Crate",
+      "frame": "crate.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 22
+      }
+    },
+    "shop_counter_l": {
+      "name": "Counter",
+      "frame": "counter.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 28,
+        "height": 18
+      }
+    },
+    "shop_counter_r": {
+      "name": "Counter",
+      "frame": "counter.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 28,
+        "height": 18
+      }
+    },
+    "shop_counter_m": {
+      "name": "Counter",
+      "frame": "counter.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 28,
+        "height": 18
+      }
+    },
+    "inn_counter": {
+      "name": "Service Counter",
+      "frame": "counter.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 28,
+        "height": 18
+      }
+    },
+    "inn_counter_2": {
+      "name": "Service Counter",
+      "frame": "counter.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 28,
+        "height": 18
+      }
+    },
+    "inn_table": {
+      "name": "Ale Table",
+      "frame": "table.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 26,
+        "height": 22
+      },
+      "environment": {
+        "durability": 6,
+        "blocksMovement": true,
+        "blocksSight": false,
+        "cover": "half"
+      }
+    },
+    "inn_table_2": {
+      "name": "Ale Table",
+      "frame": "table.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 26,
+        "height": 22
+      },
+      "environment": {
+        "durability": 6,
+        "blocksMovement": true,
+        "blocksSight": false,
+        "cover": "half"
+      }
+    },
+    "inn_table_3": {
+      "name": "Ale Table",
+      "frame": "table.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 26,
+        "height": 22
+      },
+      "environment": {
+        "durability": 6,
+        "blocksMovement": true,
+        "blocksSight": false,
+        "cover": "half"
+      }
+    },
+    "inn_chair": {
+      "name": "Chair",
+      "frame": "chair.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 16,
+        "height": 10
+      }
+    },
+    "inn_chair_2": {
+      "name": "Chair",
+      "frame": "chair.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 16,
+        "height": 10
+      }
+    },
+    "inn_chair_3": {
+      "name": "Chair",
+      "frame": "chair.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 16,
+        "height": 10
+      }
+    },
+    "inn_chair_4": {
+      "name": "Chair",
+      "frame": "chair.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 16,
+        "height": 10
+      }
+    },
+    "inn_chair_5": {
+      "name": "Chair",
+      "frame": "chair.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 16,
+        "height": 10
+      }
+    },
+    "inn_chair_6": {
+      "name": "Chair",
+      "frame": "chair.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 16,
+        "height": 10
+      }
+    },
+    "shop_chair": {
+      "name": "Chair",
+      "frame": "chair.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 16,
+        "height": 10
+      }
+    },
+    "inn_bed": {
+      "name": "Guest Bed",
+      "frame": "bed.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 30,
+        "height": 22
+      }
+    },
+    "inn_hearth": {
+      "name": "Hearth",
+      "frame": "prop_hearth.png",
+      "provenance": {
+        "source": "generated:local-sdcpp-anima"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 44,
+        "height": 20
+      }
+    },
+    "inn_shelf": {
+      "name": "Storage Shelf",
+      "frame": "bookshelf.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
       "anchor": {
         "x": 0.5,
         "y": 1
@@ -798,40 +1329,68 @@
         "type": "rect",
         "width": 24,
         "height": 14
-      },
-      "provenance": {
-        "source": "generated:gpt"
       }
     },
-    "inn_table": {
-      "name": "Ale Table",
-      "frame": "counter.png",
+    "shop_shelf": {
+      "name": "Storage Shelf",
+      "frame": "bookshelf.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
       "anchor": {
         "x": 0.5,
-        "y": 1.0
+        "y": 1
       },
       "isWalkable": false,
       "collision": {
         "type": "rect",
-        "width": 22,
-        "height": 22
-      },
+        "width": 24,
+        "height": 14
+      }
+    },
+    "shop_shelf_2": {
+      "name": "Storage Shelf",
+      "frame": "bookshelf.png",
       "provenance": {
         "source": "generated:gpt"
       },
-      "environment": {
-        "durability": 6,
-        "blocksMovement": true,
-        "blocksSight": false,
-        "cover": "half"
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 24,
+        "height": 14
+      }
+    },
+    "yard_anvil": {
+      "name": "Smith Anvil",
+      "frame": "anvil.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 24,
+        "height": 16
       }
     },
     "inn_brazier": {
       "name": "Brazier",
-      "frame": "barrel.png",
+      "frame": "prop_brazier.png",
+      "provenance": {
+        "source": "generated:local-sdcpp-anima"
+      },
       "anchor": {
         "x": 0.5,
-        "y": 1.0
+        "y": 1
       },
       "isWalkable": false,
       "collision": {
@@ -839,12 +1398,10 @@
         "width": 22,
         "height": 22
       },
-      "provenance": {
-        "source": "generated:gpt"
-      },
       "environment": {
         "durability": 4,
         "blocksMovement": true,
+        "blocksSight": false,
         "cover": "none",
         "affordances": [
           {
@@ -901,21 +1458,44 @@
         ]
       }
     },
-    "inn_oil_pool": {
-      "name": "Spilled Oil",
-      "frame": "notice_board.png",
+    "shrine_brazier": {
+      "name": "Brazier",
+      "frame": "prop_brazier.png",
+      "provenance": {
+        "source": "generated:local-sdcpp-anima"
+      },
       "anchor": {
         "x": 0.5,
-        "y": 1.0
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 22
+      },
+      "environment": {
+        "durability": 4,
+        "blocksMovement": true,
+        "blocksSight": false,
+        "cover": "none"
+      }
+    },
+    "inn_oil_pool": {
+      "name": "Spilled Oil",
+      "frame": "prop_oil_pool.png",
+      "provenance": {
+        "source": "generated:local-sdcpp-anima"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
       },
       "isWalkable": true,
       "collision": {
         "type": "rect",
         "width": 22,
         "height": 22
-      },
-      "provenance": {
-        "source": "generated:gpt"
       },
       "environment": {
         "durability": 1,
@@ -959,19 +1539,19 @@
     },
     "inn_support": {
       "name": "Rotting Support",
-      "frame": "village_gate.png",
+      "frame": "prop_support.png",
+      "provenance": {
+        "source": "generated:local-sdcpp-anima"
+      },
       "anchor": {
         "x": 0.5,
-        "y": 1.0
+        "y": 1
       },
       "isWalkable": false,
       "collision": {
         "type": "rect",
         "width": 22,
         "height": 22
-      },
-      "provenance": {
-        "source": "generated:gpt"
       },
       "environment": {
         "durability": 3,
@@ -1017,12 +1597,15 @@
         ]
       }
     },
-    "inn_hanging_crate": {
-      "name": "Hanging Crate",
-      "frame": "crate.png",
+    "waystation_support": {
+      "name": "Rotting Support",
+      "frame": "prop_support.png",
+      "provenance": {
+        "source": "generated:local-sdcpp-anima"
+      },
       "anchor": {
         "x": 0.5,
-        "y": 1.0
+        "y": 1
       },
       "isWalkable": false,
       "collision": {
@@ -1030,14 +1613,692 @@
         "width": 22,
         "height": 22
       },
+      "environment": {
+        "durability": 3,
+        "blocksMovement": true,
+        "blocksSight": false,
+        "cover": "half"
+      }
+    },
+    "inn_hanging_crate": {
+      "name": "Hanging Crate",
+      "frame": "crate.png",
       "provenance": {
         "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 22
       },
       "environment": {
         "durability": 5,
         "blocksMovement": false,
         "blocksSight": false,
         "cover": "none"
+      }
+    },
+    "sella_receipt": {
+      "name": "Sella's Custody Receipt",
+      "frame": "prop_receipt.png",
+      "provenance": {
+        "source": "generated:local-sdcpp-anima"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 20,
+        "height": 10
+      }
+    },
+    "tess_component": {
+      "name": "Intact Ward Component",
+      "frame": "prop_component.png",
+      "provenance": {
+        "source": "generated:local-sdcpp-anima"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 24,
+        "height": 14
+      }
+    },
+    "waystation_cart": {
+      "name": "Abandoned Cart",
+      "frame": "prop_cart.png",
+      "provenance": {
+        "source": "generated:local-sdcpp-anima"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 40,
+        "height": 24
+      }
+    },
+    "shrine_arch": {
+      "name": "Shrine Arch",
+      "frame": "shrine_arch.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": true
+    },
+    "ward_socket": {
+      "name": "Ward Socket",
+      "frame": "prop_ward_socket.png",
+      "provenance": {
+        "source": "generated:local-sdcpp-anima"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 24,
+        "height": 16
+      }
+    },
+    "road_oak_0": {
+      "name": "Woodland Oak",
+      "frame": "oak.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 30,
+        "height": 16
+      }
+    },
+    "road_birch_0": {
+      "name": "Woodland Birch",
+      "frame": "birch.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 14
+      }
+    },
+    "road_oak_1": {
+      "name": "Woodland Oak",
+      "frame": "oak.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 30,
+        "height": 16
+      }
+    },
+    "road_birch_1": {
+      "name": "Woodland Birch",
+      "frame": "birch.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 14
+      }
+    },
+    "road_oak_2": {
+      "name": "Woodland Oak",
+      "frame": "oak.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 30,
+        "height": 16
+      }
+    },
+    "road_birch_2": {
+      "name": "Woodland Birch",
+      "frame": "birch.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 14
+      }
+    },
+    "road_oak_3": {
+      "name": "Woodland Oak",
+      "frame": "oak.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 30,
+        "height": 16
+      }
+    },
+    "road_birch_3": {
+      "name": "Woodland Birch",
+      "frame": "birch.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 14
+      }
+    },
+    "road_oak_4": {
+      "name": "Woodland Oak",
+      "frame": "oak.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 30,
+        "height": 16
+      }
+    },
+    "road_birch_4": {
+      "name": "Woodland Birch",
+      "frame": "birch.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 14
+      }
+    },
+    "road_oak_5": {
+      "name": "Woodland Oak",
+      "frame": "oak.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 30,
+        "height": 16
+      }
+    },
+    "road_birch_5": {
+      "name": "Woodland Birch",
+      "frame": "birch.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 14
+      }
+    },
+    "road_oak_6": {
+      "name": "Woodland Oak",
+      "frame": "oak.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 30,
+        "height": 16
+      }
+    },
+    "road_birch_6": {
+      "name": "Woodland Birch",
+      "frame": "birch.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 14
+      }
+    },
+    "road_oak_7": {
+      "name": "Woodland Oak",
+      "frame": "oak.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 30,
+        "height": 16
+      }
+    },
+    "road_birch_7": {
+      "name": "Woodland Birch",
+      "frame": "birch.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 14
+      }
+    },
+    "road_oak_8": {
+      "name": "Woodland Oak",
+      "frame": "oak.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 30,
+        "height": 16
+      }
+    },
+    "road_birch_8": {
+      "name": "Woodland Birch",
+      "frame": "birch.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 14
+      }
+    },
+    "road_oak_9": {
+      "name": "Woodland Oak",
+      "frame": "oak.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 30,
+        "height": 16
+      }
+    },
+    "road_birch_9": {
+      "name": "Woodland Birch",
+      "frame": "birch.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 14
+      }
+    },
+    "road_oak_10": {
+      "name": "Woodland Oak",
+      "frame": "oak.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 30,
+        "height": 16
+      }
+    },
+    "road_birch_10": {
+      "name": "Woodland Birch",
+      "frame": "birch.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 14
+      }
+    },
+    "road_oak_11": {
+      "name": "Woodland Oak",
+      "frame": "oak.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 30,
+        "height": 16
+      }
+    },
+    "road_birch_11": {
+      "name": "Woodland Birch",
+      "frame": "birch.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 14
+      }
+    },
+    "road_oak_12": {
+      "name": "Woodland Oak",
+      "frame": "oak.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 30,
+        "height": 16
+      }
+    },
+    "road_birch_12": {
+      "name": "Woodland Birch",
+      "frame": "birch.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 14
+      }
+    },
+    "road_oak_13": {
+      "name": "Woodland Oak",
+      "frame": "oak.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 30,
+        "height": 16
+      }
+    },
+    "road_birch_13": {
+      "name": "Woodland Birch",
+      "frame": "birch.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 14
+      }
+    },
+    "road_oak_14": {
+      "name": "Woodland Oak",
+      "frame": "oak.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 30,
+        "height": 16
+      }
+    },
+    "road_birch_14": {
+      "name": "Woodland Birch",
+      "frame": "birch.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 14
+      }
+    },
+    "road_oak_15": {
+      "name": "Woodland Oak",
+      "frame": "oak.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 30,
+        "height": 16
+      }
+    },
+    "road_birch_15": {
+      "name": "Woodland Birch",
+      "frame": "birch.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 14
+      }
+    },
+    "road_oak_16": {
+      "name": "Woodland Oak",
+      "frame": "oak.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 30,
+        "height": 16
+      }
+    },
+    "road_birch_16": {
+      "name": "Woodland Birch",
+      "frame": "birch.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 14
       }
     }
   },
@@ -1135,21 +2396,21 @@
       "initialSuggestions": [
         {
           "id": "elder_ask_ward",
-          "label": "\ud83d\udd6f\ufe0f Ask about the ward",
+          "label": "🕯️ Ask about the ward",
           "intentType": "quest",
-          "prefillText": "The ward is failing, you said \u2014 can you tell me what happened to it?"
+          "prefillText": "The ward is failing, you said — can you tell me what happened to it?"
         },
         {
           "id": "elder_offer_help",
-          "label": "\ud83e\udd1d Offer to help",
+          "label": "🤝 Offer to help",
           "intentType": "quest",
-          "prefillText": "I would like to help Emberwatch \u2014 is there a task you need done?"
+          "prefillText": "I would like to help Emberwatch — is there a task you need done?"
         },
         {
           "id": "elder_ask_wand",
-          "label": "\ud83e\ude84 Ask about the Ward Wand",
+          "label": "🪄 Ask about the Ward Wand",
           "intentType": "quest",
-          "prefillText": "You mentioned the Ward Wand \u2014 what is it, and where can I find it?"
+          "prefillText": "You mentioned the Ward Wand — what is it, and where can I find it?"
         }
       ],
       "personality": {
@@ -1169,7 +2430,14 @@
       ],
       "boundaries": [
         "She will not risk Emberwatch's safety on a stranger's promise, no matter how earnest."
-      ]
+      ],
+      "portraits": {
+        "variants": {
+          "neutral": "/game-data/portraits/emberwatch/village_elder/neutral.png",
+          "concerned": "/game-data/portraits/emberwatch/village_elder/concerned.png",
+          "relieved": "/game-data/portraits/emberwatch/village_elder/relieved.png"
+        }
+      }
     },
     "rollo_grasper": {
       "name": "Rollo the Grasper",
@@ -1233,27 +2501,27 @@
       "initialSuggestions": [
         {
           "id": "rollo_ask_wand",
-          "label": "\ud83e\ude84 Ask about the Ward Wand",
+          "label": "🪄 Ask about the Ward Wand",
           "intentType": "quest",
-          "prefillText": "I hear you hold the Ward Wand \u2014 the one Emberwatch needs."
+          "prefillText": "I hear you hold the Ward Wand — the one Emberwatch needs."
         },
         {
           "id": "rollo_persuade",
-          "label": "\ud83d\udde3\ufe0f Reason with him",
+          "label": "🗣️ Reason with him",
           "intentType": "skill_check",
-          "prefillText": "Emberwatch needs that wand to survive \u2014 name your price, please."
+          "prefillText": "Emberwatch needs that wand to survive — name your price, please."
         },
         {
           "id": "rollo_intimidate",
-          "label": "\ud83d\ude21 Intimidate him",
+          "label": "😡 Intimidate him",
           "intentType": "skill_check",
           "prefillText": "Hand over the wand now, or I will take it from you by force."
         },
         {
           "id": "rollo_leave",
-          "label": "\ud83d\udeb6 Turn back",
+          "label": "🚶 Turn back",
           "intentType": "dialogue",
-          "prefillText": "Fine. Keep your trinket for now \u2014 but this is not over."
+          "prefillText": "Fine. Keep your trinket for now — but this is not over."
         }
       ],
       "personality": {
@@ -1273,7 +2541,14 @@
       ],
       "boundaries": [
         "He will not give the wand away for free, no matter how desperate the plea."
-      ]
+      ],
+      "portraits": {
+        "variants": {
+          "neutral": "/game-data/portraits/emberwatch/rollo_grasper/neutral.png",
+          "relieved": "/game-data/portraits/emberwatch/rollo_grasper/relieved.png",
+          "guarded": "/game-data/portraits/emberwatch/rollo_grasper/guarded.png"
+        }
+      }
     },
     "ash_hound": {
       "name": "Ash Hound",
@@ -1316,6 +2591,12 @@
           "source": "manifest:appearanceLayers",
           "snapshot": "legacy-catalog-order-v1"
         }
+      },
+      "visual": {
+        "kind": "static",
+        "url": "/emberwatch/enemies/ash_hound.png",
+        "width": 214,
+        "height": 192
       },
       "isVendor": false,
       "combatStats": {
@@ -1369,6 +2650,12 @@
           "snapshot": "legacy-catalog-order-v1"
         }
       },
+      "visual": {
+        "kind": "static",
+        "url": "/emberwatch/enemies/cinder_thrall.png",
+        "width": 102,
+        "height": 166
+      },
       "isVendor": false,
       "combatStats": {
         "hitPoints": 12,
@@ -1420,6 +2707,12 @@
           "source": "manifest:appearanceLayers",
           "snapshot": "legacy-catalog-order-v1"
         }
+      },
+      "visual": {
+        "kind": "static",
+        "url": "/emberwatch/enemies/ember_warden.png",
+        "width": 106,
+        "height": 259
       },
       "isVendor": false,
       "combatStats": {
@@ -1486,19 +2779,19 @@
       "initialSuggestions": [
         {
           "id": "mara_browse",
-          "label": "\ud83d\udcb0 Browse the wares",
+          "label": "💰 Browse the wares",
           "intentType": "trade",
           "prefillText": "I would like to see what wares you have for sale today."
         },
         {
           "id": "mara_wand",
-          "label": "\ud83e\ude84 Ask about the Ward Wand",
+          "label": "🪄 Ask about the Ward Wand",
           "intentType": "quest",
-          "prefillText": "A traveling merchant hears everything \u2014 have you heard of the Ward Wand?"
+          "prefillText": "A traveling merchant hears everything — have you heard of the Ward Wand?"
         },
         {
           "id": "mara_news",
-          "label": "\ud83d\uddde\ufe0f Ask for news",
+          "label": "🗞️ Ask for news",
           "intentType": "dialogue",
           "prefillText": "What news have you heard around the village lately?"
         }
@@ -1520,7 +2813,12 @@
       ],
       "boundaries": [
         "She will not undercut her own prices, even for a cause as desperate as the ward."
-      ]
+      ],
+      "portraits": {
+        "variants": {
+          "neutral": "/game-data/portraits/emberwatch/merchant/neutral.png"
+        }
+      }
     },
     "village_guard": {
       "name": "Bram the Guard",
@@ -1567,7 +2865,12 @@
       "boundaries": [
         "refuse|Threaten an innocent villager",
         "object|Give the Ward Wand to Rollo"
-      ]
+      ],
+      "portraits": {
+        "variants": {
+          "neutral": "/game-data/portraits/emberwatch/village_guard/neutral.png"
+        }
+      }
     },
     "innkeeper_sella": {
       "name": "Sella",
@@ -1623,7 +2926,12 @@
       ],
       "boundaries": [
         "Will not name a guest as a thief without proof."
-      ]
+      ],
+      "portraits": {
+        "variants": {
+          "neutral": "/game-data/portraits/emberwatch/innkeeper_sella/neutral.png"
+        }
+      }
     },
     "smith_orra": {
       "name": "Orra",
@@ -1672,14 +2980,19 @@
         "Repair the physical ward conduits before the next corruption tide."
       ],
       "knowledge": [
-        "The ward fails at its joints, not its heart \u2014 the conduits were never maintained."
+        "The ward fails at its joints, not its heart — the conduits were never maintained."
       ],
       "secrets": [
         "She warned the council about the conduit debt years ago and was ignored."
       ],
       "boundaries": [
         "Will not hand over tools she has not tested herself."
-      ]
+      ],
+      "portraits": {
+        "variants": {
+          "neutral": "/game-data/portraits/emberwatch/smith_orra/neutral.png"
+        }
+      }
     },
     "cartographer_ivo": {
       "name": "Ivo",
@@ -1735,7 +3048,12 @@
       ],
       "boundaries": [
         "Will not send anyone down a route he cannot describe in full."
-      ]
+      ],
+      "portraits": {
+        "variants": {
+          "neutral": "/game-data/portraits/emberwatch/cartographer_ivo/neutral.png"
+        }
+      }
     },
     "shrine_keeper_nemi": {
       "name": "Nemi",
@@ -1791,7 +3109,12 @@
       ],
       "boundaries": [
         "Will not perform the rite on a lie or a guess."
-      ]
+      ],
+      "portraits": {
+        "variants": {
+          "neutral": "/game-data/portraits/emberwatch/shrine_keeper_nemi/neutral.png"
+        }
+      }
     },
     "apprentice_tess": {
       "name": "Tess",
@@ -1843,11 +3166,16 @@
         "The waystation conduit cracked along a joint, not from any monster attack."
       ],
       "secrets": [
-        "She is afraid the failure was her master\u2019s negligence, not bad luck."
+        "She is afraid the failure was her master’s negligence, not bad luck."
       ],
       "boundaries": [
         "Will not abandon the component to save herself."
-      ]
+      ],
+      "portraits": {
+        "variants": {
+          "neutral": "/game-data/portraits/emberwatch/apprentice_tess/neutral.png"
+        }
+      }
     },
     "woodcutter_ada": {
       "name": "Ada",
@@ -1902,8 +3230,13 @@
         "She has seen lights moving beneath the culvert at night."
       ],
       "boundaries": [
-        "Will not cut a tree that the ward tree\u2019s roots still reach."
-      ]
+        "Will not cut a tree that the ward tree’s roots still reach."
+      ],
+      "portraits": {
+        "variants": {
+          "neutral": "/game-data/portraits/emberwatch/woodcutter_ada/neutral.png"
+        }
+      }
     }
   },
   "items": {
@@ -1967,44 +3300,44 @@
     }
   },
   "dialogues": {
-    "elder_thalia_greeting": "Ah, a traveler! Welcome to Emberwatch. I am Elder Thalia, keeper of this village's lore. You arrive at a troubling time \u2014 the ward that has shielded our valley for centuries is fading fast. If it fails, the corruption beyond the hills will pour in, and Emberwatch will fall.",
-    "elder_thalia_offer": "The Ward Wand can renew the ward \u2014 a relic of the Vesperine Order, carved from the heartwood of the first ward tree. With it in my hands I can mend the ward and save the valley. But the wand was lost years ago. Word has it a rogue named Rollo the Grasper took it and now keeps it at the Guttering Candle inn, east of the square. Will you bring it back to me? Emberwatch would be forever in your debt.",
-    "elder_thalia_progress": "Have you found the Ward Wand yet? Rollo the Grasper holds it at the inn, east of the village square. He is a stubborn, slippery sort \u2014 he may need convincing, or a firmer hand than words.",
-    "elder_thalia_decline": "I understand \u2014 the burden is heavy and the roads are rough. Should you change your mind, I will be here, and the ward will still be fading.",
-    "elder_thalia_complete": "You found it! The Ward Wand \u2014 I can feel its warmth from here. With this, the ward will blaze bright once more. Emberwatch owes you a debt it can never repay.",
-    "elder_thalia_ending_renewed": "You returned the Ward Wand! The ward blazes bright once more \u2014 I felt its pulse from the village center. Emberwatch owes you everything, brave soul. The Vesperine Order smiles upon you.",
-    "elder_thalia_ending_reconciled": "You showed me what I refused to see. The ward was never one relic's burden \u2014 it was ours, and I let the work of keeping it go quiet for fear of the panic the truth would cause. Emberwatch stands because you made us look at it together. I will not carry the watch alone again.",
+    "elder_thalia_greeting": "Ah, a traveler! Welcome to Emberwatch. I am Elder Thalia, keeper of this village's lore. You arrive at a troubling time — the ward that has shielded our valley for centuries is fading fast. If it fails, the corruption beyond the hills will pour in, and Emberwatch will fall.",
+    "elder_thalia_offer": "The Ward Wand can renew the ward — a relic of the Vesperine Order, carved from the heartwood of the first ward tree. With it in my hands I can mend the ward and save the valley. But the wand was lost years ago. Word has it a rogue named Rollo the Grasper took it and now keeps it at the Guttering Candle inn, east of the square. Will you bring it back to me? Emberwatch would be forever in your debt.",
+    "elder_thalia_progress": "Have you found the Ward Wand yet? Rollo the Grasper holds it at the inn, east of the village square. He is a stubborn, slippery sort — he may need convincing, or a firmer hand than words.",
+    "elder_thalia_decline": "I understand — the burden is heavy and the roads are rough. Should you change your mind, I will be here, and the ward will still be fading.",
+    "elder_thalia_complete": "You found it! The Ward Wand — I can feel its warmth from here. With this, the ward will blaze bright once more. Emberwatch owes you a debt it can never repay.",
+    "elder_thalia_ending_renewed": "You returned the Ward Wand! The ward blazes bright once more — I felt its pulse from the village center. Emberwatch owes you everything, brave soul. The Vesperine Order smiles upon you.",
+    "elder_thalia_ending_reconciled": "You showed me what I refused to see. The ward was never one relic's burden — it was ours, and I let the work of keeping it go quiet for fear of the panic the truth would cause. Emberwatch stands because you made us look at it together. I will not carry the watch alone again.",
     "bram_ending_darkened": "The ward has gone dark. I have kept this gate for years, and tonight I keep it against the dark. Whatever comes, we face it together.",
-    "rollo_greeting": "What do you want? I'm busy. If it's about that glowing stick \u2014 it's mine. Found it fair and square off a dead man's hands. Now scram.",
-    "rollo_ask_wand": "The Ward Wand? Sure, I've got it. Pretty thing \u2014 hums when you hold it. But it's worth a fortune to the right buyer, and you're not that buyer. Go on, get lost.",
-    "rollo_persuasion_success": "Hmph. You make a decent argument, adventurer. Emberwatch folk are good people, and if the ward dies we're all in the muck anyway. Fine \u2014 take the wand. Don't make me regret this.",
-    "rollo_persuasion_failure": "Nice try. I've heard better sob stories from street rats. The wand stays with me. Come back when you have real coin \u2014 or real steel.",
-    "rollo_intimidation_success": "W-wait! Easy now! Fine, fine \u2014 take it! It's not worth dying over a glowing stick. J-just don't hurt me!",
+    "rollo_greeting": "What do you want? I'm busy. If it's about that glowing stick — it's mine. Found it fair and square off a dead man's hands. Now scram.",
+    "rollo_ask_wand": "The Ward Wand? Sure, I've got it. Pretty thing — hums when you hold it. But it's worth a fortune to the right buyer, and you're not that buyer. Go on, get lost.",
+    "rollo_persuasion_success": "Hmph. You make a decent argument, adventurer. Emberwatch folk are good people, and if the ward dies we're all in the muck anyway. Fine — take the wand. Don't make me regret this.",
+    "rollo_persuasion_failure": "Nice try. I've heard better sob stories from street rats. The wand stays with me. Come back when you have real coin — or real steel.",
+    "rollo_intimidation_success": "W-wait! Easy now! Fine, fine — take it! It's not worth dying over a glowing stick. J-just don't hurt me!",
     "rollo_intimidation_failure": "Ha! You think a few harsh words scare me? I've stared down worse than you in alleys across the realm. Try again when you've grown a spine.",
     "rollo_fight_start": "Oh, you want it the hard way? Fine! Let's see how tough you really are!",
-    "rollo_defeated": "Enough! Mercy! Take the wand \u2014 it's yours! Just... just let me keep my teeth.",
-    "proof_encounter_start": "Three shapes block the way \u2014 a hound of ash, a thrall of cinder, and a warden wreathed in embers.",
+    "rollo_defeated": "Enough! Mercy! Take the wand — it's yours! Just... just let me keep my teeth.",
+    "proof_encounter_start": "Three shapes block the way — a hound of ash, a thrall of cinder, and a warden wreathed in embers.",
     "proof_encounter_victory": "The embers gutter and die. The way is clear.",
     "ash_hound_greeting": "The hound's ribs glow through its hide.",
     "cinder_thrall_greeting": "The thrall shambles forward, ash falling from its hands.",
     "ember_warden_greeting": "The warden raises a hand wreathed in ember-light.",
-    "rollo_news": "Hear a lot, sitting here. The ward's failing \u2014 everyone knows it. That's why I'm holding onto the wand, see. When the price is right, I'll sell it back to the very folk who need it. Business.",
-    "merchant_mara_greeting": "Welcome to Mara's Provisions! Fine steel, sturdy armor, potent potions \u2014 everything an adventurer needs to stay alive out there. What can I get for you today?",
-    "merchant_mara_wand": "The Ward Wand? Oh yes \u2014 Rollo's prized trinket. He's been trying to sell it for months, but no buyer with a brain will touch it. The elder would pay dearly to have it back, though. Talk to Rollo at the Guttering Candle inn, east side of the village. And mind your coin purse around him.",
-    "merchant_mara_news": "The whole valley's on edge, dear. The ward's fading, the elder's frantic, and that lout Rollo's been bragging at the inn that he holds the one thing that can fix it \u2014 the Ward Wand. If you're planning to deal with him, buy some potions first. You'll need them.",
+    "rollo_news": "Hear a lot, sitting here. The ward's failing — everyone knows it. That's why I'm holding onto the wand, see. When the price is right, I'll sell it back to the very folk who need it. Business.",
+    "merchant_mara_greeting": "Welcome to Mara's Provisions! Fine steel, sturdy armor, potent potions — everything an adventurer needs to stay alive out there. What can I get for you today?",
+    "merchant_mara_wand": "The Ward Wand? Oh yes — Rollo's prized trinket. He's been trying to sell it for months, but no buyer with a brain will touch it. The elder would pay dearly to have it back, though. Talk to Rollo at the Guttering Candle inn, east side of the village. And mind your coin purse around him.",
+    "merchant_mara_news": "The whole valley's on edge, dear. The ward's fading, the elder's frantic, and that lout Rollo's been bragging at the inn that he holds the one thing that can fix it — the Ward Wand. If you're planning to deal with him, buy some potions first. You'll need them.",
     "bram_greeting": "\"Easy, traveler. Name your business before you cross the gate.\"",
-    "bram_recruit_offer": "\"You fight the way I was taught to fight \u2014 straight and for the people behind you. If the ward is to hold, I would rather stand beside you than behind a wall. Say the word, and I will follow.\"",
+    "bram_recruit_offer": "\"You fight the way I was taught to fight — straight and for the people behind you. If the ward is to hold, I would rather stand beside you than behind a wall. Say the word, and I will follow.\"",
     "bram_dismiss": "\"You have your reasons. I will keep the gate in your absence. Call on me when the wall needs a spear.\"",
     "bram_banter_ward": "\"The ward is a song, the elders say. A song has to be sung by someone.\"",
     "bram_banter_covenant": "\"The Covenant comes at night. So do we.\"",
     "sella_greeting": "Welcome to the Guttering Candle. Keep your boots off the good rug and your coin where I can see it.",
-    "sella_receipt": "Rollo came in with the Ward Wand and paid to keep a room. I wrote him a receipt \u2014 I keep every one.",
+    "sella_receipt": "Rollo came in with the Ward Wand and paid to keep a room. I wrote him a receipt — I keep every one.",
     "orra_greeting": "Mind the sparks. If you've come about the ward, I can talk while I work.",
     "orra_kit": "These are the couplings I could salvage. Not enough of them to set the conduits right, so I need to know what is still standing out there.",
     "ivo_greeting": "You'll want the shrine marked before you walk the old road. I chart both ways.",
     "ivo_routes": "The bridge road is short and exposed. The woodland trail is longer, but the trees keep you. Pick your trouble.",
     "nemi_greeting": "The shrine keeps its own counsel. State your business, and speak plainly.",
-    "nemi_choice": "You can seat the wand and trust the old ward to hold \u2014 or break the circle and share the watch. Both have a price.",
+    "nemi_choice": "You can seat the wand and trust the old ward to hold — or break the circle and share the watch. Both have a price.",
     "tess_greeting": "Don't mind the waystation; it has held worse weather than this. The conduit there finally failed.",
     "tess_component": "I saved one intact ward component. Get me home and it's the village's.",
     "ada_greeting": "Hear that? The roots are pulling in ways they should not. Something under the old road is wrong.",
@@ -2027,7 +3360,7 @@
           "completeOnNpcInteract": "village_elder"
         },
         {
-          "text": "Find the Ward Wand\u2019s keeper at the inn",
+          "text": "Find the Ward Wand’s keeper at the inn",
           "completeOnMapEnter": "inn",
           "prerequisiteIndices": [
             0
@@ -2042,7 +3375,7 @@
           "optional": true
         },
         {
-          "text": "Enter Mara\u2019s shop to look for the repair ledger",
+          "text": "Enter Mara’s shop to look for the repair ledger",
           "completeOnMapEnter": "merchant_shop",
           "prerequisiteIndices": [
             1
@@ -2071,7 +3404,7 @@
           ]
         },
         {
-          "text": "Return to Elder Thalia and decide the ward\u2019s fate",
+          "text": "Return to Elder Thalia and decide the ward’s fate",
           "completeOnNpcInteract": "village_elder",
           "prerequisiteIndices": [
             6
@@ -2108,7 +3441,7 @@
         },
         "ward_darkened": {
           "title": "A Watch Without Magic",
-          "narration": "The wand falls quiet in its stone cradle. Beyond the gate the night is only night again \u2014 dangerous, and no longer held at bay by a promise. Lanterns appear along the wall. Bram lifts the bar, looks back at the people gathering behind him, and says, \"Then we keep watch ourselves.\"",
+          "narration": "The wand falls quiet in its stone cradle. Beyond the gate the night is only night again — dangerous, and no longer held at bay by a promise. Lanterns appear along the wall. Bram lifts the bar, looks back at the people gathering behind him, and says, \"Then we keep watch ourselves.\"",
           "reactionDialogueKey": "bram_ending_darkened",
           "requiresWorldStateFlag": "evidence.presented.elders_seal",
           "worldStateFlag": "emberwatch.ending.darkened"
@@ -2245,7 +3578,7 @@
       "endings": {
         "done": {
           "title": "Mark the Safe Trail",
-          "narration": "Ivo copies Ada\u2019s cut-stump markers onto his map with the care of a man redrawing a coastline. The woodland trail is on the chart now, and it will not be lost again.",
+          "narration": "Ivo copies Ada’s cut-stump markers onto his map with the care of a man redrawing a coastline. The woodland trail is on the chart now, and it will not be lost again.",
           "worldStateFlag": "emberwatch.side.mark_the_safe_trail"
         }
       }
@@ -2274,7 +3607,7 @@
         {
           "itemId": "wardWand",
           "quantity": 1,
-          "dropChance": 1.0
+          "dropChance": 1
         },
         {
           "itemId": "healthPotion",
@@ -2478,7 +3811,7 @@
           "kind": "input",
           "actionId": "move_up"
         },
-        "text": "Use {key} to move \u2014 try walking around!",
+        "text": "Use {key} to move — try walking around!",
         "trigger": "map_loaded"
       },
       {
@@ -2561,12 +3894,12 @@
     "the_ward_truth": [
       {
         "npcId": "rollo_grasper",
-        "claim": "The ward has been failing for years because the village let its conduits rot while the council told everyone the relic would hold forever. I found the true ledger in the shop and I kept it \u2014 the repairs were paid for and never done. I took the wand because no one else would act.",
+        "claim": "The ward has been failing for years because the village let its conduits rot while the council told everyone the relic would hold forever. I found the true ledger in the shop and I kept it — the repairs were paid for and never done. I took the wand because no one else would act.",
         "supportsTruthId": "rollo_owns_the_ledger"
       },
       {
         "npcId": "village_elder",
-        "claim": "The ward has held for centuries because the order kept its seal and its rites without fail; the only failure is Rollo, who robbed a dead guardian and now peddles our relic. There is no negligence here \u2014 only theft, and the sooner the wand is returned to the cradle the sooner we are safe.",
+        "claim": "The ward has held for centuries because the order kept its seal and its rites without fail; the only failure is Rollo, who robbed a dead guardian and now peddles our relic. There is no negligence here — only theft, and the sooner the wand is returned to the cradle the sooner we are safe.",
         "supportsTruthId": "thalia_owns_the_seal"
       }
     ]
@@ -2638,7 +3971,7 @@
     "emberwatch_citizens": {
       "id": "emberwatch_citizens",
       "name": "Emberwatch Citizens",
-      "description": "The common folk of Emberwatch \u2014 farmers, craftsmen, and merchants who call this village home.",
+      "description": "The common folk of Emberwatch — farmers, craftsmen, and merchants who call this village home.",
       "defaultStanding": 10,
       "standingTiers": [
         {
@@ -2709,8 +4042,9 @@
         "cueId": "bed.explore",
         "target": "music",
         "context": "bed.explore",
-        "tag": "music:exploration:bgm_explore",
-        "sha256": "cf4233978d79d3d878e3f9b5d008b53710ea6f31259a128f828a922ba61def81",
+        "source": {
+          "kind": "silence"
+        },
         "resolution": "optional",
         "fallback": "silence"
       },
@@ -2718,8 +4052,9 @@
         "cueId": "bed.combat",
         "target": "music",
         "context": "bed.combat",
-        "tag": "music:combat:bgm_combat",
-        "sha256": "506679f49699c83f5322ee60a3d9407c1174e49ebec6317eafff6954d6eba1fa",
+        "source": {
+          "kind": "silence"
+        },
         "resolution": "optional",
         "fallback": "silence"
       },
@@ -2727,8 +4062,11 @@
         "cueId": "village.music",
         "target": "music",
         "context": "village",
-        "tag": "music:exploration:village_ward",
-        "sha256": "22536060db87b024eaf717d57c8885067a7942052ecfef9ed8b51fc7766a5a98",
+        "source": {
+          "kind": "asset",
+          "tag": "music:exploration:village_ward",
+          "sha256": "22536060db87b024eaf717d57c8885067a7942052ecfef9ed8b51fc7766a5a98"
+        },
         "resolution": "required",
         "fallback": "declared_cue",
         "fallbackCueId": "bed.explore"
@@ -2737,8 +4075,11 @@
         "cueId": "combat.music",
         "target": "music",
         "context": "combat",
-        "tag": "music:combat:emberwatch_combat",
-        "sha256": "7989c905e85ef41948860ae0e7d042a9fc412ae478eb2ed2ee6b30e0634caf9a",
+        "source": {
+          "kind": "asset",
+          "tag": "music:combat:emberwatch_combat",
+          "sha256": "7989c905e85ef41948860ae0e7d042a9fc412ae478eb2ed2ee6b30e0634caf9a"
+        },
         "resolution": "required",
         "fallback": "declared_cue",
         "fallbackCueId": "bed.combat"
@@ -2747,8 +4088,11 @@
         "cueId": "inn.music",
         "target": "music",
         "context": "inn",
-        "tag": "music:exploration:inn_hearth",
-        "sha256": "a01b7aa92d2fc01cf9240e03d278a18c8e73da66567ae2f8cb2d601c8e08b4dc",
+        "source": {
+          "kind": "asset",
+          "tag": "music:exploration:inn_hearth",
+          "sha256": "a01b7aa92d2fc01cf9240e03d278a18c8e73da66567ae2f8cb2d601c8e08b4dc"
+        },
         "resolution": "optional",
         "fallback": "declared_cue",
         "fallbackCueId": "bed.explore"
@@ -2757,8 +4101,11 @@
         "cueId": "merchant_shop.music",
         "target": "music",
         "context": "merchant_shop",
-        "tag": "music:exploration:inn_hearth",
-        "sha256": "a01b7aa92d2fc01cf9240e03d278a18c8e73da66567ae2f8cb2d601c8e08b4dc",
+        "source": {
+          "kind": "asset",
+          "tag": "music:exploration:inn_hearth",
+          "sha256": "a01b7aa92d2fc01cf9240e03d278a18c8e73da66567ae2f8cb2d601c8e08b4dc"
+        },
         "resolution": "optional",
         "fallback": "declared_cue",
         "fallbackCueId": "bed.explore"
@@ -2767,8 +4114,11 @@
         "cueId": "old_road.music",
         "target": "music",
         "context": "old_road",
-        "tag": "music:exploration:old_road",
-        "sha256": "cb1c05a159a346322790efdfe31335225ddd3e37d3bd10cede4c03a4b8162ba1",
+        "source": {
+          "kind": "asset",
+          "tag": "music:exploration:old_road",
+          "sha256": "cb1c05a159a346322790efdfe31335225ddd3e37d3bd10cede4c03a4b8162ba1"
+        },
         "resolution": "optional",
         "fallback": "declared_cue",
         "fallbackCueId": "bed.explore"
@@ -2777,8 +4127,11 @@
         "cueId": "ruined_shrine.music",
         "target": "music",
         "context": "ruined_shrine",
-        "tag": "music:exploration:ruined_shrine",
-        "sha256": "46fe67554780fda4ff516e6aea4b05e2a6713bf76811a09b50df58cff11e8ce7",
+        "source": {
+          "kind": "asset",
+          "tag": "music:exploration:ruined_shrine",
+          "sha256": "46fe67554780fda4ff516e6aea4b05e2a6713bf76811a09b50df58cff11e8ce7"
+        },
         "resolution": "optional",
         "fallback": "declared_cue",
         "fallbackCueId": "bed.explore"

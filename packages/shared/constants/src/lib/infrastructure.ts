@@ -112,6 +112,63 @@ export const R2_BUCKETS = {
 export const HUB_R2_BUCKET_KEYS = ['saves', 'catalog', 'uploads'] as const;
 
 /**
+ * Canonical catalog ORIGIN identity, per mode.
+ *
+ * `R2_BUCKETS` answers "which bucket does this mode write to?". This answers the
+ * question that caused a real release-target bug: "which PUBLIC ORIGIN does
+ * this mode read back from?" — and the two must agree, because verifying a
+ * staging write by reading the production origin proves nothing about staging.
+ *
+ * An origin is an IDENTITY here, not a setting. `scripts/.env.staging` once
+ * carried `CATALOG_ORIGIN_URL=https://assets.bearlysleeping.com`, so `--mode
+ * staging` resolved the production read origin and the mode-aware safety net
+ * never ran. Encoding the origin alongside the bucket makes that
+ * misconfiguration a static contradiction rather than a runtime surprise.
+ *
+ * `originUrl: null` means the origin is NOT PROVISIONED. That is deliberate and
+ * is the current staging state: there is no public URL for
+ * `aikami-staging-catalog`, and inventing one — or pointing staging at
+ * production to unblock testing — would make every staging verification a lie.
+ * A null origin fails closed; it is never a fallback.
+ *
+ * Provisioning a staging origin is a HUMAN infrastructure action: create a
+ * public R2 custom domain (or Worker route) for `aikami-staging-catalog`, then
+ * set the URL here and in the mode's environment.
+ */
+export const CATALOG_ORIGINS = {
+  production: {
+    bucketName: 'aikami-catalog',
+    originUrl: 'https://assets.bearlysleeping.com',
+  },
+  staging: {
+    bucketName: 'aikami-staging-catalog',
+    // NOT PROVISIONED — see the doc comment. A staging publish cannot be
+    // verified until this is a real URL.
+    originUrl: null,
+  },
+} as const satisfies Record<string, { bucketName: string; originUrl: string | null }>;
+
+/** The catalog origin identity for a mode, or undefined when none applies. */
+export const resolveCatalogOrigin = (
+  mode: string,
+): { bucketName: string; originUrl: string | null } | undefined =>
+  (CATALOG_ORIGINS as Record<string, { bucketName: string; originUrl: string | null }>)[mode];
+
+/**
+ * Every HOSTNAME that serves the PRODUCTION catalog.
+ *
+ * Derived from `CATALOG_ORIGINS` so the denylist cannot drift from the identity
+ * table it exists to protect. Hostnames, not URLs: the consumer compares a
+ * parsed `URL.hostname`, and a denylist of full URLs would silently never
+ * match — which is exactly the failure mode this list exists to prevent.
+ */
+export const PRODUCTION_CATALOG_ORIGINS: readonly string[] = (
+  [CATALOG_ORIGINS.production.originUrl] as readonly (string | null)[]
+)
+  .filter((url): url is string => typeof url === 'string' && url.length > 0)
+  .map((url) => new URL(url).hostname);
+
+/**
  * Resolve the R2 bucket name for a given mode and bucket key.
  * Returns undefined for emulator/testing modes (local-only).
  */

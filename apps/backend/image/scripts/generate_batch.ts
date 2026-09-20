@@ -28,6 +28,7 @@ import { GENERATION_BATCH_EXIT_CODES } from '@aikami/constants';
 import {
   buildGenerationPlan,
   buildGenerationRunLock,
+  getPreparationProfile,
   makeRunId,
   requirePreparationProfile,
   resolveBudget,
@@ -71,6 +72,7 @@ import {
   parseOptions,
 } from './generate_batch_options.ts';
 import {
+  buildPerItemPreparationHook,
   buildPreparationHook,
   profileWarnings,
   writeMediaValidationFile,
@@ -166,6 +168,74 @@ const readValidatedBrief = (manifestPath: string): AssetBrief => {
   return parsed;
 };
 
+/**
+ * The `--mode status|cancel` path: reads or cancels an existing run record.
+ *
+ * It never builds a plan and never spends, so it is a separate entry point
+ * rather than another branch inside the generation pipeline.
+ */
+const runStatusOrCancel = (options: {
+  mode: 'status' | 'cancel';
+  paths: GenerationStorePaths;
+  itemId?: string;
+  runId: string;
+  runsDir: string;
+  briefId: string;
+  phase: string;
+}): number => {
+  const kind = options.mode === 'status' ? 'generation-status' : 'generation-cancel';
+  const scope = options.itemId === undefined ? {} : { itemIds: [options.itemId] };
+
+  if (!existsSync(options.paths.runRecordPath)) {
+    const report = reportFor({
+      kind,
+      result: {
+        jobs: [],
+        engineRequests: 0,
+        blockers: [],
+        activeLeases: [],
+        exitCode: GENERATION_BATCH_EXIT_CODES.CLAIM_CONFLICT,
+      },
+      runId: options.runId,
+      runsDir: options.runsDir,
+      briefId: options.briefId,
+      phase: options.phase,
+      message: `No run record for "${options.runId}" under ${options.runsDir}.`,
+    });
+    console.log(JSON.stringify(report, null, 2));
+    return GENERATION_BATCH_EXIT_CODES.CLAIM_CONFLICT;
+  }
+
+  const result =
+    options.mode === 'status'
+      ? readBatchStatus({ paths: options.paths, ...scope })
+      : cancelBatch({ paths: options.paths, ...scope });
+  const report = reportFor({
+    kind,
+    result,
+    runId: options.runId,
+    runsDir: options.runsDir,
+    briefId: options.briefId,
+    phase: options.phase,
+  });
+  const enriched =
+    options.mode === 'status'
+      ? {
+          ...report,
+          // C-524: an unsettled hosted reservation is a live, auditable spend
+          // — the run's own status names it and the remedy.
+          warnings: [
+            ...statusWarnings(report.jobs),
+            ...hostedReservationWarnings({ paths: options.paths }),
+          ],
+        }
+      : report;
+  console.log(
+    JSON.stringify(Value.Check(GenerationBatchReportSchema, enriched) ? enriched : report, null, 2),
+  );
+  return result.exitCode;
+};
+
 const main = async (): Promise<number> => {
   let options: CliOptions | 'help';
   try {
@@ -195,60 +265,15 @@ const main = async (): Promise<number> => {
   const modeFlag = MODE_FLAG[options.mode];
 
   if (options.mode === 'status' || options.mode === 'cancel') {
-    if (!existsSync(paths.runRecordPath)) {
-      const report = reportFor({
-        kind: options.mode === 'status' ? 'generation-status' : 'generation-cancel',
-        result: {
-          jobs: [],
-          engineRequests: 0,
-          blockers: [],
-          activeLeases: [],
-          exitCode: GENERATION_BATCH_EXIT_CODES.CLAIM_CONFLICT,
-        },
-        runId,
-        runsDir: options.runsDir,
-        briefId: brief.id,
-        phase,
-        message: `No run record for "${runId}" under ${options.runsDir}.`,
-      });
-      console.log(JSON.stringify(report, null, 2));
-      return GENERATION_BATCH_EXIT_CODES.CLAIM_CONFLICT;
-    }
-    const result =
-      options.mode === 'status'
-        ? readBatchStatus({
-            paths,
-            ...(options.itemId === undefined ? {} : { itemIds: [options.itemId] }),
-          })
-        : cancelBatch({
-            paths,
-            ...(options.itemId === undefined ? {} : { itemIds: [options.itemId] }),
-          });
-    const report = reportFor({
-      kind: options.mode === 'status' ? 'generation-status' : 'generation-cancel',
-      result,
+    return runStatusOrCancel({
+      mode: options.mode,
+      paths,
       runId,
       runsDir: options.runsDir,
       briefId: brief.id,
       phase,
+      ...(options.itemId === undefined ? {} : { itemId: options.itemId }),
     });
-    const enriched =
-      options.mode === 'status'
-        ? {
-            ...report,
-            // C-524: an unsettled hosted reservation is a live, auditable spend
-            // — the run's own status names it and the remedy.
-            warnings: [...statusWarnings(report.jobs), ...hostedReservationWarnings({ paths })],
-          }
-        : report;
-    console.log(
-      JSON.stringify(
-        Value.Check(GenerationBatchReportSchema, enriched) ? enriched : report,
-        null,
-        2,
-      ),
-    );
-    return result.exitCode;
   }
 
   if (options.importLegacy) {
@@ -439,6 +464,28 @@ const main = async (): Promise<number> => {
       ? undefined
       : requirePreparationProfile(options.preparationProfileId);
 
+  // C-520 follow-up: when no run-wide profile is forced, each job's own
+  // declared `preparationProfile` is authoritative. A brief that mixes a prop
+  // (needs alpha extraction) with a portrait (keeps its own coverage) cannot
+  // be served by one global profile, and silently preparing every job under
+  // the wrong one produces artifacts that look accepted but are not.
+  const profileByItemId = new Map(
+    plan.items.map((item) => [item.itemId, item.preparationProfile] as const),
+  );
+  const perItemHook = buildPerItemPreparationHook({
+    profileByItemId,
+    resolveProfile: (id) => getPreparationProfile(id),
+    onRejected: (message) => console.error(message),
+    onUnresolved: (message) => console.error(message),
+  });
+  const preparationHook =
+    preparationProfile === undefined
+      ? perItemHook
+      : buildPreparationHook({
+          preparationProfile,
+          onRejected: (message) => console.error(message),
+        });
+
   const result = await executeBatch({
     paths,
     plan,
@@ -459,14 +506,7 @@ const main = async (): Promise<number> => {
     ...(options.variation === undefined || options.itemId === undefined
       ? {}
       : { variation: { itemId: options.itemId, attempt: options.variation } }),
-    ...(preparationProfile === undefined
-      ? {}
-      : {
-          prepare: buildPreparationHook({
-            preparationProfile,
-            onRejected: (message) => console.error(message),
-          }),
-        }),
+    ...(preparationHook === undefined ? {} : { prepare: preparationHook }),
     onRawPersisted: () => {
       // Test seam only (never documented as a feature): kill the process after
       // the raw bytes are durable, to exercise resume-across-crash.

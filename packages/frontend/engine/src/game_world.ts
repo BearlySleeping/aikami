@@ -1,8 +1,9 @@
 // packages/frontend/engine/src/game_world.ts
 
 import { BASE_WORLD_SCALE } from '@aikami/constants';
+import type { ActorVisual } from '@aikami/schemas';
 import type { Application, Ticker } from 'pixi.js';
-import { Container, Sprite, Texture, type UniformGroup } from 'pixi.js';
+import { Container, Sprite, type UniformGroup } from 'pixi.js';
 import { autotileLayers, type TerrainLayerEmission } from './assets/autotile.ts';
 import type { AssetTagResolver } from './assets/map_loader.ts';
 import { BaseEngineClass, type BaseEngineClassOptions } from './base_engine_class.ts';
@@ -11,6 +12,7 @@ import { COMPONENT_STRIDE } from './config/memory_config.ts';
 import type { EngineBridge } from './engine_bridge.ts';
 import { COLOR_INTERIOR, ENV_UBO_OFFSETS } from './environment/environment_ubo.ts';
 import { unprojectScreenPoint } from './frame_pacing.ts';
+import { loadStaticVisual } from './game_world/actor_visual_transport.ts';
 import { CombatSelectionHighlights } from './game_world/combat_selection_highlights.ts';
 import { setupGameCommandForwarding } from './game_world/command_forwarding.ts';
 import {
@@ -21,6 +23,7 @@ import {
   resetEntityPositions,
 } from './game_world/diagnostics.ts';
 import { EntityAppearanceLoader } from './game_world/entity_appearance.ts';
+import { createEntityDisplay } from './game_world/entity_display.ts';
 import { FrameRenderer } from './game_world/frame_renderer.ts';
 import { InputController } from './game_world/input_controller.ts';
 import { PointerController } from './game_world/pointer_controller.ts';
@@ -52,7 +55,6 @@ import {
   type PixiAppOptions,
 } from './pixi_app.ts';
 import { sanitizeCanvasDimension } from './pixi_init_options.ts';
-import { AnimationController } from './rendering/animation_controller.ts';
 import { WORLD_Z_BANDS } from './rendering/layer_bands.ts';
 import { type LpcSlotCatalog, mergeLpcRecipes } from './rendering/lpc_appearance_resolver.ts';
 import type { PropTextureResolver } from './rendering/prop_texture_resolver.ts';
@@ -165,6 +167,8 @@ export type GameWorldOptions = BaseEngineClassOptions & {
    * May return null for unmapped tags — callers degrade gracefully.
    */
   assetUrlResolver?: (slot: string, assetId: string, state: string) => string | null;
+  /** How a content-pack NPC draws itself, keyed by its AUTHORED npcId. */
+  actorVisualResolver?: (npcId: string) => ActorVisual | undefined;
   /**
    * Optional provider returning the player's currently equipped items as
    * LPC layer recipes. Invoked whenever the player's appearance changes
@@ -274,6 +278,9 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
 
   /** Resolves layer IDs to LPC layer recipes. */
   private readonly _recipeResolver?: (layerIds: readonly number[]) => LpcLayerRecipe[];
+  private readonly _actorVisualResolver?: (npcId: string) => ActorVisual | undefined;
+  /** Entities whose authored visual is a single image, not composed LPC layers. */
+  private readonly _staticVisualEntities = new Set<number>();
 
   /** Resolves asset URLs. May return null for unmapped tags. */
   private readonly _assetUrlResolver?: (
@@ -519,6 +526,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     this._aiService = options.aiService;
     this._recipeResolver = options.recipeResolver;
     this._assetUrlResolver = options.assetUrlResolver;
+    this._actorVisualResolver = options.actorVisualResolver;
     this._equipmentRecipeProvider = options.equipmentRecipeProvider;
     this._appearanceLoader = new EntityAppearanceLoader({
       resolveAssetUrl: (slot, assetId, state) =>
@@ -1374,68 +1382,52 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
           isVendor: npcData.isVendor || false,
           vendorInventory: npcData.vendorInventory || '',
         });
+        // Resolved from the AUTHORED npcId, never from worker mechanics.
+        this._maybeLoadAuthoredStaticVisual(eid);
       }
     }
 
-    // Create an LPC-compatible container.
-    // When the first APPEARANCE_CHANGED event arrives, the container will
-    // be populated with layer sprites.
-    //
-    // ⚠️  NEVER set .width / .height on an empty Container. PixiJS
-    // computes an internal scale multiplier by dividing target width by
-    // the container's local bounds — when there are no children the
-    // local bounds are (0,0,0,0), producing a scale of 0 (or Infinity),
-    // which makes ALL future children invisible.
-    const container = new Container();
-
-    // Draw a debug colored square using the worker's tint so entities are
-    // visible even before LPC textures load. Uses Sprite(Texture.WHITE)
-    // because PixiJS v8 Graphics has compat issues in headless WebGL.
-    // Anchored bottom-center (0.5, 1.0) so the position represents the
-    // character's feet — consistent with the LPC layer sprite anchor.
-    // 32×32 world units → 128×128 screen pixels at 4× scale.
-    // The worker posts a numeric tint; guard NaN from a malformed message
-    // rather than rendering an invisible (NaN-tinted) placeholder.
-    const safeTint = Number.isNaN(tint) ? 0xff00ff : tint;
-    const sprite = new Sprite(Texture.WHITE);
-    sprite.width = 32;
-    sprite.height = 32;
-    sprite.anchor.set(0.5, 1.0);
-    sprite.tint = safeTint;
-    container.addChild(sprite);
-
-    // Props carry their named atlas frame from the worker — swap the white
-    // placeholder for the real tileset sprite (e.g. "well.png"). The atlas
-    // spritesheet is preloaded at boot so Texture.from(frame) resolves.
-    const frame = message.frame;
-    if (frame) {
-      void this._loadPropFrameTexture({ eid, frame, container });
-    }
-
-    // Per-contract C-032: bypass layout hit-tests for character visuals
-    container.eventMode = 'none';
-
-    // Add to the world container (scaled + centered) instead of raw stage
-    const target = this._worldContainer ?? this._app.stage;
-    target.addChild(container);
-    this.debug('entity-added-to-stage', {
+    const display = createEntityDisplay({
       eid,
-      stageChildren: this._app.stage.children.length,
-    });
-
-    // Initialize per-entity animation controller for walk/idle state
-    const animationController = new AnimationController();
-
-    this._renderEntries.set(eid, {
-      displayObject: container,
-      spawnOrder: ++this._entitySpawnCounter,
-      animationController,
       tint,
-      cullable: true,
-      recipes: [],
+      spawnOrder: ++this._entitySpawnCounter,
+      worldContainer: this._worldContainer,
+      stage: this._app.stage,
+      loadPropFrame: (options) => void this._loadPropFrameTexture(options),
+      frame: message.frame,
+      onAddedToStage: (info) => this.debug('entity-added-to-stage', info),
     });
-
+    this._renderEntries.set(eid, display.entry);
     // Recipes will be loaded when the first APPEARANCE_CHANGED event arrives.
+  }
+
+  /**
+   * Kicks off the authored visual for a newly created actor. The load itself
+   * lives in `game_world/actor_visual_transport.ts`.
+   */
+  private _maybeLoadAuthoredStaticVisual(eid: number): void {
+    const entry = this._renderEntries.get(eid);
+    const npcId = this._npcMeta.get(eid)?.npcId;
+    const visual = npcId === undefined ? undefined : this._actorVisualResolver?.(npcId);
+    if (!entry || visual?.kind !== 'static') {
+      return;
+    }
+    this._staticVisualEntities.add(eid);
+    const revision = (this._entityLoadRevisions.get(eid) ?? 0) + 1;
+    this._entityLoadRevisions.set(eid, revision);
+    void loadStaticVisual({
+      context: {
+        loader: this._appearanceLoader,
+        isDisposed: () => this._disposed,
+        currentRevision: () => this._entityLoadRevisions.get(eid) ?? 0,
+        debug: (event, data) => this.debug(event, data),
+      },
+      entry,
+      currentEntry: entry,
+      visual,
+      revision,
+      resolveUrl: this._resolveTag,
+    });
   }
 
   /**
@@ -1769,6 +1761,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     }
     this._renderEntries.clear();
     this._npcMeta.clear();
+    this._staticVisualEntities.clear();
     this._playerEntityId = 0;
     resetEntityPositions();
 
@@ -1854,6 +1847,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     }
     this._renderEntries.clear();
     this._npcMeta.clear();
+    this._staticVisualEntities.clear();
     // C-504 AC-5: reset the debug per-NPC appearance map on map switch so a
     // stale map's NPCs never leak into the next map's debug state.
     this._debugNpcAppearance = {};
@@ -2100,6 +2094,11 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
   ): Promise<void> {
     const entry = this._renderEntries.get(eid);
     if (!entry) {
+      return;
+    }
+    // A static actor has no LPC layers: composing would slice one still image
+    // into body/hair/torso frames and replace the authored art with nothing.
+    if (this._staticVisualEntities.has(eid)) {
       return;
     }
 

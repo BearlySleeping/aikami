@@ -5,8 +5,8 @@
 // Standalone from the rest of the catalog pipeline on purpose: since C-435
 // de-bundled the raw asset library out of this repo, `manifest.json` /
 // `asset_hashes.json` no longer exist here, so `loadCatalogEntries` can't run —
-// but the seed files these six lines read DO still live in `game-data/` and can
-// be republished on their own, without touching the content-addressed assets or
+// but the seed files these lines read DO still live in `game-data/` and can be
+// republished on their own, without touching the content-addressed assets or
 // the catalog index.
 //
 // Extracted from `pipeline.ts` when that module crossed the source-file-size
@@ -32,8 +32,10 @@ export const SEED_FILES = [
 /** Outcome of the seed/metadata phase. */
 export type SeedPublishReport = {
   uploaded: number;
+  /** Objects reused from the previous verified release (byte-identical). */
+  carried: number;
   failed: number;
-  objects: readonly { key: string; hash: string }[];
+  objects: readonly { key: string; hash: string; carried: boolean }[];
 };
 
 /**
@@ -41,43 +43,147 @@ export type SeedPublishReport = {
  * the client can fetch the compact boot seed, offline-core declaration,
  * credits, and audio metadata from the R2 origin.
  *
- * A missing or unreadable seed file is counted as a failure, never silently
- * skipped: `runCatalogPublish` treats any seed failure as blocking the release,
- * because a missing seed means offline boot/credits data is incomplete.
+ * ── Completeness, not leniency ─────────────────────────────────────────────
+ *
+ * A release is a COMPLETE, self-contained graph. A de-bundled checkout lacking
+ * one of these inputs — this repo has no `lpc_credits.json`, because the LPC
+ * library is no longer committed — does NOT mean the published dependency may
+ * disappear: the client still fetches it, and an offline install still pins it.
+ *
+ * So a file absent locally is satisfied from `carriedDependencies`: the
+ * previous VERIFIED release's immutable copy, reused under its exact existing
+ * key and hash. Only when neither the candidate nor the previous release
+ * supplies a required file does this phase fail.
+ *
+ * The alternative of making the missing files non-fatal is deliberately NOT
+ * implemented. That would make the failure disappear by incrementing fewer
+ * counters while publishing an incomplete release — the pointer would describe
+ * a graph with a hole in it, and the client would discover the hole at boot.
+ *
+ * @param options.carriedDependencies - Verified dependencies of the previous
+ *   release, keyed by catalog key, from `resolvePreviousRelease`.
  */
+type SeedObject = { key: string; hash: string; carried: boolean };
+
+const errorCodeOf = (error: unknown): unknown =>
+  error !== null && typeof error === 'object' && 'code' in error ? error.code : undefined;
+
+const messageOf = (error: unknown): string =>
+  error instanceof Error ? error.message : String(error);
+
+/**
+ * The previous release's verified copy of one seed file, keyed by the exact
+ * existing catalog key (dependency keys are hashed, so the file name is the
+ * only stable part).
+ */
+const carriedSeedBody = (
+  carriedDependencies: ReadonlyMap<string, Uint8Array> | undefined,
+  filename: string,
+): Uint8Array | undefined => {
+  const carriedKey = [...(carriedDependencies?.keys() ?? [])].find((dependencyKey) =>
+    dependencyKey.endsWith(`/${filename}`),
+  );
+  return carriedKey ? carriedDependencies?.get(carriedKey) : undefined;
+};
+
+/**
+ * Resolves one seed file's bytes: the candidate's own copy first, then the
+ * previous verified release's immutable copy.
+ *
+ * Absent from both is a FAILURE, not a skip — see the module header: making it
+ * non-fatal would publish a graph with a hole in it.
+ */
+const resolveSeedBody = (options: {
+  filename: string;
+  gameDataDir: string;
+  carriedDependencies: ReadonlyMap<string, Uint8Array> | undefined;
+}): { ok: true; body: Uint8Array; carried: boolean } | { ok: false; reason: string } => {
+  try {
+    return {
+      ok: true,
+      body: readFileSync(join(options.gameDataDir, options.filename)),
+      carried: false,
+    };
+  } catch (error) {
+    if (errorCodeOf(error) !== 'ENOENT') {
+      return { ok: false, reason: `could not be read — ${messageOf(error)}` };
+    }
+  }
+  const carriedBody = carriedSeedBody(options.carriedDependencies, options.filename);
+  if (!carriedBody) {
+    return {
+      ok: false,
+      reason:
+        'is absent from this candidate AND from the previous verified release — the new ' +
+        'release would be incomplete.',
+    };
+  }
+  return { ok: true, body: carriedBody, carried: true };
+};
+
+/** Uploads one seed file under its immutable content-addressed key. */
+const storeSeedFile = async (options: {
+  client: R2ClientLike;
+  filename: string;
+  body: Uint8Array;
+  carried: boolean;
+}): Promise<{ ok: true; object: SeedObject } | { ok: false; error: string }> => {
+  const hash = createHash('sha256').update(options.body).digest('hex');
+  const key = `${SEED_KEY_PREFIX}${hash}/${options.filename}`;
+  try {
+    await options.client.putObject({
+      key,
+      body: options.body,
+      contentType: 'application/json',
+      cacheControl: ASSET_CACHE_CONTROL,
+    });
+  } catch (error) {
+    return { ok: false, error: messageOf(error) };
+  }
+  return { ok: true, object: { key, hash, carried: options.carried } };
+};
+
 export const runSeedPublish = async (options: {
   client: R2ClientLike;
   gameDataDir?: string;
+  carriedDependencies?: ReadonlyMap<string, Uint8Array>;
 }): Promise<SeedPublishReport> => {
-  const { client, gameDataDir = GAME_DATA_DIR } = options;
+  const { client, gameDataDir = GAME_DATA_DIR, carriedDependencies } = options;
   let uploaded = 0;
+  let carried = 0;
   let failed = 0;
-  const objects: { key: string; hash: string }[] = [];
+  const objects: SeedObject[] = [];
 
   for (const filename of SEED_FILES) {
-    const localPath = join(gameDataDir, filename);
-    try {
-      const body = readFileSync(localPath);
-      const hash = createHash('sha256').update(body).digest('hex');
-      const key = `${SEED_KEY_PREFIX}${hash}/${filename}`;
-      await client.putObject({
-        key,
-        body,
-        contentType: 'application/json',
-        cacheControl: ASSET_CACHE_CONTROL,
-      });
-      objects.push({ key, hash });
-      uploaded++;
-      console.log(`  📄 seed: ${filename} (${(body.length / 1024).toFixed(1)} KB)`);
-    } catch (error) {
+    const resolved = resolveSeedBody({ filename, gameDataDir, carriedDependencies });
+    if (!resolved.ok) {
       failed++;
-      const message = error instanceof Error ? error.message : String(error);
-      console.warn(`  ⚠ seed: ${filename} skipped — ${message}`);
+      console.error(`  ❌ seed: ${filename} ${resolved.reason}`);
+      continue;
+    }
+    const stored = await storeSeedFile({
+      client,
+      filename,
+      body: resolved.body,
+      carried: resolved.carried,
+    });
+    if (!stored.ok) {
+      failed++;
+      console.warn(`  ⚠ seed: ${filename} upload failed — ${stored.error}`);
+      continue;
+    }
+    objects.push(stored.object);
+    if (resolved.carried) {
+      carried++;
+      console.log(`  🔗 seed: ${filename} carried forward from the previous release`);
+    } else {
+      uploaded++;
+      console.log(`  📄 seed: ${filename} (${(resolved.body.length / 1024).toFixed(1)} KB)`);
     }
   }
 
   if (failed > 0) {
-    console.warn(`⚠ ${failed} seed file(s) skipped.`);
+    console.error(`❌ ${failed} required seed file(s) could not be supplied.`);
   }
-  return { uploaded, failed, objects };
+  return { uploaded, carried, failed, objects };
 };

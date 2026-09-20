@@ -11,7 +11,6 @@ import type { PreparationProfile } from '@aikami/types';
 import {
   clippedProp,
   fringedProp,
-  fullAlphaGroundProp,
   groundRectangle,
   hairlineProp,
   isolatedProp,
@@ -129,9 +128,9 @@ describe('C-520 AC-3: the defined defects are caught, each with its own code', (
   });
 });
 
-describe('C-520 AC-3: the full-alpha ground profile clears its own defect', () => {
-  test('extraction turns the ground render into a passing prop', () => {
-    const prepared = prepareRgbaImage({ image: fullAlphaGroundProp(), profile: groundProfile() });
+describe('C-520 AC-3: the native-alpha ground profile accepts an isolated prop', () => {
+  test('native alpha and a detached ground plane pass preparation QA', () => {
+    const prepared = prepareRgbaImage({ image: isolatedProp(), profile: groundProfile() });
     const findings = evaluatePreparedImage({
       image: prepared.image,
       profile: groundProfile(),

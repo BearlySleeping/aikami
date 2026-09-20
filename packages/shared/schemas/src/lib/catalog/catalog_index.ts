@@ -65,6 +65,90 @@ export type CatalogCategory = Static<typeof CatalogCategorySchema>;
  * the publish preflight (AC-4) refuses to publish an asset that resolves to
  * neither a CREDITS.csv row nor a project-owned licence declaration.
  */
+// ---------------------------------------------------------------------------
+// GeneratedAssetRights — generator provenance vs OUTPUT rights
+// ---------------------------------------------------------------------------
+//
+// A generated asset's credit must answer the RELEASE question — may Aikami
+// distribute this artifact? — and that is NOT the same question as "what is
+// the generator model's licence?"
+//
+// The model's licence governs the MODEL (use and redistribution of weights).
+// The OUTPUT is a separate work with its own terms, and a licence can permit
+// the outputs while restricting the weights (as Anima's does). Recording only
+// the model licence, as the credits originally did, made the two
+// indistinguishable and caused every generated asset to be classified by a
+// restriction that does not apply to it.
+//
+// `outputRights` is therefore its own field, backed by a pinned evidence
+// quotation, and it is the field the release gate reads.
+
+/** May the OUTPUT be used and distributed under Aikami's terms? */
+export const GeneratedOutputRightsSchema = Type.Union(
+  [
+    Type.Literal('commercial-permitted'),
+    Type.Literal('non-commercial-only'),
+    Type.Literal('unknown'),
+  ],
+  { description: 'The release question — may the generated output be distributed?' },
+);
+
+/** One quotation from an immutable document revision. */
+export const LicenseEvidenceSchema = Type.Object(
+  {
+    url: Type.String({ minLength: 1 }),
+    /** The revision the document was read AT; evidence is invalid for others. */
+    revision: Type.String({ minLength: 1 }),
+    retrievedAt: Type.String({ minLength: 1 }),
+    quote: Type.String({ minLength: 1 }),
+  },
+  { additionalProperties: false },
+);
+
+/** Rights classification for an asset produced by a generative model. */
+export const GeneratedAssetRightsSchema = Type.Object(
+  {
+    kind: Type.Literal('generated'),
+    /** What produced the bytes — identity, revision and engine. */
+    generator: Type.Object(
+      {
+        model: Type.String({ minLength: 1 }),
+        revision: Type.String({ minLength: 1 }),
+        engine: Type.String({ minLength: 1 }),
+      },
+      { additionalProperties: false },
+    ),
+    /** The generator model's own use terms — recorded, NOT the release gate. */
+    modelUse: Type.Union([
+      Type.Literal('non-commercial'),
+      Type.Literal('commercial'),
+      Type.Literal('unknown'),
+    ]),
+    /** Whether the generator weights may be redistributed. */
+    modelRedistribution: Type.Union([
+      Type.Literal('restricted'),
+      Type.Literal('permitted'),
+      Type.Literal('unknown'),
+    ]),
+    /** THE RELEASE QUESTION. */
+    outputRights: GeneratedOutputRightsSchema,
+    /** Evidence establishing `outputRights`. */
+    evidence: LicenseEvidenceSchema,
+    /** The upstream base model this generator derives from, and its terms. */
+    upstream: Type.Object(
+      {
+        id: Type.String({ minLength: 1 }),
+        licenseName: Type.String({ minLength: 1 }),
+        outputRights: GeneratedOutputRightsSchema,
+      },
+      { additionalProperties: false },
+    ),
+  },
+  { additionalProperties: false },
+);
+
+export type GeneratedAssetRights = Static<typeof GeneratedAssetRightsSchema>;
+
 export const CatalogAssetCreditSchema = Type.Object(
   {
     /** Upstream license strings, VERBATIM. NOT SPDX — LPC publishes "OGA-BY 3.0". */
@@ -83,6 +167,11 @@ export const CatalogAssetCreditSchema = Type.Object(
     licenseNote: Type.Optional(
       Type.String({ description: 'Freeform upstream note, where one exists' }),
     ),
+    /**
+     * Rights classification for generated art. Absent for upstream-licensed
+     * assets (LPC, OpenGameArt), whose `licenses` IS the output licence.
+     */
+    rights: Type.Optional(GeneratedAssetRightsSchema),
   },
   { additionalProperties: false },
 );

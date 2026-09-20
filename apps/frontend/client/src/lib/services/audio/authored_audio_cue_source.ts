@@ -150,10 +150,11 @@ const fallbackChain = (options: {
   while (cursor && !seen.has(cursor.cueId) && chain.length <= bindings.length) {
     chain.push(cursor);
     seen.add(cursor.cueId);
-    cursor =
-      cursor.fallback === 'declared_cue' && cursor.fallbackCueId
-        ? bindings.find((candidate) => candidate.cueId === cursor?.fallbackCueId)
-        : undefined;
+    // Capture the id before the lookup: reading it inside the callback would
+    // lose the narrowing that excludes the silence variant.
+    const nextCueId: string | undefined =
+      cursor.fallback === 'declared_cue' ? cursor.fallbackCueId : undefined;
+    cursor = nextCueId ? bindings.find((candidate) => candidate.cueId === nextCueId) : undefined;
   }
   return chain;
 };
@@ -166,6 +167,84 @@ const fallbackChain = (options: {
  * @param options.context - Map id, `combat`, or a scripted predicate id.
  * @returns The URL to play (or null for declared silence), with its binding.
  */
+/**
+ * The outcome of trying one candidate in the fallback chain.
+ *
+ * `skip` means "this candidate could not play — try the next one"; `resolved`
+ * carries the lookup the caller should return. Modelled as a value so the loop
+ * in {@link resolveAuthoredCue} stays a loop rather than a branch ladder.
+ */
+type ChainAttempt = { kind: 'resolved'; result: AuthoredCueLookup } | { kind: 'skip' };
+
+/**
+ * Tries one candidate from the declared fallback chain.
+ *
+ * Extracted so each refusal reason reads as its own step instead of deepening
+ * the caller's control flow: a lock-refused cue, an intentional-silence cue,
+ * and an unresolvable tag are three distinct outcomes, not three nested
+ * branches.
+ */
+const tryChainCandidate = async (options: {
+  candidate: PackAudioCueBinding;
+  index: number;
+  selection: ReturnType<typeof selectAudioCue>;
+  verification: { failedCueIds: readonly string[]; lockPresent: boolean };
+  packId: string;
+  target: AudioCueTarget;
+  context: string;
+}): Promise<ChainAttempt> => {
+  const { candidate, index, selection, verification, packId, target, context } = options;
+
+  if (verification.failedCueIds.includes(candidate.cueId)) {
+    logger.warn('resolveAuthoredCue:lock-verification-refused', {
+      packId,
+      target,
+      context,
+      cueId: candidate.cueId,
+    });
+    return { kind: 'skip' };
+  }
+
+  // A silence binding in the chain terminates resolution: the pack declares
+  // this cue plays nothing. There is no tag to resolve and no hash to verify.
+  if (candidate.source.kind === 'silence') {
+    logger.debug('resolveAuthoredCue:declared-silence', {
+      packId,
+      target,
+      context,
+      cueId: candidate.cueId,
+    });
+    return {
+      kind: 'resolved',
+      result: { url: null, binding: undefined, kind: 'silence', authored: true },
+    };
+  }
+
+  const url = await resolveTagToUrl({ tag: candidate.source.tag, target });
+  if (!url) {
+    logger.warn('resolveAuthoredCue:unresolvable-tag', {
+      packId,
+      target,
+      context,
+      cueId: candidate.cueId,
+      required: selection.required,
+    });
+    return { kind: 'skip' };
+  }
+
+  const kind = index === 0 ? selection.kind : 'fallback-cue';
+  logger.debug('resolveAuthoredCue:resolved', {
+    packId,
+    target,
+    context,
+    cueId: candidate.cueId,
+    kind,
+    sha256: candidate.source.sha256,
+    lockPresent: verification.lockPresent,
+  });
+  return { kind: 'resolved', result: { url, binding: candidate, kind, authored: true } };
+};
+
 export const resolveAuthoredCue = async (options: {
   packId: string;
   target: AudioCueTarget;
@@ -261,37 +340,18 @@ export const resolveAuthoredCue = async (options: {
   // lock. Each candidate is verified independently against its own identity.
   const chain = fallbackChain({ start: selection.binding, bindings: bindings.bindings });
   for (const [index, candidate] of chain.entries()) {
-    if (verification.failedCueIds.includes(candidate.cueId)) {
-      logger.warn('resolveAuthoredCue:lock-verification-refused', {
-        packId,
-        target,
-        context,
-        cueId: candidate.cueId,
-      });
-      continue;
-    }
-    const url = await resolveTagToUrl({ tag: candidate.tag, target });
-    if (!url) {
-      logger.warn('resolveAuthoredCue:unresolvable-tag', {
-        packId,
-        target,
-        context,
-        cueId: candidate.cueId,
-        required: selection.required,
-      });
-      continue;
-    }
-    const kind = index === 0 ? selection.kind : 'fallback-cue';
-    logger.debug('resolveAuthoredCue:resolved', {
+    const attempt = await tryChainCandidate({
+      candidate,
+      index,
+      selection,
+      verification,
       packId,
       target,
       context,
-      cueId: candidate.cueId,
-      kind,
-      sha256: candidate.sha256,
-      lockPresent: verification.lockPresent,
     });
-    return { url, binding: candidate, kind, authored: true };
+    if (attempt.kind === 'resolved') {
+      return attempt.result;
+    }
   }
 
   return { url: null, binding: selection.binding, kind: 'silence', authored: true };

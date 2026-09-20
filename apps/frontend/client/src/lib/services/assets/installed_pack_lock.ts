@@ -83,7 +83,12 @@ const installedAudioHashes = (options: {
   }
 
   for (const binding of bindings.bindings) {
-    const declared = binding.tag.trim().toLowerCase();
+    // An intentional-silence cue pins no rendition, so it contributes no
+    // installed hash. Skipping it is not a miss — there is nothing to verify.
+    if (binding.source.kind === 'silence') {
+      continue;
+    }
+    const declared = binding.source.tag.trim().toLowerCase();
     const row = rows.find((candidate) => candidate.tag.trim().toLowerCase() === declared);
     if (row) {
       hashes[binding.cueId] = row.hash;

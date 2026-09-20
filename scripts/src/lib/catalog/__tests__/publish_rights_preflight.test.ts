@@ -13,7 +13,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runCatalogPublish } from '../pipeline.ts';
-import { FakeR2Client, makeFixtureGameData } from './fixtures.ts';
+import { FakeR2Client, makeFixtureGameData, noPreviousRelease } from './fixtures.ts';
 
 type RightsEvidence = {
   evidenceUrl?: string;
@@ -54,12 +54,42 @@ const writeRights = (gameDataDir: string, rights: Record<string, RightsEvidence>
 };
 
 describe('C-518 AC-5: the publish preflight requests missing rights evidence', () => {
+  test('a rights-gate block is reported separately from missing evidence', async () => {
+    const gameDataDir = makeFixtureGameData();
+    const client = new FakeR2Client();
+    const credits = creditsOf(gameDataDir) as Record<
+      string,
+      { licenses: string[]; authors: string[]; sourceUrls: string[] }
+    >;
+    const blockedTag = 'music:exploration:bgm_explore';
+    const blockedCredit = credits[blockedTag];
+    if (blockedCredit === undefined) {
+      throw new Error('fixture music credit is missing');
+    }
+    blockedCredit.licenses = ['research-only'];
+    writeFileSync(join(gameDataDir, 'asset_credits.json'), JSON.stringify({ credits }));
+
+    const report = await runCatalogPublish({
+      releaseReader: noPreviousRelease,
+      config: config(),
+      client,
+      gameDataDir,
+      contentPacksDir: emptyContentPacksDir(),
+    });
+
+    expect(report.ok).toBe(false);
+    expect(report.rightsBlockedTags).toEqual([blockedTag]);
+    expect(report.missingRightsEvidenceTags).toEqual([]);
+    expect(client.putCount).toBe(0);
+  });
+
   test('a declared rights block with a missing tag refuses before uploading', async () => {
     const gameDataDir = makeFixtureGameData();
     const client = new FakeR2Client();
     writeRights(gameDataDir, { 'lpc:hat:magic:celestial_adult:thrust': ALLOWED });
 
     const report = await runCatalogPublish({
+      releaseReader: noPreviousRelease,
       config: config(),
       client,
       gameDataDir,
@@ -86,6 +116,7 @@ describe('C-518 AC-5: the publish preflight requests missing rights evidence', (
     writeRights(gameDataDir, rights);
 
     const report = await runCatalogPublish({
+      releaseReader: noPreviousRelease,
       config: config(),
       client,
       gameDataDir,
@@ -109,6 +140,7 @@ describe('C-518 AC-5: the publish preflight requests missing rights evidence', (
     writeRights(gameDataDir, rights);
 
     const report = await runCatalogPublish({
+      releaseReader: noPreviousRelease,
       config: config(),
       client,
       gameDataDir,
@@ -133,6 +165,7 @@ describe('C-518 AC-5: the publish preflight requests missing rights evidence', (
     writeRights(gameDataDir, rights);
 
     const report = await runCatalogPublish({
+      releaseReader: noPreviousRelease,
       config: config(),
       client,
       gameDataDir,

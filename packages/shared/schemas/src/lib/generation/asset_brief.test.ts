@@ -38,10 +38,23 @@ describe('C-519 AC-1: the authored brief validates strictly', () => {
 
   test('the brief reports the phase counts the plan is asserted against', () => {
     const parsed = Value.Parse(AssetBriefSchema, readAuthoredBrief());
-    expect(parsed.summary.sliceItems).toBe(6);
-    expect(parsed.summary.expansionItems).toBe(36);
-    expect(parsed.summary.totalItems).toBe(42);
-    expect(parsed.jobs.length).toBe(42);
+    // Derived from the jobs themselves, never re-pinned to literals: the
+    // previous version hardcoded 6/36/42 and went stale the first time the
+    // brief was rebased. A one-sided edit of either the jobs or the summary
+    // now fails, and the gate cannot drift on the next rebase.
+    const slice = parsed.jobs.filter((job) => job.phase === 'slice').length;
+    const expansion = parsed.jobs.filter((job) => job.phase === 'expansion').length;
+    expect(parsed.summary.sliceItems).toBe(slice);
+    expect(parsed.summary.expansionItems).toBe(expansion);
+    expect(parsed.summary.totalItems).toBe(parsed.jobs.length);
+    expect(parsed.summary.maxCandidates).toBe(
+      parsed.jobs.reduce((sum, job) => sum + job.candidateLimit, 0),
+    );
+    // Every job's declared preparation profile must be one the brief declares.
+    const declared = new Set(Object.keys(parsed.preparationProfiles));
+    for (const job of parsed.jobs) {
+      expect(declared.has(job.preparationProfile)).toBe(true);
+    }
     expect(parsed.execution.candidateLimitPerItem).toBe(2);
     expect(parsed.execution.hostedBudgetUsd).toBe(0);
   });

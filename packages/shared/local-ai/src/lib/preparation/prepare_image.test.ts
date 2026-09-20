@@ -9,7 +9,6 @@ import { MEDIA_VALIDATION_CODES } from '@aikami/constants';
 import type { PreparationProfile } from '@aikami/types';
 import {
   blankImage,
-  fullAlphaGroundProp,
   isolatedProp,
   OPAQUE_LIGHT,
   opaquePixelCount,
@@ -29,7 +28,6 @@ import {
 import {
   alphaAt,
   findGroundContact,
-  findLargestOpaqueRectangle,
   pixelAt,
   resampleBoxAverage,
   resampleNearest,
@@ -62,16 +60,10 @@ describe('C-520 AC-3: prepared bytes are repeatable', () => {
 
   test('the applied operation list is the profile order, so the record cannot drift', () => {
     const prepared = prepareRgbaImage({
-      image: fullAlphaGroundProp(),
+      image: isolatedProp(),
       profile: profile('prop-full-alpha-ground'),
     });
-    expect(prepared.operations).toEqual([
-      'decode-orient',
-      'alpha-extract',
-      'alpha-cleanup',
-      'trim',
-      'encode',
-    ]);
+    expect(prepared.operations).toEqual(['decode-orient', 'alpha-cleanup', 'trim', 'encode']);
     expect(prepared.processor.id).toBe('aikami-deterministic-preparation');
     expect(prepared.processor.deterministic).toBe(true);
   });
@@ -153,21 +145,16 @@ describe('C-520 AC-3/AC-4: aspect ratio is never stretched', () => {
   });
 });
 
-describe('C-520 AC-3: a full-alpha ground render becomes an isolated prop', () => {
-  test('the opaque backdrop is gone and the prop survives', () => {
-    const source = fullAlphaGroundProp({ width: 64, height: 64, groundRows: 6 });
+describe('C-520 AC-3: native alpha preserves dark prop pixels', () => {
+  test('a black object pixel remains opaque without luminance extraction', () => {
+    const source = blankImage(16, 16);
+    paintRect(source, { x: 6, y: 6, width: 4, height: 4 }, { r: 0, g: 0, b: 0, a: 255 });
     const prepared = prepareRgbaImage({
       image: source,
       profile: profile('prop-full-alpha-ground'),
     });
 
-    expect(findLargestOpaqueRectangle(source).area).toBeGreaterThan(
-      source.width * source.height * 0.5,
-    );
-    const remaining = findLargestOpaqueRectangle(prepared.preTrim);
-    expect(remaining.area).toBeLessThan(prepared.preTrim.width * prepared.preTrim.height * 0.5);
-    expect(opaquePixelCount(prepared.image)).toBeGreaterThan(0);
-    expect(prepared.image.width).toBeLessThan(64);
+    expect(opaquePixelCount(prepared.image)).toBe(16);
   });
 
   test('the trim records the origin the content came from', () => {
@@ -336,10 +323,7 @@ describe('C-520: profiles refuse to silently skip an operation', () => {
     const shippedProfiles = listPreparationProfiles();
     expect(shippedProfiles.length).toBeGreaterThan(0);
     for (const shipped of shippedProfiles) {
-      const source =
-        shipped.role === 'prop-sprite' && shipped.id === 'prop-full-alpha-ground'
-          ? fullAlphaGroundProp()
-          : isolatedProp();
+      const source = isolatedProp();
       const prepared = prepareRgbaImage({ image: source, profile: shipped });
       expect(prepared.operations.length).toBe(shipped.operations.length);
       expect(checkPreparationDeterminism({ image: source, profile: shipped })).toEqual([]);

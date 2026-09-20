@@ -32,6 +32,15 @@ export type AppearanceLayer = {
   spritesheet?: Spritesheet;
   /** C-496 AC-3: compiled shared visual definition for this layer. */
   definition?: CompleteSpriteDefinition;
+  /**
+   * True when this layer is ONE authored image rather than an LPC sheet.
+   *
+   * Load-bearing for the per-frame path: without it the "legacy row/column"
+   * fallback would slice a static actor's single image into 64px cells and
+   * render one corner of it as the actor. A static layer has no sheet geometry
+   * to resolve, so it must be left alone entirely.
+   */
+  staticVisual?: boolean;
 };
 
 /** A fully loaded appearance staged off-scene, ready for an atomic commit. */
@@ -134,6 +143,71 @@ export class EntityAppearanceLoader {
   }
 
   /**
+   * Loads ONE authored image as an actor's whole visual.
+   *
+   * The generic counterpart to {@link prepare} for actors that are not LPC
+   * humanoids — a hound, a construct, a creature. It produces the same
+   * {@link PreparedAppearance} shape, so `commit` and `disposePrepared` work
+   * unchanged and a caller never has to branch on which kind it holds.
+   *
+   * Movement semantics are explicit rather than pretended: one still image
+   * faces every direction, so the layer carries a synthetic recipe with no
+   * animation states. A pack that wants directional or animated art authors a
+   * sheet and uses the LPC path instead.
+   *
+   * Returns an EMPTY appearance (not a throw) when the image cannot be loaded,
+   * so the caller's existing "no layers resolved — keep the placeholder" path
+   * applies rather than a special case.
+   */
+  async prepareStatic(options: {
+    url: string;
+    width: number;
+    height: number;
+    /** Fraction of the image height at the actor's feet. Defaults to bottom. */
+    anchorY?: number;
+    /** Logical id for diagnostics and the synthetic recipe. */
+    id: string;
+  }): Promise<PreparedAppearance> {
+    const container = new Container();
+    container.eventMode = 'none';
+
+    let texture: Texture;
+    try {
+      texture = await this._loadTexture(options.url);
+    } catch (error) {
+      this._onLoadError?.({ url: options.url, error: String(error) });
+      return { container, layers: [] };
+    }
+
+    // Nearest-neighbour, matching every other game surface: a static actor is
+    // pixel art and must not be bilinearly smeared when scaled.
+    texture.source.scaleMode = 'nearest';
+
+    const sprite = new Sprite(texture);
+    sprite.eventMode = 'none';
+    sprite.anchor.set(0.5, options.anchorY ?? 1);
+    // The authored size is the actor's footprint; the texture may be a
+    // different resolution, so scale to the declared dimensions rather than
+    // assuming the file is already at gameplay size.
+    if (texture.width > 0 && texture.height > 0) {
+      sprite.scale.set(options.width / texture.width, options.height / texture.height);
+    }
+    container.addChild(sprite);
+
+    // A static image is not recoloured: LPC palettes map grayscale source art
+    // through a per-slot LUT, and there is no grayscale source here. An
+    // all-zero LUT is the identity, so the authored colours survive.
+    const recipe: LpcLayerRecipe = {
+      slot: options.id,
+      assetId: options.id,
+      layerRole: 'front',
+      hexPalette: new Uint8Array(1024),
+    };
+
+    return { container, layers: [{ sprite, recipe, texture, staticVisual: true }] };
+  }
+
+  /**
    * Atomically replaces the target's current children with the prepared
    * layers: the old display objects are removed and destroyed in the same
    * synchronous step that adds the new ones, so there is no blank frame.
@@ -233,6 +307,108 @@ export class EntityAppearanceLoader {
  * LPC direction names keyed by row offset (C-496 AC-3). Used to derive clip
  * names like `walk.down` when resolving frames through the shared definition.
  */
+/**
+ * Resolves ONE layer's frame for this tick and assigns it.
+ *
+ * Extracted from the loop so the loop reads as 'for each layer, apply its
+ * frame' while the branch ladder that decides WHICH frame stays on its own.
+ */
+const applyFrameToLayer = (options: {
+  layer: AppearanceLayer;
+  row: number;
+  directionName: string;
+  controller: AnimationController;
+  textureManager?: TextureManager;
+}): void => {
+  const { layer, row, directionName, controller, textureManager } = options;
+  const texture = layer.texture;
+
+  // A static actor is one whole image with no sheet to slice, and a layer
+  // with no texture has nothing to slice either — falling through would crop
+  // the still image to a single cell.
+  if (!texture || layer.staticVisual) {
+    return;
+  }
+
+  // C-496 AC-3/AC-6: when a shared visual definition was compiled at load,
+  // resolve the frame through it (elapsed-time clock + actor-level
+  // fallback) instead of hard-coding the 'walk' row. The resolved frame
+  // maps back to a cached spritesheet key so steady playback still
+  // allocates no new render objects.
+  if (layer.definition) {
+    const clipName = controller.isIdle ? `idle.${directionName}` : `walk.${directionName}`;
+    const resolved = resolveDefinitionFrameAtTime({
+      definition: layer.definition,
+      clipName,
+      elapsedMs: controller.elapsedMs,
+    });
+    if (resolved) {
+      const frame = resolved.frame;
+      const geometry = resolveLpcSheetGeometry(texture);
+      const frameCol = Math.floor(frame.x / geometry.pitch);
+      const frameRow = Math.floor(frame.y / geometry.pitch);
+      if (layer.spritesheet) {
+        const frameTexture = layer.spritesheet.textures[`walk_${frameRow}_${frameCol}`];
+        if (frameTexture) {
+          layer.sprite.texture = frameTexture;
+          return;
+        }
+      } else if (textureManager) {
+        const frameTexture = textureManager.getFrameAt({
+          texture,
+          layout: {
+            frameWidth: geometry.pitch,
+            frameHeight: geometry.pitch,
+            columns: geometry.columns,
+            rows: geometry.rows,
+          },
+          frameIndex: frameRow * geometry.columns + frameCol,
+        });
+        if (frameTexture) {
+          layer.sprite.texture = frameTexture;
+          return;
+        }
+      }
+    }
+    // Fall through to the legacy row/column path if the definition path
+    // could not slice a texture.
+  }
+
+  // C-428: resolve sheet geometry from the loaded texture dimensions
+  const geometry = resolveLpcSheetGeometry(texture);
+  const columns = geometry.columns;
+  const pitch = geometry.pitch;
+
+  // C-428: use the real per-sheet column count, not a global constant
+  const column = controller.getFrameColumn(columns);
+
+  // C-168: prefer the parsed Spritesheet for WebGPU-safe UV lookups.
+  // Fall back to getFrameAt when no spritesheet was created
+  // (e.g., dimensions don't align to the standard grid).
+  if (layer.spritesheet) {
+    const rows = geometry.rows;
+    const effectiveRow = rows === 1 ? 0 : row;
+    const frameTexture = layer.spritesheet.textures[`walk_${effectiveRow}_${column % columns}`];
+    if (frameTexture) {
+      layer.sprite.texture = frameTexture;
+    }
+  } else if (textureManager) {
+    // Legacy fallback — manual frame slicing via Rectangle.
+    // Kept for spritesheets that don't conform to the standard LPC grid.
+    const rows = geometry.rows;
+    const effectiveRow = rows === 1 ? 0 : row;
+    const dynamicFrameIndex = effectiveRow * columns + (column % columns);
+    const frameTexture = textureManager.getFrameAt({
+      texture,
+      layout: { frameWidth: pitch, frameHeight: pitch, columns, rows },
+      frameIndex: dynamicFrameIndex,
+    });
+    if (frameTexture) {
+      layer.sprite.texture = frameTexture;
+    }
+  }
+};
+
 const DIRECTION_NAMES: Record<number, string> = {
   0: 'up',
   1: 'left',
@@ -262,86 +438,6 @@ export const applyLpcFrameToEntry = (options: {
   const directionName = DIRECTION_NAMES[controller.direction];
 
   for (const layer of layers) {
-    if (!layer.texture) {
-      continue;
-    }
-
-    // C-496 AC-3/AC-6: when a shared visual definition was compiled at load,
-    // resolve the frame through it (elapsed-time clock + actor-level
-    // fallback) instead of hard-coding the 'walk' row. The resolved frame
-    // maps back to a cached spritesheet key so steady playback still
-    // allocates no new render objects.
-    if (layer.definition) {
-      const clipName = controller.isIdle ? `idle.${directionName}` : `walk.${directionName}`;
-      const resolved = resolveDefinitionFrameAtTime({
-        definition: layer.definition,
-        clipName,
-        elapsedMs: controller.elapsedMs,
-      });
-      if (resolved) {
-        const frame = resolved.frame;
-        const geometry = resolveLpcSheetGeometry(layer.texture);
-        const frameCol = Math.floor(frame.x / geometry.pitch);
-        const frameRow = Math.floor(frame.y / geometry.pitch);
-        if (layer.spritesheet) {
-          const frameTexture = layer.spritesheet.textures[`walk_${frameRow}_${frameCol}`];
-          if (frameTexture) {
-            layer.sprite.texture = frameTexture;
-            continue;
-          }
-        } else if (textureManager) {
-          const frameTexture = textureManager.getFrameAt({
-            texture: layer.texture,
-            layout: {
-              frameWidth: geometry.pitch,
-              frameHeight: geometry.pitch,
-              columns: geometry.columns,
-              rows: geometry.rows,
-            },
-            frameIndex: frameRow * geometry.columns + frameCol,
-          });
-          if (frameTexture) {
-            layer.sprite.texture = frameTexture;
-            continue;
-          }
-        }
-      }
-      // Fall through to the legacy row/column path if the definition path
-      // could not slice a texture.
-    }
-
-    // C-428: resolve sheet geometry from the loaded texture dimensions
-    const geometry = resolveLpcSheetGeometry(layer.texture);
-    const columns = geometry.columns;
-    const pitch = geometry.pitch;
-
-    // C-428: use the real per-sheet column count, not a global constant
-    const column = controller.getFrameColumn(columns);
-
-    // C-168: prefer the parsed Spritesheet for WebGPU-safe UV lookups.
-    // Fall back to getFrameAt when no spritesheet was created
-    // (e.g., dimensions don't align to the standard grid).
-    if (layer.spritesheet) {
-      const rows = geometry.rows;
-      const effectiveRow = rows === 1 ? 0 : row;
-      const frameTexture = layer.spritesheet.textures[`walk_${effectiveRow}_${column % columns}`];
-      if (frameTexture) {
-        layer.sprite.texture = frameTexture;
-      }
-    } else if (textureManager) {
-      // Legacy fallback — manual frame slicing via Rectangle.
-      // Kept for spritesheets that don't conform to the standard LPC grid.
-      const rows = geometry.rows;
-      const effectiveRow = rows === 1 ? 0 : row;
-      const dynamicFrameIndex = effectiveRow * columns + (column % columns);
-      const frameTexture = textureManager.getFrameAt({
-        texture: layer.texture,
-        layout: { frameWidth: pitch, frameHeight: pitch, columns, rows },
-        frameIndex: dynamicFrameIndex,
-      });
-      if (frameTexture) {
-        layer.sprite.texture = frameTexture;
-      }
-    }
+    applyFrameToLayer({ layer, row, directionName, controller, textureManager });
   }
 };

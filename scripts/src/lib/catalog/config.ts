@@ -21,6 +21,11 @@
 import { resolve } from 'node:path';
 import { AUDIO_MIME_MAP, IMAGE_MIME_MAP, R2_BUCKETS } from '@aikami/constants';
 import { getScriptsEnv, initScriptsEnv } from '../env/scripts_env.ts';
+import {
+  CATALOG_TEST_SEAM_ENV,
+  type ReleaseTarget,
+  resolveReleaseTarget,
+} from './release_target.ts';
 
 // ---------------------------------------------------------------------------
 // Bucket / index layout constants
@@ -98,23 +103,67 @@ export type CatalogConfig = {
   bucket: string;
   /** Public origin base URL — injected configuration, never hardcoded. */
   originUrl: string;
+  /** Validated target identity, including warnings and test-seam state. */
+  releaseTarget?: ReleaseTarget;
+};
+
+/**
+ * The read-only identity of a release target: where a release would live and
+ * be read from, with no write credentials involved.
+ *
+ * Deliberately separate from {@link CatalogConfig}. Answering "what would
+ * happen, and where?" must not require the ability to make it happen — an
+ * operator reviewing a plan, or CI checking one, should not need R2 write
+ * credentials to see the exact target.
+ */
+export type CatalogTarget = {
+  /** R2 bucket name the release targets. */
+  bucket: string;
+  /** Public origin base URL — injected configuration, never hardcoded. */
+  originUrl: string;
+  /** Validated target identity, including warnings and test-seam state. */
+  releaseTarget: ReleaseTarget;
+};
+
+/**
+ * Resolve the read-only release target for a mode.
+ *
+ * Performs the full safety gate — canonical origin identity, sibling-origin
+ * and forbidden-production-host checks, origin provisioning — and requires no
+ * credentials. A mode whose declared origin is `null` (staging today) fails
+ * closed here, because there is no usable read origin from which to resolve a
+ * base release. That is a different failure from "the operator has no write
+ * credentials", and the two must not collapse into one message.
+ *
+ * @param mode - AIKAMI mode used to load scripts/.env.{mode}.
+ */
+export const resolveCatalogTarget = (mode: string): CatalogTarget => {
+  initScriptsEnv(mode);
+  const target = resolveReleaseTarget({
+    mode,
+    env: {
+      catalogBucket: getScriptsEnv('CATALOG_BUCKET'),
+      catalogOriginUrl: getScriptsEnv('CATALOG_ORIGIN_URL'),
+      testSeam: getScriptsEnv(CATALOG_TEST_SEAM_ENV),
+    },
+  });
+  return { bucket: target.bucket, originUrl: target.originUrl, releaseTarget: target };
 };
 
 /**
  * Resolve the catalog publish configuration from the environment.
  *
+ * Adds write credentials to {@link resolveCatalogTarget}. Only a path that
+ * actually writes should call this.
+ *
  * @param mode - AIKAMI mode used to load scripts/.env.{mode} credentials.
  */
 export const resolveCatalogConfig = (mode: string): CatalogConfig => {
-  initScriptsEnv(mode);
+  const target = resolveCatalogTarget(mode);
 
   const accessKeyId = getScriptsEnv('CLOUD_FLARE_CATALOG_BUCKET_ACCESS_KEY_ID') ?? '';
   const secretAccessKey = getScriptsEnv('CLOUD_FLARE_CATALOG_BUCKET_SECRET_ACCESS_KEY') ?? '';
   const endpoint = getScriptsEnv('CLOUD_FLARE_CATALOG_BUCKET_ENDPOINT') ?? '';
-  const originUrlRaw = getScriptsEnv('CATALOG_ORIGIN_URL') ?? '';
-  // C-454: CATALOG_BUCKET env var override takes precedence (local testing),
-  // otherwise resolve from R2_BUCKETS.catalog by mode.
-  const bucket = getScriptsEnv('CATALOG_BUCKET') || resolveDefaultCatalogBucket(mode);
 
   const missing: string[] = [];
   if (!accessKeyId) {
@@ -126,9 +175,6 @@ export const resolveCatalogConfig = (mode: string): CatalogConfig => {
   if (!endpoint) {
     missing.push('CLOUD_FLARE_CATALOG_BUCKET_ENDPOINT');
   }
-  if (!originUrlRaw) {
-    missing.push('CATALOG_ORIGIN_URL');
-  }
   if (missing.length > 0) {
     throw new Error(
       `Catalog publish config missing: ${missing.join(', ')}. ` +
@@ -136,26 +182,13 @@ export const resolveCatalogConfig = (mode: string): CatalogConfig => {
     );
   }
 
-  // Validate + canonicalize the origin: new URL() rejects malformed or
-  // protocol-less values, and trailing slashes are stripped so index
-  // generation produces single-slash asset URLs (no double slashes when the
-  // consumer joins originUrl with a hash).
-  let originUrl: string;
-  try {
-    originUrl = new URL(originUrlRaw).toString().replace(/\/+$/, '');
-  } catch {
-    throw new Error(
-      `Catalog publish config invalid: CATALOG_ORIGIN_URL is not a valid URL ` +
-        `(${JSON.stringify(originUrlRaw)}). Set it in scripts/.env.{mode} (see scripts/.env.example).`,
-    );
-  }
-
   return {
     accessKeyId,
     secretAccessKey,
     endpoint,
-    bucket,
-    originUrl,
+    bucket: target.bucket,
+    originUrl: target.originUrl,
+    releaseTarget: target.releaseTarget,
   };
 };
 

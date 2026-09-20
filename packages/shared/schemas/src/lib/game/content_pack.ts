@@ -153,8 +153,18 @@ export type NamedAppearance = Static<typeof NamedAppearanceSchema>;
 export type NamedAppearanceComponent = Static<typeof NamedAppearanceComponentSchema>;
 
 // ---------------------------------------------------------------------------
+// NpcPortraits — authored dialogue busts
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
 // ContentPackNpcEntry — NPC definition in the pack
 // ---------------------------------------------------------------------------
+
+import { ActorVisualSchema } from './actor_visual.ts';
+import { NpcPortraitsSchema } from './npc_portraits.ts';
+
+export * from './actor_visual.ts';
+export * from './npc_portraits.ts';
 
 export const ContentPackNpcEntrySchema = Type.Object(
   {
@@ -168,6 +178,15 @@ export const ContentPackNpcEntrySchema = Type.Object(
     ),
     /** C-504: optional named appearance (slot + stable assetId + layerRole). */
     appearance: Type.Optional(NamedAppearanceSchema),
+    /**
+     * Optional authored dialogue portraits, keyed by emotion variant.
+     *
+     * Absent → the overlay renders no bust (the pre-portrait behaviour), which
+     * is why every field here is optional and the whole block is optional too.
+     */
+    portraits: Type.Optional(NpcPortraitsSchema),
+    /** How this actor draws itself. Absent means `lpc`. */
+    visual: Type.Optional(ActorVisualSchema),
     /** Whether this NPC is a vendor */
     isVendor: Type.Optional(Type.Boolean({ description: 'Whether this NPC is a vendor' })),
     /** Comma-separated item IDs e.g. "ironSword,healthPotion" */

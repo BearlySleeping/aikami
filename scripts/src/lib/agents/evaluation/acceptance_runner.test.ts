@@ -56,6 +56,10 @@ describe('AC-1: frozen acceptance check cannot be weakened from inside the sandb
   [...new Set(values)].sort((a, b) => a - b);\n`,
       );
       const result = await runAcceptance({ task, sandboxPath: sandbox.path });
+      // Assert the diagnostic first: if the oracle ever fails on one platform
+      // only, the reason must be in the failure output rather than being
+      // hidden behind a bare `accepted === false`.
+      expect(result.diagnostics).toBe('');
       expect(result.accepted).toBe(true);
     } finally {
       await sandbox.cleanup();

@@ -33,6 +33,7 @@ import {
 import { audioContextManager } from '../audio/audio_context_manager.ts';
 import { authService } from '../auth/auth_service.svelte.ts';
 import { personaService } from '../persona/persona_service.svelte.ts';
+import { actorVisualResolverFor } from './actor_visual_presentation.ts';
 import { equipmentService } from './equipment_service.svelte.ts';
 import { inputActionService } from './input_action_service.svelte';
 import { onboardingHintService } from './onboarding_hint_service.svelte';
@@ -827,15 +828,14 @@ class GameEngineService
         bridge,
         recipeResolver: pipeline.recipeResolver,
         assetUrlResolver: pipeline.assetUrlResolver,
-        // C-400: forward the projected catalog so the worker resolves the
-        // same slot/assetId sequences as the main-thread resolver.
+        actorVisualResolver: actorVisualResolverFor(() => pack),
+        // C-400: the worker resolves the same slot/assetId sequences.
         lpcCatalog: pipeline.catalog,
-        // C-374: merge equipped items onto the player's base LPC render
+        // C-374: merge equipped items onto the base LPC render.
         equipmentRecipeProvider: () => equipmentService.buildLpcRecipes(),
         textureManager,
         // C-375 AC-1: deterministic prop frame resolution.
         propFrameResolver: this._propFrameResolverHandle?.resolver,
-        // C-434: registry-backed tag resolver for maps and tilesets.
         resolveTag: assetTagResolver,
         releaseUrl,
       });

@@ -150,6 +150,11 @@ const validateOfflineCore = async (options: {
 const { values } = parseArgs({
   args: process.argv.slice(2),
   options: {
+    'merge-origin': {
+      type: 'string',
+      description:
+        'Union the entries already published at this catalog origin into the seed. Required when this checkout does not hold the complete asset library (C-435), or the seed would carry only the local scan subset.',
+    },
     write: { type: 'boolean', default: false },
     manifest: { type: 'string' },
     hashes: { type: 'string' },
@@ -202,6 +207,47 @@ if (values.write) {
     }
   } catch {
     log.warn('⚠ Content-packs manifest not found — skipping content-pack tags in seed');
+  }
+
+  // C-435: this checkout no longer holds the complete asset library, so the
+  // locally-built rows alone are a FRACTION of the catalog. Writing that as the
+  // boot seed would ship a client that cannot resolve every LPC sheet, legacy
+  // portrait and audio bed it previously could. `--merge-origin` unions the
+  // already-published entries back in; a local row always wins for its tag.
+  if (values['merge-origin']) {
+    const { resolvePreviousRelease } = await import('../catalog/published_catalog.ts');
+    const previous = await resolvePreviousRelease({
+      originUrl: String(values['merge-origin']),
+    });
+    if (!previous) {
+      throw new Error(
+        `--merge-origin ${values['merge-origin']} publishes no release pointer, so there is ` +
+          'nothing to carry and this checkout cannot produce a complete seed. Refusing to ' +
+          'write a seed that would drop every asset this checkout does not carry.',
+      );
+    }
+    const published = previous.entries;
+    const localTags = new Set(rows.map((row) => row.t));
+    let carried = 0;
+    for (const entry of published) {
+      if (localTags.has(entry.tag)) {
+        continue;
+      }
+      rows.push({
+        t: entry.tag,
+        h: entry.hash,
+        s: entry.sizeBytes,
+        c: entry.category,
+        e: entry.ext,
+        l: [...entry.licenses],
+      });
+      carried += 1;
+    }
+    if (carried > 0) {
+      log.info(
+        `🔗 carried ${carried} already-published seed row(s) from ${values['merge-origin']}`,
+      );
+    }
   }
 
   rows.sort((a, b) => a.t.localeCompare(b.t));
