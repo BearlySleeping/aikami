@@ -33,8 +33,19 @@ import { realpathSync } from 'node:fs';
 import { join } from 'node:path';
 import type { AcceptanceOutcome } from './types.ts';
 
-/** The candidate's own execution budget — the bound on a runaway candidate. */
-export const CANDIDATE_TIMEOUT_MS = 2_000;
+/**
+ * The candidate's own execution budget — the bound on a runaway candidate.
+ *
+ * This is a BOUND, not a performance assertion. 2s was chosen without evidence
+ * and the evidence now contradicts it: on a Windows CI runner, importing a
+ * module the test wrote milliseconds earlier (real-time AV scanning of a fresh
+ * file) plus running the oracle's three cases routinely exceeds it, so the
+ * oracle reported "exceeded 2000ms" for a candidate that was correct. The
+ * frozen-acceptance guarantee is unchanged by the number: the oracle is still
+ * host-owned, still unsubvertible from inside the sandbox, and still killed at
+ * a fixed deadline. A runaway candidate is still terminated.
+ */
+export const CANDIDATE_TIMEOUT_MS = 10_000;
 
 /**
  * The budget for the OS to create the child and for Node to boot it to the
