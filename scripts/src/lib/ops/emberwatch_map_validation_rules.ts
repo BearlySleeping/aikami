@@ -280,11 +280,27 @@ const bounceBackFindings = (
 ): ValidationFinding[] => {
   const targetSpawnId = str(transition.props.targetSpawnId);
   if (targetSpawnId.length === 0) {
-    return [];
+    return [
+      finding(
+        'transition-target-spawn-invalid',
+        'error',
+        subject,
+        'targetSpawnId',
+        'transition has no named destination spawn',
+      ),
+    ];
   }
   const marker = targetContext.spawns.find((s) => str(s.props.spawnId) === targetSpawnId);
   if (!marker) {
-    return [];
+    return [
+      finding(
+        'transition-target-spawn-invalid',
+        'error',
+        subject,
+        `spawn ${targetSpawnId}`,
+        'targetSpawnId does not match a spawn on the destination map',
+      ),
+    ];
   }
   const markerCell = cellOfPoint(marker.x, marker.y);
   const inZone = targetContext.transitions.some((zone) =>
@@ -573,31 +589,69 @@ const unreachableAnchorFinding = (options: {
 // Route width (warning)
 // ---------------------------------------------------------------------------
 
-const minClearanceOnLine = (
+const ROUTE_STEPS = [
+  [1, 0],
+  [-1, 0],
+  [0, 1],
+  [0, -1],
+] as const;
+
+const improveRouteNeighbors = (options: {
+  context: MapContext;
+  best: Uint16Array;
+  queue: number[];
+  index: number;
+}): void => {
+  const { context, best, queue, index } = options;
+  const c = index % context.grid.width;
+  const r = Math.floor(index / context.grid.width);
+  for (const [dc, dr] of ROUTE_STEPS) {
+    const nc = c + dc;
+    const nr = r + dr;
+    if (!isWalkable(context.grid, nc, nr)) {
+      continue;
+    }
+    const step = { dc, dr };
+    const edgeClearance = Math.min(
+      clearanceAt(context.grid, c, r, step),
+      clearanceAt(context.grid, nc, nr, step),
+    );
+    const next = gridIndex(context.grid, nc, nr);
+    const candidate = Math.min(best[index] ?? 0, edgeClearance);
+    if (candidate <= (best[next] ?? 0)) {
+      continue;
+    }
+    best[next] = candidate;
+    queue.push(next);
+  }
+};
+
+const maxRouteClearance = (
   context: MapContext,
   from: { c: number; r: number },
   to: { c: number; r: number },
 ): number => {
-  if (from.c !== to.c && from.r !== to.r) {
+  if (!isWalkable(context.grid, from.c, from.r) || !isWalkable(context.grid, to.c, to.r)) {
     return 0;
   }
-  const stepC = Math.sign(to.c - from.c);
-  const stepR = Math.sign(to.r - from.r);
-  let c = from.c;
-  let r = from.r;
-  let min = Number.POSITIVE_INFINITY;
-  for (let guard = 0; guard < context.raw.width + context.raw.height; guard++) {
-    if (!isWalkable(context.grid, c, r) || context.reachable[gridIndex(context.grid, c, r)] !== 1) {
-      return 0;
-    }
-    min = Math.min(min, clearanceAt(context.grid, c, r));
-    if (c === to.c && r === to.r) {
-      break;
-    }
-    c += stepC;
-    r += stepR;
+  if (from.c === to.c && from.r === to.r) {
+    return Math.max(
+      clearanceAt(context.grid, from.c, from.r, { dc: 1, dr: 0 }),
+      clearanceAt(context.grid, from.c, from.r, { dc: 0, dr: 1 }),
+    );
   }
-  return min === Number.POSITIVE_INFINITY ? 0 : min;
+  const best = new Uint16Array(context.grid.width * context.grid.height);
+  const queue = [gridIndex(context.grid, from.c, from.r)];
+  best[queue[0] ?? 0] = Math.max(context.grid.width, context.grid.height);
+  let head = 0;
+  while (head < queue.length) {
+    const index = queue[head++];
+    if (index === undefined) {
+      continue;
+    }
+    improveRouteNeighbors({ context, best, queue, index });
+  }
+  return best[gridIndex(context.grid, to.c, to.r)] ?? 0;
 };
 
 export const validateRouteWidth = (context: MapContext, findings: ValidationFinding[]): void => {
@@ -606,19 +660,22 @@ export const validateRouteWidth = (context: MapContext, findings: ValidationFind
     r: Math.floor(context.raw.height / 2),
   };
   for (const gate of context.transitions) {
-    const target = cellOfPoint(gate.x, gate.y);
-    if (!isWalkable(context.grid, target.c, target.r)) {
-      continue;
-    }
-    const minClearance = minClearanceOnLine(context, target, centre);
-    if (minClearance > 0 && minClearance < COMPANION_SAFE_ROUTE_WIDTH) {
+    const minClearance = rectCells(gate).reduce(
+      (widest, start) => Math.max(widest, maxRouteClearance(context, start, centre)),
+      0,
+    );
+    if (minClearance < COMPANION_SAFE_ROUTE_WIDTH) {
+      const detail =
+        minClearance === 0
+          ? `no walkable route to the map centre supports the companion-safe width ${COMPANION_SAFE_ROUTE_WIDTH}`
+          : `clearance ${minClearance} cells is below the companion-safe minimum ${COMPANION_SAFE_ROUTE_WIDTH}`;
       findings.push(
         finding(
           'route-width-below-minimum',
           'warning',
           context.id,
           `transition:${str(gate.props.targetMap)}`,
-          `clearance ${minClearance} cells is below the companion-safe minimum ${COMPANION_SAFE_ROUTE_WIDTH}`,
+          detail,
         ),
       );
     }

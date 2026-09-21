@@ -36,10 +36,23 @@ const DEFAULT_PORT = 8788;
 
 const args = process.argv.slice(2);
 const has = (flag: string): boolean => args.includes(flag);
-const port = (() => {
-  const index = args.indexOf('--port');
-  return index >= 0 ? Number(args[index + 1]) : DEFAULT_PORT;
-})();
+
+/** Resolves a valid TCP port, falling back for missing or malformed flags. */
+export const parseStudioPort = (arguments_: readonly string[]): number => {
+  const index = arguments_.indexOf('--port');
+  if (index < 0) {
+    return DEFAULT_PORT;
+  }
+  const candidate = Number(arguments_[index + 1]);
+  return Number.isFinite(candidate) &&
+    Number.isInteger(candidate) &&
+    candidate >= 1 &&
+    candidate <= 65_535
+    ? candidate
+    : DEFAULT_PORT;
+};
+
+const port = parseStudioPort(args);
 
 const run = (script: string, extra: string[] = []): void => {
   console.log(`\n▶ bun ${script} ${extra.join(' ')}`.trimEnd());
@@ -87,7 +100,7 @@ const validateInputs = (): void => {
     for (const blocker of validation.blockers) {
       console.error(`   [${blocker.rule}] ${blocker.map}/${blocker.subject} — ${blocker.detail}`);
     }
-    process.exit(1);
+    throw new Error(`semantic map validation failed with ${validation.blockers.length} blocker(s)`);
   }
   console.log(`✅ semantic map validation passed — ${warnings} warning(s), 0 blocker(s)`);
 };
@@ -114,14 +127,15 @@ const pipe = (): void => {
     console.error(
       `\n❌ candidate plane incomplete — stale published rows for:\n   ${missing.join('\n   ')}`,
     );
-    process.exit(1);
+    throw new Error(`candidate plane is missing ${missing.length} override(s)`);
   }
   console.log(`✅ candidate plane complete`);
 };
 
 const launch = (): void => {
-  const children: ReturnType<typeof Bun.spawn>[] = [];
+  const services: Array<{ name: string; child: ReturnType<typeof Bun.spawn> }> = [];
   const originReady = existsSync(snapshotRoot);
+  let localOriginStarted = false;
 
   if (!has('--no-serve')) {
     if (!originReady) {
@@ -131,37 +145,64 @@ const launch = (): void => {
       );
     } else {
       console.log(`\n▶ local candidate origin on http://localhost:${port}`);
-      children.push(
-        Bun.spawn(['bun', join(ops, 'local_asset_origin.ts'), '--port', String(port)], {
+      services.push({
+        name: 'local candidate origin',
+        child: Bun.spawn(['bun', join(ops, 'local_asset_origin.ts'), '--port', String(port)], {
           cwd: repository,
           stdio: ['inherit', 'inherit', 'inherit'],
         }),
-      );
+      });
+      localOriginStarted = true;
     }
   }
 
   if (!has('--no-client')) {
     console.log('\n▶ client dev server (vite --mode emulator)');
-    children.push(
-      Bun.spawn(['bun', 'run', 'dev'], {
+    const env = { ...process.env };
+    if (localOriginStarted) {
+      env.PUBLIC_ASSETS_BASE_URL = `http://localhost:${port}`;
+    }
+    services.push({
+      name: 'client dev server',
+      child: Bun.spawn(['bun', 'run', 'dev'], {
         cwd: join(repository, 'apps/frontend/client'),
         stdio: ['inherit', 'inherit', 'inherit'],
-        env: {
-          ...process.env,
-          PUBLIC_ASSETS_BASE_URL: `http://localhost:${port}`,
-        },
+        env,
       }),
-    );
+    });
   }
 
-  const stop = (): void => {
-    for (const child of children) {
-      child.kill();
+  let stopping = false;
+  const stop = async (options: {
+    exitCode: number;
+    exitedChild?: ReturnType<typeof Bun.spawn>;
+  }): Promise<void> => {
+    if (stopping) {
+      return;
     }
-    process.exit(0);
+    stopping = true;
+    const siblings = services.filter((service) => service.child !== options.exitedChild);
+    for (const service of siblings) {
+      service.child.kill();
+    }
+    await Promise.allSettled(siblings.map((service) => service.child.exited));
+    process.exit(options.exitCode);
   };
-  process.on('SIGINT', stop);
-  process.on('SIGTERM', stop);
+  for (const service of services) {
+    void service.child.exited.then((exitCode) => {
+      if (stopping) {
+        return;
+      }
+      if (exitCode !== 0) {
+        console.error(`✗ ${service.name} exited with status ${exitCode}`);
+      } else {
+        console.error(`✗ ${service.name} exited unexpectedly`);
+      }
+      void stop({ exitCode: exitCode === 0 ? 1 : exitCode, exitedChild: service.child });
+    });
+  }
+  process.on('SIGINT', () => void stop({ exitCode: 0 }));
+  process.on('SIGTERM', () => void stop({ exitCode: 0 }));
 };
 
 const startWatch = (): void => {
@@ -207,7 +248,15 @@ const banner = (): void => {
 const main = (): void => {
   banner();
   if (!has('--skip-build')) {
-    pipe();
+    try {
+      pipe();
+    } catch (error) {
+      console.error(
+        '✗ initial Studio build failed:',
+        error instanceof Error ? error.message : String(error),
+      );
+      process.exit(1);
+    }
   }
   launch();
   if (has('--watch')) {
@@ -217,4 +266,6 @@ const main = (): void => {
   }
 };
 
-main();
+if (import.meta.main) {
+  main();
+}

@@ -170,6 +170,17 @@ export const path = (options: {
 /** Extra authored property on a placement (kept for vendor/affordance data). */
 export type AuthoredProperty = { name: string; type: string; value: unknown };
 
+/** Semantic prop ids authored through {@link placeLandmark}. */
+export const EMBERWATCH_LANDMARK_PROP_IDS: ReadonlySet<string> = new Set([
+  'village_well',
+  'notice_board',
+  'village_gate',
+  'ward_tree_landmark',
+  'road_notice',
+  'ward_socket',
+  'shrine_arch',
+]);
+
 /**
  * Place a prop at a cell. `frame` is a logical frame name resolved through the
  * installed pack lock; logical size/anchor/shadow live in the manifest prop
@@ -208,7 +219,12 @@ export const placeLandmark = (
   c: number,
   r: number,
   extra: AuthoredProperty[] = [],
-) => placeProp(id, propId, propName, frame, c, r, extra);
+) => {
+  if (!EMBERWATCH_LANDMARK_PROP_IDS.has(propId)) {
+    throw new Error(`Unknown Emberwatch landmark prop id: ${propId}`);
+  }
+  return placeProp(id, propId, propName, frame, c, r, extra);
+};
 
 /** Place a named arrival spawn marker at a cell. */
 export const placeSpawn = (id: number, spawnId: string, c: number, r: number) =>

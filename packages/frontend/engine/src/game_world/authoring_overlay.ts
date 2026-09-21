@@ -349,7 +349,7 @@ export const buildAuthoringOverlayShapes = (
   if (layers.has('grid')) {
     pushGrid(input, shapes);
   }
-  if (layers.has('transitions')) {
+  if (layers.has('transitions') || layers.has('destinations')) {
     pushTransitions(input, shapes);
   }
   if (

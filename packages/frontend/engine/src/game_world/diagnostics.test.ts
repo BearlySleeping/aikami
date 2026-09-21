@@ -3,6 +3,7 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import {
   exposeEngineState,
+  isAuthoringOverlayMode,
   isE2ETestMode,
   isVisualScreenshotMode,
   publishEntityPosition,
@@ -40,6 +41,7 @@ describe('diagnostics — mode detection', () => {
   afterEach(() => {
     setWindow(undefined);
     resetVisualScreenshotModeCache();
+    delete process.env.PUBLIC_MODE;
   });
 
   test('E2E mode is off outside a browser', () => {
@@ -65,6 +67,18 @@ describe('diagnostics — mode detection', () => {
     // the page URL cannot change without a reload.
     fake.location.search = '';
     expect(isVisualScreenshotMode()).toBe(true);
+  });
+
+  test('authoring mode requires a recognized development mode and an explicit flag', () => {
+    setWindow(makeWindow('?authoring=true'));
+    process.env.PUBLIC_MODE = 'production';
+    expect(isAuthoringOverlayMode()).toBe(false);
+    process.env.PUBLIC_MODE = 'unknown';
+    expect(isAuthoringOverlayMode()).toBe(false);
+    process.env.PUBLIC_MODE = 'testing';
+    expect(isAuthoringOverlayMode()).toBe(true);
+    setWindow(makeWindow());
+    expect(isAuthoringOverlayMode()).toBe(false);
   });
 });
 

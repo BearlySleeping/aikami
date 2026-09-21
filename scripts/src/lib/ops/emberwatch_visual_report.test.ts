@@ -30,6 +30,21 @@ describe('emberwatch visual report', () => {
   test('the six legacy frames are reported as legacy dependencies', () => {
     const report = buildVisualReport();
     expect(new Set(report.legacyVisualDependencies)).toEqual(new Set(LEGACY_GRID_PROP_FRAMES));
+    for (const row of report.props.filter(
+      (candidate) => LEGACY_GRID_PROP_FRAMES.has(candidate.frame) && !candidate.worldSizeAuthored,
+    )) {
+      expect(row.worldSize).toEqual({ width: 32, height: 32 });
+    }
+  });
+
+  test('landmarks follow authoring semantics rather than render width', () => {
+    const report = buildVisualReport();
+    const oldRoad = report.maps.find((map) => map.id === 'old_road');
+    const shrine = report.maps.find((map) => map.id === 'ruined_shrine');
+
+    expect(oldRoad?.landmarkPlacements).toContain('road_notice');
+    expect(oldRoad?.landmarkPlacements).not.toContain('road_oak_0');
+    expect(shrine?.landmarkPlacements).toContain('ward_socket');
   });
 
   test('every map summary reports walkability and object counts', () => {

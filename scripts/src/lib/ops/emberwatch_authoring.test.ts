@@ -69,9 +69,12 @@ describe('emberwatch_authoring primitives', () => {
     expect(prop.type).toBe('prop');
     expect(prop.properties.find((entry) => entry.name === 'propId')?.value).toBe('p');
 
-    const landmark = placeLandmark(8, 'l', 'Landmark', 'l.png', 1, 1);
+    const landmark = placeLandmark(8, 'road_notice', 'Landmark', 'l.png', 1, 1);
     expect(landmark.type).toBe('prop');
     expect(landmark.x).toBe(32);
+    expect(() => placeLandmark(8, 'tree', 'Tree', 'tree.png', 1, 1)).toThrow(
+      'Unknown Emberwatch landmark prop id',
+    );
 
     const npc = placeNpc(9, 'n', 'Npc', 'key', 2, 2);
     expect(npc.type).toBe('npc');

@@ -116,6 +116,32 @@ export const buildLegacyPropManifest = (): LegacyPropManifest => {
   };
 };
 
+const normalizeJsonValue = (value: unknown): unknown => {
+  if (Array.isArray(value)) {
+    return value.map(normalizeJsonValue);
+  }
+  if (typeof value !== 'object' || value === null) {
+    return value;
+  }
+  return Object.fromEntries(
+    Object.entries(value)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([key, entry]) => [key, normalizeJsonValue(entry)]),
+  );
+};
+
+const normalizeManifest = (manifest: LegacyPropManifest): unknown =>
+  normalizeJsonValue({
+    ...manifest,
+    items: manifest.items
+      .map((item) => ({
+        ...item,
+        propIds: [...item.propIds].sort(),
+        maps: [...item.maps].sort(),
+      }))
+      .sort((a, b) => a.frame.localeCompare(b.frame)),
+  });
+
 /** Validates the committed manifest still covers exactly the legacy frames. */
 export const checkLegacyPropManifest = (): { ok: boolean; reasons: string[] } => {
   const reasons: string[] = [];
@@ -130,6 +156,9 @@ export const checkLegacyPropManifest = (): { ok: boolean; reasons: string[] } =>
     reasons.push(
       `manifest frames [${declaredFrames.join(', ')}] do not match the legacy allowlist [${wantedFrames.join(', ')}]`,
     );
+  }
+  if (JSON.stringify(normalizeManifest(declared)) !== JSON.stringify(normalizeManifest(wanted))) {
+    reasons.push('manifest contents do not match the current generated replacement manifest');
   }
   for (const item of declared.items) {
     if (item.briefJobId === null) {

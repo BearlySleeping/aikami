@@ -216,17 +216,24 @@ export const buildAuthoringOverlayInput = (
   const height = scene.tilemap.height;
   const tileSize = scene.tilemap.tilewidth || 32;
 
-  const collision = scene.collisionGrid?.grid;
   const blocked = new Uint8Array(width * height);
-  if (collision) {
-    for (let i = 0; i < blocked.length; i++) {
-      blocked[i] = collision[i] ? 1 : 0;
-    }
+  for (let i = 0; i < blocked.length; i++) {
+    blocked[i] = scene.terrainGrid.cost[i] === 0 ? 1 : 0;
   }
 
   const propDefs =
     (scene.packConfig as { props?: Record<string, ProjectedPropDef> } | undefined)?.props ?? {};
   const placements = collectPlacements(scene, propDefs, options);
+  for (const prop of placements.props) {
+    if ((propDefs[prop.propId]?.isWalkable ?? false) === true) {
+      continue;
+    }
+    const c = Math.floor(prop.x / tileSize);
+    const r = Math.floor(prop.y / tileSize);
+    if (c >= 0 && c < width && r >= 0 && r < height) {
+      blocked[r * width + c] = 1;
+    }
+  }
 
   return {
     width,

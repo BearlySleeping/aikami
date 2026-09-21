@@ -103,6 +103,12 @@ describe('buildAuthoringOverlayShapes', () => {
     }
   });
 
+  test('destination labels can be selected without transition bounds', () => {
+    const shapes = buildAuthoringOverlayShapes(input(), new Set(['destinations']));
+    expect(shapes.length).toBeGreaterThan(0);
+    expect(new Set(shapes.map((shape) => shape.layer))).toEqual(new Set(['destinations']));
+  });
+
   test('connectivity marks only walkable unreachable cells', () => {
     const shapes = buildAuthoringOverlayShapes(input(), new Set(['connectivity']));
     const rects = shapes.filter((shape) => shape.kind === 'rect');

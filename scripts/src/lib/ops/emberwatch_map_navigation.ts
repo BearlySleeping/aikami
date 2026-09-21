@@ -246,12 +246,15 @@ export const cloneGrid = (grid: WalkabilityGrid): WalkabilityGrid => ({
 });
 
 /**
- * Clearance (in cells) at a walkable cell: the longer of the contiguous
- * horizontal and vertical walkable runs through it. This is the local corridor
- * width an actor of a given body size can use — a proxy for "is this route
- * companion-safe?".
+ * Usable corridor width at a walkable cell, measured perpendicular to one
+ * orthogonal route step. A horizontal route needs vertical room and vice versa.
  */
-export const clearanceAt = (grid: WalkabilityGrid, c: number, r: number): number => {
+export const clearanceAt = (
+  grid: WalkabilityGrid,
+  c: number,
+  r: number,
+  routeStep: { dc: number; dr: number },
+): number => {
   if (!isWalkable(grid, c, r)) {
     return 0;
   }
@@ -269,5 +272,5 @@ export const clearanceAt = (grid: WalkabilityGrid, c: number, r: number): number
   for (let y = r + 1; isWalkable(grid, c, y); y++) {
     vertical += 1;
   }
-  return Math.max(horizontal, vertical);
+  return routeStep.dc === 0 ? horizontal : vertical;
 };

@@ -14,6 +14,7 @@
 // Type-only: erased at build time, so this module stays runtime-free of the
 // rendering layer while keeping the published shape in lockstep with it.
 import type { WeatherFxDebugSnapshot } from '../rendering/weather/weather_overlay.ts';
+import { isDevelopmentModePublic } from '../../../configs/src/lib/public_mode.ts';
 import { AUTHORING_OVERLAY_LAYERS, type AuthoringOverlayLayer } from './authoring_overlay.ts';
 
 /** Keys the engine owns on `window` for E2E/devtools inspection. */
@@ -133,7 +134,8 @@ export const resetVisualScreenshotModeCache = (): void => {
  * Development only: the overlay never renders unless this is explicitly true,
  * so it cannot reach the production HUD.
  */
-export const isAuthoringOverlayMode = (): boolean => readSearchParam('authoring') === 'true';
+export const isAuthoringOverlayMode = (): boolean =>
+  isDevelopmentModePublic() && readSearchParam('authoring') === 'true';
 
 /**
  * The authoring overlay layers to draw.

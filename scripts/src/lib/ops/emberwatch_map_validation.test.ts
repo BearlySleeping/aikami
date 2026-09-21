@@ -9,6 +9,7 @@ import {
   applyPropCollision,
   buildWalkabilityGrid,
   cellOfPoint,
+  clearanceAt,
   cloneGrid,
   componentsOf,
   reachableFrom,
@@ -19,6 +20,7 @@ import {
   validateConnectivity,
   validateNpcAndEvidence,
   validateProps,
+  validateRouteWidth,
   validateStableIds,
   validateTransitions,
 } from './emberwatch_map_validation_rules.ts';
@@ -123,6 +125,19 @@ describe('emberwatch_map_navigation', () => {
     const labels = componentsOf(grid);
     expect(labels[0]).not.toBe(labels[2]);
   });
+
+  test('clearance is measured perpendicular to the route step', () => {
+    const horizontalCorridor = buildWalkabilityGrid({
+      map: {
+        width: 5,
+        height: 1,
+        layers: [{ name: 'collision', type: 'tilelayer', data: [0, 0, 0, 0, 0] }],
+      },
+      tiles: {},
+    });
+    expect(clearanceAt(horizontalCorridor, 2, 0, { dc: 1, dr: 0 })).toBe(1);
+    expect(clearanceAt(horizontalCorridor, 2, 0, { dc: 0, dr: 1 })).toBe(5);
+  });
 });
 
 describe('emberwatch map validation rules', () => {
@@ -205,6 +220,98 @@ describe('emberwatch map validation rules', () => {
     );
     expect(findings.some((f) => f.rule === 'transition-landing-blocked')).toBe(true);
     expect(findings.some((f) => f.rule === 'transition-bounce-back')).toBe(true);
+  });
+
+  test('missing and unknown destination spawn ids are blockers', () => {
+    const contextA = makeContext({
+      id: 'a',
+      blocked: [[0, 0]],
+      objects: [
+        transition({ targetMap: 'b', targetX: 0, targetY: 0, x: 0, y: 0, width: 32, height: 32 }),
+        transition({
+          targetMap: 'b',
+          targetSpawnId: 'missing',
+          targetX: 0,
+          targetY: 0,
+          x: 32,
+          y: 0,
+          width: 32,
+          height: 32,
+        }),
+      ],
+    });
+    const contextB = makeContext({
+      id: 'b',
+      blocked: [[0]],
+      objects: [{ type: 'spawn', x: 0, y: 0, props: { spawnId: 'arrival' } }],
+    });
+    const findings: Parameters<typeof validateTransitions>[1] = [];
+
+    validateTransitions(
+      new Map([
+        ['a', contextA],
+        ['b', contextB],
+      ]),
+      findings,
+    );
+
+    expect(
+      findings.filter((finding) => finding.rule === 'transition-target-spawn-invalid'),
+    ).toHaveLength(2);
+  });
+
+  test('route width pathfinds to diagonal centres and reports missing routes', () => {
+    const diagonal = makeContext({
+      id: 'diagonal',
+      blocked: [
+        [0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0],
+      ],
+      objects: [
+        transition({
+          targetMap: 'other',
+          targetSpawnId: 'arrival',
+          targetX: 0,
+          targetY: 0,
+          x: 0,
+          y: 0,
+          width: 32,
+          height: 32,
+        }),
+      ],
+    });
+    const blocked = makeContext({
+      id: 'blocked',
+      blocked: [
+        [0, 1, 0],
+        [1, 1, 1],
+        [0, 1, 0],
+      ],
+      objects: [
+        transition({
+          targetMap: 'other',
+          targetSpawnId: 'arrival',
+          targetX: 0,
+          targetY: 0,
+          x: 0,
+          y: 0,
+          width: 32,
+          height: 32,
+        }),
+      ],
+    });
+    const diagonalFindings: Parameters<typeof validateRouteWidth>[1] = [];
+    const blockedFindings: Parameters<typeof validateRouteWidth>[1] = [];
+
+    validateRouteWidth(diagonal, diagonalFindings);
+    validateRouteWidth(blocked, blockedFindings);
+
+    expect(diagonalFindings).toEqual([]);
+    expect(blockedFindings.map((finding) => finding.rule)).toContain('route-width-below-minimum');
+    expect(blockedFindings[0]?.detail).toContain('no walkable route');
   });
 
   test('npc on a blocked cell and unreachable npc are detected', () => {

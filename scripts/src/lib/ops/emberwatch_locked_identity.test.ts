@@ -6,6 +6,7 @@ import {
   diffLockedIdentities,
   extractLockedIdentities,
   type LockedIdentities,
+  type LockedMapIdentity,
   readLockedIdentityGolden,
   serializeLockedIdentities,
 } from './emberwatch_locked_identity.ts';
@@ -67,6 +68,45 @@ describe('emberwatch locked identity', () => {
   });
 
   test('serialization is member-order stable for the same data', () => {
-    expect(serializeLockedIdentities(fixture())).toBe(serializeLockedIdentities(fixture()));
+    const first = fixture();
+    first.maps.inn = {
+      spawnIds: ['side', 'door'],
+      npcIds: ['keeper', 'guest'],
+      propIds: ['table', 'bed'],
+      dialogueKeys: ['welcome', 'rumour'],
+      transitions: [
+        { id: 2, targetMap: 'old_road', targetSpawnId: 'road' },
+        { id: 1, targetMap: 'village', targetSpawnId: 'inn' },
+      ],
+    };
+    first.manifest.mapIds.push('inn');
+    first.manifest.npcIds.push('keeper');
+    first.manifest.questIds.push('q2');
+    first.manifest.evidenceIds.push('e2');
+    first.manifest.affordanceIds.push('inspect', 'rest');
+    const village = first.maps.village;
+    const inn = first.maps.inn;
+    if (!village || !inn) {
+      throw new Error('fixture maps missing');
+    }
+    const reverseMap = (identity: LockedMapIdentity): LockedMapIdentity => ({
+      spawnIds: [...identity.spawnIds].reverse(),
+      npcIds: [...identity.npcIds].reverse(),
+      propIds: [...identity.propIds].reverse(),
+      dialogueKeys: [...identity.dialogueKeys].reverse(),
+      transitions: [...identity.transitions].reverse(),
+    });
+    const second: LockedIdentities = {
+      maps: { inn: reverseMap(inn), village: reverseMap(village) },
+      manifest: {
+        mapIds: [...first.manifest.mapIds].reverse(),
+        npcIds: [...first.manifest.npcIds].reverse(),
+        questIds: [...first.manifest.questIds].reverse(),
+        evidenceIds: [...first.manifest.evidenceIds].reverse(),
+        affordanceIds: [...first.manifest.affordanceIds].reverse(),
+      },
+    };
+
+    expect(serializeLockedIdentities(first)).toBe(serializeLockedIdentities(second));
   });
 });

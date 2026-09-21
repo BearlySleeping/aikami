@@ -267,9 +267,39 @@ export const checkLockedIdentities = (): LockedIdentityResult => {
   return { current, ok: drift.length === 0, drift };
 };
 
-/** Serializes the golden deterministically. */
-export const serializeLockedIdentities = (identities: LockedIdentities): string =>
-  `${JSON.stringify(identities, null, 2)}\n`;
+/** Serializes the golden deterministically, independent of insertion order. */
+export const serializeLockedIdentities = (identities: LockedIdentities): string => {
+  const maps = Object.fromEntries(
+    Object.entries(identities.maps)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([mapId, identity]) => [
+        mapId,
+        {
+          spawnIds: sortedUnique(identity.spawnIds),
+          npcIds: sortedUnique(identity.npcIds),
+          propIds: sortedUnique(identity.propIds),
+          dialogueKeys: sortedUnique(identity.dialogueKeys),
+          transitions: [...identity.transitions].sort(
+            (a, b) =>
+              a.id - b.id ||
+              a.targetMap.localeCompare(b.targetMap) ||
+              a.targetSpawnId.localeCompare(b.targetSpawnId),
+          ),
+        },
+      ]),
+  );
+  const normalized: LockedIdentities = {
+    maps,
+    manifest: {
+      mapIds: sortedUnique(identities.manifest.mapIds),
+      npcIds: sortedUnique(identities.manifest.npcIds),
+      questIds: sortedUnique(identities.manifest.questIds),
+      evidenceIds: sortedUnique(identities.manifest.evidenceIds),
+      affordanceIds: sortedUnique(identities.manifest.affordanceIds),
+    },
+  };
+  return `${JSON.stringify(normalized, null, 2)}\n`;
+};
 
 const printDrift = (drift: readonly IdentityDrift[]): void => {
   for (const entry of drift) {

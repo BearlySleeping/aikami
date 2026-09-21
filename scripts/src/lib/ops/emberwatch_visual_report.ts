@@ -19,6 +19,7 @@
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { computePropRenderSize } from '@aikami/utils';
+import { EMBERWATCH_LANDMARK_PROP_IDS } from './emberwatch_authoring.ts';
 import { cellOfPoint } from './emberwatch_map_navigation.ts';
 import {
   buildContexts,
@@ -88,7 +89,7 @@ type ManifestWithProvenance = Manifest & {
 };
 
 const DEFAULT_OUT = join(repository, 'docs/reference/emberwatch-visual-report.json');
-const LANDMARK_MIN_WIDTH = 96;
+const LEGACY_GRID_FRAME_SIZE = 32;
 
 const generatedAt = (): string =>
   process.env.SOURCE_DATE_EPOCH
@@ -141,10 +142,15 @@ const buildPropRow = (options: {
   const def = manifest.props?.[propId];
   const frame = str(def?.frame);
   const sourcePixels = frame.endsWith('.png') ? readPngSize(join(propsDir, frame)) : null;
+  const texturePixels =
+    sourcePixels ??
+    (LEGACY_GRID_PROP_FRAMES.has(frame)
+      ? { width: LEGACY_GRID_FRAME_SIZE, height: LEGACY_GRID_FRAME_SIZE }
+      : { width: 0, height: 0 });
   const renderSize = def?.renderSize;
   const worldSize = computePropRenderSize({
-    textureWidth: sourcePixels?.width ?? 0,
-    textureHeight: sourcePixels?.height ?? 0,
+    textureWidth: texturePixels.width,
+    textureHeight: texturePixels.height,
     ...(renderSize?.width === undefined ? {} : { renderWidth: renderSize.width }),
     ...(renderSize?.height === undefined ? {} : { renderHeight: renderSize.height }),
   });
@@ -186,11 +192,7 @@ export const buildVisualReport = (): VisualReport => {
     const landmarkPlacements = [
       ...new Set(
         context.props
-          .filter((prop) => {
-            const def = manifest.props?.[str(prop.props.propId)];
-            const width = def?.renderSize?.width ?? 0;
-            return width >= LANDMARK_MIN_WIDTH;
-          })
+          .filter((prop) => EMBERWATCH_LANDMARK_PROP_IDS.has(str(prop.props.propId)))
           .map((prop) => str(prop.props.propId)),
       ),
     ].sort();
