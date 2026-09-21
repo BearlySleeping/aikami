@@ -182,10 +182,13 @@ const readJson = async <T>(path: string): Promise<T> =>
   JSON.parse(await readFile(path, 'utf8')) as T;
 
 /** Every row this checkout can produce, from both scan roots. */
-const buildLocalRows = async (options: {
+export const buildLocalRows = async (options: {
   manifestPath: string;
   hashesPath: string;
+  /** Content-pack scan root. Injectable so tests need not touch the real pack. */
+  contentPacksDir?: string;
 }): Promise<{ rows: CompactSeedRow[]; manifest: AssetManifest }> => {
+  const contentPacksDir = options.contentPacksDir ?? CONTENT_PACKS_DIR;
   const manifest = await readJson<AssetManifest>(options.manifestPath);
   const hashes = await readJson<AssetHashesFile>(options.hashesPath);
   const credits = await readJson<AssetCreditsFile>(
@@ -200,7 +203,12 @@ const buildLocalRows = async (options: {
   }
 
   // Content-pack tags, so offline-core tags (emberwatch:*) resolve.
-  const contentPackManifestPath = join(CONTENT_PACKS_DIR, 'manifest.json');
+  //
+  // Only a genuinely ABSENT content-packs manifest is optional. Once it
+  // exists, every later read/parse failure (hashes, credits, manifest content)
+  // PROPAGATES: a corrupt or unreadable manifest must fail generation, not
+  // silently drop every content-pack row.
+  const contentPackManifestPath = join(contentPacksDir, 'manifest.json');
   let cpManifest: AssetManifest;
   try {
     cpManifest = await readJson<AssetManifest>(contentPackManifestPath);
@@ -217,8 +225,8 @@ const buildLocalRows = async (options: {
     return { rows, manifest };
   }
 
-  const cpHashes = await readJson<AssetHashesFile>(join(CONTENT_PACKS_DIR, 'asset_hashes.json'));
-  const cpCredits = await readJson<AssetCreditsFile>(join(CONTENT_PACKS_DIR, 'asset_credits.json'));
+  const cpHashes = await readJson<AssetHashesFile>(join(contentPacksDir, 'asset_hashes.json'));
+  const cpCredits = await readJson<AssetCreditsFile>(join(contentPacksDir, 'asset_credits.json'));
   const { rows: cpRows, skipped: cpSkipped } = buildRows({
     manifest: cpManifest,
     hashes: cpHashes,

@@ -77,6 +77,18 @@ const BASE_CONNECT_SRC = [
 // Local/custom-URL providers take an arbitrary user-supplied endpoint at
 // runtime — no fixed host can be allowlisted. Remote endpoints must use
 // HTTPS; cleartext HTTP is limited to locally-run providers.
+//
+// 🔴 `https://*` is a DELIBERATE security trade-off (CWE-942), not an
+// allowlist. Custom API / OpenAI-compatible providers accept arbitrary
+// user-supplied HTTPS endpoints, so removing the wildcard would break
+// supported providers. The cost is that arbitrary HTTPS egress is permitted
+// after a renderer compromise. `script-src`/`style-src`/`img-src` still block
+// injected script execution and stay the primary control. Restricting egress
+// requires a validated endpoint policy or routing custom-provider requests
+// through a constrained native/proxy path — neither exists yet, so the
+// wildcard MUST NOT be removed to silence a scanner. The desktop-parity
+// `connect-src` in src-tauri/tauri.conf.json carries the same wildcard; keep
+// the two in step.
 const WILDCARD_CONNECT_SRC = ['https://*', 'http://localhost:*', 'http://127.0.0.1:*'];
 
 const collectProviderOrigins = (): string[] => {

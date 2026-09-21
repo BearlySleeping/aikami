@@ -38,7 +38,7 @@
 import { readFileSync } from 'node:fs';
 import { CATALOG_ORIGINS } from '@aikami/constants';
 import type { ReleaseDocumentReader, ReleaseReceipt } from '@aikami/schemas';
-import { ReleaseReceiptSchema } from '@aikami/schemas';
+import { isCatalogSha256, ReleaseReceiptSchema } from '@aikami/schemas';
 import { Value } from 'typebox/value';
 import { resolvePreviousRelease } from './published_catalog.ts';
 import { checkPromotion, type PromotionFailureCode } from './release.ts';
@@ -194,15 +194,18 @@ export const verifyStagingApproval = async (options: {
         `currently serves ${JSON.stringify(previous.releaseId)}. The approval is stale.`,
     };
   }
-  if (receipt.catalogRootHash.length !== 64) {
+  if (!isCatalogSha256(receipt.catalogRootHash)) {
     return {
       ok: false,
       code: 'staging-release-mismatch',
       reason:
-        'the receipt is not bound to a complete 64-character staging root hash, so it ' +
+        'the receipt is not bound to a complete canonical SHA-256 staging root hash, so it ' +
         'cannot approve the release currently served by staging.',
     };
   }
+  // Unconditional: after the representation check above, a valid receipt always
+  // pins a root and it must equal the one staging actually serves. There is no
+  // empty-string escape that could skip this comparison.
   if (previous.rootHash !== receipt.catalogRootHash) {
     return {
       ok: false,

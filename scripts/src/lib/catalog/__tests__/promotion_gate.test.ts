@@ -212,6 +212,18 @@ describe('the staging release the receipt names must still be true', () => {
     }
   });
 
+  test('a receipt with a 64-character NON-hex root is refused, not compared', async () => {
+    // Length alone is not a canonical SHA-256. A 64-char value that is not
+    // lowercase hex must be rejected before any comparison with the remote root.
+    writeReceipt(receipt({ catalogRootHash: 'z'.repeat(64) }));
+    const result = await run();
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.code).toBe('staging-release-mismatch');
+      expect(result.reason).toContain('canonical SHA-256');
+    }
+  });
+
   test('staging publishing no pointer at all is refused', async () => {
     writeReceipt(receipt());
     const result = await verifyStagingApproval({

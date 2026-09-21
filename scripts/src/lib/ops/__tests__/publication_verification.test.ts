@@ -176,19 +176,24 @@ describe('verifyPublishedRelease — distinguishable outcomes', () => {
     expect(result.verificationError).toContain('ECONNREFUSED');
   });
 
-  test('remote-verification-failure: non-absence HTTP errors are unreadable pointers', async () => {
-    const result = await verifyPublishedRelease({
-      originUrl: ORIGIN,
-      previous: pointerRead({ status: 404 }),
-      plannedRootHash: 'e'.repeat(64),
-      readPointer: async () => pointerRead({ status: 503 }),
-      reader: async () => undefined,
-    });
+  // Only actual absence is `never-activated`. Auth failures, rate limits and
+  // server errors mean the origin could not answer, so they must not be
+  // reported as "the release was never activated".
+  for (const status of [401, 403, 429, 500, 502, 503]) {
+    test(`remote-verification-failure: HTTP ${status} is an unreadable pointer, not absence`, async () => {
+      const result = await verifyPublishedRelease({
+        originUrl: ORIGIN,
+        previous: pointerRead({ status: 404 }),
+        plannedRootHash: 'e'.repeat(64),
+        readPointer: async () => pointerRead({ status }),
+        reader: async () => undefined,
+      });
 
-    expect(result.verified).toBe(false);
-    expect(result.outcome).toBe('remote-verification-failure');
-    expect(result.verificationError).toContain('HTTP 503');
-  });
+      expect(result.verified).toBe(false);
+      expect(result.outcome).toBe('remote-verification-failure');
+      expect(result.verificationError).toContain(`HTTP ${status}`);
+    });
+  }
 });
 
 describe('repeat publication', () => {

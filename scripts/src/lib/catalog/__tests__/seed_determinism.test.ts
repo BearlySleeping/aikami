@@ -125,9 +125,11 @@ describe('merging a carried seed preserves inventory', () => {
     expect(merged.r.map((r) => r.t)).toContain('legacy:lpc:sheet');
   });
 
-  test('a document that is not a compact seed is refused', () => {
+  test('a document that is not a compact seed is refused with an actionable reason', () => {
+    // Names the document AND the first failing field, so a malformed seed is
+    // actionable rather than reading as a bare "no rows".
     expect(() => parseCompactSeed(new TextEncoder().encode('{"seed":true}'), 'fixture')).toThrow(
-      /no `r` row array/,
+      /not a compact seed document \(/,
     );
     expect(() => parseCompactSeed(new TextEncoder().encode('{not json'), 'fixture')).toThrow(
       /not valid JSON/,

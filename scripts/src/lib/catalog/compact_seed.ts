@@ -37,7 +37,14 @@ export const parseCompactSeed = (bytes: Uint8Array, label: string): CompactSeedD
     );
   }
   if (!Value.Check(CompactSeedDocumentSchema, parsed)) {
-    throw new Error(`${label} has no \`r\` row array — it is not a compact seed document`);
+    // Name the first violation so a malformed seed is actionable instead of
+    // reading as "no rows": the schema also pins `sv`, `g`, `o` and every row
+    // field, not just the presence of `r`.
+    const first = [...Value.Errors(CompactSeedDocumentSchema, parsed)][0];
+    throw new Error(
+      `${label} is not a compact seed document` +
+        (first ? ` (${first.instancePath || '/'}: ${first.message})` : ''),
+    );
   }
   return parsed as CompactSeedDocument;
 };

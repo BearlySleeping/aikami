@@ -56,6 +56,16 @@ describe('Tauri allowlists cover every provisioned catalog origin', () => {
     expect(CATALOG_ORIGINS.staging.originUrl).not.toBe(CATALOG_ORIGINS.production.originUrl);
   });
 
+  test('connect-src keeps the deliberate https://* wildcard for custom providers', () => {
+    // Custom API / OpenAI-compatible providers accept arbitrary user-supplied
+    // HTTPS endpoints, so no fixed host can be allowlisted for them. The
+    // wildcard is a documented security trade-off (CWE-942), not an oversight:
+    // removing it breaks supported providers, and no constrained egress path
+    // exists yet. If egress restriction is ever required, route custom-provider
+    // requests through a native/proxy path first, then update this test.
+    expect(directive('connect-src')).toContain('https://*');
+  });
+
   for (const origin of provisionedOrigins) {
     test(`connect-src allows ${origin}`, () => {
       expect(directive('connect-src')).toContain(origin);

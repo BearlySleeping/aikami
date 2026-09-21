@@ -187,6 +187,7 @@ describe('publication failure matrix — after the pointer moves', () => {
     failOnKey?: string;
     alreadyActivePointer?: ReleasePointer;
     packLockHash?: string;
+    seedObjects?: readonly { key: string; hash: string; carried: boolean }[];
   }) => {
     client.failOnKey = options.failOnKey;
     return publishIndexAndActivate({
@@ -202,7 +203,7 @@ describe('publication failure matrix — after the pointer moves', () => {
         { id: 'maps', category: 'maps', key: 'index/v1/maps.json', json: '{"a":1}', gzipBytes: 7 },
       ] as never,
       releaseId: '2026-09-20T00:00:00.000Z',
-      seedReport: { uploaded: 0, carried: 0, failed: 0, objects: [] },
+      seedReport: { uploaded: 0, carried: 0, failed: 0, objects: options.seedObjects ?? [] },
       packLockReport: {
         written: true,
         key: 'index/v1/revisions/aaaa/pack_lock.json',
@@ -260,6 +261,40 @@ describe('publication failure matrix — after the pointer moves', () => {
     expect(activation.alreadyActive).toBe(false);
     expect(activation.releaseWritten).toBe(true);
     expect(activation.legacyAlias.written).toBe(true);
+    const updatedObject = client.objects.get(RELEASE_POINTER_KEY);
+    if (!updatedObject) {
+      throw new Error('expected the updated release pointer');
+    }
+    const updated = JSON.parse(new TextDecoder().decode(updatedObject.body)) as ReleasePointer;
+    expect(updated.rootHash).toBe(activePointer.rootHash);
+    expect(updated.dependencies).not.toEqual(activePointer.dependencies);
+    expect(updated.dependencies.some((dependency) => dependency.hash === 'b'.repeat(64))).toBe(
+      true,
+    );
+  });
+
+  test('a same-root release with a changed SEED dependency advances the pointer', async () => {
+    // The root hash is the same in both runs. Only the pinned seed object
+    // moved, which the pointer's dependency list — not the root — identifies.
+    // `alreadyActive` must therefore be false and the pointer must advance.
+    await activate({
+      packLockBody: Buffer.from('{"lock":"stable"}'),
+      seedObjects: [{ key: 'seed/aaaa/asset_seed.json', hash: 'a'.repeat(64), carried: false }],
+    });
+    const activeObject = client.objects.get(RELEASE_POINTER_KEY);
+    if (!activeObject) {
+      throw new Error('expected the first release pointer');
+    }
+    const activePointer = JSON.parse(new TextDecoder().decode(activeObject.body)) as ReleasePointer;
+
+    const activation = await activate({
+      packLockBody: Buffer.from('{"lock":"stable"}'),
+      seedObjects: [{ key: 'seed/bbbb/asset_seed.json', hash: 'b'.repeat(64), carried: false }],
+      alreadyActivePointer: activePointer,
+    });
+
+    expect(activation.alreadyActive).toBe(false);
+    expect(activation.releaseWritten).toBe(true);
     const updatedObject = client.objects.get(RELEASE_POINTER_KEY);
     if (!updatedObject) {
       throw new Error('expected the updated release pointer');
