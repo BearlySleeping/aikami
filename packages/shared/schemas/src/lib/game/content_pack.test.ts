@@ -1316,6 +1316,7 @@ describe('ContentPackManifestSchema — C-523 authored audio bindings', () => {
 describe('ContentPackProp renderSize and shadow', () => {
   const withProp = (prop: Record<string, unknown>) => ({
     ...validManifest,
+    // biome-ignore lint/style/useNamingConvention: manifest prop IDs use snake_case
     props: { test_prop: prop },
   });
 
@@ -1323,7 +1324,11 @@ describe('ContentPackProp renderSize and shadow', () => {
     expect(() =>
       Value.Parse(
         ContentPackManifestSchema,
-        withProp({ name: 'Barrel', frame: 'prop_barrel.png', renderSize: { width: 48, height: 35 } }),
+        withProp({
+          name: 'Barrel',
+          frame: 'prop_barrel.png',
+          renderSize: { width: 48, height: 35 },
+        }),
       ),
     ).not.toThrow();
   });
@@ -1372,7 +1377,11 @@ describe('ContentPackProp renderSize and shadow', () => {
     expect(() =>
       Value.Parse(
         ContentPackManifestSchema,
-        withProp({ name: 'Barrel', frame: 'prop_barrel.png', shadow: { kind: 'ellipse', width: 0, height: 12 } }),
+        withProp({
+          name: 'Barrel',
+          frame: 'prop_barrel.png',
+          shadow: { kind: 'ellipse', width: 0, height: 12 },
+        }),
       ),
     ).toThrow();
   });
