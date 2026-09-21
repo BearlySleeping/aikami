@@ -159,6 +159,61 @@ describe('writeCommittedVersion', () => {
       rmSync(root, { recursive: true, force: true });
     }
   });
+
+  test('only rewrites the top-level version, never a nested one that appears first', () => {
+    const root = fixture({ cargoVersion: '0.1.0', confVersion: '0.1.0' });
+    try {
+      const confPath = join(root, TAURI_CONF);
+      writeFileSync(
+        confPath,
+        `${JSON.stringify(
+          { plugins: { updater: { version: '9.9.9' } }, version: '0.1.0' },
+          null,
+          2,
+        )}\n`,
+      );
+      writeCommittedVersion(root, '0.2.0');
+      const rewritten = JSON.parse(readFileSync(confPath, 'utf8'));
+      expect(rewritten.version).toBe('0.2.0');
+      expect(rewritten.plugins.updater.version).toBe('9.9.9');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test('rewrites a compact config without counting braces inside strings', () => {
+    const root = fixture({ cargoVersion: '0.1.0', confVersion: '0.1.0' });
+    try {
+      const confPath = join(root, TAURI_CONF);
+      writeFileSync(
+        confPath,
+        '{"description":"literal { brace }","plugin":{"version":"9.9.9"},"version":"0.1.0"}',
+      );
+      writeCommittedVersion(root, '0.2.0');
+      expect(readFileSync(confPath, 'utf8')).toBe(
+        '{"description":"literal { brace }","plugin":{"version":"9.9.9"},"version":"0.2.0"}',
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test('rewrites a top-level version whose key, colon, and value span lines', () => {
+    const root = fixture({ cargoVersion: '0.1.0', confVersion: '0.1.0' });
+    try {
+      const confPath = join(root, TAURI_CONF);
+      writeFileSync(
+        confPath,
+        '{\n  "productName": "Aikami",\n  "version"\n    :\n    "0.1.0"\n}\n',
+      );
+      writeCommittedVersion(root, '0.2.0');
+      expect(readFileSync(confPath, 'utf8')).toBe(
+        '{\n  "productName": "Aikami",\n  "version"\n    :\n    "0.2.0"\n}\n',
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
 });
 
 describe('resolveReleaseVersion', () => {

@@ -5,8 +5,8 @@ import {
   type BaseClassOptions,
   toAppErrorFromUnknownError,
 } from '@aikami/utils';
-import { dialogService } from '../services/dialog.svelte.ts';
 import type { ConditionalSnackbarData, ConfirmDialogData, SnackbarData } from '../types/index.ts';
+import { getDialogCapabilities } from './dialog_capabilities.ts';
 
 export type BaseFrontendClassOptions = BaseClassOptions;
 
@@ -19,15 +19,15 @@ export abstract class BaseFrontendClass<
   implements BaseFrontendClassInterface
 {
   protected showSnackbar(action: SnackbarData): void {
-    dialogService.showSnackbar(action);
+    getDialogCapabilities().showSnackbar(action);
   }
   protected showConditionalSnackbar(options: ConditionalSnackbarData): void {
-    dialogService.showConditionalSnackbar(options);
+    getDialogCapabilities().showConditionalSnackbar(options);
   }
   protected async openConfirmDialog(
     confirmDialog: Omit<ConfirmDialogData, 'resolve'>,
   ): Promise<boolean> {
-    const result = await dialogService.open<boolean>({
+    const result = await getDialogCapabilities().open<boolean>({
       type: 'confirm',
       props: confirmDialog as Record<string, unknown>,
     });
@@ -35,7 +35,7 @@ export abstract class BaseFrontendClass<
   }
 
   protected setAppLoading(loading: boolean, label?: string): void {
-    dialogService.setAppLoading(loading, label);
+    getDialogCapabilities().setAppLoading(loading, label);
   }
   /**
    * A helper wrapper to handle service methods. It will show success/error

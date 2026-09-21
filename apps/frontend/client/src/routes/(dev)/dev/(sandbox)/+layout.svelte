@@ -1,6 +1,6 @@
 <script lang="ts">
 // apps/frontend/client/src/routes/(dev)/dev/(sandbox)/+layout.svelte
-import { BaseDevViewModel } from '@aikami/frontend/services';
+import { BaseDevViewModel } from '@aikami/frontend/services/base';
 import ModeIndicator from '$lib/components/mode_indicator.svelte';
 
 import type { LayoutProps } from './$types';

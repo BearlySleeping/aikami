@@ -6,7 +6,7 @@
 //   - C-459 AC-2: graceful degradation when no retrieval results exist.
 //
 // Run with:
-//   bun test --preload ./src/lib/test_preload.ts --tsconfig tsconfig.test.json
+//   bun test --preload ./src/lib/test_setup.ts --tsconfig tsconfig.test.json
 //     src/lib/services/gm/narrative_director.test.ts
 
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
@@ -22,12 +22,15 @@ const mockExtractStructure = mock(async () => ({
   playerGuidance: 'Follow the path north to find the ancient ruins.',
 }));
 
-mock.module('$services', () => ({
+mock.module('../ai/text_generation_service.svelte.ts', () => ({
   textGenerationService: {
     streamChat: mock(async () => {}),
     extractStructure: mockExtractStructure,
     cancelAll: mock(() => {}),
   },
+}));
+
+mock.module('../memory/memory_retrieval_service.svelte.ts', () => ({
   memoryRetrievalService: {
     query: mockMemoryQuery,
   },

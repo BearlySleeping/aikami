@@ -1,0 +1,328 @@
+// packages/shared/schemas/src/lib/game/combat/combat_preview.ts
+//
+// Tactical query + preview wire contract (Combat-03).
+//
+// A preview is a *pure question*: the client mints a `requestId`, binds the
+// query to a `basedOnRevision`, and the engine answers with either a forecast
+// or a typed rejection. Nothing here mutates state and nothing here is
+// persisted.
+//
+// Deliberately camelCase literals: the C-509 wire vocabulary already uses
+// `useAbility` / `endTurn` / `targetNotVisible`.
+//
+// Contract: C-515 AC-3, AC-4, AC-5
+
+import Type, { type Static } from 'typebox';
+import { CombatCommandSchema } from './combat_command';
+import {
+  COMBAT_ENVIRONMENT_BOUNDS,
+  CoverLevelSchema,
+  ObjectStateSchema,
+  SurfaceKindSchema,
+} from './combat_environment';
+import { GridPointSchema } from './combat_grid';
+import { CombatActionCostSchema, TurnBudgetSchema } from './combat_state';
+import { CombatInvalidReasonSchema } from './combat_validation';
+
+// ---------------------------------------------------------------------------
+// Queries
+// ---------------------------------------------------------------------------
+
+/** Every cell the active combatant can legally end its movement on. */
+export const LegalMoveQuerySchema = Type.Object(
+  {
+    kind: Type.Literal('legalMoves'),
+    combatantId: Type.String({ minLength: 1 }),
+  },
+  { additionalProperties: false },
+);
+
+export type LegalMoveQuery = Static<typeof LegalMoveQuerySchema>;
+
+/** Every cell holding a combatant the ability may legally target. */
+export const LegalTargetQuerySchema = Type.Object(
+  {
+    kind: Type.Literal('legalTargets'),
+    combatantId: Type.String({ minLength: 1 }),
+    abilityId: Type.String({ minLength: 1 }),
+  },
+  { additionalProperties: false },
+);
+
+export type LegalTargetQuery = Static<typeof LegalTargetQuerySchema>;
+
+/** Forecast one concrete proposed command without committing it. */
+export const ActionQuerySchema = Type.Object(
+  {
+    kind: Type.Literal('action'),
+    combatantId: Type.String({ minLength: 1 }),
+    command: CombatCommandSchema,
+  },
+  { additionalProperties: false },
+);
+
+export type ActionQuery = Static<typeof ActionQuerySchema>;
+
+export const CombatPreviewQuerySchema = Type.Union([
+  LegalMoveQuerySchema,
+  LegalTargetQuerySchema,
+  ActionQuerySchema,
+]);
+
+export type CombatPreviewQuery = Static<typeof CombatPreviewQuerySchema>;
+
+export const CombatPreviewRequestSchema = Type.Object(
+  {
+    /** Client-minted correlation id; never reused across revisions. */
+    requestId: Type.String({ minLength: 1 }),
+    encounterId: Type.String({ minLength: 1 }),
+    /** The C-509 `stateRevision` this query is bound to. */
+    basedOnRevision: Type.Integer({ minimum: 0 }),
+    query: CombatPreviewQuerySchema,
+  },
+  { additionalProperties: false },
+);
+
+export type CombatPreviewRequest = Static<typeof CombatPreviewRequestSchema>;
+
+// ---------------------------------------------------------------------------
+// Forecast
+// ---------------------------------------------------------------------------
+
+/**
+ * Advisory warnings attached to a forecast.
+ *
+ * `triggersReaction` is reserved for Combat-08 and is never produced in
+ * Combat-03.
+ */
+export const CombatPreviewWarningSchema = Type.Union([
+  Type.Literal('triggersReaction'),
+  Type.Literal('affectsAlly'),
+  Type.Literal('consumesResource'),
+  Type.Literal('endsTurn'),
+  Type.Literal('damagesSelf'),
+  Type.Literal('damagesObject'),
+  Type.Literal('createsHazard'),
+  Type.Literal('destroysCover'),
+]);
+
+export type CombatPreviewWarning = Static<typeof CombatPreviewWarningSchema>;
+
+/**
+ * One forecast environmental consequence.
+ *
+ * `detail` is a bounded, authored-or-derived label — the preview never carries
+ * model prose.
+ */
+export const EnvironmentalForecastEffectSchema = Type.Object(
+  {
+    change: Type.Union([
+      Type.Literal('objectState'),
+      Type.Literal('objectMoved'),
+      Type.Literal('objectIgnited'),
+      Type.Literal('objectCover'),
+      Type.Literal('surfaceCreated'),
+      Type.Literal('surfaceRemoved'),
+      Type.Literal('payloadDropped'),
+      Type.Literal('forcedMovement'),
+      Type.Literal('damage'),
+    ]),
+    objectId: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
+    state: Type.Union([ObjectStateSchema, Type.Null()]),
+    cover: Type.Union([CoverLevelSchema, Type.Null()]),
+    surfaceKind: Type.Union([SurfaceKindSchema, Type.Null()]),
+    cells: Type.Array(GridPointSchema, { maxItems: COMBAT_ENVIRONMENT_BOUNDS.cells }),
+  },
+  { additionalProperties: false },
+);
+
+export type EnvironmentalForecastEffect = Static<typeof EnvironmentalForecastEffectSchema>;
+
+/**
+ * The check a preview is about to ask for.
+ *
+ * `modifierAvailable: false` means the acting combatant's snapshot carries no
+ * value for `modifierSource` — the commit will be rejected, so the preview
+ * states the missing field instead of inventing a bonus.
+ */
+export const ForecastCheckOutcomeSchema = Type.Object(
+  {
+    category: Type.String({ minLength: 1 }),
+    dc: Type.Integer({ minimum: 0 }),
+    modifierSource: Type.String({ minLength: 1 }),
+    modifier: Type.Integer(),
+    modifierAvailable: Type.Boolean(),
+    /** 0..1 advisory success chance — never a dice result. */
+    successOdds: Type.Number({ minimum: 0, maximum: 1 }),
+  },
+  { additionalProperties: false },
+);
+
+export type ForecastCheckOutcome = Static<typeof ForecastCheckOutcomeSchema>;
+
+/**
+ * One known opportunity-attack risk on a proposed move.
+ *
+ * Only reactors the acting side can perceive are listed. `reactorId` is an
+ * authored combatant id, never a hidden entity: the preview must not reveal an
+ * unseen reactor. An unexpected reaction is explained only when it becomes
+ * observable (through `reactionWindowOpened`).
+ */
+export const ReactionRiskForecastSchema = Type.Object(
+  {
+    /** The cell whose entry would leave the reactor's threat range. */
+    triggerCell: GridPointSchema,
+    /** Index into the forecast path of `triggerCell`. */
+    pathIndex: Type.Integer({ minimum: 0 }),
+    /** Known hostile reactors, ordered by initiative desc then stable id asc. */
+    reactorIds: Type.Array(Type.String({ minLength: 1 }), { maxItems: 16 }),
+    reactionId: Type.String({ minLength: 1 }),
+    /** Cells of the path committed before the trigger cell. */
+    committedCells: Type.Array(GridPointSchema),
+  },
+  { additionalProperties: false },
+);
+
+export type ReactionRiskForecast = Static<typeof ReactionRiskForecastSchema>;
+
+/**
+ * One objective consequence a proposed action would produce.
+ *
+ * `progressAfter` is the projected satisfied-unit count, not a promise: the
+ * commit re-evaluates against committed facts. Hidden objectives are never
+ * listed.
+ */
+export const ObjectiveEffectForecastSchema = Type.Object(
+  {
+    objectiveId: Type.String({ minLength: 1 }),
+    objectiveKind: Type.String({ minLength: 1 }),
+    statusBefore: Type.Union([
+      Type.Literal('pending'),
+      Type.Literal('complete'),
+      Type.Literal('failed'),
+    ]),
+    statusAfter: Type.Union([
+      Type.Literal('pending'),
+      Type.Literal('complete'),
+      Type.Literal('failed'),
+    ]),
+    progressAfter: Type.Integer({ minimum: 0 }),
+    /** Whether this action is what would complete the objective. */
+    completes: Type.Boolean(),
+    /** Whether the action would push a required objective past its deadline. */
+    failsDeadline: Type.Boolean(),
+  },
+  { additionalProperties: false },
+);
+
+export type ObjectiveEffectForecast = Static<typeof ObjectiveEffectForecastSchema>;
+
+/**
+ * Deterministic, non-mutating projection of one proposed action.
+ *
+ * `reactionRisks` and `objectiveEffects` carry the Combat-08 forecasts: the
+ * immediate objective consequences of a proposed action and its conditional
+ * opportunity-attack risks. Both are bounded and perception-filtered.
+ */
+export const ActionForecastSchema = Type.Object(
+  {
+    /** Recomputed movement path (move commands only). */
+    path: Type.Optional(Type.Array(GridPointSchema)),
+    /** Total movement cost of `path`, in cells. */
+    movementCost: Type.Optional(Type.Integer({ minimum: 0 })),
+    actionCost: Type.Union([Type.Literal('movement'), CombatActionCostSchema]),
+    /** 0..1 advisory hit chance — never a dice result. */
+    hitChance: Type.Optional(Type.Number({ minimum: 0, maximum: 1 })),
+    damageRange: Type.Optional(
+      Type.Object(
+        {
+          minimum: Type.Integer({ minimum: 0 }),
+          maximum: Type.Integer({ minimum: 0 }),
+        },
+        { additionalProperties: false },
+      ),
+    ),
+    affectedCells: Type.Optional(Type.Array(GridPointSchema)),
+    affectedEntityIds: Type.Optional(Type.Array(Type.String({ minLength: 1 }))),
+    /** Present for `interactWithObject` — the check the commit will roll. */
+    checkOutcome: Type.Optional(ForecastCheckOutcomeSchema),
+    /** Present for `interactWithObject` — declared consequences in order. */
+    environmentalEffects: Type.Optional(
+      Type.Array(EnvironmentalForecastEffectSchema, {
+        maxItems: COMBAT_ENVIRONMENT_BOUNDS.effectExpansion,
+      }),
+    ),
+    /** Present for `interactWithObject` — cells the approach will affect. */
+    impactCells: Type.Optional(Type.Array(GridPointSchema)),
+    /** Known opportunity-attack risks on a proposed move. */
+    reactionRisks: Type.Array(ReactionRiskForecastSchema, {
+      maxItems: COMBAT_ENVIRONMENT_BOUNDS.effectExpansion,
+    }),
+    /** Immediate objective consequences of the proposed action. */
+    objectiveEffects: Type.Array(ObjectiveEffectForecastSchema, {
+      maxItems: 32,
+    }),
+    warnings: Type.Array(CombatPreviewWarningSchema),
+  },
+  { additionalProperties: false },
+);
+
+export type ActionForecast = Static<typeof ActionForecastSchema>;
+
+// ---------------------------------------------------------------------------
+// Results
+// ---------------------------------------------------------------------------
+
+/** The pure query module's answer for `legalMoves`. */
+export const LegalActionsSchema = Type.Object(
+  {
+    endpoints: Type.Array(GridPointSchema),
+    targetsByAbility: Type.Record(Type.String(), Type.Array(Type.String({ minLength: 1 }))),
+    budget: TurnBudgetSchema,
+  },
+  { additionalProperties: false },
+);
+
+export type LegalActions = Static<typeof LegalActionsSchema>;
+
+export const CombatPreviewSuccessSchema = Type.Object(
+  {
+    requestId: Type.String({ minLength: 1 }),
+    valid: Type.Literal(true),
+    forecast: ActionForecastSchema,
+    /** Present for `legalMoves`. */
+    legalEndpoints: Type.Optional(Type.Array(GridPointSchema)),
+    /** Present for `legalTargets`. */
+    legalTargetIds: Type.Optional(Type.Array(Type.String({ minLength: 1 }))),
+    /**
+     * Present for `legalTargets` — the cell of each id in `legalTargetIds`,
+     * in the same order. Lets a renderer highlight the target cells without
+     * re-deriving occupancy (C-525 R-2).
+     */
+    legalTargetCells: Type.Optional(Type.Array(GridPointSchema)),
+    /** Reserved for the UI grid; keys are `"x,y"`. */
+    movementCostTo: Type.Optional(Type.Record(Type.String(), Type.Integer({ minimum: 0 }))),
+  },
+  { additionalProperties: false },
+);
+
+export type CombatPreviewSuccess = Static<typeof CombatPreviewSuccessSchema>;
+
+export const CombatPreviewFailureSchema = Type.Object(
+  {
+    requestId: Type.String({ minLength: 1 }),
+    valid: Type.Literal(false),
+    reasonCode: CombatInvalidReasonSchema,
+    messageKey: Type.String({ minLength: 1 }),
+  },
+  { additionalProperties: false },
+);
+
+export type CombatPreviewFailure = Static<typeof CombatPreviewFailureSchema>;
+
+export const CombatPreviewResultSchema = Type.Union([
+  CombatPreviewSuccessSchema,
+  CombatPreviewFailureSchema,
+]);
+
+export type CombatPreviewResult = Static<typeof CombatPreviewResultSchema>;

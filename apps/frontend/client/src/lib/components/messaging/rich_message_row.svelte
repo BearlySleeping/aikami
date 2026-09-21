@@ -34,6 +34,13 @@ type Props = {
   isStreaming?: boolean;
   /** Whether this is the last message in the list. */
   isLast?: boolean;
+  /** Whether the dialogue variant offers Rephrase for this NPC message. */
+  showRephrase?: boolean;
+  /**
+   * C-490: when true (consequential campaign play), transcript-rewinding
+   * actions (branch/edit/delete) are not offered and retry reads "Rephrase".
+   */
+  disableTranscriptEditing?: boolean;
   /** Called when a message action is invoked (chat variant). */
   onAction?: (messageId: string, action: MessageAction) => void;
   /** Surface-specific extras rendered under this message. */
@@ -75,6 +82,12 @@ type Props = {
   canSwipeLeft?: boolean;
   /** Whether swipe right is available (dialogue). */
   canSwipeRight?: boolean;
+  /**
+   * Read-only rendering: hide every action, edit, branch, and swipe affordance.
+   * Used by surfaces (e.g. the companion conversation) whose ViewModel does not
+   * implement transcript editing, so no unavailable control is displayed.
+   */
+  readOnly?: boolean;
 };
 
 const {
@@ -83,6 +96,8 @@ const {
   avatarUrl,
   isStreaming = false,
   isLast = false,
+  showRephrase = true,
+  disableTranscriptEditing = false,
   onAction,
   renderFooter,
   variant = 'chat',
@@ -103,10 +118,13 @@ const {
   alternativeLabel = '',
   canSwipeLeft = false,
   canSwipeRight = false,
+  readOnly = false,
 }: Props = $props();
 
 const isPlayer = $derived(message.sender === 'user');
 const alignRight = $derived(isPlayer || isPartyMate);
+/** System messages (e.g. slash-command help) render as a muted centered banner. */
+const isSystem = $derived(senderName === 'System');
 
 /** Chat variant: enrich alternatives from the branch store (C-231). */
 const enriched = $derived(
@@ -179,200 +197,220 @@ const handleSwipeRight = () => {
 
 {#if variant === 'dialogue'}
   <!-- ── Dialogue variant ─────────────────────────────────────────────── -->
-  <div class="group flex gap-2 {alignRight ? 'flex-row-reverse' : 'flex-row'}">
-    <div class="flex max-w-[75%] flex-col gap-0.5">
-      {#if editing}
-        <div class="flex flex-col gap-1">
-          <textarea
-            class="textarea textarea-bordered textarea-sm w-full"
-            rows={3}
-            value={editText}
-            oninput={(e) => onEditChange?.((e.target as HTMLTextAreaElement).value)}
-          ></textarea>
-          <div class="flex gap-1 justify-end">
-            <button type="button" class="btn btn-ghost btn-xs" onclick={() => onEditCancel?.()}>
-              Cancel
-            </button>
-            <button
-              type="button"
-              class="btn btn-primary btn-xs"
-              onclick={() => onEditSave?.(message.id)}
-            >
-              Save
-            </button>
+  {#if isSystem}
+    <!-- System banner (slash-command help, C-501) — muted & centered so it is
+         readable in both light and dark themes (replaces the unreadable
+         info-tint party bubble where text and background were both dark). -->
+    <div class="flex justify-center py-1.5" data-testid="dialogue-system-message">
+      <span
+        class="max-w-[85%] rounded-lg border border-base-content/10 bg-base-100/70 px-3 py-1.5 text-center text-xs leading-relaxed text-base-content/70"
+        >{message.text}</span
+      >
+    </div>
+  {:else}
+    <div class="group flex gap-2 {alignRight ? 'flex-row-reverse' : 'flex-row'}">
+      <div class="flex max-w-[75%] flex-col gap-0.5">
+        {#if editing && !readOnly}
+          <div class="flex flex-col gap-1">
+            <textarea
+              class="textarea textarea-bordered textarea-sm w-full"
+              rows={3}
+              value={editText}
+              oninput={(e) => onEditChange?.((e.target as HTMLTextAreaElement).value)}
+            ></textarea>
+            <div class="flex gap-1 justify-end">
+              <button type="button" class="btn btn-ghost btn-xs" onclick={() => onEditCancel?.()}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                class="btn btn-primary btn-xs"
+                onclick={() => onEditSave?.(message.id)}
+              >
+                Save
+              </button>
+            </div>
           </div>
-        </div>
-      {:else}
-        {#if showPartyUi}
-          <div class="flex items-center gap-1.5 mb-0.5">
-            <Image
-              src={avatarUrlFor()}
-              alt={senderName || (isPlayer ? 'You' : characterName)}
-              class="h-5 w-5 rounded-full object-cover"
-              loading="lazy"
-            />
-            <span class="text-xs font-medium text-base-content/50">
-              {senderName || (isPlayer ? 'You' : characterName)}
-            </span>
+        {:else}
+          {#if showPartyUi}
+            <div class="flex items-center gap-1.5 mb-0.5">
+              <Image
+                src={avatarUrlFor()}
+                alt={senderName || (isPlayer ? 'You' : characterName)}
+                class="h-5 w-5 rounded-full object-cover"
+                loading="lazy"
+              />
+              <span class="text-xs font-medium text-base-content/50">
+                {senderName || (isPlayer ? 'You' : characterName)}
+              </span>
+            </div>
+          {/if}
+          <div
+            class="relative rounded-2xl px-3.5 py-2 text-sm leading-relaxed break-words whitespace-pre-wrap shadow-sm {bubbleClassFor()}"
+          >
+            {#if message.text}
+              {#if isPlayer}
+                {message.text}
+              {:else}
+                {#each formatNpcTextSegments(message.text) as segment}
+                  {#if segment.type === 'action'}
+                    <span class="italic text-base-content/60">*{segment.content}*</span>
+                  {:else if segment.type === 'dialogue'}
+                    <span class="text-base-content">"{segment.content}"</span>
+                  {:else}
+                    {segment.content}
+                  {/if}
+                {/each}
+              {/if}
+            {:else if (isStreaming || isResolvingSkillCheck) && isLast && streamingText}
+              <span class="inline-block" role="status" data-testid="dialogue-streaming-text">
+                {#each formatNpcTextSegments(streamingText) as segment}
+                  {#if segment.type === 'action'}
+                    <span class="italic text-base-content/60">*{segment.content}*</span>
+                  {:else if segment.type === 'dialogue'}
+                    <span class="text-base-content">"{segment.content}"</span>
+                  {:else}
+                    {segment.content}
+                  {/if}
+                {/each}
+              </span>
+            {:else if (isStreaming || isResolvingSkillCheck) && isLast}
+              <span class="inline-flex items-center gap-1" role="status" aria-label="NPC is typing">
+                <span class="h-1.5 w-1.5 rounded-full bg-current opacity-45 animate-bounce"></span>
+                <span
+                  class="h-1.5 w-1.5 rounded-full bg-current opacity-65 animate-bounce"
+                  style="animation-delay: 150ms"
+                ></span>
+                <span
+                  class="h-1.5 w-1.5 rounded-full bg-current opacity-85 animate-bounce"
+                  style="animation-delay: 300ms"
+                ></span>
+              </span>
+            {/if}
           </div>
         {/if}
-        <div
-          class="relative rounded-2xl px-3.5 py-2 text-sm leading-relaxed break-words whitespace-pre-wrap shadow-sm {bubbleClassFor()}"
-        >
-          {#if message.text}
-            {#if isPlayer}
-              {message.text}
-            {:else}
-              {#each formatNpcTextSegments(message.text) as segment}
-                {#if segment.type === 'action'}
-                  <span class="italic text-base-content/60">*{segment.content}*</span>
-                {:else if segment.type === 'dialogue'}
-                  <span class="text-base-content">"{segment.content}"</span>
-                {:else}
-                  {segment.content}
-                {/if}
-              {/each}
-            {/if}
-          {:else if (isStreaming || isResolvingSkillCheck) && isLast && streamingText}
-            <span class="inline-block" role="status" data-testid="dialogue-streaming-text">
-              {#each formatNpcTextSegments(streamingText) as segment}
-                {#if segment.type === 'action'}
-                  <span class="italic text-base-content/60">*{segment.content}*</span>
-                {:else if segment.type === 'dialogue'}
-                  <span class="text-base-content">"{segment.content}"</span>
-                {:else}
-                  {segment.content}
-                {/if}
-              {/each}
-            </span>
-          {:else if (isStreaming || isResolvingSkillCheck) && isLast}
-            <span class="inline-flex items-center gap-1" role="status" aria-label="NPC is typing">
-              <span class="h-1.5 w-1.5 rounded-full bg-current opacity-45 animate-bounce"></span>
-              <span
-                class="h-1.5 w-1.5 rounded-full bg-current opacity-65 animate-bounce"
-                style="animation-delay: 150ms"
-              ></span>
-              <span
-                class="h-1.5 w-1.5 rounded-full bg-current opacity-85 animate-bounce"
-                style="animation-delay: 300ms"
-              ></span>
-            </span>
-          {/if}
-        </div>
-      {/if}
 
-      <!-- Action buttons (hover-visible) -->
-      <div
-        class="flex gap-0.5 opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-within:opacity-100 max-sm:opacity-100 {alignRight ? 'justify-end' : 'justify-start'}"
-      >
-        {#if !isPlayer && !isPartyMate}
-          <button
-            type="button"
-            class="btn btn-ghost btn-xs px-1"
-            title="Copy"
-            aria-label="Copy"
-            onclick={() => onAction?.(message.id, 'copy')}
+        {#if !readOnly}
+          <!-- Action buttons (hover-visible) -->
+          <div
+            class="flex gap-0.5 opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-within:opacity-100 max-sm:opacity-100 {alignRight ? 'justify-end' : 'justify-start'}"
           >
-            📋
-          </button>
-          <button
-            type="button"
-            class="btn btn-ghost btn-xs px-1"
-            title="Retry"
-            aria-label="Retry"
-            disabled={isStreaming}
-            onclick={() => onAction?.(message.id, 'retry')}
-          >
-            🔄
-          </button>
-          {#if ttsAvailable}
+            {#if !isPlayer && !isPartyMate}
+              <button
+                type="button"
+                class="btn btn-ghost btn-xs px-1"
+                title="Copy"
+                aria-label="Copy"
+                onclick={() => onAction?.(message.id, 'copy')}
+              >
+                📋
+              </button>
+              {#if showRephrase}
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-xs px-1"
+                  title="Rephrase"
+                  aria-label="Rephrase"
+                  disabled={isStreaming}
+                  onclick={() => onAction?.(message.id, 'retry')}
+                >
+                  🔄
+                </button>
+              {/if}
+              {#if ttsAvailable}
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-xs px-1"
+                  title="Speak"
+                  aria-label="Speak"
+                  onclick={() => onAction?.(message.id, 'speak')}
+                >
+                  🔊
+                </button>
+              {/if}
+              {#if !disableTranscriptEditing}
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-xs px-1"
+                  title="Branch"
+                  aria-label="Branch"
+                  onclick={() => onAction?.(message.id, 'branch')}
+                >
+                  🌿
+                </button>
+              {/if}
+            {:else}
+              <button
+                type="button"
+                class="btn btn-ghost btn-xs px-1"
+                title="Copy"
+                aria-label="Copy"
+                onclick={() => onAction?.(message.id, 'copy')}
+              >
+                📋
+              </button>
+              {#if !disableTranscriptEditing}
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-xs px-1"
+                  title="Edit"
+                  aria-label="Edit"
+                  disabled={isStreaming}
+                  onclick={() => onAction?.(message.id, 'edit')}
+                >
+                  ✏️
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-xs px-1"
+                  title="Delete"
+                  aria-label="Delete"
+                  disabled={isStreaming}
+                  onclick={() => onAction?.(message.id, 'delete')}
+                >
+                  🗑️
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-xs px-1"
+                  title="Branch"
+                  aria-label="Branch"
+                  onclick={() => onAction?.(message.id, 'branch')}
+                >
+                  🌿
+                </button>
+              {/if}
+            {/if}
+          </div>
+        {/if}
+
+        <!-- Swipe controls for AI messages with alternatives -->
+        {#if !readOnly && !isPlayer && !isPartyMate && alternativeLabel}
+          <div class="flex items-center justify-center gap-1 mt-0.5">
             <button
               type="button"
               class="btn btn-ghost btn-xs px-1"
-              title="Speak"
-              aria-label="Speak"
-              onclick={() => onAction?.(message.id, 'speak')}
+              disabled={!canSwipeLeft}
+              onclick={handleSwipeLeft}
+              aria-label="Previous alternative"
             >
-              🔊
+              ◀
             </button>
-          {/if}
-          <button
-            type="button"
-            class="btn btn-ghost btn-xs px-1"
-            title="Branch"
-            aria-label="Branch"
-            onclick={() => onAction?.(message.id, 'branch')}
-          >
-            🌿
-          </button>
-        {:else}
-          <button
-            type="button"
-            class="btn btn-ghost btn-xs px-1"
-            title="Copy"
-            aria-label="Copy"
-            onclick={() => onAction?.(message.id, 'copy')}
-          >
-            📋
-          </button>
-          <button
-            type="button"
-            class="btn btn-ghost btn-xs px-1"
-            title="Edit"
-            aria-label="Edit"
-            disabled={isStreaming}
-            onclick={() => onAction?.(message.id, 'edit')}
-          >
-            ✏️
-          </button>
-          <button
-            type="button"
-            class="btn btn-ghost btn-xs px-1"
-            title="Delete"
-            aria-label="Delete"
-            disabled={isStreaming}
-            onclick={() => onAction?.(message.id, 'delete')}
-          >
-            🗑️
-          </button>
-          <button
-            type="button"
-            class="btn btn-ghost btn-xs px-1"
-            title="Branch"
-            aria-label="Branch"
-            onclick={() => onAction?.(message.id, 'branch')}
-          >
-            🌿
-          </button>
+            <span class="text-xs font-mono text-base-content/50">{alternativeLabel}</span>
+            <button
+              type="button"
+              class="btn btn-ghost btn-xs px-1"
+              disabled={!canSwipeRight}
+              onclick={handleSwipeRight}
+              aria-label="Next alternative"
+            >
+              ▶
+            </button>
+          </div>
         {/if}
       </div>
-
-      <!-- Swipe controls for AI messages with alternatives -->
-      {#if !isPlayer && !isPartyMate && alternativeLabel}
-        <div class="flex items-center justify-center gap-1 mt-0.5">
-          <button
-            type="button"
-            class="btn btn-ghost btn-xs px-1"
-            disabled={!canSwipeLeft}
-            onclick={handleSwipeLeft}
-            aria-label="Previous alternative"
-          >
-            ◀
-          </button>
-          <span class="text-xs font-mono text-base-content/50">{alternativeLabel}</span>
-          <button
-            type="button"
-            class="btn btn-ghost btn-xs px-1"
-            disabled={!canSwipeRight}
-            onclick={handleSwipeRight}
-            aria-label="Next alternative"
-          >
-            ▶
-          </button>
-        </div>
-      {/if}
     </div>
-  </div>
+  {/if}
 
   {#if renderFooter}
     {@render renderFooter(message.id)}
@@ -380,34 +418,38 @@ const handleSwipeRight = () => {
 {:else}
   <!-- ── Chat variant (C-231 rich message row) ────────────────────────── -->
   <div class="group relative">
-    <!-- Swipe controls (top-right of message) -->
-    <div class="absolute -top-6 right-0 z-10">
-      <MessageSwipeControls
-        canSwipeLeft={enriched?.canSwipeLeft ?? canSwipeLeft}
-        canSwipeRight={enriched?.canSwipeRight ?? canSwipeRight}
-        label={enriched?.alternativeLabel ?? alternativeLabel}
-        onSwipeLeft={handleSwipeLeft}
-        onSwipeRight={handleSwipeRight}
-      />
-    </div>
+    {#if !readOnly}
+      <!-- Swipe controls (top-right of message) -->
+      <div class="absolute -top-6 right-0 z-10">
+        <MessageSwipeControls
+          canSwipeLeft={enriched?.canSwipeLeft ?? canSwipeLeft}
+          canSwipeRight={enriched?.canSwipeRight ?? canSwipeRight}
+          label={enriched?.alternativeLabel ?? alternativeLabel}
+          onSwipeLeft={handleSwipeLeft}
+          onSwipeRight={handleSwipeRight}
+        />
+      </div>
+    {/if}
 
     {#if message.kind === 'dice' && message.dice}
       <DiceCard card={message.dice} />
     {:else}
       <ChatMessage
         message={{
-          id: message.id,
-          text: message.text,
-          sender: (isPlayer ? 'user' : 'ai') as 'user' | 'ai',
-          timestamp: message.timestamp,
-        }}
+  id: message.id,
+  text: message.text,
+  sender: (isPlayer ? 'user' : 'ai') as 'user' | 'ai',
+  timestamp: message.timestamp,
+}}
         {avatarUrl}
         {characterName}
       />
     {/if}
 
-    <!-- Action bar (appears on hover) -->
-    <MessageActionBar sender={message.sender} {ttsAvailable} onAction={handleAction} />
+    {#if !readOnly}
+      <!-- Action bar (appears on hover) -->
+      <MessageActionBar sender={message.sender} {ttsAvailable} onAction={handleAction} />
+    {/if}
 
     {#if renderFooter}
       {@render renderFooter(message.id)}

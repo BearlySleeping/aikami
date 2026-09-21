@@ -3,6 +3,11 @@
 // ViewModel for the custom agent editor form. Manages field state,
 // validation, save/create, duplicate, import/export, and test run.
 //
+// Collaborators arrive through typed capability options. This module never
+// imports the `$services` barrel or any production singleton, so its tests can
+// inject fresh fixtures. Production wiring lives in
+// ./agent_editor_composition.ts.
+//
 // Contract: C-247 Custom Agent Creation
 
 import {
@@ -18,10 +23,45 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import type { AgentPhase } from '@aikami/types';
-import { agentRegistryService, configService, runCustomAgent } from '$services';
-import type { AgentConfig, AgentRunResult, Connection, CustomAgentDefinition } from '$types';
+import type {
+  AgentConfig,
+  AgentPipelineContext,
+  AgentRunResult,
+  CustomAgentDefinition,
+} from '$types';
+import type { AgentRegistryServiceInterface } from '../../../services/agent/agent_registry_service.svelte.ts';
+
+// ── Capability contracts ────────────────────────────────────────────────
+
+/** The custom-agent registry operations the editor performs. */
+export type AgentEditorRegistryCapabilities = Pick<
+  AgentRegistryServiceInterface,
+  'createAgent' | 'updateAgent' | 'importAgent' | 'exportAgent'
+>;
+
+/** A connection entry as the editor's routing dropdown needs it. */
+export type AgentEditorConnectionEntry = {
+  readonly id: string;
+  readonly name: string;
+  readonly capability?: string;
+};
+
+/** The connection catalog the editor reads for its routing dropdown. */
+export type AgentEditorConfigCapabilities = {
+  readonly state: { readonly connections: readonly AgentEditorConnectionEntry[] };
+};
+
+/** The test-run executor. */
+export type AgentEditorRunCapabilities = {
+  run(options: {
+    config: AgentConfig;
+    context: AgentPipelineContext;
+    definition: CustomAgentDefinition;
+    mockInput?: string;
+  }): Promise<AgentRunResult>;
+};
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -107,7 +147,14 @@ export type AgentEditorViewModelInterface = BaseViewModelInterface & {
 
 // ── Options ──────────────────────────────────────────────────────────────
 
-export type AgentEditorViewModelOptions = BaseViewModelOptions;
+export type AgentEditorViewModelOptions = BaseViewModelOptions & {
+  /** Custom-agent registry capability. */
+  registry: AgentEditorRegistryCapabilities;
+  /** Connection catalog capability. */
+  config: AgentEditorConfigCapabilities;
+  /** Test-run executor capability. */
+  runner: AgentEditorRunCapabilities;
+};
 
 // ── Implementation ───────────────────────────────────────────────────────
 
@@ -115,6 +162,17 @@ class AgentEditorViewModel
   extends BaseViewModel<AgentEditorViewModelOptions>
   implements AgentEditorViewModelInterface
 {
+  private readonly _registry: AgentEditorRegistryCapabilities;
+  private readonly _config: AgentEditorConfigCapabilities;
+  private readonly _runner: AgentEditorRunCapabilities;
+
+  constructor(options: AgentEditorViewModelOptions) {
+    super(options);
+    this._registry = options.registry;
+    this._config = options.config;
+    this._runner = options.runner;
+  }
+
   // ── Form state ──────────────────────────────────────────────────
 
   isOpen = $state(false);
@@ -162,8 +220,8 @@ class AgentEditorViewModel
     const options = [{ value: '', label: 'Use chat default' }];
     // C-463: Only show text connections for agent routing (AC-8).
     // Agents use text generation, so voice/image connections are irrelevant.
-    for (const conn of configService.state.connections as readonly Connection[]) {
-      const capability = (conn as { capability?: string }).capability ?? 'text';
+    for (const conn of this._config.state.connections) {
+      const capability = conn.capability ?? 'text';
       if (capability === 'text') {
         options.push({ value: conn.id, label: conn.name });
       }
@@ -270,7 +328,7 @@ class AgentEditorViewModel
 
     try {
       if (this._editingId) {
-        await agentRegistryService.updateAgent({
+        await this._registry.updateAgent({
           id: this._editingId,
           updates: {
             name: trimmedName,
@@ -285,7 +343,7 @@ class AgentEditorViewModel
           },
         });
       } else {
-        await agentRegistryService.createAgent({
+        await this._registry.createAgent({
           name: trimmedName,
           description: this.description,
           folder: this.folder.trim() || undefined,
@@ -370,7 +428,7 @@ class AgentEditorViewModel
     const start = performance.now();
 
     try {
-      const result = await runCustomAgent({
+      const result = await this._runner.run({
         config,
         context: mockContext,
         definition: mockDefinition,
@@ -410,7 +468,7 @@ class AgentEditorViewModel
   async importAgent(file: File): Promise<void> {
     try {
       const text = await file.text();
-      const definition = await agentRegistryService.importAgent({ json: text });
+      const definition = await this._registry.importAgent({ json: text });
       this.debug('importAgent:done', { id: definition.id, name: definition.name });
       this.openEdit(definition);
     } catch (error) {
@@ -425,7 +483,7 @@ class AgentEditorViewModel
     }
 
     try {
-      const json = await agentRegistryService.exportAgent({ id: this._editingId });
+      const json = await this._registry.exportAgent({ id: this._editingId });
       const blob = new Blob([json], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -467,6 +525,13 @@ class AgentEditorViewModel
 
 export { AgentEditorViewModel };
 
-export const getAgentEditorViewModel = (
+/**
+ * Builds an agent editor ViewModel from explicit capabilities.
+ *
+ * Callers outside production (tests, sandboxes) use this directly; production
+ * code goes through `getAgentEditorViewModel` in
+ * ./agent_editor_composition.ts.
+ */
+export const createAgentEditorViewModel = (
   options: AgentEditorViewModelOptions,
 ): AgentEditorViewModelInterface => AgentEditorViewModel.create(options);

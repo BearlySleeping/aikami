@@ -8,12 +8,12 @@
 // Capture is always sequential — parallel capture risks corrupting
 // the single WebGL context shared by Chromium headless.
 
-import { existsSync, mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { EMULATOR_PORTS } from '@aikami/constants';
 
 import { DEFAULT_LANCZOS_SIZE, optimizePng, resizeLanczos, toBase64DataUri } from '@scripts/ai';
-import { chromium, type Page } from 'playwright';
+import { chromium, type Locator, type Page } from 'playwright';
 import type { TSchema } from 'typebox';
 
 // ── Types ─────────────────────────────────────────────────────
@@ -36,6 +36,16 @@ export type VisualTestCase<T extends TSchema = TSchema> = {
    * Use 'canvas' to capture only the rendered game surface.
    */
   screenshotSelector?: string;
+  /**
+   * C-529: crop the FULL scrollable page instead of the viewport.
+   *
+   * A target taller than the viewport cannot be captured by a viewport clip —
+   * Playwright silently truncates the crop rather than failing, which hides the
+   * lower half of the surface from the evaluator (a 200%-text settings card is
+   * 1116px tall in a 720px viewport). Opt in here when the whole element must be
+   * judged; leave it unset to keep the existing viewport-clip pixels.
+   */
+  fullPageClip?: boolean;
   /** Size of the clip region in pixels. Default: 256. */
   clipSize?: number;
   /**
@@ -60,6 +70,22 @@ export type VisualTestCase<T extends TSchema = TSchema> = {
    * `overheadOccludesPlayer`).
    */
   requiredTrueFields?: string[];
+  /**
+   * C-527: boolean schema fields that must be `false` for the case to pass,
+   * regardless of the score.
+   *
+   * The mirror of `requiredTrueFields`, and required wherever a *defect flag*
+   * is a hard gate: a field named `missingCriticalAction` must FAIL the case
+   * when it is true, so listing it in `requiredTrueFields` inverts the gate
+   * and makes a correct UI impossible to pass.
+   */
+  requiredFalseFields?: string[];
+  /**
+   * Minimum AI score for this case to pass. Defaults to the framework
+   * threshold (80) — set higher (e.g. 90) for headline claims that must not
+   * pass on a marginal render.
+   */
+  minScore?: number;
 };
 
 /** A suite of related visual test cases targeting the same route. */
@@ -75,6 +101,18 @@ export type VisualTestSuite = {
   app?: 'client' | 'hub';
   /** How to wait for the engine/canvas before capturing. */
   waitCondition: 'pixi_loaded' | 'game_ready' | 'hub_ready';
+  /**
+   * A selector this suite's own page renders, used instead of the shared
+   * `waitCondition` heuristics.
+   *
+   * 🔴 `hub_ready` means "the hub *catalog* grid is up" — it polls for
+   * `catalog-asset-grid`, which no other hub route renders. A hub suite on a
+   * non-catalog route therefore has no honest way to say "my page is ready"
+   * with the three built-in conditions, and would time out waiting for a grid
+   * it never shows. Declaring a selector keeps the wait specific to the route
+   * being captured instead of widening a shared helper for one suite.
+   */
+  waitSelector?: string;
   /** Test cases in this suite. */
   cases: VisualTestCase[];
   /**
@@ -102,6 +140,10 @@ export type CaptureResult = {
   error?: string;
   /** C-378: boolean schema fields that must be true for this case to pass. */
   requiredTrueFields?: string[];
+  /** C-527: boolean schema fields that must be FALSE for this case to pass. */
+  requiredFalseFields?: string[];
+  /** Per-case minimum AI score (defaults to the framework threshold). */
+  minScore?: number;
 };
 
 // ── Path resolution ──────────────────────────────────────────
@@ -118,8 +160,29 @@ const getChromiumPath = (): string | undefined => {
   if (existsSync(NIX_CHROMIUM)) {
     return NIX_CHROMIUM;
   }
-  if (process.env.PLAYWRIGHT_BROWSERS_PATH) {
-    return `${process.env.PLAYWRIGHT_BROWSERS_PATH}/chromium-1217/chrome-linux64/chrome`;
+  const browsersPath = process.env.PLAYWRIGHT_BROWSERS_PATH;
+  if (browsersPath) {
+    // Prefer the historically pinned revision, but never point at a path that
+    // does not exist: a stale hard-coded revision makes `chromium.launch()`
+    // fail outright ("executable doesn't exist") even though the toolchain
+    // ships a perfectly good browser. Fall back to whichever `chromium-<rev>`
+    // is actually present, and otherwise return undefined so Playwright
+    // resolves the browser from its own browsers.json revision.
+    const pinned = `${browsersPath}/chromium-1217/chrome-linux64/chrome`;
+    if (existsSync(pinned)) {
+      return pinned;
+    }
+    try {
+      const chromiumDir = readdirSync(browsersPath).find((entry) => entry.startsWith('chromium-'));
+      if (chromiumDir) {
+        const candidate = `${browsersPath}/${chromiumDir}/chrome-linux64/chrome`;
+        if (existsSync(candidate)) {
+          return candidate;
+        }
+      }
+    } catch {
+      // Unreadable browsers path — fall through to Playwright's resolution.
+    }
   }
   return undefined;
 };
@@ -164,6 +227,17 @@ const _waitForGameReady = async (page: Page, timeout = 20_000): Promise<void> =>
       // Start menu / main menu (C-405 pack-picker visual suite)
       const startMenu = document.querySelector('[data-testid="start-menu"]');
       if (startMenu) {
+        return true;
+      }
+
+      // Creator Studio (C-513 AC-13), the community browse surface and the
+      // Settings page — DOM-only routes with no PixiJS canvas. A visual case may
+      // legitimately navigate to Settings in its setup hook, and without this it
+      // would wait forever for a canvas that route never renders.
+      const domReady = document.querySelector(
+        '[data-testid="studio-ready"], [data-testid="community-ready"], [data-testid="settings-interface"]',
+      );
+      if (domReady) {
         return true;
       }
 
@@ -239,8 +313,84 @@ const _waitForHubReady = async (page: Page, timeout = 30_000): Promise<void> => 
     { timeout },
   );
 };
+/**
+ * Captures a screenshot clipped to a target element.
+ *
+ * C-529: `page.screenshot({ clip })` rejects a clip that lies entirely outside
+ * the viewport ("Clipped area is either empty or outside the resulting image")
+ * and silently TRUNCATES one that only partly fits. A target below the fold
+ * therefore needs `scrollFirst`, and a target taller than the viewport needs
+ * `fullPage` (which crops the scrollable page rather than the viewport).
+ *
+ * @throws When the target has no usable bounding box or the crop is rejected.
+ * The caller logs that reason instead of hiding it behind a full-page fallback —
+ * a bare `catch` is what silently downgraded three distinct contexts to
+ * byte-identical screenshots.
+ */
+const _captureClippedScreenshot = async (options: {
+  page: Page;
+  filepath: string;
+  selector: string;
+  useExactSelector: boolean;
+  clipSize: number;
+  mask?: Locator[];
+  scrollFirst: boolean;
+  fullPage: boolean;
+}): Promise<void> => {
+  const { page, filepath, selector, useExactSelector, clipSize, mask, scrollFirst, fullPage } =
+    options;
+
+  const target = page.locator(selector).first();
+
+  if (scrollFirst) {
+    await target.scrollIntoViewIfNeeded({ timeout: 3000 });
+  }
+
+  const box = await target.boundingBox({ timeout: 3000 });
+
+  if (!box || box.width <= 0 || box.height <= 0) {
+    throw new Error(`"${selector}" has no usable bounding box`);
+  }
+
+  const scrollOffset = fullPage
+    ? await page.evaluate(() => ({ x: window.scrollX, y: window.scrollY }))
+    : { x: 0, y: 0 };
+
+  // When screenshotSelector is set, clip to that element's exact bounds.
+  if (useExactSelector) {
+    await page.screenshot({
+      path: filepath,
+      fullPage,
+      clip: {
+        x: Math.max(0, Math.floor(box.x + scrollOffset.x)),
+        y: Math.max(0, Math.floor(box.y + scrollOffset.y)),
+        width: Math.floor(box.width),
+        height: Math.floor(box.height),
+      },
+      mask,
+    });
+    return;
+  }
+
+  // Otherwise clip a clipSize×clipSize region centered on the canvas element.
+  const centerX = box.x + box.width / 2;
+  const centerY = box.y + box.height / 2;
+
+  await page.screenshot({
+    path: filepath,
+    fullPage,
+    clip: {
+      x: Math.max(0, Math.floor(centerX + scrollOffset.x - clipSize / 2)),
+      y: Math.max(0, Math.floor(centerY + scrollOffset.y - clipSize / 2)),
+      width: clipSize,
+      height: clipSize,
+    },
+    mask,
+  });
+};
 
 /**
+ * Builds the full URL for a suite route using EMULATOR_PORTS.
  * Builds the full URL for a suite route using EMULATOR_PORTS.
  *
  * Always includes `screenshot=true` as a default query param.
@@ -287,6 +437,17 @@ export const captureSuite = async (suite: VisualTestSuite): Promise<CaptureResul
   const browser = await chromium.launch({
     headless: true,
     executablePath: chromiumPath,
+    args: [
+      // 🔴 WebGL is required for anything that touches the game surface. Without
+      // these flags the Pixi engine falls back to Canvas2D and the production
+      // combat entry path never mounts (a suite asking for the combat surface
+      // then screenshots a world with no combat in it). These are the same
+      // flags the Playwright `client`/`game` projects use.
+      '--use-gl=angle',
+      '--use-angle=gl',
+      '--enable-webgl',
+      '--ignore-gpu-blocklist',
+    ],
   });
 
   const contextOptions: Parameters<typeof browser.newContext>[0] = {
@@ -325,7 +486,9 @@ export const captureSuite = async (suite: VisualTestSuite): Promise<CaptureResul
 
           // Only wait for canvas if the suite expects PixiJS rendering.
           // DOM-only pages (boot screen, settings, etc.) have no canvas.
-          if (suite.waitCondition === 'pixi_loaded') {
+          if (suite.waitSelector) {
+            await page.waitForSelector(suite.waitSelector, { timeout: 30_000 });
+          } else if (suite.waitCondition === 'pixi_loaded') {
             await _waitForCanvas(page);
             await _waitForPixiLoaded(page);
           } else if (suite.waitCondition === 'hub_ready') {
@@ -344,7 +507,9 @@ export const captureSuite = async (suite: VisualTestSuite): Promise<CaptureResul
             await testCase.setupHook(page);
             await page.waitForTimeout(2000);
 
-            if (suite.waitCondition === 'pixi_loaded') {
+            if (suite.waitSelector) {
+              await page.waitForSelector(suite.waitSelector, { timeout: 30_000 });
+            } else if (suite.waitCondition === 'pixi_loaded') {
               await _waitForPixiLoaded(page);
             } else if (suite.waitCondition === 'hub_ready') {
               await _waitForHubReady(page);
@@ -365,62 +530,67 @@ export const captureSuite = async (suite: VisualTestSuite): Promise<CaptureResul
           // Cover elements matching the mask selectors with solid black
           // rectangles so streaming text, AI indicators, and particles
           // don't cause pixel-diff noise between runs.
-          let maskLocators: import('playwright').Locator[] | undefined;
+          let maskLocators: Locator[] | undefined;
           if (testCase.mask && testCase.mask.length > 0) {
             maskLocators = testCase.mask.map((sel) => page.locator(sel));
           }
 
-          // Try bounding-box clip, fall back to full page if no element found.
+          // Try a bounding-box clip, falling back to a full-page screenshot only
+          // when no crop can be produced at all.
+          //
+          // C-529: a target below the fold reports a bounding box outside the
+          // 1280×720 viewport, and `page.screenshot({ clip })` then throws
+          // "Clipped area is either empty or outside the resulting image". The
+          // bare `catch` that used to sit here swallowed that and silently fell
+          // back to `fullPage: true`, producing byte-identical evidence for three
+          // genuinely distinct contexts. Scrolling the target into view fixes the
+          // crop, and the reason is now logged instead of hidden.
+          const targetSelector = screenshotSelector ?? canvasSelector;
           let usedClip = false;
-          try {
-            // When screenshotSelector is set, clip to that element's exact bounds.
-            // Otherwise clip a 256×256 region centered on the canvas element.
-            const targetSelector = screenshotSelector ?? canvasSelector;
-            const target = page.locator(targetSelector).first();
-            const box = await target.boundingBox({ timeout: 3000 });
 
-            if (box && box.width > 0 && box.height > 0) {
-              if (screenshotSelector) {
-                // Clip to the target element's exact bounding box
-                await page.screenshot({
-                  path: filepath,
-                  clip: {
-                    x: Math.max(0, Math.floor(box.x)),
-                    y: Math.max(0, Math.floor(box.y)),
-                    width: Math.floor(box.width),
-                    height: Math.floor(box.height),
-                  },
-                  mask: maskLocators,
-                });
-              } else {
-                // Default: 256×256 center-crop around the canvas
-                const cx = box.x + box.width / 2;
-                const cy = box.y + box.height / 2;
+          // `fullPageClip` cases crop the scrollable page, so no viewport retry
+          // applies; everything else retries once with the target scrolled in.
+          const clipAttempts = testCase.fullPageClip
+            ? [{ scrollFirst: false, fullPage: true }]
+            : [
+                { scrollFirst: false, fullPage: false },
+                { scrollFirst: true, fullPage: false },
+              ];
 
-                await page.screenshot({
-                  path: filepath,
-                  clip: {
-                    x: Math.max(0, Math.floor(cx - clipSize / 2)),
-                    y: Math.max(0, Math.floor(cy - clipSize / 2)),
-                    width: clipSize,
-                    height: clipSize,
-                  },
-                  mask: maskLocators,
-                });
-              }
+          for (const attempt of clipAttempts) {
+            try {
+              await _captureClippedScreenshot({
+                page,
+                filepath,
+                selector: targetSelector,
+                useExactSelector: screenshotSelector !== undefined,
+                clipSize,
+                mask: maskLocators,
+                ...attempt,
+              });
               usedClip = true;
+              break;
+            } catch (error) {
+              console.warn(
+                `[capture] "${testCase.name}": clipped screenshot of "${targetSelector}" failed (scrollFirst=${attempt.scrollFirst}, fullPage=${attempt.fullPage}) — ${
+                  error instanceof Error ? error.message : String(error)
+                }`,
+              );
             }
-          } catch {
-            // Element not found or not visible — fall through to full page
           }
 
           if (!usedClip) {
+            console.warn(
+              `[capture] "${testCase.name}": falling back to a full-page screenshot — this evidence is NOT clipped to "${targetSelector}".`,
+            );
             await page.screenshot({ path: filepath, fullPage: true });
           }
 
-          // C-200 AC-1: Optimise + Lanczos resample via shared pipeline
+          // C-200 AC-1: Optimise + Lanczos resample via shared pipeline.
+          // `fit: 'inside'` keeps the aspect ratio — squashing a tall page
+          // screenshot into a square makes off-screen controls look clipped.
           await optimizePng({ filepath });
-          await resizeLanczos({ filepath, width: DEFAULT_LANCZOS_SIZE });
+          await resizeLanczos({ filepath, width: DEFAULT_LANCZOS_SIZE, fit: 'inside' });
 
           const base64DataUri = toBase64DataUri(filepath);
 
@@ -431,6 +601,8 @@ export const captureSuite = async (suite: VisualTestSuite): Promise<CaptureResul
             prompt: testCase.prompt,
             schema: testCase.schema,
             requiredTrueFields: testCase.requiredTrueFields,
+            requiredFalseFields: testCase.requiredFalseFields,
+            minScore: testCase.minScore,
           });
         } finally {
           await page.close();
@@ -443,6 +615,8 @@ export const captureSuite = async (suite: VisualTestSuite): Promise<CaptureResul
           prompt: testCase.prompt,
           schema: testCase.schema,
           requiredTrueFields: testCase.requiredTrueFields,
+          requiredFalseFields: testCase.requiredFalseFields,
+          minScore: testCase.minScore,
           error: error instanceof Error ? error.message : String(error),
         });
       }

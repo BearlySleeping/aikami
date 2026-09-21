@@ -5,6 +5,11 @@
 //
 // Contract C-136 Task 3, C-138 Task 1
 
+import {
+  type AppearanceCatalog,
+  LEGACY_CATALOG_SNAPSHOT_ID,
+  resolveNpcAppearance,
+} from '@aikami/lpc';
 import type { PackConfig } from '@aikami/types';
 import type { World } from 'bitecs';
 import { addComponent, addEntity, set } from 'bitecs';
@@ -86,6 +91,12 @@ export type SpawnEntitiesOptions = {
    * Contract: C-342 — interactable state persistence
    */
   interactableStates?: InteractableStateMap;
+  /**
+   * Projected LPC slot catalog (C-400/C-504) — the worker resolves a named
+   * NPC appearance to derived layer IDs with the SAME catalog the main thread
+   * resolves against (worker/main-thread parity). Passed from the engine.
+   */
+  lpcCatalog?: AppearanceCatalog;
 };
 
 // ---------------------------------------------------------------------------
@@ -171,29 +182,6 @@ const _addSpatialCollision = (
  */
 const NPC_APPEARANCE_LAYERS: readonly number[] = [3, 3, 23, 22, 7, 95];
 
-/**
- * Reads appearance layer indices from the content pack manifest, keyed by
- * `npcId` (C-400). The Tiled `appearanceLayers` property is IGNORED — the
- * manifest is the single source of truth.
- *
- * @param spawnPoint - The Tiled spawn object (npcId property).
- * @param packConfig - Projected pack config (tiles/props/terrains/npcs).
- * @returns The manifest's appearanceLayers when present, otherwise undefined
- *   (caller decides: legacy default vs skip).
- */
-const _getNpcAppearanceLayers = (
-  spawnPoint: SpawnPoint,
-  packConfig?: PackConfig,
-): readonly number[] | undefined => {
-  const npcId = _getStringProperty(spawnPoint.properties, 'npcId', spawnPoint.id);
-  const entry = packConfig?.npcs?.[npcId];
-  const layers = entry?.appearanceLayers;
-  if (layers && layers.length > 0) {
-    return layers;
-  }
-  return undefined;
-};
-
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -217,6 +205,7 @@ const _getNpcAppearanceLayers = (
 export const spawnEntities = (options: SpawnEntitiesOptions): SpawnResult[] => {
   const { world, spawnPoints, packConfig, defeatedEnemies, collectedPickups, interactableStates } =
     options;
+  const lpcCatalog = options.lpcCatalog;
   const results: SpawnResult[] = [];
   const defeatedSet = new Set(defeatedEnemies ?? []);
   const collectedSet = new Set(collectedPickups ?? []);
@@ -252,7 +241,7 @@ export const spawnEntities = (options: SpawnEntitiesOptions): SpawnResult[] => {
     }
 
     if (spawnPoint.type === 'npc') {
-      const eid = _spawnNpc(world, spawnPoint, packConfig);
+      const eid = _spawnNpc(world, spawnPoint, packConfig, lpcCatalog);
       // C-400: an NPC whose npcId has no manifest entry is skipped — the
       // spawner returns 0 and no result is recorded for it.
       if (eid > 0) {
@@ -386,7 +375,12 @@ export const spawnTransitionEntities = (options: SpawnTransitionOptions): number
 /**
  * Creates an NPC entity from a spawn point.
  */
-const _spawnNpc = (world: World, spawnPoint: SpawnPoint, packConfig?: PackConfig): number => {
+const _spawnNpc = (
+  world: World,
+  spawnPoint: SpawnPoint,
+  packConfig?: PackConfig,
+  lpcCatalog?: AppearanceCatalog,
+): number => {
   const npcId = _getStringProperty(spawnPoint.properties, 'npcId', spawnPoint.id);
 
   // ── C-400: NPC appearance comes from the content pack manifest, keyed by
@@ -443,7 +437,8 @@ const _spawnNpc = (world: World, spawnPoint: SpawnPoint, packConfig?: PackConfig
   );
 
   addComponent(world, eid, Appearance);
-  const appearanceLayers = _getNpcAppearanceLayers(spawnPoint, packConfig) ?? NPC_APPEARANCE_LAYERS;
+  const appearanceLayers =
+    _resolveNpcLayerIds(spawnPoint, packConfig, lpcCatalog) ?? NPC_APPEARANCE_LAYERS;
   setAppearanceLayers(world, eid, appearanceLayers);
 
   addComponent(world, eid, NPCDialog);
@@ -904,6 +899,74 @@ const _getBoolProperty = (
  *
  * Falls back to `defaultValue` when the property is missing or not a string.
  */
+/**
+ * Resolves an NPC's appearance to derived engine layer IDs (C-504).
+ *
+ * The manifest's named `appearance` (slot + assetId + layerRole) is preferred;
+ * legacy `appearanceLayers` (numeric indices tied to the verified legacy
+ * catalog snapshot) are migrated via the shared normalization boundary — never
+ * a positional read against the derived catalog. Both the worker and the main
+ * thread resolve against the SAME catalog (`lpcCatalog`), so a given NPC
+ * resolves to the same slot/assetId sequence everywhere.
+ *
+ * @returns Derived layer IDs, or undefined when no appearance is declared or
+ *   resolution fails (caller falls back to the whole-character default — never
+ *   a mixed per-slot recipe).
+ */
+const _resolveNpcLayerIds = (
+  spawnPoint: SpawnPoint,
+  packConfig?: PackConfig,
+  lpcCatalog?: AppearanceCatalog,
+): readonly number[] | undefined => {
+  const npcId = _getStringProperty(spawnPoint.properties, 'npcId', spawnPoint.id);
+  const entry = packConfig?.npcs?.[npcId];
+  const named = entry?.appearance;
+  const legacy = entry?.appearanceLayers;
+
+  const input = named ?? legacy;
+  if (input === undefined) {
+    return undefined;
+  }
+
+  // The derived catalog must be present to resolve a named/legacy appearance
+  // (worker receives it via INITIALIZE_ENGINE). A missing catalog means every
+  // named asset would read as "missing" — surface a diagnostic instead of
+  // silently substituting the hardcoded default stack.
+  if (!lpcCatalog || lpcCatalog.length === 0) {
+    logger.warn('entity-spawner:npc-appearance-no-catalog', {
+      npcId,
+      source: named ? 'manifest:appearance' : 'manifest:appearanceLayers',
+      hint: 'No LPC catalog available to resolve the NPC appearance — using the whole-character default. The worker normally receives the catalog at INITIALIZE_ENGINE.',
+    });
+    return undefined;
+  }
+
+  const result = resolveNpcAppearance({
+    input,
+    catalog: lpcCatalog ?? [],
+    // Legacy appearanceLayers in the shipped pack are tied to the verified
+    // legacy catalog-order snapshot. Named appearance needs no snapshot.
+    snapshot: named ? undefined : LEGACY_CATALOG_SNAPSHOT_ID,
+    source: named ? 'manifest:appearance' : 'manifest:appearanceLayers',
+    npcId,
+  });
+
+  if (result.layerIds !== undefined && result.diagnostics.length === 0) {
+    return result.layerIds;
+  }
+  if (result.diagnostics.length > 0) {
+    for (const d of result.diagnostics) {
+      logger.warn('entity-spawner:npc-appearance', {
+        npcId,
+        slot: d.slot,
+        assetId: d.assetId,
+        detail: d.detail,
+      });
+    }
+  }
+  return undefined;
+};
+
 const _getStringProperty = (
   properties: Record<string, unknown>,
   key: string,

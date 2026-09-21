@@ -5,8 +5,8 @@ import type { QuestData } from '@aikami/frontend/engine/sim';
 // but seeds localStorage with a mock persona so a character loads instantly.
 import { browser } from '$app/env';
 import DevToolsPanel from '$lib/components/dev/dev_tools_panel.svelte';
+import { getGameViewModel } from '$lib/views/game/game_composition.ts';
 import GameView from '$lib/views/game/game_view.svelte';
-import { getGameViewModel } from '$lib/views/game/game_view_model.svelte';
 import { inventoryService, questStateService, routerService, worldStateService } from '$services';
 import type { DevAction } from '$types';
 

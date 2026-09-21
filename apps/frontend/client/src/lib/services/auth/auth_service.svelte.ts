@@ -18,7 +18,7 @@ import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import type { AppResult, CurrentUser, RegisterForm, SignInProviderName } from '@aikami/types';
 import { toAppErrorFromUnknownError } from '@aikami/utils';
 import { isTauri } from '$lib/views/utils/is_tauri';
@@ -152,6 +152,14 @@ export type AuthServiceInterface = BaseFrontendClassInterface & {
    * Approves the Better Auth device-authorization code from the /link page.
    */
   deleteAccount(): Promise<boolean>;
+
+  /**
+   * Revokes every active session for the current account, signing the user out
+   * on all devices.
+   *
+   * @returns A promise that resolves with true if the sessions were revoked.
+   */
+  revokeAllSessions(): Promise<boolean>;
 
   completeDeviceHandoff(options: { code: string; uid: string }): Promise<void>;
 };
@@ -440,6 +448,28 @@ export class AuthService
       return true;
     } catch (error) {
       this.error('deleteAccount', error);
+      return false;
+    }
+  }
+
+  async revokeAllSessions(): Promise<boolean> {
+    this.log('revokeAllSessions');
+    try {
+      const base = hubApiBase();
+      const response = await fetch(`${base}/account/sessions/revoke-all`, {
+        method: 'POST',
+        headers: hubAuthHeaders(),
+        credentials: 'include',
+      });
+      if (!response.ok) {
+        this.error('revokeAllSessions:failed', { status: response.status });
+        return false;
+      }
+      this.setCurrentUser(undefined);
+      this.log('revokeAllSessions:success');
+      return true;
+    } catch (error) {
+      this.error('revokeAllSessions', error);
       return false;
     }
   }

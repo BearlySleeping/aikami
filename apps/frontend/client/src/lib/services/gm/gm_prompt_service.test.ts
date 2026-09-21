@@ -6,7 +6,7 @@
 // AC-3: Dropped sections are observable via logging
 //
 // Run with:
-//   bun test --preload ./src/lib/test_preload.ts --tsconfig tsconfig.test.json
+//   bun test --preload ./src/lib/test_setup.ts --tsconfig tsconfig.test.json
 //     src/lib/services/gm/gm_prompt_service.test.ts
 
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
@@ -34,6 +34,13 @@ class MockBaseFrontendClass {
 }
 
 mock.module('@aikami/frontend/services', () => ({
+  // biome-ignore lint/style/useNamingConvention: mirrors the real module's exported PascalCase class name
+  BaseFrontendClass: MockBaseFrontendClass,
+}));
+
+// gm_prompt_service imports the base hierarchy from the narrow `/base`
+// entrypoint, so the root mock above no longer intercepts it.
+mock.module('@aikami/frontend/services/base', () => ({
   // biome-ignore lint/style/useNamingConvention: mirrors the real module's exported PascalCase class name
   BaseFrontendClass: MockBaseFrontendClass,
 }));
@@ -72,16 +79,15 @@ mock.module('../game/world_state_service.svelte.ts', () => ({
   worldStateService: worldStateMock,
 }));
 
-// Import after mocks are registered
-import {
-  characterService,
-  choiceHistoryStore,
-  narrativeDirectorService,
-  playerStateService,
-} from '$services';
+// Import after mocks are registered. These resolve to the same modules the
+// service imports directly (it no longer reads the `$services` barrel).
+import { characterService } from '../character/character.svelte.ts';
+import { choiceHistoryStore } from '../chat/choice_history_store.svelte.ts';
+import { playerStateService } from '../game/player_state_service.svelte.ts';
+import { narrativeDirectorService } from './narrative_director_service.svelte.ts';
 
 // We need to access the CLASS_REGISTRY mock - it's a package import,
-// so we mock it at the barrel level via test_preload globals.
+// so we mock it at the barrel level via test_setup globals.
 // For characterService, the global mock is a stub with no selectedCharacter.
 
 let gmPromptService: GmPromptServiceInterface;
@@ -102,7 +108,7 @@ describe('GmPromptService — C-457', () => {
     choiceHistoryStore.formatHistorySection = mock(() => '');
     warnMock.mockClear();
 
-    // Player state defaults (matches test_preload)
+    // Player state defaults (matches test_setup)
     playerStateService.playerLevel = 1;
     playerStateService.playerHp = 100;
     playerStateService.playerMaxHp = 100;

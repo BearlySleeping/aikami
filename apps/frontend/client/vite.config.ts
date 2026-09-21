@@ -14,6 +14,13 @@ import { visualizer } from 'rollup-plugin-visualizer';
 import { createLogger, defineConfig, type PluginOption } from 'vite';
 import devtoolsJson from 'vite-plugin-devtools-json';
 import { PORTS } from '../../../packages/shared/constants/src/index.ts';
+import { devIdentityPlugin } from '../../../scripts/src/lib/ops/dev_identity_plugin.ts';
+import { resolveIncludeDevRoutes, type ViteCommand } from './scripts/dev_routes_gate.ts';
+import {
+  createDiagnosticCollector,
+  diagnosticReportPlugin,
+} from './scripts/diagnostic_collector.ts';
+import { ortExternalPlugin } from './scripts/ort_external_plugin.ts';
 
 // Default Vite logger, wrapped below to filter out warnings that cannot be
 // suppressed via `build.rollupOptions.onwarn` (rolldown emits some warnings,
@@ -73,33 +80,39 @@ const toSrcPath = (path: string) => toPosixPath(join(projectDirectory, 'src', pa
 // Production builds must not ship the `(dev)` route group. SvelteKit 2.70 has
 // no `kit.routes` filter, so the gate points `files.routes` at a filtered
 // copy of the routes directory (`.svelte-kit/routes-prod`), materialized by
-// scripts/gate_dev_routes.ts before every build (M3). The flag is a build
-// flag, never a runtime check:
+// scripts/gate_dev_routes.ts before every build (M3). The decision is made
+// while resolving the config, never as a runtime check:
 //
 //   AIKAMI_INCLUDE_DEV_ROUTES=true   → always include `(dev)` (test builds)
 //   AIKAMI_INCLUDE_DEV_ROUTES=false  → always exclude `(dev)`
-//   unset                            → exclude iff the VITE BUILD MODE is
-//                                       'production' (set by vite.config.ts)
+//   unset                            → include when serving, exclude when building
+//
+// The unset default is derived from Vite's `command`, so a dev server started
+// straight from source keeps the sandboxes with no configuration, while every
+// distributable build — staging included — ships the production route graph.
+// A developer who wants sandboxes in a build opts in explicitly with
+// AIKAMI_INCLUDE_DEV_ROUTES=true; the moon test/typecheck tasks set that flag
+// too. The decision itself lives in scripts/dev_routes_gate.ts, shared with
+// scripts/gate_dev_routes.ts so the two can never disagree.
 //
 // NODE_ENV is deliberately NOT consulted: moon sets NODE_ENV=production for
 // every build task regardless of target mode, so using it here would strip
-// the (dev) sandbox routes from test/QA builds (M4). The vite mode is the
-// single source of truth.
+// the (dev) sandbox routes from test/QA builds (M4). Vite's own `command` is
+// the signal, and scripts/dev_routes_gate.ts is its single interpreter.
 // ---------------------------------------------------------------------------
-const devGateOverride = process.env.AIKAMI_INCLUDE_DEV_ROUTES;
-let includeDevRoutes: boolean;
-if (devGateOverride === 'true') {
-  includeDevRoutes = true;
-} else if (devGateOverride === 'false') {
-  includeDevRoutes = false;
-} else {
-  // TODO: remove the default 'true' once we want to try hard production
-  includeDevRoutes = true; //process.env.AIKAMI_BUILD_MODE === 'production';
-}
-
 const FILTERED_ROUTES_DIR = join(projectDirectory, '.svelte-kit', 'routes-prod');
-let routesDir = 'src/routes';
-if (!includeDevRoutes) {
+
+/**
+ * Resolves `files.routes` for one Vite invocation.
+ *
+ * Deliberately called from inside the config callback rather than at module
+ * scope: only there is Vite's real `command` known, and the serve/build split
+ * is what keeps sandboxes in the dev server without leaking them into builds.
+ */
+const resolveRoutesDir = (command: ViteCommand): string => {
+  if (resolveIncludeDevRoutes(command)) {
+    return 'src/routes';
+  }
   // Guard (M3): a bare `vite build` without the gate script would point
   // `files.routes` at a missing directory and fail confusingly (or worse,
   // build from a stale copy). Fail fast with a clear remedy instead.
@@ -110,11 +123,13 @@ if (!includeDevRoutes) {
         'scripts/gate_dev_routes.ts --mode production first.',
     );
   }
-  routesDir = '.svelte-kit/routes-prod';
-}
+  return '.svelte-kit/routes-prod';
+};
 
-export default defineConfig(({ mode }) => {
-  // Expose the Vite mode to svelte.config.js (loaded later by the SvelteKit
+export default defineConfig(({ command, mode }) => {
+  const routesDir = resolveRoutesDir(command);
+
+  // Expose the Vite mode to vite.config.ts (loaded later by the SvelteKit
   // plugin) so the dev-route build gate (C-418 Feature B) can exclude the
   // `(dev)` route group from production builds without a runtime check.
   //
@@ -131,10 +146,19 @@ export default defineConfig(({ mode }) => {
   // per-contract emulator instance, not another contract's. 0 otherwise.
   const emulatorPortOffset = Number(process.env.PUBLIC_EMULATOR_PORT_OFFSET || 0);
 
+  // Collects build diagnostics that used to be suppressed outright. Flushed to
+  // `.svelte-kit/aikami_diagnostics.json` by the diagnosticReportPlugin below.
+  const diagnostics = createDiagnosticCollector();
+
   const plugins: PluginOption[] = [
     tailwindcss(),
+    // Must be registered before SvelteKit/Vite's asset plugins so it can rewrite
+    // ORT `new URL('ort-wasm-*', import.meta.url)` references before
+    // `vite:asset-import-meta-url` resolves and emits the binaries. `enforce:
+    // 'pre'` guarantees the ordering; see scripts/ort_external_plugin.ts.
+    ortExternalPlugin() as PluginOption,
     sveltekit({
-      // SvelteKit 3: configuration moved from svelte.config.js to here
+      // SvelteKit 3: configuration moved from vite.config.ts to here
       preprocess: [vitePreprocess()],
       files: {
         routes: routesDir,
@@ -183,6 +207,14 @@ export default defineConfig(({ mode }) => {
         '@aikami/lpc': toPackagesPath('shared/lpc/src'),
         '@aikami/lpc/*': toPackagesPath('shared/lpc/src/lib/*'),
         '@aikami/constants': toPackagesPath('shared/constants/src'),
+        '@aikami/frontend/services/base': toPackagesPath('frontend/services/src/base'),
+        '@aikami/frontend/services/r2_storage': toPackagesPath('frontend/services/src/r2_storage'),
+        '@aikami/frontend/services/backup_client': toPackagesPath(
+          'frontend/services/src/backup_client',
+        ),
+        '@aikami/frontend/services/router': toPackagesPath('frontend/services/src/router'),
+        '@aikami/frontend/services/preference': toPackagesPath('frontend/services/src/preference'),
+        '@aikami/frontend/services/dialog': toPackagesPath('frontend/services/src/dialog'),
         '@aikami/frontend/services': toPackagesPath('frontend/services/src'),
         '@aikami/frontend/services/*': toPackagesPath('frontend/services/src/lib/*'),
         '@aikami/frontend/components': toPackagesPath('frontend/components/src'),
@@ -247,6 +279,16 @@ export default defineConfig(({ mode }) => {
         });
       },
     } as PluginOption,
+    // C-471 AC-2 / brief P1: dev-only identity endpoint so the pipeline's
+    // readiness probe can prove THIS checkout answered, not a server from
+    // another worktree. Never present in a build (`apply: 'serve'`).
+    devIdentityPlugin({ service: 'client' }) as PluginOption,
+    // Records suppressed build diagnostics (currently ineffective dynamic
+    // imports) so a post-build ratchet can compare them to a reviewed baseline.
+    diagnosticReportPlugin(
+      diagnostics,
+      join(projectDirectory, '.svelte-kit', 'aikami_diagnostics.json'),
+    ) as PluginOption,
   ];
 
   if (mode === 'staging' && process.env.DEBUG === '1') {
@@ -333,12 +375,14 @@ export default defineConfig(({ mode }) => {
           if (warning.code === 'PLUGIN_TIMINGS' || warning.message.includes('PLUGIN_TIMINGS')) {
             return;
           }
-          // The services barrel (src/lib/services/index.ts) is statically
-          // imported by 150+ modules, so any `import('$services')` can never
-          // split a chunk. Those dynamic imports exist to break circular
-          // dependencies at module-init time, not for code-splitting — the
-          // warning is expected for this architecture.
+          // Ineffective dynamic imports are recorded by `diagnostics` and
+          // ratcheted after the build (scripts/check_ineffective_dynamic_imports.ts)
+          // instead of being silently dropped. First-party occurrences are the
+          // ones that matter: they mean a module advertised as lazy is eagerly
+          // reachable. Third-party diagnostics are expected (transformers.js
+          // inlines ORT) and are excluded from the ratchet.
           if (warning.code === 'INEFFECTIVE_DYNAMIC_IMPORT') {
+            diagnostics.record(warning.code, warning.message);
             return;
           }
 
@@ -354,6 +398,11 @@ export default defineConfig(({ mode }) => {
       // ES module format. IIFE/UMD worker builds do not support code-splitting
       // dynamic imports.
       format: 'es',
+      // Worker bundles use their own plugin pipeline (`worker.plugins`), NOT
+      // the top-level `config.plugins`. The ORT externalization must be
+      // registered here as well or worker-owned ORT assets (kokoro_worker,
+      // text_llm_worker) are emitted into the Cloudflare build.
+      plugins: () => [ortExternalPlugin() as PluginOption],
     },
 
     server: {

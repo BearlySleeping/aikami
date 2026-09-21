@@ -42,6 +42,14 @@ const BOUNDARIES: Array<{
 /** File patterns that are NOT checked for pixi.js (they're the render barrel). */
 const RENDER_BARREL = resolve(ENGINE_SRC, 'render.ts');
 
+/** Adapter dependencies that would make the ECS projection a second rules authority. */
+const COMBAT_ADAPTER_FORBIDDEN_IMPORTS = [
+  /from\s+['"].*rules\/rng/,
+  /from\s+['"].*systems\/turn_manager_system/,
+  /from\s+['"]pixi\.js['"]/,
+  /from\s+['"]node:/,
+] as const;
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -171,6 +179,15 @@ function walkGraph(entryPath: string, visited: Set<string> = new Set()): string[
 // ---------------------------------------------------------------------------
 
 describe('engine entrypoint boundaries', () => {
+  it('keeps the combat-state adapter free of forbidden dependencies', () => {
+    const adapterPath = resolve(ENGINE_SRC, 'combat/combat_state_adapter.ts');
+    const source = readFileSync(adapterPath, 'utf-8');
+    const offenders = COMBAT_ADAPTER_FORBIDDEN_IMPORTS.filter((pattern) => pattern.test(source));
+    if (offenders.length > 0) {
+      throw new Error('combat_state_adapter.ts imports a forbidden rules or platform dependency');
+    }
+  });
+
   for (const boundary of BOUNDARIES) {
     describe(`${boundary.name}`, () => {
       it('contains no forbidden imports', () => {

@@ -12,7 +12,7 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import type { WizardStep, WorldGenInput, WorldGenOutput } from '@aikami/types';
 import { getRandomPreset } from '@aikami/types';
 import {
@@ -24,19 +24,54 @@ import {
   WorldGenSettingStageSchema,
 } from '$lib/data/ai_prompts/world_gen_schema';
 import { WORLD_GEN_SYSTEM_PROMPT } from '$lib/data/ai_prompts/world_gen_system_prompt';
-import {
-  campaignService,
-  routerService,
-  textGenerationService,
-  worldGenSeedingService,
-  worldStateService,
+import type {
+  CampaignServiceInterface,
+  RouterServiceInterface,
+  TextGenerationServiceInterface,
+  WorldGenSeedingServiceInterface,
+  WorldStateServiceInterface,
 } from '$services';
+
+// ---------------------------------------------------------------------------
+// Capability contracts
+// ---------------------------------------------------------------------------
+
+/** The active campaign lookup the wizard reads when seeding a world. */
+export type WorldGenCampaignCapabilities = Pick<CampaignServiceInterface, 'activeCampaign'>;
+
+/** Navigation the wizard performs between steps. */
+export type WorldGenRouterCapabilities = Pick<RouterServiceInterface, 'goToRoute'>;
+
+/** Structured LLM extraction used by each generation stage. */
+export type WorldGenTextCapabilities = Pick<TextGenerationServiceInterface, 'extractStructure'>;
+
+/** World-state setup performed when the generated world is accepted. */
+export type WorldGenWorldStateCapabilities = Pick<
+  WorldStateServiceInterface,
+  'subscribeToWorld' | 'addLocation'
+>;
+
+/** Seeding of the generated sections into game state. */
+export type WorldGenSeedingCapabilities = Pick<
+  WorldGenSeedingServiceInterface,
+  'seedNpcs' | 'seedLocations' | 'seedPartyArcs' | 'seedHudWidgets'
+>;
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
 export type WorldGenWizardViewModelOptions = BaseViewModelOptions & {
+  /** Active campaign lookup capability. */
+  campaign: WorldGenCampaignCapabilities;
+  /** Navigation capability. */
+  router: WorldGenRouterCapabilities;
+  /** LLM structured-extraction capability. */
+  textGeneration: WorldGenTextCapabilities;
+  /** World-state setup capability. */
+  worldState: WorldGenWorldStateCapabilities;
+  /** World-gen seeding capability. */
+  worldGenSeeding: WorldGenSeedingCapabilities;
   /** Pre-populated inputs for editing (e.g. from a previous session). */
   initialInputs?: WorldGenInput;
   /** Optional callback when the wizard completes world generation. */
@@ -215,6 +250,14 @@ export class WorldGenWizardViewModel
   extends BaseViewModel<WorldGenWizardViewModelOptions>
   implements WorldGenWizardViewModelInterface
 {
+  // ── Injected capabilities ──
+
+  private readonly _campaign: WorldGenCampaignCapabilities;
+  private readonly _router: WorldGenRouterCapabilities;
+  private readonly _textGeneration: WorldGenTextCapabilities;
+  private readonly _worldState: WorldGenWorldStateCapabilities;
+  private readonly _worldGenSeeding: WorldGenSeedingCapabilities;
+
   // ── Instance fields ──
 
   private readonly _onWorldAccepted: ((output: WorldGenOutput) => Promise<void>) | undefined;
@@ -331,6 +374,11 @@ export class WorldGenWizardViewModel
 
     const { initialInputs, onWorldAccepted } = options;
 
+    this._campaign = options.campaign;
+    this._router = options.router;
+    this._textGeneration = options.textGeneration;
+    this._worldState = options.worldState;
+    this._worldGenSeeding = options.worldGenSeeding;
     this._onWorldAccepted = onWorldAccepted;
 
     if (initialInputs) {
@@ -421,7 +469,7 @@ export class WorldGenWizardViewModel
 
   /** Navigates back to setup screen to change the AI connection. */
   async changeConnection(): Promise<void> {
-    await routerService.goToRoute('setup', {
+    await this._router.goToRoute('setup', {
       queryParameters: { reason: 'generation-failed' },
       pathParameters: undefined,
     });
@@ -437,21 +485,21 @@ export class WorldGenWizardViewModel
 
     // Initialize world state before seeding — creates the world and a
     // default location so NPCs and events have a place to attach to.
-    const campaignId = campaignService.activeCampaign?.id ?? crypto.randomUUID();
-    await worldStateService.subscribeToWorld(campaignId);
-    worldStateService.addLocation({
+    const campaignId = this._campaign.activeCampaign?.id ?? crypto.randomUUID();
+    await this._worldState.subscribeToWorld(campaignId);
+    this._worldState.addLocation({
       name: output.locations[0] ?? 'Town Square',
       description: output.worldDescription,
     });
 
     // Seed generated data into game state
-    await worldGenSeedingService.seedNpcs({ npcs: output.npcs });
-    await worldGenSeedingService.seedLocations({
+    await this._worldGenSeeding.seedNpcs({ npcs: output.npcs });
+    await this._worldGenSeeding.seedLocations({
       locations: output.locations,
       worldName: output.worldName,
     });
-    await worldGenSeedingService.seedPartyArcs({ arcs: output.partyArcs });
-    await worldGenSeedingService.seedHudWidgets({ widgets: output.hudWidgets });
+    await this._worldGenSeeding.seedPartyArcs({ arcs: output.partyArcs });
+    await this._worldGenSeeding.seedHudWidgets({ widgets: output.hudWidgets });
 
     if (this._onWorldAccepted) {
       await this._onWorldAccepted(output);
@@ -483,7 +531,7 @@ export class WorldGenWizardViewModel
 
   async navigateToCharacterCreation(): Promise<void> {
     this.debug('navigateToCharacterCreation');
-    await routerService.goToRoute('personas', {
+    await this._router.goToRoute('personas', {
       queryParameters: undefined,
       pathParameters: undefined,
     });
@@ -639,7 +687,7 @@ export class WorldGenWizardViewModel
     this.debug('_callLlm:calling-textGenerationService');
 
     try {
-      const result = await textGenerationService.extractStructure({
+      const result = await this._textGeneration.extractStructure({
         schema,
         schemaName: 'WorldGenOutput',
         prompt,
@@ -758,7 +806,7 @@ export class WorldGenWizardViewModel
   }
 }
 
-/** Factory function for the wizard ViewModel. */
-export const getWorldGenWizardViewModel = (
+/** Builds a world-generation wizard ViewModel from explicit capabilities. */
+export const createWorldGenWizardViewModel = (
   options: WorldGenWizardViewModelOptions,
 ): WorldGenWizardViewModelInterface => WorldGenWizardViewModel.create(options);

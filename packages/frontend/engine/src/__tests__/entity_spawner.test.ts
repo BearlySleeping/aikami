@@ -14,7 +14,7 @@ import type { PackConfig } from '@aikami/types';
 import type { World } from 'bitecs';
 import { createWorld, hasComponent } from 'bitecs';
 import type { SpawnPoint } from '../assets/map_loader.ts';
-import { Appearance } from '../components/appearance.ts';
+import { Appearance, getAppearanceLayers } from '../components/appearance.ts';
 import {
   CollisionData,
   CollisionLayer,
@@ -26,6 +26,7 @@ import { registerPositionObservers } from '../components/position.ts';
 import { registerSpatialLinkObservers } from '../components/spatial_link.ts';
 import { registerVisualObservers } from '../components/visual.ts';
 import { spawnEntities } from '../systems/entity_spawner.ts';
+import { buildLegacyDerivedCatalog, slotOf } from '../test_support/lpc_catalog.ts';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -308,5 +309,101 @@ describe('spawnEntities — spatial collision components (C-375 AC-3)', () => {
     // hasComponent — world-scoped, unlike the module-global SoA arrays which
     // are polluted across test files.)
     expect(hasComponent(world, propEid, Appearance)).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// C-504 — named appearance → derived layer IDs (worker/main-thread parity)
+// ---------------------------------------------------------------------------
+
+describe('spawnEntities — C-504 named appearance resolution', () => {
+  let world: World;
+
+  beforeEach(() => {
+    world = makeWorld();
+  });
+
+  const smallCatalog = [
+    { slot: 'body', variants: [{ assetId: 'body/bodies_child' }, { assetId: 'body/bodies_male' }] },
+    { slot: 'hair', variants: [{ assetId: 'hair/bald' }] },
+    { slot: 'torso', variants: [{ assetId: 'torso/chainmail_male' }] },
+    { slot: 'legs', variants: [{ assetId: 'legs/pants_male' }] },
+    { slot: 'feet', variants: [{ assetId: 'feet/shoes/basic_male' }] },
+    { slot: 'head', variants: [{ assetId: 'head/heads/human_male' }] },
+  ];
+
+  test('named appearance resolves to derived layer IDs via the shared normalizer', () => {
+    const packConfig: PackConfig = {
+      tiles: {},
+      props: {},
+      npcs: {
+        rollo: {
+          appearance: {
+            formatVersion: 1,
+            components: [
+              { slot: 'body', assetId: 'body/bodies_male' },
+              { slot: 'head', assetId: 'head/heads/human_male' },
+            ],
+          },
+        },
+      },
+    };
+    const results = spawnEntities({
+      world,
+      spawnPoints: [
+        makeSpawnPoint({
+          id: 'rollo',
+          type: 'npc',
+          x: 160,
+          y: 160,
+          properties: { npcId: 'rollo' },
+        }),
+      ],
+      packConfig,
+      lpcCatalog: smallCatalog,
+    });
+    expect(results).toHaveLength(1);
+    const layers = getAppearanceLayers(results[0].eid);
+    // body/bodies_male is at derived index 1 (0-based) → 2 (1-based);
+    // head/heads/human_male at index 0 → 1; other slots absent → 0.
+    expect(layers).toEqual([2, 0, 0, 0, 0, 1]);
+  });
+
+  test('legacy appearanceLayers migrate to derived layer IDs (rollo)', () => {
+    const derived = buildLegacyDerivedCatalog();
+
+    const packConfig: PackConfig = {
+      tiles: {},
+      props: {},
+      npcs: {
+        rollo: { appearanceLayers: [3, 123, 23, 22, 7, 95] },
+      },
+    };
+    const results = spawnEntities({
+      world,
+      spawnPoints: [
+        makeSpawnPoint({
+          id: 'rollo',
+          type: 'npc',
+          x: 160,
+          y: 160,
+          properties: { npcId: 'rollo' },
+        }),
+      ],
+      packConfig,
+      lpcCatalog: derived,
+    });
+    expect(results).toHaveLength(1);
+    const layers = getAppearanceLayers(results[0].eid);
+    // The derived layer IDs must resolve to Rollo's intended identities.
+    expect(slotOf({ catalog: derived, slot: 'body', index: layers[0] - 1 })).toBe(
+      'body/bodies_male',
+    );
+    expect(slotOf({ catalog: derived, slot: 'legs', index: layers[3] - 1 })).toBe(
+      'legs/pants_male',
+    );
+    expect(slotOf({ catalog: derived, slot: 'head', index: layers[5] - 1 })).toBe(
+      'head/heads/human_male',
+    );
   });
 });

@@ -53,17 +53,10 @@ import { Type } from 'typebox';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
-import { commitContractContent } from '../../scripts/src/lib/agents/contract_pipeline/contract_sync';
-import { readManifest } from '../../scripts/src/lib/agents/contract_pipeline/manifest_store';
-import {
-  createWorkspaceGitReader,
-  deriveRunRepoRoot,
-  evaluatePublicationGate,
-  formatPublicationBlocks,
-  formatPublicationWarning,
-} from '../../scripts/src/lib/agents/contract_pipeline/publication_gate';
-import { PIPELINE_BASE_BRANCH } from '../../scripts/src/lib/agents/contract_pipeline/types';
+import { PIPELINE_BASE_BRANCH } from '../../packages/shared/constants/src/index.ts';
+import { runPiScript } from './lib/bridge.ts';
 import { currentBranch, ensureGitHubRepo, resolvePrSelector, runGh } from './lib/gh.ts';
+import { pipelinePublicationAssessment } from './lib/publication_assessment.ts';
 import { defineAction, registerNamespace } from './lib/tool_namespace.ts';
 
 const DEFAULT_BASE = PIPELINE_BASE_BRANCH;
@@ -803,57 +796,6 @@ function formatCheckStatus(raw: string): string {
   return [summary, '', ...statusLines].join('\n');
 }
 
-/**
- * Assess whether a contract-pipeline PR may be opened from this branch.
- *
- * 🔴 The C-484 lesson (PR #266, 2026-09-07). The pre-push gate ran once, in
- * the orchestrator, and correctly went red. The review captain then fixed the
- * flagged violation by hand, re-ran only the single guard it had been told
- * about, committed with `--no-verify`, pushed, and opened the PR — carrying
- * an un-indented edit that `client:format` rejected on CI. Every step after
- * the orchestrator's one-shot gate was unvalidated, and the prompt was the
- * only thing standing between a hand edit and a public PR.
- *
- * A prompt is guidance. This is a precondition: PR creation is the choke
- * point every path must pass through, so the invariant is enforced here.
- * See publication_gate.ts for the individual blocks and their remedies.
- *
- * A RED validation verdict is a WARNING, not a refusal: the review captain
- * may publish it with the user's permission (YOLO proceeds automatically) so
- * CodeRabbit can fix the failures on the PR. Hard blocks (dirty worktree,
- * stale/unrecorded verdict, unpushed commits) still refuse.
- *
- * Returns empty outside a pipeline worker and whenever the gate cannot read
- * the workspace (a gate that cannot run must not become a wall).
- */
-const pipelinePublicationAssessment = (
-  headBranch: string,
-): { refusal?: string; warning?: string } => {
-  const role = process.env.CONTRACT_PIPELINE_ROLE;
-  const workspacePath = process.env.CONTRACT_PIPELINE_WORKSPACE_PATH;
-  const runId = process.env.CONTRACT_PIPELINE_RUN_ID;
-  if (!role || !workspacePath || !runId || !existsSync(workspacePath)) {
-    return {};
-  }
-
-  let result: ReturnType<typeof evaluatePublicationGate>;
-  try {
-    result = evaluatePublicationGate({
-      git: createWorkspaceGitReader(workspacePath),
-      manifest: readManifest({ runId, cwd: deriveRunRepoRoot() }),
-      branch: headBranch,
-    });
-  } catch {
-    // Unreadable manifest or git failure — indeterminate, so allow.
-    return {};
-  }
-
-  if (result.indeterminate || result.ok) {
-    return { warning: formatPublicationWarning(result) };
-  }
-  return { refusal: formatPublicationBlocks(result) };
-};
-
 // ── Extension ───────────────────────────────────────────────────────────────
 
 export default function (pi: ExtensionAPI) {
@@ -896,7 +838,7 @@ export default function (pi: ExtensionAPI) {
 
           // 🔴 Hard precondition inside a contract-pipeline worker — see
           // pipelinePublicationAssessment above. No-op everywhere else.
-          const assessment = pipelinePublicationAssessment(params.headBranch);
+          const assessment = await pipelinePublicationAssessment(params.headBranch);
           if (assessment.refusal) {
             return {
               content: [{ type: 'text', text: assessment.refusal }],
@@ -1042,7 +984,11 @@ export default function (pi: ExtensionAPI) {
                         // so it is safe no matter what branch is checked out
                         // here (root checkout mid-refactor, a linked contract
                         // worktree, anything).
-                        const sync = commitContractContent({
+                        const sync = await runPiScript<{
+                          ok: boolean;
+                          committed: boolean;
+                          message: string;
+                        }>('contract.content.commit', {
                           repoRoot: cwd,
                           contractPath,
                           content: updated,

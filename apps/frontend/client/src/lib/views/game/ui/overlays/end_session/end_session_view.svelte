@@ -27,28 +27,28 @@ const focusOnMount = (node: HTMLElement): { destroy: () => void } => {
     tabindex="-1"
     onclick={(event: MouseEvent) => viewModel.handleBackdropClick(event)}
     onkeydown={(e: KeyboardEvent) => {
-    if (e.key === 'Escape') {
-      if (viewModel.phase === 'editing') {
-        viewModel.cancelEdit();
-      } else {
-        viewModel.cancel();
-      }
+  if (e.key === 'Escape') {
+    if (viewModel.phase === 'editing') {
+      viewModel.cancelEdit();
+    } else {
+      viewModel.cancel();
+    }
+    return;
+  }
+  if (e.key === 'Tab') {
+    e.preventDefault();
+    const focusable = (e.currentTarget as HTMLElement).querySelectorAll<HTMLElement>(
+      'button:not([disabled]), [tabindex]:not([tabindex="-1"]), [href], textarea, input',
+    );
+    if (focusable.length === 0) {
       return;
     }
-    if (e.key === 'Tab') {
-      e.preventDefault();
-      const focusable = (e.currentTarget as HTMLElement).querySelectorAll<HTMLElement>(
-        'button:not([disabled]), [tabindex]:not([tabindex="-1"]), [href], textarea, input'
-      );
-      if (focusable.length === 0) {
-        return;
-      }
-      const currentIndex = Array.from(focusable).indexOf(document.activeElement as HTMLElement);
-      const direction = e.shiftKey ? -1 : 1;
-      const nextIndex = (currentIndex + direction + focusable.length) % focusable.length;
-      focusable[nextIndex].focus();
-    }
-  }}
+    const currentIndex = Array.from(focusable).indexOf(document.activeElement as HTMLElement);
+    const direction = e.shiftKey ? -1 : 1;
+    const nextIndex = (currentIndex + direction + focusable.length) % focusable.length;
+    focusable[nextIndex].focus();
+  }
+}}
     use:focusOnMount
   >
     <div class="w-96 rounded-xl border border-base-300 bg-base-200 p-6 shadow-xl">
@@ -164,9 +164,9 @@ const focusOnMount = (node: HTMLElement): { destroy: () => void } => {
             class="textarea textarea-bordered w-full h-48 text-sm"
             value={viewModel.editedSynopsis}
             oninput={(e: Event) => {
-            const target = e.target as HTMLTextAreaElement;
-            viewModel.setEditedSynopsis(target.value);
-          }}
+  const target = e.target as HTMLTextAreaElement;
+  viewModel.setEditedSynopsis(target.value);
+}}
             placeholder="Edit your session synopsis..."
           ></textarea>
         </div>

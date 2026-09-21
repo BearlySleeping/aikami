@@ -1,6 +1,6 @@
 # MVP Contract Backlog — C-400 … C-419
 
-> **Source:** `docs/strategy/mvp-assessment-2026-08-16.md`
+> **Source:** `docs/reference/mvp-assessment-2026-08-16.md`
 > **ID range:** C-400 onward. C-397 … C-399 remain reserved by
 > `data-layer-target-architecture.md` §5.1 (client asset migration, member
 > submissions, social metadata) and are **not** MVP work.
@@ -41,12 +41,13 @@ moves `draft → approved` — they are fact lookups and design calls, not
 blockers on starting.
 
 > 🔴 **ID allocation caveat.** `prepareDirectSource`
-> (`scripts/src/lib/agents/contract_pipeline.ts:463-467`) computes the next ID
-> as `maxId + 1` from **contract filenames on disk** — it does not know about
-> IDs reserved in this document or in the data-layer ADR. With C-419 now on
-> disk, the next `--source prompt` or `--source issue` run allocates
-> **C-420**. `--source todo` is unusable here: `parse_backlog.ts:70`
-> hardcodes `docs/TODO.md`, which no longer holds structured backlog items.
+> (`scripts/src/lib/agents/contract_pipeline.ts`) computes the next ID as
+> `maxId + 1` from **contract filenames on disk** — it does not know about IDs
+> reserved in this document or in the data-layer ADR. Do not re-derive the next
+> ID by hand: `--source prompt` / `--source issue` allocate from disk filenames,
+> and `--source todo` allocates from the structured seeds in `docs/TODO.md`
+> (parsed by [`scripts/src/lib/ops/parse_backlog.ts`](../../scripts/src/lib/ops/parse_backlog.ts)).
+> Never reuse a historical ID.
 
 ## Ordering
 
@@ -344,7 +345,7 @@ Movement input stops taking effect.
 difficulty, and goals, then runs world generation. **The output is discarded** —
 the MVP loads the Emberwatch content pack regardless.
 
-`docs/strategy/vision-and-directives.md:88` is explicit:
+`docs/intro/directives.md:88` is explicit:
 
 > *"Do not make AI world generation the front door."*
 
@@ -686,7 +687,7 @@ correspondingly simpler.
 ## C-413 — Reverse the Cloud Run inference plan (ADR amendment)
 
 > 🔀 **Superseded — merged into [`C-418-p2-cleanup-and-infrastructure.md`](C-418-p2-cleanup-and-infrastructure.md)
-> Feature E** (2026-08-17). Re-verification found `docs/strategy/deferred.md`
+> Feature E** (2026-08-17). Re-verification found `docs/intro/deferred-scope.md`
 > already carries a `🔴 Under revision (C-413)` marker for this exact change —
 > the merged contract resolves that marker (now pointing at C-418) rather than
 > writing a fresh edit. The entry below is the original seed, kept as
@@ -695,7 +696,7 @@ correspondingly simpler.
 | Field | Value |
 |---|---|
 | **Priority** | P2 — a decision and a document, not a build |
-| **Target** | `docs/architecture/data-layer-target-architecture.md`, `docs/strategy/deferred.md` |
+| **Target** | `docs/architecture/data-layer-target-architecture.md`, `docs/intro/deferred-scope.md` |
 
 **Problem:** the plan of record is Cloud Run for image / text / TTS / STT once
 pay-as-you-go users appear. Cloud Run GPU (L4) is ~$0.71/hr with a 20–30 s
@@ -710,7 +711,7 @@ Directive #10 already makes this a swap at one layer.
 **Scope:** an amendment to the data-layer ADR (or a new ADR if inference
 hosting is judged out of its scope) recording the decision, the cost
 comparison, and the conditions under which self-hosting would be revisited.
-Update the corresponding line in `docs/strategy/deferred.md` from "Phase 5
+Update the corresponding line in `docs/intro/deferred-scope.md` from "Phase 5
 work" to "rejected, see ADR".
 
 **No code changes.** The `service` adapter interface already exists (C-320).

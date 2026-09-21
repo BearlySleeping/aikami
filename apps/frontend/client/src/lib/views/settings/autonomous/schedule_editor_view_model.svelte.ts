@@ -15,9 +15,26 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
-import type { AvailabilityStatus, DaySchedule } from '@aikami/types';
-import { npcScheduleService, textGenerationService } from '$services';
+} from '@aikami/frontend/services/base';
+import type { AvailabilityStatus, DaySchedule, NpcSchedule } from '@aikami/types';
+
+// ── Capability contracts ────────────────────────────────────────────────
+
+/** The NPC schedule read/write operations the editor performs. */
+export type NpcScheduleCapabilities = {
+  getSchedule(npcId: string): Promise<NpcSchedule>;
+  setSchedule(npcId: string, schedule: NpcSchedule): Promise<void>;
+};
+
+/** The schema-constrained text generation the schedule planner performs. */
+export type ScheduleGenerationCapabilities = {
+  extractStructure(options: {
+    schema: Record<string, unknown>;
+    schemaName: string;
+    prompt: string;
+    systemPrompt: string;
+  }): Promise<unknown>;
+};
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -48,6 +65,8 @@ export type ScheduleEditorViewModelInterface = BaseViewModelInterface & {
   readonly statusColors: Record<string, string>;
   /** Status labels map. */
   readonly statusLabels: Record<string, string>;
+  /** Available statuses in paint-control order. */
+  readonly paintStatuses: readonly AvailabilityStatus[];
   /** Currently selected paint status for drag-paint. */
   readonly paintStatus: AvailabilityStatus;
 
@@ -67,7 +86,12 @@ export type ScheduleEditorViewModelInterface = BaseViewModelInterface & {
 
 // ── Options ──────────────────────────────────────────────────────────────
 
-export type ScheduleEditorViewModelOptions = BaseViewModelOptions;
+export type ScheduleEditorViewModelOptions = BaseViewModelOptions & {
+  /** NPC schedule persistence. */
+  schedules: NpcScheduleCapabilities;
+  /** Structured schedule generation. */
+  generation: ScheduleGenerationCapabilities;
+};
 
 // ── Implementation ───────────────────────────────────────────────────────
 
@@ -88,6 +112,16 @@ class ScheduleEditorViewModel
   readonly hourLabels = HOUR_LABELS;
   readonly statusColors = AVAILABILITY_STATUS_COLORS;
   readonly statusLabels = AVAILABILITY_STATUS_LABELS;
+  readonly paintStatuses: readonly AvailabilityStatus[] = ['online', 'idle', 'dnd', 'offline'];
+
+  private readonly _schedules: NpcScheduleCapabilities;
+  private readonly _generation: ScheduleGenerationCapabilities;
+
+  constructor(options: ScheduleEditorViewModelOptions) {
+    super(options);
+    this._schedules = options.schedules;
+    this._generation = options.generation;
+  }
 
   get currentDay(): number {
     return new Date().getDay();
@@ -105,7 +139,7 @@ class ScheduleEditorViewModel
     this.isGenerating = false;
     this.generationError = undefined;
 
-    const schedule = await npcScheduleService.getSchedule(options.npcId);
+    const schedule = await this._schedules.getSchedule(options.npcId);
     this.days = schedule.days;
     this.isGenerated = schedule.generated;
     this.isOpen = true;
@@ -164,7 +198,7 @@ class ScheduleEditorViewModel
     try {
       // Use text generation service to call the Schedule Planner agent
 
-      const result = (await textGenerationService.extractStructure({
+      const result = (await this._generation.extractStructure({
         schema: {
           type: 'object',
           properties: {
@@ -245,13 +279,20 @@ class ScheduleEditorViewModel
     if (!this.npcId) {
       return;
     }
-    const schedule = await npcScheduleService.getSchedule(this.npcId);
+    const schedule = await this._schedules.getSchedule(this.npcId);
     schedule.days = this.days;
     schedule.generated = this.isGenerated;
-    await npcScheduleService.setSchedule(this.npcId, schedule);
+    await this._schedules.setSchedule(this.npcId, schedule);
   }
 }
 
-export const getScheduleEditorViewModel = (
+/**
+ * Builds a schedule-editor ViewModel from explicit capabilities.
+ *
+ * Callers outside production (tests, sandboxes) use this directly; production
+ * code goes through `getScheduleEditorViewModel` in
+ * ./schedule_editor_composition.ts.
+ */
+export const createScheduleEditorViewModel = (
   options: ScheduleEditorViewModelOptions,
 ): ScheduleEditorViewModelInterface => ScheduleEditorViewModel.create(options);

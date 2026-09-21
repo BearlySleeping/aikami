@@ -13,26 +13,20 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import type { CapabilitySnapshot, ConnectionEntry } from '@aikami/types';
 import { isAiTextProviderRequiredError } from '@aikami/utils';
-import { isTauri } from '$lib/views/utils/is_tauri';
-import {
-  campaignService,
-  capabilityService,
-  configService,
-  equipmentService,
-  gameModeService,
-  inventoryService,
-  playerStateService,
-  routerService,
-  runtimeConfigService,
-  worldStateService,
+import type {
+  CampaignServiceInterface,
+  CapabilityServiceInterface,
+  ConfigServiceInterface,
+  RouterServiceInterface,
+  RuntimeConfigServiceInterface,
 } from '$services';
 import type { ConnectionCapability } from '$types';
-import {
-  type AiSettingsViewModelInterface,
-  getAiSettingsViewModel,
+import type {
+  AiSettingsViewModelInterface,
+  CapabilitySetupPrefill,
 } from '../settings/ai/ai_settings_view_model.svelte';
 
 // ── Types ──────────────────────────────────────────────────────────────
@@ -113,6 +107,8 @@ export type CapabilityRow = {
   readonly actionButtonClass: string;
   /** Whether the row's checkbox reads as on. */
   readonly checked: boolean;
+  /** Whether the row's checkbox is locked (no backing connection or detection). */
+  readonly disabled: boolean;
 };
 
 /**
@@ -253,11 +249,11 @@ export type SetupSubflowViewModelInterface = BaseViewModelInterface & {
   /** Starts provider discovery for the enabled capabilities only. */
   startDiscovery(): Promise<void>;
   /** Opens the shared connection editor for manual configuration of one capability. */
-  openManualSetup(capability: ConnectionCapability): void;
+  openManualSetup(capability: ConnectionCapability, prefill?: CapabilitySetupPrefill): void;
   /** Shows the manual step (saved connections list) without opening the editor. */
   showManualStep(capability: ConnectionCapability): void;
-  /** Plan-step action: show saved connections when configured, otherwise open the editor. */
-  reviewCapability(capability: ConnectionCapability): void;
+  /** Plan-step action: show saved connections when configured, otherwise detect local servers or open the editor. */
+  reviewCapability(capability: ConnectionCapability): Promise<void>;
   /** Called when the user is done with the manual editor — re-checks configured state and advances. */
   finishManualSetup(): void;
   /** Applies the selected plan. */
@@ -272,9 +268,44 @@ export type SetupSubflowViewModelInterface = BaseViewModelInterface & {
   retry(): void;
 };
 
+export type SetupSubflowConfigCapabilities = Pick<
+  ConfigServiceInterface,
+  'state' | 'load' | 'save' | 'addConnection' | 'setDefaultConnection'
+>;
+
+export type SetupSubflowDetectionCapabilities = Pick<CapabilityServiceInterface, 'detect'>;
+
+export type SetupSubflowRuntimeConfigCapabilities = Pick<
+  RuntimeConfigServiceInterface,
+  'getTextUrl' | 'getImageUrl' | 'getVoiceTtsUrl'
+>;
+
+export type SetupSubflowCampaignCapabilities = Pick<CampaignServiceInterface, 'startNewCampaign'>;
+
+export type SetupSubflowRouterCapabilities = Pick<RouterServiceInterface, 'goToRoute'>;
+
+/** The per-service state reset invoked when resuming campaign creation. */
+export type SetupSubflowResetCapabilities = {
+  inventory: { reset(): void };
+  worldState: { reset(): void };
+  playerState: { reset(): void };
+  equipment: { reset(): void };
+  gameMode: { reset(): void };
+};
+
 export type SetupSubflowViewModelOptions = BaseViewModelOptions & {
   /** Where the flow was entered from — decides what leave()/completion does. Defaults to 'direct'. */
   origin?: SetupOrigin;
+  config: SetupSubflowConfigCapabilities;
+  detection: SetupSubflowDetectionCapabilities;
+  runtimeConfig: SetupSubflowRuntimeConfigCapabilities;
+  campaign: SetupSubflowCampaignCapabilities;
+  router: SetupSubflowRouterCapabilities;
+  reset: SetupSubflowResetCapabilities;
+  /** Whether the app runs in the Tauri desktop shell. */
+  isDesktop: () => boolean;
+  /** Builds the shared connection-editor ViewModel mounted during 'manual'. */
+  createEditor: () => AiSettingsViewModelInterface;
 };
 
 // ── Constants ──────────────────────────────────────────────────────────
@@ -333,6 +364,7 @@ const LOCAL_PROVIDER_IDS = new Set([
   'ooba',
   'comfyui',
   'webui',
+  'sdcpp',
   'kokoro',
   'voicevox',
   'fish-speech',
@@ -365,6 +397,13 @@ class SetupSubflowViewModel
   /** The in-flight discovery run, so a second request joins it instead of racing it. */
   private _pendingDiscovery: Promise<void> | null = null;
   private readonly _origin: SetupOrigin;
+  private readonly _config: SetupSubflowConfigCapabilities;
+  private readonly _detection: SetupSubflowDetectionCapabilities;
+  private readonly _runtimeConfig: SetupSubflowRuntimeConfigCapabilities;
+  private readonly _campaign: SetupSubflowCampaignCapabilities;
+  private readonly _router: SetupSubflowRouterCapabilities;
+  private readonly _reset: SetupSubflowResetCapabilities;
+  private readonly _isDesktop: () => boolean;
 
   readonly editorViewModel: AiSettingsViewModelInterface;
 
@@ -386,7 +425,14 @@ class SetupSubflowViewModel
   constructor(options: SetupSubflowViewModelOptions) {
     super(options);
     this._origin = options.origin ?? 'direct';
-    this.editorViewModel = getAiSettingsViewModel({ className: 'SetupSubflowEditor' });
+    this._config = options.config;
+    this._detection = options.detection;
+    this._runtimeConfig = options.runtimeConfig;
+    this._campaign = options.campaign;
+    this._router = options.router;
+    this._reset = options.reset;
+    this._isDesktop = options.isDesktop;
+    this.editorViewModel = options.createEditor();
   }
 
   // ── Getters ────────────────────────────────────────────────────────────
@@ -437,7 +483,7 @@ class SetupSubflowViewModel
   }
 
   get isDesktop(): boolean {
-    return isTauri();
+    return this._isDesktop();
   }
 
   get hasScanned(): boolean {
@@ -504,7 +550,11 @@ class SetupSubflowViewModel
         actionLabel: configured ? 'Change' : 'Set up',
         icon: configured ? '✅' : '⚠️',
         actionButtonClass: configured ? 'btn btn-sm btn-ghost' : 'btn btn-sm btn-primary',
-        checked: toggle.enabled,
+        // An optional capability only reads as on while something backs it, so
+        // removing its connection drops the checkbox to off (and disabled)
+        // even if the stale toggle was left enabled internally.
+        checked: toggle.required ? toggle.enabled : toggle.enabled && this._hasBacking(toggle.id),
+        disabled: !toggle.required && !this._hasBacking(toggle.id),
       };
     });
   }
@@ -599,8 +649,8 @@ class SetupSubflowViewModel
 
   get manualConnections(): readonly ManualConnectionRow[] {
     const capability = this.manualCapability ?? 'text';
-    const connections = (configService.state.connections ?? []) as ConnectionEntry[];
-    const defaultId = configService.state.defaultByCapability?.[capability];
+    const connections = (this._config.state.connections ?? []) as ConnectionEntry[];
+    const defaultId = this._config.state.defaultByCapability?.[capability];
     return connections
       .filter((c) => (c.capability ?? 'text') === capability)
       .map((c) => {
@@ -648,8 +698,8 @@ class SetupSubflowViewModel
 
   useConnection(connectionId: string): void {
     this.debug('useConnection', { connectionId });
-    configService.setDefaultConnection(connectionId);
-    void configService.save();
+    this._config.setDefaultConnection(connectionId);
+    void this._config.save();
   }
 
   /**
@@ -670,7 +720,11 @@ class SetupSubflowViewModel
     // so a refresh "forgot" every saved connection — and worse, the next
     // save() serialized that empty state over the vault, destroying the
     // connections it had not read.
-    await configService.load();
+    await this._config.load();
+    // Auto-enable optional capabilities (image/voice) already backed by a
+    // stored connection, so a reload keeps them on and a removed connection
+    // drops them back to off + disabled.
+    this._autoEnableOptional();
     // The editor ViewModel is deliberately not initialized here: its
     // initialize() loads image checkpoints and voice archetypes for the full
     // AI Settings page, and this flow only mounts the connection modals,
@@ -708,11 +762,11 @@ class SetupSubflowViewModel
     this.entryPath = path;
     this.errorMessage = '';
 
-    // Every path starts from the required capability only. Image and voice
-    // are opt-in from the plan screen.
+    // Every path keeps required capabilities enabled. Optional capabilities
+    // remain selected only when a usable stored connection backs them.
     this._capabilityToggles = this._capabilityToggles.map((t) => ({
       ...t,
-      enabled: t.required,
+      enabled: t.required || this._hasUsableConnection(t.id),
     }));
 
     if (path === 'recommended' && this.canScan) {
@@ -737,9 +791,17 @@ class SetupSubflowViewModel
 
   toggleCapability(capability: ConnectionCapability): void {
     const toggle = this._capabilityToggles.find((t) => t.id === capability);
-    if (toggle && !toggle.required) {
-      toggle.enabled = !toggle.enabled;
+    if (!toggle || toggle.required) {
+      return;
     }
+    // An optional capability can only be turned on when something backs it —
+    // a usable connection, or a provider the last scan detected. With nothing
+    // behind it the checkbox is disabled and this guard keeps state in step.
+    if (!toggle.enabled && !this._hasBacking(capability)) {
+      this.debug('toggleCapability:blocked-no-backing', { capability });
+      return;
+    }
+    toggle.enabled = !toggle.enabled;
   }
 
   async rescan(): Promise<void> {
@@ -771,6 +833,9 @@ class SetupSubflowViewModel
 
   private async _runDiscovery(): Promise<void> {
     const enabledIds = this._capabilityToggles.filter((t) => t.enabled).map((t) => t.id);
+    const requestedIds = this.hasScanned
+      ? enabledIds
+      : this._capabilityToggles.map((toggle) => toggle.id);
 
     const operationId = ++this._discoveryOperationId;
     this.isDetecting = true;
@@ -778,14 +843,14 @@ class SetupSubflowViewModel
     this.step = 'detecting';
 
     try {
-      // Only the capabilities the user actually enabled are probed — an
-      // un-selected optional capability is never scanned.
-      const snapshot = await capabilityService.detect({ capabilities: enabledIds });
+      // The initial scan probes optional capabilities so they can become
+      // selectable when found. Later rescans remain scoped to enabled choices.
+      const snapshot = await this._detection.detect({ capabilities: requestedIds });
       if (operationId !== this._discoveryOperationId) {
         return;
       }
       this.snapshot = snapshot;
-      this._discoveredProviders = this._buildDiscoveredProviders(snapshot, enabledIds);
+      this._discoveredProviders = this._buildDiscoveredProviders(snapshot, requestedIds);
       this._buildPlan(snapshot);
       this.step = 'plan';
       this.debug('startDiscovery:complete', { providers: this._discoveredProviders.length });
@@ -822,7 +887,7 @@ class SetupSubflowViewModel
         isLocal: LOCAL_PROVIDER_IDS.has(snapshot.textProviderId),
         isCompatible: true,
         modelName: snapshot.textModelName,
-        baseUrl: runtimeConfigService.getTextUrl() ?? undefined,
+        baseUrl: this._runtimeConfig.getTextUrl() ?? undefined,
         key: `${snapshot.textProviderId}-text`,
         icon: LOCAL_PROVIDER_IDS.has(snapshot.textProviderId) ? '🖥️' : '☁️',
         detailText: _providerDetailText('text', snapshot.textModelName),
@@ -840,7 +905,7 @@ class SetupSubflowViewModel
         isLocal: LOCAL_PROVIDER_IDS.has(snapshot.imageProviderId),
         isCompatible: true,
         modelName: undefined,
-        baseUrl: runtimeConfigService.getImageUrl() ?? undefined,
+        baseUrl: this._runtimeConfig.getImageUrl() ?? undefined,
         key: `${snapshot.imageProviderId}-image`,
         icon: LOCAL_PROVIDER_IDS.has(snapshot.imageProviderId) ? '🖥️' : '☁️',
         detailText: _providerDetailText('image', undefined),
@@ -875,17 +940,43 @@ class SetupSubflowViewModel
     this.step = 'manual';
   }
 
-  openManualSetup(capability: ConnectionCapability): void {
+  openManualSetup(capability: ConnectionCapability, prefill?: CapabilitySetupPrefill): void {
     this.showManualStep(capability);
-    this.editorViewModel.openCapabilitySetup(capability);
+    this.editorViewModel.openCapabilitySetup(capability, prefill);
   }
 
-  reviewCapability(capability: ConnectionCapability): void {
+  async reviewCapability(capability: ConnectionCapability): Promise<void> {
     if (this._hasUsableConnection(capability)) {
       this.showManualStep(capability);
-    } else {
-      this.openManualSetup(capability);
+      return;
     }
+
+    // "Artwork (Scenes & Characters)" is backed by a server the player runs
+    // on localhost. Clicking "Set up" should look for a running image engine
+    // first, then open the connection editor pre-filled with the found server
+    // instead of a blank form defaulting to ComfyUI. The browser build can
+    // still see the same-origin /api/image proxy, so this is deliberately not
+    // gated by canScan.
+    if (capability === 'image') {
+      const snapshot = await this._detectSingleCapability(capability);
+      if (snapshot?.imageStatus === 'detected' && snapshot.imageProviderId) {
+        const baseUrl = this._runtimeConfig.getImageUrl();
+        if (baseUrl?.trim()) {
+          this.debug('reviewCapability:detected', {
+            capability,
+            providerId: snapshot.imageProviderId,
+            baseUrl,
+          });
+          this.openManualSetup(capability, {
+            registryId: snapshot.imageProviderId,
+            baseUrl: baseUrl.trim(),
+          });
+          return;
+        }
+      }
+    }
+
+    this.openManualSetup(capability);
   }
 
   finishManualSetup(): void {
@@ -894,6 +985,9 @@ class SetupSubflowViewModel
     // to go next.
     const capability = this.manualCapability;
     this.manualCapability = null;
+    // Saving a connection for an optional capability (image/voice) auto-enables
+    // its toggle; the plan screen reflects it immediately.
+    this._autoEnableOptional();
 
     if (capability === 'text' || (capability === null && this.entryPath === 'text-only')) {
       if (this._hasUsableConnection('text')) {
@@ -959,6 +1053,8 @@ class SetupSubflowViewModel
         return;
       }
 
+      // Seeding a connection for an optional capability auto-enables it.
+      this._autoEnableOptional();
       this.step = 'ready';
       this.debug('applyPlan:complete', { capabilities: enabledCaps });
     } catch (error) {
@@ -1015,11 +1111,14 @@ class SetupSubflowViewModel
     this._capabilityToggles = CAPABILITY_DEFINITIONS.map((d) => ({ ...d }));
     this._discoveredProviders = [];
     this._planSummary = null;
+    // Re-apply auto-enable for optional capabilities still backed by a stored
+    // connection after the reset.
+    this._autoEnableOptional();
   }
 
   async leave(): Promise<void> {
     if (this._origin === 'settings') {
-      await routerService.goToRoute('settings', {
+      await this._router.goToRoute('settings', {
         queryParameters: undefined,
         pathParameters: undefined,
       });
@@ -1032,7 +1131,7 @@ class SetupSubflowViewModel
       // to resume — starting a campaign here would be a guess. Send the
       // player home rather than fabricate an action for a context this
       // flow was never told about.
-      await routerService.goToRoute('index', {
+      await this._router.goToRoute('index', {
         queryParameters: undefined,
         pathParameters: undefined,
       });
@@ -1044,15 +1143,15 @@ class SetupSubflowViewModel
     // the redirect here (the gate throws before campaignService writes
     // anything), so this creates exactly one.
     try {
-      inventoryService.reset();
-      worldStateService.reset();
-      playerStateService.reset();
-      equipmentService.reset();
-      gameModeService.reset();
+      this._reset.inventory.reset();
+      this._reset.worldState.reset();
+      this._reset.playerState.reset();
+      this._reset.equipment.reset();
+      this._reset.gameMode.reset();
 
-      await campaignService.startNewCampaign({ contentPackId: 'emberwatch' });
+      await this._campaign.startNewCampaign({ contentPackId: 'emberwatch' });
 
-      await routerService.goToRoute('personaCreate', {
+      await this._router.goToRoute('personaCreate', {
         queryParameters: { onboarding: '1' },
         pathParameters: undefined,
       });
@@ -1076,6 +1175,39 @@ class SetupSubflowViewModel
 
   // ── Private helpers ────────────────────────────────────────────────────
 
+  /**
+   * Runs detection scoped to one capability and reports the snapshot, or null
+   * on error/cancellation. Unlike {@link startDiscovery}, this is intentionally
+   * not gated by {@link canScan}: the browser build can still reach the
+   * same-origin /api/image proxy for a local image engine.
+   */
+  private async _detectSingleCapability(
+    capability: ConnectionCapability,
+  ): Promise<CapabilitySnapshot | null> {
+    const operationId = ++this._discoveryOperationId;
+    this.isDetecting = true;
+    this.errorMessage = '';
+    this.step = 'detecting';
+
+    try {
+      const snapshot = await this._detection.detect({ capabilities: [capability] });
+      if (operationId !== this._discoveryOperationId) {
+        return null;
+      }
+      return snapshot;
+    } catch (error) {
+      if (operationId !== this._discoveryOperationId) {
+        return null;
+      }
+      this.warn('reviewCapability:detect-failed', error);
+      return null;
+    } finally {
+      if (operationId === this._discoveryOperationId) {
+        this.isDetecting = false;
+      }
+    }
+  }
+
   private async _ensureTextProvider(): Promise<void> {
     if (this._hasUsableConnection('text')) {
       return;
@@ -1086,9 +1218,9 @@ class SetupSubflowViewModel
       throw new Error('A usable text provider is required before setup can complete.');
     }
 
-    const connections = (configService.state.connections ?? []) as ConnectionEntry[];
-    const textBaseUrl = runtimeConfigService.getTextUrl();
-    configService.addConnection({
+    const connections = (this._config.state.connections ?? []) as ConnectionEntry[];
+    const textBaseUrl = this._runtimeConfig.getTextUrl();
+    this._config.addConnection({
       name: `${snapshot.textProviderId} (local)`,
       provider: snapshot.textProviderId,
       capability: 'text',
@@ -1107,7 +1239,7 @@ class SetupSubflowViewModel
       isDefault: connections.length === 0,
       source: 'detected',
     });
-    await configService.save();
+    await this._config.save();
   }
 
   private _invalidateDiscovery(): void {
@@ -1128,11 +1260,11 @@ class SetupSubflowViewModel
       return;
     }
 
-    const connections = (configService.state.connections ?? []) as ConnectionEntry[];
+    const connections = (this._config.state.connections ?? []) as ConnectionEntry[];
     const baseUrl =
       capability === 'image'
-        ? (runtimeConfigService.getImageUrl() ?? '')
-        : (runtimeConfigService.getVoiceTtsUrl() ?? '');
+        ? (this._runtimeConfig.getImageUrl() ?? '')
+        : (this._runtimeConfig.getVoiceTtsUrl() ?? '');
 
     // Kokoro is bundled and _isUsable() treats its persisted connection as
     // usable without an endpoint. Other local providers still need one.
@@ -1151,7 +1283,7 @@ class SetupSubflowViewModel
     };
 
     if (capability === 'image') {
-      configService.addConnection({
+      this._config.addConnection({
         name: `${_labelForProvider('image', providerId)}`,
         provider: providerId,
         capability: 'image',
@@ -1164,7 +1296,7 @@ class SetupSubflowViewModel
         source: 'detected',
       });
     } else {
-      configService.addConnection({
+      this._config.addConnection({
         name: `${_labelForProvider('voice', providerId)}`,
         provider: providerId,
         capability: 'voice',
@@ -1178,7 +1310,42 @@ class SetupSubflowViewModel
       });
     }
 
-    await configService.save();
+    await this._config.save();
+  }
+
+  /** Whether the capability was detected as available by the last scan. */
+  private _isDetected(capability: ConnectionCapability): boolean {
+    if (capability === 'image') {
+      return this.snapshot?.imageStatus === 'detected';
+    }
+    if (capability === 'voice') {
+      return this.snapshot?.voiceStatus === 'detected';
+    }
+    return this.snapshot?.textStatus === 'detected';
+  }
+
+  /**
+   * Whether an optional capability has anything to back it — a usable
+   * connection, or a provider the last scan detected. With nothing behind it
+   * the toggle is disabled in the view and {@link toggleCapability} refuses to
+   * enable it.
+   */
+  private _hasBacking(capability: ConnectionCapability): boolean {
+    return this._hasUsableConnection(capability) || this._isDetected(capability);
+  }
+
+  /**
+   * Auto-enables optional capabilities (image/voice) already backed by a
+   * usable connection. Called after stored config loads (so a reload keeps
+   * them on), after a manual connection is saved, and after Apply seeds one.
+   * Never disables — detection-driven opt-ins are the user's to keep.
+   */
+  private _autoEnableOptional(): void {
+    this._capabilityToggles = this._capabilityToggles.map((toggle) =>
+      toggle.required || !this._hasUsableConnection(toggle.id)
+        ? toggle
+        : { ...toggle, enabled: true },
+    );
   }
 
   private _hasUsableConnection(capability: ConnectionCapability): boolean {
@@ -1186,11 +1353,11 @@ class SetupSubflowViewModel
   }
 
   private _connectionFor(capability: ConnectionCapability): ConnectionEntry | undefined {
-    const connections = (configService.state.connections ?? []) as ConnectionEntry[];
+    const connections = (this._config.state.connections ?? []) as ConnectionEntry[];
     const usable = connections.filter(
       (c) => (c.capability ?? 'text') === capability && this._isUsable(c),
     );
-    const defaultId = configService.state.defaultByCapability?.[capability];
+    const defaultId = this._config.state.defaultByCapability?.[capability];
     return usable.find((c) => c.id === defaultId) ?? usable[0];
   }
 
@@ -1240,6 +1407,6 @@ class SetupSubflowViewModel
 
 // ── Factory ────────────────────────────────────────────────────────────
 
-export const getSetupSubflowViewModel = (
+export const createSetupSubflowViewModel = (
   options: SetupSubflowViewModelOptions,
 ): SetupSubflowViewModelInterface => SetupSubflowViewModel.create(options);

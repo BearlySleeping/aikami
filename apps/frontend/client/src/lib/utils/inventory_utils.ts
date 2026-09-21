@@ -318,21 +318,3 @@ export const getItemDefinition = (itemId: string): ItemDefinition => {
   }
   return ITEM_CATALOG[itemId] ?? { ...DEFAULT_ITEM_DEFINITION, label: itemId };
 };
-
-/**
- * Finds an item whose LPC render asset matches the given asset ID.
- *
- * Used to map a character's base appearance layer (e.g. the default
- * chainmail torso) to an equippable item so the paperdoll reflects the
- * base outfit (C-374). Returns `undefined` when no item renders that asset
- * (e.g. AI-generated appearance layers without a catalog item).
- */
-export const findItemIdByLpcAsset = (assetId: string): string | undefined => {
-  const catalog = _activeCatalog ?? ITEM_CATALOG;
-  for (const [itemId, definition] of Object.entries(catalog)) {
-    if (definition.lpcAssetId === assetId) {
-      return itemId;
-    }
-  }
-  return undefined;
-};

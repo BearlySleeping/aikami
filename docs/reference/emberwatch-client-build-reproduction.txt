@@ -1,0 +1,26 @@
+Phase 7 — origin/main client:build reproduction (executed, not inferred)
+
+Method (not a symlinked node_modules this time):
+  git worktree add -f /tmp/mainbuild2 origin/main
+  cd /tmp/mainbuild2 && bun install --frozen-lockfile
+  cd apps/frontend/client && bun run build
+
+origin/main HEAD: 8b3fe3aad8c84482c98cca993c3805fd159fdd8f
+
+Result: IDENTICAL FAILURE
+  Dev-route output present (1) — must not ship:
+    dev/
+  ✗ /tmp/mainbuild2/apps/frontend/client/build FAILED
+  ❌ check deploy assets failed (exit 1)
+  error: script "build:app" exited with code 1
+  × Task client:build failed to run.
+  error: script "build" exited with code 1
+
+Baseline conclusion (superseded): this reproduction established that the dev
+route leak was present on origin/main rather than introduced by the Emberwatch
+work. That assessment no longer describes the final branch state.
+
+Final branch result: `client:build` completes with no `(dev)` route output in
+the deploy bundle. Commit f6f21e3a82ef90597328c1c46d4b541d343fbd1f fixed the
+inconsistent route-default handling that allowed development routes into the
+production build.

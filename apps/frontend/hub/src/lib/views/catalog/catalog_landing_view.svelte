@@ -17,16 +17,16 @@ const { viewModel }: Props = $props();
     <!-- Explicit degraded state (C-396 Quality Requirements): the static
          index is unreachable — never a blank list, never a 500. -->
     <div
-      class="rounded-lg border border-destructive/40 bg-destructive/10 px-6 py-10 text-center"
+      class="rounded-lg border border-error/40 bg-error/10 px-6 py-10 text-center"
       data-testid="catalog-error-state"
     >
-      <h1 class="font-display text-2xl text-foreground">Catalog unavailable</h1>
-      <p class="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
+      <h1 class="font-display text-2xl text-base-content">Catalog unavailable</h1>
+      <p class="mx-auto mt-2 max-w-md text-sm text-base-content/60">
         The catalog index could not be loaded. Please try again in a moment.
       </p>
       <button
         type="button"
-        class="mt-6 rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent"
+        class="mt-6 rounded-md border border-base-300 px-4 py-2 text-sm font-medium text-base-content transition-colors hover:bg-base-300"
         onclick={() => viewModel.retry()}
       >
         Try again
@@ -34,17 +34,17 @@ const { viewModel }: Props = $props();
     </div>
   {:else}
     <header class="flex flex-col gap-2">
-      <h1 class="font-display text-3xl text-foreground">Catalog</h1>
-      <p class="text-sm text-muted-foreground">
+      <h1 class="font-display text-3xl text-base-content">Catalog</h1>
+      <p class="text-sm text-base-content/60">
         Community-shared sprites, music, maps and tilesets — free to browse, for everyone.
       </p>
       <label
-        class="mt-2 flex max-w-md items-center gap-2 rounded-md border border-border bg-card px-3 py-2"
+        class="mt-2 flex max-w-md items-center gap-2 rounded-md border border-base-300 bg-base-200 px-3 py-2"
       >
         <svg
           role="img"
           aria-label="Search"
-          class="h-4 w-4 shrink-0 text-muted-foreground"
+          class="h-4 w-4 shrink-0 text-base-content/60"
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"
@@ -61,16 +61,103 @@ const { viewModel }: Props = $props();
           placeholder="Search categories…"
           value={viewModel.searchQuery}
           oninput={(event) => viewModel.setSearchQuery(event.currentTarget.value)}
-          class="w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+          class="w-full bg-transparent text-sm text-base-content outline-none placeholder:text-base-content/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
         >
       </label>
     </header>
 
-    {#if viewModel.visibleCategories.length === 0}
-      <p
-        class="py-10 text-center text-sm text-muted-foreground"
-        data-testid="catalog-no-categories"
+    <!-- Hub tools: map editor + walk sandbox, open to everyone (C-508). -->
+    <section
+      class="flex flex-col gap-3"
+      data-testid="hub-tools"
+      aria-labelledby="hub-tools-heading"
+    >
+      <h2 id="hub-tools-heading" class="font-display text-xl text-base-content">
+        Make &amp; explore
+      </h2>
+      <div
+        class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"
+        data-testid="hub-tools-grid"
       >
+        <div
+          class="flex flex-col gap-3 rounded-lg border border-base-300 bg-base-200 p-5"
+          data-testid="hub-tool-map-studio"
+        >
+          <span class="font-display text-lg text-base-content">Map Studio</span>
+          <p class="flex-1 text-sm text-base-content/60">
+            Paste, edit and export maps with the same scene loader the game uses — then share them
+            with the community.
+          </p>
+          <button
+            type="button"
+            class="self-start rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-content transition-colors hover:bg-primary/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+            data-testid="open-map-studio"
+            onclick={() => viewModel.goToMapStudio()}
+          >
+            Open Map Studio
+          </button>
+        </div>
+
+        <div
+          class="flex flex-col gap-3 rounded-lg border border-base-300 bg-base-200 p-5"
+          data-testid="hub-tool-walk-sandbox"
+        >
+          <span class="font-display text-lg text-base-content">Walk Sandbox</span>
+          <p class="flex-1 text-sm text-base-content/60">
+            Walk a published map in the engine with collision, spawn and transition overlays.
+          </p>
+          {#if viewModel.sandboxMapOptions.length === 0}
+            <p class="text-sm text-base-content/60" data-testid="sandbox-no-maps">
+              No published maps yet.
+            </p>
+          {:else}
+            <div class="flex flex-wrap items-center gap-2">
+              <label class="sr-only" for="sandbox-map-select">Map</label>
+              <select
+                id="sandbox-map-select"
+                class="min-w-0 flex-1 rounded-md border border-base-300 bg-base-100 px-3 py-2 text-sm text-base-content"
+                value={viewModel.selectedSandboxTag}
+                onchange={(event) => viewModel.setSelectedSandboxTag(event.currentTarget.value)}
+              >
+                {#each viewModel.sandboxMapOptions as map (map.tag)}
+                  <option value={map.tag}>{map.label}</option>
+                {/each}
+              </select>
+              <button
+                type="button"
+                class="rounded-md border border-base-300 px-4 py-2 text-sm font-medium text-base-content transition-colors hover:bg-base-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+                data-testid="open-sandbox"
+                onclick={() => viewModel.goToSandbox()}
+              >
+                Walk
+              </button>
+            </div>
+          {/if}
+        </div>
+
+        <div
+          class="flex flex-col gap-3 rounded-lg border border-base-300 bg-base-200 p-5"
+          data-testid="hub-tool-lpc-preview"
+        >
+          <span class="font-display text-lg text-base-content">LPC Preview</span>
+          <p class="flex-1 text-sm text-base-content/60">
+            Compose animated LPC characters from published catalog components with the game's
+            renderer.
+          </p>
+          <button
+            type="button"
+            class="self-start rounded-md border border-base-300 px-4 py-2 text-sm font-medium text-base-content transition-colors hover:bg-base-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+            data-testid="open-lpc-preview"
+            onclick={() => viewModel.goToLpcPreview()}
+          >
+            Open LPC Preview
+          </button>
+        </div>
+      </div>
+    </section>
+
+    {#if viewModel.visibleCategories.length === 0}
+      <p class="py-10 text-center text-sm text-base-content/60" data-testid="catalog-no-categories">
         No categories match your search.
       </p>
     {:else}
@@ -82,11 +169,11 @@ const { viewModel }: Props = $props();
           <li>
             <button
               type="button"
-              class="flex w-full flex-col gap-1 rounded-lg border border-border bg-card p-5 text-left transition-colors hover:border-primary/50 hover:bg-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+              class="flex w-full flex-col gap-1 rounded-lg border border-base-300 bg-base-200 p-5 text-left transition-colors hover:border-primary/50 hover:bg-base-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
               onclick={() => viewModel.goToCategory(category.id)}
             >
-              <span class="font-display text-lg text-foreground">{category.label}</span>
-              <span class="text-sm text-muted-foreground">
+              <span class="font-display text-lg text-base-content">{category.label}</span>
+              <span class="text-sm text-base-content/60">
                 {category.count.toLocaleString()}
                 asset{category.count === 1 ? '' : 's'}
               </span>
@@ -97,7 +184,7 @@ const { viewModel }: Props = $props();
     {/if}
 
     {#if viewModel.publishedAt}
-      <footer class="mt-auto border-t border-border pt-4 text-xs text-muted-foreground">
+      <footer class="mt-auto border-t border-base-300 pt-4 text-xs text-base-content/60">
         Index published {new Date(viewModel.publishedAt).toLocaleString()}
       </footer>
     {/if}

@@ -5,7 +5,7 @@
 //
 // Contract: C-248 Autonomous NPC Behavior Schedules
 
-import { BaseFrontendClass, type BaseFrontendClassInterface } from '@aikami/frontend/services';
+import { BaseFrontendClass, type BaseFrontendClassInterface } from '@aikami/frontend/services/base';
 import type { IdleDetectionServiceOptions } from '$types';
 // ── Types ────────────────────────────────────────────────────────────────
 

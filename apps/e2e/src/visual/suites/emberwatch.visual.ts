@@ -13,6 +13,7 @@
 //     it (AC-1). The village map places the arch over the walkable gate gap
 //     at the default spawn, so overheadOccludesPlayer is true by geometry.
 
+import { MapGeometrySchema, MapLandmarkSchema } from '@aikami/schemas';
 import type { Page } from 'playwright';
 import { Type } from 'typebox';
 import { defineConfig } from '$visual/core/config';
@@ -241,6 +242,218 @@ const OVERHEAD_PROMPT = [
   'Return ONLY valid JSON matching the schema.',
 ].join('\n');
 
+// ---------------------------------------------------------------------------
+// C-523 AC-2 — the five-map art pass, captured natively on the production
+// `/game` route.
+//
+// The village-only coverage above is NOT five-map evidence. Each case below
+// loads one of the pack's five maps through the production `loadMap` path (the
+// test seam only replaces the portal trigger) and captures the whole rendered
+// canvas, then asks the VLM the geometry questions AC-2 names: readable
+// composition, no missing-frame placeholders, no stretched furniture, the
+// map's landmark present, and entrances looking walkable.
+//
+// ---------------------------------------------------------------------------
+
+// AC-2 geometry/readability schemas (`MapGeometrySchema` and its composed
+// `MapLandmarkSchema`) live in `@aikami/schemas` (lib/visual/map_visual_review)
+// so the shared field declarations are reused rather than duplicated here.
+
+/**
+ * Loads one pack map through the production path before capture.
+ *
+ * `near` spawns the camera on an authored landmark instead of the map's default
+ * spawn. Several of the five maps put their landmark hundreds of pixels from
+ * the default spawn, so a spawn-centred capture cannot show the thing AC-2 asks
+ * about — the coordinates below are the map's own object-layer coordinates.
+ */
+const loadMapForVisual =
+  (mapId: string, near?: { x: number; y: number }) =>
+  async (page: Page): Promise<void> => {
+    await waitForVisualReady(page);
+    await page.evaluate(
+      (options) => (window as any).__AIKAMI_TEST__.loadPackMap(options), // guard-ignore lint/type-safety/casting: custom window property for e2e hooks
+      { mapId, ...(near ? { nearX: near.x, nearY: near.y } : {}) },
+    );
+    await page.waitForFunction(
+      (id) => (window as any).__AIKAMI_TEST__.getCurrentMapId() === id, // guard-ignore lint/type-safety/casting: custom window property for e2e hooks
+      mapId,
+      { timeout: 15_000 },
+    );
+    // Let the renderer draw the newly loaded map before the capture.
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) => {
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+        }),
+    );
+  };
+
+const mapPrompt = (options: {
+  name: string;
+  mapId: string;
+  framing: 'default spawn' | 'landmark';
+  expected: string[];
+  landmark: string;
+}): string =>
+  [
+    `This is a screenshot of "${options.name}" (map id "${options.mapId}") — a top-down pixel-art JRPG scene from the Aikami game engine, captured from the production /game route.`,
+    options.framing === 'landmark'
+      ? "The camera is centred ON the map's landmark prop, so that prop should be visible and identifiable."
+      : "The camera is centred on the player at the map's authored default spawn — this is the composition a player sees on entering, so judge the scene as a whole.",
+    '',
+    'THE SCENE SHOULD CONTAIN:',
+    ...options.expected.map((line) => `- ${line}`),
+    '',
+    'EVALUATE (C-523 AC-2):',
+    '- Is the scene a coherent, intentionally composed pixel-art map (not a blank grid, not a flat colour field)?',
+    '- Are tile edges hard-edged pixel art with no blurring, smearing or bilinear interpolation?',
+    '- Are there ZERO missing-frame placeholders — no magenta boxes, no solid white squares, no blank holes where a tile or prop should be?',
+    '- Is any furniture or prop visibly STRETCHED, squashed, or cropped mid-sprite?',
+    `- Is the landmark present and recognisable: ${options.landmark}?`,
+    options.framing === 'landmark'
+      ? '- This capture is framed on the landmark, so its absence is a real defect.'
+      : '- This capture is NOT framed on the landmark — do not treat its absence as a defect here, and do not lower the score for it.',
+    '- Do doors, gate openings and path junctions read as open, walkable ground (not walled off)?',
+    '',
+    'Score breakdown:',
+    '- 90-100: Coherent readable map; landmark, entrances and props all correct.',
+    '- 70-89: Mostly correct but some element ambiguous or missing.',
+    '- 40-69: A visible defect — placeholder frame, stretched prop, or unreadable composition.',
+    '- 0-39: Blank, dark grid, or severely broken rendering.',
+    '',
+    'Return ONLY valid JSON matching the schema.',
+  ].join('\n');
+
+/** One AC-2 case per Emberwatch map. */
+//
+// All five cases need every map resolvable: the published catalog seed only
+// carries village/inn/merchant_shop, so `old_road` and `ruined_shrine` come
+// from the local asset origin (`scripts/src/lib/ops/local_asset_origin.ts`,
+// which the client is already pointed at via
+// `apps/frontend/client/.env.emulator.local`). Run it before this suite.
+const fiveMapCases = [
+  {
+    mapId: 'village',
+    name: 'Emberwatch Village',
+    // `ward_tree_landmark` sits at (1024, 704) in the map's object layer. The
+    // camera centres on the player, so the capture spawns ON the prop — a
+    // 96px offset put the player in front of the tree and it stopped reading
+    // as a tree at all (verified by capture: on-coordinate it is unmistakable).
+    near: { x: 1024, y: 704 },
+    expected: [
+      'Green grass ground with brown dirt/cobblestone paths.',
+      'The ward tree — a large distinctive tree landmark — dominating the upper part of the view.',
+      'Woodland trees (oak and birch) around the village.',
+      'A village well and a notice board as distinct props.',
+    ],
+    landmark: 'the ward tree (the large distinctive tree landmark)',
+  },
+  {
+    mapId: 'inn',
+    name: 'The Guttering Candle Inn (interior)',
+    // The crate sits at (768, 480) and barrels at (96, 96) / (768, 96); the
+    // camera centres on the player, so spawn on the crate.
+    near: { x: 768, y: 480 },
+    expected: [
+      'A wooden interior floor with a clearly bounded room.',
+      'Interior walls with a visible wall-top rim, not an open field.',
+      'Barrels and a crate as distinct interior props.',
+      'A doorway opening reading as walkable ground.',
+    ],
+    landmark: 'the inn interior furnishings (barrels and a crate) inside a bounded room',
+  },
+  {
+    mapId: 'merchant_shop',
+    name: "Mara's Provisions (shop interior)",
+    // The counter row runs along y = 352 (halves at x = 128 and x = 576, crate
+    // at x = 384); spawn on the row so it is centred rather than 96px off.
+    near: { x: 384, y: 352 },
+    expected: [
+      'A wooden interior floor with a clearly bounded shop room.',
+      'A shop counter spanning the room as distinct counter props.',
+      'At least one crate as a distinct prop.',
+      'A doorway opening reading as walkable ground.',
+    ],
+    landmark: 'the shop counter inside a bounded room',
+  },
+  {
+    mapId: 'old_road',
+    name: 'The Old Road',
+    // The waystation (cart, barrel, ward component) is authored at
+    // (1920, 352), (1760, 288) and (1888, 320); spawn on the cart.
+    near: { x: 1920, y: 352 },
+    expected: [
+      'An outdoor trail/road running through open terrain.',
+      'A waystation with an abandoned cart and a barrel as distinct props.',
+      'Woodland trees (oak and birch) bordering the road.',
+      'Grass and dirt/gravel terrain transitions.',
+    ],
+    landmark: 'the waystation (abandoned cart and barrel) beside the trail',
+  },
+  {
+    mapId: 'ruined_shrine',
+    name: 'The Ruined Shrine',
+    // The arch is two pillars at (608, 448) and (672, 448); spawn between them
+    // so both pillars and the central passage are in frame.
+    near: { x: 640, y: 448 },
+    expected: [
+      'A shrine arch made of stone pillars with a walkable central passage.',
+      'Weathered stone/gravel terrain, distinct from the village grass.',
+      'Surrounding woodland or overgrowth framing the ruin.',
+    ],
+    landmark: 'the shrine arch (stone pillars with a central passage)',
+  },
+] as const;
+
+/**
+ * Two cases per map, because one capture cannot answer both questions.
+ *
+ * The camera centres on the player, so:
+ *   - the **default spawn** capture is the authored composition — it is what
+ *     "map readability" is about, and it is what a player actually sees on
+ *     entering; and
+ *   - the **landmark** capture puts the camera on the prop the map is known
+ *     for, which is the only way "is the landmark present and recognisable"
+ *     can be answered at all.
+ *
+ * Asking a single spawn-centred capture for both produced failures that said
+ * more about the framing than about the map (established by capture, not
+ * inferred — see the C-523 execution report).
+ */
+const geometryCase = (
+  entry: (typeof fiveMapCases)[number],
+  framing: 'default spawn' | 'landmark',
+) => ({
+  name: `${entry.name} — ${framing} geometry (C-523 AC-2)`,
+  screenshotSelector: 'canvas',
+  prompt: mapPrompt({
+    name: entry.name,
+    mapId: entry.mapId,
+    framing,
+    expected: [...entry.expected],
+    landmark: entry.landmark,
+  }),
+  schema: framing === 'landmark' ? MapLandmarkSchema : MapGeometrySchema,
+  searchParams: { gameHour: '12' },
+  setupHook: loadMapForVisual(entry.mapId, framing === 'landmark' ? entry.near : undefined),
+  requiredTrueFields: ['mapReadable', 'noMissingFramePlaceholders', 'noStretchedFurniture'],
+});
+
+export const EMBERWATCH_FIVE_MAP_CASES = fiveMapCases.flatMap((entry) => [
+  geometryCase(entry, 'default spawn'),
+  {
+    ...geometryCase(entry, 'landmark'),
+    // The landmark claim is only asserted where the capture is on the prop.
+    requiredTrueFields: [
+      'mapReadable',
+      'noMissingFramePlaceholders',
+      'noStretchedFurniture',
+      'landmarkVisible',
+    ],
+  },
+]);
+
 export default defineConfig({
   id: 'emberwatch',
   route: '/game',
@@ -324,5 +537,7 @@ export default defineConfig({
       // undifferentiated or prop-less render cannot pass on score alone.
       requiredTrueFields: ['terrainDistinguishable', 'propsVisible', 'playerVisible'],
     },
+    // C-523 AC-2: the village-only cases above are not five-map evidence.
+    ...EMBERWATCH_FIVE_MAP_CASES,
   ],
 });

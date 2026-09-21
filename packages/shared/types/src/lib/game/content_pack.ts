@@ -7,15 +7,20 @@
 // Contract: C-327 AC-3 — onboarding hint types added
 
 import type {
+  ContentPackAccountSchema,
   ContentPackCombatStatsSchema,
   ContentPackCreditsSchema,
   ContentPackEncounterEntrySchema,
+  ContentPackEncounterObjectSchema,
+  ContentPackEvidenceSchema,
   ContentPackInteractableEntrySchema,
   ContentPackItemEntrySchema,
   ContentPackLootEntrySchema,
   ContentPackManifestSchema,
   ContentPackMapEntrySchema,
   ContentPackNpcEntrySchema,
+  ContentPackNpcPersonalitySchema,
+  ContentPackPropEnvironmentSchema,
   ContentPackPropSchema,
   ContentPackPuzzleSchema,
   ContentPackQuestEndingSchema,
@@ -26,6 +31,7 @@ import type {
   ContentPackSkillCheckSchema,
   ContentPackSkillStatSchema,
   ContentPackTileSchema,
+  ContentPackTruthVariantSchema,
   ItemTypeSchema,
   OnboardingHintStepSchema,
   OnboardingSectionSchema,
@@ -42,6 +48,9 @@ export type ContentPackCombatStats = Static<typeof ContentPackCombatStatsSchema>
 
 /** An NPC definition in a content pack manifest. */
 export type ContentPackNpcEntry = Static<typeof ContentPackNpcEntrySchema>;
+
+/** An NPC's authored personality (voice + manner) — C-488. */
+export type ContentPackNpcPersonality = Static<typeof ContentPackNpcPersonalitySchema>;
 
 /** Supported item types. */
 export type ItemType = Static<typeof ItemTypeSchema>;
@@ -103,8 +112,23 @@ export type ContentPackTile = Static<typeof ContentPackTileSchema>;
 /** A single prop definition in a content pack manifest (C-376). */
 export type ContentPackProp = Static<typeof ContentPackPropSchema>;
 
+/** The environmental half of a prop definition (C-531). */
+export type ContentPackPropEnvironment = Static<typeof ContentPackPropEnvironmentSchema>;
+
+/** One authored battlefield-object placement inside an encounter (C-531). */
+export type ContentPackEncounterObject = Static<typeof ContentPackEncounterObjectSchema>;
+
 /**
  * PackConfig — the runtime projection of a manifest's tile/prop definitions
  * that crosses the worker boundary (C-376 AC-2). Derived from the schema.
  */
 export type PackConfig = Static<typeof PackConfigSchema>;
+
+/** A hidden-truth starting-condition variant (C-495). */
+export type ContentPackTruthVariant = Static<typeof ContentPackTruthVariantSchema>;
+
+/** A discoverable, presentable piece of physical evidence (C-495). */
+export type ContentPackEvidence = Static<typeof ContentPackEvidenceSchema>;
+
+/** An NPC account consistent with a truth variant (C-495). */
+export type ContentPackAccount = Static<typeof ContentPackAccountSchema>;

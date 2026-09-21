@@ -1,0 +1,95 @@
+[
+  {
+    "id": "prop-native-alpha",
+    "version": "1.0.0",
+    "role": "prop-sprite",
+    "pixelGrid": "native",
+    "notes": "Source already carries a real alpha channel (a PNG prop exported with transparency). No alpha extraction is attempted, because running one over an existing alpha channel would replace a correct matte with a luminance guess.",
+    "operations": [
+      { "op": "decode-orient", "autoOrient": true },
+      {
+        "op": "alpha-cleanup",
+        "fringeThreshold": 24,
+        "matteThreshold": 230,
+        "removeGroundRectangle": true
+      },
+      { "op": "trim", "preserveGroundContact": true, "paddingPx": 1 },
+      { "op": "encode", "format": "png" }
+    ],
+    "qa": {
+      "requireGroundContact": true,
+      "maxAlphaFringeRatio": 0.35,
+      "forbidClippedContent": true,
+      "minNativeScaleFeaturePx": 2,
+      "manualReviewCodes": ["ground-rectangle-detected"]
+    }
+  },
+  {
+    "id": "prop-full-alpha-ground",
+    "version": "1.0.0",
+    "role": "prop-sprite",
+    "pixelGrid": "native",
+    "notes": "Source must carry native alpha with the object already isolated. No luminance or colour threshold is applied, so dark object pixels survive; any ground plane must be detached before preparation.",
+    "operations": [
+      { "op": "decode-orient", "autoOrient": true },
+      {
+        "op": "alpha-cleanup",
+        "fringeThreshold": 24,
+        "matteThreshold": 230,
+        "removeGroundRectangle": true
+      },
+      { "op": "trim", "preserveGroundContact": true, "paddingPx": 1 },
+      { "op": "encode", "format": "png" }
+    ],
+    "qa": {
+      "requireGroundContact": true,
+      "maxAlphaFringeRatio": 0.35,
+      "forbidClippedContent": true,
+      "minNativeScaleFeaturePx": 2,
+      "manualReviewCodes": ["ground-plane-not-detached"]
+    }
+  },
+  {
+    "id": "portrait-original",
+    "version": "1.0.0",
+    "role": "portrait",
+    "pixelGrid": "native",
+    "notes": "A portrait is a composed frame, not an isolated sprite: it keeps its own coverage and its own alpha. The profile exists so a portrait still flows through the same preparation stage and produces the same report shape, rather than bypassing it.",
+    "operations": [
+      { "op": "decode-orient", "autoOrient": true },
+      { "op": "encode", "format": "png" }
+    ],
+    "qa": {
+      "requireGroundContact": false,
+      "maxAlphaFringeRatio": 1,
+      "forbidClippedContent": false,
+      "minNativeScaleFeaturePx": 1,
+      "manualReviewCodes": []
+    }
+  },
+  {
+    "id": "lpc-sheet-native",
+    "version": "1.0.0",
+    "role": "sprite-sheet",
+    "pixelGrid": "pixel-art",
+    "notes": "LPC sheets are true pixel clusters, so the only approved resample is nearest-neighbour at the standard 13x21 cell grid (832x1344 at a 64px pitch). Blending here would invent colours that the LPC palette never had.",
+    "operations": [
+      { "op": "decode-orient", "autoOrient": true },
+      {
+        "op": "resample",
+        "method": "nearest-neighbor",
+        "targetWidth": 832,
+        "targetHeight": 1344,
+        "lockAspectRatio": false
+      },
+      { "op": "encode", "format": "png" }
+    ],
+    "qa": {
+      "requireGroundContact": true,
+      "maxAlphaFringeRatio": 1,
+      "forbidClippedContent": false,
+      "minNativeScaleFeaturePx": 2,
+      "manualReviewCodes": ["animation-review-required"]
+    }
+  }
+]

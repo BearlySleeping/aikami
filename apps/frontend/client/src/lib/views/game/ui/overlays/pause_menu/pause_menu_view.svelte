@@ -1,6 +1,5 @@
 <script lang="ts">
 import { BaseViewModelContainer } from '$components';
-import DiceHistoryFeed from './dice_history_feed.svelte';
 // apps/frontend/client/src/lib/views/game/ui/overlays/pause_menu/pause_menu_view.svelte
 import type { PauseMenuViewModelInterface } from './pause_menu_view_model.svelte';
 
@@ -9,21 +8,6 @@ type Props = {
 };
 
 const { viewModel }: Props = $props();
-
-/** Ref to the Roll History trigger so focus can be restored when the dialog closes. */
-let rollHistoryTrigger = $state<HTMLButtonElement | null>(null);
-/** Tracks the previous open state so focus is only restored on an open→close transition. */
-let wasRollHistoryOpen = false;
-
-// Restore focus to the Roll History trigger when the history dialog closes,
-// keeping keyboard navigation within the pause menu.
-$effect(() => {
-  const open = viewModel.isRollHistoryOpen;
-  if (!open && wasRollHistoryOpen) {
-    rollHistoryTrigger?.focus();
-  }
-  wasRollHistoryOpen = open;
-});
 </script>
 <BaseViewModelContainer {viewModel}>
   <div
@@ -33,37 +17,28 @@ $effect(() => {
     aria-label="Pause Menu"
     tabindex="-1"
     onkeydown={(e: KeyboardEvent) => {
-    if (e.key === 'Escape') {
-      if (viewModel.isRollHistoryOpen) {
-        viewModel.closeRollHistory();
-      } else {
-        viewModel.resumeGame();
-      }
+  if (e.key === 'Escape') {
+    viewModel.resumeGame();
+    return;
+  }
+  // Focus trap — Tab/Shift+Tab cycle within the dialog
+  if (e.key === 'Tab') {
+    e.preventDefault();
+    const focusable = (e.currentTarget as HTMLElement).querySelectorAll<HTMLElement>(
+      'button:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    );
+    if (focusable.length === 0) {
       return;
     }
-    // Focus trap — Tab/Shift+Tab cycle within the dialog
-    if (e.key === 'Tab') {
-      e.preventDefault();
-      const focusable = (e.currentTarget as HTMLElement).querySelectorAll<HTMLElement>(
-        'button:not([disabled]), [tabindex]:not([tabindex="-1"])'
-      );
-      if (focusable.length === 0) {
-        return;
-      }
-      const currentIndex = Array.from(focusable).indexOf(document.activeElement as HTMLElement);
-      const direction = e.shiftKey ? -1 : 1;
-      const nextIndex = (currentIndex + direction + focusable.length) % focusable.length;
-      focusable[nextIndex].focus();
-    }
-  }}
+    const currentIndex = Array.from(focusable).indexOf(document.activeElement as HTMLElement);
+    const direction = e.shiftKey ? -1 : 1;
+    const nextIndex = (currentIndex + direction + focusable.length) % focusable.length;
+    focusable[nextIndex].focus();
+  }
+}}
   >
     <div class="w-72 rounded-xl border border-base-300 bg-base-200 p-6 shadow-xl">
-      {#if viewModel.isRollHistoryOpen}
-        <DiceHistoryFeed
-          entries={viewModel.rollHistory}
-          onClose={() => viewModel.closeRollHistory()}
-        />
-      {:else if viewModel.confirmingQuit}
+      {#if viewModel.confirmingQuit}
         <h2 class="text-center text-lg font-bold text-base-content">Quit to Main Menu?</h2>
         <p class="mt-2 text-center text-sm text-base-content/60">
           Any unsaved progress will be lost.
@@ -130,37 +105,34 @@ $effect(() => {
             Settings
           </button>
 
+          <!-- C-528: HUD customization. Customize HUD opens the paused editor;
+               Hide HUD is temporary and reversible, and never erases saved
+               preferences. -->
+          <button
+            type="button"
+            class="btn btn-outline btn-block"
+            data-testid="pause-customize-hud"
+            disabled={!viewModel.isHudEditorEnabled}
+            onclick={() => viewModel.openHudEditor()}
+          >
+            Customize HUD
+          </button>
+
+          <button
+            type="button"
+            class="btn btn-ghost btn-block"
+            data-testid="pause-hide-hud"
+            onclick={() => viewModel.toggleHudTemporarilyHidden()}
+          >
+            {viewModel.isHudTemporarilyHidden ? 'Show HUD' : 'Hide HUD'}
+          </button>
+
           <button
             type="button"
             class="btn btn-ghost btn-block"
             onclick={() => viewModel.openEndSession()}
           >
             End Session
-          </button>
-
-          <button
-            type="button"
-            class="btn btn-ghost btn-block"
-            onclick={() => viewModel.openReputation()}
-          >
-            Reputation
-          </button>
-
-          <button
-            type="button"
-            class="btn btn-ghost btn-block"
-            bind:this={rollHistoryTrigger}
-            onclick={() => viewModel.openRollHistory()}
-          >
-            Roll History
-          </button>
-
-          <button
-            type="button"
-            class="btn btn-ghost btn-block"
-            onclick={() => viewModel.replayOnboarding()}
-          >
-            Replay Tutorial
           </button>
 
           <button

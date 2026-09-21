@@ -63,6 +63,22 @@ const KEY_ZOOM = 'zoom';
 const VALID_ANIMATION_STATES = new Set(Object.values(LpcAnimationState) as number[]);
 const VALID_DIRECTIONS = new Set(Object.values(LpcDirection) as number[]);
 
+// ---------------------------------------------------------------------------
+// Zoom bounds
+// ---------------------------------------------------------------------------
+
+/**
+ * Minimum canvas scale factor. The preview is meant to be inspected zoomed in,
+ * so the floor is high (a 64px LPC frame at 10x fills the canvas) rather than 1.
+ */
+export const LPC_PREVIEW_MIN_ZOOM = 10;
+
+/** Default canvas scale factor — the legible starting zoom. */
+export const LPC_PREVIEW_DEFAULT_ZOOM = 10;
+
+/** Maximum canvas scale factor — zoom in further for pixel-level inspection. */
+export const LPC_PREVIEW_MAX_ZOOM = 40;
+
 const DEFAULT_LPC_URL_STATE: LpcPreviewState = {
   layers: [],
   paletteOverrides: new Map(),
@@ -70,7 +86,7 @@ const DEFAULT_LPC_URL_STATE: LpcPreviewState = {
   direction: LpcDirection.Down,
   frame: 0,
   playing: false,
-  zoom: 1,
+  zoom: LPC_PREVIEW_DEFAULT_ZOOM,
 };
 
 // ---------------------------------------------------------------------------
@@ -199,7 +215,7 @@ export const decodeLpcPreviewState = (params: URLSearchParams): LpcPreviewState 
   const rawZoom = params.get(KEY_ZOOM);
   if (rawZoom !== null) {
     const parsed = Number.parseFloat(rawZoom);
-    if (!Number.isNaN(parsed) && parsed > 0 && parsed <= 10) {
+    if (!Number.isNaN(parsed) && parsed >= LPC_PREVIEW_MIN_ZOOM && parsed <= LPC_PREVIEW_MAX_ZOOM) {
       state.zoom = parsed;
     }
   }

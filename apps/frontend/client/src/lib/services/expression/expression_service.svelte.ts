@@ -4,13 +4,12 @@
 // and LPC overlay resolution for character portrait rendering.
 //
 // Contract: C-239 Expression Emotion System
-import { BaseFrontendClass, type BaseFrontendClassInterface } from '@aikami/frontend/services';
+import { BaseFrontendClass, type BaseFrontendClassInterface } from '@aikami/frontend/services/base';
 import {
   EXPRESSION_CATALOG,
   getExpressionEntry,
   getKeywordRegex,
 } from '$lib/data/expression_catalog';
-import { textGenerationService } from '$services';
 import type {
   DetectExpressionOptions,
   DetectExpressionResult,
@@ -21,6 +20,7 @@ import type {
   ExpressionServiceOptions,
 } from '$types';
 import type { ExpressionOutput } from '../agent/agent_schemas.ts';
+import { textGenerationService } from '../ai/text_generation_service.svelte.ts';
 
 // ── Service Interface ────────────────────────────────────────────────────
 

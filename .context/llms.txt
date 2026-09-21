@@ -1,16 +1,16 @@
 # Aikami Knowledge Index
 
 > **AI-first entry point.** Read this file first.
-> Generated: 2026-09-06
-> Files: 428 across 18 categories
+> Generated: 2026-09-18
+> Files: 476 across 10 categories
 
 ## Quick Start (Read These First)
 
-1. [AI Briefing](CONTEXT.md) — what we're building, tech stack, active contracts
-2. [Contracts Index](contracts/INDEX.md) — active feature contracts
-3. [Architecture](guides/ARCHITECTURE.md) — system design
-4. [Tech Stack](guides/STACK.md) — technology stack
-5. [Coding Standards](guides/CODING_STANDARDS.md) — project conventions
+1. [Contributor docs](../docs/README.md) — the documentation entry point
+2. [AI Briefing](CONTEXT.md) — what we're building, tech stack, active contracts
+3. [Contracts Index](../docs/contracts/INDEX.md) — contract groups and sequencing
+4. [Architecture](../docs/architecture/architecture.md) — system design
+5. [Coding Standards](../docs/guides/CODING_STANDARDS.md) — project conventions
 
 ## Main Repo
 
@@ -19,17 +19,11 @@ Monorepo: SvelteKit Client × Cloudflare Workers backend (D1 + R2 + Better Auth)
 ## architecture/
 
 - [Architecture Overview](architecture/architecture.md)
+- [Aikami Combat 2.0 — Deterministic Tactical Combat with LLM-Driven Intent](architecture/combat_2.md)
 - [Data Layer — Target Architecture (ADR)](architecture/data-layer-target-architecture.md)
 - [Known Limitations & TODOs](architecture/limitations.md)
 - [Object Storage Layout — Buckets, Keys, and Enforcement](architecture/object-storage-layout.md)
-- [Architecture](architecture/README.md)
-## archive/
-
-- [Tickets](archive/tickets/README.md)
-- [[TICKET-ID] : [Short Descriptive Imperative Subject]](archive/tickets/template.md)
-## backlog-format.md/
-
-- [Contract-Ready Backlog Format](backlog-format.md)
+- [Semantic map authoring — foundation and deferred compiler design](architecture/semantic_map_authoring.md)
 ## contracts/
 
 - [AI vendor directories](contracts/archived/C-001-remove-ai-vendor-dirs.md)
@@ -395,6 +389,54 @@ Monorepo: SvelteKit Client × Cloudflare Workers backend (D1 + R2 + Better Auth)
 - [Contract C-484: Capability-first settings and production integration](contracts/C-484-capability-first-settings.md)
 - [Contract C-485: Enforce a production path in the Evidence Matrix](contracts/C-485-production-path-evidence-gate.md)
 - [Contract C-486: Replace the conditional release gate with one unconditional journey](contracts/C-486-unconditional-release-journey.md)
+- [Contract C-487: Free-text skill checks honour the real character sheet](contracts/C-487-free-text-skill-checks-honour-the-character-sheet.md)
+- [Contract C-488: Authored NPC identity in the content pack](contracts/C-488-authored-npc-identity-in-the-content-pack.md)
+- [Contract C-489: One authority path for consequences](contracts/C-489-one-authority-path-for-consequences.md)
+- [Contract C-490: Transcript branching must not imply rewinding the world](contracts/C-490-transcript-branching-must-not-imply-rewinding-the-world.md)
+- [Contract C-491: Committed narrative event record](contracts/C-491-committed-narrative-event-record.md)
+- [Contract C-492: Memory retrieval correctness and production wiring](contracts/C-492-memory-retrieval-correctness-and-production-wiring.md)
+- [Contract C-493: Wire group scenes into the production party path](contracts/C-493-wire-group-scenes-into-the-production-party-path.md)
+- [Contract C-494: One companion who reacts](contracts/C-494-one-companion-who-reacts.md)
+- [Contract C-495: Emberwatch dramatic structure](contracts/C-495-emberwatch-dramatic-structure.md)
+- [Contract C-496: Shared visual assets, atlas import and playback](contracts/C-496-shared-visual-assets-and-playback.md)
+- [Contract C-497: Camera framing and default-asset review](contracts/C-497-camera-framing-and-default-asset-review.md)
+- [Contract C-498: A preset means the character is ready](contracts/C-498-preset-means-character-is-ready.md)
+- [Contract C-499: Dialogue Intent Envelope Extraction Resilience](contracts/C-499-dialogue-intent-envelope-extraction-resilience.md)
+- [Contract C-500: Combat Overlay Rendering and Engine Stall](contracts/C-500-combat-overlay-rendering-and-engine-stall.md)
+- [Contract C-501: Dialogue Slash Commands](contracts/C-501-dialogue-slash-commands.md)
+- [Contract C-502: Minimap HUD](contracts/C-502-minimap-hud.md)
+- [Contract C-503: Quest Marker HUD](contracts/C-503-quest-marker-hud.md)
+- [Contract C-504: Stable character appearance identity and legacy migration](contracts/C-504-stable-character-appearance-identity.md)
+- [Contract C-505: Canonical scene data and future semantic authoring boundary](contracts/C-505-canonical-scene-data-and-authoring-boundary.md)
+- [Contract C-506: Emberwatch grounding, depth and navigation readability](contracts/C-506-emberwatch-visual-readability.md)
+- [Contract C-507: Map studio Phase 2 — native scene visual editor and export](contracts/C-507-map-studio-visual-editor.md)
+- [Contract C-508: Map studio Phase 3 — per-user drafts and community map publishing](contracts/C-508-map-studio-drafts-and-publishing.md)
+- [Contract C-509: Combat-01 — Versioned Combat Schemas and Pure Kernel Authority](contracts/C-509-combat-01-versioned-schemas-and-kernel-authority.md)
+- [Contract C-510: Engine-Agnostic Asset Generation Pipeline and Registry Write Seam](contracts/C-510-engine-agnostic-asset-generation-and-registry-write-seam.md)
+- [Contract C-511: Local Audio Generation Modality — Music and Sound Effects](contracts/C-511-local-audio-generation-modality.md)
+- [Contract C-512: Creator Studio and Runtime Asset Generation](contracts/C-512-creator-studio-and-runtime-asset-generation.md)
+- [Contract C-513: End-User Asset Publishing and Community Sharing](contracts/C-513-end-user-asset-publishing-and-community-sharing.md)
+- [Contract C-514: Combat-02 — Real Turn Coordinator and Action Budgets](contracts/C-514-combat-02-real-turn-coordinator-and-action-budgets.md)
+- [Contract C-515: Combat-03 — World-Space Tactical Queries and Previews](contracts/C-515-combat-03-world-space-tactical-queries-and-previews.md)
+- [Contract C-516: Combat-04 — Direct-Control Production Vertical Slice](contracts/C-516-combat-04-direct-control-production-vertical-slice.md)
+- [Contract C-517: Generation request and format correctness](contracts/C-517-generation-request-and-format-correctness.md)
+- [Contract C-518: Generation provenance and candidate records](contracts/C-518-generation-provenance-and-candidate-records.md)
+- [Contract C-519: Durable asset jobs and batch execution](contracts/C-519-durable-asset-jobs-and-batch-execution.md)
+- [Contract C-520: Versioned image workflows and asset preparation](contracts/C-520-versioned-image-workflows-and-asset-preparation.md)
+- [Contract C-521: Music and SFX generation with audio preparation](contracts/C-521-music-sfx-generation-and-audio-preparation.md)
+- [Contract C-522: Hub and client access to the generation runner](contracts/C-522-hub-and-client-generation-runner-access.md)
+- [Contract C-523: Emberwatch asset pilot and offline integration](contracts/C-523-emberwatch-asset-pilot-and-offline-integration.md)
+- [Contract C-524: Optional hosted asset provider comparison](contracts/C-524-optional-hosted-asset-provider-comparison.md)
+- [Contract C-525: Combat-05 — Natural-Language Intent and Confirmation UX (with Combat-04 remediation)](contracts/C-525-combat-05-natural-language-intent-and-confirmation-ux.md)
+- [Contract C-526: Combat-06 — Companion and Enemy LLM Intent Agents and Post-Resolution Narration](contracts/C-526-combat-06-companion-and-enemy-llm-intent-agents.md)
+- [Contract C-527: Coherent play shell and management navigation](contracts/C-527-coherent-play-shell-and-management-navigation.md)
+- [Contract C-528: Player HUD presets and layout editor](contracts/C-528-player-hud-presets-and-layout-editor.md)
+- [Contract C-529: Declarative theme runtime and creator tools](contracts/C-529-declarative-theme-runtime-and-creator-tools.md)
+- [Contract C-530: Hub theme publishing and installation](contracts/C-530-hub-theme-publishing-and-installation.md)
+- [Contract C-531: Combat-07 — Affordances and Improvised Actions](contracts/C-531-combat-07-affordances-and-improvised-actions.md)
+- [Contract C-532: Combat-08 — Objectives, Morale, Reactions, and Release Gate](contracts/C-532-combat-08-objectives-morale-reactions-and-release-gate.md)
+- [Contract C-543: Production Management Workspace, HUD Semantics, and Theme Integration Correction](contracts/C-543-production-management-workspace-and-hud-correction.md)
+- [Contract C-544: Deterministic Particle Weather FX — Rain, Atmosphere and Scene Gating](contracts/C-544-deterministic-particle-weather-fx.md)
 - [Contracts — Aikami Feature Development](contracts/INDEX.md)
 - [MVP Contract Backlog — C-400 … C-419](contracts/MVP_BACKLOG.md)
 - [Contract Implementation Archive](contracts/PROGRESS_ARCHIVE.md)
@@ -405,81 +447,71 @@ Monorepo: SvelteKit Client × Cloudflare Workers backend (D1 + R2 + Better Auth)
 - [Strictness Coverage Matrix](contracts/STRICTNESS_COVERAGE_MATRIX.md)
 - [Contract {FEATURE_CODE}: {TITLE}](contracts/TEMPLATE.md)
 - [Contract {FEATURE_CODE}: {TITLE}](contracts/THIN_TEMPLATE.md)
-## decisions/
-
-- [Decisions](decisions/README.md)
 ## design/
 
+- [Aikami UI, HUD and theme ecosystem — Q3 2026 proposal](design/aikami_ui_hud_theme_review_2026q3.md)
+- [Game UI/HUD overhaul — Obsidian Chronicle](design/game_ui_hud_overhaul.md)
 - [Design](design/README.md)
-## engineering-hygiene.md/
-
-- [Engineering Hygiene & Maintenance](engineering-hygiene.md)
-## gotchas/
-
-- [Cross-Origin Isolation & SharedArrayBuffer — Gotchas & Lessons Learned](gotchas/cross-origin-isolation.md)
-- [NPC Interaction & Dialogue — Gotchas & Lessons Learned](gotchas/npc_interaction_dialogue.md)
-- [Worker VM + Cloudflare — Gotchas & Lessons Learned](gotchas/worker-cloudflare-tls.md)
 ## guides/
 
-- [AI Research Findings - April 2026](guides/AI_RESEARCH.md)
+- [Local catalog authoring workspace](guides/catalog_workspace.md)
 - [CI/CD](guides/CI_CD.md)
-- [Client Feature Roadmap](guides/CLIENT_FEATURES.md)
 - [Coding Standards](guides/CODING_STANDARDS.md)
 - [Contract Pipeline — Primary Development Flow](guides/contract-pipeline.md)
+- [Cross-Origin Isolation & SharedArrayBuffer — Gotchas & Lessons Learned](guides/cross-origin-isolation.md)
 - [Database — The Server Data Plane](guides/database.md)
 - [Developer Workflow](guides/dev-workflow.md)
+- [Engineering Hygiene & Maintenance](guides/engineering-hygiene.md)
 - [Aikami Feature Specification](guides/FEATURES.md)
-- [Playwright Tests](guides/PLAYWRIGHT.md)
+- [Map Studio (Hub)](guides/map_studio.md)
+- [NPC Interaction & Dialogue — Gotchas & Lessons Learned](guides/npc-interaction-dialogue.md)
 - [Guides](guides/README.md)
 - [Technology Stack](guides/STACK.md)
 - [Structure](guides/STRUCTURE.md)
 - [Tauri Desktop Boot Failure — Handoff](guides/TAURI_BOOT_HANDOFF.md)
 - [Tauri Desktop App — Development Guide & Debugging Notes](guides/TAURI.md)
 - [Testing Strategy](guides/TESTING.md)
-- [TODO Moved](guides/TODO.md)
-## index.md/
-
-- [Welcome to Aikami Docs](index.md)
+- [Worker VM + Cloudflare — Gotchas & Lessons Learned](guides/worker-cloudflare-tls.md)
 ## intro/
 
+- [Explicitly Deferred / Not MVP](intro/deferred-scope.md)
+- [Aikami Strategy & Directives](intro/directives.md)
 - [Intro](intro/README.md)
 - [Setup Guide](intro/setup.md)
 - [Product Vision](intro/vision.md)
 ## plans/
 
-- [Execution rules](plans/ai-setup/dispatch.md)
-- [Execution order](plans/ai-setup/queue.md)
-- [AI setup and settings — execution plan](plans/ai-setup/README.md)
+- [AI setup and settings — programme record](plans/ai-setup/README.md)
+- [Combat 2.0 repair — progress record (review F1–F11)](plans/combat/combat-2-repair-progress.md)
+- [Combat 2.0 completion — durable progress record](plans/combat/combat-completion-progress.md)
+- [Emberwatch rebuild — art, maps, cast and quest](plans/emberwatch_rebuild.md)
+- [Visual asset foundation — remaining verification](plans/visual_asset_foundation.md)
 ## README.md/
 
 - [Aikami Documentation](README.md)
 ## reference/
 
-- [Completed Contracts](reference/completed-contracts.md)
+- [Agent platform hardening — execution plan](reference/agent-platform-hardening.md)
+- [Asset generation review and recommendations (2026-09-13)](reference/asset-generation-review-2026-09.md)
+- [Executive verdict](reference/astra-game-review.md)
+- [Contract-Ready Backlog Format](reference/backlog-format.md)
+- [Aikami Data Layer — Review & Recommendation](reference/database-architecture-recommendation.md)
 - [Definition of Done](reference/definition-of-done.md)
 - [Design Rationale](reference/design-rationale.md)
+- [Distribution & Onboarding Strategy — 2026-08-19](reference/distribution-and-onboarding-2026-08-19.md)
+- [Emberwatch release-path repair — implementation notes (2026-09-16)](reference/emberwatch-release-repair-2026-09.md)
+- [Game Engine / World Setup — Critical Review](reference/game_engine_architecture_review.md)
+- [Migration recipe: `#`-prefixed subpath imports](reference/kit-alias-migration.md)
+- [MVP Assessment — 2026-08-16](reference/mvp-assessment-2026-08-16.md)
 - [Project Review: Adopt vs Avoid](reference/project-review.md)
-## research/
-
-- [Executive verdict](research/astra-game-review.md)
-- [Aikami Database Architecture — Investigation Summary (for external review)](research/database-architecture-inquiry.md)
-- [Aikami Data Layer — Review & Recommendation](research/database-architecture-recommendation.md)
-- [Game Engine / World Setup — Research Brief for Critical Review](research/game_engine_architecture_brief.md)
-- [Game Engine / World Setup — Critical Review](research/game_engine_architecture_review.md)
-## scripts/
-
-- [Scripts](scripts/README.md)
-## strategy/
-
-- [Agent platform hardening — execution plan](strategy/agent-platform-hardening.md)
-- [PR 02 — repair active agent instructions](strategy/agent-platform-hardening/instruction-repair.md)
-- [Explicitly Deferred / Not MVP](strategy/deferred.md)
-- [Distribution & Onboarding Strategy — 2026-08-19](strategy/distribution-and-onboarding-2026-08-19.md)
-- [MVP Assessment — 2026-08-16](strategy/mvp-assessment-2026-08-16.md)
-- [Aikami Strategy & Architecture](strategy/vision-and-directives.md)
 ## TODO.md/
 
 - [Aikami TODO](TODO.md)
+## verification/
+
+- [C-496 Resource & Regression Report](verification/C-496-resource-report.md)
+- [C-531 environmental timing report](verification/C-531-timing.md)
+- [C-532 encounter-depth timing report](verification/C-532-timing.md)
 
 ---
 

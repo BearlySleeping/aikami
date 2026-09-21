@@ -21,6 +21,31 @@ export {
   ENVIRONMENT_UBO_BYTES,
   ENVIRONMENT_UBO_SIZE,
 } from './environment/environment_ubo.ts';
+export type { AppearanceCommitContext } from './game_world/actor_visual_transport.ts';
+export {
+  commitPreparedAppearance,
+  loadStaticVisual,
+} from './game_world/actor_visual_transport.ts';
+// Weather FX renderer diagnostics (dev/E2E only)
+export { readWeatherFxDebug } from './game_world/diagnostics.ts';
+// ---------------------------------------------------------------------------
+// Actor appearance transport (C-523 enemy visual transport)
+//
+// Exported so the client can drive the SAME path the world does when it
+// projects an authored `npcId` onto a rendered actor. The integration test
+// that proves the authored enemy URLs resolve to published tags needs the real
+// transport, not a reimplementation of it.
+//
+// `ActorRenderEntry` is the world's per-entity record, distinct from the
+// render-system `RenderEntry` above — hence the alias rather than a collision.
+// ---------------------------------------------------------------------------
+export type {
+  AppearanceLayer,
+  EntityAppearanceLoaderOptions,
+  PreparedAppearance,
+} from './game_world/entity_appearance.ts';
+export { EntityAppearanceLoader } from './game_world/entity_appearance.ts';
+export type { RenderEntry as ActorRenderEntry } from './game_world/render_entry.ts';
 // Pixi app
 export type { PixiAppDebugMetrics, PixiAppInstance, PixiAppOptions } from './pixi_app.ts';
 export { createPixiApp } from './pixi_app.ts';
@@ -66,9 +91,13 @@ export type {
   TilemapChunkRenderResult,
 } from './rendering/tilemap_chunk_renderer.ts';
 export { buildTilemapChunks, frustumCullChunks } from './rendering/tilemap_chunk_renderer.ts';
-// Weather overlay
-export type { WeatherOverlayOptions } from './rendering/weather_overlay.ts';
-export { WeatherOverlay } from './rendering/weather_overlay.ts';
+// Weather FX (rain particles + atmosphere pass)
+export type {
+  WeatherEnvironmentState,
+  WeatherFxDebugSnapshot,
+  WeatherOverlayOptions,
+} from './rendering/weather/weather_overlay.ts';
+export { WeatherOverlay } from './rendering/weather/weather_overlay.ts';
 // Render systems
 export type { RenderEntry } from './systems/render_system.ts';
 export {

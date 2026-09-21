@@ -7,8 +7,9 @@
 
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import type { RelationshipState } from '@aikami/types';
-// Import the pure utility functions directly
-import { buildFacts, computeTier, relationshipService } from './relationship_service.svelte';
+import { narrativeEventService } from './narrative_event_service.svelte.ts';
+import { relationshipService } from './relationship_service.svelte';
+import { buildFacts, computeTier } from './relationship_utils';
 
 // ---------------------------------------------------------------------------
 // Stubs for testing
@@ -330,6 +331,7 @@ describe('RelationshipService', () => {
   test('records and retrieves promises', () => {
     const promise = relationshipService.recordPromise({
       targetId: 'guard_captain',
+      campaignId: 'test-campaign',
       description: 'Retrieve the lost ward pendant',
     });
 
@@ -343,9 +345,29 @@ describe('RelationshipService', () => {
     expect(promises[0].id).toBe(promise.id);
   });
 
+  test('C-491: recording a promise commits a PromiseMade event (actor is a witness)', () => {
+    narrativeEventService.reset();
+    const promise = relationshipService.recordPromise({
+      targetId: 'guard_captain',
+      campaignId: 'test-campaign',
+      description: 'Retrieve the lost ward pendant',
+    });
+
+    const events = narrativeEventService.events.filter((e) => e.kind === 'PromiseMade');
+    expect(events).toHaveLength(1);
+    const event = events[0];
+    expect(event?.subjectId).toBe('guard_captain');
+    // The promise actor (defaults to the target) is always a witness.
+    expect(event?.witnesses).toContain('guard_captain');
+    expect(event?.informationKind).toBe('world_fact');
+    expect(promise.broken).toBe(false);
+    narrativeEventService.reset();
+  });
+
   test('resolves promise as fulfilled', () => {
     const promise = relationshipService.recordPromise({
       targetId: 'elara',
+      campaignId: 'test-campaign',
       description: 'Find the ancient scroll',
     });
 
@@ -359,6 +381,7 @@ describe('RelationshipService', () => {
   test('resolves promise as broken', () => {
     const promise = relationshipService.recordPromise({
       targetId: 'merchant',
+      campaignId: 'test-campaign',
       description: 'Deliver the goods',
     });
 
@@ -386,6 +409,7 @@ describe('RelationshipService', () => {
     });
     const promise = relationshipService.recordPromise({
       targetId: 'elara',
+      campaignId: 'test-campaign',
       description: 'Help her find lost sister',
     });
 
@@ -463,5 +487,61 @@ describe('RelationshipService', () => {
     expect(facts.length).toBeGreaterThanOrEqual(0);
     // town_guard standing is 0, should not appear
     expect(facts.some((f) => f.includes('town_guard'))).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// C-489 AC-1: accepted deltas survive a save/reload cycle
+// ---------------------------------------------------------------------------
+
+describe('C-489 AC-1: relationship deltas persist across serialize/deserialize', () => {
+  beforeEach(() => {
+    resetService();
+  });
+
+  afterEach(() => {
+    resetService();
+  });
+
+  test('trust and affinity changes survive serialize -> deserialize', () => {
+    relationshipService.applyDelta({
+      characterId: 'guard_captain',
+      trustDelta: 7,
+      affinityDelta: 4,
+      eventDescription: 'Dialogue consequence op-1 from ev-1',
+    });
+
+    // "Save"
+    const saved: RelationshipState = JSON.parse(JSON.stringify(relationshipService.serialize()));
+    expect(saved.characterRelationships.guard_captain.trust).toBe(7);
+    expect(saved.characterRelationships.guard_captain.affinity).toBe(4);
+
+    // "Reload" into a fresh instance
+    resetService();
+    relationshipService.deserialize(saved);
+
+    const rel = relationshipService.getRelationship('guard_captain');
+    expect(rel).toBeDefined();
+    expect(rel?.trust).toBe(7);
+    expect(rel?.affinity).toBe(4);
+    // The event description survives in history, carrying the operation identity.
+    expect(rel?.history.some((h) => h.description.includes('op-1 from ev-1'))).toBe(true);
+  });
+
+  test('faction standing changes survive serialize -> deserialize', () => {
+    relationshipService.adjustFactionStanding({
+      factionId: 'town_guard',
+      delta: 10,
+      reason: 'Dialogue consequence op-2 from ev-2',
+    });
+
+    const saved: RelationshipState = JSON.parse(JSON.stringify(relationshipService.serialize()));
+    expect(saved.factionStandings.town_guard.standing).toBe(10);
+
+    resetService();
+    relationshipService.deserialize(saved);
+
+    const standing = relationshipService.getStanding('town_guard');
+    expect(standing?.standing).toBe(10);
   });
 });

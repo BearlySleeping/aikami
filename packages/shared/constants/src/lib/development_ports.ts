@@ -13,7 +13,7 @@
 //   8081        Aikami     Firebase emulator (firestore)
 //   8085        Nordclaw   Firebase emulator (pubsub)
 //   8086        Aikami     Firebase emulator (pubsub)
-//   8087-8092   Aikami     Backend services (voice=8089, stt=8087)
+//   8087-8098   Aikami     Backend services (voice=8089, stt=8087, audio=8094)
 //   9099        Nordclaw   Firebase emulator (auth)
 //   9098        Aikami     Firebase emulator (auth)
 //   9199        Nordclaw   Firebase emulator (storage)
@@ -26,7 +26,7 @@
 //   Within each project range, even ports = emulator mode, odd = staging,
 //   offset +4 = production.
 //
-//   Aikami apps:  client=5274  voice=8089  stt=8087  postgres=5433
+//   Aikami apps:  client=5274  voice=8089  stt=8087  audio=8094  postgres=5433
 
 // ── Reserved ranges (single source of truth) ─────────────────────────────
 // The Nordclaw-owned ranges from the table above, plus the 5432 system
@@ -90,6 +90,10 @@ export const FIXED_PORTS = {
   stt: 8087,
   image: 8188,
   text: 11434,
+  // C-511: ACE-Step audio generation. 8085 is Nordclaw's emulator pubsub
+  // port (see NORDCLAW_RESERVED_RANGES) and 8091 is the voice container's
+  // internal whisper port — audio deliberately avoids both.
+  audio: 8094,
 } as const;
 
 export const EMULATOR_PORTS = {
@@ -106,6 +110,7 @@ export const STAGING_PORTS = {
   stt: 8086,
   image: 8187,
   text: 11433,
+  audio: 8096,
 } as const;
 
 export const PRODUCTION_PORTS = {
@@ -117,6 +122,7 @@ export const PRODUCTION_PORTS = {
   stt: 8090,
   image: 8193,
   text: 11435,
+  audio: 8098,
 } as const;
 
 export const PORTS = {

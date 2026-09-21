@@ -7,10 +7,17 @@
 // Contract: C-427 AC-3
 
 import { env, pipeline } from '@huggingface/transformers';
+import {
+  configureLocalModelResolution,
+  configureOrtRuntime,
+  type OrtConfigurableEnv,
+} from './ort_runtime.ts';
 
-// Local models enabled — weights come from the app-controlled cache
-env.allowLocalModels = true;
-env.localModelPath = '/models/';
+// Local models enabled — weights come from the app-controlled cache.
+configureLocalModelResolution(env as OrtConfigurableEnv);
+
+// Single shared ORT boundary: version-pinned, fetched from aikami-dist.
+configureOrtRuntime(env as OrtConfigurableEnv);
 
 // ---------------------------------------------------------------------------
 // Worker-scoped state

@@ -50,9 +50,7 @@ const onMaskChange = (e: Event) => {
         {#each viewModel.tabs as tab}
           <button
             type="button"
-            class="tab tab-sm font-['JetBrains_Mono'] text-xs uppercase tracking-wider {viewModel.activeTab === tab.key
-              ? 'tab-active border-[#cabeff] text-[#cabeff]'
-              : 'text-[#938ea1]'}"
+            class="tab tab-sm font-['JetBrains_Mono'] text-xs uppercase tracking-wider {viewModel.activeTab === tab.key ? 'tab-active border-[#cabeff] text-[#cabeff]' : 'text-[#938ea1]'}"
             onclick={() => viewModel.setActiveTab(tab.key)}
           >
             {tab.label}
@@ -152,7 +150,10 @@ const onMaskChange = (e: Event) => {
                 <select
                   class="select select-bordered select-sm w-full"
                   value={viewModel.imageType}
-                  onchange={(e: Event) => (viewModel.imageType = (e.target as HTMLSelectElement).value as ReturnType<() => typeof viewModel.imageType>)}
+                  onchange={(e: Event) =>
+  (viewModel.imageType = (e.target as HTMLSelectElement).value as ReturnType<
+    () => typeof viewModel.imageType
+  >)}
                   disabled={viewModel.isGenerating}
                 >
                   {#each viewModel.imageTypes as imageType}
@@ -332,7 +333,11 @@ const onMaskChange = (e: Event) => {
                 placeholder="Describe the image you want to generate..."
                 bind:value={viewModel.prompt}
                 disabled={viewModel.isGenerating}
-                onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { void viewModel.generate(); } }}
+                onkeydown={(e: KeyboardEvent) => {
+  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+    void viewModel.generate();
+  }
+}}
               ></textarea>
             </label>
             {#if supportsNegative || enginePending}
@@ -684,7 +689,11 @@ const onMaskChange = (e: Event) => {
                 placeholder="Describe how to edit this image..."
                 bind:value={viewModel.editPrompt}
                 disabled={viewModel.isGenerating}
-                onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { void viewModel.editImage(); } }}
+                onkeydown={(e: KeyboardEvent) => {
+  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+    void viewModel.editImage();
+  }
+}}
               ></textarea>
             </label>
             <div class="flex gap-3 mt-4">

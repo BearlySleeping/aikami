@@ -8,13 +8,26 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
-import { lorebookStore } from '$services';
+} from '@aikami/frontend/services/base';
+import type { LorebookStoreInterface } from '$services/lorebook/lorebook_store.svelte';
 import type { Lorebook, LorebookEntry, LorebookEntryInput } from '$types';
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
+
+/** The lorebook store operations the editor drives. */
+export type LorebookEditorStoreCapabilities = Pick<
+  LorebookStoreInterface,
+  | 'lorebooks'
+  | 'addLorebook'
+  | 'updateLorebook'
+  | 'deleteLorebook'
+  | 'addEntry'
+  | 'updateEntry'
+  | 'deleteEntry'
+  | 'reorderEntries'
+>;
 
 export type LorebookEditorViewModelInterface = BaseViewModelInterface & {
   /** All lorebooks from the store. */
@@ -91,7 +104,10 @@ export type LorebookEditorViewModelInterface = BaseViewModelInterface & {
   setGenerating: (value: boolean) => void;
 };
 
-export type LorebookEditorViewModelOptions = BaseViewModelOptions & {};
+export type LorebookEditorViewModelOptions = BaseViewModelOptions & {
+  /** Lorebook store. */
+  store: LorebookEditorStoreCapabilities;
+};
 
 // ---------------------------------------------------------------------------
 // ViewModel
@@ -101,6 +117,8 @@ class LorebookEditorViewModel
   extends BaseViewModel<LorebookEditorViewModelOptions>
   implements LorebookEditorViewModelInterface
 {
+  private readonly _store: LorebookEditorStoreCapabilities;
+
   // ── Lorebook state ──────────────────────────────────────────────────────
 
   selectedLorebookId = $state<string | undefined>();
@@ -121,10 +139,15 @@ class LorebookEditorViewModel
   generatedEntries = $state<LorebookEntryInput[]>([]);
   isGenerating = $state(false);
 
+  constructor(options: LorebookEditorViewModelOptions) {
+    super(options);
+    this._store = options.store;
+  }
+
   // ── Derived ─────────────────────────────────────────────────────────────
 
   get lorebooks(): Lorebook[] {
-    return lorebookStore.lorebooks;
+    return this._store.lorebooks;
   }
 
   get selectedLorebook(): Lorebook | undefined {
@@ -156,7 +179,7 @@ class LorebookEditorViewModel
     if (!name) {
       return '';
     }
-    const id = lorebookStore.addLorebook({ name, description: this.lorebookDescription.trim() });
+    const id = this._store.addLorebook({ name, description: this.lorebookDescription.trim() });
     this.selectedLorebookId = id;
     this._resetEntryForm();
     return id;
@@ -166,7 +189,7 @@ class LorebookEditorViewModel
     if (!this.selectedLorebookId) {
       return;
     }
-    lorebookStore.updateLorebook({
+    this._store.updateLorebook({
       id: this.selectedLorebookId,
       patch: {
         name: this.lorebookName.trim(),
@@ -179,7 +202,7 @@ class LorebookEditorViewModel
     if (!this.selectedLorebookId) {
       return;
     }
-    lorebookStore.deleteLorebook({ id: this.selectedLorebookId });
+    this._store.deleteLorebook({ id: this.selectedLorebookId });
     this.selectedLorebookId = undefined;
     this.lorebookName = '';
     this.lorebookDescription = '';
@@ -249,7 +272,7 @@ class LorebookEditorViewModel
     }
 
     if (this.editingEntryId) {
-      lorebookStore.updateEntry({
+      this._store.updateEntry({
         lorebookId: this.selectedLorebookId,
         entryId: this.editingEntryId,
         patch: {
@@ -263,7 +286,7 @@ class LorebookEditorViewModel
       return this.editingEntryId;
     }
 
-    const id = lorebookStore.addEntry({
+    const id = this._store.addEntry({
       lorebookId: this.selectedLorebookId,
       entry: {
         keywords,
@@ -280,7 +303,7 @@ class LorebookEditorViewModel
     if (!this.selectedLorebookId) {
       return;
     }
-    lorebookStore.deleteEntry({
+    this._store.deleteEntry({
       lorebookId: this.selectedLorebookId,
       entryId: options.entryId,
     });
@@ -290,7 +313,7 @@ class LorebookEditorViewModel
     if (!this.selectedLorebookId) {
       return;
     }
-    lorebookStore.reorderEntries({
+    this._store.reorderEntries({
       lorebookId: this.selectedLorebookId,
       entryIds: options.entryIds,
     });
@@ -303,7 +326,7 @@ class LorebookEditorViewModel
       return;
     }
     for (const entry of entries) {
-      lorebookStore.addEntry({
+      this._store.addEntry({
         lorebookId: this.selectedLorebookId,
         entry: {
           keywords: entry.keywords,
@@ -344,6 +367,13 @@ class LorebookEditorViewModel
   }
 }
 
-export const getLorebookEditorViewModel = (
+/**
+ * Builds a lorebook-editor ViewModel from explicit capabilities.
+ *
+ * Callers outside production (tests, sandboxes) use this directly; production
+ * code goes through `getLorebookEditorViewModel` in
+ * ./lorebook_editor_composition.ts.
+ */
+export const createLorebookEditorViewModel = (
   options: LorebookEditorViewModelOptions,
 ): LorebookEditorViewModelInterface => LorebookEditorViewModel.create(options);

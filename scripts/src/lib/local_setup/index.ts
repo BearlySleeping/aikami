@@ -37,10 +37,18 @@
  *   bun run setup --doctor               # --json --check combined: one machine-readable pass/fail
  */
 
-import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { c, fmt, parseCliArgs, run } from '../cli_utils';
+import { c, fmt, getEnvWithFallback, parseCliArgs, run } from '../cli_utils';
 import { findBash } from '../env/which.ts';
 import { parseHerdrStatus } from '../herdr/session.ts';
 
@@ -227,26 +235,31 @@ const TOOLS: ToolCheck[] = [
     },
   },
   {
-    name: 'hypa',
-    bins: ['hypa'],
-    why: 'CLI output compression — makes `hypa_find`/`hypa_grep`/`hypa_read` tools work in pi. Optional.',
+    name: 'rtk',
+    bins: ['rtk'],
+    why: 'CLI token compression (60-90%) for grep/read/test/git/diff output. Optional.',
     category: 'dx',
-    verify: (out) => /^\d+\.\d+/.test(out.trim()),
     install: {
       linux: {
-        label: 'Install hypa (npm)',
-        commands: ['npm install -g @hypabolic/hypa'],
+        label: 'Install rtk (curl installer)',
+        commands: [
+          'rtk_installer=$(mktemp) && trap \'rm -f "$rtk_installer"\' EXIT && curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/fde0a8f185945556f51718de0f4c430bb62b3df6/install.sh -o "$rtk_installer" && echo "d6eb73a772903e13ff34ee1be8a8b24e896ba9a978f20d2279a08b4083ea6f77  $rtk_installer" | sha256sum --check --status && RTK_VERSION=v0.48.0 sh "$rtk_installer"',
+        ],
       },
       darwin: {
-        label: 'Install hypa (npm)',
-        commands: ['npm install -g @hypabolic/hypa'],
+        label: 'Install rtk (curl installer)',
+        commands: [
+          'rtk_installer=$(mktemp) && trap \'rm -f "$rtk_installer"\' EXIT && curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/fde0a8f185945556f51718de0f4c430bb62b3df6/install.sh -o "$rtk_installer" && test "$(shasum -a 256 "$rtk_installer" | awk \'{print $1}\')" = "d6eb73a772903e13ff34ee1be8a8b24e896ba9a978f20d2279a08b4083ea6f77" && RTK_VERSION=v0.48.0 sh "$rtk_installer"',
+        ],
       },
       win32: {
-        label: 'Install hypa (npm)',
-        commands: ['npm install -g @hypabolic/hypa'],
+        label: 'Install rtk (cargo)',
+        commands: [
+          'cargo install --git https://github.com/rtk-ai/rtk --rev fde0a8f185945556f51718de0f4c430bb62b3df6 --locked rtk',
+        ],
       },
     },
-    hint: 'After install, restart your shell. Without hypa, pi falls back to direct bash execution.',
+    hint: 'Installs to ~/.local/bin (add to PATH if missing). Nix users: rtk is in nixpkgs. Optional — pi falls back to raw tools.',
   },
   {
     name: 'herdr',
@@ -552,6 +565,85 @@ async function probeRecommended(): Promise<{ direnv: boolean; nix: boolean }> {
   };
 }
 
+// ─── pi model configuration (interactive only) ───────────────────────────
+
+const MODEL_TIER_PROMPTS = [
+  { key: 'CONTRACT_PIPELINE_MODEL_PRO', label: 'Pro model', note: 'writer / review' },
+  {
+    key: 'CONTRACT_PIPELINE_MODEL_FLASH',
+    label: 'Flash model',
+    note: 'critic / implementer / verifier',
+  },
+  { key: 'CONTRACT_PIPELINE_MODEL_FREE', label: 'Free model', note: 'fallback tier' },
+] as const;
+
+/** Write model keys into the repo-root `.env`, preserving unrelated lines. */
+const writeRootEnvModels = (values: Record<string, string>): void => {
+  const envPath = join(process.cwd(), '.env');
+  const existing = existsSync(envPath) ? readFileSync(envPath, 'utf-8') : '';
+  const keys = new Set(Object.keys(values));
+  const kept = existing.split('\n').filter((line) => {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) {
+      return true;
+    }
+    const eq = trimmed.indexOf('=');
+    if (eq === -1) {
+      return true;
+    }
+    return !keys.has(trimmed.slice(0, eq).trim());
+  });
+  const block = [
+    '',
+    '# pi model configuration (bun run setup)',
+    ...Object.entries(values).map(([key, value]) => `${key}=${value}`),
+    '',
+  ];
+  writeFileSync(envPath, [...kept, ...block].join('\n'));
+};
+
+/**
+ * Interactive-only: if pi is installed, prompt for the pro/flash/free model
+ * slugs and persist them into the repo-root `.env` (the same file the
+ * contract pipeline, autofix, scout, and worker resolve models from).
+ */
+const promptForModels = (checkResults: CheckResult[]): void => {
+  const piPresent = checkResults.some((r) => r.tool.name === 'pi' && r.present);
+  if (!piPresent) {
+    return;
+  }
+
+  console.log(fmt.section('pi model configuration'));
+  console.log(
+    fmt.note('Set the models the contract pipeline (writer/critic/implementer/verifier/review)'),
+  );
+  console.log(
+    fmt.note(
+      'will use. Leave a tier blank to preserve its current configuration, including generic fallbacks such as MODEL.',
+    ),
+  );
+  console.log();
+
+  const values: Record<string, string> = {};
+  for (const spec of MODEL_TIER_PROMPTS) {
+    const current = getEnvWithFallback([spec.key]) ?? '';
+    const suffix = current ? ` [current: ${current}]` : '';
+    const answer = prompt(`${spec.label} (${spec.note})${suffix}: `);
+    const trimmed = answer?.trim();
+    if (trimmed) {
+      values[spec.key] = trimmed;
+    }
+  }
+
+  if (Object.keys(values).length === 0) {
+    console.log(fmt.note('No model overrides configured — pi will use its own defaults.'));
+    return;
+  }
+
+  writeRootEnvModels(values);
+  console.log(fmt.ok('Wrote model configuration to .env'));
+};
+
 function printRecommendedSection(recommendedTools: { direnv: boolean; nix: boolean }): void {
   console.log(fmt.section('Recommended path — direnv + Nix flake'));
 
@@ -832,6 +924,11 @@ for (const category of Object.keys(CATEGORY_META) as Category[]) {
       missingByCategory.set(category, [...(missingByCategory.get(category) ?? []), r]);
     }
   }
+}
+
+// ── pi model configuration (interactive only) ──
+if (!opts.check) {
+  promptForModels(results);
 }
 
 // ── Install instructions ────────────────────────────────────────────────

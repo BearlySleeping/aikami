@@ -6,6 +6,24 @@
 // Contract: C-340 Build Party and Companion Gameplay
 
 import Type, { type Static } from 'typebox';
+import {
+  type CompanionControlMode,
+  CompanionControlModeSchema,
+  DEFAULT_COMPANION_CONTROL_MODE,
+} from './combat/combat_ai_decision';
+
+// ---------------------------------------------------------------------------
+// Companion preference bounds (C-526 AC-6)
+// ---------------------------------------------------------------------------
+
+/**
+ * Maximum length of a companion's standing goal (Intent mode).
+ *
+ * Bounded because the goal is injected into the decision prompt: an unbounded
+ * player-authored string would be a prompt-size and injection hazard
+ * (`combat_2.md` §20 — player text is untrusted data).
+ */
+export const COMPANION_STANDING_INTENT_CHARS = 120;
 
 // ---------------------------------------------------------------------------
 // PartyRosterEntry — one companion in the roster
@@ -29,11 +47,36 @@ export const PartyRosterEntrySchema = Type.Object(
     personalQuestActive: Type.Boolean({ default: false }),
     /** Equipped item IDs (references C-331 item registry). */
     equipmentSlotIds: Type.Array(Type.String(), { default: [] }),
+    /**
+     * Companion control mode (C-526). Additive and optional: a save written
+     * before this contract lacks the field and resolves to `suggest`
+     * (`combat_2.md` §25 decision 6).
+     */
+    controlMode: Type.Optional(CompanionControlModeSchema),
+    /**
+     * Standing goal for Intent mode (C-526 AC-6 §12.5).
+     *
+     * Additive and optional like `controlMode`: a pre-526 save has no goal, and
+     * a mode change away from `intent` clears it. Never mechanical state — it is
+     * injected into the companion's decision policy as character direction.
+     */
+    standingIntent: Type.Optional(Type.String({ maxLength: COMPANION_STANDING_INTENT_CHARS })),
   },
   { additionalProperties: false },
 );
 
 export type PartyRosterEntry = Static<typeof PartyRosterEntrySchema>;
+
+/**
+ * Resolves the control mode of a party entry, tolerating pre-C-526 saves.
+ *
+ * A missing or unknown value resolves to {@link DEFAULT_COMPANION_CONTROL_MODE}
+ * so old party data loads unchanged and companions remain AI-driven until the
+ * player picks a mode.
+ */
+export const resolveCompanionControlMode = (entry: {
+  controlMode?: CompanionControlMode;
+}): CompanionControlMode => entry.controlMode ?? DEFAULT_COMPANION_CONTROL_MODE;
 
 // ---------------------------------------------------------------------------
 // PartyState — full party snapshot

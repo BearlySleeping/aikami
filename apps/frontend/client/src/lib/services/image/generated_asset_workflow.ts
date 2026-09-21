@@ -1,0 +1,478 @@
+// apps/frontend/client/src/lib/services/image/generated_asset_workflow.ts
+//
+// C-512: the byte/descriptor seam between image generation and the C-510
+// registry write.
+//
+// `imageGenerationService.generateImage` hands back a `Blob` (plus the engine
+// id and seed); `registerGenerated` needs a `GeneratedAsset` descriptor and a
+// `Uint8Array`. Nothing else may bridge the two: a ViewModel must never fetch a
+// blob URL or touch engine transport to obtain bytes (C-512 Architecture
+// Directives — "one generation path").
+//
+// Contract: C-512 AC-1 / AC-3 / AC-6
+
+import { expressionAssetTag } from '@aikami/constants';
+import {
+  decodeImagePayload,
+  extForMimeType,
+  hashTransformationChain,
+  requireRecipe,
+  sha256Hex,
+  sniffMimeType,
+  toGeneratedAsset,
+} from '@aikami/local-ai';
+import type {
+  AssetRecipe,
+  GeneratedAsset,
+  GenerationEngineId,
+  GenerationReference,
+  GenerationResult,
+  RightsDecision,
+} from '@aikami/types';
+import { logger } from '$logger';
+import type {
+  GeneratedAssetLineage,
+  GeneratedAssetOutcome,
+  GeneratedAssetSaveOutcome,
+} from '$types';
+import { assetManager } from '../assets/asset_manager.svelte.ts';
+import type { RegisterGeneratedResult } from '../assets/generated_asset_registration.ts';
+import { imageGenerationService } from './image_generation_service.svelte.ts';
+
+/**
+ * C-518 fail-closed default rights record.
+ *
+ * The studio save path knows the engine and the model id but nothing about the
+ * model's terms, so every scope is recorded `unknown` rather than assumed. A
+ * `unknown` scope refuses at the publish gate — the record is honest and the
+ * gate stays closed until a resolved decision is supplied.
+ */
+const unresolvedRightsDecision = (): RightsDecision => ({
+  inference: { permitted: false, state: 'unknown', evidence: 'no terms evidence recorded' },
+  gameInclusion: { permitted: false, state: 'unknown', evidence: 'no terms evidence recorded' },
+  standaloneDistribution: {
+    permitted: false,
+    state: 'unknown',
+    evidence: 'no terms evidence recorded',
+  },
+});
+
+/** What the seam needs from a generation engine. */
+type GeneratedAssetWorkflowDeps = {
+  /**
+   * Generates bytes for the requested recipe. `blob` is the raw engine output —
+   * never a `blob:` URL.
+   *
+   * C-513 AC-12: `recipeId` is passed through so the dep can be a
+   * modality-neutral adapter keyed by the recipe's modality instead of an
+   * image-only closure.
+   */
+  generateImage(options: {
+    /** The recipe the bytes must satisfy (modality/category/ext live here). */
+    recipeId: string;
+    prompt: string;
+    negativePrompt?: string;
+    /**
+     * Reference face as a data URL (img2img) — AC-3's "uploaded/reference
+     * face". Kept as a payload, never a registry tag: the engine needs bytes.
+     */
+    initImage?: string;
+    /** Extra reference images (character consistency). */
+    referenceImages?: readonly string[];
+    signal?: AbortSignal;
+  }): Promise<{
+    blob: Blob;
+    mimeType: string;
+    engineId: GenerationEngineId;
+    seed?: number;
+    isDemo: boolean;
+  }>;
+  /** The C-510 write seam (`assetManager.registerGenerated`). */
+  registerGenerated(
+    asset: GeneratedAsset,
+    bytes: Uint8Array,
+    lineage?: GeneratedAssetLineage,
+  ): Promise<RegisterGeneratedResult>;
+  /**
+   * C-518 — the scoped rights decision for a produced asset.
+   *
+   * Optional: when absent the fail-closed unknown-rights record is used, so a
+   * publish is refused until the terms are actually resolved.
+   */
+  resolveRights?(asset: GeneratedAsset): RightsDecision;
+};
+
+/** Options for the workflow's `generate`. */
+type GeneratedAssetGenerateOptions = {
+  recipeId: string;
+  prompt: string;
+  negativePrompt?: string;
+  /** Set for NPC-bound assets — drives the `expressionAssetTag` override. */
+  npcId?: string;
+  /** Emotion for an NPC-bound asset. Defaults to `neutral`. */
+  emotion?: string;
+  /** Reference face (data URL) for a consistent expression pack. */
+  initImage?: string;
+  /** Extra reference images (character consistency). */
+  referenceImages?: readonly string[];
+  /** Explicit registry tag override; wins over the NPC-bound derivation. */
+  tag?: string;
+  signal?: AbortSignal;
+};
+
+type GeneratedAssetWorkflow = {
+  generate(options: GeneratedAssetGenerateOptions): Promise<GeneratedAssetOutcome>;
+  /**
+   * Registers the bytes produced by the last {@link generate} for `tag`.
+   *
+   * @throws Error when nothing was generated for that tag, or when the
+   *         registry write fails (quota, seed collision) — the caller must
+   *         surface it, never swallow it.
+   */
+  save(options: { tag: string }): Promise<GeneratedAssetSaveOutcome>;
+  /** Revokes the preview URL and drops the pending bytes for a tag. */
+  discard(tag: string): void;
+  /** Revokes every pending preview URL (teardown). */
+  dispose(): void;
+};
+
+/** Bounded so a long studio session cannot accumulate generated bytes. */
+const MAX_PENDING_RESULTS = 8;
+
+/**
+ * Builds the seam. One instance per composition root — it holds the pending
+ * generated bytes between the review step and the save.
+ */
+export const createGeneratedAssetWorkflow = (
+  deps: GeneratedAssetWorkflowDeps,
+): GeneratedAssetWorkflow => {
+  const pending = new Map<
+    string,
+    {
+      asset: GeneratedAsset;
+      bytes: Uint8Array;
+      previewUrl: string;
+      references: readonly GenerationReference[];
+    }
+  >();
+
+  const evictOldest = (): void => {
+    if (pending.size < MAX_PENDING_RESULTS) {
+      return;
+    }
+    const oldest = pending.keys().next().value;
+    if (oldest !== undefined) {
+      discard(oldest);
+    }
+  };
+
+  const discard = (tag: string): void => {
+    const entry = pending.get(tag);
+    if (!entry) {
+      return;
+    }
+    pending.delete(tag);
+    try {
+      URL.revokeObjectURL(entry.previewUrl);
+    } catch {
+      // A non-DOM environment (tests) has nothing to revoke.
+    }
+  };
+
+  return {
+    async generate(options: GeneratedAssetGenerateOptions): Promise<GeneratedAssetOutcome> {
+      const recipe = requireRecipe(options.recipeId);
+      const references = await hashGenerationReferences(options);
+      const generated = await deps.generateImage({
+        recipeId: options.recipeId,
+        prompt: options.prompt,
+        negativePrompt: options.negativePrompt,
+        ...(options.initImage === undefined ? {} : { initImage: options.initImage }),
+        ...(options.referenceImages === undefined
+          ? {}
+          : { referenceImages: options.referenceImages }),
+        signal: options.signal,
+      });
+
+      const bytes = new Uint8Array(await generated.blob.arrayBuffer());
+      if (bytes.length === 0) {
+        throw new Error(`The ${recipe.modality} engine returned an empty result`);
+      }
+
+      // C-517 AC-2: the BYTES decide the format. An engine (or a proxy in
+      // front of it) can declare a `Content-Type` its payload does not have,
+      // so the sniffed container is what the seam reconciles against. An
+      // unrecognised container is left to `toGeneratedAsset`, which refuses it
+      // loudly rather than registering undecodable bytes.
+      const sniffedMimeType = sniffMimeType(bytes);
+      if (sniffedMimeType === undefined) {
+        logger.warn('generated_asset_workflow:unrecognised-container', {
+          recipeId: recipe.id,
+          declared: generated.mimeType,
+          sizeBytes: bytes.length,
+        });
+      } else if (
+        (generated.mimeType.split(';', 1)[0]?.trim().toLowerCase() ?? '') !== sniffedMimeType
+      ) {
+        logger.warn('generated_asset_workflow:mime-mismatch', {
+          recipeId: recipe.id,
+          declared: generated.mimeType,
+          sniffed: sniffedMimeType,
+        });
+      }
+      const effectiveMimeType = sniffedMimeType ?? generated.mimeType;
+
+      // An engine may emit a different format than the recipe declares
+      // (sd-server always returns PNG). Registering PNG bytes under a `.webp`
+      // recipe would hand the renderer a MIME the bytes do not have, so the
+      // seam reconciles the declared ext with what actually came back.
+      const effectiveRecipe = reconcileRecipeExt(recipe, effectiveMimeType);
+
+      const tag = options.tag ?? deriveSeamTag({ recipe: effectiveRecipe, options });
+
+      const result: GenerationResult = {
+        bytes,
+        mimeType: effectiveMimeType,
+        engine: generated.engineId,
+        metadata: {
+          prompt: options.prompt,
+          ...(options.emotion === undefined ? {} : { emotion: options.emotion }),
+          ...(options.npcId === undefined ? {} : { npcId: options.npcId }),
+        },
+        ...(generated.seed === undefined ? {} : { seed: generated.seed }),
+      };
+
+      const asset = await toGeneratedAsset(result, effectiveRecipe, generated.engineId, {
+        prompt: options.prompt,
+        tag,
+      });
+
+      discard(asset.tag);
+      evictOldest();
+
+      const previewUrl = createObjectUrl(generated.blob, effectiveMimeType);
+      pending.set(asset.tag, { asset, bytes, previewUrl, references });
+
+      logger.debug('generated_asset_workflow:generated', {
+        tag: asset.tag,
+        engine: asset.engine,
+        sizeBytes: bytes.length,
+        ext: asset.ext,
+        demo: generated.isDemo,
+      });
+
+      return {
+        tag: asset.tag,
+        sha256: asset.sha256,
+        engine: asset.engine,
+        ...(asset.seed === undefined ? {} : { seed: asset.seed }),
+        sizeBytes: bytes.length,
+        ext: asset.ext,
+        mimeType: asset.mimeType,
+        previewUrl,
+        isDemo: generated.isDemo,
+      };
+    },
+
+    async save(options: { tag: string }): Promise<GeneratedAssetSaveOutcome> {
+      const entry = pending.get(options.tag);
+      if (!entry) {
+        throw new Error(
+          `No generated bytes are pending for "${options.tag}" — generate before saving`,
+        );
+      }
+
+      const result = await deps.registerGenerated(entry.asset, entry.bytes, {
+        provenance: {
+          engine: entry.asset.engine,
+          // The engine reports a model id (never a weight hash), so the record
+          // states exactly that rather than inventing an artifact hash.
+          models:
+            entry.asset.model === undefined
+              ? []
+              : [
+                  {
+                    id: entry.asset.model,
+                    kind: 'base',
+                    limitation:
+                      'Model id reported by the engine; the weight artifact hash is not exposed on this path (C-520 model profiles land later).',
+                  },
+                ],
+          ...(entry.asset.seed === undefined ? {} : { seed: entry.asset.seed }),
+          ...(entry.asset.prompt === undefined ? {} : { prompt: entry.asset.prompt }),
+          references: [...entry.references],
+          // On this path the engine output IS the prepared artifact — the seam
+          // reconciles MIME/ext rather than re-encoding bytes.
+          rawHash: entry.asset.sha256,
+          preparedHash: entry.asset.sha256,
+          transformations: [
+            { operation: `generated:${entry.asset.engine}` },
+            { operation: `prepared:${entry.asset.ext}`, processor: 'format-reconcile@1' },
+          ],
+          media: {
+            mimeType: entry.asset.mimeType,
+            sizeBytes: entry.bytes.length,
+          },
+          rights: deps.resolveRights?.(entry.asset) ?? unresolvedRightsDecision(),
+          createdAt: new Date().toISOString(),
+        },
+        // The studio save is the creator accepting this candidate for local
+        // use — a different decision from approving it for publication.
+        status: 'accepted',
+        acceptedAt: new Date().toISOString(),
+        // The validation actually performed on this path: byte identity against
+        // the descriptor plus the container sniff that reconciled MIME/ext.
+        validationReportHash: await hashTransformationChain([
+          {
+            operation: 'validation:sha256+container',
+            processor: `sniff:${entry.asset.mimeType}`,
+            outputHash: entry.asset.sha256,
+          },
+        ]),
+      });
+
+      logger.debug('generated_asset_workflow:saved', {
+        tag: result.tag,
+        registered: result.registered,
+        version: result.version,
+        unchanged: result.unchanged,
+        reason: result.reason,
+      });
+
+      if (result.registered) {
+        // Bytes are owned by the registry (and its cache) now — drop the preview.
+        discard(options.tag);
+      }
+
+      return {
+        registered: result.registered,
+        tag: result.tag,
+        sha256: result.sha256,
+        ...(result.version === undefined ? {} : { version: result.version }),
+        ...(result.unchanged === undefined ? {} : { unchanged: result.unchanged }),
+        ...(result.reason === undefined ? {} : { reason: result.reason }),
+      };
+    },
+
+    discard,
+
+    dispose(): void {
+      for (const tag of [...pending.keys()]) {
+        discard(tag);
+      }
+    },
+  };
+};
+
+/** Decodes and hashes private inline references before their payloads leave generation scope. */
+const hashGenerationReferences = async (
+  options: GeneratedAssetGenerateOptions,
+): Promise<GenerationReference[]> => {
+  const payloads: { payload: string; role: GenerationReference['role']; note: string }[] = [
+    ...(options.initImage === undefined
+      ? []
+      : [{ payload: options.initImage, role: 'image' as const, note: 'init image' }]),
+    ...(options.referenceImages ?? []).map((payload) => ({
+      payload,
+      role: 'style' as const,
+      note: 'reference image',
+    })),
+  ];
+
+  return Promise.all(
+    payloads.map(async (reference) => {
+      const { bytes } = decodeImagePayload(reference.payload);
+      if (bytes.length === 0) {
+        throw new Error(`Cannot hash an empty ${reference.note} payload`);
+      }
+      return {
+        role: reference.role,
+        sha256: await sha256Hex(bytes),
+        note: reference.note,
+      };
+    }),
+  );
+};
+
+/**
+ * The resolver tag for a generate request.
+ *
+ * An NPC-bound portrait/expression lands on `expressionAssetTag` so the
+ * runtime resolver finds it; the prompt slug `deriveTag` would produce never
+ * matches the resolver's tag family (C-512 tag discipline).
+ */
+const deriveSeamTag = (options: {
+  recipe: AssetRecipe;
+  options: GeneratedAssetGenerateOptions;
+}): string | undefined => {
+  const { recipe, options: request } = options;
+  if (!request.npcId) {
+    return undefined;
+  }
+  if (recipe.category !== 'portraits') {
+    return undefined;
+  }
+  return expressionAssetTag({
+    npcId: request.npcId,
+    emotion: request.emotion ?? 'neutral',
+  });
+};
+
+/**
+ * Returns the recipe with its declared ext reconciled to the format the bytes
+ * actually are, so the descriptor's ext and MIME always agree with the bytes.
+ *
+ * `mimeType` must be the SNIFFED type, never a provider's declared header.
+ */
+const reconcileRecipeExt = (recipe: AssetRecipe, mimeType: string): AssetRecipe => {
+  const actualExt = extForMimeType(mimeType);
+  if (actualExt === undefined || actualExt === recipe.output.ext) {
+    return recipe;
+  }
+  logger.warn('generated_asset_workflow:ext-reconciled', {
+    recipeId: recipe.id,
+    declared: recipe.output.ext,
+    actual: actualExt,
+    mimeType,
+  });
+  return { ...recipe, output: { ...recipe.output, ext: actualExt } };
+};
+
+/** Object URL for the review step; falls back to a data-less blob in tests. */
+const createObjectUrl = (blob: Blob, mimeType: string): string => {
+  try {
+    return URL.createObjectURL(blob.type ? blob : new Blob([blob], { type: mimeType }));
+  } catch {
+    return '';
+  }
+};
+
+/**
+ * The production seam: the image engine service and the C-510 registry write.
+ *
+ * Built here rather than in a composition because two features need the same
+ * instance — the studio (review then save) and contextual generation
+ * (fire-and-forget). A second instance would hold a second pending-bytes map.
+ */
+export const generatedAssetWorkflow: GeneratedAssetWorkflow = createGeneratedAssetWorkflow({
+  generateImage: async (options) => {
+    const result = await imageGenerationService.generateImage({
+      prompt: options.prompt,
+      ...(options.negativePrompt === undefined ? {} : { negativePrompt: options.negativePrompt }),
+      ...(options.initImage === undefined ? {} : { initImage: options.initImage }),
+      ...(options.signal === undefined ? {} : { signal: options.signal }),
+    });
+    if (!result.isDemo) {
+      imageGenerationService.releaseResultUrl(result.url);
+    }
+    return {
+      blob: result.blob,
+      mimeType: result.mimeType,
+      engineId: result.engineId,
+      ...(result.seed === undefined ? {} : { seed: result.seed }),
+      isDemo: result.isDemo,
+    };
+  },
+  registerGenerated: (asset, bytes, lineage) =>
+    assetManager.registerGenerated(asset, bytes, lineage),
+});

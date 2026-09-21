@@ -2,7 +2,7 @@
 // CYOA Choices — declarative visual test suite.
 //
 // Captures the /dev/cyoa sandbox to verify the choice buttons render
-// correctly: DaisyUI join stack, skill-check badges, truncation,
+// correctly: Aikami UI join stack, skill-check badges, truncation,
 // selection state, and history card.
 //
 // Contract: C-245 CYOA Choices Branching Narrative
@@ -55,7 +55,7 @@ const CHOICES_PROMPT = [
   'EXPECTED:',
   '- Heading: "CYOA Choices Sandbox" with a subtitle',
   '- A chat bubble with a fantasy narrative about a forest crossroads',
-  '- A vertical stack of 4 joined (DaisyUI join) choice buttons below the bubble:',
+  '- A vertical stack of 4 joined (Aikami UI join) choice buttons below the bubble:',
   '  "Investigate the ruins", "Follow the river trail", "Persuade the guard to talk",',
   '  and a long truncated choice ending with an ellipsis',
   '- Skill-check badges on two buttons: "Persuasion DC 15" and "Survival DC 12"',

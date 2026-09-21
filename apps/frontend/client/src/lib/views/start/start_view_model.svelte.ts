@@ -11,30 +11,119 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import type { Campaign, CapabilityProfile, PackIndexEntry } from '@aikami/types';
 import { isAiTextProviderRequiredError } from '@aikami/utils';
-import { isTauri } from '$lib/views/utils/is_tauri';
-import {
-  assetPrefetchService,
-  campaignService,
-  equipmentService,
-  gameModeService,
-  gameOverlayService,
-  gameSaveService,
-  inventoryService,
-  packRegistryService,
-  playerStateService,
-  routerService,
-  worldStateService,
+import type {
+  AssetPrefetchServiceInterface,
+  CampaignServiceInterface,
+  EquipmentServiceInterface,
+  GameModeServiceInterface,
+  GameOverlayServiceInterface,
+  GameSaveServiceInterface,
+  InventoryServiceInterface,
+  PackRegistryServiceInterface,
+  PlayerStateServiceInterface,
+  RouterServiceInterface,
+  WorldStateServiceInterface,
 } from '$services';
 import { CREDIT_GROUPS, type CreditGroup } from './credits_data';
+import { type AdvancedEntry, buildAdvancedItems } from './start_advanced_items.ts';
+
+// ---------------------------------------------------------------------------
+// Capability contracts
+// ---------------------------------------------------------------------------
+
+/** Campaign list + lifecycle operations the start menu performs. */
+export type StartCampaignCapabilities = Pick<
+  CampaignServiceInterface,
+  'campaigns' | 'activeCampaign' | 'refreshCampaigns' | 'startNewCampaign' | 'loadCampaign'
+>;
+
+/** Navigation performed by the start menu. */
+export type StartRouterCapabilities = Pick<RouterServiceInterface, 'goToRoute'>;
+
+/** Inventory reset performed before a fresh adventure. */
+export type StartInventoryCapabilities = Pick<InventoryServiceInterface, 'reset'>;
+
+/** World-state reset performed before a fresh adventure. */
+export type StartWorldStateCapabilities = Pick<WorldStateServiceInterface, 'reset'>;
+
+/** Player-state reset performed before a fresh adventure. */
+export type StartPlayerStateCapabilities = Pick<PlayerStateServiceInterface, 'reset'>;
+
+/** Equipment reset performed before a fresh adventure. */
+export type StartEquipmentCapabilities = Pick<EquipmentServiceInterface, 'reset'>;
+
+/** Game-mode reset performed before a fresh adventure. */
+export type StartGameModeCapabilities = Pick<GameModeServiceInterface, 'reset'>;
+
+/** Save + crash-recovery marker operations the start menu reads. */
+export type StartGameOverlayCapabilities = Pick<
+  GameOverlayServiceInterface,
+  'saveGame' | 'checkSessionMarker' | 'clearSessionMarker'
+>;
+
+/** Available-save lookup used by crash recovery. */
+export type StartGameSaveCapabilities = Pick<
+  GameSaveServiceInterface,
+  'fetchAvailableSaves' | 'availableSaves'
+>;
+
+/** Content-pack registry used by the pack browser. */
+export type StartPackRegistryCapabilities = Pick<
+  PackRegistryServiceInterface,
+  'refresh' | 'availablePacks'
+>;
+
+/** Background asset-download pipeline the status strip observes. */
+export type StartAssetPrefetchCapabilities = Pick<
+  AssetPrefetchServiceInterface,
+  | 'phase'
+  | 'coreProgress'
+  | 'warmProgress'
+  | 'prefetchError'
+  | 'warmStarted'
+  | 'warmRemaining'
+  | 'ensureStarted'
+>;
+
+/** Desktop platform probes and window actions. */
+export type StartPlatformCapabilities = {
+  isTauri(): boolean;
+  closeWindow(): Promise<void>;
+};
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-export type StartViewModelOptions = BaseViewModelOptions;
+export type StartViewModelOptions = BaseViewModelOptions & {
+  /** Campaign list + lifecycle operations. */
+  campaign: StartCampaignCapabilities;
+  /** Navigation capability. */
+  router: StartRouterCapabilities;
+  /** Inventory reset capability. */
+  inventory: StartInventoryCapabilities;
+  /** World-state reset capability. */
+  worldState: StartWorldStateCapabilities;
+  /** Player-state reset capability. */
+  playerState: StartPlayerStateCapabilities;
+  /** Equipment reset capability. */
+  equipment: StartEquipmentCapabilities;
+  /** Game-mode reset capability. */
+  gameMode: StartGameModeCapabilities;
+  /** Save + crash-recovery marker capability. */
+  gameOverlay: StartGameOverlayCapabilities;
+  /** Available-save lookup capability. */
+  gameSave: StartGameSaveCapabilities;
+  /** Content-pack registry capability. */
+  packRegistry: StartPackRegistryCapabilities;
+  /** Asset-download pipeline capability. */
+  assets: StartAssetPrefetchCapabilities;
+  /** Desktop platform capability. */
+  platform: StartPlatformCapabilities;
+};
 
 /** Display-ready summary of a campaign for the start menu. */
 export type CampaignSummary = {
@@ -52,20 +141,6 @@ export type CampaignSummary = {
   readonly isResumable: boolean;
   /** AI capability indicators. */
   readonly capabilities: CapabilityProfile;
-};
-
-/** An entry in the Advanced section of the start menu. */
-export type AdvancedEntry = {
-  /** Button label. */
-  readonly label: string;
-  /** Description shown below the button. */
-  readonly description: string;
-  /** Optional external link shown at the end of the description. */
-  readonly href?: string;
-  /** Label for the external link. */
-  readonly hrefLabel?: string;
-  /** Action to invoke when the button is clicked. */
-  readonly action: () => void;
 };
 
 /** What the start menu is currently saying about the asset download. */
@@ -110,7 +185,7 @@ export type StartViewModelInterface = BaseViewModelInterface & {
   /** Whether any campaign exists — gates the Load Campaign entry. */
   readonly hasCampaigns: boolean;
 
-  /** DaisyUI classes for New Adventure — primary only when it is the hero action. */
+  /** Aikami UI classes for New Adventure — primary only when it is the hero action. */
   readonly newAdventureButtonClass: string;
 
   /** C-317 AC-3: Whether the Load Campaign modal is visible. */
@@ -175,6 +250,9 @@ export type StartViewModelInterface = BaseViewModelInterface & {
 
   /** C-405 AC-4: Navigates to the world-generation preview (Advanced entry). */
   startWorldGeneration(): Promise<void>;
+
+  /** C-512: Navigates to the Creator Studio (Advanced entry). */
+  openCreatorStudio(): Promise<void>;
 
   /** Advanced section entries shown at the bottom of the start menu. */
   readonly advancedItems: readonly AdvancedEntry[];
@@ -317,6 +395,21 @@ class StartViewModel
   extends BaseViewModel<StartViewModelOptions>
   implements StartViewModelInterface
 {
+  // ── Injected capabilities ──
+
+  private readonly _campaign: StartCampaignCapabilities;
+  private readonly _router: StartRouterCapabilities;
+  private readonly _inventory: StartInventoryCapabilities;
+  private readonly _worldState: StartWorldStateCapabilities;
+  private readonly _playerState: StartPlayerStateCapabilities;
+  private readonly _equipment: StartEquipmentCapabilities;
+  private readonly _gameMode: StartGameModeCapabilities;
+  private readonly _gameOverlay: StartGameOverlayCapabilities;
+  private readonly _gameSave: StartGameSaveCapabilities;
+  private readonly _packRegistry: StartPackRegistryCapabilities;
+  private readonly _assets: StartAssetPrefetchCapabilities;
+  private readonly _platform: StartPlatformCapabilities;
+
   /** Initialization error message — null when initialization succeeded. */
   private _initError = $state<string | null>(null);
 
@@ -361,9 +454,25 @@ class StartViewModel
   /** The currently selected pack ID. */
   selectedPackId = $state<string | undefined>(undefined);
 
+  constructor(options: StartViewModelOptions) {
+    super(options);
+    this._campaign = options.campaign;
+    this._router = options.router;
+    this._inventory = options.inventory;
+    this._worldState = options.worldState;
+    this._playerState = options.playerState;
+    this._equipment = options.equipment;
+    this._gameMode = options.gameMode;
+    this._gameOverlay = options.gameOverlay;
+    this._gameSave = options.gameSave;
+    this._packRegistry = options.packRegistry;
+    this._assets = options.assets;
+    this._platform = options.platform;
+  }
+
   /** @inheritdoc */
   get isTauri(): boolean {
-    return isTauri();
+    return this._platform.isTauri();
   }
 
   /** @inheritdoc */
@@ -386,31 +495,30 @@ class StartViewModel
       return undefined;
     }
 
-    switch (assetPrefetchService.phase) {
+    switch (this._assets.phase) {
       case 'prefetching-core':
         return {
           kind: 'progress',
           label: 'Downloading starter content…',
-          ...toProgressLabels(assetPrefetchService.coreProgress),
+          ...toProgressLabels(this._assets.coreProgress),
         };
       case 'warming':
         return {
           kind: 'progress',
           label: 'Downloading everything for offline play…',
-          ...toProgressLabels(assetPrefetchService.warmProgress),
+          ...toProgressLabels(this._assets.warmProgress),
         };
       case 'degraded':
         return {
           kind: 'error',
-          label:
-            assetPrefetchService.prefetchError ?? 'Asset download paused — check your connection.',
+          label: this._assets.prefetchError ?? 'Asset download paused — check your connection.',
           fraction: undefined,
           percentLabel: undefined,
         };
       case 'ready':
         // warmRemaining() flips the phase to 'warming' synchronously, so a
         // 'ready' phase with warming already requested means it finished.
-        return assetPrefetchService.warmStarted
+        return this._assets.warmStarted
           ? {
               kind: 'complete',
               label: 'Ready for offline play',
@@ -431,12 +539,12 @@ class StartViewModel
 
   /** @inheritdoc */
   downloadAllAssets(): void {
-    assetPrefetchService.warmRemaining();
+    this._assets.warmRemaining();
   }
 
   /** @inheritdoc */
   retryAssetDownload(): void {
-    assetPrefetchService.ensureStarted();
+    this._assets.ensureStarted();
   }
 
   /** @inheritdoc */
@@ -458,7 +566,7 @@ class StartViewModel
   /** @inheritdoc */
   async confirmNewAdventure(): Promise<void> {
     this.showNewAdventureConfirm = false;
-    await gameOverlayService.saveGame();
+    await this._gameOverlay.saveGame();
     await this._doStartNewAdventure();
   }
 
@@ -484,15 +592,15 @@ class StartViewModel
       this.debug(options.logKey, { contentPackId: options.packId });
 
       // Reset game state for a fresh start
-      inventoryService.reset();
-      worldStateService.reset();
-      playerStateService.reset();
-      equipmentService.reset();
-      gameModeService.reset();
+      this._inventory.reset();
+      this._worldState.reset();
+      this._playerState.reset();
+      this._equipment.reset();
+      this._gameMode.reset();
 
-      await campaignService.startNewCampaign({ contentPackId: options.packId });
+      await this._campaign.startNewCampaign({ contentPackId: options.packId });
 
-      await routerService.goToRoute('personaCreate', {
+      await this._router.goToRoute('personaCreate', {
         queryParameters: { onboarding: '1' },
         pathParameters: undefined,
       });
@@ -500,7 +608,7 @@ class StartViewModel
       if (isAiTextProviderRequiredError(error)) {
         this.warn(`${options.logKey}:no-text-provider`, { error: String(error) });
         // Soft advisory — route to setup screen instead of blocking
-        await routerService.goToRoute('setup', {
+        await this._router.goToRoute('setup', {
           queryParameters: { reason: 'text-provider-required' },
           pathParameters: undefined,
         });
@@ -521,9 +629,9 @@ class StartViewModel
     }
 
     try {
-      await campaignService.loadCampaign({ campaignId: campaign.id });
+      await this._campaign.loadCampaign({ campaignId: campaign.id });
 
-      await routerService.goToRoute('game', {
+      await this._router.goToRoute('game', {
         queryParameters: undefined,
         pathParameters: undefined,
       });
@@ -548,10 +656,10 @@ class StartViewModel
     this.debug('loadCampaignById', { campaignId });
 
     try {
-      await campaignService.loadCampaign({ campaignId });
+      await this._campaign.loadCampaign({ campaignId });
       this.showLoadCampaign = false;
 
-      await routerService.goToRoute('game', {
+      await this._router.goToRoute('game', {
         queryParameters: undefined,
         pathParameters: undefined,
       });
@@ -563,7 +671,7 @@ class StartViewModel
 
   /** @inheritdoc */
   async startWorldGeneration(): Promise<void> {
-    await routerService.goToRoute('worldgen', {
+    await this._router.goToRoute('worldgen', {
       queryParameters: undefined,
       pathParameters: undefined,
     });
@@ -571,7 +679,15 @@ class StartViewModel
 
   /** @inheritdoc */
   async goToDev(): Promise<void> {
-    await routerService.goToRoute('dev', {
+    await this._router.goToRoute('dev', {
+      queryParameters: undefined,
+      pathParameters: undefined,
+    });
+  }
+
+  /** @inheritdoc */
+  async openCreatorStudio(): Promise<void> {
+    await this._router.goToRoute('studioAssets', {
       queryParameters: undefined,
       pathParameters: undefined,
     });
@@ -579,25 +695,11 @@ class StartViewModel
 
   /** @inheritdoc */
   get advancedItems(): readonly AdvancedEntry[] {
-    return [
-      {
-        label: 'World Generation (Preview)',
-        description:
-          'Generates a world preview that is not yet playable — used to prototype story content. See',
-        href: 'https://github.com/BearlySleeping/aikami/issues/81',
-        hrefLabel: 'issue #81',
-        action: () => {
-          this.startWorldGeneration();
-        },
-      },
-      {
-        label: 'Dev Tools',
-        description: 'Access developer tools, sandboxes, and experimental features.',
-        action: () => {
-          this.goToDev();
-        },
-      },
-    ];
+    return buildAdvancedItems({
+      openWorldGeneration: () => void this.startWorldGeneration(),
+      openCreatorStudio: () => void this.openCreatorStudio(),
+      openDevTools: () => void this.goToDev(),
+    });
   }
 
   /** @inheritdoc */
@@ -605,7 +707,7 @@ class StartViewModel
     this.debug('initialize');
 
     // C-448: start (or observe) the required-to-play (offline-core) download
-    assetPrefetchService.ensureStarted();
+    this._assets.ensureStarted();
 
     // Hold the download strip back until the pipeline has settled — see
     // DOWNLOAD_STATUS_SETTLE_MS. After it opens, downloadStatus tracks the
@@ -616,7 +718,7 @@ class StartViewModel
 
     // Load campaigns from IndexedDB
     try {
-      await campaignService.refreshCampaigns();
+      await this._campaign.refreshCampaigns();
       this._initError = null;
     } catch (error) {
       this._initError = String(error);
@@ -631,7 +733,7 @@ class StartViewModel
 
     // C-334 AC-5: Check for stale session marker (crash recovery)
     try {
-      const campaignId = await gameOverlayService.checkSessionMarker();
+      const campaignId = await this._gameOverlay.checkSessionMarker();
       if (campaignId) {
         this.recoveryCampaignId = campaignId;
         this.showRecoveryPrompt = true;
@@ -647,7 +749,7 @@ class StartViewModel
 
   /** Refreshes the campaign summary state from the campaign service. */
   private _refreshCampaignState(): void {
-    const campaigns = [...campaignService.campaigns].sort(
+    const campaigns = [...this._campaign.campaigns].sort(
       (left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime(),
     );
     this.campaignSummaries = campaigns.map(toCampaignSummary);
@@ -664,7 +766,7 @@ class StartViewModel
 
   /** @inheritdoc */
   async goToOptions(): Promise<void> {
-    await routerService.goToRoute('settings', {
+    await this._router.goToRoute('settings', {
       queryParameters: undefined,
       pathParameters: undefined,
     });
@@ -704,8 +806,7 @@ class StartViewModel
     }
 
     try {
-      const { getCurrentWindow } = await import('@tauri-apps/api/window');
-      await getCurrentWindow().close();
+      await this._platform.closeWindow();
     } catch (error) {
       this.debug('quitApp:error', { error: String(error) });
     }
@@ -721,12 +822,12 @@ class StartViewModel
 
     try {
       // Find the most recent save for the crashed campaign
-      await gameSaveService.fetchAvailableSaves(this.recoveryCampaignId);
-      const saves = gameSaveService.availableSaves;
+      await this._gameSave.fetchAvailableSaves(this.recoveryCampaignId);
+      const saves = this._gameSave.availableSaves;
 
       if (saves.length === 0) {
         // No saves — just clear the marker and show start screen
-        await gameOverlayService.clearSessionMarker();
+        await this._gameOverlay.clearSessionMarker();
         this.showRecoveryPrompt = false;
         this.debug('acceptRecovery:no-saves-for-campaign');
         return;
@@ -736,13 +837,13 @@ class StartViewModel
       this.debug('acceptRecovery', { slotId: latestSave.id, mapName: latestSave.mapName });
 
       // Clear the session marker before navigating
-      await gameOverlayService.clearSessionMarker();
+      await this._gameOverlay.clearSessionMarker();
 
       // Dismiss the recovery prompt before navigating
       this.showRecoveryPrompt = false;
 
       // Navigate to /game with the campaign from the save
-      await routerService.goToRoute('game', {
+      await this._router.goToRoute('game', {
         queryParameters: undefined,
         pathParameters: undefined,
       });
@@ -757,7 +858,7 @@ class StartViewModel
   /** @inheritdoc */
   async declineRecovery(): Promise<void> {
     // C-334 AC-5: Clear the session marker silently
-    await gameOverlayService.clearSessionMarker();
+    await this._gameOverlay.clearSessionMarker();
     this.showRecoveryPrompt = false;
     this.recoveryCampaignId = undefined;
     this.debug('declineRecovery');
@@ -769,9 +870,9 @@ class StartViewModel
   async openPackBrowser(): Promise<void> {
     try {
       // Load the pack registry
-      await packRegistryService.refresh();
+      await this._packRegistry.refresh();
 
-      this.availablePacks = [...packRegistryService.availablePacks];
+      this.availablePacks = [...this._packRegistry.availablePacks];
 
       if (this.availablePacks.length <= 1) {
         // Single pack or empty — skip browser, proceed directly
@@ -826,5 +927,11 @@ class StartViewModel
 // Factory
 // ---------------------------------------------------------------------------
 
-export const getStartViewModel = (options: StartViewModelOptions): StartViewModelInterface =>
-  StartViewModel.create({ ...options, startWithLoadingView: true } as StartViewModelOptions);
+/**
+ * Builds a start-menu ViewModel from explicit capabilities.
+ *
+ * Callers outside production (tests, sandboxes) use this directly; production
+ * code goes through `getStartViewModel` in ./start_composition.ts.
+ */
+export const createStartViewModel = (options: StartViewModelOptions): StartViewModelInterface =>
+  StartViewModel.create(options);

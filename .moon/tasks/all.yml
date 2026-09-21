@@ -155,6 +155,10 @@ tasks:
   # Validate
   # Meta-task: runs lint + format + typecheck in sequence.
   # Useful for pre-commit hooks and CI gates.
+  #
+  # `scripts:guard` is the full structural-guard aggregate; `guard:whole-repo`
+  # is the subset the PR gate also runs unconditionally (see pr-checks.yml),
+  # because a whole-repo guard has no owning project to be "affected".
   # ------------------------------------------------------------------
   validate:
     deps:
@@ -162,21 +166,8 @@ tasks:
       - "~:format"
       - "~:typecheck"
       - "scripts:guard"
+      - "scripts:guard-policy-diff"
       - "scripts:validate-agent-guidance"
     options:
       cache: false
       runInCI: true
-
-  # C-485 AC-2: scripts:guard depends on this inherited task.
-  guard-orphaned-capability:
-    command: "bun run scripts/src/lib/ops/guard_orphaned_capability.ts"
-    env:
-      AIKAMI_GUARD_PROJECT: "$project"
-    inputs:
-      - "/scripts/src/lib/ops/guard_orphaned_capability.ts"
-      - "/scripts/src/lib/ops/guard_orphaned_capability_baseline.json"
-      - "/apps/frontend/client/src/lib/services/**/*"
-    options:
-      cache: false
-      runInCI: true
-      runFromWorkspaceRoot: true

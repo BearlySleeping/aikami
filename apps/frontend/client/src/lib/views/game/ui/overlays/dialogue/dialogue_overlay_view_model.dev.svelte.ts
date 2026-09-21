@@ -14,13 +14,17 @@
 
 import { resolveNpcAvatarUrl, resolvePlayerAvatarUrl } from '$lib/data/npc_avatar_catalog';
 import { NPC_SPRITE_EXPRESSIONS } from '$lib/data/npc_sprite_expressions';
-import { diceService, imageGenerationService, ttsService } from '$services';
+import type { PlayerStateServiceInterface } from '$services';
 import type { ExpressionId } from '$types';
+import { ttsService } from '../../../../../services/audio/tts_service.svelte.ts';
+import { diceService } from '../../../../../services/dice/dice_service.svelte.ts';
+import { imageGenerationService } from '../../../../../services/image/image_generation_service.svelte.ts';
 import {
   DialogueOverlayViewModel,
   type DialogueOverlayViewModelInterface,
   type DialogueOverlayViewModelOptions,
 } from './dialogue_overlay_view_model.svelte';
+import { resolveStakes } from './dialogue_skill_checks.ts';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -82,15 +86,12 @@ export type DialogueDevViewModelInterface = DialogueOverlayViewModelInterface & 
   simulatePartyMessage(): void;
 
   /** Force a dice roll with test parameters. */
-  forceDiceRoll(options: {
-    checkType: string;
-    difficultyClass: number;
-    statModifier: string;
-    statModifierValue: number;
-  }): void;
+  forceDiceRoll(options: { checkType: string; difficultyClass: number }): void;
 };
 
 export type DialogueDevViewModelOptions = DialogueOverlayViewModelOptions & {
+  /** Player state owner; dev sandboxes inject an isolated instance. */
+  playerStateService?: PlayerStateServiceInterface;
   /** Initial dice outcome (default: 'random'). */
   initialDiceOutcome?: DiceOutcome;
   /** Initial mock AI setting (default: true). */
@@ -250,7 +251,13 @@ export class DialogueDevViewModel
   }
 
   constructor(options: DialogueDevViewModelOptions) {
-    super(options);
+    // C-490: the dev sandbox is NOT campaign play — keep transcript
+    // rewinding (branch/edit/delete) and the branch selector available.
+    super({
+      ...options,
+      playerState: options.playerStateService ?? options.playerState,
+      isCampaignPlay: false,
+    });
     this.diceOutcome = options.initialDiceOutcome ?? 'random';
     this.useMockAi = options.initialUseMockAi ?? true;
     this.mockNpcPreset = options.initialNpcPreset ?? 'sage';
@@ -371,18 +378,15 @@ export class DialogueDevViewModel
   }
 
   /** @inheritdoc */
-  forceDiceRoll(options: {
-    checkType: string;
-    difficultyClass: number;
-    statModifier: string;
-    statModifierValue: number;
-  }): void {
-    const targetNumber = Math.max(1, options.difficultyClass - options.statModifierValue);
+  forceDiceRoll(options: { checkType: string; difficultyClass: number }): void {
+    const breakdown = this._computeSkillCheckBreakdown(options.checkType);
+    const stakes = resolveStakes(options.checkType);
+    const targetNumber = Math.max(1, options.difficultyClass - breakdown.totalModifier);
     this.skillCheckState = {
       checkType: options.checkType,
       difficultyClass: options.difficultyClass,
-      statModifier: options.statModifier,
-      statModifierValue: options.statModifierValue,
+      breakdown,
+      stakes,
       targetNumber,
       rollValue: null,
       phase: 'declared',

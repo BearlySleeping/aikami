@@ -15,9 +15,8 @@
 // entrypoint, `bun run sync-workspace`), so importing the helper from there
 // would trigger a `moon sync` as a side effect of asking a question.
 //
-// 🔴 No `Bun.*` and no `import.meta` here — this module sits in the import
-// graph reachable from `.pi/extensions/*`, which pi loads under Node. See
-// scripts/src/lib/env/runtime_boundary.test.ts.
+// 🔴 Kept free of `Bun.*` and `import.meta` — a pure helper shared with the
+// bridge (scripts/src/lib/pi/) that pi extensions call under Bun.
 import { execSync } from 'node:child_process';
 
 /**

@@ -10,12 +10,12 @@
 // apps/e2e/src/visual/suites/onboarding_appearance.visual.ts.
 //
 // Run with:
-//   bun test --preload ./src/lib/test_preload.ts --tsconfig tsconfig.test.json \
+//   bun test --preload ./src/lib/test_setup.ts --tsconfig tsconfig.test.json \
 //     src/lib/views/character/lpc_preview/lpc_preview_view_model.test.ts
 
 import { beforeEach, describe, expect, it, mock } from 'bun:test';
 
-// ── Svelte 5 runes polyfill (matches test_preload.ts) ────────────────
+// ── Svelte 5 runes polyfill (matches test_setup.ts) ────────────────
 
 (globalThis as Record<string, unknown>).$state = (value: unknown) => value;
 (globalThis as Record<string, unknown>).$state.raw = (value: unknown) => value;
@@ -71,7 +71,7 @@ mock.module('@aikami/frontend/engine/content', () => ({
   resolveLayerDepth: mockResolveLayerDepth,
 }));
 
-mock.module('@aikami/frontend/services', () => ({
+const baseServicesModule = () => ({
   BaseFrontendClass: class {
     _options: { className: string };
     constructor(options: { className: string }) {
@@ -112,7 +112,10 @@ mock.module('@aikami/frontend/services', () => ({
     }
   },
   dialogService: {},
-}));
+});
+
+mock.module('@aikami/frontend/services', baseServicesModule);
+mock.module('@aikami/frontend/services/base', baseServicesModule);
 
 mock.module('@aikami/lpc', () => ({
   LpcAnimationState: {
@@ -140,8 +143,12 @@ mock.module('$logger', () => ({
   logger: {
     debug: mock(() => {}),
     info: mock(() => {}),
+    log: mock(() => {}),
     warn: mock(() => {}),
     error: mock(() => {}),
+    spam: mock(() => {}),
+    write: mock(() => {}),
+    setLogLevel: mock(() => {}),
   },
 }));
 

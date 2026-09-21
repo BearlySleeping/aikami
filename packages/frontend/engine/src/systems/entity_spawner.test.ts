@@ -10,6 +10,7 @@ import { Appearance, registerAppearanceObservers } from '../components/appearanc
 import { NPCDialog, registerNPCDialogObservers } from '../components/npc_dialog.ts';
 import { Position, registerPositionObservers } from '../components/position.ts';
 import { AssetAlias, registerVisualObservers, Visual } from '../components/visual.ts';
+import { assetAt, buildLegacyDerivedCatalog } from '../test_support/lpc_catalog.ts';
 import { spawnEntities } from './entity_spawner.ts';
 
 // ---------------------------------------------------------------------------
@@ -201,16 +202,29 @@ describe('spawnEntities', () => {
       props: {},
       npcs: packNpcs,
     };
+    // C-504: legacy appearanceLayers migrate to DERIVED engine layer IDs via
+    // the shared normalizer + the runtime catalog (worker/main parity).
+    const derived = buildLegacyDerivedCatalog();
 
-    const results = spawnEntities({ world, spawnPoints: [spawnPoint], packConfig });
+    const results = spawnEntities({
+      world,
+      spawnPoints: [spawnPoint],
+      packConfig,
+      lpcCatalog: derived,
+    });
     const eid = results[0].eid;
 
-    expect(Appearance.layer0[eid]).toBe(2);
-    expect(Appearance.layer1[eid]).toBe(3);
-    expect(Appearance.layer2[eid]).toBe(65);
-    expect(Appearance.layer3[eid]).toBe(21);
-    expect(Appearance.layer4[eid]).toBe(20);
-    expect(Appearance.layer5[eid]).toBe(97);
+    // Elder: female body, female pants, elderly head — resolved from the
+    // verified legacy snapshot, not raw positional reads.
+    expect(assetAt({ catalog: derived, slot: 'body', layerId: Appearance.layer0[eid] ?? 0 })).toBe(
+      'body/bodies_female',
+    );
+    expect(assetAt({ catalog: derived, slot: 'legs', layerId: Appearance.layer3[eid] ?? 0 })).toBe(
+      'legs/pants_female',
+    );
+    expect(assetAt({ catalog: derived, slot: 'head', layerId: Appearance.layer5[eid] ?? 0 })).toBe(
+      'head/heads/human/female_elderly',
+    );
   });
 
   it('ignores the Tiled appearanceLayers property when the manifest declares appearance', () => {
@@ -221,20 +235,36 @@ describe('spawnEntities', () => {
         appearanceLayers: '3,123,23,22,7,95',
       },
     });
+    // Manifest declares the REAL Rollo legacy appearance.
     const packNpcs = Object.fromEntries([
-      ['rollo_grasper', { appearanceLayers: [9, 9, 9, 9, 9, 9] }],
+      ['rollo_grasper', { appearanceLayers: [3, 123, 23, 22, 7, 95] }],
     ]);
     const packConfig = {
       tiles: {},
       props: {},
       npcs: packNpcs,
     };
+    const derived = buildLegacyDerivedCatalog();
 
-    const results = spawnEntities({ world, spawnPoints: [spawnPoint], packConfig });
+    const results = spawnEntities({
+      world,
+      spawnPoints: [spawnPoint],
+      packConfig,
+      lpcCatalog: derived,
+    });
     const eid = results[0].eid;
 
-    // Manifest wins over the Tiled property.
-    expect(Appearance.layer0[eid]).toBe(9);
+    // Manifest wins over the Tiled property; the legacy values migrate to
+    // Rollo's intended male body / male trousers / human male head.
+    expect(assetAt({ catalog: derived, slot: 'body', layerId: Appearance.layer0[eid] ?? 0 })).toBe(
+      'body/bodies_male',
+    );
+    expect(assetAt({ catalog: derived, slot: 'legs', layerId: Appearance.layer3[eid] ?? 0 })).toBe(
+      'legs/pants_male',
+    );
+    expect(assetAt({ catalog: derived, slot: 'head', layerId: Appearance.layer5[eid] ?? 0 })).toBe(
+      'head/heads/human_male',
+    );
   });
 
   it('falls back to the legacy default stack when the manifest entry has no appearanceLayers', () => {

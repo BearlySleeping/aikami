@@ -1,0 +1,14 @@
+{
+  "$comment": "CORS policy for the R2 `aikami-dist` distribution plane (dl.bearlysleeping.com). The client Worker fetches ORT runtime assets (models/ort/<version>/) cross-origin, so a browser needs Access-Control-Allow-Origin; without this policy the bytes are served but the browser refuses to expose them. Apply with: bun cf r2 buckets cors update aikami-dist --body \"$(cat scripts/src/lib/dist/r2_cors_policy.json)\" (run from scripts/, or use scripts/src/lib/dist/apply_r2_cors.ts). Objects are public, immutable, and non-credentialed, hence origins: ['*'].",
+  "rules": [
+    {
+      "allowed": {
+        "origins": ["*"],
+        "methods": ["GET", "HEAD"],
+        "headers": []
+      },
+      "exposeHeaders": ["ETag", "Content-Length", "Content-Type"],
+      "maxAgeSeconds": 86400
+    }
+  ]
+}

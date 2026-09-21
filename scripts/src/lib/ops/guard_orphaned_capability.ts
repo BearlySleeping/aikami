@@ -1,61 +1,104 @@
 // scripts/src/lib/ops/guard_orphaned_capability.ts
 //
-// Ratchet guard that reports exported service methods whose only
-// non-declaration references live in test files or declarations.
+// Ratchet guard for RUNTIME capabilities that no production code consumes.
 //
-// For each exported symbol in apps/frontend/client/src/lib/services/**
-// (and symbols named by an Evidence Matrix Production Path), count
-// references outside its own declaration after resolving barrel re-export
-// chains. References in interface/type declarations, declaration files,
-// *.test.ts files, or __tests__/ do not count as production use.
+// A capability that is exported, wired into the services barrel, and never
+// called is dead surface: it costs a public API promise, a test to keep green,
+// and a reader's attention. This guard finds those.
 //
-// Existing offenders are captured in guard_orphaned_capability_baseline.json
-// so the guard exits zero on the current tree. New offenders fail the guard,
-// and improvements not locked into the baseline also fail (ratchet semantics).
+// ── What it checks ───────────────────────────────────────────────────────
 //
-// The baseline JSON format:
-//   {
-//     "apps/frontend/client/src/lib/services/...ts": {
-//       "orphaned": ["symbolName1", "symbolName2"],
-//       "_comment": "C-456 shipped these with no production caller. C-493 wires them in."  // optional
-//     }
-//   }
+// Exported RUNTIME bindings in apps/frontend/client/src/lib/services/**:
+//
+//   • exported classes and functions;
+//   • exported `const` bindings (a singleton, a factory, a schema object);
+//   • public methods of exported service classes, keyed `ClassName.method`.
+//
+// A binding is orphaned when no PRODUCTION file references it — references in
+// *.test.ts, __tests__/, *.spec.ts, apps/e2e/ and *.d.ts do not count. Test-only
+// use is exactly the case this guard exists to catch: it looks like usage and
+// is not.
+//
+// ── What it deliberately does NOT check ──────────────────────────────────
+//
+// Type-only exports. `export type Foo = …`, `export interface Foo`, and
+// `export type { Foo }` are erased at compile time — they are not runtime
+// capabilities and they have no runtime consumer to have. Before this was
+// narrowed, `FooServiceInterface` and `FooServiceOptions` were reported as
+// orphaned capabilities, which pushed real service modules into deleting or
+// relocating legitimate public types to satisfy the guard. That is the guard
+// creating architecture work out of a category error.
+//
+// 🔴 Runtime identity is what matters. A symbol may not be moved from a runtime
+// export into a type-only export to silence this guard — if it was a runtime
+// capability, it still is one.
+//
+// ── Ratchet ──────────────────────────────────────────────────────────────
+//
+// Existing offenders live in guard_orphaned_capability_baseline.json and may
+// only shrink (shared framework: scripts/src/lib/ops/guards/ratchet.ts).
+// `--update-baseline` is REDUCTION-ONLY — a new orphan can never be blessed by
+// running it. The baseline records the orphan SYMBOL NAMES as identities, so
+// swapping one orphan for a different one at the same count is detected too.
+//
+// ── Evidence Matrix ingestion (deliberate, visible seam) ─────────────────
+//
+// A symbol named by a contract's Evidence Matrix "Production Path" counts as
+// in-use. This exists because a contract can legitimately land the wiring in a
+// later PR, and deleting the capability in the meantime would be wrong.
+//
+// 🔴 It is a documentation-driven seam and therefore weaker than a code
+// reference: editing a markdown table can silence an orphan. It is kept
+// deliberately (removing it today would ADD recorded debt, which is a policy
+// change requiring human review) and it is reported explicitly in --show-all
+// so a reviewer can see exactly which symbols are being held open by a
+// contract rather than by code. Follow-up: replace it with an explicit,
+// reviewed baseline entry per rescued symbol.
 //
 // Usage:
-//   bun run scripts/src/lib/ops/guard_orphaned_capability.ts
-//   bun run scripts/src/lib/ops/guard_orphaned_capability.ts --update-baseline
-//   bun run scripts/src/lib/ops/guard_orphaned_capability.ts --show-all
+//   bun run src/lib/ops/guard_orphaned_capability.ts
+//   bun run src/lib/ops/guard_orphaned_capability.ts --update-baseline  # reductions only
+//   bun run src/lib/ops/guard_orphaned_capability.ts --show-all
+//   bun run src/lib/ops/guard_orphaned_capability.ts --base-ref=origin/main
 //
-// Exits non-zero on any regression (new orphan), any unlocked improvement
-// (orphan fixed but not in baseline), or any baseline entry that no longer
-// matches (renamed symbol at same count). --show-all ignores the baseline.
-//
-// See guard_type_safety.ts for the identity-aware ratchet pattern this mirrors.
+// Exits non-zero on any new orphan, any resolved orphan not yet locked in, or
+// any growth relative to an explicitly configured base revision.
 
-import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { relative, resolve, sep } from 'node:path';
 import ts from 'typescript';
-import { annotate } from './gha_annotate.ts';
+import { evidenceMatrixSymbols } from './guards/evidence_matrix.ts';
+import type { RatchetRuleSpec, RatchetViolation } from './guards/ratchet.ts';
+import { relativeToRoot } from './guards/ratchet_io.ts';
+import { runRatchet } from './guards/ratchet_runner.ts';
 
-const ROOT = resolve(import.meta.dir, '../../../..');
-const SERVICES_DIR = resolve(ROOT, 'apps/frontend/client/src/lib/services');
-const BASELINE_PATH = resolve(import.meta.dir, 'guard_orphaned_capability_baseline.json');
+// Root, service directory and baseline are overridable so tests can run the
+// guard against an isolated fixture tree without touching the repository's real
+// baseline or reading the real service layer.
+const ROOT = resolve(process.env.AIKAMI_GUARD_ROOT ?? resolve(import.meta.dir, '../../../..'));
+const SERVICES_DIR = resolve(
+  process.env.AIKAMI_GUARD_SERVICES ?? resolve(ROOT, 'apps/frontend/client/src/lib/services'),
+);
+const BASELINE_PATH = resolve(
+  process.env.AIKAMI_GUARD_BASELINE ??
+    resolve(import.meta.dir, 'guard_orphaned_capability_baseline.json'),
+);
+const BASELINE_REL_PATH =
+  relativeToRoot(ROOT, BASELINE_PATH) ??
+  'scripts/src/lib/ops/guard_orphaned_capability_baseline.json';
+const CONTRACTS_DIR_PATH = resolve(
+  process.env.AIKAMI_GUARD_CONTRACTS ?? resolve(ROOT, 'docs/contracts'),
+);
 
-// ── Types ──────────────────────────────────────────────────
-
-type OrphanEntry = {
-  orphaned: string[];
-  _comment?: string;
-};
-
-type Baseline = Record<string, OrphanEntry>;
-
-type OrphanReport = {
-  file: string;
-  symbols: string[];
-};
-
-// ── Constants ──────────────────────────────────────────────
+/** The single ratcheted rule: one orphaned runtime capability. */
+export const RULE_SPECS: readonly RatchetRuleSpec[] = [
+  {
+    id: 'orphans',
+    label: 'orphaned runtime capability',
+    remediation:
+      'Wire it into production, or delete it. A capability used only by its own tests is not used. Do not move it into a type-only export to hide it, and do not raise the orphan baseline.',
+  },
+];
 
 const EXCLUDED_DIRS = new Set([
   'node_modules',
@@ -66,17 +109,16 @@ const EXCLUDED_DIRS = new Set([
   '__tests__',
 ]);
 
-// ── Helpers ────────────────────────────────────────────────
+// ── File discovery ───────────────────────────────────────────────────────
 
 const relPath = (file: string): string => relative(ROOT, file).split(sep).join('/');
 
-/** Recursively find all .ts and .svelte files under services dir. */
+/** Recursively find all .ts and .svelte files under the services dir. */
 const collectServiceFiles = (): string[] => {
   const results: string[] = [];
   const walk = (dir: string): void => {
     try {
-      const entries = readdirSync(dir, { withFileTypes: true });
-      for (const entry of entries) {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
         const fullPath = resolve(dir, entry.name);
         if (entry.isDirectory()) {
           if (!EXCLUDED_DIRS.has(entry.name) && !entry.name.startsWith('.')) {
@@ -90,7 +132,7 @@ const collectServiceFiles = (): string[] => {
         }
       }
     } catch {
-      // skip inaccessible dirs
+      // Skip inaccessible directories.
     }
   };
   if (existsSync(SERVICES_DIR)) {
@@ -98,6 +140,8 @@ const collectServiceFiles = (): string[] => {
   }
   return results;
 };
+
+// ── Export extraction (runtime only) ─────────────────────────────────────
 
 const hasModifier = (node: ts.Node, kind: ts.SyntaxKind): boolean =>
   Boolean(
@@ -121,6 +165,7 @@ const unwrapExpression = (expression: ts.Expression): ts.Expression => {
   return current;
 };
 
+/** Classes reachable from an exported `XService.create(...)` singleton. */
 const exportedServiceClasses = (sourceFile: ts.SourceFile): Set<string> => {
   const classNames = new Set<string>();
   for (const statement of sourceFile.statements) {
@@ -157,8 +202,17 @@ const exportedServiceClasses = (sourceFile: ts.SourceFile): Set<string> => {
 };
 
 /**
- * Extracts top-level exports and public methods exposed by exported service classes.
- * Class methods use `ClassName.methodName` identities so baseline entries remain stable.
+ * Extracts the RUNTIME exports of a service module, plus the public methods of
+ * every exported service class (keyed `ClassName.methodName` so baseline
+ * entries stay stable across line moves).
+ *
+ * 🔴 Type-only declarations are excluded on purpose. `export type` and
+ * `export interface` produce no runtime binding, so there is no runtime
+ * consumer for them to lack. `export enum` is NOT type-only — it emits a real
+ * object — and is included.
+ *
+ * 🔴 `export { a } from '…'` (a forward) is also excluded: ownership lives at
+ * the declaration, and the declaring file is scanned separately.
  */
 export const extractExports = (content: string): string[] => {
   const sourceFile = ts.createSourceFile('service.ts', content, ts.ScriptTarget.Latest, true);
@@ -166,11 +220,27 @@ export const extractExports = (content: string): string[] => {
   const serviceClassNames = exportedServiceClasses(sourceFile);
 
   for (const statement of sourceFile.statements) {
-    if (ts.isExportDeclaration(statement) && !statement.moduleSpecifier && statement.exportClause) {
-      if (ts.isNamedExports(statement.exportClause)) {
-        for (const element of statement.exportClause.elements) {
-          exports.add(element.propertyName?.text ?? element.name.text);
+    // `export { a, b }` — a LOCAL re-export of bindings declared in this file.
+    // Those bindings are already collected by the const/function/class scan, so
+    // this only matters for a renamed local export.
+    //
+    // 🔴 `export { a, b } from '…'` is deliberately NOT collected. Forwarding a
+    // symbol declared elsewhere is not owning a capability: the declaring file
+    // is scanned on its own, so including the forward would double-report it and
+    // would attribute foreign symbols (a re-exported constant from
+    // `@aikami/constants`, say) to a service barrel that does not own them.
+    if (ts.isExportDeclaration(statement) && statement.exportClause) {
+      if (statement.moduleSpecifier || !ts.isNamedExports(statement.exportClause)) {
+        continue;
+      }
+      for (const element of statement.exportClause.elements) {
+        if (element.isTypeOnly || statement.isTypeOnly) {
+          continue;
         }
+        // `element.name` is the PUBLIC runtime name. For `export { internal as
+        // publicName }` the property name is `internal`, which is not what a
+        // consumer sees and not what the reference index records.
+        exports.add(element.name.text);
       }
       continue;
     }
@@ -184,19 +254,22 @@ export const extractExports = (content: string): string[] => {
       continue;
     }
 
+    if (!hasModifier(statement, ts.SyntaxKind.ExportKeyword)) {
+      continue;
+    }
+    // Type-only declarations have no runtime binding — see the header.
+    if (ts.isTypeAliasDeclaration(statement) || ts.isInterfaceDeclaration(statement)) {
+      continue;
+    }
     if (
-      !hasModifier(statement, ts.SyntaxKind.ExportKeyword) ||
       !(
         ts.isFunctionDeclaration(statement) ||
         ts.isClassDeclaration(statement) ||
-        ts.isTypeAliasDeclaration(statement) ||
-        ts.isInterfaceDeclaration(statement) ||
         ts.isEnumDeclaration(statement)
       )
     ) {
       continue;
     }
-
     const name = declarationName(statement);
     if (name) {
       exports.add(name);
@@ -234,26 +307,45 @@ export const extractExports = (content: string): string[] => {
   return [...exports].filter((symbol) => !symbol.startsWith('_')).sort();
 };
 
+// ── Production reference index ───────────────────────────────────────────
+
 /**
  * Check if a reference is in a production (non-test, non-declaration) file.
  * Returns false for:
  *   - *.test.ts, *.spec.ts
  *   - __tests__/ directories
  *   - *.d.ts declaration files
+ *   - apps/e2e/
+ */
+/**
+ * Check if a reference is in a production (non-test, non-declaration) file.
+ *
+ * Returns false for:
+ *   - *.test.ts, *.spec.ts
+ *   - __tests__/ directories
+ *   - *.d.ts declaration files
+ *   - anything under `apps/e2e/`
+ *
+ * 🔴 Every check is anchored to a path SEGMENT, and the path is normalised to a
+ * leading slash first. The e2e check used to be `includes('/apps/e2e/')`, which
+ * silently missed a repo-relative `apps/e2e/src/pom/x.ts` — the walker happens
+ * to pass absolute paths, so the branch looked exercised while a relative path
+ * (a fixture, a test, a future caller) fell through it and was reported as
+ * production code.
  */
 export const isProductionFile = (filePath: string): boolean => {
   const normalized = filePath.replace(/\\/g, '/');
-  if (normalized.includes('/__tests__/')) {
+  const anchored = normalized.startsWith('/') ? normalized : `/${normalized}`;
+  if (anchored.includes('/__tests__/')) {
     return false;
   }
-  if (/\.(test|spec)\.(ts|svelte)$/.test(normalized)) {
+  if (/\.(test|spec)\.(ts|svelte)$/.test(anchored)) {
     return false;
   }
-  if (normalized.endsWith('.d.ts')) {
+  if (anchored.endsWith('.d.ts')) {
     return false;
   }
-  // Exclude e2e test files
-  if (normalized.includes('/apps/e2e/')) {
+  if (anchored.includes('/apps/e2e/')) {
     return false;
   }
   return true;
@@ -319,13 +411,40 @@ const sourceReferenceNames = (sourceFile: ts.SourceFile): Set<string> => {
   return names;
 };
 
-type ProductionSource = {
-  filePath: string;
-  sourceFile: ts.SourceFile;
+/**
+ * Extract property access expressions (e.g. `MyService.initialize()`) from a
+ * source file, keyed `object.method`. Only captures patterns where the object
+ * is a simple identifier — not a computed or chained expression.
+ */
+const extractPropertyAccessReferences = (sourceFile: ts.SourceFile): Set<string> => {
+  const refs = new Set<string>();
+  const visit = (node: ts.Node): void => {
+    if (
+      ts.isPropertyAccessExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      ts.isIdentifier(node.name)
+    ) {
+      const propertyName = node.name.text;
+      if (
+        propertyName !== 'constructor' &&
+        !propertyName.startsWith('_') &&
+        !isTypeOnlyNode(node) &&
+        !isDeclarationIdentifier(node.name)
+      ) {
+        refs.add(`${node.expression.text}.${propertyName}`);
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+  return refs;
 };
+
+type ProductionSource = { filePath: string; sourceFile: ts.SourceFile };
 
 let productionSourcesCache: ProductionSource[] | undefined;
 let productionReferenceIndexCache: Map<string, Set<string>> | undefined;
+let propertyAccessIndexCache: Map<string, Set<string>> | undefined;
 
 /** Extracts executable script and template-expression code from a Svelte component. */
 export const extractSvelteCode = (content: string): string => {
@@ -448,21 +567,41 @@ const productionReferenceIndex = (): Map<string, Set<string>> => {
   }
 
   const index = new Map<string, Set<string>>();
+  const propIndex = new Map<string, Set<string>>();
+
   for (const source of productionSources()) {
     for (const name of sourceReferenceNames(source.sourceFile)) {
       const files = index.get(name) ?? new Set<string>();
       files.add(source.filePath);
       index.set(name, files);
     }
+    for (const propRef of extractPropertyAccessReferences(source.sourceFile)) {
+      const files = propIndex.get(propRef) ?? new Set<string>();
+      files.add(source.filePath);
+      propIndex.set(propRef, files);
+    }
   }
+
   productionReferenceIndexCache = index;
+  propertyAccessIndexCache = propIndex;
   return index;
 };
 
 /**
- * Scan for references to a symbol across the production codebase.
- * Counts the number of files (not occurrences) that reference the symbol
- * outside of its own declaration file.
+ * Resolve production references to a symbol with import-ownership awareness.
+ *
+ * For bare symbols (no dot), uses the bare-identifier index.
+ *
+ * For `ClassName.methodName` symbols, first checks the property-access index
+ * for exact `ClassName.methodName` matches, so `OtherService.initialize()` does
+ * not count as a reference to `MyService.initialize()`. As a secondary
+ * fallback, checks the bare method-name index to catch a differently-named
+ * variable holding the instance. Both indices must be empty before a method is
+ * declared orphaned.
+ *
+ * References in the declaring file do not count: the declaration is not a
+ * consumer, and an export that only its own module calls is not a public
+ * capability.
  */
 export const findProductionReferences = (options: {
   symbol: string;
@@ -470,47 +609,44 @@ export const findProductionReferences = (options: {
 }): string[] => {
   const { symbol, declaringFile } = options;
   const normalizedDeclaring = declaringFile.replace(/\\/g, '/');
-  const referenceName = symbol.includes('.') ? symbol.slice(symbol.lastIndexOf('.') + 1) : symbol;
-  return [...(productionReferenceIndex().get(referenceName) ?? [])].filter(
+
+  productionReferenceIndex();
+
+  if (!symbol.includes('.')) {
+    return [...(productionReferenceIndexCache?.get(symbol) ?? [])].filter(
+      (filePath) => filePath !== normalizedDeclaring,
+    );
+  }
+
+  const methodName = symbol.slice(symbol.lastIndexOf('.') + 1);
+  const exactFiles = [...(propertyAccessIndexCache?.get(symbol) ?? [])].filter(
+    (filePath) => filePath !== normalizedDeclaring,
+  );
+  if (exactFiles.length > 0) {
+    return exactFiles;
+  }
+  return [...(productionReferenceIndexCache?.get(methodName) ?? [])].filter(
     (filePath) => filePath !== normalizedDeclaring,
   );
 };
 
-/** Compute a simple hash for a list of orphan symbols (for identity-aware comparison). */
-const orphanHash = (symbols: string[]): string => {
-  const sorted = [...symbols].sort();
-  const input = sorted.join(',');
-  let hash = 2166136261 >>> 0;
-  for (let i = 0; i < input.length; i++) {
-    hash ^= input.charCodeAt(i);
-    hash = Math.imul(hash, 16777619) >>> 0;
-  }
-  return hash.toString(16).padStart(8, '0').slice(0, 8);
-};
+// ── Main ─────────────────────────────────────────────────────────────────
 
-// ── Main ────────────────────────────────────────────────────
-
-const main = () => {
-  if (process.env.AIKAMI_GUARD_PROJECT && process.env.AIKAMI_GUARD_PROJECT !== 'scripts') {
-    return;
-  }
-
+const main = (): void => {
   const args = process.argv.slice(2);
-  const updateBaseline = args.includes('--update-baseline');
-  const showAll = args.includes('--show-all');
-
-  // Load baseline
-  let baseline: Baseline = {};
-  if (existsSync(BASELINE_PATH) && !showAll) {
-    try {
-      baseline = JSON.parse(readFileSync(BASELINE_PATH, 'utf-8')) as Baseline;
-    } catch {
-      baseline = {};
-    }
-  }
-
-  const allReports: OrphanReport[] = [];
   const serviceFiles = collectServiceFiles();
+  // The Evidence Matrix seam lives in guards/evidence_matrix.ts — see that
+  // module's header for why it exists and why it is reported, not hidden.
+  const evidenceSymbols = evidenceMatrixSymbols({
+    contractsDir: CONTRACTS_DIR_PATH,
+    servicesDir: SERVICES_DIR,
+    root: ROOT,
+    excludedDirs: EXCLUDED_DIRS,
+    serviceFiles,
+    exportedServiceClasses,
+  });
+  const violations: RatchetViolation[] = [];
+  const rescued: string[] = [];
 
   for (const filePath of serviceFiles) {
     const content = readFileSync(filePath, 'utf-8');
@@ -520,124 +656,56 @@ const main = () => {
     }
 
     const fileRelPath = relPath(filePath);
-    const orphanedSymbols: string[] = [];
-
     for (const symbol of exports) {
-      const refs = findProductionReferences({ symbol, declaringFile: filePath });
-      // Also check if the declaring file itself references the symbol
-      // (the declaration itself doesn't count as production use)
-      const externalRefs = refs.filter((r) => r !== fileRelPath);
-
-      if (externalRefs.length === 0) {
-        orphanedSymbols.push(symbol);
-      }
-    }
-
-    if (orphanedSymbols.length > 0) {
-      allReports.push({ file: fileRelPath, symbols: orphanedSymbols.sort() });
-    }
-  }
-
-  // ── Compare against baseline ──────────────────────────────
-
-  let exitCode = 0;
-  const annotations: string[] = [];
-
-  if (updateBaseline) {
-    // Write new baseline from current scan
-    const newBaseline: Baseline = {};
-    for (const report of allReports) {
-      const existing = baseline[report.file];
-      newBaseline[report.file] = {
-        orphaned: report.symbols,
-        ...(existing?._comment ? { _comment: existing._comment } : {}),
-      };
-    }
-    writeFileSync(BASELINE_PATH, `${JSON.stringify(newBaseline, null, 2)}\n`, 'utf-8');
-    console.log(`✅ Baseline updated: ${Object.keys(newBaseline).length} file(s) with orphans`);
-    process.exit(0);
-  }
-
-  // Check for regressions and improvements
-  for (const report of allReports) {
-    const baselineEntry = baseline[report.file];
-    const currentHash = orphanHash(report.symbols);
-
-    if (!baselineEntry) {
-      // New orphan — regression
-      console.log(`❌ NEW ORPHAN: ${report.file} — ${report.symbols.join(', ')}`);
-      annotations.push(`error:New orphan in ${report.file}: ${report.symbols.join(', ')}`);
-      exitCode = 1;
-    } else {
-      const baselineHash = orphanHash(baselineEntry.orphaned);
-      if (currentHash !== baselineHash) {
-        // Changed — could be improvement or regression or same-count replacement
-        if (report.symbols.length < baselineEntry.orphaned.length) {
-          // Improvement — must be locked in
-          console.log(
-            `⚠️  IMPROVEMENT NOT LOCKED: ${report.file} — ${baselineEntry.orphaned.length} → ${report.symbols.length}. Run --update-baseline to lock.`,
-          );
-          annotations.push(`warning:Improved but not locked: ${report.file}`);
-          exitCode = 1;
-        } else {
-          // Regression or same-count replacement
-          console.log(
-            `❌ REGRESSION: ${report.file} — baseline had ${baselineEntry.orphaned.join(', ')}; found ${report.symbols.join(', ')}`,
-          );
-          annotations.push(`error:Regression in ${report.file}: ${report.symbols.join(', ')}`);
-          exitCode = 1;
-        }
-      }
-    }
-  }
-
-  // Check for baselined entries that no longer exist (should be removed)
-  for (const [filePath, entry] of Object.entries(baseline)) {
-    const report = allReports.find((r) => r.file === filePath);
-    if (!report) {
-      // File no longer exists or has no orphans — improvement
-      console.log(
-        `⚠️  IMPROVEMENT NOT LOCKED: ${filePath} — all ${entry.orphaned.length} orphan(s) resolved. Run --update-baseline to lock.`,
+      const externalRefs = findProductionReferences({ symbol, declaringFile: filePath }).filter(
+        (ref) => ref !== fileRelPath,
       );
-      annotations.push(`warning:Resolved but not locked: ${filePath}`);
-      exitCode = 1;
-    }
-  }
-
-  // Print summary
-  if (exitCode === 0) {
-    if (allReports.length === 0) {
-      console.log('✅ No orphaned capabilities found.');
-    } else {
-      console.log(`✅ All ${allReports.length} orphaned capability file(s) match baseline.`);
-      if (!showAll) {
-        console.log('   Run --show-all to see full list.');
+      if (externalRefs.length > 0) {
+        continue;
       }
+      // A symbol named by a contract Evidence Matrix Production Path counts as
+      // in-use — see the header for why this seam exists and why it is visible.
+      if (evidenceSymbols.get(symbol)?.has(filePath)) {
+        rescued.push(`${fileRelPath}: ${symbol}`);
+        continue;
+      }
+      violations.push({
+        file: fileRelPath,
+        rule: 'orphans',
+        line: 1,
+        message: `exported runtime capability \`${symbol}\` has no production consumer (test-only or unused)`,
+        identity: symbol,
+      });
     }
   }
 
-  // In --show-all mode, print everything
-  if (showAll) {
-    console.log('\n📋 All current orphaned capabilities:');
-    for (const report of allReports) {
-      console.log(`  ${report.file}: ${report.symbols.join(', ')}`);
-    }
-    if (allReports.length === 0) {
-      console.log('  (none)');
+  if (args.includes('--show-all')) {
+    console.log(`ℹ️  ${violations.length} orphaned capability symbol(s) found (baseline ignored)`);
+    if (rescued.length > 0) {
+      console.log(
+        `\n⚠️  ${rescued.length} symbol(s) held open by a contract Evidence Matrix Production Path, not by code:`,
+      );
+      for (const entry of rescued.sort()) {
+        console.log(`      ${entry}`);
+      }
+      console.log(
+        '   These are NOT code references. If the contract is stale, the symbol is orphaned.',
+      );
     }
   }
 
-  // Send annotations (GHA only — annotate always emits ::error)
-  for (const annotation of annotations) {
-    const [, ...msgParts] = annotation.split(':');
-    annotate({
-      file: '',
-      line: 0,
-      message: msgParts.join(':'),
-    });
-  }
-
-  process.exit(exitCode);
+  runRatchet({
+    name: 'orphaned-capability',
+    root: ROOT,
+    baselinePath: BASELINE_PATH,
+    baselineRelPath: BASELINE_REL_PATH,
+    rules: RULE_SPECS,
+    violations,
+    hardFailures: 0,
+    identityAware: true,
+    args,
+    summary: `${new Set(violations.map((violation) => violation.file)).size} file(s) with orphans`,
+  });
 };
 
 if (import.meta.main) {

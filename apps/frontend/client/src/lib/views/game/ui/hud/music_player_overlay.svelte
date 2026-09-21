@@ -8,10 +8,8 @@
 // Contract: C-150 (audio engine), C-249 (music tags)
 
 import { BaseViewModelContainer } from '$components';
-import {
-  getMusicPlayerViewModel,
-  type MusicPlayerViewModelInterface,
-} from './music_player_view_model.svelte';
+import { getMusicPlayerViewModel } from './music_player_composition.ts';
+import type { MusicPlayerViewModelInterface } from './music_player_view_model.svelte';
 
 type Props = {
   viewModel?: MusicPlayerViewModelInterface;
@@ -34,7 +32,7 @@ const playPauseTitle = $derived.by(() => {
 <BaseViewModelContainer {viewModel}>
   {#if viewModel.visible}
     <section
-      class="pointer-events-auto absolute bottom-20 left-3 z-40 flex w-72 flex-col gap-1 rounded-xl border border-base-content/10 bg-base-200/90 p-3 shadow-2xl backdrop-blur-md"
+      class="pointer-events-auto absolute bottom-20 left-3 z-10 flex w-72 flex-col gap-1 rounded-xl border border-base-content/10 bg-base-200/90 p-3 shadow-2xl backdrop-blur-md"
       aria-label="Music player"
       data-testid="music-player-overlay"
     >
@@ -42,9 +40,7 @@ const playPauseTitle = $derived.by(() => {
       <div class="flex items-start justify-between gap-2">
         <div class="min-w-0 flex-1">
           <p
-            class="truncate text-sm font-bold text-primary {viewModel.hasActiveTrack
-              ? ''
-              : 'text-base-content/40'}"
+            class="truncate text-sm font-bold text-primary {viewModel.hasActiveTrack ? '' : 'text-base-content/40'}"
             title={viewModel.currentTrackTitle}
           >
             🎵 {viewModel.currentTrackTitle}
@@ -96,8 +92,8 @@ const playPauseTitle = $derived.by(() => {
           onclick={() => viewModel.skip()}
           aria-label="Skip to similar song"
           title={viewModel.hasSimilarTracks
-            ? 'Play another song matching this vibe'
-            : 'No other similar track available'}
+  ? 'Play another song matching this vibe'
+  : 'No other similar track available'}
           disabled={!viewModel.hasSimilarTracks}
         >
           ⏭

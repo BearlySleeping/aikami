@@ -1,265 +1,57 @@
 // apps/frontend/client/src/lib/services/game/game_overlay_service.svelte.ts
 /** biome-ignore-all lint/style/useNamingConvention: GameOverlayType enum-like keys use SCREAMING_SNAKE_CASE */
 
-import type { EngineBridge, InteractableStateMap } from '@aikami/frontend/engine';
-import {
-  BaseFrontendClass,
-  type BaseFrontendClassInterface,
-  type BaseFrontendClassOptions,
-  routerService,
-} from '@aikami/frontend/services';
-import {
-  audioService,
-  campaignService,
-  configService,
-  gameModeService,
-  gameSaveService,
-  sessionService,
-  worldStateService,
-} from '$services';
+import { featureFlags } from '@aikami/frontend/configs';
+import type {
+  EncounterRosterPayload,
+  EngineBridge,
+  InteractableStateMap,
+} from '@aikami/frontend/engine';
+import { BaseFrontendClass } from '@aikami/frontend/services/base';
+import { routerService } from '@aikami/frontend/services/router';
+import type { CombatEngineKind } from '@aikami/types';
 import type { AutoSaveStatus, DialogueNpcData, GameOverlayType, OverlayStackEntry } from '$types';
 import { playSceneBgm, playSfxByName } from '../audio/audio_asset_resolver';
+import { audioService } from '../audio/audio_service.svelte.ts';
+import { campaignService } from '../campaign/campaign_service.svelte.ts';
+import { configService } from '../config/config_service.svelte.ts';
+import { contextualTriggerService } from '../image/contextual_trigger_service.svelte.ts';
 import { setupBridgeListeners } from './bridge_listeners';
 import { combatService } from './combat_service.svelte';
 import { gameEngineService } from './game_engine_service.svelte';
+import { isConsumedOrComposing, isEditableTarget } from './game_input_guard.ts';
+import { gameModeService } from './game_mode_service.svelte.ts';
+// GameOverlayService — overlay router for the game UI layer. C-332 replaced the
+// flat active-overlay toggle with an explicit stack; Escape always pops exactly
+// one layer.
+//
+// The public contract lives in `game_overlay_types.ts` (C-525 R-5); the aliases
+// below re-declare it because the service-conventions guard requires a
+// `*_service.svelte.ts` file to own its `*ServiceOptions`/`*ServiceInterface`.
+import {
+  COMBAT_START_OVERLAY_UNAVAILABLE_KEY,
+  type CombatStartOutcome,
+  type GameOverlayServiceInterface as GameOverlayServiceContract,
+  type GameOverlayServiceOptions as GameOverlayServiceContractOptions,
+  type OverlayEventHandlers,
+} from './game_overlay_types.ts';
 import { parseSavePayloadEnvelope, validateEnvelopeChecksum } from './game_save_envelope.ts';
 import type { GameSaveServiceInterface } from './game_save_service.svelte.ts';
-import { GameSaveService } from './game_save_service.svelte.ts';
+import { gameSaveService } from './game_save_service.svelte.ts';
 import { inputActionService } from './input_action_service.svelte.ts';
 import { npcDialogueService } from './npc_dialogue_service.svelte';
 import { onboardingHintService } from './onboarding_hint_service.svelte.ts';
+import { applyOverlayModeTransition } from './overlay_combat_mode.ts';
+import { OVERLAY_COMPATIBILITY } from './overlay_compatibility.ts';
 import { partyFollowService } from './party_follow_service.svelte.ts';
 import { playerStateService } from './player_state_service.svelte';
 import { buildSaveMapBlock, getCurrentMapName } from './save_map_block';
+import { sessionService } from './session_service.svelte.ts';
 import { timeService } from './time_service.svelte';
+import { worldStateService } from './world_state_service.svelte.ts';
 
-// ---------------------------------------------------------------------------
-// GameOverlayService — overlay router for the game UI layer.
-//
-// C-332: Replaces flat active-overlay toggle with an explicit overlay stack.
-// Pressing Escape always pops the top overlay — exactly one layer at a time.
-// ---------------------------------------------------------------------------
-
-/**
- * Overlay compatibility matrix — which overlay types can be pushed over
- * the current active overlay.
- *
- * Row = current active overlay, Column = overlay being opened.
- * 'allow'  = allowed
- * 'block'  = silently ignored
- * 'clear'  = clear stack first, then push (e.g. combat wipes non-combat overlays)
- */
-type OverlayCompatibility = 'allow' | 'block' | 'clear';
-
-const OVERLAY_COMPATIBILITY: Record<
-  GameOverlayType,
-  Partial<Record<GameOverlayType, OverlayCompatibility>>
-> = {
-  NONE: {
-    PAUSE_MENU: 'allow',
-    DIALOGUE: 'allow',
-    COMBAT: 'allow',
-    INVENTORY: 'allow',
-    QUEST_LOG: 'allow',
-    GAME_OVER: 'allow',
-    CHARACTER_DASHBOARD: 'allow',
-    VENDOR: 'allow',
-    END_SESSION: 'allow',
-    PARTY_ROSTER: 'allow',
-    REPUTATION: 'allow',
-  },
-  PAUSE_MENU: {
-    INVENTORY: 'allow',
-    QUEST_LOG: 'allow',
-    CHARACTER_DASHBOARD: 'allow',
-    END_SESSION: 'allow',
-    SETTINGS: 'allow',
-    REPUTATION: 'allow',
-  },
-  DIALOGUE: {
-    COMBAT: 'clear',
-    GAME_OVER: 'clear',
-  },
-  COMBAT: {
-    GAME_OVER: 'clear',
-  },
-  INVENTORY: {
-    PAUSE_MENU: 'allow',
-  },
-  QUEST_LOG: {
-    PAUSE_MENU: 'allow',
-  },
-  CHARACTER_DASHBOARD: {
-    PAUSE_MENU: 'allow',
-  },
-  VENDOR: {
-    PAUSE_MENU: 'allow',
-  },
-  GAME_OVER: {},
-  END_SESSION: {},
-  SETTINGS: {},
-  PARTY_ROSTER: {
-    PAUSE_MENU: 'allow',
-    TALK_TO_PARTY: 'allow',
-  },
-  TALK_TO_PARTY: {
-    PAUSE_MENU: 'allow',
-  },
-  REPUTATION: {
-    PAUSE_MENU: 'allow',
-  },
-};
-
-type OverlayEventHandlers = {
-  onDialogueStart(npcData: DialogueNpcData): void;
-  onDialogueEnd(): void;
-  onCombatStart(event: {
-    enemyName: string;
-    enemyHp: number;
-    enemyMaxHp: number;
-    participantIds: number[];
-    firstTurnEntityId: number;
-  }): void;
-  onCombatEnd(options: { victory: boolean }): void;
-  onInventoryOpen(): void;
-  onInventoryClose(): void;
-  onQuestLogOpen(): void;
-  onQuestLogClose(): void;
-  onDashboardOpen(): void;
-  onDashboardClose(): void;
-  onVendorOpen(options: { vendorId: string; vendorName: string; vendorInventory: string }): void;
-  onVendorClose(): void;
-  onCameraZoomUpdate(event: { npcScreenX?: number; npcScreenY?: number }): void;
-};
-
-export type GameOverlayServiceInterface = BaseFrontendClassInterface & {
-  readonly activeOverlay: GameOverlayType;
-  readonly overlayStack: readonly OverlayStackEntry[];
-  readonly stackDepth: number;
-  readonly dialogueNpc: DialogueNpcData | undefined;
-  readonly isSaving: boolean;
-  readonly saveMessage: string | undefined;
-  readonly isTransitioning: boolean;
-  readonly autoSaveStatus: AutoSaveStatus;
-  readonly useOllama: boolean;
-  readonly textProvider: { endpoint: string } | undefined;
-
-  initialize(): Promise<void>;
-  setEngineService(
-    service: import('./game_engine_service.svelte').GameEngineServiceInterface,
-  ): void;
-
-  handleKeyDown(event: KeyboardEvent): void;
-  resumeGame(): void;
-  goToSettings(): Promise<void>;
-  quitToMainMenu(): Promise<void>;
-  endDialogue(): void;
-  saveGame(): Promise<void>;
-  respawnPlayer(): Promise<void>;
-  loadLastSave(): Promise<void>;
-  openVendor(options: { vendorId: string; vendorName: string; vendorInventory: string }): void;
-  closeVendor(): void;
-  openInventory(): void;
-  closeInventory(): void;
-  openQuestLog(): void;
-  closeQuestLog(): void;
-  openCharacterDashboard(): void;
-  closeCharacterDashboard(): void;
-
-  // ── Party Roster (C-340) ──
-  openPartyRoster(): void;
-  closePartyRoster(): void;
-
-  // ── Talk to Party (C-340) ──
-  openTalkToParty(options: { npcId: string; name: string }): void;
-  closeTalkToParty(): void;
-  readonly talkToPartyOptions: { npcId: string; name: string } | undefined;
-
-  // ── Reputation (C-341) ──
-  openReputation(): void;
-  closeReputation(): void;
-
-  startCombat(options: {
-    enemyName: string;
-    /** Encounter ID so victory loot/quest triggers resolve (C-316). */
-    encounterId?: string | null;
-  }): void;
-
-  // ── Auto-Save Scheduling (C-334) ──
-
-  /** Starts the auto-save interval timer. Called after engine init. */
-  startAutoSaveScheduler(): void;
-  /** Stops and clears the auto-save interval timer. */
-  stopAutoSaveScheduler(): void;
-  /** Whether the auto-save scheduler is currently running. */
-  readonly autoSaveSchedulerActive: boolean;
-
-  // ── Session Management (C-240) ──
-
-  /** Opens the End Session confirmation dialog overlay. */
-  openEndSession(): void;
-  /** Closes the End Session overlay without ending. */
-  closeEndSession(): void;
-  /** Executes the end-session flow: lock chat, summarize, save. */
-  endSession(): Promise<void>;
-  /** Starts a new session after previous ended. */
-  startNewSession(): Promise<void>;
-
-  /** Resets onboarding hints for replay (C-327 AC-4). */
-  replayOnboarding(): void;
-
-  /** Intent-driven methods for bridge_listeners (not for general use). */
-  setBridge(bridge: EngineBridge): void;
-  setActive(type: GameOverlayType): void;
-  clearActive(): void;
-
-  // ── Overlay Stack (C-332) ──
-
-  /** Push an overlay onto the stack. Respects the compatibility matrix. Returns true if pushed successfully. */
-  pushOverlay(type: GameOverlayType): boolean;
-  /** Pop the top overlay. Restores focus to the element that had focus before. */
-  popOverlay(): void;
-  /** Replace the top overlay (pop then push). */
-  replaceOverlay(type: GameOverlayType): void;
-  /** Clear the entire overlay stack (terminal state — combat, game over). */
-  clearStack(): void;
-  /** Check if a given overlay type can be opened over the current state. */
-  canOpenOverlay(type: GameOverlayType): boolean;
-  setTransitioning(value: boolean): void;
-  getDefeatedEnemies(): string[];
-  /** Returns the per-spawnId interactable state map for map-load persistence (C-342). */
-  getInteractableStates(): InteractableStateMap;
-  /** Returns the collected item pickup spawn IDs for map-load suppression (C-331). */
-  getCollectedPickups(): string[];
-  setCameraZoom(options: { npcScreenX?: number; npcScreenY?: number }): void;
-  onInventoryCountChange(newCount: number): void;
-  onMapLoaded(): void;
-
-  /** Internal camera zoom state (read by GameUIViewModel for dialogue spatial UI). */
-  readonly _cameraZoomNpcScreenX: number | undefined;
-  readonly _cameraZoomNpcScreenY: number | undefined;
-  readonly vendorSessionOptions:
-    | { vendorId: string; vendorName: string; vendorInventory: string }
-    | undefined;
-  /** Interaction prompt label (C-327 AC-2). */
-  readonly interactionPromptLabel: string;
-  /** Whether the interaction prompt is visible (C-327 AC-2). */
-  readonly interactionPromptVisible: boolean;
-  /** Sets the interaction prompt state (called by bridge_listeners). */
-  setInteractionPrompt(options: {
-    label: string;
-    visible: boolean;
-    targetMetadata?: { verb: string; targetName: string };
-  }): void;
-
-  /** C-334: Checks for a stale session_active marker (crash detection). Returns the campaign ID or undefined. */
-  checkSessionMarker(): Promise<string | undefined>;
-
-  /** C-334: Clears the session_active marker (e.g. from the start menu after recovery). */
-  clearSessionMarker(): Promise<void>;
-};
-
-export type GameOverlayServiceOptions = BaseFrontendClassOptions;
+export type GameOverlayServiceInterface = GameOverlayServiceContract;
+export type GameOverlayServiceOptions = GameOverlayServiceContractOptions;
 
 export class GameOverlayService
   extends BaseFrontendClass<GameOverlayServiceOptions>
@@ -320,7 +112,6 @@ export class GameOverlayService
   private _useOllama = false;
   private _settingsLoaded = false;
   private _bridge: EngineBridge | undefined;
-  private _saveService: GameSaveServiceInterface | undefined;
   private _initialized = false;
   private _engineService:
     | import('./game_engine_service.svelte').GameEngineServiceInterface
@@ -343,12 +134,14 @@ export class GameOverlayService
       inputActionService,
       onboardingHintService,
       partyFollowService,
+      contextualTriggerService,
     });
   }
 
   /** Sets the engine bridge for save operations. Called by setupBridgeListeners. */
   setBridge(bridge: EngineBridge): void {
     this._bridge = bridge;
+    gameSaveService.configureBridge(bridge);
   }
 
   /** Intent-driven overlay activation — called by bridge listeners only. */
@@ -357,7 +150,9 @@ export class GameOverlayService
       this.clearStack();
       return;
     }
-    this.pushOverlay(type);
+    if (this.pushOverlay(type)) {
+      applyOverlayModeTransition({ type, modeService: gameModeService });
+    }
   }
 
   /** Resets overlay to NONE. */
@@ -412,9 +207,8 @@ export class GameOverlayService
     this.interactionPromptVisible = false;
 
     // ── C-332: Flush stale key state when overlay opens ──
-    // Prevents key-state poisoning where the browser's internal key-repeat
-    // survives the overlay transition, causing subsequent keyDown events
-    // to be treated as OS repeats and silently dropped.
+    // Prevents key-state poisoning where the browser's key-repeat survives
+    // the overlay transition and subsequent keyDown events are silently dropped.
     gameEngineService.flushInput();
 
     return true;
@@ -692,10 +486,8 @@ export class GameOverlayService
       clearTimeout(this._mapTransitionDebounce);
     }
 
-    // Trigger auto-save 1s after map transitions (zoned to a new map).
-    // Do NOT auto-save on the very first map load during boot — the
-    // engine tick loop is still stabilizing and snapshotWorld can
-    // race with the setTimeout-based tick rescheduling.
+    // Trigger auto-save 1s after map transitions. NOT on the first map load
+    // during boot — the tick loop is stabilizing and snapshotWorld can race.
     if (this._firstMapLoaded) {
       this._mapTransitionDebounce = setTimeout(() => {
         void this._triggerAutoSave();
@@ -716,7 +508,7 @@ export class GameOverlayService
   private async _triggerAutoSave(): Promise<void> {
     this.autoSaveStatus = 'saving';
     try {
-      const saveService = this._getOrCreateSaveService();
+      const saveService = this._getSaveService();
       if (!saveService) {
         this.autoSaveStatus = 'error';
         return;
@@ -785,16 +577,15 @@ export class GameOverlayService
   }
 
   handleKeyDown(event: KeyboardEvent): void {
+    // C-527 AC-3 — honour a higher-priority scope and IME composition first.
+    if (isConsumedOrComposing(event)) {
+      return;
+    }
+
     // When the user is typing in an input/textarea, skip game action
     // processing (wasd movement, etc.) so keystrokes reach the text field.
     // However, Escape must still be processed to allow closing overlays.
-    const target = event.target as HTMLElement | null;
-    const isInputField =
-      target &&
-      (target.tagName === 'INPUT' ||
-        target.tagName === 'TEXTAREA' ||
-        target.tagName === 'SELECT' ||
-        target.isContentEditable);
+    const isInputField = isEditableTarget(event.target);
 
     if (isInputField && event.key !== 'Escape') {
       return;
@@ -851,6 +642,16 @@ export class GameOverlayService
         return;
       }
 
+      if (this.activeOverlay === 'JOURNAL') {
+        this.closeJournal();
+        return;
+      }
+
+      if (this.activeOverlay === 'WORLD') {
+        this.closeWorld();
+        return;
+      }
+
       if (this.activeOverlay === 'CHARACTER_DASHBOARD') {
         this.closeCharacterDashboard();
         return;
@@ -868,6 +669,13 @@ export class GameOverlayService
 
       if (this.activeOverlay === 'PARTY_ROSTER') {
         this.closePartyRoster();
+        return;
+      }
+
+      // Combat dismisses cleanly (C-500): resume the engine so a rapid
+      // Escape right after combat starts cannot leave the world paused.
+      if (this.activeOverlay === 'COMBAT') {
+        this.closeCombat();
         return;
       }
 
@@ -1011,7 +819,7 @@ export class GameOverlayService
     this.isSaving = true;
     this.saveMessage = undefined;
     try {
-      const saveService = this._getOrCreateSaveService();
+      const saveService = this._getSaveService();
       if (!saveService) {
         throw new Error('Engine bridge not available for save');
       }
@@ -1108,7 +916,7 @@ export class GameOverlayService
       }
 
       // Load the most recent save
-      const saveService = this._getOrCreateSaveService();
+      const saveService = this._getSaveService();
       if (!saveService) {
         this.warn('loadLastSave:no-bridge');
         return;
@@ -1117,10 +925,9 @@ export class GameOverlayService
       const latestSave = saves[0];
       this.debug('loadLastSave', { slotId: latestSave.id, mapName: latestSave.mapName });
 
-      // Map-authoritative load for v3+ saves: validate + hydrate domain
-      // services, rebuild the saved map, then overlay the player snapshot.
-      // Legacy v2/plain payloads fall back to the old full-world restore
-      // path (loadGame does its own validation + hydration).
+      // Map-authoritative load for v3+ saves: validate + hydrate, rebuild the
+      // map, then overlay the player snapshot. Legacy v2/plain payloads fall
+      // back to the full-world restore path (loadGame validates + hydrates).
       const rawPayload = await saveService.getRawSavePayload(latestSave.id);
       const { ecsSnapshot, serviceSnapshots, version, storedChecksum, map } =
         parseSavePayloadEnvelope(rawPayload);
@@ -1184,98 +991,82 @@ export class GameOverlayService
   }
 
   openVendor(options: { vendorId: string; vendorName: string; vendorInventory: string }): void {
-    const success = this.pushOverlay('VENDOR');
-    if (!success) {
-      return;
-    }
-    gameModeService.setMode('MENU');
-    this._engineService?.pauseEngine();
-    this.vendorSessionOptions = options;
+    this._enterManagementOverlay('VENDOR', () => {
+      this.vendorSessionOptions = options;
+    });
   }
 
   closeVendor(): void {
-    this.popOverlay();
-    if (this.activeOverlay === 'NONE') {
-      gameModeService.setMode('EXPLORE');
-      this._engineService?.resumeEngine();
-    }
-    this._handlers?.onVendorClose();
+    this._exitManagementOverlay(() => this._handlers?.onVendorClose());
   }
 
   openInventory(): void {
-    const success = this.pushOverlay('INVENTORY');
-    if (!success) {
-      return;
-    }
-    gameModeService.setMode('MENU');
-    this._engineService?.pauseEngine();
-    this._handlers?.onInventoryOpen();
+    this._enterManagementOverlay('INVENTORY', () => this._handlers?.onInventoryOpen());
   }
 
   closeInventory(): void {
-    this.popOverlay();
-    if (this.activeOverlay === 'NONE') {
-      gameModeService.setMode('EXPLORE');
-      this._engineService?.resumeEngine();
-    }
-    this._handlers?.onInventoryClose();
+    this._exitManagementOverlay(() => this._handlers?.onInventoryClose());
   }
 
   openQuestLog(): void {
-    const success = this.pushOverlay('QUEST_LOG');
-    if (!success) {
-      return;
-    }
-    gameModeService.setMode('MENU');
-    this._engineService?.pauseEngine();
-    this._handlers?.onQuestLogOpen();
+    this._enterManagementOverlay('QUEST_LOG', () => this._handlers?.onQuestLogOpen());
   }
 
   closeQuestLog(): void {
-    this.popOverlay();
-    if (this.activeOverlay === 'NONE') {
-      gameModeService.setMode('EXPLORE');
-      this._engineService?.resumeEngine();
-    }
-    this._handlers?.onQuestLogClose();
+    this._exitManagementOverlay(() => this._handlers?.onQuestLogClose());
   }
 
-  openCharacterDashboard(): void {
-    const success = this.pushOverlay('CHARACTER_DASHBOARD');
+  // ── Management overlay helpers ──
+
+  /**
+   * Pushes a management overlay, pauses the world, enters MENU mode, and runs
+   * the optional per-overlay side effect.
+   */
+  private _enterManagementOverlay(type: GameOverlayType, onOpen?: () => void): boolean {
+    const success = this.pushOverlay(type);
     if (!success) {
-      return;
+      return false;
     }
     gameModeService.setMode('MENU');
     this._engineService?.pauseEngine();
-    this._handlers?.onDashboardOpen();
+    onOpen?.();
+    return true;
   }
 
-  closeCharacterDashboard(): void {
+  /** Pops the current overlay, resuming exploration when the stack empties. */
+  private _exitManagementOverlay(onClose?: () => void): void {
     this.popOverlay();
     if (this.activeOverlay === 'NONE') {
       gameModeService.setMode('EXPLORE');
       this._engineService?.resumeEngine();
     }
-    this._handlers?.onDashboardClose();
+    onClose?.();
+  }
+
+  openJournal(): void {
+    this._enterManagementOverlay('JOURNAL');
+  }
+
+  closeJournal(): void {
+    this._exitManagementOverlay();
+  }
+
+  openCharacterDashboard(): void {
+    this._enterManagementOverlay('CHARACTER_DASHBOARD', () => this._handlers?.onDashboardOpen());
+  }
+
+  closeCharacterDashboard(): void {
+    this._exitManagementOverlay(() => this._handlers?.onDashboardClose());
   }
 
   // ── Party Roster (C-340) ──
 
   openPartyRoster(): void {
-    const success = this.pushOverlay('PARTY_ROSTER');
-    if (!success) {
-      return;
-    }
-    gameModeService.setMode('MENU');
-    this._engineService?.pauseEngine();
+    this._enterManagementOverlay('PARTY_ROSTER');
   }
 
   closePartyRoster(): void {
-    this.popOverlay();
-    if (this.activeOverlay === 'NONE') {
-      gameModeService.setMode('EXPLORE');
-      this._engineService?.resumeEngine();
-    }
+    this._exitManagementOverlay();
   }
 
   // ── Talk to Party (C-340) ──
@@ -1300,35 +1091,103 @@ export class GameOverlayService
   }
 
   // ── Reputation (C-341) ──
-
   /** @inheritdoc */
   openReputation(): void {
-    this.pushOverlay('REPUTATION');
-    gameModeService.setMode('MENU');
-    this._engineService?.pauseEngine();
+    this._enterManagementOverlay('REPUTATION');
   }
 
   /** @inheritdoc */
   closeReputation(): void {
-    this.popOverlay();
-    if (this.activeOverlay === 'NONE') {
-      gameModeService.setMode('EXPLORE');
-      this._engineService?.resumeEngine();
-    }
+    this._exitManagementOverlay();
   }
 
-  startCombat(options: { enemyName: string; encounterId?: string | null }): void {
-    combatService.startCombat({
-      enemyName: options.enemyName,
-      enemyHp: 60,
-      enemyMaxHp: 60,
-      participantIds: [1, 2],
-      firstTurnEntityId: 1,
-      encounterId: options.encounterId ?? undefined,
-      setActive: (overlay) => {
-        this.setActive(overlay);
-      },
+  // ── HUD layout editor (C-528) — a registered GameOverlayType, no second router.
+  openHudEditor(): void {
+    this._enterManagementOverlay('HUD_EDITOR');
+  }
+
+  closeHudEditor(): void {
+    this._exitManagementOverlay();
+  }
+
+  // ── World Codex (Phase 4) ──
+
+  /** @inheritdoc */
+  openWorld(): void {
+    this._enterManagementOverlay('WORLD');
+  }
+
+  /** @inheritdoc */
+  closeWorld(): void {
+    this._exitManagementOverlay();
+  }
+
+  /**
+   * Starts a production encounter through the ENGINE (C-516 AC-2).
+   *
+   * The overlay opens immediately and the engine answers with a real
+   * `COMBAT_STARTED` (real participants, real HP), which the bridge listener
+   * forwards to the combat service — there is no hardcoded roster here any
+   * more. `engine` is the resolved `combatEngine` flag, read ONCE here and
+   * pinned on the encounter.
+   */
+  startCombat(options: {
+    enemyName: string;
+    enemyNpcId?: string;
+    encounterId?: string | null;
+    /** Authored roster + its pinned battlefield objects, resolved on the main thread. */
+    roster?: EncounterRosterPayload;
+    /** Deterministic encounter seed (a retry reuses it). */
+    seed?: number;
+    engine?: CombatEngineKind;
+  }): CombatStartOutcome {
+    const encounterId = options.encounterId ?? options.enemyNpcId ?? '';
+    const engine = options.engine ?? featureFlags.combatEngine;
+
+    // Open the combat overlay first: `COMBAT_STARTED` is ignored when another
+    // overlay is active, and the overlay must own the screen while the engine
+    // spawns the roster.
+    this.setActive('COMBAT');
+    if (this.activeOverlay !== 'COMBAT') {
+      // The overlay router refused the activation (an incompatible overlay is
+      // on screen). Starting the engine here would spawn a fight the player
+      // cannot see, so NOTHING is dispatched and the caller gets a typed
+      // reason instead of silence (C-525 R-5).
+      this.debug('startCombat:overlay-unavailable', { encounterId });
+      return {
+        ok: false,
+        reason: 'overlayUnavailable',
+        messageKey: COMBAT_START_OVERLAY_UNAVAILABLE_KEY,
+      };
+    }
+    this._bridge?.send({
+      type: 'COMBAT_START_ENCOUNTER',
+      encounterId,
+      seed: options.seed ?? 0,
+      engine,
+      llmAgentsEnabled: featureFlags.combatLlmAgents,
+      ...(options.roster === undefined ? {} : { roster: options.roster }),
     });
+    this.debug('startCombat:dispatched', {
+      encounterId,
+      engine,
+      rosterSize: options.roster?.participants.length ?? 0,
+    });
+    return { ok: true };
+  }
+
+  /**
+   * Dismisses the combat overlay and restores engine input (C-500). Combat
+   * entry pauses the engine, so the first cleanup clears the stack, restores
+   * EXPLORE, and resumes input. Repeated delayed cleanup is a no-op.
+   */
+  closeCombat(): void {
+    if (this.activeOverlay !== 'COMBAT') {
+      return;
+    }
+    this.clearStack();
+    gameModeService.setMode('EXPLORE');
+    this._engineService?.resumeEngine();
   }
 
   // ── Session Management (C-240) ─────────────────────────────────────
@@ -1398,21 +1257,11 @@ export class GameOverlayService
   // ── Crash Detection Session Marker (C-334 AC-5) ────────────────────
 
   /**
-   * Returns the save service instance, creating it if necessary.
-   * Returns undefined if the engine bridge is not available.
+   * Returns the shared save service when the engine bridge is available.
+   * Returns undefined before the bridge is set (no second writer instance).
    */
-  private _getOrCreateSaveService(): GameSaveServiceInterface | undefined {
-    if (!this._saveService) {
-      if (!this._bridge) {
-        return undefined;
-      }
-      // @ts-expect-error — Generic inference mismatch in BaseClass.create
-      this._saveService = GameSaveService.create({
-        className: 'GameSaveService',
-        bridge: this._bridge,
-      }) as unknown as GameSaveServiceInterface; // guard-ignore lint/type-safety/casting: service interface cast for save service or self-reference
-    }
-    return this._saveService;
+  private _getSaveService(): GameSaveServiceInterface | undefined {
+    return this._bridge ? gameSaveService : undefined;
   }
 
   /**

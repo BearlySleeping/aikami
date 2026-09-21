@@ -8,14 +8,7 @@
 
 import { describe, expect, mock, test } from 'bun:test';
 
-const COMBAT_SVC_PATH =
-  '/home/sonny/Development/Projects/passion/aikami/apps/frontend/client/src/lib/services/game/combat_service.svelte.ts';
-const GAME_STATE_SVC_PATH =
-  '/home/sonny/Development/Projects/passion/aikami/apps/frontend/client/src/lib/services/game/game_state_service.svelte.ts';
-const TIME_SVC_PATH =
-  '/home/sonny/Development/Projects/passion/aikami/apps/frontend/client/src/lib/services/game/time_service.svelte.ts';
-
-mock.module(COMBAT_SVC_PATH, () => ({
+mock.module('../game/combat_service.svelte.ts', () => ({
   combatService: {
     enemyName: 'Unknown Enemy',
     enemyHp: 0,
@@ -23,15 +16,7 @@ mock.module(COMBAT_SVC_PATH, () => ({
   },
 }));
 
-mock.module(GAME_STATE_SVC_PATH, () => ({
-  gameStateService: {
-    worldGenOutput: undefined,
-    quests: [],
-    characterSheetSummary: undefined,
-  },
-}));
-
-mock.module(TIME_SVC_PATH, () => ({
+mock.module('../game/time_service.svelte.ts', () => ({
   timeService: {
     gameHour: 12,
     gameMinute: 0,
@@ -40,31 +25,33 @@ mock.module(TIME_SVC_PATH, () => ({
 }));
 
 import { CYOA_HISTORY_HEADING } from '@aikami/constants';
-import { choiceHistoryStore } from '$lib/services/chat/choice_history_store.svelte.ts';
+// gmPromptService reads choiceHistoryStore directly from its module. Import
+// the same module and drive its formatHistorySection double.
+import { choiceHistoryStore } from '../chat/choice_history_store.svelte.ts';
 import { gmPromptService } from './gm_prompt_service.svelte.ts';
+
+const RECENT_SECTION = [
+  CYOA_HISTORY_HEADING,
+  '- Investigate the ruins',
+  '- Open the sarcophagus',
+].join('\n');
 
 describe('GmPromptService — CYOA history injection (C-245 AC-4)', () => {
   test('includes Recent Choices section when chat has history', () => {
     const chatId = 'cyoa-test-chat';
-    choiceHistoryStore.recordChoice({
-      chatId,
-      entry: { choiceId: 'c1', label: 'Investigate the ruins', selectedAt: 1000 },
-    });
-    choiceHistoryStore.recordChoice({
-      chatId,
-      entry: { choiceId: 'c2', label: 'Open the sarcophagus', selectedAt: 2000 },
-    });
+    choiceHistoryStore.formatHistorySection = mock((cid: string) =>
+      cid === chatId ? RECENT_SECTION : '',
+    );
 
     const prompt = gmPromptService.assemblePrompt({ mode: 'scene', chatId });
 
     expect(prompt).toContain(CYOA_HISTORY_HEADING);
     expect(prompt).toContain('- Investigate the ruins');
     expect(prompt).toContain('- Open the sarcophagus');
-
-    choiceHistoryStore.clearHistory(chatId);
   });
 
   test('omits Recent Choices section when chat has no history', () => {
+    choiceHistoryStore.formatHistorySection = mock(() => '');
     const prompt = gmPromptService.assemblePrompt({
       mode: 'scene',
       chatId: 'empty-history-chat',
@@ -74,6 +61,7 @@ describe('GmPromptService — CYOA history injection (C-245 AC-4)', () => {
   });
 
   test('omits Recent Choices section when no chatId provided', () => {
+    choiceHistoryStore.formatHistorySection = mock(() => RECENT_SECTION);
     const prompt = gmPromptService.assemblePrompt({ mode: 'scene' });
 
     expect(prompt).not.toContain(CYOA_HISTORY_HEADING);

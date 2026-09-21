@@ -6,6 +6,7 @@ import {
   hasPendingUserInput,
   initialFirstResponseState,
   isSettledStatus,
+  isTaskAccepted,
   readComposer,
 } from './review_pane.ts';
 
@@ -174,5 +175,44 @@ describe('advanceFirstResponse', () => {
 
   it('honours a custom settle-sample count', () => {
     expect(fold(['working', 'idle', 'idle'], 2).phase).toBe('responded');
+  });
+});
+
+// ── Task acceptance (C-472 AC-3 / brief P1) ─────────────────
+
+describe('isTaskAccepted', () => {
+  const SENT = 'Review contract run run-1.';
+
+  it('accepts when the agent left idle/blocked (it started working)', () => {
+    expect(isTaskAccepted({ status: 'working', paneText: null })).toBe(true);
+    expect(isTaskAccepted({ status: 'done', paneText: null })).toBe(true);
+  });
+
+  it('accepts when the composer no longer holds our text (it was consumed)', () => {
+    expect(isTaskAccepted({ status: 'idle', paneText: snapshot('') })).toBe(true);
+  });
+
+  it('rejects while the composer still holds our exact text (Enter missed)', () => {
+    expect(isTaskAccepted({ status: 'idle', paneText: snapshot(SENT) })).toBe(false);
+  });
+
+  it('rejects a busy/blocked pane that never took the task', () => {
+    expect(isTaskAccepted({ status: 'blocked', paneText: snapshot(SENT) })).toBe(false);
+  });
+
+  it('rejects an unreadable snapshot when the status is still idle', () => {
+    expect(isTaskAccepted({ status: 'idle', paneText: null })).toBe(false);
+    expect(isTaskAccepted({ status: undefined, paneText: null })).toBe(false);
+  });
+
+  it('rejects unknown and unexpected status values even with an empty composer', () => {
+    expect(isTaskAccepted({ status: 'unknown', paneText: snapshot('') })).toBe(false);
+    expect(isTaskAccepted({ status: 'future-status', paneText: snapshot('') })).toBe(false);
+  });
+
+  it('rejects when the composer has unrelated human input', () => {
+    expect(isTaskAccepted({ status: 'idle', paneText: snapshot('let me add something') })).toBe(
+      false,
+    );
   });
 });

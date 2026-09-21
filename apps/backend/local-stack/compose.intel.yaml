@@ -6,6 +6,11 @@
 #   COMPOSE_FILE=compose.yaml:compose.intel.yaml
 #   COMPOSE_PROFILES=text,image,voice,stt,client
 
+# C-511 note: the `audio` profile (ACE-Step) is CUDA-only — its published
+# image is built on nvidia/cuda with cu126 torch. Enabling `audio` here
+# produces a readable failure from the service itself rather than a torch
+# crash; leave it out of COMPOSE_PROFILES on this backend.
+
 services:
   text:
     image: ghcr.io/ggml-org/llama.cpp:server-intel@sha256:b883ef703dddaaa4d55520e358f62ab636a5ccd2358dae58bf1490899c1844a5

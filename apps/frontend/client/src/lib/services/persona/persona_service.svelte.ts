@@ -9,7 +9,7 @@ import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import type { PersonaData } from '@aikami/types';
 import { personaStorage } from './persona_storage.svelte.ts';
 
@@ -34,6 +34,16 @@ export type PersonaServiceInterface = BaseFrontendClassInterface & {
    * @returns The active persona or undefined if none is active.
    */
   getActivePersona(): Promise<PersonaData | undefined>;
+
+  /**
+   * Resolves the persona for a play session: the campaign's persona when it
+   * still exists, otherwise the active persona. Runs the legacy localStorage
+   * migration first so pre-SQLite data is never stranded.
+   */
+  resolvePersona(campaignPersonaId?: string): Promise<PersonaData | undefined>;
+
+  /** One-time idempotent import of the legacy `aikami-characters` list. */
+  migrateLegacyCharacters(): Promise<void>;
 
   /**
    * Sets a persona as the active one (game-style - one character for entire run).
@@ -70,6 +80,22 @@ class PersonaService
 
   async getActivePersona(): Promise<PersonaData | undefined> {
     return await personaStorage.getActivePersona();
+  }
+
+  async resolvePersona(campaignPersonaId?: string): Promise<PersonaData | undefined> {
+    await personaStorage.migrateLegacyCharacters();
+    if (campaignPersonaId) {
+      const personas = await personaStorage.getPersonas('local');
+      const match = personas.find((persona) => persona.id === campaignPersonaId);
+      if (match) {
+        return match;
+      }
+    }
+    return await personaStorage.getActivePersona();
+  }
+
+  async migrateLegacyCharacters(): Promise<void> {
+    await personaStorage.migrateLegacyCharacters();
   }
 
   async setActivePersona(personaId: string): Promise<void> {

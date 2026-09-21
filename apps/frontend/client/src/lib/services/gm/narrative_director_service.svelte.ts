@@ -10,9 +10,10 @@ import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
-} from '@aikami/frontend/services';
-import { memoryRetrievalService, textGenerationService } from '$services';
+} from '@aikami/frontend/services/base';
+import { textGenerationService } from '../ai/text_generation_service.svelte.ts';
 import { registerSerializable, type SerializableService } from '../game/serializable_service';
+import { memoryRetrievalService } from '../memory/memory_retrieval_service.svelte.ts';
 import type { ArcMemory, SceneDirection } from './gm_types';
 
 // ---------------------------------------------------------------------------

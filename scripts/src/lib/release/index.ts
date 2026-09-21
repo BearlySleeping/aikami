@@ -10,6 +10,7 @@
  *   bun run release --promote        # promote the staging cut (on `production`)
  *   bun run release --dry-run        # print every git/gh mutation, do none of them
  *   bun run release --yes            # skip the confirmation prompt
+ *   bun run release --wait           # …then block until the desktop build publishes latest.json
  *
  * ── The model ────────────────────────────────────────────────────────────
  *
@@ -50,12 +51,14 @@ import { createInterface } from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
 import { banner, c, error, log, ok, parseCliArgs, run, step, warn } from '../cli_utils';
 import {
+  acquireReleaseLock,
   commitFiles,
   commitsInRange,
   createRelease,
   currentBranch,
   deleteRelease,
   formatVersionTag,
+  inFlightReleaseRun,
   isTreeClean,
   latestStableTag,
   localTagExists,
@@ -65,11 +68,13 @@ import {
   releaseExists,
   releaseHasAsset,
   releaseMetadata,
+  releaseReleaseLock,
   releaseUrl,
   revParse,
   STAGING_RELEASE_TITLE,
   STAGING_TAG,
   setTag,
+  waitForInFlightPushWorkflows,
   waitForReleaseWorkflow,
 } from './github';
 import { promoteNotes, renderNotes } from './notes';
@@ -138,9 +143,28 @@ const cutStaging = async (options: {
   bump: BumpKind | null;
   dryRun: boolean;
   autoYes: boolean;
+  wait: boolean;
 }): Promise<void> => {
-  const { bump, dryRun, autoYes } = options;
+  const { bump, dryRun, autoYes, wait } = options;
   await requireBranch(STAGING_BRANCH, dryRun);
+
+  // A `release: published` event is what rebuilds the desktop legs. Two
+  // concurrent cuts on `staging` would race on the rolling tag and the
+  // delete-then-recreate release, so refuse a second cut while one is
+  // already running rather than corrupting the first.
+  const inFlightRelease = await inFlightReleaseRun({ branch: STAGING_BRANCH, dryRun });
+  if (inFlightRelease !== null) {
+    throw new Error(
+      `A release workflow (run ${inFlightRelease}) is already in progress on ${STAGING_BRANCH}.\n` +
+        `Wait for it to finish before cutting another release.`,
+    );
+  }
+
+  // The promote-to-staging push is what triggers the web deploy. If it is
+  // still running when we push the version bump below, release.yml's push
+  // concurrency group (cancel-in-progress: true) cancels it. Wait first.
+  step('Waiting for in-flight deploys');
+  await waitForInFlightPushWorkflows({ branch: STAGING_BRANCH, dryRun });
 
   step('Resolving version');
   const lastStable = await latestStableTag();
@@ -166,81 +190,103 @@ const cutStaging = async (options: {
   log(`  ${commits.length} commit(s) since ${lastStable?.tag ?? 'the beginning'}`);
   log(`\n${c.dim}${body}${c.reset}\n`);
 
-  if (
+  if (dryRun) {
+    log(`  ${c.dim}[dry-run] Skipping confirmation for a dry run.${c.reset}`);
+  } else if (
     !(await confirm(`Cut staging release ${version} (rolling tag \`${STAGING_TAG}\`)?`, autoYes))
   ) {
     warn('Aborted.');
     return;
   }
 
-  step('Committing version bump');
-  // Guarded, unlike the git/gh helpers which take dryRun themselves: this one
-  // edits the working tree, and a --dry-run that leaves Cargo.toml rewritten
-  // and uncommitted is not a dry run.
-  const changed = dryRun ? [CARGO_TOML, TAURI_CONF] : writeCommittedVersion(ROOT_DIR, version);
-  if (dryRun) {
-    log(`  ${c.dim}[dry-run] set version ${version} in ${changed.join(', ')}${c.reset}`);
-  } else if (changed.length === 0) {
-    log(`  ${c.dim}Version files already at ${version} — nothing to commit.${c.reset}`);
-  }
-  await commitFiles({ files: changed, message: `chore(release): v${version}`, dryRun });
-  await pushBranch({ branch: STAGING_BRANCH, dryRun });
-
-  step('Publishing staging release');
-  const sha = dryRun ? 'HEAD' : await revParse('HEAD');
-  await setTag({ tag: STAGING_TAG, sha, message: `Staging ${version}`, force: true, dryRun });
-  // Delete-then-create rather than edit: only a newly *published* release
-  // fires release.yml's `release: published` trigger. See createRelease.
-  const previousRelease = await releaseMetadata(STAGING_TAG);
-  if (previousRelease !== null) {
-    await deleteRelease({ tag: STAGING_TAG, dryRun });
-  }
+  const releaseLock = await acquireReleaseLock({ branch: STAGING_BRANCH, dryRun });
   try {
-    await createRelease({
-      tag: STAGING_TAG,
-      title: `${STAGING_RELEASE_TITLE} — ${version}`,
-      body: `> Rolling staging build of \`${version}\`. Not a production release.\n\n${body}`,
-      prerelease: true,
-      latest: false,
-      dryRun,
-    });
-  } catch (createError) {
-    if (previousRelease === null || dryRun) {
+    step('Committing version bump');
+    // Guarded, unlike the git/gh helpers which take dryRun themselves: this one
+    // edits the working tree, and a --dry-run that leaves Cargo.toml rewritten
+    // and uncommitted is not a dry run.
+    const changed = dryRun ? [CARGO_TOML, TAURI_CONF] : writeCommittedVersion(ROOT_DIR, version);
+    if (dryRun) {
+      log(`  ${c.dim}[dry-run] set version ${version} in ${changed.join(', ')}${c.reset}`);
+    } else if (changed.length === 0) {
+      log(`  ${c.dim}Version files already at ${version} — nothing to commit.${c.reset}`);
+    }
+    await commitFiles({ files: changed, message: `chore(release): v${version}`, dryRun });
+    await pushBranch({ branch: STAGING_BRANCH, dryRun });
+
+    step('Publishing staging release');
+    const sha = dryRun ? 'HEAD' : await revParse('HEAD');
+    await setTag({ tag: STAGING_TAG, sha, message: `Staging ${version}`, force: true, dryRun });
+    // Delete-then-create rather than edit: only a newly *published* release
+    // fires release.yml's `release: published` trigger. See createRelease.
+    const previousRelease = await releaseMetadata(STAGING_TAG);
+    if (previousRelease !== null) {
+      await deleteRelease({ tag: STAGING_TAG, dryRun });
+    }
+    try {
+      await createRelease({
+        tag: STAGING_TAG,
+        title: `${STAGING_RELEASE_TITLE} — ${version}`,
+        body: `> Rolling staging build of \`${version}\`. Not a production release.\n\n${body}`,
+        prerelease: true,
+        latest: false,
+        target: sha,
+        dryRun,
+      });
+    } catch (createError) {
+      if (previousRelease === null || dryRun) {
+        throw createError;
+      }
+      warn('Replacement failed after deleting the staging release; restoring prior metadata.');
+      await createRelease({
+        tag: STAGING_TAG,
+        title: previousRelease.title,
+        body: previousRelease.body,
+        prerelease: previousRelease.prerelease,
+        latest: false,
+        dryRun: false,
+      });
+      await waitForReleaseWorkflow(sha);
+      if (!(await releaseHasAsset({ tag: STAGING_TAG, asset: 'latest.json' }))) {
+        throw new Error(
+          `Restored ${STAGING_TAG} release completed without latest.json; original replacement error: ${createError instanceof Error ? createError.message : String(createError)}`,
+        );
+      }
+      ok(
+        'Previous staging release metadata restored; rebuild completed and latest.json is available.',
+      );
       throw createError;
     }
-    warn('Replacement failed after deleting the staging release; restoring prior metadata.');
-    await createRelease({
-      tag: STAGING_TAG,
-      title: previousRelease.title,
-      body: previousRelease.body,
-      prerelease: previousRelease.prerelease,
-      latest: false,
-      dryRun: false,
-    });
-    await waitForReleaseWorkflow(sha);
-    if (!(await releaseHasAsset({ tag: STAGING_TAG, asset: 'latest.json' }))) {
-      throw new Error(
-        `Restored ${STAGING_TAG} release completed without latest.json; original replacement error: ${createError instanceof Error ? createError.message : String(createError)}`,
+
+    ok(
+      `Staging release ${version} published — ${dryRun ? '(dry run)' : await releaseUrl(STAGING_TAG)}`,
+    );
+
+    if (wait && !dryRun) {
+      step('Waiting for desktop build');
+      await waitForReleaseWorkflow(sha);
+      if (!(await releaseHasAsset({ tag: STAGING_TAG, asset: 'latest.json' }))) {
+        throw new Error(`${STAGING_TAG} release completed without latest.json`);
+      }
+      ok(`Desktop build complete — latest.json is available for ${version}.`);
+    } else {
+      log(
+        `  ${c.dim}Desktop legs build now; promote with \`bun run release --promote\` on ${PRODUCTION_BRANCH}.${c.reset}`,
       );
     }
-    ok(
-      'Previous staging release metadata restored; rebuild completed and latest.json is available.',
-    );
-    throw createError;
+  } finally {
+    await releaseReleaseLock({ lock: releaseLock, dryRun });
   }
-
-  ok(
-    `Staging release ${version} published — ${dryRun ? '(dry run)' : await releaseUrl(STAGING_TAG)}`,
-  );
-  log(
-    `  ${c.dim}Desktop legs build now; promote with \`bun run release --promote\` on ${PRODUCTION_BRANCH}.${c.reset}`,
-  );
 };
 
 // ── Production promote ───────────────────────────────────────────────────
 
-const promote = async (options: { dryRun: boolean; autoYes: boolean }): Promise<void> => {
-  const { dryRun, autoYes } = options;
+const promote = async (options: {
+  dryRun: boolean;
+  autoYes: boolean;
+  wait: boolean;
+}): Promise<void> => {
+  const { dryRun, autoYes, wait } = options;
   await requireBranch(PRODUCTION_BRANCH, dryRun);
 
   step('Verifying the staging cut is in production');
@@ -296,7 +342,9 @@ const promote = async (options: { dryRun: boolean; autoYes: boolean }): Promise<
   log(`  Extra commits since the staging cut: ${sinceStaging.length}`);
   log(`\n${c.dim}${body}${c.reset}\n`);
 
-  if (!(await confirm(`Publish production release ${tag} as Latest?`, autoYes))) {
+  if (dryRun) {
+    log(`  ${c.dim}[dry-run] Skipping confirmation for a dry run.${c.reset}`);
+  } else if (!(await confirm(`Publish production release ${tag} as Latest?`, autoYes))) {
     warn('Aborted.');
     return;
   }
@@ -316,13 +364,24 @@ const promote = async (options: { dryRun: boolean; autoYes: boolean }): Promise<
     body,
     prerelease: false,
     latest: true,
+    target: sha,
     dryRun,
   });
 
   ok(`Production release ${tag} published — ${dryRun ? '(dry run)' : await releaseUrl(tag)}`);
-  log(
-    `  ${c.dim}Desktop legs rebuild against production config (staging bundles embed staging env, so they are never reused here).${c.reset}`,
-  );
+
+  if (wait && !dryRun) {
+    step('Waiting for desktop build');
+    await waitForReleaseWorkflow(sha);
+    if (!(await releaseHasAsset({ tag, asset: 'latest.json' }))) {
+      throw new Error(`${tag} release completed without latest.json`);
+    }
+    ok(`Desktop build complete — latest.json is available for ${tag}.`);
+  } else {
+    log(
+      `  ${c.dim}Desktop legs rebuild against production config (staging bundles embed staging env, so they are never reused here).${c.reset}`,
+    );
+  }
 };
 
 // ── Main ─────────────────────────────────────────────────────────────────
@@ -335,6 +394,7 @@ const main = async (): Promise<void> => {
     major: { type: 'boolean' },
     'dry-run': { type: 'boolean' },
     yes: { type: 'boolean', aliases: ['y'] },
+    wait: { type: 'boolean' },
   });
 
   const bumps: BumpKind[] = [];
@@ -360,13 +420,14 @@ const main = async (): Promise<void> => {
   }
 
   if (opts.promote) {
-    await promote({ dryRun: opts['dry-run'], autoYes: opts.yes });
+    await promote({ dryRun: opts['dry-run'], autoYes: opts.yes, wait: opts.wait });
     return;
   }
   await cutStaging({
     bump: bumps[0] ?? null,
     dryRun: opts['dry-run'],
     autoYes: opts.yes,
+    wait: opts.wait,
   });
 };
 

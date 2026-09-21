@@ -45,16 +45,20 @@ const devActions = [
       | uploading={viewModel.isUploading ? '✓' : '✗'}
     </div>
     <div class="collapse-content text-xs font-mono opacity-60">
-      <pre>{JSON.stringify({
-        phase: viewModel.phase,
-        messageCount: viewModel.messages.length,
-        isStreaming: viewModel.isStreaming,
-        showLoadingView: viewModel.showLoadingView,
-        hasAvatar: !!viewModel.avatarUrl,
-        hasPersona: !!viewModel.persona,
-        isUploading: viewModel.isUploading,
-        errorMessage: viewModel.errorMessage ?? 'none',
-      }, null, 2)}</pre>
+      <pre>{JSON.stringify(
+  {
+    phase: viewModel.phase,
+    messageCount: viewModel.messages.length,
+    isStreaming: viewModel.isStreaming,
+    showLoadingView: viewModel.showLoadingView,
+    hasAvatar: !!viewModel.avatarUrl,
+    hasPersona: !!viewModel.persona,
+    isUploading: viewModel.isUploading,
+    errorMessage: viewModel.errorMessage ?? 'none',
+  },
+  null,
+  2,
+)}</pre>
     </div>
   </div>
 </div>

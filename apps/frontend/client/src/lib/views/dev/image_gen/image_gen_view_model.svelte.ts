@@ -10,19 +10,54 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import type {
+  CompiledPrompt,
   ContextualTriggerEvent,
   GalleryImage,
   ImageStyleProfile,
   ImageType,
 } from '@aikami/types';
-import {
-  compileImagePrompt,
-  contextualTriggerService,
-  galleryService,
-  styleProfileService,
+import type {
+  ContextualTriggerServiceInterface,
+  GalleryServiceInterface,
+  StyleProfileServiceInterface,
 } from '$services';
+
+// ── Capability contracts ────────────────────────────────────────────────
+
+/** The style-profile CRUD operations and observable state the sandbox drives. */
+export type ImageGenStyleProfileCapabilities = Pick<
+  StyleProfileServiceInterface,
+  | 'profiles'
+  | 'activeProfile'
+  | 'activeProfileId'
+  | 'setActiveProfile'
+  | 'cloneProfile'
+  | 'deleteProfile'
+  | 'saveProfile'
+>;
+
+/** The contextual trigger simulator state and fire operation. */
+export type ContextualTriggerCapabilities = Pick<
+  ContextualTriggerServiceInterface,
+  'enabled' | 'fireTrigger'
+>;
+
+/** The gallery operations the sandbox reads and mutates. */
+export type GalleryCapabilities = Pick<
+  GalleryServiceInterface,
+  'getImagesForChat' | 'addImage' | 'removeImage'
+>;
+
+/** The prompt-compiler pure function the compiler tab invokes. */
+export type ImageGenPromptCompilerCapabilities = {
+  compileImagePrompt(options: {
+    basePrompt: string;
+    profile: ImageStyleProfile;
+    imageType: ImageType;
+  }): CompiledPrompt;
+};
 
 // ── Tab definitions ────────────────────────────────────────────────────
 
@@ -86,7 +121,16 @@ export type ImageGenViewModelInterface = BaseViewModelInterface & {
   addMockGalleryImage(): void;
 };
 
-export type ImageGenViewModelOptions = BaseViewModelOptions & {};
+export type ImageGenViewModelOptions = BaseViewModelOptions & {
+  /** Style profile pipeline state + CRUD. */
+  styleProfiles: ImageGenStyleProfileCapabilities;
+  /** Contextual trigger simulator. */
+  triggers: ContextualTriggerCapabilities;
+  /** Gallery state + operations. */
+  gallery: GalleryCapabilities;
+  /** Prompt compiler. */
+  compiler: ImageGenPromptCompilerCapabilities;
+};
 
 // ── Implementation ──────────────────────────────────────────────────────
 
@@ -122,22 +166,35 @@ export class ImageGenViewModel
   galleryChatId = $state('dev-sandbox');
   galleryExpandedUrl = $state<string | null>(null);
 
+  private readonly _styleProfiles: ImageGenStyleProfileCapabilities;
+  private readonly _triggers: ContextualTriggerCapabilities;
+  private readonly _gallery: GalleryCapabilities;
+  private readonly _compiler: ImageGenPromptCompilerCapabilities;
+
+  constructor(options: ImageGenViewModelOptions) {
+    super(options);
+    this._styleProfiles = options.styleProfiles;
+    this._triggers = options.triggers;
+    this._gallery = options.gallery;
+    this._compiler = options.compiler;
+  }
+
   // ── Profiles (delegated) ─────────────────────────────────────────────
 
   get profiles(): readonly ImageStyleProfile[] {
-    return styleProfileService.profiles;
+    return this._styleProfiles.profiles;
   }
 
   get activeProfile(): ImageStyleProfile | undefined {
-    return styleProfileService.activeProfile;
+    return this._styleProfiles.activeProfile;
   }
 
   get activeProfileId(): string {
-    return styleProfileService.activeProfileId;
+    return this._styleProfiles.activeProfileId;
   }
 
   set activeProfileId(value: string) {
-    styleProfileService.setActiveProfile(value);
+    this._styleProfiles.setActiveProfile(value);
   }
 
   get isEditing(): boolean {
@@ -145,15 +202,15 @@ export class ImageGenViewModel
   }
 
   cloneProfile(id: string): void {
-    const cloned = styleProfileService.cloneProfile(id);
+    const cloned = this._styleProfiles.cloneProfile(id);
     if (cloned) {
       this.editingProfile = { ...cloned };
-      styleProfileService.setActiveProfile(cloned.id);
+      this._styleProfiles.setActiveProfile(cloned.id);
     }
   }
 
   deleteProfile(id: string): void {
-    styleProfileService.deleteProfile(id);
+    this._styleProfiles.deleteProfile(id);
     if (this.editingProfile?.id === id) {
       this.editingProfile = undefined;
     }
@@ -165,10 +222,10 @@ export class ImageGenViewModel
       return;
     }
     if (source.isBuiltIn) {
-      const cloned = styleProfileService.cloneProfile(id);
+      const cloned = this._styleProfiles.cloneProfile(id);
       if (cloned) {
         this.editingProfile = { ...cloned };
-        styleProfileService.setActiveProfile(cloned.id);
+        this._styleProfiles.setActiveProfile(cloned.id);
       }
     } else {
       this.editingProfile = { ...source };
@@ -179,7 +236,7 @@ export class ImageGenViewModel
     if (!this.editingProfile) {
       return;
     }
-    styleProfileService.saveProfile(this.editingProfile);
+    this._styleProfiles.saveProfile(this.editingProfile);
     this.editingProfile = undefined;
   }
 
@@ -223,7 +280,7 @@ export class ImageGenViewModel
       this.compilerResultNegative = '';
       return;
     }
-    const result = compileImagePrompt({
+    const result = this._compiler.compileImagePrompt({
       basePrompt: this.compilerBasePrompt,
       profile,
       imageType: this.compilerImageType,
@@ -235,8 +292,8 @@ export class ImageGenViewModel
   // ── Triggers ─────────────────────────────────────────────────────────
 
   async fireTrigger(): Promise<void> {
-    contextualTriggerService.enabled = this.triggerEnabled;
-    const result = await contextualTriggerService.fireTrigger({
+    this._triggers.enabled = this.triggerEnabled;
+    const result = await this._triggers.fireTrigger({
       event: this.triggerEvent,
       context: this.triggerContext,
       characterName: this.triggerCharacterName || undefined,
@@ -253,7 +310,7 @@ export class ImageGenViewModel
   // ── Gallery ───────────────────────────────────────────────────────────
 
   get galleryImages(): GalleryImage[] {
-    return galleryService.getImagesForChat(this.galleryChatId);
+    return this._gallery.getImagesForChat(this.galleryChatId);
   }
 
   setGalleryChatId(chatId: string): void {
@@ -275,11 +332,11 @@ export class ImageGenViewModel
         this.galleryExpandedUrl = null;
       }
     }
-    galleryService.removeImage(id);
+    this._gallery.removeImage(id);
   }
 
   addMockGalleryImage(): void {
-    galleryService.addImage({
+    this._gallery.addImage({
       chatId: this.galleryChatId,
       url: `https://placehold.co/300x200?text=Image+${Date.now()}`,
       prompt: 'Mock image for testing the gallery panel',
@@ -288,6 +345,12 @@ export class ImageGenViewModel
   }
 }
 
-export const getImageGenViewModel = (
+/**
+ * Builds an image-gen ViewModel from explicit capabilities.
+ *
+ * Callers outside production (tests, sandboxes) use this directly; production
+ * code goes through `getImageGenViewModel` in ./image_gen_composition.ts.
+ */
+export const createImageGenViewModel = (
   options: ImageGenViewModelOptions,
 ): ImageGenViewModelInterface => ImageGenViewModel.create(options);

@@ -9,9 +9,9 @@
 import DevToolsPanel from '$lib/components/dev/dev_tools_panel.svelte';
 import MacroAutocomplete from '$lib/components/macro_autocomplete.svelte';
 import type { DevAction } from '$types';
-import { getMacrosSandboxViewModel } from '$views/macros/macros_sandbox_view_model.svelte.ts';
+import { getMacrosSandboxViewModel } from '$views/macros/macros_sandbox_composition.ts';
+import { getPresetEditorViewModel } from '$views/presets/preset_editor_composition.ts';
 import PresetEditorView from '$views/presets/preset_editor_view.svelte';
-import { getPresetEditorViewModel } from '$views/presets/preset_editor_view_model.svelte.ts';
 
 const sandboxViewModel = getMacrosSandboxViewModel({ className: 'MacrosSandboxViewModel' });
 const presetEditorViewModel = getPresetEditorViewModel({ className: 'PresetEditorViewModel' });
@@ -188,11 +188,11 @@ const devActions: DevAction[] = [
         <select
           class="select select-bordered select-sm flex-1"
           onchange={(e: Event) => {
-            const target = e.target as HTMLSelectElement;
-            if (target.value) {
-              sandboxViewModel.selectPreset({ id: target.value });
-            }
-          }}
+  const target = e.target as HTMLSelectElement;
+  if (target.value) {
+    sandboxViewModel.selectPreset({ id: target.value });
+  }
+}}
         >
           <option value="">-- Custom template --</option>
           {#each sandboxViewModel.presets as preset}
@@ -215,11 +215,11 @@ const devActions: DevAction[] = [
           oninput={handleTextareaInput}
           onfocus={handleTextareaFocus}
           onkeydown={(e: KeyboardEvent) => {
-            if (e.key === 'Escape' && showAutocomplete) {
-              e.preventDefault();
-              handleAutocompleteClose();
-            }
-          }}
+  if (e.key === 'Escape' && showAutocomplete) {
+    e.preventDefault();
+    handleAutocompleteClose();
+  }
+}}
         ></textarea>
 
         <!-- Macro autocomplete popover -->
@@ -249,9 +249,9 @@ const devActions: DevAction[] = [
               class="input input-bordered input-xs font-mono"
               value={sandboxViewModel.userName}
               oninput={(e: Event) => {
-                const target = e.target as HTMLInputElement;
-                sandboxViewModel.updateContext({ field: 'userName', value: target.value });
-              }}
+  const target = e.target as HTMLInputElement;
+  sandboxViewModel.updateContext({ field: 'userName', value: target.value });
+}}
             >
           </label>
           <label class="form-control">
@@ -261,9 +261,9 @@ const devActions: DevAction[] = [
               class="input input-bordered input-xs font-mono"
               value={sandboxViewModel.characterName}
               oninput={(e: Event) => {
-                const target = e.target as HTMLInputElement;
-                sandboxViewModel.updateContext({ field: 'characterName', value: target.value });
-              }}
+  const target = e.target as HTMLInputElement;
+  sandboxViewModel.updateContext({ field: 'characterName', value: target.value });
+}}
             >
           </label>
           <label class="form-control">
@@ -273,9 +273,9 @@ const devActions: DevAction[] = [
               class="input input-bordered input-xs font-mono"
               value={sandboxViewModel.characterPersonality}
               oninput={(e: Event) => {
-                const target = e.target as HTMLInputElement;
-                sandboxViewModel.updateContext({ field: 'characterPersonality', value: target.value });
-              }}
+  const target = e.target as HTMLInputElement;
+  sandboxViewModel.updateContext({ field: 'characterPersonality', value: target.value });
+}}
             >
           </label>
           <label class="form-control">
@@ -285,9 +285,9 @@ const devActions: DevAction[] = [
               class="input input-bordered input-xs font-mono"
               value={sandboxViewModel.scenario}
               oninput={(e: Event) => {
-                const target = e.target as HTMLInputElement;
-                sandboxViewModel.updateContext({ field: 'scenario', value: target.value });
-              }}
+  const target = e.target as HTMLInputElement;
+  sandboxViewModel.updateContext({ field: 'scenario', value: target.value });
+}}
             >
           </label>
           <label class="form-control col-span-2">
@@ -297,9 +297,9 @@ const devActions: DevAction[] = [
               rows={2}
               value={sandboxViewModel.characterDescription}
               oninput={(e: Event) => {
-                const target = e.target as HTMLTextAreaElement;
-                sandboxViewModel.updateContext({ field: 'characterDescription', value: target.value });
-              }}
+  const target = e.target as HTMLTextAreaElement;
+  sandboxViewModel.updateContext({ field: 'characterDescription', value: target.value });
+}}
             ></textarea>
           </label>
           <label class="form-control">
@@ -309,9 +309,9 @@ const devActions: DevAction[] = [
               class="input input-bordered input-xs font-mono"
               value={sandboxViewModel.persona}
               oninput={(e: Event) => {
-                const target = e.target as HTMLInputElement;
-                sandboxViewModel.updateContext({ field: 'persona', value: target.value });
-              }}
+  const target = e.target as HTMLInputElement;
+  sandboxViewModel.updateContext({ field: 'persona', value: target.value });
+}}
             >
           </label>
           <label class="form-control">
@@ -321,9 +321,9 @@ const devActions: DevAction[] = [
               class="input input-bordered input-xs font-mono"
               value={sandboxViewModel.otherCharacters}
               oninput={(e: Event) => {
-                const target = e.target as HTMLInputElement;
-                sandboxViewModel.updateContext({ field: 'otherCharacters', value: target.value });
-              }}
+  const target = e.target as HTMLInputElement;
+  sandboxViewModel.updateContext({ field: 'otherCharacters', value: target.value });
+}}
             >
           </label>
           <label class="form-control col-span-2">
@@ -333,9 +333,9 @@ const devActions: DevAction[] = [
               rows={3}
               value={sandboxViewModel.chatHistory}
               oninput={(e: Event) => {
-                const target = e.target as HTMLTextAreaElement;
-                sandboxViewModel.updateContext({ field: 'chatHistory', value: target.value });
-              }}
+  const target = e.target as HTMLTextAreaElement;
+  sandboxViewModel.updateContext({ field: 'chatHistory', value: target.value });
+}}
             ></textarea>
           </label>
           <label class="form-control">
@@ -345,9 +345,9 @@ const devActions: DevAction[] = [
               class="input input-bordered input-xs font-mono"
               value={sandboxViewModel.userMessage}
               oninput={(e: Event) => {
-                const target = e.target as HTMLInputElement;
-                sandboxViewModel.updateContext({ field: 'userMessage', value: target.value });
-              }}
+  const target = e.target as HTMLInputElement;
+  sandboxViewModel.updateContext({ field: 'userMessage', value: target.value });
+}}
             >
           </label>
         </div>

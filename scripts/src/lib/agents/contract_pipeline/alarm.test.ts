@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'bun:test';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { ALARM_FILE, playerFor, resolveAlarmFile } from './alarm.ts';
+import { ALARM_FILE, isAlarmEnabled, playerFor, resolveAlarmFile } from './alarm.ts';
 
 const which = (bin: string): string | null => (bin === 'aplay' ? '/usr/bin/aplay' : null);
 
@@ -43,6 +43,20 @@ describe('playerFor', () => {
     const argv = fileFor('linux');
     expect(argv?.[0]).toBe('aplay');
     expect(argv).toEqual(['aplay', '-q', SAMPLE]);
+  });
+});
+
+describe('isAlarmEnabled', () => {
+  it('is disabled during tests so error.wav never plays from the suite', () => {
+    expect(isAlarmEnabled({ NODE_ENV: 'test' })).toBe(false);
+  });
+
+  it('is disabled by CONTRACT_ALARM=0', () => {
+    expect(isAlarmEnabled({ NODE_ENV: 'production', CONTRACT_ALARM: '0' })).toBe(false);
+  });
+
+  it('is enabled outside tests unless explicitly muted', () => {
+    expect(isAlarmEnabled({ NODE_ENV: 'production' })).toBe(true);
   });
 });
 

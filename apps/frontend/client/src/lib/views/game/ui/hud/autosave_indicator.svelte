@@ -1,9 +1,14 @@
 <script lang="ts">
 // apps/frontend/client/src/lib/views/game/ui/hud/autosave_indicator.svelte
 //
-// Autosave indicator HUD element — shows transient autosave status
-// adjacent to the clock in the top-right HUD zone.
-// Contract: C-332 AC-3
+// Autosave indicator HUD element — shows transient autosave status adjacent to
+// the clock in the top-right HUD zone.
+//
+// C-543 PART F: theme-semantic `.hud-notice` styling; success stays quiet and
+// transient. The persistent, actionable Save-failed state is owned by the
+// required `system-notice` widget, so this optional widget may be hidden.
+//
+// Contract: C-332 AC-3, C-543 PART F.
 
 type Props = {
   status: 'idle' | 'saving' | 'saved' | 'error';
@@ -11,35 +16,18 @@ type Props = {
 };
 
 const { status, visible }: Props = $props();
-
-/** Accessible label for the current autosave state. */
-const statusLabel = $derived.by(() => {
-  if (status === 'saving') {
-    return 'Autosaving';
-  }
-  if (status === 'saved') {
-    return 'Autosave complete';
-  }
-  return 'Autosave failed';
-});
 </script>
 
 {#if visible && status !== 'idle'}
-  <div
-    class="autosave-indicator flex items-center gap-1.5 rounded-full bg-base-200/80 px-2.5 py-1 backdrop-blur-sm text-xs"
-    role="status"
-    aria-live="polite"
-    aria-label={statusLabel}
-  >
+  <div class="hud-notice" role="status" aria-live="polite" data-testid="autosave-indicator">
     {#if status === 'saving'}
-      <span class="loading loading-spinner loading-xs"></span>
-      <span class="text-base-content/70">Saving…</span>
+      <span class="loading loading-spinner loading-xs" aria-hidden="true"></span>
+      <span class="game-metadata">Saving…</span>
     {:else if status === 'saved'}
-      <span class="text-success">✓</span>
-      <span class="text-success">Saved</span>
+      <span class="hud-status__mark" aria-hidden="true"></span>
+      <span class="game-metadata">Saved</span>
     {:else if status === 'error'}
-      <span class="text-error">✗</span>
-      <span class="text-error">Save failed</span>
+      <span class="game-metadata">Save failed</span>
     {/if}
   </div>
 {/if}

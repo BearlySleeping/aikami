@@ -10,6 +10,9 @@ import type { LpcAnimationState, LpcDirection } from '@aikami/lpc';
 import type { AssetResolver } from '@aikami/types';
 import {
   getLpcPreviewViewModel,
+  LPC_PREVIEW_DEFAULT_ZOOM,
+  LPC_PREVIEW_MAX_ZOOM,
+  LPC_PREVIEW_MIN_ZOOM,
   type LpcPreviewState,
   type LpcPreviewViewModelInterface,
   type LpcSlotDef,
@@ -29,7 +32,7 @@ type Props = {
 let {
   resolver,
   allSlots,
-  zoom = 1,
+  zoom = LPC_PREVIEW_DEFAULT_ZOOM,
   initialState,
   onStateChange,
   controls = true,
@@ -130,9 +133,13 @@ $effect(() => {
 
   <div class="flex flex-row flex-1 min-h-0">
     <!-- Canvas -->
+    <!-- min-w-0 + overflow-hidden: without a shrinkable flex basis the
+         canvas's intrinsic width keeps the row at its content size, which
+         pushes the fixed-width controls panel off-screen to the right when
+         the nav drawer narrows the page. -->
     <div
       bind:this={canvasWrapperEl}
-      class="flex-1 flex items-center justify-center bg-base-300 min-h-0"
+      class="flex-1 flex items-center justify-center bg-base-300 min-h-0 min-w-0 overflow-hidden"
     >
       <canvas
         bind:this={canvasEl}
@@ -186,9 +193,9 @@ $effect(() => {
               class="select select-sm w-full bg-base-100"
               value={viewModel.animationState}
               onchange={(e: Event) => {
-                const val = Number.parseInt((e.target as HTMLSelectElement).value, 10);
-                viewModel?.setAnimationState(val as LpcAnimationState);
-              }}
+  const val = Number.parseInt((e.target as HTMLSelectElement).value, 10);
+  viewModel?.setAnimationState(val as LpcAnimationState);
+}}
             >
               {#each viewModel.animationStateOptions as { value, label }}
                 <option {value}>{label}</option>
@@ -202,9 +209,9 @@ $effect(() => {
               class="select select-sm w-full bg-base-100"
               value={viewModel.facingDirection}
               onchange={(e: Event) => {
-                const val = Number.parseInt((e.target as HTMLSelectElement).value, 10);
-                viewModel?.setFacingDirection(val as LpcDirection);
-              }}
+  const val = Number.parseInt((e.target as HTMLSelectElement).value, 10);
+  viewModel?.setFacingDirection(val as LpcDirection);
+}}
             >
               {#each viewModel.directionOptions as { value, label }}
                 <option {value}>{label}</option>
@@ -222,9 +229,9 @@ $effect(() => {
               step="1"
               value={viewModel.animationFrame}
               oninput={(e: Event) => {
-                const val = Number.parseInt((e.target as HTMLInputElement).value, 10);
-                viewModel?.setAnimationFrame(val);
-              }}
+  const val = Number.parseInt((e.target as HTMLInputElement).value, 10);
+  viewModel?.setAnimationFrame(val);
+}}
             >
           </label>
         </fieldset>
@@ -267,9 +274,9 @@ $effect(() => {
                   class="select select-sm w-full bg-base-100"
                   value={layer.slotDefIndex}
                   onchange={(e: Event) => {
-                    const val = Number.parseInt((e.target as HTMLSelectElement).value, 10);
-                    viewModel?.setSlotDef(i, val);
-                  }}
+  const val = Number.parseInt((e.target as HTMLSelectElement).value, 10);
+  viewModel?.setSlotDef(i, val);
+}}
                 >
                   {#each viewModel.allSlots as slotOpt, sIdx}
                     <option value={sIdx}>{slotOpt.label}</option>
@@ -284,9 +291,9 @@ $effect(() => {
                     class="select select-sm w-full bg-base-100"
                     value={layer.variantIndex}
                     onchange={(e: Event) => {
-                      const val = Number.parseInt((e.target as HTMLSelectElement).value, 10);
-                      viewModel?.setVariant(i, val);
-                    }}
+  const val = Number.parseInt((e.target as HTMLSelectElement).value, 10);
+  viewModel?.setVariant(i, val);
+}}
                   >
                     {#each slotDef.variants as varOpt, vIdx}
                       <option value={vIdx}>{varOpt.label}</option>
@@ -323,9 +330,9 @@ $effect(() => {
               step="1"
               value={viewModel.playbackFps}
               oninput={(e: Event) => {
-                const val = Number.parseInt((e.target as HTMLInputElement).value, 10);
-                viewModel?.setPlaybackFps(val);
-              }}
+  const val = Number.parseInt((e.target as HTMLInputElement).value, 10);
+  viewModel?.setPlaybackFps(val);
+}}
             >
           </label>
 
@@ -353,8 +360,8 @@ $effect(() => {
               class="input input-sm input-bordered w-12 h-7 p-0.5"
               value={viewModel.globalTint || '#ffffff'}
               oninput={(e: Event) => {
-                viewModel?.setGlobalTint((e.target as HTMLInputElement).value);
-              }}
+  viewModel?.setGlobalTint((e.target as HTMLInputElement).value);
+}}
             >
           </label>
 
@@ -373,8 +380,8 @@ $effect(() => {
                 value={viewModel.paletteColors[i] || '#ffffff'}
                 disabled={!viewModel.layerOverrides[i]}
                 oninput={(e: Event) => {
-                  viewModel?.setLayerColor(i, (e.target as HTMLInputElement).value);
-                }}
+  viewModel?.setLayerColor(i, (e.target as HTMLInputElement).value);
+}}
               >
             </label>
           {/each}
@@ -386,14 +393,14 @@ $effect(() => {
           <input
             type="range"
             class="range range-sm range-primary w-full mt-1"
-            min="0.5"
-            max="10"
-            step="0.1"
+            min={LPC_PREVIEW_MIN_ZOOM}
+            max={LPC_PREVIEW_MAX_ZOOM}
+            step="1"
             value={viewModel.zoom}
             oninput={(e: Event) => {
-              const val = Number.parseFloat((e.target as HTMLInputElement).value);
-              viewModel?.setZoom(val);
-            }}
+  const val = Number.parseFloat((e.target as HTMLInputElement).value);
+  viewModel?.setZoom(val);
+}}
           >
         </label>
       </div>

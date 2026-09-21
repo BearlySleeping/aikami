@@ -2,15 +2,59 @@
 //
 // C-464 AC-8: Export & Data settings tab — export operations, offline mode,
 // telemetry opt-out, and delete local data.
+//
+// Collaborators arrive through typed capability options. This module never
+// imports the `$services` barrel or any production singleton, so its tests can
+// inject fresh fixtures. Production wiring lives in
+// ./export_composition.ts.
 
 import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import type { ChatData, NpcData, PersonaData } from '@aikami/types';
-import { exportService, readAiPrivacySettings, writeAiPrivacySettings } from '$services';
 import type { GameSession } from '$types';
+
+// ── Capability contracts ────────────────────────────────────────────────
+
+/** Persisted AI privacy pair (offline mode + telemetry opt-out). */
+export type ExportPrivacySettings = {
+  offlineMode: boolean;
+  telemetryOptOut: boolean;
+};
+
+/** The export/storage operations the export tab performs. */
+export type ExportServiceCapabilities = {
+  listChats(): Promise<ChatData[]>;
+  listCompletedSessions(): GameSession[];
+  listExportableCharacters(): Promise<Array<NpcData | PersonaData>>;
+  exportChatAsJsonl(options: { chat: ChatData; npcName?: string }): Promise<void>;
+  exportChatAsPlainText(options: {
+    chat: ChatData;
+    npcName?: string;
+    userName?: string;
+  }): Promise<void>;
+  exportCharacterAsJson(options: {
+    character: NpcData | PersonaData;
+    type: 'character' | 'npc' | 'persona';
+  }): Promise<void>;
+  exportCharacterAsPng(options: {
+    character: NpcData | PersonaData;
+    type: 'character' | 'npc' | 'persona';
+  }): Promise<void>;
+  exportSessionAsEpub(options: { session: GameSession }): Promise<void>;
+  exportBulkBackup(): Promise<void>;
+  downloadDeviceBackup(): Promise<void>;
+  restoreDeviceBackup(options: { file: File }): Promise<void>;
+  deleteAllLocalData(): Promise<void>;
+};
+
+/** Persisted privacy settings read/write. */
+export type ExportPrivacyCapabilities = {
+  read(): ExportPrivacySettings;
+  write(settings: ExportPrivacySettings): void;
+};
 
 // ── Types ───────────────────────────────────────────────────────────────
 
@@ -60,6 +104,16 @@ export type ExportViewModelInterface = BaseViewModelInterface & {
   // ── Bulk backup ──
   exportBulkBackup(): Promise<void>;
 
+  // ── Device backup (local file round-trip) ──
+  readonly isBackupBusy: boolean;
+  downloadDeviceBackup(): Promise<void>;
+  selectRestoreFile(options: { event: Event }): void;
+  readonly pendingRestoreName: string | undefined;
+  readonly isRestoreDialogOpen: boolean;
+  readonly isRestoringBackup: boolean;
+  closeRestoreDialog(): void;
+  confirmRestoreBackup(): Promise<void>;
+
   /** Formats a Firestore Timestamp or ISO string to a locale date. */
   formatDate(timestamp: unknown): string;
 
@@ -79,7 +133,12 @@ export type ExportViewModelInterface = BaseViewModelInterface & {
 
 // ── Options ─────────────────────────────────────────────────────────────
 
-export type ExportViewModelOptions = BaseViewModelOptions;
+export type ExportViewModelOptions = BaseViewModelOptions & {
+  /** Export/storage operations capability. */
+  service: ExportServiceCapabilities;
+  /** Persisted privacy settings capability. */
+  privacy: ExportPrivacyCapabilities;
+};
 
 // ── Implementation ──────────────────────────────────────────────────────
 
@@ -87,11 +146,20 @@ export class ExportViewModel
   extends BaseViewModel<ExportViewModelOptions>
   implements ExportViewModelInterface
 {
+  private readonly _service: ExportServiceCapabilities;
+  private readonly _privacy: ExportPrivacyCapabilities;
+
   chats: ChatData[] = $state([]);
   characters: ExportableCharacter[] = $state([]);
   sessions: ExportableSession[] = $state([]);
   isLoading = $state(false);
   backupProgress = $state('');
+
+  // ── Device backup (local file round-trip) ──
+  isBackupBusy = $state(false);
+  isRestoreDialogOpen = $state(false);
+  isRestoringBackup = $state(false);
+  private _pendingRestoreFile: File | undefined;
 
   // ── Privacy toggles (C-464 AC-8) ──
   offlineMode = $state<boolean>(false);
@@ -101,6 +169,12 @@ export class ExportViewModel
   isDeleteLocalDialogOpen = $state(false);
   deleteLocalConfirmText = $state('');
   isDeletingLocal = $state(false);
+
+  constructor(options: ExportViewModelOptions) {
+    super(options);
+    this._service = options.service;
+    this._privacy = options.privacy;
+  }
 
   override async initialize(): Promise<void> {
     this.isLoading = true;
@@ -115,24 +189,24 @@ export class ExportViewModel
   // ── Chat exports ────────────────────────────────────────────────────
 
   async exportChatAsJsonl(chat: ChatData): Promise<void> {
-    await exportService.exportChatAsJsonl({ chat });
+    await this._service.exportChatAsJsonl({ chat });
   }
 
   async exportChatAsPlainText(chat: ChatData): Promise<void> {
-    await exportService.exportChatAsPlainText({ chat });
+    await this._service.exportChatAsPlainText({ chat });
   }
 
   // ── Character exports ───────────────────────────────────────────────
 
   async exportCharacterAsJson(character: ExportableCharacter): Promise<void> {
-    await exportService.exportCharacterAsJson({
+    await this._service.exportCharacterAsJson({
       character: character.source,
       type: character.type,
     });
   }
 
   async exportCharacterAsPng(character: ExportableCharacter): Promise<void> {
-    await exportService.exportCharacterAsPng({
+    await this._service.exportCharacterAsPng({
       character: character.source,
       type: character.type,
     });
@@ -141,13 +215,65 @@ export class ExportViewModel
   // ── Session exports ─────────────────────────────────────────────────
 
   async exportSessionAsEpub(session: ExportableSession): Promise<void> {
-    await exportService.exportSessionAsEpub({ session });
+    await this._service.exportSessionAsEpub({ session });
   }
 
   // ── Bulk backup ─────────────────────────────────────────────────────
 
   async exportBulkBackup(): Promise<void> {
-    await exportService.exportBulkBackup();
+    await this._service.exportBulkBackup();
+  }
+
+  get pendingRestoreName(): string | undefined {
+    return this._pendingRestoreFile?.name;
+  }
+
+  async downloadDeviceBackup(): Promise<void> {
+    this.isBackupBusy = true;
+    try {
+      await this._service.downloadDeviceBackup();
+    } catch (error) {
+      this.error('downloadDeviceBackup', error);
+      this.errorMessage = error instanceof Error ? error.message : String(error);
+    } finally {
+      this.isBackupBusy = false;
+    }
+  }
+
+  selectRestoreFile(options: { event: Event }): void {
+    const target = options.event.target as HTMLInputElement;
+    const file = target.files?.[0];
+    target.value = '';
+    if (!file) {
+      return;
+    }
+    this._pendingRestoreFile = file;
+    this.isRestoreDialogOpen = true;
+  }
+
+  closeRestoreDialog(): void {
+    this.isRestoreDialogOpen = false;
+    this._pendingRestoreFile = undefined;
+  }
+
+  async confirmRestoreBackup(): Promise<void> {
+    const file = this._pendingRestoreFile;
+    if (!file) {
+      return;
+    }
+    this.isRestoringBackup = true;
+    try {
+      await this._service.restoreDeviceBackup({ file });
+      if (typeof window !== 'undefined') {
+        window.location.reload();
+      }
+    } catch (error) {
+      this.error('confirmRestoreBackup', error);
+      this.errorMessage = error instanceof Error ? error.message : String(error);
+    } finally {
+      this.isRestoringBackup = false;
+      this.closeRestoreDialog();
+    }
   }
 
   formatDate(timestamp: unknown): string {
@@ -204,7 +330,7 @@ export class ExportViewModel
     }
     this.isDeletingLocal = true;
     try {
-      await exportService.deleteAllLocalData();
+      await this._service.deleteAllLocalData();
       localStorage.clear();
       window.location.reload();
     } catch (error) {
@@ -215,7 +341,7 @@ export class ExportViewModel
   }
 
   private _persistPrivacySettings(): void {
-    writeAiPrivacySettings({
+    this._privacy.write({
       offlineMode: this.offlineMode,
       telemetryOptOut: this.telemetryOptOut,
     });
@@ -238,14 +364,14 @@ export class ExportViewModel
   }
 
   private _loadPrivacySettings(): void {
-    const settings = readAiPrivacySettings();
+    const settings = this._privacy.read();
     this.offlineMode = settings.offlineMode;
     this.telemetryOptOut = settings.telemetryOptOut;
   }
 
   async _loadChats(): Promise<ChatData[]> {
     try {
-      return await exportService.listChats();
+      return await this._service.listChats();
     } catch (error) {
       this.error('_loadChats failed', error);
       return [];
@@ -254,7 +380,7 @@ export class ExportViewModel
 
   async _loadCharacters(): Promise<ExportableCharacter[]> {
     try {
-      const raw = await exportService.listExportableCharacters();
+      const raw = await this._service.listExportableCharacters();
       return raw.map((source) => {
         const isPersona = 'uid' in source && !('faction' in source);
         return {
@@ -273,7 +399,7 @@ export class ExportViewModel
 
   async _loadSessions(): Promise<ExportableSession[]> {
     try {
-      return exportService.listCompletedSessions();
+      return this._service.listCompletedSessions();
     } catch (error) {
       this.error('_loadSessions failed', error);
       return [];
@@ -281,5 +407,11 @@ export class ExportViewModel
   }
 }
 
-export const getExportViewModel = (options: ExportViewModelOptions): ExportViewModelInterface =>
+/**
+ * Builds the export ViewModel from explicit capabilities.
+ *
+ * Callers outside production (tests, sandboxes) use this directly; production
+ * code goes through `getExportViewModel` in ./export_composition.ts.
+ */
+export const createExportViewModel = (options: ExportViewModelOptions): ExportViewModelInterface =>
   ExportViewModel.create(options);

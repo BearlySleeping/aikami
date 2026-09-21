@@ -10,7 +10,7 @@
 
 import { parseBridgeTags } from '@aikami/frontend/engine/sim';
 import type { NpcData } from '@aikami/types';
-import { type ChatMessage, chatService, connectedChatsService } from '$services';
+import type { ChatMessage } from '$services';
 import {
   ChatViewModel,
   type ChatViewModelInterface,
@@ -109,12 +109,26 @@ const MOCK_OOC_REPLIES = [
 // Implementation
 // ---------------------------------------------------------------------------
 
-/** Configuration inherited from the production chat ViewModel for connected-chat demos. */
-export type ConnectedChatsSandboxViewModelOptions = ChatViewModelOptions;
+/** The connected-chats operations the sandbox additionally demonstrates. */
+export type ConnectedChatsSandboxCapabilities = ChatViewModelOptions['connectedChats'] & {
+  createLink(options: { sourceChatId: string; targetChatId: string }): Promise<unknown>;
+};
+
+/** Configuration for the connected-chats sandbox. */
+export type ConnectedChatsSandboxViewModelOptions = Omit<ChatViewModelOptions, 'connectedChats'> & {
+  connectedChats: ConnectedChatsSandboxCapabilities;
+};
 /** Public chat ViewModel contract exposed by the connected-chats sandbox. */
 export type ConnectedChatsSandboxViewModelInterface = ChatViewModelInterface;
 
 export class ConnectedChatsSandboxViewModel extends ChatViewModel {
+  private readonly _connectedChatsAdmin: ConnectedChatsSandboxCapabilities;
+
+  constructor(options: ChatViewModelOptions) {
+    super(options);
+    this._connectedChatsAdmin = (options as ConnectedChatsSandboxViewModelOptions).connectedChats;
+  }
+
   /** When true, uses mock replies instead of LLM. */
   useMockReplies = $state(true);
 
@@ -161,7 +175,7 @@ export class ConnectedChatsSandboxViewModel extends ChatViewModel {
       stats: {},
     };
 
-    chatService.setMessages(
+    this._chat.setMessages(
       MOCK_SEED_MESSAGES.map((m) => ({
         id: m.id,
         text: m.text,
@@ -196,11 +210,11 @@ export class ConnectedChatsSandboxViewModel extends ChatViewModel {
   }
 
   private async _sendMockGameReply(text: string): Promise<void> {
-    chatService.setSending(true);
-    chatService.setTyping(true);
-    chatService.setError(undefined);
+    this._chat.setSending(true);
+    this._chat.setTyping(true);
+    this._chat.setError(undefined);
 
-    chatService.addMessage({
+    this._chat.addMessage({
       id: crypto.randomUUID(),
       text,
       sender: 'user',
@@ -210,9 +224,9 @@ export class ConnectedChatsSandboxViewModel extends ChatViewModel {
     setTimeout(() => {
       const reply = MOCK_BOT_REPLIES[this._replyIndex % MOCK_BOT_REPLIES.length] ?? '...';
       this._replyIndex++;
-      chatService.appendAIMessage(reply);
-      chatService.setTyping(false);
-      chatService.setSending(false);
+      this._chat.appendAIMessage(reply);
+      this._chat.setTyping(false);
+      this._chat.setSending(false);
     }, 600);
   }
 
@@ -259,7 +273,7 @@ export class ConnectedChatsSandboxViewModel extends ChatViewModel {
   /** Pre-seeds a ChatLink with demo notes and influences. */
   async seedDemoLink(): Promise<void> {
     try {
-      await connectedChatsService.createLink({
+      await this._connectedChatsAdmin.createLink({
         sourceChatId: 'dev-ooc-chat-mock',
         targetChatId: ConnectedChatsSandboxViewModel._devChatId,
       });
@@ -303,10 +317,21 @@ export class ConnectedChatsSandboxViewModel extends ChatViewModel {
  * Factory function — returns a ConnectedChatsSandboxViewModel.
  * Only use in (dev) routes or tests.
  */
-export const getConnectedChatsSandboxViewModel = (
-  options: Omit<ChatViewModelOptions, 'chatId'> & { chatId?: string },
+/**
+ * Builds the connected-chats sandbox from explicit capabilities. Production
+ * wiring lives in ./connected_chats_sandbox_composition.ts.
+ */
+const buildConnectedChatsSandboxOptions = (
+  options: Omit<ConnectedChatsSandboxViewModelOptions, 'chatId'> & { chatId?: string },
+): ConnectedChatsSandboxViewModelOptions => ({
+  ...options,
+  chatId: options.chatId ?? 'dev-connected-chats-game',
+});
+
+const asChatOptions = (options: ConnectedChatsSandboxViewModelOptions): ChatViewModelOptions =>
+  options as ChatViewModelOptions;
+
+export const createConnectedChatsSandboxViewModel = (
+  options: Omit<ConnectedChatsSandboxViewModelOptions, 'chatId'> & { chatId?: string },
 ): ConnectedChatsSandboxViewModel =>
-  ConnectedChatsSandboxViewModel.create({
-    ...options,
-    chatId: options.chatId ?? 'dev-connected-chats-game',
-  });
+  ConnectedChatsSandboxViewModel.create(asChatOptions(buildConnectedChatsSandboxOptions(options)));

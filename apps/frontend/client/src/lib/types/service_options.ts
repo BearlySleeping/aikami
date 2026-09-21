@@ -1,9 +1,6 @@
 // apps/frontend/client/src/lib/types/service_options.ts
 
-import type { BaseFrontendClassOptions } from '@aikami/frontend/services';
-
-/** Options used to construct the legacy AI service. */
-export type AiServiceOptions = BaseFrontendClassOptions;
+import type { BaseFrontendClassOptions } from '@aikami/frontend/services/base';
 
 /** Options used to construct the expression-detection service. */
 export type ExpressionServiceOptions = BaseFrontendClassOptions;
@@ -31,3 +28,9 @@ export type ImageGenerationServiceOptions = BaseFrontendClassOptions & {
   /** Whether generation uses deterministic demo responses instead of an engine. */
   isDemo: boolean;
 };
+
+/** Options used to construct the appearance preference service. */
+export type AppearancePreferenceServiceOptions = BaseFrontendClassOptions;
+
+/** Options used to construct the theme package service. */
+export type ThemePackageServiceOptions = BaseFrontendClassOptions;

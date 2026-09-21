@@ -53,9 +53,7 @@ const SCHEMA_PLACEHOLDER = 'Paste a JSON Schema here...';
         {#each viewModel.tabs as tab}
           <button
             type="button"
-            class="tab tab-sm font-['JetBrains_Mono'] text-xs uppercase tracking-wider {viewModel.activeTab === tab.key
-              ? 'tab-active border-[#cabeff] text-[#cabeff]'
-              : 'text-[#938ea1]'}"
+            class="tab tab-sm font-['JetBrains_Mono'] text-xs uppercase tracking-wider {viewModel.activeTab === tab.key ? 'tab-active border-[#cabeff] text-[#cabeff]' : 'text-[#938ea1]'}"
             onclick={() => viewModel.setActiveTab(tab.key)}
           >
             {tab.label}
@@ -212,7 +210,11 @@ const SCHEMA_PLACEHOLDER = 'Paste a JSON Schema here...';
                 placeholder="Enter your prompt here..."
                 bind:value={viewModel.prompt}
                 disabled={viewModel.isGenerating}
-                onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { void viewModel.generate(); } }}
+                onkeydown={(e: KeyboardEvent) => {
+  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+    void viewModel.generate();
+  }
+}}
               ></textarea>
               <div class="label">
                 <span class="label-text-alt text-base-content/40">Ctrl+Enter to generate</span>
@@ -288,7 +290,9 @@ const SCHEMA_PLACEHOLDER = 'Paste a JSON Schema here...';
               <button
                 type="button"
                 class="btn btn-xs btn-ghost text-[#938ea1] hover:text-[#cabeff] font-['JetBrains_Mono'] text-[10px]"
-                onclick={() => { viewModel.schemaDefinition = EXAMPLE_SCHEMA; }}
+                onclick={() => {
+  viewModel.schemaDefinition = EXAMPLE_SCHEMA;
+}}
               >
                 Load Example
               </button>
@@ -333,7 +337,11 @@ const SCHEMA_PLACEHOLDER = 'Paste a JSON Schema here...';
                 placeholder="Enter text to extract structured data from..."
                 bind:value={viewModel.schemaPrompt}
                 disabled={viewModel.isGenerating}
-                onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { void viewModel.validateSchema(); } }}
+                onkeydown={(e: KeyboardEvent) => {
+  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+    void viewModel.validateSchema();
+  }
+}}
               ></textarea>
             </label>
             <div class="flex gap-3 mt-3">

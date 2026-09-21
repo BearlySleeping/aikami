@@ -78,22 +78,6 @@
         "recordedAt": "2026-09-06T23:30:00.324Z"
       }
     },
-    "daisyui": {
-      "name": "daisyui",
-      "type": "git-skill",
-      "description": "daisyUI component skills from upstream daisyui repo",
-      "source": {
-        "kind": "git",
-        "url": "https://github.com/saadeghi/daisyui.git",
-        "revision": "HEAD",
-        "subdir": "skills/daisyui"
-      },
-      "installed": {
-        "contentHash": "a189f532280844ca5a13128d94527919e2badd6a5b4cd17a76627674c8b71c11",
-        "fileCount": 73,
-        "recordedAt": "2026-09-06T23:30:00.325Z"
-      }
-    },
     "herdr": {
       "name": "herdr",
       "type": "git-skill",

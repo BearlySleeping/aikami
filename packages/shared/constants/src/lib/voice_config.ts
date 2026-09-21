@@ -11,7 +11,11 @@ import type { VoiceArchetype, VoiceOption } from '@aikami/types';
 
 /** Available TTS engines. */
 export const VOICE_ENGINES = [
-  { id: 'kokoro', label: 'Kokoro (local)', description: 'Local Kokoro TTS via Docker' },
+  {
+    id: 'kokoro',
+    label: 'Kokoro (local)',
+    description: 'On-device Kokoro TTS (browser WebGPU / desktop binary)',
+  },
   { id: 'elevenlabs', label: 'ElevenLabs', description: 'Cloud-based TTS' },
   { id: 'openai', label: 'OpenAI TTS', description: 'OpenAI cloud TTS' },
 ] as const;

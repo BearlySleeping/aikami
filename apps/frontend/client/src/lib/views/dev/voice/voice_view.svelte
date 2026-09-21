@@ -176,10 +176,10 @@ const statusDotClass = $derived.by(() => {
               bind:value={viewModel.text}
               disabled={viewModel.isPlaying || viewModel.isConnected}
               onkeydown={(e: KeyboardEvent) => {
-                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-                  void viewModel.generateAndPlay();
-                }
-              }}
+  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+    void viewModel.generateAndPlay();
+  }
+}}
             ></textarea>
             <div class="label">
               <span class="label-text-alt text-base-content/40">Ctrl+Enter to generate</span>

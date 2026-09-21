@@ -11,7 +11,7 @@ import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import { partyRosterService } from '../game/party_roster_service.svelte.ts';
 import { worldStateService } from '../game/world_state_service.svelte.ts';
 import type { GmNpcContext } from '../gm/gm_types';

@@ -9,9 +9,10 @@
  *   at `/models/` — the explicit voice-model download pre-warms the
  *   transformers Cache Storage under those keys, so initialization loads
  *   fully offline (no HuggingFace request after the first explicit download).
- * - ORT WASM binaries are vendored into the app's static assets (`/ort/`)
- *   instead of a CDN, so no network is required for the WASM fallback and
- *   the Tauri CSP never needs a CDN entry.
+ * - ORT WASM binaries are fetched from the `aikami-dist` distribution plane
+ *   under a version-pinned path instead of being bundled (see
+ *   `packages/frontend/local-runtime/src/lib/ort_runtime.ts`), so no ORT
+ *   binary is ever emitted into the Cloudflare client build.
  * - The worker reports which backend it actually used (`webgpu` | `wasm`)
  *   so the TTS service can surface honest degraded-speech state (AC-6).
  *
@@ -22,13 +23,16 @@
  * Contracts: C-131, C-389
  */
 
+import {
+  configureLocalModelResolution,
+  configureOrtRuntime,
+  type OrtConfigurableEnv,
+} from '@aikami/frontend/local-runtime';
 import { env } from '@huggingface/transformers';
 
 // Local models enabled — weights come from the app-controlled cache
 // (pre-warmed by the explicit download control), not the HF CDN.
-env.allowLocalModels = true;
-// transformers.js resolves `/models/{repo}/{file}` cache keys first.
-env.localModelPath = '/models/';
+configureLocalModelResolution(env as OrtConfigurableEnv);
 
 // ---------------------------------------------------------------------------
 // Worker-scoped state
@@ -44,8 +48,11 @@ let activeBackend: 'webgpu' | 'wasm' = 'wasm';
 
 type InitializeMessage = {
   action: 'initialize';
-  /** Absolute URL prefix for the vendored ORT WASM binaries (ends in '/'). */
-  wasmPath: string;
+  /**
+   * Optional override for the ORT runtime base URL (ends in '/'). Normally
+   * omitted — the shared seam resolves the version-pinned distribution URL.
+   */
+  wasmPath?: string;
   /** Preferred device; WebGPU falls back to WASM when unavailable. */
   device: 'webgpu' | 'wasm';
   /** HF model id — pinned by the main thread. */
@@ -119,10 +126,17 @@ const handleInitialize = async (message: InitializeMessage): Promise<void> => {
   try {
     const { wasmPath, device, modelId } = message;
 
-    // Configure the ONNX runtime WebGPU backend before Kokoro creates its
-    // session. WASM binaries are vendored (C-389) — never a CDN.
+    // Configure the ONNX runtime through the single shared seam before Kokoro
+    // creates its session. This sets the explicit, version-pinned
+    // `wasmPaths` mapping and guarantees the WASM/MJS pair is fetched from
+    // the distribution plane — never a hashed `_app/immutable` path.
+    const { wasmPaths } = configureOrtRuntime(env as OrtConfigurableEnv, wasmPath);
+
+    // The standalone `onnxruntime-web` instance the Worker controls directly
+    // must agree with the transformers env. Importing it here (rather than
+    // relying on transformers' inlined copy) lets us pin its env as well.
     const ort = await import('onnxruntime-web/webgpu');
-    ort.env.wasm.wasmPaths = wasmPath;
+    ort.env.wasm.wasmPaths = wasmPaths;
 
     // Decide the effective backend: WebGPU when requested and available,
     // WASM otherwise (single-threaded since COEP was dropped — C-389).

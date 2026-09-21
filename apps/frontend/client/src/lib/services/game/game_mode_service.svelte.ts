@@ -6,7 +6,7 @@
 // Extracted from game_state_service (C-314 service split).
 
 import { setEngineGameMode } from '@aikami/frontend/engine/sim';
-import { BaseFrontendClass, type BaseFrontendClassInterface } from '@aikami/frontend/services';
+import { BaseFrontendClass, type BaseFrontendClassInterface } from '@aikami/frontend/services/base';
 import type { GameMode, GameModeServiceOptions } from '$types';
 // ---------------------------------------------------------------------------
 // Types

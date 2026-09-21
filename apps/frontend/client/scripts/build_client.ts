@@ -24,6 +24,7 @@ import { dirname, resolve } from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { logger } from '@aikami/logger';
+import { DEV_ROUTES_ENV_VAR, resolveIncludeDevRoutes } from './dev_routes_gate.ts';
 
 const CLIENT_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -67,11 +68,11 @@ const run = (label: string, cmd: string, args: string[], opts: SpawnSyncOptions 
 
 const modeArgs = mode ? ['--mode', mode] : [];
 
-// 1. Dev-route gate — must see the same mode svelte.config.js will.
+// 1. Dev-route gate — must see the same mode vite.config.ts will.
 run('gate dev routes', 'bun', ['scripts/gate_dev_routes.ts', ...modeArgs]);
 
 // 2. Web bundle. Extra args are forwarded here, where they were aimed.
-//    AIKAMI_BUILD_MODE is exported so svelte.config.js sees the real mode:
+//    AIKAMI_BUILD_MODE is exported so vite.config.ts sees the real mode:
 //    SvelteKit loads it during a config probe that runs before vite resolves
 //    `--mode`, and without this it falls back to production and demands the
 //    filtered routes copy a non-production build never creates.
@@ -91,3 +92,40 @@ run('vite build', 'bunx', ['vite', 'build', ...modeArgs, ...passthrough], { env:
 // 3. Guard the emitted chunk graph. A static-import cycle between chunks
 //    breaks module evaluation order and only surfaces at runtime.
 run('check bundle', 'bun', ['scripts/check_bundle.ts']);
+
+// 4. Guard the deployment assets Cloudflare will actually receive. Fails on
+//    any asset at/over Aikami's 24 MiB ceiling, any ORT WASM in the client
+//    output, byte-identical large binaries emitted at multiple paths, or a
+//    `(dev)` route that leaked into a production graph. A build that
+//    explicitly opts into dev routes passes --allow-dev-routes.
+//
+//    The decision comes from the same resolver the gate itself uses, so the
+//    guard can never disagree with the route graph that was actually built.
+const allowDevRoutes = resolveIncludeDevRoutes('build');
+if (allowDevRoutes) {
+  logger.info(`[build-client] ${DEV_ROUTES_ENV_VAR}=true — dev routes are expected in this build.`);
+}
+run('check deploy assets', 'bun', [
+  'scripts/check_deploy_assets.ts',
+  'build',
+  ...(allowDevRoutes ? ['--allow-dev-routes'] : []),
+]);
+
+// 5. Ratchet first-party ineffective dynamic imports against the reviewed
+//    baseline. A new one means a module advertised as lazy is eagerly
+//    reachable again.
+run('check ineffective dynamic imports', 'bun', ['scripts/check_ineffective_dynamic_imports.ts']);
+
+// 6. Report bundle budgets (raw/gzip, totals, per-route initial closures) and
+//    ratchet tracked metrics. Kept after the guards so the report reflects an
+//    output that already passed the hard gates.
+//
+//    When dev routes were deliberately included, the ratchet is skipped: the
+//    committed baseline measures the production route graph, so a sandbox build
+//    would otherwise always report a ~20% regression and fail the build. The
+//    flag comes from the same resolver the gate itself uses, so a normal build
+//    can never skip the ratchet by accident.
+run('report bundle budget', 'bun', [
+  'scripts/report_bundle_budget.ts',
+  ...(allowDevRoutes ? ['--expect-dev-routes'] : []),
+]);

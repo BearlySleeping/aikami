@@ -3,7 +3,7 @@ id: C-475
 title: "Test canonical coding examples and prevent active instruction drift"
 source: direct
 contract_type: thin
-status: implemented
+status: draft
 github:
     issue_number: null
     issue_url: null
@@ -19,7 +19,7 @@ created_at: "2026-09-04T22:21:38Z"
 
 | Field                | Value                                                                                             |
 | -------------------- | ------------------------------------------------------------------------------------------------- |
-| **Source**           | Accepted agent-platform audit; PR 09 in [execution plan](../strategy/agent-platform-hardening.md) |
+| **Source**           | Accepted agent-platform audit; PR 09 in [execution plan](../reference/agent-platform-hardening.md) |
 | **Target**           | Active agent guidance, canonical example fixtures and instruction checks                          |
 | **Type**             | thin                                                                                              |
 | **Priority**         | P1 — contradictory examples and obsolete tools repeatedly regenerate incorrect work               |
@@ -108,3 +108,8 @@ See [SHARED_SECTIONS.md](SHARED_SECTIONS.md#status-lifecycle).
 ## Execution Report
 
 Not executed. No implementation or platform evidence is claimed by this planning document.
+
+> **Status reconciliation (2026-09-17):** the YAML frontmatter previously said
+> `implemented`, contradicting both this report ("Not executed") and the
+> metadata table (`draft`). The frontmatter was corrected to `draft`. No
+> acceptance criterion is claimed as met.

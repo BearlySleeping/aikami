@@ -236,7 +236,7 @@ Full reference: [Tech Stack](docs/guides/STACK.md)
 | [Local Stack](apps/backend/local-stack/README.md) | Docker engines, hardware backends, models |
 | [Database](docs/guides/database.md) | Server data plane, D1, migrations |
 | [Feature Specs](docs/guides/FEATURES.md) | Personas, memory, lorebooks, world state |
-| [Client Roadmap](docs/guides/CLIENT_FEATURES.md) | Full DND/JRPG feature roadmap |
+| [Outstanding Work](docs/TODO.md) | The structured intake for contract-sized work |
 
 AI coding agents: start at `.context/llms.txt`, then `.context/CONTEXT.md`.
 

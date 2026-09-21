@@ -6,7 +6,7 @@
 
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 
-// $state, $derived, @aikami/frontend/services mocks are provided by test_preload.ts
+// $state, $derived are polyfilled by test_setup.ts
 
 // Mock @aikami/frontend/engine to avoid ECS worker import
 mock.module('@aikami/frontend/engine', () => {

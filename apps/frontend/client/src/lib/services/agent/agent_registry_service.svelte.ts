@@ -17,7 +17,7 @@ import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import type { CreateAgentInput, CustomAgentDefinition, UpdateAgentInput } from '$types';
 import { authService } from '../auth/auth_service.svelte.ts';
 import { agentRegistryStorage } from './agent_registry_storage.svelte.ts';

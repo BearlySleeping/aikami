@@ -5,7 +5,12 @@
 
 import { describe, expect, test } from 'bun:test';
 import { Value } from 'typebox/value';
-import { EMPTY_PARTY_STATE, PartyRosterEntrySchema, PartyStateSchema } from './party.ts';
+import {
+  EMPTY_PARTY_STATE,
+  PartyRosterEntrySchema,
+  PartyStateSchema,
+  resolveCompanionControlMode,
+} from './party.ts';
 
 const validMember = {
   npcId: 'lydia',
@@ -35,6 +40,31 @@ describe('PartyRosterEntrySchema', () => {
   test('rejects unknown properties', () => {
     expect(Value.Check(PartyRosterEntrySchema, { ...validMember, unknownField: 'nope' })).toBe(
       false,
+    );
+  });
+
+  // C-526 AC-6: control mode is additive, persisted and safe-defaulted.
+  test('accepts every companion control mode (C-526)', () => {
+    for (const controlMode of ['direct', 'suggest', 'intent', 'autonomous'] as const) {
+      expect(Value.Check(PartyRosterEntrySchema, { ...validMember, controlMode })).toBe(true);
+    }
+  });
+
+  test('rejects an unknown companion control mode (C-526)', () => {
+    expect(Value.Check(PartyRosterEntrySchema, { ...validMember, controlMode: 'puppet' })).toBe(
+      false,
+    );
+  });
+
+  test('a pre-C-526 entry without controlMode still validates (C-526)', () => {
+    expect(Value.Check(PartyRosterEntrySchema, validMember)).toBe(true);
+    expect(resolveCompanionControlMode(validMember)).toBe('suggest');
+  });
+
+  test('resolveCompanionControlMode preserves an explicit mode (C-526)', () => {
+    expect(resolveCompanionControlMode({ ...validMember, controlMode: 'direct' })).toBe('direct');
+    expect(resolveCompanionControlMode({ ...validMember, controlMode: 'autonomous' })).toBe(
+      'autonomous',
     );
   });
 });

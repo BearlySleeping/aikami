@@ -12,6 +12,10 @@
 //                apps/frontend/client/src/lib/views/game/game_view.svelte
 
 import type { Page } from '@playwright/test';
+import { EMULATOR_PORTS } from '../config';
+
+/** Origin of the client dev server for this run (contract-scoped offset applied). */
+const CLIENT_ORIGIN = `http://localhost:${EMULATOR_PORTS.client}`;
 
 export type GamePageOptions = {
   /** Whether to use the QA bypass flag to skip text AI requirement */
@@ -25,6 +29,14 @@ export type GameJourneyCheckpoint = {
   route: string;
   /** Expected game mode at this checkpoint */
   expectedMode: 'explore' | 'combat' | 'dialogue' | 'menu';
+};
+
+/** Engine state the render loop publishes to `window.__AIKAMI_DEBUG__`. */
+export type GameEngineDebugSnapshot = {
+  playerX: number;
+  playerY: number;
+  npcCount: number;
+  playerVisibleByMask: number;
 };
 
 export class GamePage {
@@ -43,7 +55,7 @@ export class GamePage {
       params.set('bypassTextAi', 'true');
     }
     const query = params.toString();
-    const url = `http://localhost:5274/game${query ? `?${query}` : ''}`;
+    const url = `${CLIENT_ORIGIN}/game${query ? `?${query}` : ''}`;
     await this.page.goto(url, { waitUntil: 'domcontentloaded' });
     await this.waitForEngineReady();
   }
@@ -61,7 +73,7 @@ export class GamePage {
    */
   async gotoColdLaunch(): Promise<void> {
     // Start at root
-    await this.page.goto('http://localhost:5274/', { waitUntil: 'domcontentloaded' });
+    await this.page.goto(`${CLIENT_ORIGIN}/`, { waitUntil: 'domcontentloaded' });
 
     // Click the real "New Adventure" start button via the POM method
     await this.startNewAdventure();
@@ -94,8 +106,7 @@ export class GamePage {
     });
 
     // Wait for HUD to appear (player HUD is the visual indicator of engine ready)
-    const playerHud = this.page.locator('.bg-base-200\\/80');
-    await playerHud.waitFor({ state: 'visible', timeout: 30_000 }).catch(() => {
+    await this.playerHud.waitFor({ state: 'visible', timeout: 30_000 }).catch(() => {
       // HUD may not appear if boot fails — that's fine, caller checks
     });
   }
@@ -150,7 +161,7 @@ export class GamePage {
 
   /** The game UI overlay layer (DOM overlays). */
   get uiLayer() {
-    return this.page.locator('#game-ui-layer');
+    return this.page.getByTestId('game-ui-overlay-layer');
   }
 
   /** Loading message displayed while the engine boots. */
@@ -160,7 +171,7 @@ export class GamePage {
 
   /** Player HUD — the always-visible bottom-left overlay. */
   get playerHud() {
-    return this.page.locator('.bg-base-200\\/80');
+    return this.page.getByTestId('player-hud');
   }
 
   /** HP progress bar with ARIA role. */
@@ -183,14 +194,17 @@ export class GamePage {
     await this.page.waitForTimeout(300);
   }
 
-  /** Click "Save Game" in pause menu. */
+  /** Click "Save Game" in pause menu and await save-completion signal. */
   async saveGame(): Promise<void> {
     await this.openPauseMenu();
     const saveButton = this.page.getByRole('button', { name: /save/i });
-    if (await saveButton.isVisible({ timeout: 2000 }).catch(() => false)) {
-      await saveButton.click();
-      await this.page.waitForTimeout(500);
-    }
+    const { expect } = await import('@playwright/test');
+    await expect(saveButton).toBeVisible({ timeout: 5000 });
+    await expect(saveButton).toBeEnabled({ timeout: 5000 });
+    await saveButton.click();
+    // Await the "Game Saved!" confirmation message before closing
+    const saveConfirmation = this.page.getByText('Game Saved!');
+    await expect(saveConfirmation).toBeVisible({ timeout: 10_000 });
     await this.closePauseMenu();
   }
 
@@ -283,6 +297,55 @@ export class GamePage {
     await this.page.waitForTimeout(500);
   }
 
+  /** The most recent NPC response rendered in the dialogue overlay. */
+  get npcResponse() {
+    return this.page.locator('[data-testid="dialogue-overlay"] .chat-start').last();
+  }
+
+  /** Hover the first NPC message bubble to reveal its action controls. */
+  async hoverNpcMessageActions(): Promise<void> {
+    const npcBubble = this.page
+      .locator('[data-testid="dialogue-overlay"] .rounded-bl-md.bg-base-100')
+      .first();
+    await npcBubble.hover();
+  }
+
+  // ── Declared-DC dice overlay (C-487) ──────────────────────────
+
+  /** The declared-DC dice overlay panel (GameDice). */
+  get diceOverlay() {
+    return this.page.locator('.dice-overlay');
+  }
+
+  /** The d20 interactive roll button (GameDice). */
+  get d20RollButton() {
+    return this.page.getByRole('button', { name: 'Click to roll d20' });
+  }
+
+  /** The named modifier breakdown block (C-487 AC-1/AC-2). */
+  get diceBreakdown() {
+    return this.page.locator('[data-testid="dice-breakdown"]');
+  }
+
+  /** The failure-cost text shown before the roll commits (C-487 AC-2). */
+  get diceStakesFailure() {
+    return this.page.locator('[data-testid="dice-stakes-failure"]');
+  }
+
+  /** Asserts the declared-DC dice overlay (breakdown + stakes) is visible. */
+  async expectDiceOverlayVisible(): Promise<void> {
+    const { expect } = await import('@playwright/test');
+    await expect(this.diceOverlay).toBeVisible({ timeout: 15_000 });
+    await expect(this.diceBreakdown).toBeVisible({ timeout: 5_000 });
+    await expect(this.diceStakesFailure).toBeVisible({ timeout: 5_000 });
+  }
+
+  /** Asserts no dice overlay is present (ordinary conversation, C-487 AC-4). */
+  async expectNoDiceOverlay(): Promise<void> {
+    const { expect } = await import('@playwright/test');
+    await expect(this.diceOverlay).toHaveCount(0);
+  }
+
   /** Assert suggestion chips are visible (C-371). */
   async expectChipsVisible(): Promise<void> {
     const { expect } = await import('@playwright/test');
@@ -330,6 +393,19 @@ export class GamePage {
     });
   }
 
+  /** Assert the complete combat surface is mounted and visible. */
+  async expectCombatUiVisible(): Promise<void> {
+    const { expect } = await import('@playwright/test');
+    await expect(this.page.locator('[data-testid="combat-portrait-stage"]')).toBeVisible({
+      timeout: 10_000,
+    });
+    await expect(this.page.locator('[data-testid="player-hp-text"]')).toBeVisible();
+    await expect(this.page.locator('[data-testid="enemy-hp-text"]')).toBeVisible();
+    await expect(this.page.locator('[data-testid="combat-attack-btn"]')).toBeVisible();
+    await expect(this.page.locator('[data-testid="combat-defend-btn"]')).toBeVisible();
+    await expect(this.page.locator('[data-testid="combat-flee-btn"]')).toBeVisible();
+  }
+
   /** Return whether the combat Attack button is currently visible. */
   async isCombatAttackButtonVisible(): Promise<boolean> {
     return this.page
@@ -342,6 +418,107 @@ export class GamePage {
   async clickAttack(): Promise<void> {
     await this.page.locator('[data-testid="combat-attack-btn"]').click();
     await this.page.waitForTimeout(500);
+  }
+
+  /** Combat action-economy budget readout. */
+  get combatBudgetReadout() {
+    return this.page.getByTestId('combat-budget-dots');
+  }
+
+  /** Rendered combat log (facts + narration + telegraphs). */
+  get combatLog() {
+    return this.page.getByTestId('combat-log');
+  }
+
+  /** Explicit End Turn control. */
+  get combatEndTurnButton() {
+    return this.page.getByTestId('combat-end-turn-btn');
+  }
+
+  /** C-526 AC-6: the companion mode selector / proposal panel. */
+  get companionControlPanel() {
+    return this.page.getByTestId('companion-control-panel');
+  }
+
+  /** C-526 AC-6: the companion plan awaiting the player's approval. */
+  get companionProposal() {
+    return this.page.getByTestId('companion-proposal');
+  }
+
+  /** C-526 AC-6: approve the companion's plan. */
+  get companionApproveButton() {
+    return this.page.getByTestId('companion-approve');
+  }
+
+  /** C-526 AC-6: decline the companion's plan. */
+  get companionDeclineButton() {
+    return this.page.getByTestId('companion-decline');
+  }
+
+  /** C-526 AC-6: one mode button for a companion. */
+  companionModeButton(combatantId: string, mode: string) {
+    return this.page.getByTestId(`companion-mode-${combatantId}-${mode}`);
+  }
+
+  /** C-526 AC-6: one editable target choice inside a proposal. */
+  companionTargetButton(combatantId: string) {
+    return this.page.getByTestId(`companion-target-${combatantId}`);
+  }
+
+  /** Natural-language combat instruction form. */
+  get combatIntentForm() {
+    return this.page.getByTestId('combat-intent-form');
+  }
+
+  /** Compiled natural-language intent preview. */
+  get combatIntentPreview() {
+    return this.page.getByTestId('combat-intent-preview');
+  }
+
+  /** Bounded intent clarification choices. */
+  get combatIntentClarification() {
+    return this.page.getByTestId('combat-intent-clarification');
+  }
+
+  /** Explicit intent confirmation control. */
+  get combatIntentConfirmButton() {
+    return this.page.getByTestId('combat-intent-confirm');
+  }
+
+  /** Intent preview cancellation control. */
+  get combatIntentCancelButton() {
+    return this.page.getByTestId('combat-intent-cancel');
+  }
+
+  /** Action availability label in the combat budget readout. */
+  get combatActionLabel() {
+    return this.page.getByTestId('combat-action-label');
+  }
+
+  /** Whether the engine-owned combat budget is currently visible. */
+  async isCombatBudgetVisible(): Promise<boolean> {
+    return this.combatBudgetReadout.isVisible().catch(() => false);
+  }
+
+  /** Fills and submits one natural-language combat instruction. */
+  async submitCombatIntent(text: string): Promise<void> {
+    await this.page.getByTestId('combat-intent-input').fill(text);
+    await this.page.getByTestId('combat-intent-submit').click();
+  }
+
+  /** Reads the current natural-language decision status. */
+  async readCombatIntentStatus(): Promise<string> {
+    return this.page.getByTestId('combat-intent-status').innerText();
+  }
+
+  /** Reads the engine-owned action-economy budget text. */
+  async readCombatBudgetText(): Promise<string> {
+    return this.combatBudgetReadout.innerText();
+  }
+
+  /** Reads the Action label classes used to expose available/spent state. */
+  async readCombatActionLabelClass(): Promise<string | null> {
+    return this.combatActionLabel.getAttribute('class');
   }
 
   /** Wait for combat to resolve (attack button re-enabled after round). */
@@ -462,6 +639,62 @@ export class GamePage {
       }
       return null;
     });
+  }
+
+  // ── Boot Check ────────────────────────────────────────────
+
+  /**
+   * Wait until the render loop has published a finite player position to
+   * `window.__AIKAMI_DEBUG__`.
+   *
+   * This is the strongest "engine is actually running" signal: the canvas can
+   * be attached while boot is still failing, but only a live render loop
+   * publishes player coordinates every frame.
+   */
+  async waitForEngineRunning(timeout = 45_000): Promise<void> {
+    await this.page.waitForFunction(
+      () => {
+        const debug = (window as unknown as Record<string, unknown>).__AIKAMI_DEBUG__ as
+          | { playerX?: unknown; playerY?: unknown }
+          | undefined;
+        return (
+          typeof debug?.playerX === 'number' &&
+          Number.isFinite(debug.playerX) &&
+          typeof debug?.playerY === 'number' &&
+          Number.isFinite(debug.playerY)
+        );
+      },
+      undefined,
+      { timeout },
+    );
+  }
+
+  /** Read the engine debug snapshot the render loop publishes each frame. */
+  async getEngineDebugSnapshot(): Promise<GameEngineDebugSnapshot | null> {
+    return this.page.evaluate(() => {
+      const debug = (window as unknown as Record<string, unknown>).__AIKAMI_DEBUG__ as
+        | Partial<GameEngineDebugSnapshot>
+        | undefined;
+      if (typeof debug?.playerX !== 'number' || typeof debug.playerY !== 'number') {
+        return null;
+      }
+      return {
+        playerX: debug.playerX,
+        playerY: debug.playerY,
+        npcCount: typeof debug.npcCount === 'number' ? debug.npcCount : 0,
+        playerVisibleByMask:
+          typeof debug.playerVisibleByMask === 'number' ? debug.playerVisibleByMask : 0,
+      };
+    });
+  }
+
+  /** Assert the WebGL canvas is visible with a non-zero layout size. */
+  async expectCanvasSized(): Promise<void> {
+    const { expect } = await import('@playwright/test');
+    await expect(this.canvas).toBeVisible({ timeout: 15_000 });
+    const box = await this.canvas.boundingBox();
+    expect(box?.width ?? 0).toBeGreaterThan(0);
+    expect(box?.height ?? 0).toBeGreaterThan(0);
   }
 
   // ── Capability Screen ─────────────────────────────────────

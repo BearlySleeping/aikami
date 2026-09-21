@@ -15,9 +15,33 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, sep } from 'node:path';
+import type { ProbeExecutor } from '@aikami/local-ai';
 import { HardwareProfileSchema, StackPlanSchema } from '@aikami/schemas';
 import { Value } from 'typebox/value';
 import { type CliOptions, defaultEnvPath, parseArgs, runInit } from './init.ts';
+import { probeExecutor as realProbeExecutor } from './probe_executor.ts';
+
+/**
+ * 200 GB of reported free space, regardless of the host.
+ *
+ * The AC-6 disk-shortfall guard compares the plan's download total against the
+ * REAL volume's free space. That made these assertions depend on the machine
+ * running the suite: on a nearly-full dev/CI volume every plan-visible test
+ * exited 2 with a shortfall message instead of exercising the wizard. The real
+ * executor is wrapped (not replaced) so detection itself stays genuine — only
+ * `statfs` is stubbed, and only here.
+ */
+const FREE_DISK_BYTES = 200_000_000_000;
+
+const STUB_EXECUTOR: ProbeExecutor = {
+  run: (command, args, options) => realProbeExecutor.run(command, args, options),
+  readTextFile: (path) => realProbeExecutor.readTextFile(path),
+  statfs: async () => ({ freeBytes: FREE_DISK_BYTES }),
+};
+
+/** `runInit` with the deterministic host probe, plus any test-specific overrides. */
+const run = (options: CliOptions, deps: Parameters<typeof runInit>[1] = {}): Promise<number> =>
+  runInit(options, { executor: STUB_EXECUTOR, ...deps });
 
 const MANIFEST = JSON.stringify({
   schemaVersion: 1,
@@ -123,7 +147,7 @@ describe('AC-6 — insufficient disk fails before writing', () => {
   test('total download > free disk → exit 2, shortfall in GB, no .env', async () => {
     const base = await baseOptions();
     await writeFile(base.manifestPath, HUGE_MANIFEST);
-    const code = await runInit(base);
+    const code = await run(base);
     expect(code).toBe(2);
     const envExists = await readFile(base.envPath, 'utf8').then(
       () => true,
@@ -145,7 +169,7 @@ describe('AC-7 — plan is shown before anything is written', () => {
     process.stdout.write = stub as typeof process.stdout.write;
     let code: number;
     try {
-      code = await runInit(base);
+      code = await run(base);
     } finally {
       process.stdout.write = originalWrite;
     }
@@ -182,7 +206,7 @@ describe('AC-7 — plan is shown before anything is written', () => {
     process.stdin.pause = (() => process.stdin) as typeof process.stdin.pause;
     process.stdin.off = (() => process.stdin) as typeof process.stdin.off;
     try {
-      const code = await runInit({ ...base, yes: false });
+      const code = await run({ ...base, yes: false });
       expect(code).toBe(0);
     } finally {
       Object.defineProperty(process.stdin, 'isTTY', { value: originalInIsTTY, configurable: true });
@@ -233,7 +257,7 @@ describe('interactive modality prompt accepts a comma-separated multi-value answ
     process.stdin.off = (() => process.stdin) as typeof process.stdin.off;
     let code: number;
     try {
-      code = await runInit({ ...base, yes: false });
+      code = await run({ ...base, yes: false });
     } finally {
       Object.defineProperty(process.stdin, 'isTTY', { value: originalInIsTTY, configurable: true });
       Object.defineProperty(process.stdout, 'isTTY', {
@@ -294,7 +318,7 @@ describe('AC-13 — --json output is complete and stable', () => {
     };
     process.stdout.write = stub as typeof process.stdout.write;
     try {
-      const code = await runInit({ ...base, json: true });
+      const code = await run({ ...base, json: true });
       expect(code).toBe(0);
     } finally {
       process.stdout.write = originalWrite;
@@ -314,7 +338,7 @@ describe('text engine source — host Ollama detection', () => {
 
   test('auto + probe finds nothing → bundled text engine unchanged', async () => {
     const base = await baseOptions();
-    const code = await runInit({ ...base, textSource: 'auto' }, { probeOllama: async () => false });
+    const code = await run({ ...base, textSource: 'auto' }, { probeOllama: async () => false });
     expect(code).toBe(0);
     const content = await readFile(base.envPath, 'utf8');
     expect(content).toContain('COMPOSE_PROFILES=text,image,voice,stt');
@@ -323,7 +347,7 @@ describe('text engine source — host Ollama detection', () => {
 
   test('auto + probe detects Ollama + --yes → reuses it, text dropped, .env notes it', async () => {
     const base = await baseOptions();
-    const code = await runInit({ ...base, textSource: 'auto' }, { probeOllama: async () => true });
+    const code = await run({ ...base, textSource: 'auto' }, { probeOllama: async () => true });
     expect(code).toBe(0);
     const content = await readFile(base.envPath, 'utf8');
     expect(content).toContain('COMPOSE_PROFILES=image,voice,stt');
@@ -334,7 +358,7 @@ describe('text engine source — host Ollama detection', () => {
   test('--text-source ollama forces reuse without probing — text dropped, .env notes it', async () => {
     const base = await baseOptions();
     // Probe stubbed to throw: --text-source ollama must never call it.
-    const code = await runInit(
+    const code = await run(
       { ...base, textSource: 'ollama' },
       {
         probeOllama: async () => {
@@ -351,7 +375,7 @@ describe('text engine source — host Ollama detection', () => {
 
   test('--text-source bundled skips the probe — text always kept', async () => {
     const base = await baseOptions();
-    const code = await runInit(
+    const code = await run(
       { ...base, textSource: 'bundled' },
       {
         probeOllama: async () => {
@@ -369,13 +393,13 @@ describe('text engine source — host Ollama detection', () => {
 describe('AC-9 — re-run is safe', () => {
   test('declining the overwrite leaves the file byte-identical', async () => {
     const base = await baseOptions();
-    const first = await runInit(base);
+    const first = await run(base);
     expect(first).toBe(0);
     const original = await readFile(base.envPath, 'utf8');
 
     // Second run WITHOUT --yes: non-TTY stdin defaults the overwrite
     // confirm to false, so the existing .env must remain untouched.
-    const code = await runInit({ ...base, yes: false });
+    const code = await run({ ...base, yes: false });
     expect(code).toBe(0);
     const after = await readFile(base.envPath, 'utf8');
     expect(after).toBe(original);
@@ -393,7 +417,7 @@ describe('next steps after writing .env', () => {
     };
     console.log = capture;
     try {
-      await runInit(options);
+      await run(options);
     } finally {
       console.log = originalLog;
     }
@@ -430,6 +454,39 @@ describe('next steps after writing .env', () => {
   });
 });
 
+describe('C-511 — audio is an opt-in modality', () => {
+  test('--modalities accepts audio', () => {
+    expect(parseArgs(['--modalities', 'text,audio']).modalities).toEqual(['text', 'audio']);
+    expect(parseArgs(['--modalities', 'audio']).modalities).toEqual(['audio']);
+  });
+
+  test('the shipped default plan never includes audio', async () => {
+    // DEFAULT_MODALITIES is not exported; the wizard's non-interactive default
+    // is asserted through the usage text plus the `.env.example`
+    // COMPOSE_PROFILES guard in repo_structure.test.ts.
+    const envExample = await readFile(join(import.meta.dir, '..', '.env.example'), 'utf8');
+    const line = envExample.split('\n').find((row) => row.startsWith('COMPOSE_PROFILES='));
+    expect(line).not.toContain('audio');
+  });
+
+  test('the usage text advertises audio as selectable', async () => {
+    const base = await baseOptions();
+    const out: string[] = [];
+    const originalWrite = process.stdout.write.bind(process.stdout);
+    // biome-ignore lint/suspicious/noExplicitAny: stdout capture in tests
+    (process.stdout as any).write = (chunk: string): boolean => {
+      out.push(String(chunk));
+      return true;
+    };
+    try {
+      await run({ ...base, help: true });
+    } finally {
+      process.stdout.write = originalWrite;
+    }
+    expect(out.join('')).toContain('text,image,voice,stt,audio,client');
+  });
+});
+
 describe('--help', () => {
   test('parseArgs recognises --help and -h', () => {
     expect(parseArgs(['--help']).help).toBe(true);
@@ -448,7 +505,7 @@ describe('--help', () => {
     };
     let code: number;
     try {
-      code = await runInit({ ...base, help: true });
+      code = await run({ ...base, help: true });
     } finally {
       process.stdout.write = originalWrite;
     }

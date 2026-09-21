@@ -387,11 +387,24 @@ describe('pipeline integration — thumbnailHash lands in the republished index 
       }),
     );
 
-    const { FakeR2Client } = await import('./fixtures.ts');
+    // Seed/metadata files so the seed publish phase reports zero failures.
+    // `asset_seed.json` must be a well-formed COMPACT SEED: the publisher
+    // parses it to union the candidate's rows with the previous release's.
+    writeFileSync(
+      join(dir, 'asset_seed.json'),
+      JSON.stringify({ sv: 1, g: '2026-01-01T00:00:00.000Z', o: '', r: [] }),
+    );
+    writeFileSync(join(dir, 'offline_core.json'), JSON.stringify({ core: ['lpc'] }));
+    writeFileSync(join(dir, 'lpc_credits.json'), JSON.stringify({ credits: [] }));
+    writeFileSync(join(dir, 'lpc_credits_supplement.json'), JSON.stringify({ credits: [] }));
+    writeFileSync(join(dir, 'audio_tracks.json'), JSON.stringify({ tracks: [] }));
+
+    const { FakeR2Client, noPreviousRelease } = await import('./fixtures.ts');
     const { runCatalogPublish } = await import('../pipeline.ts');
     const client = new FakeR2Client();
     const contentPacksDir = mkdtempSync(join(tmpdir(), 'catalog-thumb-empty-packs-'));
     const report = await runCatalogPublish({
+      releaseReader: noPreviousRelease,
       config: {
         accessKeyId: 'test',
         secretAccessKey: 'test',
@@ -417,7 +430,8 @@ describe('pipeline integration — thumbnailHash lands in the republished index 
 
     // The republished LPC shard carries thumbnailHash for the two decodable
     // entries; the corrupt one and the music entry do not.
-    const lpcShard = client.objects.get('index/v1/lpc.json');
+    const lpcShardKey = report.shardKeys.find((key) => key.endsWith('/lpc.json'));
+    const lpcShard = lpcShardKey ? client.objects.get(lpcShardKey) : undefined;
     expect(lpcShard).toBeDefined();
     const lpcShardBody = lpcShard?.body ?? new Uint8Array();
     const shardJson = JSON.parse(Buffer.from(lpcShardBody).toString('utf8')) as {

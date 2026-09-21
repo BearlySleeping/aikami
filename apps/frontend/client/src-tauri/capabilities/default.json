@@ -40,7 +40,8 @@
         { "url": "http://localhost:5278/**" },
         { "url": "https://hub.bearlysleeping.com/**" },
         { "url": "https://hub.stg.bearlysleeping.com/**" },
-        { "url": "https://assets.bearlysleeping.com/**" }
+        { "url": "https://assets.bearlysleeping.com/**" },
+        { "url": "https://assets.stg.bearlysleeping.com/**" }
       ]
     },
     {

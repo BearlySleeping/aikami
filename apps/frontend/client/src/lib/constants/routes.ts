@@ -10,7 +10,7 @@ export {
   toRouteHref,
   toRoutePathFromRouteId,
   toRoutePathFromURL,
-} from '@aikami/frontend/services';
+} from '$router';
 
 export const routes = {
   index: {
@@ -78,6 +78,12 @@ export const routes = {
     getPath: () => '/dev',
     queryParameters: undefined,
     routeId: '/dev',
+    type: 'public',
+  },
+  studioAssets: {
+    getPath: () => '/studio/assets',
+    queryParameters: undefined,
+    routeId: '/studio/assets',
     type: 'public',
   },
   personaCreate: {

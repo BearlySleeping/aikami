@@ -5,6 +5,12 @@
 // Contract: C-236 Agent Pipeline System
 
 import { describe, expect, it } from 'bun:test';
+import {
+  AGENT_MAX_TIMEOUT,
+  AGENT_MIN_TIMEOUT,
+  DEFAULT_AGENT_TIMEOUT_MS,
+  DEFAULT_PRE_AGENT_TIMEOUT_MS,
+} from '@aikami/constants';
 import { BUILT_IN_AGENTS } from './built_in_agents.ts';
 
 describe('BUILT_IN_AGENTS', () => {
@@ -44,10 +50,15 @@ describe('BUILT_IN_AGENTS', () => {
     }
   });
 
-  it('should have timeout of 500ms for all agents', () => {
+  it('should give agents realistic abortable timeouts', () => {
     for (const agent of BUILT_IN_AGENTS) {
-      expect(agent.timeout).toBe(500);
+      expect(agent.timeout).toBeGreaterThanOrEqual(AGENT_MIN_TIMEOUT);
+      expect(agent.timeout).toBeLessThanOrEqual(AGENT_MAX_TIMEOUT);
     }
+    const preAgent = BUILT_IN_AGENTS.find((a) => a.phase === 'pre');
+    expect(preAgent?.timeout).toBe(DEFAULT_PRE_AGENT_TIMEOUT_MS);
+    const postAgent = BUILT_IN_AGENTS.find((a) => a.phase === 'post');
+    expect(postAgent?.timeout).toBe(DEFAULT_AGENT_TIMEOUT_MS);
   });
 
   it('should have systemPrompt for all agents', () => {

@@ -25,7 +25,10 @@ export type Alias = { prefix: string; base: string; wildcard: boolean };
  */
 export const svelteAliases = (hubRoot: string, packagesDirectory: string): Alias[] => {
   const source = readFileSync(join(hubRoot, 'vite.config.ts'), 'utf8');
-  const pattern = /'?([$@][\w/*.-]+)'?:\s*to(Src|Packages)Path\('([^']+)'\)/g;
+  // Tolerate the wrapped `toPackagesPath(\n  '...',\n)` form that Biome emits
+  // for long alias keys — otherwise the alias silently disappears from the
+  // generated paths map.
+  const pattern = /'?([$@][\w/*.-]+)'?:\s*to(Src|Packages)Path\(\s*'([^']+)'\s*,?\s*\)/g;
   return [...source.matchAll(pattern)].map(([, key, kind, value]) => {
     const root = kind === 'Src' ? join(hubRoot, 'src') : packagesDirectory;
     const wildcard = (key as string).endsWith('/*');

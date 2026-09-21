@@ -8,7 +8,7 @@ import {
   BaseDevViewModel,
   type BaseDevViewModelInterface,
   type BaseDevViewModelOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import type { AssetResolver } from '@aikami/types';
 import type { EngineBridge, GameWorldOptions } from '../../../../engine/src/index.ts';
 import { createEngineBridge, GameWorld, TextureManager } from '../../../../engine/src/index.ts';

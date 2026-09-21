@@ -8,9 +8,20 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import { page } from '$app/state';
-import { configService, textGenerationService } from '$services';
+import type { ConfigServiceInterface, TextGenerationServiceInterface } from '$services';
+
+// ── Capability contracts ────────────────────────────────────────────────
+
+/** The config lookup the sandbox reads to seed its provider fields. */
+export type TextConfigCapabilities = Pick<ConfigServiceInterface, 'getActiveTextProvider'>;
+
+/** The text generation transport the sandbox exercises. */
+export type TextGenerationCapabilities = Pick<
+  TextGenerationServiceInterface,
+  'streamChat' | 'extractStructure'
+>;
 
 // ---------------------------------------------------------------------------
 // Tab definitions
@@ -65,7 +76,12 @@ export type TextViewModelInterface = BaseViewModelInterface & {
   validateSchema(): Promise<void>;
 };
 
-export type TextViewModelOptions = BaseViewModelOptions & {};
+export type TextViewModelOptions = BaseViewModelOptions & {
+  /** Config lookup used to seed endpoint/model. */
+  config: TextConfigCapabilities;
+  /** Text generation transport. */
+  textGeneration: TextGenerationCapabilities;
+};
 
 // ---------------------------------------------------------------------------
 // Implementation
@@ -100,6 +116,15 @@ class TextViewModel extends BaseViewModel<TextViewModelOptions> implements TextV
 
   private _abortController: AbortController | undefined;
 
+  private readonly _config: TextConfigCapabilities;
+  private readonly _textGeneration: TextGenerationCapabilities;
+
+  constructor(options: TextViewModelOptions) {
+    super(options);
+    this._config = options.config;
+    this._textGeneration = options.textGeneration;
+  }
+
   // ── Getters ──────────────────────────────────────────────────────────
 
   get tabs(): readonly TextTabMeta[] {
@@ -115,9 +140,9 @@ class TextViewModel extends BaseViewModel<TextViewModelOptions> implements TextV
   // ── Public: lifecycle ─────────────────────────────────────────────────
 
   override async initialize(): Promise<void> {
-    // Seed from configService, with try/catch for unconfigured state
+    // Seed from the config capability, with try/catch for unconfigured state
     try {
-      const resolved = configService.getActiveTextProvider();
+      const resolved = this._config.getActiveTextProvider();
       this.endpoint = resolved.endpoint;
       this.model = resolved.model;
     } catch {
@@ -180,7 +205,7 @@ class TextViewModel extends BaseViewModel<TextViewModelOptions> implements TextV
 
       const streamMode = this.streamEnabled;
 
-      await textGenerationService.streamChat({
+      await this._textGeneration.streamChat({
         messages,
         model: this.model.trim() || undefined,
         endpoint: this.endpoint.trim() || undefined,
@@ -253,7 +278,7 @@ class TextViewModel extends BaseViewModel<TextViewModelOptions> implements TextV
 
       this.output += 'Schema parsed successfully.\nGenerating structured output...\n';
 
-      const result = await textGenerationService.extractStructure({
+      const result = await this._textGeneration.extractStructure({
         schema,
         schemaName: this.schemaName.trim() || 'TestSchema',
         prompt: this.schemaPrompt.trim(),
@@ -278,5 +303,11 @@ class TextViewModel extends BaseViewModel<TextViewModelOptions> implements TextV
   }
 }
 
-export const getTextViewModel = (options: TextViewModelOptions): TextViewModelInterface =>
+/**
+ * Builds a text ViewModel from explicit capabilities.
+ *
+ * Callers outside production (tests, sandboxes) use this directly; production
+ * code goes through `getTextViewModel` in ./text_composition.ts.
+ */
+export const createTextViewModel = (options: TextViewModelOptions): TextViewModelInterface =>
   TextViewModel.create(options);

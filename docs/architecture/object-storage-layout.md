@@ -1,10 +1,22 @@
 # Object Storage Layout — Buckets, Keys, and Enforcement
 
-**Status:** draft for review
+**Status:** current for the R2 catalog/upload/distribution layout; the
+**player-owned** plane described in §2 and §6 has since moved to R2 (`aikami-saves`)
+— see the status note below.
 **Created:** 2026-08-20
 **Extends:** `data-layer-target-architecture.md` (D-13, D-14, I-3, I-7)
 **Implements today:** C-395 (catalog origin), C-396 (browse)
-**Blocks:** C-397 (on-demand assets), C-398 (submissions)
+**Blocks:** C-397 (on-demand assets, not yet drafted as a contract), C-398
+(member submissions)
+
+> **Status refresh (2026-09-16).** Per-user save blobs no longer live in Firebase
+> Storage: Firebase was removed and **R2 `SAVES_BUCKET` (`aikami-saves`) holds
+> encrypted save backups**, authorized by Better Auth-minted signed URLs
+> (`hub/src/lib/server/api/save_backup.ts`, D-13 amendment A-14, C-426). Where
+> §2/§6 describe Firebase Storage `isOwner(uid)` rules, read the R2 signed-URL
+> model; Postgres ownership/takedown references now mean Cloudflare D1 (C-436).
+> Bucket names, the catalog/upload/dist key layout, cache TTLs, branded key
+> types, and the enforcement analysis remain accurate.
 
 ---
 
@@ -67,12 +79,12 @@ Secondary benefits that fall out of the same split:
 | **Catalog** | R2 `aikami-catalog` | yes, `assets.bearlysleeping.com` | publish pipeline, moderation job | first-party + approved community asset bytes, thumbnails, indexes |
 | **Intake** | R2 `aikami-uploads` | **no** | hub (presigned PUT only) | unreviewed member submissions, quarantined |
 | **Distribution** | R2 `aikami-dist` | yes, `dl.bearlysleeping.com` | mirror job | permissively-licensed model checkpoints, optional release mirror |
-| **Player-owned** | Firebase Storage | no, `isOwner(uid)` | the client, directly | encrypted database backups, save blobs, avatars |
+| **Player-owned** *(moved to R2)* | R2 `aikami-saves` (was Firebase Storage) | no, hub-minted signed URL | the client, via the hub | encrypted database backups, save blobs, avatars |
 
 One sentence you can hold in your head:
 
-> **Public content bytes go to R2. Player-owned bytes go to Firebase Storage.
-> Nothing unreviewed is ever in a public bucket.**
+> **Public content bytes go to R2. Player-owned bytes go to the private R2 saves
+> bucket. Nothing unreviewed is ever in a public bucket.**
 
 That is a smaller rule than a single bucket carrying two security models would
 need, which answers the "won't multiple buckets be confusing?" worry — the
@@ -110,9 +122,24 @@ that for free only if they share a namespace.
 
 **What differs between first-party and community content is the index, not the
 storage.** Ownership, moderation state, ratings and install counts live in
-Postgres (D-14). The bucket stays a dumb content-addressed store.
+Cloudflare D1 (D-14; see status note). The bucket stays a dumb content-addressed store.
+
+> **C-513 amendment (implemented).** The community asset path ships as the
+> per-asset submission it describes here: `POST /api/assets/community` reserves
+> a `(slug, revision)` row, the owner PUTs the raw bytes to the private intake
+> plane, and only an operator `approved` transition copies the object into
+> `assets/<hash[0:2]>/<hash><ext>`. Re-publishing changed bytes creates a new
+> revision; identical bytes reuse the promoted object across owners. The
+> curated catalog's `index/v1` is untouched by user submissions — the community
+> namespace is separate, the *bytes* are shared.
 
 ### 3.2 Packs are the unit of community content
+
+> **C-513 amendment (implemented).** For *assets*, C-513 deliberately diverges:
+> the unit of community content is a single asset submission, not a pack. The
+> pack pipeline stays the operator/CI path it is today. A pack-shaped
+> submission (C-398's remaining half) must reuse this contract's intake plane
+> and moderation states rather than inventing a second one.
 
 The `PackSummary` / `PackVersion` schemas from C-394 already exist. Make first-party
 content a pack too, published through the same pipeline: `emberwatch` and
@@ -142,18 +169,40 @@ This is why intake is a different bucket rather than an unindexed prefix.
 ```
 r2://aikami-uploads/                            NO custom domain · NO public access
 
-  staging/<accountId>/<submissionId>/<filename>     expire after 14d
+  staging/<accountId>/<uploadId>                    expire after 14d
   quarantine/<sha256>                               objects held pending review
 ```
 
 Flow for C-398:
 
-1. Member authenticates to the hub. Hub checks quota and rate limit against Postgres.
+1. Member authenticates to the hub. Hub checks quota and rate limit against D1.
 2. Hub mints a **presigned PUT** scoped to one key in `aikami-uploads`, with a content-length range and content-type condition. Bytes never traverse the hub — I-7 holds.
 3. Client PUTs directly to R2. Hub records the submission row.
 4. Validation job hashes, scans, and checks the takedown denylist.
 5. On approval, a **moderation job** (not the hub) issues a server-side `CopyObject` into `aikami-catalog` under `assets/<sha[0:2]>/<sha><ext>`, then regenerates the pack manifest. No bytes move across the network.
 6. A lifecycle rule expires `staging/` after 14 days regardless of outcome.
+
+> **C-513 amendment (implemented).** The intake plane exists as of C-513
+> (`R2_BUCKETS.uploads` / `UPLOADS_BUCKET` / `aikami-uploads`, declared in
+> `@aikami/constants` and generated into the hub's `wrangler.jsonc`), with two
+> deliberate differences from the flow above:
+>
+> 1. **The hub mediates the intake hop** rather than minting a presigned PUT.
+>    `PUT /api/assets/community/:slug/upload` checks `Content-Length` against
+>    `MAX_UPLOAD_SIZE` *before* buffering, computes the sha256 itself, and
+>    writes the object through the binding. This is a recorded I-7 deviation
+>    (C-426's `/storage/upload` already does the same for player-owned bytes);
+>    presigning would require long-lived R2 API secrets in the Worker.
+> 2. **Promotion is synchronous in the moderation transition**, not a separate
+>    job: approving an asset copies the object into `aikami-catalog` in the
+>    same request and is idempotent, so an approval retried after a failure
+>    cannot produce a second copy.
+>
+> Staging keys are `staging/<accountId>/<uploadId>` (one object per *attempt*,
+> never hash-keyed — a hash-keyed staging object would be shared mutable state
+> between uploaders and would make pending bytes guessable). The
+> `quarantine/` prefix is not used yet: an unreviewed object stays in the
+> private bucket under its staging key until it is promoted or expired.
 
 Credential scoping that this makes possible:
 
@@ -177,7 +226,7 @@ and is acceptable.
 The non-obvious hazard: **content addressing makes takedown reversible by
 accident.** Re-uploading the identical bytes produces the identical key, which
 silently resurrects the object. So a takedown must write the hash to a
-`takedown_hashes` table in Postgres, checked at step 4 above *before*
+`takedown_hashes` table in D1, checked at step 4 above *before*
 promotion. Without it, deletion is theatre.
 
 Restate the invariant as: *objects are never deleted by a publish run.
@@ -190,7 +239,7 @@ denylist entry.*
 
 ### 5.1 Do not mirror model weights by default
 
-`apps/backend/local-stack/src/models.manifest.json` currently pins each entry
+`apps/backend/local-stack/stack/models.manifest.json` currently pins each entry
 to a HuggingFace `repo` + `revision` + `file` with a sha256, and the fetcher in
 `src/lib/fetch_models.ts` verifies it. That is a good design and should stay
 the primary source:
@@ -229,7 +278,18 @@ r2://aikami-dist/                               dl.bearlysleeping.com
   models/hf/<owner>/<repo>/<revision>/<path>    immutable · 1y
   models/url/<sha256[0:2]>/<sha256><ext>        immutable · 1y   archive-kind entries
   models/manifest/v1/models.json                mutable   · 60s
+  models/ort/<ort-version>/*.{mjs,wasm}         immutable · 1y   ONNX Runtime (see §7)
 ```
+
+**CORS is a hard prerequisite for `models/ort/`.** The client Worker fetches
+ORT runtime assets from `dl.bearlysleeping.com`, a different origin from the
+app, so the bucket must carry a CORS policy or the browser serves the bytes but
+refuses to expose them (opaque network error at ORT init). The policy is
+committed at `scripts/src/lib/dist/r2_cors_policy.json` and applied
+idempotently with `bun run src/lib/dist/apply_r2_cors.ts` (from `scripts/`).
+`scripts/src/lib/dist/upload_ort.ts` verifies the live response — status,
+`Content-Type`, immutable `Cache-Control`, and `Access-Control-Allow-Origin` —
+after every publish and fails loudly if any is wrong.
 
 Note the deliberate inconsistency: models mirror **HuggingFace's own
 addressing** rather than being content-addressed like the catalog. The reason
@@ -256,7 +316,7 @@ to `aikami-dist` as a secondary source in the same multi-source style as 5.2.
 
 ---
 
-## 6. Player-owned data — Firebase Storage, encrypted client-side
+## 6. Player-owned data — private R2 saves bucket, encrypted client-side
 
 ### 6.1 Why not R2
 
@@ -326,7 +386,7 @@ the whole database.
 
 ### 6.4 Two corrections to the existing vault, if you reuse it
 
-`apps/frontend/client/src/lib/utils/crypto_vault.ts` is a reasonable starting
+`apps/frontend/client/src/lib/views/utils/crypto_vault.ts` is a reasonable starting
 point — AES-GCM, PBKDF2, per-origin salt. Two things must change for a blob
 that leaves the device:
 
@@ -355,7 +415,8 @@ silent change in what gets uploaded.
 
 | Thing | Size | Verdict |
 |---|---|---|
-| `static/ort/*.wasm` | 76 MB (4 × ~19 MB) | **Trimmed and offloaded to `aikami-dist`.** Open Question 5 resolved 2026-08-20: the client uses exactly one `import('onnxruntime-web/webgpu')` path (`kokoro_worker.ts:116`), which is JSEP-enabled and fetches **only `ort-wasm-simd-threaded.jsep.wasm`** — for both the WebGPU and WASM fallback backends. The `asyncify` / `jspi` / base `simd-threaded` variants (50 MB) were verified dead and removed. The remaining `jsep.wasm` (26 MB) is served from `aikami-dist` at `models/ort/<ort-version>/` (dl.bearlysleeping.com) and fetched at TTS init — TTS is installed on demand, so nothing bundles. The client points `wasmPaths` at `PUBLIC_ORT_WASM_URL`, falling back to the app's own `/ort/` when unset. |
+| `static/ort/*.wasm` | 76 MB (4 × ~19 MB) | **Offloaded to `aikami-dist` and never bundled — enforced at build time.** Open Question 5 was originally resolved 2026-08-20 by trimming `static/ort/` to `jsep.wasm` only; the current invariant is stronger. No `static/ort/` exists, and **no `ort-*.wasm` may be emitted into `apps/frontend/client/build/` at any size**. (a) **Single source of truth:** `packages/shared/constants/src/lib/ort_runtime.ts` pins `ORT_RUNTIME_VERSION` (`1.31.0-dev.20260914-8d85527a0`, equal to the `onnxruntime-web` release `@huggingface/transformers@4.3.0` inlines) and the per-variant filenames; the browser seam `packages/frontend/local-runtime/src/lib/ort_runtime.ts` turns that into `wasmPaths`. Every local-ML consumer (Kokoro TTS in `kokoro_worker.ts`, the memory embedding backend, the text-LLM worker) goes through the seam — there is no `/ort/` fallback in production paths. (b) **Build-time externalization:** `apps/frontend/client/scripts/ort_external_plugin.ts` is an `enforce: 'pre'` Vite plugin registered both top-level **and** under `worker.plugins` (workers use their own plugin pipeline). It rewrites package-owned `new URL('ort-wasm-simd-threaded.*.(wasm\|mjs)', import.meta.url)` into a call to the seam through `virtual:aikami-ort-runtime`, before `vite:asset-import-meta-url` can resolve and emit the binary. Without it, Vite eagerly emits 21–27 MiB files and Cloudflare rejects the deploy. (c) **Two variants are published** — `jsep` (WebGPU + WAR wasm fallback) and `asyncify` (non-WebGPU default) — under `models/ort/<version>/`; the old claim that only `jsep` loads is no longer true. (d) **Guard:** `scripts/check_deploy_assets.ts` fails the build on any emitted `ort-*.wasm`, and runs again immediately before `wrangler deploy` even on a reused/cached build. |
+
 | `static/game-data/maps/`, `sprites/tilesets/` | 28 KB + | **Stays out**, as C-395 already decided — dev-only sandbox files, not scan categories. |
 | `static/*.png`, `favicon*`, `og-image.jpg` | ~660 KB | **Stays bundled.** App chrome, versioned with the build. |
 | `static/assets/npc/*.webp` | small | **Move to a pack.** These are content (Aragon, Gandalf, orc, troll portraits) that happen to live outside the six scan categories. Publish them as part of the first-party pack rather than inventing a seventh category. |
@@ -365,6 +426,36 @@ The three `game-data` sidecars — `manifest.json` (6.9 MB), `asset_credits.json
 (6.1 MB), `lpc_credits.json` (5.4 MB) — are C-397's problem, not this
 document's, but note they are 18 MB of JSON the client parses at boot and the
 catalog index already carries the same credit data in shardable form.
+
+### 7.1 Build-output audits (secondary optimizations)
+
+The client build is governed by `scripts/check_deploy_assets.ts` (hard ceiling +
+ORT/duplicate/dev-route gates) and `scripts/report_bundle_budget.ts` (tracked
+metrics + ratchet). Two findings are below the hard gates but are recorded here
+so a future change makes a deliberate decision rather than re-discovering them:
+
+1. **Duplicate `sqlite3` WASM (859,804 B).** `@sqlite.org/sqlite-wasm` emits the
+   identical binary at two paths because the main-thread and worker graphs each
+   reference it, and Vite names them differently:
+   `_app/immutable/assets/sqlite3.5oONAuZq.wasm` and
+   `_app/immutable/workers/assets/sqlite3-5oONAuZq.wasm`. It is below the 1 MiB
+   hard duplicate gate and appears only in the informational (≥256 KiB) report.
+   **Determination:** accept for now. Deduping means forcing both graphs onto one
+   emitted asset (a shared public path or a cross-graph import), which risks the
+   SQLite worker bootstrap for ~840 KB; the cost is Cloudflare asset count, not
+   correctness, and the budget has headroom. Revisit only if the budget tightens
+   or Cloudflare's per-deploy asset limit becomes the binding constraint.
+2. **Fonts: 0.96 MiB across 66 files.** Inter 400/500/600 and Source Serif 4
+   600/700 are imported from `@fontsource` in `src/app.css`; each face emits
+   **both `.woff2` and legacy `.woff`** for seven subsets (latin, latin-ext,
+   cyrillic, cyrillic-ext, greek, greek-ext, vietnamese). **Determination:**
+   establish the supported-language requirement first. Every browser Aikami
+   targets (modern Chromium/WebKit/Gecko, Tauri WebView) supports WOFF2, so
+   WOFF2-only plus explicit subset imports (e.g. `latin-400.css`) would cut the
+   set roughly in half with no rendering change — but dropping Cyrillic/Greek/
+   Vietnamese is a product-locale decision, not a build decision, so it is not
+   made here.
+
 
 ---
 
@@ -494,4 +585,4 @@ through the typed path.
 2. **Pack registry growth.** `index/v1/packs.json` has the sharding problem the root catalog index already hit. Fine while pack count is small; decide the shard axis (first letter? owner?) before it isn't.
 3. **Submission size ceiling.** The presigned PUT needs a content-length range. Pick a number tied to the R2 free tier (10 GB storage, 1M Class A ops/month) and to what a reasonable pack weighs.
 4. **Argon2id vs PBKDF2-600k** for the backup KEK — a wasm dependency in the client against a meaningfully better KDF.
-5. **Does anything actually load all four `ort` wasm variants?** **Resolved 2026-08-20: no.** One `import('onnxruntime-web/webgpu')` path (JSEP-enabled) loads only `jsep.wasm`. Trimmed `static/ort/` to `jsep.wasm` only (76 MB → 26 MB). See §7.
+5. **Does anything actually load all four `ort` wasm variants?** **Resolved 2026-08-20, superseded by the build-time invariant.** The 2026-08-20 answer was "no — one JSEP path loads only `jsep.wasm`" and `static/ort/` was trimmed to `jsep.wasm` (76 MB → 26 MB). That trimming is now moot: ORT is externalized at build time and nothing is bundled at all. Two variants (`jsep`, `asyncify`) are published under `models/ort/<version>/` because the non-WebGPU fallback needs `asyncify`; the `jspi` and base `simd-threaded` variants remain unpublished/unused. See §7.

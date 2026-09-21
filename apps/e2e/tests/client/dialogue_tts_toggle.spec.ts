@@ -27,7 +27,7 @@ test.describe('Dialogue TTS toggle (C-417 AC-5)', () => {
     await expect(toggle).toBeVisible();
     // The visible "TTS" label sits next to the toggle.
     await expect(page.getByText('TTS')).toBeVisible();
-    // It is a small daisyUI toggle, consistent with the overlay's controls.
+    // It is a small Aikami UI toggle, consistent with the overlay's controls.
     await expect(toggle).toHaveClass(/toggle/);
   });
 

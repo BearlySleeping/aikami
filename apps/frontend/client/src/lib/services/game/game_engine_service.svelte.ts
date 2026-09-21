@@ -13,8 +13,8 @@ import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
-} from '@aikami/frontend/services';
-import type { LpcAnimationState } from '@aikami/lpc';
+} from '@aikami/frontend/services/base';
+import { type LpcAnimationState, resolveBaseAppearanceRecipe } from '@aikami/lpc';
 import type {
   ContentPackManifest,
   OnboardingSection,
@@ -22,12 +22,19 @@ import type {
   PersonaData,
 } from '@aikami/types';
 import { getLpcAssetPath, getLpcCatalog, wireLpcUrlResolver } from '$lib/data/lpc_asset_catalog';
-import { audioContextManager, equipmentService, personaService } from '$services';
-import { authService } from '$services/auth/auth_service.svelte';
 import type { ActiveContextEntry, CombatantScreenState, FloatingTextInstance } from '$types';
 import { assetManager } from '../assets/asset_manager.svelte';
 import { assetTagResolver } from '../assets/registry_resolver';
-import { playSfxByName } from '../audio/audio_asset_resolver';
+import {
+  playSceneBgm,
+  playSfxByName,
+  setActiveAudioCueContext,
+} from '../audio/audio_asset_resolver';
+import { audioContextManager } from '../audio/audio_context_manager.ts';
+import { authService } from '../auth/auth_service.svelte.ts';
+import { personaService } from '../persona/persona_service.svelte.ts';
+import { actorVisualResolverFor } from './actor_visual_presentation.ts';
+import { equipmentService } from './equipment_service.svelte.ts';
 import { inputActionService } from './input_action_service.svelte';
 import { onboardingHintService } from './onboarding_hint_service.svelte';
 import { buildPropFrameResolver } from './prop_frame_resolver';
@@ -442,6 +449,12 @@ class GameEngineService
       });
       this.currentMapId = mapId;
       this.debug('loadMap:map-id', { currentMapId: this.currentMapId });
+      // C-523: MAP_LOADED fires inside the world load above, before
+      // `currentMapId` is assigned, so announce and cue from this settled point.
+      // (The listener's earlier request is superseded through the same
+      // authority; a request that did not change the context is a no-op.)
+      setActiveAudioCueContext({ packId, mapId: this.currentMapId });
+      void playSceneBgm('explore');
     }
   }
 
@@ -602,6 +615,10 @@ class GameEngineService
                   ...(def.appearanceLayers === undefined
                     ? {}
                     : { appearanceLayers: def.appearanceLayers }),
+                  // C-504: named appearance carried for the worker boundary. The
+                  // worker normalizes it (slot + assetId + layerRole) to derived
+                  // layer IDs with the SAME catalog the main thread resolves.
+                  ...(def.appearance === undefined ? {} : { appearance: def.appearance }),
                 },
               ]),
             ),
@@ -629,16 +646,15 @@ class GameEngineService
         const hour = rawHour === null || rawHour.trim() === '' ? Number.NaN : Number(rawHour);
         if (Number.isInteger(hour) && hour >= 0 && hour <= 23) {
           // C-378 visual determinism: the visual runner waits for this flag
-          // instead of a blind sleep, so the gameHour tint (and the scene
-          // state) is applied before the capture. The worker applies the
-          // start hour asynchronously, so the flag is raised only once an
-          // ENVIRONMENT_UPDATED event confirms the environment is at the
-          // requested hour.
+          // instead of a blind sleep, so the gameHour tint (and scene state)
+          // is applied before the capture. The worker applies the start hour
+          // asynchronously, so the flag is raised only once an ENVIRONMENT_UPDATED
+          // event confirms the environment is at the requested hour.
           //
           // Guard: GAME_READY re-fires after worker restores (LOAD_MAP and
-          // RESTORE_PLAYER both re-emit ENGINE_READY). Only the FIRST fire
-          // registers the subscription and dispatches the config — repeated
-          // fires would leak listeners and re-send SET_ENVIRONMENT_CONFIG.
+          // RESTORE_PLAYER both re-emit ENGINE_READY). Only the FIRST fire registers
+          // the subscription and dispatches the config — repeated fires would leak
+          // listeners and re-send SET_ENVIRONMENT_CONFIG.
           if (this._visualReadyPending) {
             return;
           }
@@ -812,15 +828,14 @@ class GameEngineService
         bridge,
         recipeResolver: pipeline.recipeResolver,
         assetUrlResolver: pipeline.assetUrlResolver,
-        // C-400: forward the projected catalog so the worker resolves the
-        // same slot/assetId sequences as the main-thread resolver.
+        actorVisualResolver: actorVisualResolverFor(() => pack),
+        // C-400: the worker resolves the same slot/assetId sequences.
         lpcCatalog: pipeline.catalog,
-        // C-374: merge equipped items onto the player's base LPC render
+        // C-374: merge equipped items onto the base LPC render.
         equipmentRecipeProvider: () => equipmentService.buildLpcRecipes(),
         textureManager,
         // C-375 AC-1: deterministic prop frame resolution.
         propFrameResolver: this._propFrameResolverHandle?.resolver,
-        // C-434: registry-backed tag resolver for maps and tilesets.
         resolveTag: assetTagResolver,
         releaseUrl,
       });
@@ -917,45 +932,62 @@ class GameEngineService
       effectiveRecipe,
     });
 
+    // ── Wearer-aware clothing resolution (C-504 follow-up) ──
+    const catalogAssetIdsBySlot: Record<string, readonly string[]> = {};
+    for (const slotDef of generatedLpcSlots) {
+      catalogAssetIdsBySlot[slotDef.slot] = slotDef.variants.map((v) => v.assetId);
+    }
+    const resolvedBase = resolveBaseAppearanceRecipe({
+      recipe: effectiveRecipe,
+      catalogAssetIdsBySlot,
+    });
+    for (const diagnostic of resolvedBase.diagnostics) {
+      this.warn('lpc.engine.incompatibleBase', {
+        slot: diagnostic.slot,
+        assetId: diagnostic.assetId,
+        rig: diagnostic.rig,
+        detail: diagnostic.detail,
+      });
+    }
+    equipmentService.configureAppearanceContext({
+      bodyAssetId: resolvedBase.recipe.body,
+      catalogAssetIdsBySlot,
+    });
+    const resolvedRecipe = resolvedBase.recipe;
+
     const EngineSlots = ['body', 'hair', 'torso', 'legs', 'feet', 'head'] as const;
 
     const SlotFallbacks: Record<string, number> = {
       body: 3,
       hair: 3,
-      torso: 0,
       legs: 22,
-      feet: 0,
       head: 95,
     };
 
     const appearanceLayers: number[] = [];
     for (const slotName of EngineSlots) {
-      const assetId = effectiveRecipe[slotName];
+      const assetId = resolvedRecipe[slotName];
       if (!assetId) {
-        appearanceLayers.push(SlotFallbacks[slotName] ?? 1);
+        appearanceLayers.push(SlotFallbacks[slotName] ?? 0);
         continue;
       }
       const catalogIdx = slotIndexMap.get(slotName);
       if (catalogIdx === undefined) {
-        appearanceLayers.push(SlotFallbacks[slotName] ?? 1);
+        appearanceLayers.push(SlotFallbacks[slotName] ?? 0);
         continue;
       }
       const slotDef = generatedLpcSlots[catalogIdx];
       if (!slotDef) {
-        appearanceLayers.push(SlotFallbacks[slotName] ?? 1);
+        appearanceLayers.push(SlotFallbacks[slotName] ?? 0);
         continue;
       }
       const variantIdx = slotDef.variants.findIndex((v) => v.assetId === assetId);
-      appearanceLayers.push(variantIdx >= 0 ? variantIdx + 1 : (SlotFallbacks[slotName] ?? 1));
+      appearanceLayers.push(variantIdx >= 0 ? variantIdx + 1 : (SlotFallbacks[slotName] ?? 0));
     }
 
     // C-430: zeroEquipmentOwnedAppearanceSlots removed — variable-length slots
     // replace the fixed six-slot ceiling. Equipment adds its own layers.
     playerData.appearanceLayers = appearanceLayers;
-
-    // C-374: seed the base outfit (chainmail + boots by default) into the
-    // equipment service so the paperdoll reflects what the character wears.
-    equipmentService.seedBaseOutfit(effectiveRecipe);
 
     this.debug('lpc.engine.appearanceLayers', { appearanceLayers });
 
@@ -1013,26 +1045,9 @@ class GameEngineService
       if (activePersona) {
         this._activePersona = activePersona;
         this._personaPlayerName = activePersona.name || activePersona.race || '';
-        return;
       }
     } catch (error) {
       this.debug('GameEngineService:loadActivePersona:local-failed', {
-        error: String(error),
-      });
-    }
-
-    try {
-      const stored = localStorage.getItem('aikami-characters');
-      if (stored) {
-        const characters = JSON.parse(stored) as Array<{ persona: PersonaData }>;
-        if (characters.length > 0) {
-          const persona = characters[characters.length - 1].persona;
-          this._activePersona = persona;
-          this._personaPlayerName = persona.name || persona.race || '';
-        }
-      }
-    } catch (error) {
-      this.debug('GameEngineService:loadActivePersona:localStorage-failed', {
         error: String(error),
       });
     }

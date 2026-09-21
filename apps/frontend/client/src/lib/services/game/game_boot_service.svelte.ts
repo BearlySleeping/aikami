@@ -9,23 +9,28 @@
 // biome-ignore-all lint/style/useNamingConvention: stage identifiers use snake_case per GameBootStage type
 
 import { DEFAULT_LPC_RECIPE } from '@aikami/constants';
-import type { EngineBridge, GameWorld } from '@aikami/frontend/engine';
+import type { ContentPackLoaderInterface, EngineBridge, GameWorld } from '@aikami/frontend/engine';
 import { createLpcPipeline, projectLpcCatalog } from '@aikami/frontend/engine/content';
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
-} from '@aikami/frontend/services';
-import type { LpcAnimationState } from '@aikami/lpc';
+} from '@aikami/frontend/services/base';
+import { type LpcAnimationState, resolveBaseAppearanceRecipe } from '@aikami/lpc';
 import type { Campaign, PersonaData } from '@aikami/types';
 import { isTauri } from '$lib/views/utils/is_tauri';
-import { authService, equipmentService } from '$services';
 import type { GameBootInput, GameBootProgress, GameBootResult, GameBootStage } from '$types';
+import { resetAudioCueAuthority } from '../audio/audio_asset_resolver.ts';
 import { transition } from '../campaign/boot_state_machine.ts';
 import { campaignService } from '../campaign/campaign_service.svelte';
+import { campaignStorage as campaignStorageRepo } from '../campaign/campaign_storage.svelte';
 import { personaService } from '../persona/persona_service.svelte';
+import { actorVisualResolverFor } from './actor_visual_presentation.ts';
+import { sampleTruthVariant } from './dramatic_structure_service';
+import { equipmentService } from './equipment_service.svelte.ts';
 import { gameEngineService } from './game_engine_service.svelte';
 import { parseSavePayloadEnvelope, validateEnvelopeChecksum } from './game_save_envelope.ts';
+import { planPackVersionHydration } from './pack_version_compat.ts';
 
 /** Ordered pipeline stages that execute sequentially during a boot attempt. */
 const bootStageOrder: readonly GameBootStage[] = [
@@ -124,6 +129,7 @@ class GameBootService
   private _bridge: EngineBridge | undefined;
   private _gameWorld: GameWorld | undefined;
   private _clearContentPackCache: (() => void) | undefined;
+  private _contentPack: ContentPackLoaderInterface | undefined;
 
   /** Registry-backed tag resolver (C-434). */
   private _resolveTag: ((tag: string) => string | null) | undefined;
@@ -149,15 +155,6 @@ class GameBootService
   private _persona: PersonaData | undefined;
 
   /**
-   * The effective LPC recipe (base + persona overrides) computed by
-   * {@link _buildPlayerData}. Persisted so the base outfit can be re-seeded
-   * AFTER save hydration — otherwise an empty equipment snapshot in the
-   * restored save clobbers the freshly-seeded chainmail/boots base outfit
-   * (C-417 / C-374 regression).
-   */
-  private _effectiveRecipe: Record<string, string> | undefined;
-
-  /**
    * Background handle for the asset registry stage.
    * Set during loading_campaign, awaited during initializing_asset_registry.
    * C-381 AC-8: registry is non-fatal and runs in the background.
@@ -178,9 +175,6 @@ class GameBootService
     this._bootGeneration++;
     this._input = input;
     this._resetProgress();
-    // Clear the previous boot's recipe so _seedBaseOutfit can never reuse it
-    // (C-374/C-417): each boot attempt must derive its own base outfit.
-    this._effectiveRecipe = undefined;
 
     const t0 = performance.now();
 
@@ -342,11 +336,13 @@ class GameBootService
     this.debug('boot:teardown');
     this.cancelBoot();
     this._teardownEngineResources();
+    // C-523: a disposed session must not leave a stale cue holding the audio
+    // authority or an in-flight transition racing the next boot.
+    resetAudioCueAuthority();
     this._setStage('idle', 0);
     this.lastResult = undefined;
     this._campaign = undefined;
     this._persona = undefined;
-    this._effectiveRecipe = undefined;
   }
 
   // ── Stage runners ──
@@ -789,6 +785,7 @@ class GameBootService
       return;
     }
     this._clearContentPackCache = clearContentPackCache;
+    this._contentPack = pack;
 
     // Validate pack has a starting map
     const startMap = pack.getStartingMap();
@@ -822,6 +819,29 @@ class GameBootService
       // Check generation after async preload
       if (generation !== this._bootGeneration) {
         return;
+      }
+    }
+    // ── C-495: sample the hidden truth once at campaign creation and persist it.
+    // The pack manifest is loaded here; the campaign is already resolved. Sampling
+    // is deterministic from the campaign seed, so it never re-rolls on reload and
+    // never rolls per NPC. If the campaign already carries a sampledTruthId
+    // (e.g. a prior boot or a post-C-495 save), it is left untouched.
+    if (this._campaign && !this._campaign.sampledTruthId) {
+      const sampled = sampleTruthVariant(pack.manifest, this._campaign.seed ?? 0);
+      if (sampled) {
+        this._campaign = { ...this._campaign, sampledTruthId: sampled };
+        try {
+          await campaignStorageRepo.update(this._campaign);
+        } catch (error) {
+          this.warn('stage:preloading_content:truth-persist-failed', {
+            error: String(error),
+          });
+          throw error;
+        }
+        this.debug('stage:preloading_content:truth-sampled', {
+          sampledTruthId: sampled,
+          seed: this._campaign.seed,
+        });
       }
     }
 
@@ -899,16 +919,13 @@ class GameBootService
       bridge: this._bridge,
       recipeResolver: pipeline.recipeResolver,
       assetUrlResolver: pipeline.assetUrlResolver,
-      // C-400: forward the projected catalog so the worker resolves the
-      // same slot/assetId sequences as the main-thread resolver.
+      actorVisualResolver: actorVisualResolverFor(() => this._contentPack),
+      // C-400: the worker resolves the same slot/assetId sequences.
       lpcCatalog: pipeline.catalog,
-      // C-374: merge equipped items onto the player's base LPC render
       equipmentRecipeProvider: () => equipmentService.buildLpcRecipes(),
       textureManager,
-      // C-375 AC-1: deterministic prop frame resolution (spritesheet-based,
-      // fallbackTile on miss) — never the global Texture.from cache.
+      // C-375 AC-1: prop frame resolution with fallbackTile on miss.
       propFrameResolver: this._propFrameResolverHandle?.resolver,
-      // C-434: registry-backed tag resolver for maps and tilesets.
       resolveTag: this._resolveTag,
       releaseUrl: this._releaseUrl,
     });
@@ -1003,11 +1020,10 @@ class GameBootService
         });
       }
 
-      // Re-seed the base outfit AFTER hydration so an empty equipment
-      // snapshot in the restored save cannot clobber the character's default
-      // chainmail/boots (C-374/C-417). seedBaseOutfit only fills empty
-      // body/feet slots, so real saved gear is preserved.
-      this._seedBaseOutfit();
+      // Base appearance now carries the character's torso/feet clothing, so
+      // there is no base-outfit seeding after hydration: an empty equipment
+      // snapshot simply means no equipped gear, and the persona's own outfit
+      // renders underneath (C-504 follow-up — wearer-compatible equipment).
 
       if (map?.mapId && map.packId) {
         // ── Map-authoritative restore (v3+ envelope) ──
@@ -1026,27 +1042,24 @@ class GameBootService
         }
 
         // ── C-381 AC-3: Pack version mismatch detection ──
-        const savedVersion = map.packVersion;
-        const currentVersion = pack.manifest.version;
-        if (savedVersion && currentVersion && savedVersion !== currentVersion) {
-          this.warn('stage:hydrating_snapshot:pack-version-mismatch', {
-            savedVersion,
-            currentVersion,
-            packId: map.packId,
-            hint: 'The pack has been updated since this save was created. If the saved map no longer exists, the starting map will be used instead.',
-          });
-          // Check if the saved map still exists in the current pack
-          if (!pack.manifest.maps[map.mapId]) {
-            this.warn('stage:hydrating_snapshot:map-not-found-in-updated-pack', {
-              mapId: map.mapId,
-              packId: map.packId,
-              fallbackMapId: pack.manifest.startingMapId,
-            });
-            // Fall back to the pack's starting map
-            map.mapId = pack.manifest.startingMapId;
-            map.playerX = pack.getStartingMap()?.defaultX ?? map.playerX;
-            map.playerY = pack.getStartingMap()?.defaultY ?? map.playerY;
-          }
+        const hydrationPlan = planPackVersionHydration({
+          savedVersion: map.packVersion,
+          currentVersion: pack.manifest.version,
+          packId: map.packId,
+          savedMapId: map.mapId,
+          currentMapIds: Object.keys(pack.manifest.maps),
+          startingMapId: pack.manifest.startingMapId,
+          startingMap: pack.getStartingMap(),
+          savedX: map.playerX,
+          savedY: map.playerY,
+        });
+        for (const warning of hydrationPlan.warnings) {
+          this.warn(warning.event, warning.details);
+        }
+        if (hydrationPlan.kind === 'mismatch' && hydrationPlan.redirect) {
+          map.mapId = hydrationPlan.redirect.mapId;
+          map.playerX = hydrationPlan.redirect.x;
+          map.playerY = hydrationPlan.redirect.y;
         }
 
         await gameEngineService.loadMap({
@@ -1212,51 +1225,14 @@ class GameBootService
 
   // ── Persona resolution ──
 
-  /** Resolves persona preferring campaign.personaId, then active persona, then localStorage. */
+  /** Resolves the play persona: campaign persona first, then the active persona. */
   private async _resolvePersona(campaign?: Campaign): Promise<PersonaData | undefined> {
-    // 1. Prefer campaign.personaId
-    if (campaign?.personaId) {
-      try {
-        const user = authService.currentUser;
-        if (user) {
-          const personas = await personaService.getPersonas(user.id);
-          const match = personas.find((p) => p.id === campaign.personaId);
-          if (match) {
-            return match;
-          }
-        }
-      } catch (error) {
-        this.debug('_resolvePersona:campaign-persona-failed', { error: String(error) });
-      }
-    }
-
-    // 2. Fall back to active persona
     try {
-      const active = await personaService.getActivePersona();
-      if (active) {
-        return active;
-      }
+      return await personaService.resolvePersona(campaign?.personaId);
     } catch (error) {
-      this.debug('_resolvePersona:active-persona-failed', { error: String(error) });
+      this.debug('_resolvePersona:failed', { error: String(error) });
+      return undefined;
     }
-
-    // 3. Fall back to localStorage
-    try {
-      const stored = localStorage.getItem('aikami-characters');
-      if (stored) {
-        const characters = JSON.parse(stored) as Array<{ persona: PersonaData }>;
-        if (characters.length > 0) {
-          const last = characters[characters.length - 1];
-          if (last) {
-            return last.persona;
-          }
-        }
-      }
-    } catch (error) {
-      this.debug('_resolvePersona:localStorage-failed', { error: String(error) });
-    }
-
-    return undefined;
   }
 
   // ── LPC pipeline ──
@@ -1301,8 +1277,6 @@ class GameBootService
     const { generatedLpcSlots } = this._getLpcCatalogSync();
     if (!generatedLpcSlots) {
       this.warn('lpc.boot.noCatalog', { personaId: this._persona.id });
-      // No catalog — no recipe to persist; drop any stale one from a prior boot.
-      this._effectiveRecipe = undefined;
       return playerData;
     }
 
@@ -1343,77 +1317,73 @@ class GameBootService
       effectiveRecipe: JSON.stringify(effectiveRecipe),
     });
 
+    // ── Wearer-aware clothing resolution (C-504 follow-up) ──
+    // Resolve the rig-dependent clothing slots (torso/legs/feet) against the
+    // recipe's own body profile so a female body never renders the catalog's
+    // male-default chainmail/boots. The same catalog is handed to the
+    // equipment service so equipped gear resolves compatibly too.
+    const catalogAssetIdsBySlot: Record<string, readonly string[]> = {};
+    for (const slotDef of generatedLpcSlots) {
+      catalogAssetIdsBySlot[slotDef.slot] = slotDef.variants.map((v) => v.assetId);
+    }
+    const resolvedBase = resolveBaseAppearanceRecipe({
+      recipe: effectiveRecipe,
+      catalogAssetIdsBySlot,
+    });
+    for (const diagnostic of resolvedBase.diagnostics) {
+      this.warn('lpc.boot.incompatibleBase', {
+        slot: diagnostic.slot,
+        assetId: diagnostic.assetId,
+        rig: diagnostic.rig,
+        detail: diagnostic.detail,
+      });
+    }
+    equipmentService.configureAppearanceContext({
+      bodyAssetId: resolvedBase.recipe.body,
+      catalogAssetIdsBySlot,
+    });
+    const resolvedRecipe = resolvedBase.recipe;
+
     const EngineSlots = ['body', 'hair', 'torso', 'legs', 'feet', 'head'] as const;
 
-    // Map effective recipe to engine variant indices.
-    // Fallback per-slot values produce a good-looking male character
-    // (bodies_male=3, bangs=3, pants=22, head=95). Torso (chainmail) and
-    // feet (boots) are equipment-owned (C-374) — they are excluded from the
-    // base appearance so unequipping reveals the bare body, and the base
-    // outfit is seeded into the equipment service instead.
+    // Map the resolved recipe to engine variant indices.
+    // The torso/feet layers are part of the BASE appearance again — unequip
+    // reveals the persona's own clothing (tunic/sandals), never a bare body.
     const SLOT_FALLBACKS: Record<string, number> = {
       body: 3,
       hair: 3,
-      torso: 0,
       legs: 22,
-      feet: 0,
       head: 95,
     };
 
     const appearanceLayers: number[] = [];
     for (const slotName of EngineSlots) {
-      const assetId = effectiveRecipe[slotName];
+      const assetId = resolvedRecipe[slotName];
       if (!assetId) {
-        appearanceLayers.push(SLOT_FALLBACKS[slotName] ?? 1);
+        appearanceLayers.push(SLOT_FALLBACKS[slotName] ?? 0);
         continue;
       }
       const catalogIdx = slotIndexMap.get(slotName);
       if (catalogIdx === undefined) {
-        appearanceLayers.push(SLOT_FALLBACKS[slotName] ?? 1);
+        appearanceLayers.push(SLOT_FALLBACKS[slotName] ?? 0);
         continue;
       }
       const slotDef = generatedLpcSlots[catalogIdx];
       if (!slotDef) {
-        appearanceLayers.push(SLOT_FALLBACKS[slotName] ?? 1);
+        appearanceLayers.push(SLOT_FALLBACKS[slotName] ?? 0);
         continue;
       }
       const variantIdx = slotDef.variants.findIndex((v) => v.assetId === assetId);
-      appearanceLayers.push(variantIdx >= 0 ? variantIdx + 1 : (SLOT_FALLBACKS[slotName] ?? 1));
+      appearanceLayers.push(variantIdx >= 0 ? variantIdx + 1 : (SLOT_FALLBACKS[slotName] ?? 0));
     }
 
     // C-430: zeroEquipmentOwnedAppearanceSlots removed — variable-length slots
     // replace the fixed six-slot ceiling. Equipment adds its own layers.
     playerData.appearanceLayers = appearanceLayers;
 
-    // Persist the effective recipe so the base outfit can be re-seeded after
-    // save hydration (see {@link _seedBaseOutfit}).
-    this._effectiveRecipe = effectiveRecipe;
-
-    // C-374: seed the base outfit (chainmail + boots by default) into the
-    // equipment service so the paperdoll reflects what the character wears.
-    // Only fills empty body/feet slots — saved gear is never clobbered.
-    this._seedBaseOutfit();
-
     this.debug('lpc.boot.appearanceLayers', { appearanceLayers: JSON.stringify(appearanceLayers) });
 
     return playerData;
-  }
-
-  /**
-   * Seeds the base outfit (chainmail + boots by default) into the equipment
-   * service so the paperdoll reflects the character's base LPC clothing.
-   *
-   * Only fills empty body/feet slots — saved gear is never clobbered. Called
-   * once during {@link _buildPlayerData} (engine creation) and again AFTER
-   * save hydration, because restoring a save with an empty equipment snapshot
-   * would otherwise wipe the freshly-seeded base outfit, leaving the
-   * character rendering chainmail while the Body slot sits empty (C-374/C-417).
-   */
-  private _seedBaseOutfit(): void {
-    if (!this._effectiveRecipe) {
-      return;
-    }
-    equipmentService.seedBaseOutfit(this._effectiveRecipe);
   }
 
   private _getLpcCatalogSync(): {

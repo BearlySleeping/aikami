@@ -12,8 +12,10 @@ import { join } from 'node:path';
 import { FakeHerdrAdapter } from './fake_adapter.ts';
 import { writeManifest } from './manifest_store.ts';
 import {
+  isImplementerGateFailure,
   prePushGateForRevision,
   ReviewAbandonedError,
+  rebindPublicationEvidence,
   runContractPipeline,
   verifierFeedback,
 } from './orchestrator.ts';
@@ -120,6 +122,68 @@ describe('prePushGateForRevision', () => {
   });
 });
 
+describe('rebindPublicationEvidence', () => {
+  it('moves validation and authorization to the commit that snapshots the validated tree', () => {
+    const manifest = baseManifest({
+      prePushValidation: {
+        outcome: 'failed',
+        ok: false,
+        output: 'failure',
+        checkedAt: 'now',
+        revision: 'before-commit',
+      },
+      publicationAuthorization: {
+        outcome: 'failed',
+        revision: 'before-commit',
+        grantedBy: 'yolo',
+        grantedAt: 'now',
+      },
+    });
+
+    rebindPublicationEvidence({ manifest, revision: 'after-commit' });
+
+    expect(manifest.prePushValidation?.revision).toBe('after-commit');
+    expect(manifest.publicationAuthorization?.revision).toBe('after-commit');
+  });
+});
+
+describe('isImplementerGateFailure', () => {
+  const validation = (
+    overrides: Partial<NonNullable<RunManifest['prePushValidation']>>,
+  ): NonNullable<RunManifest['prePushValidation']> => ({
+    outcome: 'failed',
+    ok: false,
+    output: 'failure',
+    checkedAt: 'now',
+    revision: 'rev',
+    ...overrides,
+  });
+
+  it('treats a red code verdict as implementer work', () => {
+    expect(isImplementerGateFailure(validation({ outcome: 'failed', ok: false }))).toBe(true);
+  });
+
+  it('does not send an unavailable gate back to the implementer', () => {
+    expect(isImplementerGateFailure(validation({ outcome: 'unavailable', ok: false }))).toBe(false);
+  });
+
+  it('does not send a cancelled gate back to the implementer', () => {
+    expect(isImplementerGateFailure(validation({ outcome: 'cancelled', ok: false }))).toBe(false);
+  });
+
+  it('is false for a green verdict and for a run that never recorded one', () => {
+    expect(isImplementerGateFailure(validation({ outcome: 'passed', ok: true }))).toBe(false);
+    expect(isImplementerGateFailure(undefined)).toBe(false);
+  });
+
+  it('keeps the boolean interpretation for manifests persisted before typed outcomes', () => {
+    expect(isImplementerGateFailure({ ...validation({}), outcome: undefined })).toBe(true);
+    expect(isImplementerGateFailure({ ...validation({}), outcome: undefined, ok: true })).toBe(
+      false,
+    );
+  });
+});
+
 // ── verifierFeedback (extended scenarios) ──────────────────────
 
 describe('verifierFeedback extended', () => {
@@ -145,7 +209,7 @@ describe('verifierFeedback extended', () => {
         createdAt: new Date().toISOString(),
       },
     });
-    const feedback = verifierFeedback({ manifest, attempt: 2 });
+    const feedback = verifierFeedback({ manifest, attempt: 2, revision: 'abc123' });
     expect(feedback).toContain('Fix the login redirect loop.');
     expect(feedback).toContain('AskClaude traced it to middleware.ts:42.');
   });
@@ -163,7 +227,7 @@ describe('verifierFeedback extended', () => {
         },
       ],
     });
-    expect(verifierFeedback({ manifest, attempt: 1 })).toBeUndefined();
+    expect(verifierFeedback({ manifest, attempt: 1, revision: 'abc123' })).toBeUndefined();
   });
 
   it('includes previous implementer summary when available', () => {
@@ -198,7 +262,7 @@ describe('verifierFeedback extended', () => {
         },
       ],
     });
-    const feedback = verifierFeedback({ manifest, attempt: 2 });
+    const feedback = verifierFeedback({ manifest, attempt: 2, revision: 'abc123' });
     expect(feedback).toContain('Previous implementer summary');
     expect(feedback).toContain('Partial implementation of login flow');
   });
@@ -254,6 +318,7 @@ describe('runContractPipeline with FakeHerdrAdapter', () => {
         currentStage: 'implement',
         verifyLoops: 1,
         blockedEscalations: 1,
+        blockedEscalationRounds: 3,
         skipAuthoring: true,
         rootMode: true,
       }),
@@ -296,10 +361,72 @@ describe('runContractPipeline with FakeHerdrAdapter', () => {
     expect(transitionInput.currentStage).toBe('implement');
     expect(transitionInput.verdict).toBe(attemptResult);
     expect(transitionInput.verifyLoops).toBe(1);
-    expect(transitionInput.blockedEscalations).toBe(1);
+    // 🔴 Resume resets the per-episode budget (blockedEscalations 1 → 0);
+    // the run still terminates because the run-total rounds bound is spent.
+    expect(transitionInput.blockedEscalations).toBe(0);
+    expect(transitionInput.blockedEscalationRounds).toBe(3);
     expect(result.verifyLoops).toBe(1);
-    expect(result.blockedEscalations).toBe(1);
+    expect(result.blockedEscalations).toBe(0);
+    expect(result.blockedEscalationRounds).toBe(3);
     expect(result.currentStage).toBe('blocked');
+  });
+
+  it('resumes a spent escalation budget and consults the captain again (C-526 regression)', async () => {
+    // The C-526 shape: the captain already round-tripped once (`change`),
+    // the retry blocked again, and the run died terminally on the spent
+    // budget. A resume must refresh the episode budget so the next blocked
+    // verdict escalates to the captain instead of ending the run silently.
+    const runId = 'run-test-C-526-resume';
+    const contractPath = join(tmpDir, 'docs', 'contracts', 'C-999-test.md');
+    const pipelineAdapter = new FakeHerdrAdapter({ workspacePath: '' });
+    writeManifest({
+      cwd: tmpDir,
+      manifest: baseManifest({
+        runId,
+        contractPath,
+        currentStage: 'implement',
+        blockedEscalations: 1,
+        blockedEscalationRounds: 1,
+        reviewPaneId: 'fake-review-pane',
+        skipAuthoring: true,
+        rootMode: true,
+      }),
+    });
+    // Pre-stage the captain's decision — the review stage consumes it at
+    // entry (existingDecision path), so no real pane is needed.
+    const decisionDir = join(tmpDir, '.pi', 'contract-runs', runId, 'review');
+    mkdirSync(decisionDir, { recursive: true });
+    writeFileSync(
+      join(decisionDir, 'decision.json'),
+      JSON.stringify({
+        runId,
+        decision: 'reject',
+        summary: 'Handed back to the user.',
+        diffHash: 'h',
+        contractChanged: false,
+        createdAt: new Date().toISOString(),
+      }),
+    );
+
+    const result = await runContractPipeline({
+      repoRoot: tmpDir,
+      resumeRunId: runId,
+      skipAuthoring: true,
+      rootMode: true,
+      adapterFactory: () => pipelineAdapter,
+    });
+
+    // The draft-contract precondition fast-fail produced the blocked verdict…
+    expect(result.attempts.at(-1)?.result?.status).toBe('blocked');
+    // …which ESCALATED (rounds 1 → 2) instead of terminating on the spent
+    // per-episode budget…
+    expect(result.blockedEscalations).toBe(1);
+    expect(result.blockedEscalationRounds).toBe(2);
+    // …reached the review stage, and the captain's reject decision ended the
+    // run as blocked with the decision's summary as the reason.
+    expect(result.currentStage).toBe('blocked');
+    expect(result.blockedReason).toBe('Handed back to the user.');
+    expect(result.reviewDecision?.decision).toBe('reject');
   });
 
   it('FakeHerdrAdapter returns controllable values through its interface', async () => {

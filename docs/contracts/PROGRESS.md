@@ -1,8 +1,8 @@
 # Contract Implementation Progress
 
-## Status Summary (Auto-generated: 2026-09-06)
+## Status Summary (Auto-generated: 2026-09-16)
 
-**240 active (0 without contract file), 119 archived, 0 duplicates**
+**297 active (10 without contract file), 119 archived, 0 duplicates**
 
 ### Active Contracts
 
@@ -220,8 +220,8 @@
 | C-456 | Group Chat And Systemic Npc Interactions | 🛠️ implemented | — | v1 | full |
 | C-457 | Gm Prompt Assembly Upgrade | 🛠️ implemented | — | v1 | full |
 | C-458 | In House Memory And Lore Retrieval System | 🛠️ implemented | — | v1 | full |
-| C-459 | Ai Gm Narrative Director Enhancements | 🛠️ implemented | — | v1 | full |
-| C-460 | Npc Behavioral Autonomy Layer | 🛠️ implemented | — | v1 | full |
+| C-459 | Ai Gm Narrative Director Enhancements | 🛠️ implemented | — | v2 | full |
+| C-460 | Npc Behavioral Autonomy Layer | 🛠️ implemented | — | v2 | full |
 | C-461 | Generate Typebox Row Schemas From Drizzle | 🛠️ implemented | ❓ `sandbox` | v2 | thin |
 | C-462 | Client Side R2 Save Backup And Restore | 🛠️ implemented | ❓ `sandbox` | v2 | full |
 | C-463 | Provider Connection Role Model | 🛠️ implemented | ❓ `integrated` | v2 | full |
@@ -245,9 +245,66 @@
 | C-481 | Ai Configuration Convergence | 🛠️ implemented | — | v2 | full |
 | C-482 | Managed Ai Runtime Lifecycle | 🛠️ implemented | — | v2 | full |
 | C-483 | Guided Ai Setup | 👍 approved | — | v2 | full |
-| C-484 | Capability First Settings | 👍 approved | — | v2 | full |
-| C-485 | Production Path Evidence Gate | 📝 draft | — | v2 | full |
-| C-486 | Unconditional Release Journey | 📝 draft | — | v2 | full |
+| C-484 | Capability First Settings | 🛠️ implemented | — | v2 | full |
+| C-485 | Production Path Evidence Gate | 🛠️ implemented | — | v2 | full |
+| C-486 | Unconditional Release Journey | 🛠️ implemented | — | v2 | full |
+| C-487 | Free Text Skill Checks Honour The Character Sheet | 🛠️ implemented | — | v2 | full |
+| C-488 | Authored Npc Identity In The Content Pack | 🛠️ implemented | — | v2 | full |
+| C-489 | One Authority Path For Consequences | 🛠️ implemented | — | v2 | full |
+| C-490 | Transcript Branching Must Not Imply Rewinding The World | 🛠️ implemented | — | v2 | thin |
+| C-491 | Committed Narrative Event Record | 🛠️ implemented | — | v2 | full |
+| C-492 | Memory Retrieval Correctness And Production Wiring | 👍 approved | — | v2 | full |
+| C-493 | Wire Group Scenes Into The Production Party Path | 👍 approved | — | v2 | thin |
+| C-494 | One Companion Who Reacts | 🛠️ implemented | — | v2 | full |
+| C-495 | Emberwatch Dramatic Structure | 🛠️ implemented | — | v2 | full |
+| C-496 | Shared Visual Assets And Playback | 🛠️ implemented | — | v2 | full |
+| C-497 | Camera Framing And Default Asset Review | 🛠️ implemented | — | v2 | thin |
+| C-498 | Preset Means Character Is Ready | 👍 approved | — | v2 | thin |
+| C-499 | Dialogue Intent Envelope Extraction Resilience | 🛠️ implemented | ❓ `integrated` — production route `/game` | v2 | thin |
+| C-500 | Combat Overlay Rendering And Engine Stall | 🛠️ implemented | ❓ `integrated` — production route `/game` | v2 | full |
+| C-501 | Dialogue Slash Commands | 📝 draft | ❓ `integrated` — production route `/game` | v2 | full |
+| C-502 | Minimap Hud | 📝 draft | ❓ `integrated` — production route `/game` | v2 | full |
+| C-503 | Quest Marker Hud | 📝 draft | ❓ `integrated` — production route `/game` | v2 | full |
+| C-504 | Stable Character Appearance Identity | 🛠️ implemented | — | v2 | full |
+| C-505 | Canonical Scene Data And Authoring Boundary | 🛠️ implemented | — | v2 | full |
+| C-506 | Emberwatch Visual Readability | 🛠️ implemented | — | v2 | thin |
+| C-507 | Map Studio Visual Editor | 🛠️ implemented | ❓ `sandbox` | v2 | full |
+| C-508 | Map Studio Drafts And Publishing | 🛠️ implemented | ❓ `sandbox` | v1 | full |
+| C-509 | Combat 01 Versioned Schemas And Kernel Authority | ✅ verified | ❓ `—` | v2 | full |
+| C-510 | Engine Agnostic Asset Generation And Registry Write Seam | 🛠️ implemented | ❓ `—` | v2 | full |
+| C-511 | Local Audio Generation Modality | 🛠️ implemented | ❓ `—` | v2 | full |
+| C-512 | Creator Studio And Runtime Asset Generation | 🛠️ implemented | ❓ `—` → `sandbox` once Phase 3 ships the `(dev)/dev/studio` route → `integrated` with the production route + E2E | v2 | full |
+| C-513 | End User Asset Publishing And Community Sharing | ❓ implemented — hub intake/moderation/promotion + public browse page, client publish + community browse/import, offline-reload resolution, AC-12 runner, and the C-512 production evidence executed for the first time. Re-verified in the C-513 recovery pass (see the Execution Report). | ❓ `—` | v2 | full |
+| C-514 | Combat 02 Real Turn Coordinator And Action Budgets | ✅ verified | ❓ `—` | v2 | full |
+| C-515 | Combat 03 World Space Tactical Queries And Previews | ✅ verified | ❓ `—` | v2 | full |
+| C-516 | Combat 04 Direct Control Production Vertical Slice | 🛠️ implemented | ❓ `—` | v2 | full |
+| C-517 | Generation Request And Format Correctness | 🛠️ implemented | — | v1 | full |
+| C-518 | Generation Provenance And Candidate Records | 🛠️ implemented | — | v1 | full |
+| C-519 | Durable Asset Jobs And Batch Execution | 🛠️ implemented | — | v1 | full |
+| C-520 | Versioned Image Workflows And Asset Preparation | 🛠️ implemented | — | v1 | full |
+| C-521 | Music Sfx Generation And Audio Preparation | 🛠️ implemented | — | v1 | full |
+| C-522 | Hub And Client Generation Runner Access | 🛠️ implemented | — | v1 | full |
+| C-523 | Emberwatch Asset Pilot And Offline Integration | 🛠️ implemented | — | v1 | full |
+| C-524 | Optional Hosted Asset Provider Comparison | 🛠️ implemented | — | v1 | full |
+| C-525 | Combat 05 Natural Language Intent And Confirmation Ux | ✅ verified | ❓ `—` | v2 | full |
+| C-526 | Combat 06 Companion And Enemy Llm Intent Agents | 🛠️ implemented | ❓ `—` | v2 | full |
+| C-527 | Coherent Play Shell And Management Navigation | 🛠️ implemented | — | v2 | full |
+| C-528 | Player Hud Presets And Layout Editor | 🛠️ implemented | — | v2 | full |
+| C-529 | Declarative Theme Runtime And Creator Tools | 🛠️ implemented | — | v2 | full |
+| C-530 | Hub Theme Publishing And Installation | 📝 draft | — | v2 | full |
+| C-531 | Combat 07 Affordances And Improvised Actions | 🛠️ implemented | — | v1 | full |
+| C-532 | Combat 08 Objectives Morale Reactions And Release Gate | 🛠️ implemented | — | v1 | full |
+| C-533 | Show NPC mood on the LPC sprite | ⏳ not_started (no contract file) | — | — | full |
+| C-534 | Stop per-frame `zoning.position` logging | ⏳ not_started (no contract file) | — | — | full |
+| C-535 | Ship real default persona avatars | ⏳ not_started (no contract file) | — | — | full |
+| C-536 | Keep NPC dialogue memory across session exit and re-enter | ⏳ not_started (no contract file) | — | — | full |
+| C-537 | Re-enable Tauri updater artifact signing | ⏳ not_started (no contract file) | — | — | full |
+| C-538 | Investigate herdr Windows output capture | ⏳ not_started (no contract file) | — | — | full |
+| C-539 | Restore `bun run test:unit` for client and hub | ⏳ not_started (no contract file) | — | — | full |
+| C-540 | Resolve the `check_bundle.ts` facade-getter suppression | ⏳ not_started (no contract file) | — | — | full |
+| C-541 | Migrate client and hub off deprecated `kit.alias` | ⏳ not_started (no contract file) | — | — | full |
+| C-542 | Tauri OPFS `sqlite3_vfs` persistence | ⏳ not_started (no contract file) | — | — | full |
+| C-543 | Production Management Workspace And Hud Correction | 🛠️ implemented | ❓ `integrated` (production routes wired; E2E + visual lanes authored and to be run in CI) | v1 | full |
 
 ---
 

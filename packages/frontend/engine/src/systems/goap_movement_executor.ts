@@ -21,7 +21,7 @@ import { DEFAULT_INTERACTION_RADIUS, NPCDialog } from '../components/npc_dialog.
 import { PathFollow } from '../components/path_follow.ts';
 import type { PositionData } from '../components/position.ts';
 import { Position } from '../components/position.ts';
-import { type AstarGrid, findPath, type GridCell } from '../math/astar.ts';
+import type { AstarGrid, GridCell } from '../math/astar.ts';
 import {
   DEFAULT_ACTION_COMBAT_MOVE,
   DEFAULT_ACTION_GO_TO_PUB,
@@ -29,7 +29,8 @@ import {
   DEFAULT_ACTION_IDLE,
   DEFAULT_ACTION_PURSUE_TARGET,
 } from '../math/goap/action_registry.ts';
-import { getTerrainGrid, getTerrainTileSize } from './collision_system.ts';
+import { planActorPath } from './actor_footprint.ts';
+import { getPathfindingGrid, getTerrainTileSize } from './collision_system.ts';
 import { hasActivePath } from './path_follow_system.ts';
 
 /**
@@ -254,7 +255,9 @@ const _isWithinRadius = (
  * @param world - The bitECS world.
  */
 export const updateGoapMovement = (world: World): void => {
-  const terrain = getTerrainGrid();
+  // C-379: footprint-aware terrain — only cells the actor's 32×32 box can
+  // stand in are valid GOAP goals (otherwise the NPC jams on corners).
+  const terrain = getPathfindingGrid();
   if (!terrain) {
     return;
   }
@@ -345,13 +348,9 @@ export const updateGoapMovement = (world: World): void => {
       continue;
     }
 
-    const result = findPath({
-      grid: terrain,
-      start: { x: fromX, y: fromY },
-      goal,
-    });
+    const plan = planActorPath({ terrain, fromCell: { x: fromX, y: fromY }, goal });
 
-    if (result.path.length === 0) {
+    if (!plan) {
       // Unreachable — back off and try again later. The deadline is a
       // timestamp that expires; the executor owns it in a per-eid map so
       // recycled eids never inherit another entity's backoff.
@@ -359,20 +358,13 @@ export const updateGoapMovement = (world: World): void => {
       continue;
     }
 
-    // Convert grid waypoints to world-pixel waypoints (tile centres).
-    const waypoints = new Float32Array(result.path.length * 2);
-    for (let i = 0; i < result.path.length; i++) {
-      waypoints[i * 2] = result.path[i].x * tileSize + tileSize / 2;
-      waypoints[i * 2 + 1] = result.path[i].y * tileSize + tileSize / 2;
-    }
-
     addComponent(
       world,
       eid,
       set(PathFollow, {
-        waypoints,
-        index: 1, // skip the start cell — the agent is already there
-        length: result.path.length,
+        waypoints: plan.waypoints,
+        index: plan.index,
+        length: plan.length,
         speed: GOAP_WALK_SPEED,
         // Idle wanderers pause between strolls: the backoff deadline gates
         // the next request after the path-follow system detaches PathFollow

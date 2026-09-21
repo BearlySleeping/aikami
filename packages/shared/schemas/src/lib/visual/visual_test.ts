@@ -7,6 +7,144 @@
 import { Type } from 'typebox';
 
 /**
+ * Schema for Creator Studio's recipe, prompt, generation, and library assessment.
+ */
+export const CreatorStudioSchema = Type.Object({
+  score: Type.Number({ description: '0-100 visual score' }),
+  hasRecipePicker: Type.Boolean({ description: 'Whether the asset-type picker is visible' }),
+  hasPromptField: Type.Boolean({ description: 'Whether the prompt field is visible' }),
+  hasGenerateButton: Type.Boolean({ description: 'Whether the Generate button is visible' }),
+  hasLibrarySection: Type.Boolean({ description: 'Whether the "My library" section is visible' }),
+  hasProvenanceChip: Type.Boolean({
+    description: 'Whether a generated:<engine> provenance chip is rendered per entry',
+  }),
+  issues: Type.Array(Type.String(), { description: 'Visual issues found' }),
+});
+
+/**
+ * C-513 AC-4: schema for the community asset browse grid assessment.
+ */
+export const CommunityAssetBrowseSchema = Type.Object({
+  score: Type.Number({ description: '0-100 visual score' }),
+  hasHeading: Type.Boolean({ description: 'Whether the "Community assets" heading is visible' }),
+  hasBrowseSection: Type.Boolean({ description: 'Whether the Browse section is visible' }),
+  hasAssetRow: Type.Boolean({
+    description: 'Whether at least one community asset row is rendered',
+  }),
+  hasTag: Type.Boolean({ description: 'Whether the asset registry tag is shown on the row' }),
+  hasAttribution: Type.Boolean({
+    description: 'Whether the provenance and licence attribution are shown on the row',
+  }),
+  hasImportButton: Type.Boolean({ description: 'Whether the Import action is visible on the row' }),
+  issues: Type.Array(Type.String(), { description: 'Visual issues found' }),
+});
+
+/**
+ * Schema for starter-hero card assessment in the preset-first onboarding flow.
+ */
+export const HeroCardsSchema = Type.Object({
+  score: Type.Number({ description: '0-100 score of visual correctness' }),
+  heroCardsVisible: Type.Boolean({
+    description: 'Whether illustrated starter hero cards are the first/primary element',
+  }),
+  portraitsRendered: Type.Boolean({
+    description:
+      'Whether real pixel-art portraits are visible on the hero cards (not emoji/placeholders)',
+  }),
+  heroNamesVisible: Type.Boolean({
+    description: 'Whether hero names (Thaldrin/Lyra/Zeph) are visible',
+  }),
+  aiPathSecondary: Type.Boolean({
+    description: 'Whether the AI/chat path is visually subordinate (below the hero cards)',
+  }),
+  issues: Type.Array(Type.String(), { description: 'List of visual issues detected' }),
+});
+
+/**
+ * Schema for NPC identity and prop-transparency assessment in the village scene.
+ */
+export const NpcSceneSchema = Type.Object({
+  score: Type.Number({ description: '0-100 score of visual correctness' }),
+  npcVisible: Type.Boolean({
+    description: 'Whether at least one pixel-art NPC character is visible',
+  }),
+  adultAnatomy: Type.Boolean({
+    description: 'Whether visible NPCs use adult proportions (no child-like heads/bodies)',
+  }),
+  propTransparency: Type.Boolean({
+    description:
+      'Whether props show transparent unpainted regions instead of opaque squares over the ground',
+  }),
+  issues: Type.Array(Type.String(), { description: 'List of visual issues detected' }),
+});
+
+/**
+ * Schema for dialogue slash-command visual assessment.
+ * Validates inline image generation without dialogue layout regressions.
+ */
+export const DialogueSlashCommandsSchema = Type.Object({
+  score: Type.Number({
+    description: '0-100 score of visual correctness',
+  }),
+  dialogueVisible: Type.Boolean({
+    description: 'Whether the dialogue overlay is visible with NPC name and greeting text',
+  }),
+  imageBlockVisible: Type.Boolean({
+    description: 'Whether an inline image block appears in the dialogue thread after /generate',
+  }),
+  generatedImageVisible: Type.Boolean({
+    description:
+      'Whether the generated scene image (or its generating skeleton) is visible inline in the thread',
+  }),
+  noLayoutFlashes: Type.Boolean({
+    description:
+      'Whether the UI is free of layout flashes, blank bounding frames, or visual glitches',
+  }),
+  issues: Type.Array(Type.String(), {
+    description: 'List of visual issues detected',
+  }),
+});
+
+/**
+ * Schema for the C-525 v2 tactical move-highlight assessment.
+ */
+export const CombatV2HighlightsSchema = Type.Object({
+  score: Type.Number({ description: '0-100 score of visual correctness' }),
+  combatUIVisible: Type.Boolean({ description: 'Whether the combat sidebar is rendered' }),
+  highlightsVisible: Type.Boolean({
+    description:
+      'Whether the tactical battlefield (the world canvas, not an opaque portrait stage) shows coloured highlighted cells for reachable movement and/or legal targets',
+  }),
+  layoutCorrect: Type.Boolean({
+    description: 'Whether the split-screen layout is properly structured',
+  }),
+  issues: Type.Array(Type.String(), { description: 'List of visual issues detected' }),
+});
+
+/**
+ * Schema for the C-525 v2 natural-language intent + confirmation assessment.
+ */
+export const CombatIntentSchema = Type.Object({
+  score: Type.Number({ description: '0-100 score of visual correctness' }),
+  intentInputVisible: Type.Boolean({
+    description:
+      'Whether the natural-language instruction field with its Decide/submit button is visible',
+  }),
+  planNumbersVisible: Type.Boolean({
+    description:
+      'Whether the compiled plan shows engine numbers (a movement cost in cells, a "% to hit" chance and/or a damage range) rather than an empty panel',
+  }),
+  confirmationVisible: Type.Boolean({
+    description:
+      'Whether the compiled plan panel is visible with a resolved plan (cost/hit/damage) and BOTH a Confirm and a Cancel button',
+  }),
+  layoutCorrect: Type.Boolean({
+    description: 'Whether the split-screen layout is properly structured',
+  }),
+  issues: Type.Array(Type.String(), { description: 'List of visual issues detected' }),
+});
+
+/**
  * Schema for sandbox loaded visual test assessment.
  * Validates that a tilemap with a character is correctly rendered.
  */

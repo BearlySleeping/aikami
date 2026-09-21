@@ -48,40 +48,41 @@
 
 // biome-ignore-all lint/style/useNamingConvention: HerDr API response field names (snake_case) — must match external API contract
 import { spawn } from 'node:child_process';
-import { writeFileSync } from 'node:fs';
 import net from 'node:net';
-import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
-// need to be relative path since .pi/extensions/herdr-orchestrator.ts uses the same code and pi does not support path aliases
-import { contractPortOffset, PORTS } from '../../../../packages/shared/constants/src/index';
-import { hasDirenv } from '../env/direnv_detect';
+import { resolve } from 'node:path';
+import {
+  ALL_SERVICES,
+  contractPortOffset,
+  type DevService,
+  KNOWN_SERVICES,
+  PORTS,
+} from '@aikami/constants';
+import type { AikamiMode } from '../env/mode';
 // Re-exported for back-compat — the canonical definition now lives in
 // ../env/mode (single source of truth for mode resolution).
-import type { AikamiMode } from '../env/mode';
-import { reportInfraIssue } from '../ops/infra_report.ts';
+import { resolveAikamiMode } from '../env/mode';
+import { createAudioServiceDef } from './services/audio.ts';
+import { isRecord, makeEngineProbe } from './services/engine_probe.ts';
 
 export type { AikamiMode } from '../env/mode';
 
-import { killPid, pidsOnPort, processAgeSeconds, processName } from '../env/process_info';
-import { findBash, posixQuote } from '../env/which';
+import { pidsOnPort, processAgeSeconds, processCwd, processStartTimeMs } from '../env/process_info';
+import type { ValidatedProcessIdentity } from './instance_registry.ts';
+import { killPort } from './port_owner.ts';
+import {
+  makeAppIdentityProbe,
+  makeInstanceRecorder,
+  makeListenerOwnershipProbe,
+} from './service_probes.ts';
 
 // ── Types ──────────────────────────────────────────────────
 
-/** Canonical service names (used internally). */
-export type DevService =
-  | 'client'
-  | 'hub'
-  | 'hub-worker'
-  | 'voice'
-  | 'image'
-  | 'text'
-  | 'text-ollama'
-  | 'image-comfyui'
-  | 'preview-client'
-  | 'site'
-  | 'preview-site'
-  | 'preview-hub'
-  | 'tauri';
+// `DevService` / `ALL_SERVICES` / `KNOWN_SERVICES` are the canonical service
+// identities, declared in @aikami/constants so Node-side pi extensions can read
+// them at registration time. Re-exported here so existing script imports keep
+// working and the behavioral definitions below stay the single source for
+// commands/ports/probes.
+export { ALL_SERVICES, type DevService, KNOWN_SERVICES } from '@aikami/constants';
 
 /** Accepted CLI values (includes 'all'). */
 export type ServiceInput = DevService | 'all';
@@ -112,6 +113,8 @@ export type ServiceIdentity = {
   runId?: string;
   /** Canonical service key. */
   service: DevService;
+  /** Process that reported the identity, when the probe can expose it. */
+  pid?: number;
 };
 
 /**
@@ -119,6 +122,15 @@ export type ServiceIdentity = {
  */
 export type ProbeResult = {
   ready: boolean;
+  /**
+   * Process identity the probe ESTABLISHED as owned, if it has PID identity.
+   *
+   * 🔴 The recorder persists this verbatim — it must never be re-derived from
+   * a later lookup of the same PID, or a recycled PID could be minted as
+   * ownership evidence for a process we never started. See
+   * `ValidatedProcessIdentity`.
+   */
+  validatedProcess?: ValidatedProcessIdentity;
   /** Identity evidence the probe observed from the running instance. */
   observedIdentity?: Partial<ServiceIdentity>;
   /** Human-readable reason when not ready or identity mismatched. */
@@ -146,7 +158,10 @@ export type ServiceDef = {
    * connection or HTTP status below 500 establishes liveness only and
    * cannot authorize reuse.
    */
-  probe?: (expectedIdentity: ServiceIdentity) => Promise<ProbeResult>;
+  probe?: (
+    expectedIdentity: ServiceIdentity,
+    context?: { panePids: readonly number[] },
+  ) => Promise<ProbeResult>;
 };
 
 export type SessionConfig = {
@@ -191,13 +206,73 @@ export type SessionInfo = {
 
 // ── Service definitions ────────────────────────────────────
 
+/**
+ * Identity probe for a shared local-stack engine (C-471 AC-2). The factory
+ * lives in ./services/engine_probe.ts; the port resolver is passed as a
+ * closure so this module's later bindings are read at probe time, not at
+ * module init.
+ */
+const engineProbe = makeEngineProbe((serviceKey) =>
+  resolveReadyPort(serviceKey, resolveAikamiMode(), 0),
+);
+
+/**
+ * The port offset a contract-scoped run binds its services on.
+ *
+ * 🔴 Identity probes MUST resolve the same port the caller checks. A
+ * contract-scoped `client`/`hub`/`hub-worker` binds `base + offset` (see
+ * `serviceEnvArgs`), so probing with offset 0 would query the BASE port —
+ * another checkout's server, or nothing at all — and every contract run would
+ * report its own healthy service as unavailable. This is the same expression
+ * `waitForReady` uses, deliberately: the two cannot drift.
+ */
+const probePortOffset = (): number => contractPortOffset(currentContractId());
+
+/**
+ * Instance-bound probes for run-owned application services (C-471 AC-2 /
+ * brief P1). The factories live in ./service_probes.ts; the port resolver and
+ * pid lister are passed as closures so this module's later bindings are read
+ * at probe time, not at module init. `client`/`hub` use the dev identity
+ * endpoint; `hub-worker` (wrangler, no endpoint) uses the listener ownership
+ * record.
+ */
+const appIdentityProbe = makeAppIdentityProbe({
+  resolvePort: (serviceKey) => resolveReadyPort(serviceKey, resolveAikamiMode(), probePortOffset()),
+  listPids: pidsOnPort,
+  inspector: { startTimeMs: processStartTimeMs, cwd: processCwd },
+});
+const listenerOwnershipProbe = makeListenerOwnershipProbe({
+  resolvePort: (serviceKey) => resolveReadyPort(serviceKey, resolveAikamiMode(), probePortOffset()),
+  listPids: pidsOnPort,
+  inspector: { startTimeMs: processStartTimeMs, cwd: processCwd },
+});
+
+/**
+ * Persist an ownership record for a service that just became ready (see
+ * service_probes.ts's makeInstanceRecorder). Bound here so the closures read
+ * this module's later bindings at call time.
+ *
+ * 🔴 No `startTimeMs`: the record carries the identity its probe already
+ * established. Re-reading here would be a second observation, and a recycled
+ * PID would then become kill authority. See `ValidatedProcessIdentity`.
+ */
+const recordRunningInstance = makeInstanceRecorder({
+  scopeOf: (service) => SERVICE_DEFS[service].scope,
+  currentRunId: () => currentRunId(),
+  checkout: () => resolveServiceRoot(process.cwd()),
+});
+
 export const SERVICE_DEFS: Record<DevService, ServiceDef> = {
+  ...createAudioServiceDef(engineProbe),
   client: {
     name: 'client',
     command: (mode) => `bun run dev -- --mode ${mode}`,
     cwd: (root) => resolve(root, 'apps/frontend/client'),
     readyPort: (mode) => PORTS[mode].client,
     scope: 'run',
+    // C-471 AC-2 / brief P1: prove the client that answers is THIS checkout's,
+    // not a Vite server from another worktree.
+    probe: appIdentityProbe('client'),
   },
   hub: {
     name: 'hub',
@@ -205,6 +280,7 @@ export const SERVICE_DEFS: Record<DevService, ServiceDef> = {
     cwd: (root) => resolve(root, 'apps/frontend/hub'),
     readyPort: (mode) => PORTS[mode].hub,
     scope: 'run',
+    probe: appIdentityProbe('hub'),
   },
   // C-437: wrangler dev --local — the real Workers runtime with D1 and R2
   // bindings, unlike the Vite `hub` service above which provides neither.
@@ -220,6 +296,10 @@ export const SERVICE_DEFS: Record<DevService, ServiceDef> = {
     cwd: (root) => resolve(root, 'apps/frontend/hub'),
     readyPort: (mode) => (mode === 'emulator' ? PORTS[mode].hubWorker : undefined),
     scope: 'run',
+    // C-471 AC-2 / brief P1: wrangler serves no identity endpoint, so prove
+    // ownership via the listener's PID record (checkout + run + creation
+    // identity) rather than pane-level health alone.
+    probe: listenerOwnershipProbe('hub-worker'),
   },
   // C-392: the voice/image/text dev engines delegate to the C-390
   // local-stack compose topology (apps/backend/local-stack/compose.yaml) via
@@ -232,6 +312,15 @@ export const SERVICE_DEFS: Record<DevService, ServiceDef> = {
     cwd: (root) => resolve(root, 'apps/backend/voice'),
     readyPort: (mode) => PORTS[mode].voice,
     scope: 'shared',
+    // sherpa-onnx answers /health with 200 — distinguishes it from a
+    // foreign listener squatting on :8089.
+    probe: engineProbe('voice', async (port) => {
+      const res = await fetch(`http://127.0.0.1:${port}/health`, {
+        redirect: 'error',
+        signal: AbortSignal.timeout(5000),
+      });
+      return res.ok && (await res.text()).trim() === 'ok';
+    }),
   },
   image: {
     name: 'image',
@@ -239,6 +328,19 @@ export const SERVICE_DEFS: Record<DevService, ServiceDef> = {
     cwd: (root) => resolve(root, 'apps/backend/image'),
     readyPort: (mode) => PORTS[mode].image,
     scope: 'shared',
+    // sd-server answers /sdapi/v1/sd-models with 200 + a model array —
+    // distinguishes it from ComfyUI (which 404s there) squatting on :8188.
+    probe: engineProbe('image', async (port) => {
+      const res = await fetch(`http://127.0.0.1:${port}/sdapi/v1/sd-models`, {
+        redirect: 'error',
+        signal: AbortSignal.timeout(5000),
+      });
+      if (!res.ok) {
+        return false;
+      }
+      const data = (await res.json()) as unknown;
+      return Array.isArray(data);
+    }),
   },
   text: {
     name: 'text',
@@ -246,6 +348,19 @@ export const SERVICE_DEFS: Record<DevService, ServiceDef> = {
     cwd: (root) => resolve(root, 'apps/backend/text'),
     readyPort: (mode) => PORTS[mode].text,
     scope: 'shared',
+    // llama.cpp answers /health with 200 + "ok" — distinguishes it from
+    // Ollama (which 404s /health) squatting on :11434.
+    probe: engineProbe('text', async (port) => {
+      const res = await fetch(`http://127.0.0.1:${port}/health`, {
+        redirect: 'error',
+        signal: AbortSignal.timeout(5000),
+      });
+      if (!res.ok) {
+        return false;
+      }
+      const data = (await res.json()) as unknown;
+      return isRecord(data) && data.status === 'ok';
+    }),
   },
   // C-392 advanced, opt-in engines — Ollama and ComfyUI stay one command
   // away via the local-stack compose profiles. Both share a port with the
@@ -257,6 +372,19 @@ export const SERVICE_DEFS: Record<DevService, ServiceDef> = {
     cwd: (root) => resolve(root, 'apps/backend/text'),
     readyPort: (mode) => PORTS[mode].text,
     scope: 'shared',
+    // Ollama answers /api/version with 200 — distinguishes it from the
+    // local-stack llama.cpp text engine on the same port.
+    probe: engineProbe('text-ollama', async (port) => {
+      const res = await fetch(`http://127.0.0.1:${port}/api/version`, {
+        redirect: 'error',
+        signal: AbortSignal.timeout(5000),
+      });
+      if (!res.ok) {
+        return false;
+      }
+      const data = (await res.json()) as unknown;
+      return isRecord(data) && typeof data.version === 'string' && data.version.length > 0;
+    }),
   },
   'image-comfyui': {
     name: 'image-comfyui',
@@ -264,6 +392,19 @@ export const SERVICE_DEFS: Record<DevService, ServiceDef> = {
     cwd: (root) => resolve(root, 'apps/backend/image'),
     readyPort: (mode) => PORTS[mode].image,
     scope: 'shared',
+    // ComfyUI answers /system_stats with 200 — distinguishes it from the
+    // sd-server image engine on the same port.
+    probe: engineProbe('image-comfyui', async (port) => {
+      const res = await fetch(`http://127.0.0.1:${port}/system_stats`, {
+        redirect: 'error',
+        signal: AbortSignal.timeout(5000),
+      });
+      if (!res.ok) {
+        return false;
+      }
+      const data = (await res.json()) as unknown;
+      return isRecord(data) && isRecord(data.system) && Array.isArray(data.devices);
+    }),
   },
 
   'preview-client': {
@@ -302,32 +443,6 @@ export const SERVICE_DEFS: Record<DevService, ServiceDef> = {
     // No HTTP port — the desktop window has nothing to poll.
   },
 };
-
-export const ALL_SERVICES: DevService[] = [
-  'client',
-  'hub',
-  'voice',
-  'image',
-  'text',
-  'preview-client',
-  'site',
-  'preview-site',
-  'preview-hub',
-  'tauri',
-];
-
-/**
- * All valid service names — superset of ALL_SERVICES. Used for CLI validation
- * and `herdr:list`. The C-392 advanced engines
- * (text-ollama, image-comfyui) are fully manageable even though they are NOT
- * in the `all` group.
- */
-export const KNOWN_SERVICES: DevService[] = [
-  ...ALL_SERVICES,
-  'text-ollama',
-  'image-comfyui',
-  'hub-worker',
-];
 
 /** Map a workspace tab label back to a known service key, or undefined. */
 const serviceFromTabLabel = (label: string): DevService | undefined => {
@@ -557,9 +672,48 @@ export const parseContractIdFromPath = (contractPath: string | undefined): strin
   return contractPath.match(/(C-\d+|MIG-\d+)/)?.[0];
 };
 
-/** Extract the current contract ID from the pipeline env, or undefined. */
+/**
+ * Contract ID encoded in a herdr contract-worktree path, or undefined.
+ *
+ * Worktree slugs lowercase the id (`contract-task-c-516-mtz2k7km`), so this
+ * is case-insensitive and normalises back to `C-516`.
+ */
+export const contractIdFromWorktreePath = (path: string | undefined): string | undefined => {
+  const match = path?.match(/contract-task-(c-\d+|mig-\d+)-/i);
+  return match?.[1]?.toUpperCase();
+};
+
+/** Exact run ID encoded by a contract worktree slug, or undefined for other paths. */
+export const runIdFromWorktreePath = (path: string | undefined): string | undefined => {
+  const match = path?.match(/contract-task-(c-\d+|mig-\d+)-([a-z0-9]+)/i);
+  const contractId = match?.[1]?.toUpperCase();
+  const token = match?.[2];
+  return contractId && token ? `run-${token}-${contractId}` : undefined;
+};
+
+const isContractWorktreePath = (path: string | undefined): boolean =>
+  path !== undefined && /contract-task-(c-\d+|mig-\d+)-/i.test(path);
+
+/**
+ * Extract the current contract ID, or undefined.
+ *
+ * 🔴 Primary source is the per-stage `CONTRACT_PIPELINE_CONTRACT_PATH` env
+ * var herdr injects via `tab create --env`. But a pane that is restored after
+ * a herdr daemon restart — or where the user relaunches `pi` from the pane's
+ * shell — comes back WITHOUT that env; only direnv's
+ * `CONTRACT_PIPELINE_WORKTREE=1` survives. `currentContractId()` then
+ * returned undefined and `herdr_session`/`herdr:start` silently dropped dev
+ * services into the shared `aikami-emulator` workspace instead of the
+ * contract's own workspace. The pane's PWD/DIRENV_DIR still names the
+ * contract worktree, so derive the id from there as the durable fallback.
+ */
 export const currentContractId = (): string | undefined =>
-  parseContractIdFromPath(process.env.CONTRACT_PIPELINE_CONTRACT_PATH);
+  parseContractIdFromPath(process.env.CONTRACT_PIPELINE_CONTRACT_PATH) ??
+  contractIdFromWorktreePath(process.env.DIRENV_DIR) ??
+  contractIdFromWorktreePath(process.env.PWD);
+
+/** Exact pipeline-run identity used for ownership records and destructive cleanup. */
+export const currentRunId = (): string | undefined => process.env.CONTRACT_PIPELINE_RUN_ID;
 
 /**
  * The checkout a dev-service tab should run from.
@@ -572,9 +726,23 @@ export const currentContractId = (): string | undefined =>
  * review/captain tab does not (it runs at the repo root, see
  * ContractHerdrAdapter._createWorkerTab), and a service it started from there
  * would silently test main instead of the branch.
+ *
+ * 🔴 Same restored-pane fallback as {@link currentContractId}: direnv's
+ * `DIRENV_DIR` is `-<checkout path>` and still points at the worktree after
+ * the injected env is lost, so a service started from a root-cwd review pane
+ * still serves the branch rather than main.
  */
-export const resolveServiceRoot = (projectRoot: string): string =>
-  process.env.CONTRACT_PIPELINE_WORKSPACE_PATH || projectRoot;
+export const resolveServiceRoot = (projectRoot: string): string => {
+  const workspacePath = process.env.CONTRACT_PIPELINE_WORKSPACE_PATH;
+  if (workspacePath) {
+    return workspacePath;
+  }
+  const direnvDir = process.env.DIRENV_DIR;
+  if (direnvDir && isContractWorktreePath(direnvDir)) {
+    return direnvDir.startsWith('-') ? direnvDir.slice(1) : direnvDir;
+  }
+  return projectRoot;
+};
 
 /** Resolve the workspace name for a given mode in the current context. */
 export const resolveSessionName = (mode: AikamiMode): string =>
@@ -632,6 +800,12 @@ type HerdrOptions = {
    *  probes (--version, status server) still complete in ms. */
   timeoutMs?: number;
   env?: Record<string, string>;
+  /** Suppress the `[herdr] ... failed` console warning on a non-zero exit.
+   *  For callers that probe a resource they already know may be gone (e.g.
+   *  the launcher's post-ready sweep of a workspace the child auto-closed),
+   *  a `workspace_not_found` is the expected outcome, not a defect worth
+   *  printing on every run. Errors are still returned as `null`. */
+  quiet?: boolean;
 };
 
 /**
@@ -683,6 +857,9 @@ export const herdr = (args: string[], opts: HerdrOptions = {}): Promise<HerdrRes
 export const herdrJson = async <T>(args: string[], opts: HerdrOptions = {}): Promise<T | null> => {
   const r = await herdr(args, opts);
   if (r.code !== 0 || !r.stdout.trim()) {
+    if (opts.quiet) {
+      return null;
+    }
     // herdr reports failures as JSON on stdout, but real CLI errors (bad
     // invocation context, missing worktree, etc.) land on stderr with a
     // non-zero code. Surface them instead of silently returning null — the
@@ -703,9 +880,11 @@ export const herdrJson = async <T>(args: string[], opts: HerdrOptions = {}): Pro
   try {
     return JSON.parse(r.stdout.trim()) as T;
   } catch {
-    console.warn(
-      `[herdr] ${args.join(' ')} returned non-JSON output: ${r.stdout.trim().slice(0, 200)}`,
-    );
+    if (!opts.quiet) {
+      console.warn(
+        `[herdr] ${args.join(' ')} returned non-JSON output: ${r.stdout.trim().slice(0, 200)}`,
+      );
+    }
     return null;
   }
 };
@@ -956,54 +1135,14 @@ const tcpConnectReady = (port: number, host = '127.0.0.1'): Promise<boolean> =>
   });
 
 /**
- * Process names we're willing to kill to free a port — our own dev servers.
- * Anything else holding the port is someone else's and stays untouched.
+ * 🔴 Port ownership policy moved to ./port_owner.ts (C-471 AC-1, brief P0).
+ * `killPort` now proves ownership via an `InstanceRecord`; there is no
+ * executable-name allowlist. Re-exported here so existing callers keep working.
  */
-const KILLABLE_PROCESSES = ['node', 'bun', 'vite', 'uwsgi', 'python'];
-
-/** True when a port holder is one of our dev servers rather than a bystander. */
-export const isKillableProcess = (name: string): boolean =>
-  KILLABLE_PROCESSES.some((candidate) => name.toLowerCase().includes(candidate));
-
-/**
- * Kill any process occupying a port so the next bind succeeds deterministically.
- *
- * Identity is checked before killing: an unrelated process gets a warning and
- * is left alone. Platform differences (lsof/ps/kill vs netstat/tasklist/
- * taskkill) live in env/process_info.ts — this is the policy, not the plumbing.
- */
-export const killPort = async (port: number): Promise<void> => {
-  const pids = await pidsOnPort(port);
-
-  if (pids.length === 0) {
-    // No lookup tool, or genuinely nothing listening. Do NOT fall back to
-    // fuser -k (killPortUnsafe) — it kills without an identity check and
-    // could terminate an unrelated process. (C-471 AC-1: unknown PID lookup
-    // never falls back to blind killing.)
-    return;
-  }
-
-  for (const pid of pids) {
-    const name = await processName(pid);
-    if (name === undefined) {
-      // Already exited between the lookup and now — nothing to do.
-      continue;
-    }
-    if (!isKillableProcess(name)) {
-      console.warn(
-        `Port ${port} is busy with unrelated process (PID ${pid}, ${name}). Not killing.`,
-      );
-      reportInfraIssue({
-        component: 'killPort',
-        operation: `free port ${port}`,
-        error: new Error(`port held by unrelated process: ${name} (pid ${pid})`),
-        context: { port, holderName: name },
-      });
-      continue;
-    }
-    await killPid(pid);
-  }
-};
+export {
+  type KillPortOptions,
+  killPort,
+} from './port_owner.ts';
 
 // ── Direnv wrapper ─────────────────────────────────────────
 
@@ -1013,34 +1152,25 @@ export const killPort = async (port: number): Promise<void> => {
  * fallback contract (manual tool installs + .env.local).
  */
 
-/** Keeps a crashed service's output on screen instead of closing the pane. */
-const PANE_TRAILER = '=== Stopped. Press Enter to close ===';
-
 /**
- * The shell a herdr pane runs — governs how a command string must be quoted
- * before `pane run` sends it to the pane's PTY.
+ * 🔴 Pane shell detection + command wrapping moved to ./pane_shell.ts (size
+ * ratchet) — a cohesive quoting/transport kernel with no Herdr RPC of its own.
+ * `detectPaneShell` stays here because it needs `herdrJson`.
  */
-export type PaneShell = 'powershell' | 'nushell' | 'cmd' | 'posix';
+import {
+  bashScriptForPane as bashScriptForShell,
+  type PaneShell,
+  paneShellFromProcessName,
+  wrapCommand,
+} from './pane_shell.ts';
 
-/**
- * Map a pane's foreground process name to the shell kind it represents.
- * herdr launches panes with the user's configured default shell — on this
- * Windows install that is `powershell.exe` (the old "panes default to
- * Nushell" comment predates herdr 0.8.0-preview).
- */
-const paneShellFromProcessName = (name: string): PaneShell => {
-  const n = name.toLowerCase().replace(/\.exe$/, '');
-  if (n.includes('powershell') || n.includes('pwsh')) {
-    return 'powershell';
-  }
-  if (n === 'cmd' || n.includes('cmd')) {
-    return 'cmd';
-  }
-  if (n === 'nu' || n === 'nushell' || n.includes('nu')) {
-    return 'nushell';
-  }
-  return 'posix';
-};
+export {
+  cmdQuote,
+  type PaneShell,
+  paneShellFromProcessName,
+  psQuote,
+  wrapCommand,
+} from './pane_shell.ts';
 
 /** Detect the shell running in a herdr pane (defaults to posix on failure). */
 export const detectPaneShell = async (paneId: string): Promise<PaneShell> => {
@@ -1053,126 +1183,13 @@ export const detectPaneShell = async (paneId: string): Promise<PaneShell> => {
   }
 };
 
-/**
- * Quote a value for a PowerShell single-quoted string: `'` → `''`.
- * PowerShell has no POSIX `'\''` escape; doubling is the single-quote escape.
- */
-const psQuote = (value: string): string => `'${value.replaceAll("'", "''")}'`;
-
-/**
- * Quote a value as a CMD double-quoted argument, escaping embedded `"` as
- * `\"` (cmd.exe has no literal-quote escape inside a `"…"` token; `\"` is
- * the accepted convention for native args). Used for `cmd` panes, which
- * treat POSIX single quotes as literals.
- */
-const cmdQuote = (value: string): string => `"${value.replaceAll('"', '\\"')}"`;
-
-/**
- * Write `script` to a unique temp .sh file and return its path. Used for
- * PowerShell panes, where passing `-c <script>` through PowerShell's native
- * arg mangling (embedded `"` becomes `\"` in the command line) corrupts the
- * script. A file avoids the `-c` boundary entirely: only two quoted paths
- * cross the shell.
- */
-const writeTempBashScript = (script: string): string => {
-  const path = join(
-    tmpdir(),
-    `herdr-pane-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}.sh`,
-  );
-  writeFileSync(path, script, 'utf-8');
-  return path;
-};
-
-/**
- * Wraps a command for a herdr pane, in descending order of fidelity:
- *
- *   1. bash + direnv — `direnv exec .` loads the flake devShell (bun, jdk,
- *      chromium … from flake.nix) before running the command.
- *   2. bash, no direnv — on a machine without direnv (Windows without
- *      WSL+Nix, per `bun run setup`'s recommended-path check) the prefix is
- *      not a harmless no-op, it's a "command not found" that kills the pane
- *      before the real command runs. Drop it; the caller owns their PATH/env
- *      (manual tool installs, MOON_TOOLCHAIN_FORCE_GLOBALS, .env.local).
- *   3. Windows without bash — `cmd /c "… & pause"`. cmd.exe is always
- *      present, and `pause` gives the same keep-the-pane-open behavior.
- *   4. Anything else — run bare in the pane's own shell. The pane closes on
- *      exit, but the command still runs.
- *
- * `bash` is passed as an absolute path (see `findBash`) because herdr panes
- * default to the user's shell on Windows (PowerShell here), whose PATH does
- * not include Git's bash.
- *
- * PowerShell panes get `& 'bash' 'script.sh'` with the script in a temp
- * file — PowerShell rejects the POSIX `'bash' -c '…'` form (parse error at
- * `-c`) and mangles embedded `"` in native args, so a file is the only
- * reliable transport. With direnv, both the PowerShell and CMD forms route
- * through `direnv exec .` so the pane still gets the flake devShell env.
- * CMD panes invoke the temp script with double-quoted args (`cmd.exe` treats
- * single quotes as literals); the keep-open trailer is preserved in all
- * bash-backed forms.
- */
-export const wrapCommand = (command: string, shell: PaneShell = 'posix'): string => {
-  const bash = findBash();
-  if (bash) {
-    const script = `${command}; echo; echo "${PANE_TRAILER}"; read`;
-    if (shell === 'powershell') {
-      const scriptPath = writeTempBashScript(`#!/usr/bin/env bash\n${script}\n`);
-      // With direnv, route through `direnv exec .` so the pane gets the flake
-      // devShell env; the `&` call operator is only valid as the first token,
-      // so it is dropped in the direnv form.
-      if (hasDirenv()) {
-        return `direnv exec . ${psQuote(bash)} ${psQuote(scriptPath)}`;
-      }
-      return `& ${psQuote(bash)} ${psQuote(scriptPath)}`;
-    }
-    if (shell === 'cmd') {
-      // cmd.exe treats single quotes as literals, so the POSIX `-c '…'` form
-      // would pass the script text as one literal arg and fail. Use the same
-      // temp-script transport as PowerShell, invoked with CMD-compatible
-      // double-quote escaping. direnv exec is retained for the direnv case,
-      // matching the POSIX path.
-      const scriptPath = writeTempBashScript(`#!/usr/bin/env bash\n${script}\n`);
-      const invocation = `${cmdQuote(bash)} ${cmdQuote(scriptPath)}`;
-      return hasDirenv() ? `direnv exec . ${invocation}` : invocation;
-    }
-    // Quoted so a Windows path like `C:\Program Files\Git\bin\bash.exe`
-    // survives the pane shell's tokenizing — unquoted, the space in "Program
-    // Files" would split it into two args.
-    const prefix = hasDirenv() ? `direnv exec . ${posixQuote(bash)} -c` : `${posixQuote(bash)} -c`;
-    return `${prefix} ${posixQuote(script)}`;
-  }
-
-  // cmd.exe has no escape for a literal `"` inside a `/c "…"` string, so only
-  // take this path when the command has none (every SERVICE_DEFS command
-  // does). Otherwise fall through to running it bare.
-  if (process.platform === 'win32' && !command.includes('"')) {
-    return `cmd /c "${command} & pause"`;
-  }
-
-  return command;
-};
-
 /** Detect the pane's shell, then wrap the command for it. */
 export const wrapCommandForPane = async (paneId: string, command: string): Promise<string> =>
   wrapCommand(command, await detectPaneShell(paneId));
 
-/**
- * Run a raw bash script in a pane, shell-aware. Same PowerShell-vs-POSIX
- * split as {@link wrapCommand}: PowerShell gets a temp script file invoked
- * via `& 'bash' 'file'` (its native-arg `"` mangling corrupts `-c`), other
- * shells get `'bash' -c '<script>'`.
- */
-export const bashScriptForPane = async (paneId: string, script: string): Promise<string> => {
-  const bash = findBash();
-  if (!bash) {
-    return script;
-  }
-  if ((await detectPaneShell(paneId)) === 'powershell') {
-    const scriptPath = writeTempBashScript(`#!/usr/bin/env bash\n${script}\n`);
-    return `& ${psQuote(bash)} ${psQuote(scriptPath)}`;
-  }
-  return `${posixQuote(bash)} -c ${posixQuote(script)}`;
-};
+/** Run a raw bash script in a pane, shell-aware (see pane_shell.ts). */
+export const bashScriptForPane = async (paneId: string, script: string): Promise<string> =>
+  bashScriptForShell(await detectPaneShell(paneId), script);
 
 /**
  * Shell process names that indicate an idle pane with no active command.
@@ -1313,8 +1330,8 @@ const assessServicePane = async (
  * Build the expected identity for a service in the current run context.
  */
 export const buildServiceIdentity = (serviceKey: DevService): ServiceIdentity => ({
-  checkout: process.env.CONTRACT_PIPELINE_WORKSPACE_PATH || process.cwd(),
-  runId: currentContractId(),
+  checkout: resolveServiceRoot(process.cwd()),
+  runId: currentRunId(),
   service: serviceKey,
 });
 
@@ -1332,6 +1349,18 @@ export type ReadinessResult = {
   state: ReadinessState;
   reason?: string;
   observedIdentity?: Partial<ServiceIdentity>;
+  /** Process identity established by the instance-bound probe, if any. */
+  validatedProcess?: ValidatedProcessIdentity;
+};
+
+/** Foreground process IDs reported for a trusted service pane. */
+export const paneProcessIds = async (paneId: string): Promise<number[]> => {
+  try {
+    const result = await herdrJson<PaneProcessInfo>(['pane', 'process-info', '--pane', paneId]);
+    return result?.result?.process_info?.foreground_processes?.map((process) => process.pid) ?? [];
+  } catch {
+    return [];
+  }
 };
 
 const identityMismatchReason = (
@@ -1371,7 +1400,8 @@ export const assessServiceReadiness = async (
   }
 
   // Shared/external services may be reused across runs, so pane liveness
-  // alone cannot establish that the intended instance answered.
+  // alone cannot establish that the intended instance answered. Run-owned
+  // services do not cross that trust boundary and may fall back to pane health.
   if (!serviceDef.probe) {
     if (serviceDef.scope !== 'run') {
       return {
@@ -1385,7 +1415,9 @@ export const assessServiceReadiness = async (
   // Run the instance-bound probe.
   let probeResult: ProbeResult;
   try {
-    probeResult = await serviceDef.probe(expectedIdentity);
+    probeResult = await serviceDef.probe(expectedIdentity, {
+      panePids: await paneProcessIds(paneId),
+    });
   } catch (error) {
     return {
       state: 'unavailable',
@@ -1417,7 +1449,11 @@ export const assessServiceReadiness = async (
     };
   }
 
-  return { state: 'healthy', observedIdentity: probeResult.observedIdentity };
+  return {
+    state: 'healthy',
+    observedIdentity: probeResult.observedIdentity,
+    validatedProcess: probeResult.validatedProcess,
+  };
 };
 
 // ── Tab management ─────────────────────────────────────────
@@ -1488,7 +1524,7 @@ const findTab = async (workspaceId: string, label: string): Promise<string | nul
  * Get all panes for a workspace with their tab assignments.
  * Returns an array of { pane_id, tab_id, workspace_id }.
  */
-const getWorkspacePanes = async (workspaceId: string): Promise<PaneListEntry[]> => {
+export const getWorkspacePanes = async (workspaceId: string): Promise<PaneListEntry[]> => {
   const r = await herdrJson<PaneListResult>(['pane', 'list', '--workspace', workspaceId]);
   if (!r?.result?.panes) {
     return [];
@@ -1543,14 +1579,19 @@ export const startServices = async (config: SessionConfig): Promise<string> => {
   // ── Force-ports: kill whatever's squatting on our target ports first ──
   // Distinct from `force` (which recreates the whole workspace) — this only
   // clears the ports, so it's safe to use even when the workspace/tabs
-  // already exist and are healthy. killPort() only kills known dev-tool
-  // process names (node/bun/vite/uwsgi/python), never unrelated ones.
+  // already exist and are healthy. killPort() kills ONLY processes backed by
+  // a verified ownership record (same service/run/checkout + PID creation
+  // identity); an unrelated listener survives.
   if (forcePorts) {
     await Promise.all(
       services.map(async (s) => {
         const port = resolveReadyPort(s, mode, offset);
         if (port !== undefined) {
-          await killPort(port);
+          await killPort(port, {
+            service: s,
+            runId: currentRunId(),
+            checkout: projectRoot,
+          });
         }
       }),
     );
@@ -1830,7 +1871,11 @@ export const stopServices = async (config: {
       // port this service could have orphaned a JVM/process on, not just
       // the tab itself, so a follow-up `start` never fights its own ghost.
       for (const port of portsToCleanupForService(service, mode, offset)) {
-        await killPort(port);
+        await killPort(port, {
+          service,
+          runId: currentRunId(),
+          checkout: resolveServiceRoot(process.cwd()),
+        });
       }
       console.log(`  ✓ Stopped ${name}`);
     } else {
@@ -1873,7 +1918,11 @@ export const restartServices = async (config: SessionConfig): Promise<string> =>
   // ports.
   for (const service of services) {
     for (const port of portsToCleanupForService(service, mode, offset)) {
-      await killPort(port);
+      await killPort(port, {
+        service,
+        runId: currentRunId(),
+        checkout: resolveServiceRoot(projectRoot ?? process.cwd()),
+      });
     }
   }
 
@@ -2181,6 +2230,11 @@ export const waitForReady = async (
       while (Date.now() < deadline) {
         const result = await assessServiceReadiness(pane.pane_id, svc, identity, port);
         if (result.state === 'healthy') {
+          await recordRunningInstance({
+            service: serviceKey,
+            port,
+            validatedProcess: result.validatedProcess,
+          });
           console.log(`  ✓ ${svc.name} ready on :${port}`);
           return;
         }

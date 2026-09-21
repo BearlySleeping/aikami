@@ -12,16 +12,16 @@ import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import type { ItemDefinition } from '@aikami/types';
 import {
   VENDOR_ACTION_SYSTEM_PROMPT,
   type VendorActionIntent,
   VendorActionSchema,
 } from '$lib/data/ai_prompts/vendor_action_schema';
-import { textGenerationService } from '$services';
 import type { VendorSessionOptions } from '$types';
 import { getItemDefinition } from '$utils/inventory_utils';
+import { textGenerationService } from '../ai/text_generation_service.svelte.ts';
 import { playSfxByName } from '../audio/audio_asset_resolver';
 import { inventoryService } from './inventory_service.svelte';
 

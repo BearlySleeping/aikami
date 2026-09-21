@@ -10,7 +10,7 @@
 // resolution.
 //
 // Run with:
-//   bun test --preload ./src/lib/test_preload.ts --tsconfig tsconfig.test.json \
+//   bun test --preload ./src/lib/test_setup.ts --tsconfig tsconfig.test.json \
 //     src/lib/services/assets/asset_store.test.ts
 
 import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
@@ -22,8 +22,12 @@ mock.module('$logger', () => ({
   logger: {
     debug: mock(() => {}),
     info: mock(() => {}),
+    log: mock(() => {}),
     warn: mock(() => {}),
     error: mock(() => {}),
+    spam: mock(() => {}),
+    write: mock(() => {}),
+    setLogLevel: mock(() => {}),
   },
 }));
 
@@ -168,16 +172,46 @@ describe('assetStore catalog + resolveUrl (C-372, C-435)', () => {
     expect(assetStore.resolveUrl('lpc:body:bodies_male:walk')).toBe(r2Url(HASH_BODY, '.webp'));
   });
 
-  it('records the error but keeps the last good catalog when a reload fails', async () => {
+  it('keeps the last verified catalog when a refresh fails', async () => {
+    // The store booted successfully in `beforeEach`. A failed REFRESH must
+    // reject the candidate and leave the previous complete snapshot active —
+    // it must never erase a working release while attempting the next one.
+    const seedBefore = assetStore.seed;
+    const manifestBefore = assetStore.manifest;
+    const releaseIdBefore = assetStore.releaseId;
+    const releaseSourceBefore = assetStore.releaseSource;
+    const coreTagsBefore = assetStore.coreTags.size;
+
     globalThis.fetch = mock(
       async () => new Response('boom', { status: 500 }),
     ) as unknown as typeof fetch;
     await assetStore.rescanAssets();
 
+    // The failure is reported…
     expect(assetStore.error).toBeTruthy();
-    // A failed refresh must not blank out a catalog that was already working —
-    // the player keeps rendering what they had.
+    // …but the previous verified snapshot is untouched.
+    expect(assetStore.seed).toBe(seedBefore);
+    expect(assetStore.manifest).toBe(manifestBefore);
+    expect(assetStore.releaseId).toBe(releaseIdBefore);
+    expect(assetStore.releaseSource).toBe(releaseSourceBefore);
+    expect(assetStore.coreTags.size).toBe(coreTagsBefore);
     expect(assetStore.resolveUrl('lpc:body:bodies_male:walk')).toBe(r2Url(HASH_BODY, '.webp'));
-    expect(assetStore.resolveUrl('sprites:unknown:thing')).toBeNull();
+    expect(assetStore.resolveUrl('music:exploration:Chainsmoker')).toBe(r2Url(HASH_MUSIC, '.mp3'));
+  });
+
+  it('a later retry can still replace the catalog after a failed refresh', async () => {
+    globalThis.fetch = mock(
+      async () => new Response('boom', { status: 500 }),
+    ) as unknown as typeof fetch;
+    await assetStore.rescanAssets();
+    expect(assetStore.error).toBeTruthy();
+
+    // Retry against a working origin: the update succeeds and swaps atomically.
+    stubCatalogFetch();
+    await assetStore.rescanAssets();
+
+    expect(assetStore.error).toBeNull();
+    expect(assetStore.manifest?.count).toBe(3);
+    expect(assetStore.resolveUrl('lpc:body:bodies_male:walk')).toBe(r2Url(HASH_BODY, '.webp'));
   });
 });

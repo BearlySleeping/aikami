@@ -12,12 +12,20 @@ import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
+import { resolveCompanionControlMode } from '@aikami/schemas';
 import type { ContentPackLootEntry } from '@aikami/types';
+import { configureNpcPortraitSource } from '$lib/data/npc_avatar_catalog';
 import { textGenerationService } from '../ai/text_generation_service.svelte';
 import { musicPlayerService } from '../audio/music_player_service.svelte';
 import type { CampaignServiceInterface } from '../campaign/campaign_service.svelte';
 import { campaignService } from '../campaign/campaign_service.svelte';
+import { contextualTriggerService } from '../image/contextual_trigger_service.svelte.ts';
+import { motionPreferenceService } from '../settings/motion_preference_service.svelte.ts';
+import {
+  buildEncounterRosterFromContentPack,
+  checkModifiersFromCharacterSheet,
+} from './combat_encounter_roster.ts';
 import { buildItemCatalogFromPack } from './content_pack_catalog';
 import type { EquipmentServiceInterface } from './equipment_service.svelte';
 import { equipmentService } from './equipment_service.svelte';
@@ -27,10 +35,13 @@ import type { GameModeServiceInterface } from './game_mode_service.svelte';
 import { gameModeService } from './game_mode_service.svelte';
 import type { GameOverlayServiceInterface } from './game_overlay_service.svelte';
 import { gameOverlayService } from './game_overlay_service.svelte';
+import { gameSaveService } from './game_save_service.svelte';
+import { installGameTestSeam } from './game_test_seam.ts';
 import type { InventoryServiceInterface } from './inventory_service.svelte';
 import { inventoryService } from './inventory_service.svelte';
 import type { NpcDialogueServiceInterface } from './npc_dialogue_service.svelte';
 import { npcDialogueService } from './npc_dialogue_service.svelte';
+import { operationLedgerService } from './operation_ledger_service.svelte.ts';
 import { partyRosterService } from './party_roster_service.svelte.ts';
 import type { PlayerStateServiceInterface } from './player_state_service.svelte';
 import { playerStateService } from './player_state_service.svelte';
@@ -216,6 +227,7 @@ export class GameCompositionRoot
     if (this._initialized) {
       return;
     }
+    configureNpcPortraitSource(undefined);
 
     const t0 = performance.now();
 
@@ -231,6 +243,11 @@ export class GameCompositionRoot
 
     // Phase 2b: Music player — discover tracks, register vibe tags, watch scene.
     await musicPlayerService.initialize();
+
+    // Phase 2c: Local UI preferences (C-527 AC-6). Restoring the player's
+    // explicit motion selection here is what makes the Settings control
+    // survive a reload — without it the choice would only live in memory.
+    await motionPreferenceService.initialize();
 
     // Phase 3: Stateless infrastructure
     this._gameModeService = gameModeService;
@@ -254,7 +271,9 @@ export class GameCompositionRoot
     this.debug('initialize:contentPackId', { contentPackId });
 
     // Phase 5c: Wire NPC dialogue orchestrator with content pack + gateway
-    const { loadContentPack, createEngineBridge } = await import('@aikami/frontend/engine');
+    const { djb2Hash, loadContentPack, createEngineBridge } = await import(
+      '@aikami/frontend/engine'
+    );
     const { assetTagResolver } = await import('$lib/services/assets/registry_resolver');
     const contentPack = await loadContentPack({
       packId: contentPackId,
@@ -332,6 +351,18 @@ export class GameCompositionRoot
             vendorInventory: npc.vendorInventory,
             combatStats: npc.combatStats as Record<string, unknown> | undefined,
             initialSuggestions: npc.initialSuggestions,
+            isCompanion: npc.isCompanion,
+            recruitDialogueKey: npc.recruitDialogueKey,
+            dismissDialogueKey: npc.dismissDialogueKey,
+            companionClassId: npc.companionClassId,
+            personalQuestId: npc.personalQuestId,
+            initialApproval: npc.initialApproval,
+            banterPool: npc.banterPool,
+            personality: npc.personality,
+            agenda: npc.agenda,
+            knowledge: npc.knowledge,
+            secrets: npc.secrets,
+            boundaries: npc.boundaries,
           };
         },
         getDialogue: (key) => contentPack.getDialogue(key),
@@ -340,13 +371,19 @@ export class GameCompositionRoot
           if (!q) {
             return undefined;
           }
-          return { id: q.id, name: q.name, offerDialogueKey: q.offerDialogueKey };
+          return {
+            id: q.id,
+            name: q.name,
+            offerDialogueKey: q.offerDialogueKey,
+            endings: q.endings,
+          };
         },
         getAllQuests: () =>
           contentPack.getAllQuests().map((q) => ({
             id: q.id,
             name: q.name,
             offerDialogueKey: q.offerDialogueKey,
+            endings: q.endings,
           })),
         getAllEncounters: () =>
           contentPack.getAllEncounters().map((e) => ({
@@ -384,6 +421,9 @@ export class GameCompositionRoot
             prompt: userText,
             systemPrompt,
             signal: opts.signal,
+            // Call 2 (schema present) is the structured envelope; call 1 below
+            // is the streamed dialogue/narrative.
+            task: 'envelope',
           });
           // Call 2 is extraction — the input prompt is not generated text.
           // Return an empty text value so no caller can mistake it for model output.
@@ -395,6 +435,7 @@ export class GameCompositionRoot
         await textGenerationService.streamChat({
           messages: opts.messages,
           signal: opts.signal,
+          task: 'dialogue',
           onChunk: (chunk) => {
             text += chunk;
             opts.onChunk?.(chunk);
@@ -454,9 +495,44 @@ export class GameCompositionRoot
           const encounterId =
             opts.encounterId ??
             contentPack.getAllEncounters().find((enc) => enc.enemyNpcIds.includes(opts.npcId))?.id;
+          const companion = partyRosterService.members[0];
+          // C-516 AC-2: author the REAL roster from the content pack instead of
+          // the retired hardcoded `[1, 2]` / 60-HP pair.
+          const roster = buildEncounterRosterFromContentPack({
+            contentPack,
+            encounterId: encounterId ?? '',
+            player: {
+              combatantId: 'player',
+              classIds: [playerStateService.classId],
+              // C-531 AC-2: the sheet's check modifiers are main-thread state;
+              // they must travel with the roster or every environmental check
+              // is refused `checkModifierUnavailable` before it is rolled.
+              checkModifiers: checkModifiersFromCharacterSheet({
+                skills: playerStateService.skills,
+                abilities: playerStateService.abilities,
+              }),
+            },
+            ...(companion === undefined
+              ? {}
+              : {
+                  companion: {
+                    npcId: companion.npcId,
+                    classIds: [companion.classId],
+                    // C-526 §12.5: the persisted control mode travels with the
+                    // roster so a `direct` companion's turn is the player's.
+                    controlMode: resolveCompanionControlMode(companion),
+                  },
+                }),
+          });
+          if (roster === undefined) {
+            return false;
+          }
           gameOverlayService.startCombat({
             enemyName: opts.npcName,
             encounterId,
+            // Same seed for the same encounter: a retry reproduces the fight.
+            seed: djb2Hash(encounterId ?? ''),
+            roster,
           });
           return true;
         },
@@ -484,6 +560,21 @@ export class GameCompositionRoot
           }
           return !!member;
         },
+        presentEvidence: (opts) => {
+          // Present the evidence to the NPC, recording exactly one
+          // EvidencePresented event and setting the world-state flag that
+          // gates world-state-conditioned endings (C-495 AC-2/AC-3).
+          const campaignId = campaignService.activeCampaign?.id;
+          if (!campaignId) {
+            return false;
+          }
+          const event = questStateService.presentEvidence({
+            evidenceId: opts.evidenceId,
+            campaignId,
+            npcId: opts.npcId,
+          });
+          return Boolean(event);
+        },
       },
     });
 
@@ -503,10 +594,44 @@ export class GameCompositionRoot
     await inventoryService.startListening();
     await questStateService.startListening();
 
-    this._initialized = true;
+    // C-495 AC-6 test hook: expose a seam only in explicit non-production
+    // modes. The seam still uses the production discovery, derivation,
+    // validation, precondition, and command-execution paths.
+    installGameTestSeam({
+      bridgeUnsubscribers: this._bridgeUnsubscribers,
+      contentPack,
+      createEngineBridge,
+      djb2Hash,
+      gameEngineService,
+      gameModeService,
+      gameOverlayService,
+      npcDialogueService,
+      playerStateService,
+      questStateService,
+      warn: (label, detail) => this.warn(label, detail),
+    });
+    // Recover interrupted operations (Phase 3): a `pending` turn/check/
+    // generation from a previous run is flipped to `interrupted` so a restart
+    // restores the true status instead of rerolling or fabricating completion.
+    try {
+      await operationLedgerService.reconcileInterrupted();
+    } catch (error) {
+      this.warn('initialize:operation-recovery-failed', { error: String(error) });
+    }
 
-    const elapsed = performance.now() - t0;
-    this.debug('initialize:complete', { elapsedMs: elapsed });
+    // Configure the process-wide portrait source only after every fallible
+    // initialization phase has completed. If finalization itself fails, clear
+    // the source even though the root never reached `_initialized`.
+    try {
+      configureNpcPortraitSource(contentPack.manifest);
+      this._initialized = true;
+      const elapsed = performance.now() - t0;
+      this.debug('initialize:complete', { elapsedMs: elapsed });
+    } catch (error) {
+      this._initialized = false;
+      configureNpcPortraitSource(undefined);
+      throw error;
+    }
   }
 
   /**
@@ -576,6 +701,7 @@ export class GameCompositionRoot
    * Safe to call on an uninitialized root.
    */
   async dispose(): Promise<void> {
+    configureNpcPortraitSource(undefined);
     if (!this._initialized) {
       return;
     }
@@ -586,6 +712,10 @@ export class GameCompositionRoot
     // alongside every other game runtime service (mirrors initialize()).
     musicPlayerService.stop();
 
+    // C-512: let a queued contextual generation finish writing before the
+    // runtime it belongs to is torn down.
+    await contextualTriggerService.drain();
+
     // Remove composition-root-owned bridge listeners (C-331 loot)
     for (const unsubscribe of this._bridgeUnsubscribers) {
       try {
@@ -595,6 +725,10 @@ export class GameCompositionRoot
       }
     }
     this._bridgeUnsubscribers = [];
+
+    // Detach the save service's engine bridge so a stale bridge from this
+    // session is never reused by the next game (single-writer boundary).
+    gameSaveService.clearBridge();
 
     // Reset all state services
     this._playerStateService?.reset();

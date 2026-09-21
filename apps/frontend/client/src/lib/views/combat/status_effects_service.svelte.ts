@@ -14,7 +14,7 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import type { DeathSaveState, StatusEffectDisplay } from './types/combat_enhancements.ts';
 
 // ── Types ────────────────────────────────────────────────────────────────

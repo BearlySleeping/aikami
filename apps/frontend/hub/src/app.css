@@ -1,9 +1,7 @@
 /* biome-ignore-all lint/suspicious/noUnknownAtRules: Tailwind v4 directives */
 @import "tailwindcss";
-@import "@aikami/frontend/theme/brand_daisy.css";
-@plugin "daisyui" {
-  themes: false;
-}
+@import "@aikami/frontend/theme/aikami_theme.css";
+@import "@aikami/frontend/theme/aikami_ui.css";
 
 @theme {
   --font-mono: "JetBrains Mono", monospace;

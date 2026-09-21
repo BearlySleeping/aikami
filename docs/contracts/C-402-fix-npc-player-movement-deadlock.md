@@ -1,7 +1,7 @@
 ---
 id: C-402
 title: "Fix NPC/Player Movement Deadlock"
-source: "docs/strategy/mvp-assessment-2026-08-16.md §6.2 (MVP playthrough)"
+source: "docs/reference/mvp-assessment-2026-08-16.md §6.2 (MVP playthrough)"
 status: implemented
 github:
   issue_number: null
@@ -18,7 +18,7 @@ created_at: "2026-08-16"
 
 | Field | Value |
 |---|---|
-| **Source** | `docs/strategy/mvp-assessment-2026-08-16.md` §6.2 — live MVP playthrough 2026-08-16 |
+| **Source** | `docs/reference/mvp-assessment-2026-08-16.md` §6.2 — live MVP playthrough 2026-08-16 |
 | **Target** | `packages/frontend/engine/src/systems/` — collision masks, movement, GOAP movement execution |
 | **Priority** | P0 — soft-locks play; the player loses control with no recovery short of reload |
 | **Dependencies** | — |

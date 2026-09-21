@@ -17,9 +17,14 @@ import type { CombatViewModelInterface } from './combat_view_model.svelte.ts';
 import CombatDiceUi from './components/combat_dice_ui.svelte';
 import CombatGallery from './components/combat_gallery.svelte';
 import CombatInlineImage from './components/combat_inline_image.svelte';
+import CombatObjectivesPanel from './components/combat_objectives_panel.svelte';
+import CombatReactionPrompt from './components/combat_reaction_prompt.svelte';
+import CompanionControlPanel from './components/companion_control_panel.svelte';
 import DiceQuickMenu from './components/dice_quick_menu.svelte';
 import EnrichedLogEntry from './components/enriched_log_entry.svelte';
 import InitiativeTracker from './components/initiative_tracker.svelte';
+import ObjectInspector from './components/object_inspector.svelte';
+import TurnTrackerHeader from './components/turn_tracker_header.svelte';
 import { parseDamageFromLog, parseDiceFromLog } from './utils/dice_notation.ts';
 
 type Props = {
@@ -31,6 +36,16 @@ const { viewModel }: Props = $props();
 /** Temporary input value for the freeform custom action text field. */
 let customActionInput = $state('');
 
+/** Temporary input value for the natural-language combat instruction (C-525). */
+let languageIntentInput = $state('');
+
+/** Submits the typed instruction to the intent decision loop (never commits). */
+const submitLanguageIntent = (event: SubmitEvent): void => {
+  event.preventDefault();
+  viewModel.submitLanguageIntent(languageIntentInput);
+  languageIntentInput = '';
+};
+
 /** Track which tab is active: 'log' or 'gallery'. */
 let activeTab = $state<'log' | 'gallery'>('log');
 
@@ -41,7 +56,10 @@ let initiativeCollapsed = $state(false);
 <div class="h-full flex flex-col bg-base-100 border-r border-base-300">
   <!-- ── Combat result banner (victory / defeat) ── -->
   {#if viewModel.combatResult}
-    <div class="flex flex-col items-center justify-center gap-4 p-6 flex-1">
+    <div
+      class="flex flex-col items-center justify-center gap-4 p-6 flex-1"
+      data-testid="combat-result-banner"
+    >
       <div class="text-5xl">
         {viewModel.combatResult === 'victory' ? '🏆' : '💀'}
       </div>
@@ -52,8 +70,8 @@ let initiativeCollapsed = $state(false);
       </h2>
       <p class="text-sm text-base-content/60 text-center">
         {viewModel.combatResult === 'victory'
-          ? 'The enemy has been vanquished. Glory is yours!'
-          : 'Your journey has come to an end... for now.'}
+  ? 'The enemy has been vanquished. Glory is yours!'
+  : 'Your journey has come to an end... for now.'}
       </p>
       {#if viewModel.combatLog.length > 0}
         <div
@@ -70,6 +88,7 @@ let initiativeCollapsed = $state(false);
         type="button"
         class="btn btn-primary btn-sm"
         onclick={() => viewModel.dismissResult()}
+        data-testid="combat-result-dismiss"
       >
         Continue
       </button>
@@ -78,6 +97,24 @@ let initiativeCollapsed = $state(false);
     <!-- Animated d20 dice overlay (C-148) -->
     <CombatDiceUi activeDiceRoll={viewModel.activeDiceRoll} />
 
+    <!-- ── Turn tracker: action economy + End Turn (single combat surface) ── -->
+    {#if viewModel.turnState}
+      <div class="px-3 pt-3">
+        <TurnTrackerHeader
+          turnState={viewModel.turnState}
+          actionEconomy={viewModel.turnState.actionEconomy}
+          isEndTurnDisabled={viewModel.isAttacking || viewModel.isResolvingAiAction}
+          onEndTurn={() => viewModel.endTurn()}
+        />
+      </div>
+    {/if}
+
+    <!-- ── Reaction decision surface (C-532 AC-4) ── -->
+    <CombatReactionPrompt viewModel={viewModel.reactionFlowViewModel} />
+
+    <!-- ── Authored objectives (C-532 AC-1) ── -->
+    <CombatObjectivesPanel viewModel={viewModel.objectivePanelViewModel} />
+
     <!-- ── Compact HP bars ── -->
     <div class="px-3 pt-3 pb-2">
       <div class="grid grid-cols-2 gap-2">
@@ -85,7 +122,7 @@ let initiativeCollapsed = $state(false);
         <div class="rounded border border-success/30 bg-success/5 p-2">
           <div class="mb-0.5 flex items-center justify-between">
             <span class="text-xs font-semibold text-success">Player</span>
-            <span class="text-xs tabular-nums text-base-content/70">
+            <span class="text-xs tabular-nums text-base-content/70" data-testid="player-hp-text">
               {viewModel.playerHp}/{viewModel.playerMaxHp}
             </span>
           </div>
@@ -100,7 +137,7 @@ let initiativeCollapsed = $state(false);
         <div class="rounded border border-error/30 bg-error/5 p-2">
           <div class="mb-0.5 flex items-center justify-between">
             <span class="text-xs font-semibold text-error">{viewModel.enemyName || 'Enemy'}</span>
-            <span class="text-xs tabular-nums text-base-content/70">
+            <span class="text-xs tabular-nums text-base-content/70" data-testid="enemy-hp-text">
               {viewModel.enemyHp}/{viewModel.enemyMaxHp}
             </span>
           </div>
@@ -121,6 +158,20 @@ let initiativeCollapsed = $state(false);
         onToggleCollapse={() => (initiativeCollapsed = !initiativeCollapsed)}
       />
     </div>
+
+    <!--
+      Companion control modes + approval surface (C-526 AC-6).
+      Placed HIGH in the pane on purpose: a Suggest/Intent/Autonomous companion
+      holds its turn until the player approves, so the proposal must be visible
+      without scrolling — an approval request below the fold would stall the
+      fight for a player who never sees it.
+    -->
+    <div class="px-3 pt-1 shrink-0">
+      <CompanionControlPanel {viewModel} />
+    </div>
+
+    <!-- ── Authored battlefield objects (C-531) ── -->
+    <ObjectInspector {viewModel} />
 
     <!-- ── Tab header: Log | Gallery ── -->
     <div class="px-3">
@@ -147,7 +198,7 @@ let initiativeCollapsed = $state(false);
     <!-- ── Tab content ── -->
     {#if activeTab === 'log'}
       <!-- Scrollable combat log -->
-      <div class="flex-1 overflow-y-auto px-3 py-2 min-h-0">
+      <div class="flex-1 overflow-y-auto px-3 py-2 min-h-0" data-testid="combat-log">
         {#if viewModel.combatLog.length > 0}
           <div class="space-y-1">
             {#each viewModel.combatLog as entry (entry.id)}
@@ -158,11 +209,11 @@ let initiativeCollapsed = $state(false);
                 <!-- C-234: Enriched log entry rendering -->
                 {#if entry.actionText}
                   {@const logEntry = {
-                    rawText: entry.actionText,
-                    ...parseDiceFromLog(entry.actionText),
-                    ...parseDamageFromLog(entry.actionText),
-                    isPlainText: !parseDiceFromLog(entry.actionText),
-                  }}
+  rawText: entry.actionText,
+  ...parseDiceFromLog(entry.actionText),
+  ...parseDamageFromLog(entry.actionText),
+  isPlainText: !parseDiceFromLog(entry.actionText),
+}}
                   <span class="ml-1">
                     <EnrichedLogEntry entry={logEntry} />
                   </span>
@@ -234,6 +285,120 @@ let initiativeCollapsed = $state(false);
 
     <!-- ── Fixed action bar — anchored to bottom of left pane (AC-2) ── -->
     <div class="border-t border-base-300 p-3 space-y-2 bg-base-100 flex-shrink-0">
+      <!--
+        Direct-control tactical selection (C-516 AC-7/AC-8/AC-9).
+        The panel is a projection of `viewModel.combatSelection`: it never
+        computes mechanics, it renders what the engine answered.
+      -->
+      <div
+        class="space-y-1 rounded-box border border-base-300 p-2"
+        data-testid="combat-direct-control"
+      >
+        <div class="flex gap-2">
+          <button
+            type="button"
+            class={viewModel.moveButtonClasses}
+            onclick={() => viewModel.toggleMoveSelection()}
+            disabled={viewModel.isMoveButtonDisabled}
+            data-testid="combat-move-btn"
+            aria-pressed={viewModel.isMoveSelection}
+          >
+            {viewModel.moveButtonLabel}
+          </button>
+          <button
+            type="button"
+            class="btn btn-ghost btn-sm"
+            onclick={() => viewModel.cancelSelection()}
+            disabled={viewModel.combatSelection.mode === 'idle'}
+            data-testid="combat-selection-cancel"
+          >
+            ✕
+          </button>
+        </div>
+
+        <!-- Ability picker — resolved from the production catalog. -->
+        <div class="flex flex-wrap gap-1" data-testid="combat-ability-picker">
+          {#each viewModel.availableAbilities as ability (ability.abilityId)}
+            <button
+              type="button"
+              class={viewModel.abilityButtonClasses(ability.abilityId)}
+              onclick={() => viewModel.beginAbilitySelection(ability.abilityId)}
+              title={`${ability.kind} · ${ability.actionCost} · range ${ability.rangeCells}`}
+              data-testid={`combat-ability-${ability.abilityId}`}
+            >
+              {ability.name}
+            </button>
+          {/each}
+        </div>
+
+        <!-- Target picker — only the targets the engine declared legal. -->
+        {#if viewModel.isTargetSelection}
+          <div class="flex flex-wrap gap-1" data-testid="combat-target-picker">
+            {#if viewModel.combatSelection.legalTargetIds.length === 0}
+              <span class="text-xs text-base-content/60">No legal target in range</span>
+            {/if}
+            {#each viewModel.combatSelection.legalTargetIds as targetId (targetId)}
+              <button
+                type="button"
+                class={viewModel.targetButtonClasses(targetId)}
+                onclick={() => viewModel.selectTarget(targetId)}
+                data-testid={`combat-target-${targetId}`}
+              >
+                🎯 {targetId}
+              </button>
+            {/each}
+            <button
+              type="button"
+              class="btn btn-primary btn-xs"
+              onclick={() => viewModel.commitSelection()}
+              disabled={viewModel.combatSelection.selectedTargetId === null}
+              data-testid="combat-commit-selection-btn"
+            >
+              Confirm
+            </button>
+          </div>
+        {/if}
+
+        <!-- Forecast panel — the engine's own numbers, never recomputed here. -->
+        {#if viewModel.combatSelection.forecast !== null}
+          <div class="text-xs text-base-content/70" data-testid="combat-forecast-panel">
+            {#if viewModel.combatSelection.forecast.movementCost !== undefined}
+              <span>Cost {viewModel.combatSelection.forecast.movementCost} cell(s)</span>
+            {/if}
+            {#if viewModel.forecastHitPercentage !== null}
+              <span> · {viewModel.forecastHitPercentage}% to hit </span>
+            {/if}
+            {#if viewModel.combatSelection.forecast.damageRange !== undefined}
+              <span>
+                ·
+                {viewModel.combatSelection.forecast.damageRange.minimum}–{viewModel.combatSelection.forecast.damageRange.maximum}
+                dmg
+              </span>
+            {/if}
+          </div>
+        {/if}
+
+        {#if viewModel.isSelectionLoading}
+          <p class="text-xs text-base-content/50" data-testid="combat-selection-loading">
+            <span class="loading loading-spinner loading-xs"></span>
+            Planning…
+          </p>
+        {/if}
+
+        {#if viewModel.selectionRejection !== null}
+          <p class="text-xs text-error" data-testid="combat-selection-rejection">
+            {viewModel.selectionRejection}
+          </p>
+        {/if}
+
+        {#if viewModel.isMoveSelection && viewModel.combatSelection.legalEndpoints.length > 0}
+          <p class="text-xs text-base-content/60" data-testid="combat-move-hint">
+            Click a highlighted cell ({viewModel.combatSelection.legalEndpoints.length}
+            reachable)
+          </p>
+        {/if}
+      </div>
+
       <!-- Quick action buttons -->
       <div class="grid grid-cols-3 gap-2">
         <button
@@ -265,16 +430,143 @@ let initiativeCollapsed = $state(false);
         </button>
       </div>
 
+      <!--
+        Natural-language intent + confirmation (C-525 AC-4/AC-5).
+        Order is interpret → compile → preview → confirm: this panel only ever
+        renders the decision the ViewModel exposed, and nothing is committed
+        until the player presses Confirm.
+      -->
+      {#if viewModel.languageInputEnabled}
+        <div class="space-y-1" data-testid="combat-intent-panel">
+          <form class="space-y-1" onsubmit={submitLanguageIntent} data-testid="combat-intent-form">
+            <div class="flex gap-2">
+              <input
+                type="text"
+                bind:value={languageIntentInput}
+                placeholder="e.g. move to the nearest enemy and attack"
+                class="input input-bordered input-sm flex-1"
+                disabled={viewModel.isIntentPending || viewModel.isAttacking}
+                data-testid="combat-intent-input"
+                aria-label="Combat instruction"
+              >
+              <button
+                type="submit"
+                class="btn btn-secondary btn-sm"
+                disabled={viewModel.isIntentPending || viewModel.isAttacking || languageIntentInput.trim().length === 0}
+                data-testid="combat-intent-submit"
+              >
+                {#if viewModel.isIntentPending}
+                  <span class="loading loading-spinner loading-xs"></span>
+                  Deciding…
+                {:else}
+                  🗣️ Decide
+                {/if}
+              </button>
+            </div>
+
+            <!-- Announced to assistive tech: the decision lifecycle is live. -->
+            <p
+              class="text-xs text-base-content/50"
+              aria-live="polite"
+              data-testid="combat-intent-status"
+            >
+              {#if viewModel.intentDecision.status === 'interpreting'}
+                Reading your instruction…
+              {:else if viewModel.intentDecision.status === 'compiling'}
+                Compiling a plan…
+              {:else if viewModel.intentDecision.status === 'clarifying'}
+                Which did you mean?
+              {:else if viewModel.intentDecision.status === 'awaiting_confirmation'}
+                Review the plan, then confirm.
+              {:else if viewModel.intentDecision.status === 'committed'}
+                Resolving your action…
+              {:else if viewModel.intentDecision.status === 'rejected'}
+                {viewModel.intentDecision.rejection === null
+  ? 'That instruction was refused.'
+  : viewModel.translateIntentMessage(viewModel.intentDecision.rejection.messageKey)}
+              {/if}
+            </p>
+          </form>
+
+          <!-- Bounded clarification: concrete readings, at most one round. -->
+          {#if viewModel.intentDecision.clarification !== null}
+            <div class="flex flex-wrap gap-1" data-testid="combat-intent-clarification">
+              {#each viewModel.intentDecision.clarification.options as option (option.optionId)}
+                <button
+                  type="button"
+                  class="btn btn-outline btn-xs"
+                  onclick={() => viewModel.chooseIntentClarification(option.optionId)}
+                  data-testid={`combat-intent-clarify-${option.optionId}`}
+                >
+                  {viewModel.translateIntentMessage(option.labelKey)}
+                </button>
+              {/each}
+            </div>
+          {/if}
+
+          <!-- Editable preview: the compiled plan's own numbers. -->
+          {#if viewModel.intentPreview !== null}
+            <div
+              class="space-y-1 rounded-box border border-secondary/30 bg-secondary/5 p-2"
+              data-testid="combat-intent-preview"
+            >
+              <p class="text-xs font-semibold text-base-content/80">
+                {viewModel.intentPreview.commandKind}
+                {#if viewModel.intentPreview.destination !== null}
+                  → ({viewModel.intentPreview.destination.x},
+                  {viewModel.intentPreview.destination.y})
+                {/if}
+              </p>
+              <p class="text-xs text-base-content/70">
+                {#if viewModel.intentPreview.movementCost !== null}
+                  Cost {viewModel.intentPreview.movementCost} cell(s)
+                {/if}
+                {#if viewModel.intentPreview.hitPercentage !== null}
+                  · {viewModel.intentPreview.hitPercentage}% to hit
+                {/if}
+                {#if viewModel.intentPreview.damageMinimum !== null}
+                  · {viewModel.intentPreview.damageMinimum}–{viewModel.intentPreview.damageMaximum}
+                  dmg
+                {/if}
+              </p>
+              {#if viewModel.intentPreview.warnings.length > 0}
+                <p class="text-xs text-warning" data-testid="combat-intent-warnings">
+                  {viewModel.intentPreview.warnings.join(' · ')}
+                </p>
+              {/if}
+              <div class="flex gap-2">
+                <button
+                  type="button"
+                  class="btn btn-primary btn-xs flex-1"
+                  onclick={() => viewModel.confirmIntentPlan()}
+                  data-testid="combat-intent-confirm"
+                >
+                  Confirm
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-xs flex-1"
+                  onclick={() => viewModel.cancelIntentPlan()}
+                  data-testid="combat-intent-cancel"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          {/if}
+        </div>
+      {/if}
+
       <!-- Freeform AI custom action (C-146) -->
       <form
         class="flex gap-2"
         onsubmit={(e: SubmitEvent) => {
-          e.preventDefault();
-          if (customActionInput.trim().length > 0) {
-            void viewModel.executeCustomAction(customActionInput);
-            customActionInput = '';
-          }
-        }}
+  e.preventDefault();
+  if (customActionInput.trim().length > 0) {
+    void viewModel.executeCustomAction(customActionInput);
+    customActionInput = '';
+  }
+}}
       >
         <input
           type="text"
@@ -287,9 +579,7 @@ let initiativeCollapsed = $state(false);
         <button
           type="submit"
           class="btn btn-primary btn-sm"
-          disabled={viewModel.isResolvingAiAction ||
-            viewModel.isAttacking ||
-            customActionInput.trim().length === 0}
+          disabled={viewModel.isResolvingAiAction || viewModel.isAttacking || customActionInput.trim().length === 0}
           data-testid="combat-custom-action-submit"
         >
           {#if viewModel.isResolvingAiAction}

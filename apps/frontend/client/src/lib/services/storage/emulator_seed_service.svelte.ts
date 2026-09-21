@@ -15,7 +15,7 @@ import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import { getLocalDatabase } from '@aikami/frontend/storage';
 import { EMULATOR_GOOGLE_PERSONA_DATA, EMULATOR_NPCS, EMULATOR_PERSONA_DATA } from '@aikami/mocks';
 import type { PersonaData } from '@aikami/types';

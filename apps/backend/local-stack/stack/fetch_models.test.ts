@@ -15,6 +15,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Server } from 'bun';
 import {
+  ALL_MODALITIES,
   COMPLETE_MARKER,
   downloadResumable,
   ensureEntry,
@@ -22,6 +23,7 @@ import {
   loadManifest,
   type ManifestEntry,
   PART_SUFFIX,
+  PROFILE_MODALITY,
   resolveEntryUrl,
   run,
   sha256File,
@@ -365,3 +367,38 @@ describe('archive extraction', () => {
 });
 
 const dirnameOf = (path: string): string => path.slice(0, path.lastIndexOf('/'));
+
+describe('C-511 — audio modality plumbing', () => {
+  it('the audio profile is mapped to the audio manifest modality', () => {
+    expect(PROFILE_MODALITY.audio).toEqual(['audio']);
+    expect(ALL_MODALITIES).toContain('audio');
+  });
+
+  it('every shipped default profile still exists and is unaffected', () => {
+    expect(PROFILE_MODALITY.text).toEqual(['text']);
+    expect(PROFILE_MODALITY.image).toEqual(['image']);
+    expect(PROFILE_MODALITY.voice).toEqual(['tts']);
+    expect(PROFILE_MODALITY.stt).toEqual(['stt']);
+    expect(PROFILE_MODALITY.client).toEqual([]);
+  });
+
+  it('the shipped manifest pins the ACE-Step checkpoint with a licence and digests', async () => {
+    const manifest = await loadManifest(join(import.meta.dir, 'models.manifest.json'));
+    const audioEntries = manifest.entries.filter((entry) => entry.modality === 'audio');
+    expect(audioEntries.length).toBeGreaterThan(0);
+
+    const primary = audioEntries.find((entry) => entry.id === 'audio-ace-step-v1-3.5b');
+    expect(primary).toBeDefined();
+    expect(primary?.license).toBe('Apache-2.0');
+    expect(primary?.requiresAcknowledgement).toBe(false);
+    expect(primary?.sha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(primary?.targetPath.startsWith('audio/ace-step-v1-3.5b/')).toBe(true);
+
+    // Every part of the checkpoint is fetched by the same profile, so every
+    // part must be declared under the same modality.
+    for (const entry of audioEntries) {
+      expect(entry.sha256).toMatch(/^[0-9a-f]{64}$/);
+      expect(entry.bytes).toBeGreaterThan(0);
+    }
+  });
+});

@@ -4,15 +4,13 @@
 // prompt includes all party members with names + personalities.
 //
 // Run with:
-//   bun test --preload ./src/lib/test_preload.ts --tsconfig tsconfig.test.json
+//   bun test --preload ./src/lib/test_setup.ts --tsconfig tsconfig.test.json
 //     src/lib/services/gm/party_routing.test.ts
 
 import { describe, expect, mock, test } from 'bun:test';
 
 const COMBAT_SVC_PATH =
   '/home/sonny/Development/Projects/passion/aikami/apps/frontend/client/src/lib/services/game/combat_service.svelte.ts';
-const GAME_STATE_SVC_PATH =
-  '/home/sonny/Development/Projects/passion/aikami/apps/frontend/client/src/lib/services/game/game_state_service.svelte.ts';
 const TIME_SVC_PATH =
   '/home/sonny/Development/Projects/passion/aikami/apps/frontend/client/src/lib/services/game/time_service.svelte.ts';
 
@@ -21,17 +19,6 @@ mock.module(COMBAT_SVC_PATH, () => ({
     enemyName: 'Unknown Enemy',
     enemyHp: 0,
     enemyMaxHp: 0,
-  },
-}));
-
-mock.module(GAME_STATE_SVC_PATH, () => ({
-  gameStateService: {
-    worldGenOutput: {
-      worldName: 'Test Realm',
-      locations: ['Test Town'],
-    },
-    quests: [],
-    characterSheetSummary: undefined,
   },
 }));
 

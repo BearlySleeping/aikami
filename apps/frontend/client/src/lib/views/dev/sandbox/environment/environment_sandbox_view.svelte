@@ -76,6 +76,7 @@ $effect(() => {
     <!-- Dev Control Panel — floating bottom-center -->
     {#if viewModel.engineReady}
       <div
+        data-testid="environment-controls"
         class="pointer-events-auto absolute bottom-6 inset-x-0 mx-auto w-fit max-w-md rounded-xl border border-base-300 bg-base-200/90 p-4 shadow-lg backdrop-blur-sm"
       >
         <div class="mb-3 text-center">
@@ -224,6 +225,48 @@ $effect(() => {
               oninput={(e) => viewModel.setWindVelocity(Number.parseFloat(e.currentTarget.value))}
             >
           </div>
+
+          <!-- Renderer diagnostics (dev only) -->
+          {#if viewModel.fxDiagnostics}
+            <div
+              class="flex flex-col gap-0.5 border-base-300 border-t pt-2 text-[10px] text-base-content/60"
+            >
+              <div class="flex justify-between">
+                <span>Rain (target → render)</span>
+                <span class="font-mono tabular-nums">
+                  {viewModel.fxDiagnostics.targetRainIntensity.toFixed(2)}
+                  →
+                  {viewModel.fxDiagnostics.currentRainIntensity.toFixed(2)}
+                </span>
+              </div>
+              <div class="flex justify-between">
+                <span>Drops (far / near / pool)</span>
+                <span class="font-mono tabular-nums">
+                  {viewModel.fxDiagnostics.farCount}
+                  /
+                  {viewModel.fxDiagnostics.nearCount}
+                  /
+                  {viewModel.fxDiagnostics.poolSize}
+                </span>
+              </div>
+              <div class="flex justify-between">
+                <span>Streak length (far / near)</span>
+                <span class="font-mono tabular-nums">
+                  {viewModel.fxDiagnostics.farMeanScaleY.toFixed(2)}
+                  /
+                  {viewModel.fxDiagnostics.nearMeanScaleY.toFixed(2)}
+                </span>
+              </div>
+              <div class="flex justify-between">
+                <span>Atmosphere / visible</span>
+                <span class="font-mono tabular-nums">
+                  {viewModel.fxDiagnostics.atmosphereStrength.toFixed(3)}
+                  /
+                  {viewModel.fxDiagnostics.visible ? 'yes' : 'no'}
+                </span>
+              </div>
+            </div>
+          {/if}
         </div>
       </div>
     {/if}

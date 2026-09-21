@@ -153,7 +153,16 @@ const guardNeonDependencies = (): void => {
     (file) => file !== fileURLToPath(import.meta.url),
   );
   const pgHits = sourceFiles.filter((file) => {
-    const content = readFileSync(file, 'utf8');
+    // TOCTOU: a file listed by `walk` may vanish before we read it (e.g. a
+    // parallel `docs:build`/`site:build` writing into `dist/.prerender`), so
+    // skip a vanished file rather than crashing the whole guard on an
+    // unrelated ENOENT — mirroring the statSync guard in `walk`.
+    let content: string;
+    try {
+      content = readFileSync(file, 'utf8');
+    } catch {
+      return false;
+    }
     return (
       content.includes('@neondatabase/serverless') ||
       /(?:from\s+|require\(\s*)['"`]pg['"`]/.test(content) ||

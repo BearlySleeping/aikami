@@ -9,12 +9,10 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import type { ConnectionCapability } from '$types';
-import {
-  type AiSettingsViewModelInterface,
-  getAiSettingsViewModel,
-} from './ai_settings_view_model.svelte';
+import type { CapabilityStatusEntry } from './ai_connection_status.svelte';
+import type { AiSettingsViewModelInterface } from './ai_settings_view_model.svelte';
 
 /** Presentation state and actions for configuring one AI capability. */
 export type CapabilityDetailViewModelInterface = BaseViewModelInterface & {
@@ -37,6 +35,13 @@ export type CapabilityDetailViewModelInterface = BaseViewModelInterface & {
 /** Identifies the AI capability exposed by a capability detail ViewModel. */
 export type CapabilityDetailViewModelOptions = BaseViewModelOptions & {
   capability: ConnectionCapability;
+  /**
+   * Shared capability-status projection (config + the shared connection-test
+   * store). Injected so the status card never reads the AI settings editor.
+   */
+  getStatusEntries: () => readonly CapabilityStatusEntry[];
+  /** Builds the shared AI settings editor the detail page's controls delegate to. */
+  createAiSettings: () => AiSettingsViewModelInterface;
 };
 
 class CapabilityDetailViewModel
@@ -45,19 +50,28 @@ class CapabilityDetailViewModel
 {
   readonly capability: ConnectionCapability;
   readonly aiSettingsViewModel: AiSettingsViewModelInterface;
+  private readonly _getStatusEntries: () => readonly CapabilityStatusEntry[];
 
   constructor(options: CapabilityDetailViewModelOptions) {
     super(options);
     this.capability = options.capability;
-    this.aiSettingsViewModel = getAiSettingsViewModel({
-      className: 'AiSettingsViewModel',
-      capability: options.capability,
-    });
+    this._getStatusEntries = options.getStatusEntries;
+    this.aiSettingsViewModel = options.createAiSettings();
   }
 
   override async initialize(): Promise<void> {
     await this.aiSettingsViewModel.initialize();
     await super.initialize();
+  }
+
+  /**
+   * The detail page owns the AI editor it created, so it is responsible for
+   * disposing it. Without this the editor's effects/resources outlive every
+   * visit to the capability tab.
+   */
+  override async dispose(): Promise<void> {
+    await this.aiSettingsViewModel.dispose();
+    await super.dispose();
   }
 
   get connectionId(): string | undefined {
@@ -108,11 +122,7 @@ class CapabilityDetailViewModel
   }
 
   get isTesting(): boolean {
-    const entry = this._getStatusEntry();
-    if (!entry?.connectionId) {
-      return false;
-    }
-    return this.aiSettingsViewModel.testingIds.has(entry.connectionId);
+    return this.status === 'testing';
   }
 
   openSetup(): void {
@@ -135,12 +145,12 @@ class CapabilityDetailViewModel
     }
   }
 
-  private _getStatusEntry() {
-    return this.aiSettingsViewModel.statusEntries.find((e) => e.capability === this.capability);
+  private _getStatusEntry(): CapabilityStatusEntry | undefined {
+    return this._getStatusEntries().find((entry) => entry.capability === this.capability);
   }
 }
 
 /** Creates an instrumented detail ViewModel for the requested AI capability. */
-export const getCapabilityDetailViewModel = (
+export const createCapabilityDetailViewModel = (
   options: CapabilityDetailViewModelOptions,
 ): CapabilityDetailViewModelInterface => CapabilityDetailViewModel.create(options);

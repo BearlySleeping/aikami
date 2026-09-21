@@ -10,30 +10,28 @@ type Props = {
 const { viewModel }: Props = $props();
 </script>
 
-<div class="flex min-h-screen items-center justify-center bg-background p-4">
-  <div class="w-full max-w-sm rounded-lg border border-border bg-card p-8 shadow-sm">
-    <h1 class="mb-2 text-center font-display text-2xl text-foreground">Aikami Hub</h1>
-    <p class="mb-6 text-center text-sm text-muted-foreground">
+<div class="flex min-h-screen items-center justify-center bg-base-100 p-4">
+  <div class="w-full max-w-sm rounded-lg border border-base-300 bg-base-200 p-8 shadow-sm">
+    <h1 class="mb-2 text-center font-display text-2xl text-base-content">Aikami Hub</h1>
+    <p class="mb-6 text-center text-sm text-base-content/60">
       Sign in with your Google account to continue
     </p>
 
     {#if viewModel.errorMessage}
-      <div
-        class="mb-4 rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive"
-      >
+      <div class="mb-4 rounded-md border border-error/40 bg-error/10 px-4 py-3 text-sm text-error">
         {viewModel.errorMessage}
       </div>
     {/if}
 
     <button
       type="button"
-      class="flex w-full items-center justify-center gap-2.5 rounded-md border border-border px-4 py-2.5 text-sm font-medium transition-colors hover:bg-muted disabled:opacity-50"
+      class="flex w-full items-center justify-center gap-2.5 rounded-md border border-base-300 px-4 py-2.5 text-sm font-medium transition-colors hover:bg-base-300 disabled:opacity-50"
       disabled={viewModel.isGoogleSigningIn}
       onclick={() => viewModel.handleGoogleSignIn()}
     >
       {#if viewModel.isGoogleSigningIn}
         <span
-          class="inline-block h-4 w-4 animate-spin rounded-full border-2 border-muted-foreground border-t-transparent"
+          class="inline-block h-4 w-4 animate-spin rounded-full border-2 border-base-content/40 border-t-transparent"
         ></span>
       {:else}
         <svg role="img" aria-label="Sign in with Google" class="h-4 w-4" viewBox="0 0 24 24">

@@ -75,34 +75,28 @@ const allGroups =
   <section class="py-16 md:py-20">
     <div class="mx-auto max-w-3xl px-6 flex flex-col gap-12">
       {allGroups.map((group) => (
-        <div>
-          <h2 class="font-mono text-[10px] uppercase tracking-widest text-rune mb-5">
-            {group.label}
-          </h2>
-          <div class="flex flex-col gap-3">
-            {group.items.map(({ entry, body: Content }) => (
-              <details class="glass-panel group px-5 py-4">
-                <summary
-                  class="flex cursor-pointer items-center justify-between gap-4 font-serif text-lg leading-snug marker:content-none [&::-webkit-details-marker]:hidden"
-                >
-                  {entry.data.question}
-                  <span
-                    class="shrink-0 text-muted-foreground transition-transform group-open:rotate-45"
-                    aria-hidden="true"
-                  >
-                    +
-                  </span>
-                </summary>
-                <div
-                  class="mt-3 text-sm text-muted-foreground leading-relaxed [&>p]:mt-3 [&>p:first-child]:mt-0 [&>ul]:mt-3 [&>ul]:pl-5 [&>ul]:list-disc [&>ul>li]:mt-1 [&_a]:text-rune [&_a]:no-underline [&_a:hover]:underline [&_strong]:text-foreground [&_strong]:font-medium [&_code]:font-mono [&_code]:text-xs [&_code]:bg-card [&_code]:border [&_code]:border-border [&_code]:rounded-sm [&_code]:px-1.5 [&_code]:py-0.5"
-                >
-                  <Content />
-                </div>
-              </details>
-            ))}
+  <div>
+    <h2 class="font-mono text-[10px] uppercase tracking-widest text-rune mb-5">{group.label}</h2>
+    <div class="flex flex-col gap-3">
+      {group.items.map(({ entry, body: Content }) => (
+        <details class="glass-panel group px-5 py-4">
+          <summary class="flex cursor-pointer items-center justify-between gap-4 font-serif text-lg leading-snug marker:content-none [&::-webkit-details-marker]:hidden">
+            {entry.data.question}
+            <span
+              class="shrink-0 text-muted-foreground transition-transform group-open:rotate-45"
+              aria-hidden="true"
+            >
+              +
+            </span>
+          </summary>
+          <div class="mt-3 text-sm text-muted-foreground leading-relaxed [&>p]:mt-3 [&>p:first-child]:mt-0 [&>ul]:mt-3 [&>ul]:pl-5 [&>ul]:list-disc [&>ul>li]:mt-1 [&_a]:text-rune [&_a]:no-underline [&_a:hover]:underline [&_strong]:text-foreground [&_strong]:font-medium [&_code]:font-mono [&_code]:text-xs [&_code]:bg-card [&_code]:border [&_code]:border-border [&_code]:rounded-sm [&_code]:px-1.5 [&_code]:py-0.5">
+            <Content />
           </div>
-        </div>
+        </details>
       ))}
+    </div>
+  </div>
+))}
     </div>
   </section>
 </Layout>

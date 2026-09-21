@@ -4,6 +4,11 @@
 // summarization trigger, summary preview, recap editing (C-344), and
 // New Session flow.
 //
+// Dependencies arrive through typed capability options. This module never
+// imports the `$services` barrel or any production singleton, so its tests can
+// inject fresh feature fixtures (see ./testing/end_session_fixtures.ts).
+// Production wiring lives in ./end_session_composition.ts.
+//
 // Contract: C-240 Session Management
 // Contract: C-344 Complete Session Recaps, Checkpoints, and Long-Campaign Lifecycle
 
@@ -11,11 +16,34 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
-import { gameOverlayService, sessionService } from '$services';
+} from '@aikami/frontend/services/base';
+import type { GameSession, SessionSummary } from '$types';
 
-/** Base configuration used to create the end-session overlay ViewModel. */
-export type EndSessionViewModelOptions = BaseViewModelOptions;
+// ── Capability contracts ────────────────────────────────────────────────
+
+/** Overlay operations the end-session flow drives. */
+export type EndSessionOverlayCapabilities = {
+  endSession(): Promise<void>;
+  closeEndSession(): void;
+  startNewSession(): Promise<void>;
+};
+
+/** Session state and recap operations the end-session flow reads and drives. */
+export type EndSessionSessionCapabilities = {
+  readonly latestSummary: SessionSummary | null;
+  readonly activeSession: GameSession | null;
+  updateSessionRecap(options: { sessionId: string; editedSynopsis: string }): Promise<void>;
+};
+
+// ── Types ───────────────────────────────────────────────────────────────
+
+/** Configuration used to create the end-session overlay ViewModel. */
+export type EndSessionViewModelOptions = BaseViewModelOptions & {
+  /** Overlay capability. */
+  overlay: EndSessionOverlayCapabilities;
+  /** Session capability. */
+  session: EndSessionSessionCapabilities;
+};
 
 export type EndSessionViewModelInterface = BaseViewModelInterface & {
   /** Current phase: 'confirm' → 'summarizing' → 'preview' → 'editing' → 'locked'. */
@@ -59,38 +87,49 @@ export type EndSessionViewModelInterface = BaseViewModelInterface & {
   handleBackdropClick(event: MouseEvent): void;
 };
 
+// ── Implementation ──────────────────────────────────────────────────────
+
 class EndSessionViewModel
-  extends BaseViewModel<{ className: string }>
+  extends BaseViewModel<EndSessionViewModelOptions>
   implements EndSessionViewModelInterface
 {
+  private readonly _overlay: EndSessionOverlayCapabilities;
+  private readonly _session: EndSessionSessionCapabilities;
+
   phase = $state<'confirm' | 'summarizing' | 'preview' | 'editing' | 'locked'>('confirm');
   isStartingNew = $state(false);
   isSavingRecap = $state(false);
   editedSynopsis = $state('');
   saveError = $state<string | null>(null);
 
+  constructor(options: EndSessionViewModelOptions) {
+    super(options);
+    this._overlay = options.overlay;
+    this._session = options.session;
+  }
+
   get isSummarizing(): boolean {
     return this.phase === 'summarizing';
   }
 
   get summarySynopsis(): string | null {
-    return sessionService.latestSummary?.synopsis ?? null;
+    return this._session.latestSummary?.synopsis ?? null;
   }
 
   get summaryKeyEvents(): readonly string[] {
-    return sessionService.latestSummary?.keyEvents ?? [];
+    return this._session.latestSummary?.keyEvents ?? [];
   }
 
   get sessionNumber(): number {
-    return sessionService.activeSession?.sessionNumber ?? 0;
+    return this._session.activeSession?.sessionNumber ?? 0;
   }
 
   get messageCount(): number {
-    return sessionService.activeSession?.messageCount ?? 0;
+    return this._session.activeSession?.messageCount ?? 0;
   }
 
   get recapReviewed(): boolean {
-    return sessionService.activeSession?.recapReviewed ?? false;
+    return this._session.activeSession?.recapReviewed ?? false;
   }
 
   /** @inheritdoc */
@@ -98,7 +137,7 @@ class EndSessionViewModel
     this.phase = 'summarizing';
 
     try {
-      await gameOverlayService.endSession();
+      await this._overlay.endSession();
       this.phase = 'preview';
     } catch {
       // If summarization or save fails, still show locked state
@@ -108,7 +147,7 @@ class EndSessionViewModel
 
   /** @inheritdoc */
   cancel(): void {
-    gameOverlayService.closeEndSession();
+    this._overlay.closeEndSession();
   }
 
   /** @inheritdoc */
@@ -123,7 +162,7 @@ class EndSessionViewModel
     this.isStartingNew = true;
 
     try {
-      await gameOverlayService.startNewSession();
+      await this._overlay.startNewSession();
     } finally {
       this.isStartingNew = false;
     }
@@ -134,8 +173,7 @@ class EndSessionViewModel
   /** @inheritdoc */
   enterEditMode(): void {
     // Initialize editable text with saved edit if available, otherwise current synopsis
-    this.editedSynopsis =
-      sessionService.activeSession?.editedSynopsis ?? this.summarySynopsis ?? '';
+    this.editedSynopsis = this._session.activeSession?.editedSynopsis ?? this.summarySynopsis ?? '';
     this.phase = 'editing';
   }
 
@@ -146,7 +184,7 @@ class EndSessionViewModel
 
   /** @inheritdoc */
   async saveRecap(): Promise<void> {
-    const sessionId = sessionService.activeSession?.id;
+    const sessionId = this._session.activeSession?.id;
     if (!sessionId) {
       return;
     }
@@ -162,7 +200,7 @@ class EndSessionViewModel
     this.isSavingRecap = true;
 
     try {
-      await sessionService.updateSessionRecap({
+      await this._session.updateSessionRecap({
         sessionId,
         editedSynopsis: this.editedSynopsis,
       });
@@ -183,5 +221,12 @@ class EndSessionViewModel
   }
 }
 
-export const getEndSessionViewModel = (): EndSessionViewModelInterface =>
-  EndSessionViewModel.create({ className: 'EndSessionViewModel' });
+/**
+ * Builds an end-session ViewModel from explicit capabilities.
+ *
+ * Callers outside production (tests, sandboxes) use this directly; production
+ * code goes through `getEndSessionViewModel` in ./end_session_composition.ts.
+ */
+export const createEndSessionViewModel = (
+  options: EndSessionViewModelOptions,
+): EndSessionViewModelInterface => EndSessionViewModel.create(options);

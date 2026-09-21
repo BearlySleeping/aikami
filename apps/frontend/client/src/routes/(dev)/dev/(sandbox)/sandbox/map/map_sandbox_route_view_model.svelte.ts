@@ -7,7 +7,7 @@ import {
   BaseDevViewModel,
   type BaseDevViewModelInterface,
   type BaseDevViewModelOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import type { AssetResolver } from '@aikami/types';
 
 /** Development-route configuration used to create the map sandbox ViewModel. */

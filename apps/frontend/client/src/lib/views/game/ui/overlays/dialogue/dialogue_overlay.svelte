@@ -12,13 +12,14 @@
 // GuidedComposer components. Surface-specific concerns (skill-check dice,
 // portrait row, spatial speech bubble, suggestion chips, combat escalation)
 // are preserved here via snippets.
-import { Image } from '$components';
+import { CapabilityErrorBanner, Image, SlashAutocomplete } from '@aikami/frontend/components';
 import GameDice from '$lib/components/game/game_dice.svelte';
 import GuidedComposer from '$lib/components/messaging/guided_composer.svelte';
 import RichMessageList from '$lib/components/messaging/rich_message_list.svelte';
 import RichMessageRow from '$lib/components/messaging/rich_message_row.svelte';
 import type { MessageAction } from '$types';
 import type { DialogueOverlayViewModelInterface } from './dialogue_overlay_view_model.svelte';
+import PendingMessageBanner from './pending_message_banner.svelte';
 
 type Props = {
   viewModel: DialogueOverlayViewModelInterface;
@@ -71,19 +72,28 @@ const handleRowAction = (messageId: string, action: MessageAction): void => {
       void viewModel.copyMessage(msg.content);
       break;
     case 'retry':
-      viewModel.regenerateResponse(messageId);
+      // C-490: campaign retry is presentation-only "Rephrase" — never
+      // re-runs NpcStateDelta / quest / command mutations.
+      viewModel.rephraseResponse(messageId);
       break;
     case 'speak':
       viewModel.speakMessage(msg.content);
       break;
     case 'branch':
-      viewModel.createBranch({ parentMessageId: messageId });
-      break;
     case 'edit':
-      viewModel.startEdit(messageId);
-      break;
     case 'delete':
-      viewModel.deleteMessage(messageId);
+      // C-490: transcript-rewinding is gated out in campaign play — the
+      // controls are hidden, and this guard is defense-in-depth.
+      if (viewModel.isCampaignPlay) {
+        return;
+      }
+      if (action === 'branch') {
+        viewModel.createBranch({ parentMessageId: messageId });
+      } else if (action === 'edit') {
+        viewModel.startEdit(messageId);
+      } else {
+        viewModel.deleteMessage(messageId);
+      }
       break;
   }
 };
@@ -98,8 +108,14 @@ const handleRowAction = (messageId: string, action: MessageAction): void => {
 >
   <!-- Spatial speech bubble — positioned over the NPC's rendered sprite (C-161) -->
   {#if viewModel.hasNpcScreenPosition && !isFullscreen}
-    {@const clampedX = Math.max(16, Math.min(viewModel.npcScreenX, typeof window !== 'undefined' ? window.innerWidth - 16 : 400))}
-    {@const clampedY = Math.max(16, Math.min(viewModel.npcScreenY, typeof window !== 'undefined' ? window.innerHeight - 16 : 300))}
+    {@const clampedX = Math.max(
+  16,
+  Math.min(viewModel.npcScreenX, typeof window !== 'undefined' ? window.innerWidth - 16 : 400),
+)}
+    {@const clampedY = Math.max(
+  16,
+  Math.min(viewModel.npcScreenY, typeof window !== 'undefined' ? window.innerHeight - 16 : 300),
+)}
     <div
       class="speech-bubble pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-full rounded-lg bg-base-100/90 px-3 py-1.5 text-xs font-semibold text-primary shadow-lg backdrop-blur-sm"
       style="left: {clampedX}px; top: {clampedY - 48}px;"
@@ -107,9 +123,6 @@ const handleRowAction = (messageId: string, action: MessageAction): void => {
       {viewModel.npcName}
     </div>
   {/if}
-
-  <!-- d20 Skill Check Dice (C-157 / C-162) -->
-  <GameDice dice={viewModel.diceState} />
 
   <!-- Avatar row — NPC left, Player + Party right -->
   {#if !isFullscreen}
@@ -119,9 +132,7 @@ const handleRowAction = (messageId: string, action: MessageAction): void => {
         class="{viewModel.highlightSpeaker === 'npc' ? 'scale-110' : ''} transition-transform duration-200"
       >
         <div
-          class="h-28 w-28 overflow-hidden border-2 shadow-lg {viewModel.highlightSpeaker === 'npc'
-          ? 'border-warning shadow-warning/30'
-          : 'border-base-content/10'}"
+          class="h-28 w-28 overflow-hidden border-2 shadow-lg {viewModel.highlightSpeaker === 'npc' ? 'border-warning shadow-warning/30' : 'border-base-content/10'}"
         >
           <Image
             src={viewModel.npcAvatarUrl}
@@ -149,8 +160,8 @@ const handleRowAction = (messageId: string, action: MessageAction): void => {
         >
           <div
             class="h-28 w-28 overflow-hidden border-2 shadow-lg {viewModel.highlightSpeaker === 'player'
-            ? 'border-primary shadow-primary/30'
-            : 'border-base-content/10'}"
+  ? 'border-primary shadow-primary/30'
+  : 'border-base-content/10'}"
           >
             <Image
               src={viewModel.playerAvatarUrl}
@@ -204,7 +215,11 @@ const handleRowAction = (messageId: string, action: MessageAction): void => {
       </div>
     </div>
 
-    {#snippet imageBlock(image: { id: string; url: string | null; status: string })}
+    {#snippet imageBlock(image: {
+  id: string;
+  url: string | null;
+  status: string;
+})}
       <div class="flex justify-center py-1">
         {#if image.status === 'generating'}
           <div class="skeleton h-48 w-64 rounded-xl"></div>
@@ -237,7 +252,10 @@ const handleRowAction = (messageId: string, action: MessageAction): void => {
         {/each}
       {/snippet}
 
-      {#snippet renderRow(message, index)}
+      {#snippet renderRow(
+  message,
+  index,
+)}
         {@const original = viewModel.messages.find((m) => m.id === message.id)}
         <RichMessageRow
           {message}
@@ -250,11 +268,13 @@ const handleRowAction = (messageId: string, action: MessageAction): void => {
           isPartyMate={original?.senderName != null && original?.senderName !== viewModel.npcName}
           editing={viewModel.editingMessageId === message.id}
           editText={viewModel.editText}
+          disableTranscriptEditing={viewModel.isCampaignPlay}
           onEditChange={(t) => viewModel.setEditText(t)}
           onEditSave={(id) => viewModel.editMessage({ messageId: id, newText: viewModel.editText })}
           onEditCancel={() => viewModel.cancelEdit()}
           isStreaming={viewModel.isStreaming}
           isLast={index === viewModel.messages.length - 1}
+          showRephrase={viewModel.canRephraseMessage(message.id)}
           streamingText={viewModel.streamingText}
           isResolvingSkillCheck={viewModel.isResolvingSkillCheck}
           alternativeLabel={original?.alternativeLabel ?? ''}
@@ -264,7 +284,9 @@ const handleRowAction = (messageId: string, action: MessageAction): void => {
           onSwipe={(id, direction) => viewModel.swipeAlternative(id, direction)}
           onAction={handleRowAction}
         >
-          {#snippet renderFooter(messageId)}
+          {#snippet renderFooter(
+  messageId,
+)}
             <!-- Images anchored to this message -->
             {#each viewModel.generatedImages.filter((img) => img.afterMessageId === messageId) as image (image.id)}
               {@render imageBlock(image)}
@@ -275,8 +297,8 @@ const handleRowAction = (messageId: string, action: MessageAction): void => {
               <div class="flex justify-center py-2">
                 <div
                   class="rounded-xl px-4 py-2 text-center shadow-md {viewModel.rollResultBanner.isSuccess
-                    ? 'bg-success/10 border border-success/30'
-                    : 'bg-error/10 border border-error/30'}"
+  ? 'bg-success/10 border border-success/30'
+  : 'bg-error/10 border border-error/30'}"
                 >
                   <span class="text-xs text-base-content/50"
                     >{viewModel.rollResultBanner.checkType}
@@ -304,8 +326,12 @@ const handleRowAction = (messageId: string, action: MessageAction): void => {
       {/snippet}
 
       {#snippet after()}
+        <!-- Pending skill check — now an inline card in the conversation
+             rather than a screen-covering overlay (Phase 2 / C-162). -->
+        <GameDice dice={viewModel.diceState} />
+
         <!-- Typing indicator — shown while waiting for NPC response -->
-        {#if viewModel.isStreaming && viewModel.messages.length > 0 && viewModel.messages[viewModel.messages.length - 1].role === 'player'}
+        {#if viewModel.isTyping}
           <div class="flex gap-2">
             <div class="rounded-2xl rounded-bl-md bg-base-100 px-4 py-2.5 shadow-sm">
               <span class="inline-flex items-center gap-1">
@@ -332,6 +358,12 @@ const handleRowAction = (messageId: string, action: MessageAction): void => {
           </div>
         {/if}
 
+        <CapabilityErrorBanner
+          error={viewModel.capabilityError}
+          ondismiss={() => viewModel.dismissCapabilityError()}
+          onsettings={() => viewModel.goToSettingsCapability()}
+        />
+
         <!-- CYOA choice buttons -->
         {#if viewModel.activeChoices.length > 0}
           <div class="space-y-1 px-2" data-testid="cyoa-choices">
@@ -354,8 +386,8 @@ const handleRowAction = (messageId: string, action: MessageAction): void => {
           </div>
         {/if}
 
-        <!-- Branch selector -->
-        {#if viewModel.branches.length > 0}
+        <!-- Branch selector (C-490: hidden in campaign play — rewinding is gated) -->
+        {#if viewModel.showBranchSelector}
           <div class="border-t border-base-content/10 px-3 py-1">
             <div class="flex items-center gap-1 text-xs">
               <span class="text-base-content/50">Branch:</span>
@@ -392,7 +424,7 @@ const handleRowAction = (messageId: string, action: MessageAction): void => {
 
     <!-- Delete confirmation modal -->
     {#if viewModel.pendingDeleteMessageId}
-      <!-- daisyUI v5: modal-box needs the .modal.modal-open wrapper to be visible -->
+      <!-- Aikami UI v5: modal-box needs the .modal.modal-open wrapper to be visible -->
       <div class="modal modal-open bg-base-300/60">
         <div class="modal-box w-80">
           <h3 class="text-lg font-bold">Delete Message?</h3>
@@ -431,13 +463,19 @@ const handleRowAction = (messageId: string, action: MessageAction): void => {
           </button>
         </div>
       {:else}
+        <SlashAutocomplete
+          show={viewModel.showSlashCompletions}
+          completions={viewModel.slashCompletions}
+          selectedIndex={viewModel.selectedSlashCompletion}
+          onselect={(index) => viewModel.selectAndApplySlashCompletion(index)}
+        />
         <GuidedComposer
           value={viewModel.inputText}
           onInput={(t) => viewModel.setInput(t)}
           onSend={() => viewModel.sendMessage()}
           onKeyDown={(e) => viewModel.handleKeyDown(e)}
           placeholder="Reply to {viewModel.npcName}..."
-          disabled={viewModel.isStreaming || viewModel.isResolvingSkillCheck}
+          disabled={viewModel.isResolvingSkillCheck}
           sendDisabled={viewModel.isResolvingSkillCheck}
           requireText={false}
           isSending={viewModel.isResolvingSkillCheck}
@@ -446,10 +484,50 @@ const handleRowAction = (messageId: string, action: MessageAction): void => {
           sendIcon="↑"
           square={true}
           textareaRef={(el) => {
-            viewModel.inputElement = el ?? undefined;
-          }}
+  viewModel.inputElement = el ?? undefined;
+}}
         >
           {#snippet above()}
+            <!-- Interrupted skill check recovered from the operation ledger:
+                 the roll is preserved, so resolving never rerolls. -->
+            {#if viewModel.interruptedCheck}
+              <div
+                class="border-t border-warning/30 bg-warning/10 px-4 py-2"
+                data-testid="interrupted-check-banner"
+              >
+                <div class="flex items-center justify-between gap-2">
+                  <span class="text-xs text-base-content/80">
+                    A {viewModel.interruptedCheck.checkType} check was interrupted — the roll was
+                    <span class="font-semibold">{viewModel.interruptedCheck.natural}</span>
+                    vs DC {viewModel.interruptedCheck.difficultyClass}.
+                  </span>
+                  <div class="flex shrink-0 gap-1">
+                    <button
+                      type="button"
+                      class="btn btn-warning btn-xs"
+                      data-testid="interrupted-check-resolve"
+                      onclick={() => void viewModel.resumeInterruptedCheck()}
+                    >
+                      Resolve
+                    </button>
+                    <button
+                      type="button"
+                      class="btn btn-ghost btn-xs"
+                      onclick={() => viewModel.dismissInterruptedCheck()}
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                </div>
+              </div>
+            {/if}
+
+            <!-- Pending queued messages retained after a failed/cancelled stream;
+                 require an explicit Send before any is delivered. -->
+            <PendingMessageBanner
+              messages={viewModel.pendingMessages}
+              onRetry={() => viewModel.retryPending()}
+            />
             <!-- Suggestion chips — rendered inside the card, above the input -->
             {#if viewModel.suggestedChips.length > 0}
               {#key viewModel.suggestedChips.map((c) => c.id).join('|')}

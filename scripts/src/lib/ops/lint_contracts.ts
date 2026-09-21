@@ -469,7 +469,7 @@ export const checkProductionPath = (info: ContractInfo): LintIssue[] => {
     // For thin contracts, check the Verification line of each AC
     const acSections = info.content.split(/^### /m).filter((s) => /^AC-\d+:/i.test(s));
     let hasValidPath = false;
-    const missingAcs: string[] = [];
+    const acIssues: string[] = [];
     for (const section of acSections) {
       const acIdMatch = section.match(/^(AC-\d+)/i);
       const acId = acIdMatch?.[1] ?? 'unknown';
@@ -480,18 +480,28 @@ export const checkProductionPath = (info: ContractInfo): LintIssue[] => {
         if (references.some(resolveProductionReference)) {
           hasValidPath = true;
         } else {
-          missingAcs.push(acId);
+          acIssues.push(`${acId}: No resolvable reference in Verification line`);
         }
       } else {
-        missingAcs.push(acId);
+        acIssues.push(`${acId}: Missing **Verification** line`);
       }
     }
-    if (!hasValidPath && missingAcs.length > 0) {
+    // Report every AC-level issue independently
+    for (const acIssue of acIssues) {
       issues.push({
         file: info.filename,
         severity: 'error',
         rule: 'production-path',
-        message: `No AC has a production path in its Verification line. Missing: ${missingAcs.join(', ')}`,
+        message: acIssue,
+      });
+    }
+    // At least one AC must have a valid path
+    if (!hasValidPath && acSections.length > 0) {
+      issues.push({
+        file: info.filename,
+        severity: 'error',
+        rule: 'production-path',
+        message: `No AC has a production path in its Verification line. ${acIssues.length > 0 ? 'All ACs had errors (see above).' : 'No AC sections found.'}`,
       });
     }
     return issues;
@@ -522,7 +532,7 @@ export const checkProductionPath = (info: ContractInfo): LintIssue[] => {
   // Production Path is always column index 3 (0=AC, 1=Test Level, 2=Required Artifact, 3=Production Path, 4=Evidence)
   const prodPathCol = 3;
 
-  const acErrors: string[] = [];
+  const rowIssues: string[] = [];
   let hasValidPath = false;
   for (const [rowIndex, row] of rows.entries()) {
     const acId = row[0] ?? '';
@@ -530,7 +540,7 @@ export const checkProductionPath = (info: ContractInfo): LintIssue[] => {
     const pathCell = row[prodPathCol] ?? '';
     const formatResult = classifyProductionPath(pathCell);
     if (formatResult !== null) {
-      acErrors.push(`${rowLabel}: ${formatResult}`);
+      rowIssues.push(`${rowLabel}: ${formatResult}`);
       continue;
     }
     // Format is valid; now check resolution
@@ -543,7 +553,7 @@ export const checkProductionPath = (info: ContractInfo): LintIssue[] => {
       if (toolingCommandExists(cmd)) {
         resolved = true;
       } else {
-        acErrors.push(`${rowLabel}: Tooling command not found: \`${cmd}\``);
+        rowIssues.push(`${rowLabel}: Tooling command not found: \`${cmd}\``);
       }
     }
     // Route reference: /game/...
@@ -551,7 +561,7 @@ export const checkProductionPath = (info: ContractInfo): LintIssue[] => {
       if (routeExists(referenceToken)) {
         resolved = true;
       } else {
-        acErrors.push(`${rowLabel}: Route not found: ${referenceToken}`);
+        rowIssues.push(`${rowLabel}: Route not found: ${referenceToken}`);
       }
     }
     // file.ts#exportedSymbol
@@ -559,26 +569,38 @@ export const checkProductionPath = (info: ContractInfo): LintIssue[] => {
       if (symbolExists(referenceToken)) {
         resolved = true;
       } else {
-        acErrors.push(`${rowLabel}: Symbol not found: ${referenceToken}`);
+        rowIssues.push(`${rowLabel}: Symbol not found: ${referenceToken}`);
       }
     }
     // Named component/ViewModel reference
     else if (namedProductionSourceExists(referenceToken)) {
       resolved = true;
     } else {
-      acErrors.push(`${rowLabel}: Component not found: ${referenceToken}`);
+      rowIssues.push(`${rowLabel}: Component not found: ${referenceToken}`);
     }
     if (resolved) {
       hasValidPath = true;
     }
   }
 
+  // Report every row-level issue independently — one valid row must not
+  // silence errors from other rows (see C-487 finding #2).
+  for (const rowIssue of rowIssues) {
+    issues.push({
+      file: info.filename,
+      severity: 'error',
+      rule: 'production-path',
+      message: rowIssue,
+    });
+  }
+
+  // Additionally, at least one row must name a real production/tooling entry point.
   if (!hasValidPath) {
     issues.push({
       file: info.filename,
       severity: 'error',
       rule: 'production-path',
-      message: `No AC has a valid Production Path. Errors: ${acErrors.join('; ') || 'no resolvable references found'}`,
+      message: `No AC has a valid Production Path. ${rowIssues.length > 0 ? 'All rows had errors (see above).' : 'No resolvable references found.'}`,
     });
   }
 

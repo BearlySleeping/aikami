@@ -10,7 +10,7 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 
 export type ReviewModalViewModelInterface = BaseViewModelInterface & {
   /** Whether the modal is currently open. */

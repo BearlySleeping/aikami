@@ -1,43 +1,20 @@
 // apps/frontend/client/src/lib/services/campaign/campaign_service.test.ts
 //
 // Tests for CampaignService — updated for C-321 Turso migration.
-// Uses the test_preload fake LocalDatabaseInterface instead of
-// mock IndexedDB.
+// Runs against a real in-memory libSQL database via the shared
+// local_database_fixture instead of a shared global database mock.
 // Contract: C-313 Introduce the Campaign Aggregate and Boot State Machine
 // Contract: C-323 Enforce the Mandatory Text AI Capability Gate (AC-1, AC-4)
 
 // biome-ignore-all lint/style/useNamingConvention: Mock object properties must mirror PascalCase class names for module mocking
 
-import { beforeEach, describe, expect, mock, test } from 'bun:test';
+import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test';
 import type { Campaign } from '@aikami/types';
+import { AiTextProviderRequiredError } from '@aikami/utils';
+import { createRealLocalDatabase } from '../__tests__/local_database_fixture.ts';
 
-// Mock @aikami/utils before it gets resolved — Bun's tsconfig paths don't
-// cover workspace packages in test mode, so we provide the AiTextProviderRequiredError
-// class locally.
-mock.module('@aikami/utils', () => {
-  class MockAiTextProviderRequiredError extends Error {
-    readonly code = 'text-provider-required' as const;
-    constructor(message = 'A text AI provider is required to start a campaign.') {
-      super(message);
-      this.name = 'AiTextProviderRequiredError';
-    }
-  }
-  return {
-    AiTextProviderRequiredError: MockAiTextProviderRequiredError,
-    isAiTextProviderRequiredError: (error: unknown): error is MockAiTextProviderRequiredError =>
-      error instanceof MockAiTextProviderRequiredError,
-  };
-});
-
-const { AiTextProviderRequiredError } = await import('@aikami/utils');
-
-// Mocks — must run before any imports that transitively touch $services
+// Mocks — must run before any imports that transitively touch configService
 // ---------------------------------------------------------------------------
-
-/** Mutable stubs for aiSettingsService — used to control gate behavior. */
-const _textProviderApiKey = '';
-const _textProviderEndpoint = 'http://localhost:11434';
-const _textProviderModel = 'llama3';
 
 /** Mutable C-230 connections — the source the gate now reads for text. */
 let _connections: Array<{
@@ -48,18 +25,7 @@ let _connections: Array<{
   model: string;
 }> = [{ capability: 'text', provider: 'ollama', apiKey: '', baseUrl: '', model: 'llama3' }];
 
-mock.module('$services', () => ({
-  aiSettingsService: {
-    get textProvider() {
-      return {
-        apiKey: _textProviderApiKey,
-        endpoint: _textProviderEndpoint,
-        model: _textProviderModel,
-      };
-    },
-    imageProvider: { apiKey: '', endpoint: '' },
-    ttsProvider: { apiKey: '', endpoint: '' },
-  },
+mock.module('../config/config_service.svelte.ts', () => ({
   configService: {
     state: {
       get connections() {
@@ -67,14 +33,31 @@ mock.module('$services', () => ({
       },
     },
   },
-  capabilityService: {
-    detectText: mock(async () => 'not_found'),
-    detectImage: mock(async () => 'not_found'),
-  },
 }));
 
 mock.module('../game/serializable_service', () => ({
   registerSerializable: mock(() => {}),
+}));
+
+// ---------------------------------------------------------------------------
+// Real in-memory database
+// ---------------------------------------------------------------------------
+//
+// Own this test's database instead of relying on a shared global database mock, so
+// the campaign repository observes real SQLite semantics (constraints,
+// ORDER BY, transactions). Must be registered before campaign_service imports
+// the storage barrel.
+
+const fixture = await createRealLocalDatabase();
+
+const realFrontendStorage = await import('@aikami/frontend/storage');
+
+mock.module('@aikami/frontend/storage', () => ({
+  // Spread the real module first: a mock that names only the functions a test
+  // needs breaks the moment a transitively-imported module consumes a new
+  // export (C-518 added the generation-record writers).
+  ...realFrontendStorage,
+  getLocalDatabase: async () => fixture.db,
 }));
 
 // ---------------------------------------------------------------------------
@@ -91,21 +74,15 @@ globalThis.crypto = {
 } as unknown as Crypto;
 
 // ---------------------------------------------------------------------------
-// Reset fake DB via the repositories mock
-// ---------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------
 // Setup / Teardown
 // ---------------------------------------------------------------------------
 
 beforeEach(async () => {
-  // Reset the fake database before each test
-  const reposMod = await import('@aikami/frontend/storage');
-  (reposMod as unknown as { resetLocalDatabase: () => void }).resetLocalDatabase();
+  await fixture.reset();
+});
+
+afterAll(async () => {
+  await fixture.close();
 });
 
 // ---------------------------------------------------------------------------

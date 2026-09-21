@@ -19,7 +19,17 @@
 // ── typescript ──────────────────────────────────────────────────
 // Pinned to 6.0.3 because TypeScript 7 is not yet supported by
 // vtsls (Zed's TypeScript LSP) and other tooling in the ecosystem.
-// Remove this pin once vtsls ships TS 7 compatibility.
+//
+// TS 7 is also a hard blocker for `scripts`: it dropped the JS compiler
+// API from the package root (`.` now resolves to lib/version.cjs), so
+// `import ts from 'typescript'` — used by guard_orphaned_capability.ts
+// for AST parsing — no longer typechecks. The replacement API under
+// `typescript/unstable/ast` has no `createSourceFile`/`forEachChild`
+// equivalent yet.
+//
+// Every workspace that declares a typescript devDependency must be
+// listed below, or syncpack's `bun update` will silently bump it to 7.x.
+// Remove this pin once vtsls and the AST guard can both run on TS 7.
 //
 // ── @astrojs/starlight ───────────────────────────────────────────
 // Pinned because starlight ships raw .ts source files in its npm
@@ -252,6 +262,7 @@ const tsDirs: WorkspaceInfo[] = [
   { dir: '.', name: '@aikami/monorepo' },
   { dir: 'apps/e2e', name: '@aikami/e2e' },
   { dir: 'packages/backend/ai', name: '@aikami/backend-ai' },
+  { dir: 'scripts', name: '@aikami/scripts' },
 ].filter(({ dir }) => {
   const pkgPath = resolve(MONOREPO_ROOT, dir, 'package.json');
   if (!existsSync(pkgPath)) {

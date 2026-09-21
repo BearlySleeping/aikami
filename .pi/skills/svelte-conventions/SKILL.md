@@ -115,12 +115,31 @@ imports are faster, simpler, and eliminate unnecessary async cascading.
 | Pattern | Why dynamic |
 |---|---|
 | **`@aikami/frontend/engine`** | Heavy PixiJS bundle. Deferred until game engine initializes. |
+| **`@aikami/frontend-preview`** | The package the hub imports previews from. Its `MapPreview`/`WalkSandbox` entrypoints pull the engine — and therefore PixiJS — transitively, because the engine's root barrel value-imports `pixi.js` via `pixi_app.ts` and `game_world.ts`. A static import from the hub puts PixiJS in the Worker server bundle (C-446 AC-1). |
 | **AI client factory** | Only the chosen provider's SDK loads (`openai` vs `ollama` vs `gemini`). |
 | **Massive libs** | `onnxruntime-web` (~10MB), `kokoro-js`, `pixi.js` Assets module |
 | **Tauri APIs** | `@tauri-apps/api/window`, `@tauri-apps/plugin-opener` — not available in browser |
 | **Web Workers** | `?worker&type=module` — Vite requires dynamic import syntax |
 | **Dev-only tools** | `eruda` — must not ship to production |
 | **Platform-specific storage** | `IndexedDB` vs `localStorage` — runtime detection |
+
+🔴 **This table is the human-readable half of a machine-readable list.** The
+enforced entries live in `scripts/src/lib/ops/guards/allowlist.ts`
+(`SHARED_ALLOWLIST` for services, `VIEW_MODEL_ALLOWLIST` for ViewModels), and
+matching is **exact**:
+
+* an entry names a **package**, and matches that package or an explicit subpath
+  of it — `@aikami/frontend/engine` and `@aikami/frontend/engine/game_world`,
+  never `@aikami/frontend/engine-evil`;
+* `@tauri-apps` is a **scope**, matching `@tauri-apps/api`, never
+  `@tauri-apps-evil/api`;
+* `worker&type=module` is a **query marker**, matched as a whole parameter group.
+
+So a dependency whose name merely *contains* an allowlisted package does not
+qualify. Adding an entry widens what the guard accepts — that is a policy
+change and goes through the same review as a baseline change, not a per-file
+escape. If you need a new entry, surface it rather than adding one to make a
+guard failure go away.
 
 ---
 
@@ -160,24 +179,33 @@ or call server API endpoints directly. That belongs in services.
 ### Export ViewModels via Factory Function, Never Raw Class
 
 ```typescript
-// ✅ CORRECT — factory with create() returns interface
+// ✅ CORRECT — testable factory (no production imports) + production factory
 class MyViewModel extends BaseViewModel<MyOptions> implements MyViewModelInterface {
   // ...
 }
 
-export const getMyViewModel = (options: MyOptions): MyViewModelInterface =>
+// In my_view_model.svelte.ts — tests consume this with typed fixtures.
+export const createMyViewModel = (options: MyOptions): MyViewModelInterface =>
   MyViewModel.create(options);
 
-// ❌ WRONG — never export class directly, never use `new`
-export class MyViewModel { ... }
+// In my_composition.ts — the only module that imports production services.
+export const getMyViewModel = (options: BaseViewModelOptions): MyViewModelInterface =>
+  createMyViewModel({ ...options, myService });
+
+// ❌ WRONG — never instantiate with `new`, and never export a `get*` factory
+// from the ViewModel module itself.
 const vm = new MyViewModel(options);
 ```
 
 **Why**: `BaseViewModel.create()` instruments the instance so every public
 method call is auto-logged (prototype method shadowing — not an ES6 Proxy,
 which crashes Svelte 5 `$state`). Raw `new` bypasses this instrumentation —
-no logging, no diagnostics. The factory returns the Interface type so
+no logging, no diagnostics. The factories return the Interface type so
 consumers depend on the contract, not the implementation.
+
+The class itself is normally module-local. Export it **only** when a documented
+`*.dev.svelte.ts` subclass extends it (the AI settings editor is the current
+example), and never export a class as the primary consumption path.
 
 ### 🔴 Interface Methods: Method Signatures, NOT Arrow Properties
 
@@ -235,50 +263,136 @@ utils) that has no `BaseClass` to inherit from.
 
 ### ViewModel Template
 
+Import base classes from the **narrow** `@aikami/frontend/services/base`
+entrypoint — it loads no router/dialog/application graph. For new or migrated
+ViewModels, also inject only the service capabilities the ViewModel needs
+instead of importing singletons from `$services`; production wiring goes in a
+sibling `*_composition.ts` (reference: `views/settings/account/`).
+
 ```typescript
 // apps/frontend/client/src/lib/views/feature/feature_view_model.svelte.ts
 import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from "@aikami/frontend/services";
-import { myService } from "$services";
+} from "@aikami/frontend/services/base";
+
+/** Only the capabilities this ViewModel consumes — not the whole service. */
+export type FeatureServiceCapabilities = {
+  getItems(): string[];
+};
 
 export type FeatureViewModelInterface = BaseViewModelInterface & {
   readonly items: string[];
   refresh(): Promise<void>;
 };
 
-export type FeatureViewModelOptions = BaseViewModelOptions & {};
+export type FeatureViewModelOptions = BaseViewModelOptions & {
+  featureService: FeatureServiceCapabilities;
+};
 
-export class FeatureViewModel
+class FeatureViewModel
   extends BaseViewModel<FeatureViewModelOptions>
   implements FeatureViewModelInterface
 {
+  private readonly _featureService: FeatureServiceCapabilities;
   items = $state<string[]>([]);
 
+  constructor(options: FeatureViewModelOptions) {
+    super(options);
+    this._featureService = options.featureService;
+  }
+
   async initialize(): Promise<void> {
-    this.items = myService.getItems();
+    this.items = this._featureService.getItems();
     await super.initialize();
   }
 
   async refresh(): Promise<void> {
     // create() auto-logs the call — no this.debug() needed at entry
-    this.items = myService.getItems();
+    this.items = this._featureService.getItems();
   }
 }
 
-export const getFeatureViewModel = (
+/**
+ * Testable factory — no production imports. Tests call this directly with
+ * feature fixtures. Production wiring lives in ./feature_composition.ts.
+ */
+export const createFeatureViewModel = (
   options: FeatureViewModelOptions,
 ): FeatureViewModelInterface => FeatureViewModel.create(options);
 ```
+
+Production singletons are wired in a sibling composition file — the **only**
+feature module that imports `$services`:
+
+```typescript
+// apps/frontend/client/src/lib/views/feature/feature_composition.ts
+import type { BaseViewModelOptions } from "@aikami/frontend/services/base";
+import { myService } from "$services";
+import {
+  createFeatureViewModel,
+  type FeatureViewModelInterface,
+} from "./feature_view_model.svelte";
+
+export const getFeatureViewModel = (
+  options: BaseViewModelOptions,
+): FeatureViewModelInterface =>
+  createFeatureViewModel({ ...options, featureService: myService });
+```
+
+The boundaries are **enforced** by `bun run guard`:
+
+- `guard-view-model-composition` (C1/C2) fails if a `*_view_model.svelte.ts`
+  imports the `$services` barrel or the aggregate `@aikami/frontend/services`
+  root at runtime. Type-only imports are allowed (erased); base classes come
+  from the narrow `@aikami/frontend/services/base`.
+- `guard-view-model-composition` (C3) fails if a section metadata registry
+  (`*_sections.ts`, but not `*_sections_composition.ts`) imports a ViewModel,
+  composition wrapper, or service at runtime. Metadata stays inert; factory
+  lookup lives in the sibling `*_sections_composition.ts`.
+- `guard-mvvm-conventions` (M8, AST-based) fails if a ViewModel imports another
+  ViewModel or a `*_composition.ts` wrapper at runtime.
+- `guard-mvvm-conventions` (M10) fails if application code writes `__mounted`.
+  That flag belongs to `BaseViewModelContainer` / lifecycle infrastructure.
+
+Not-yet-migrated ViewModels are captured in a ratchet baseline. Migrations are
+locked in automatically by the sanctioned validation flow (`scripts:guard-contract`
+runs each ratchet's reduction-only `--update-baseline`), so you do not have to
+run anything by hand. Baseline growth is refused outright: `--update-baseline`
+is reduction-only, and CI compares the baseline against the trusted base
+revision. If a guard failure looks like it needs a policy change, stop and
+surface it for human review — see `.pi/skills/aikami-conventions/SKILL.md`.
+
+Naming: the testable factory (no production imports) is `createFeatureViewModel`
+in the ViewModel module; `getFeatureViewModel` in the `*_composition.ts` file is
+the production-wired factory.
+
+### Child ViewModels: Composition vs Communication
+
+Each ViewModel instance has **exactly one lifecycle owner**. The default is
+`BaseViewModelContainer`: whatever view renders a child ViewModel owns its
+`initialize()`/`dispose()`. Do not manually call `initialize()`/`dispose()` on a
+child that a container renders, and never write `__mounted` (M10).
+
+| Situation | Correct shape |
+| --- | --- |
+| Parent exposes a child only for rendering | Pass the child `viewModel`; the child view's container owns lifecycle |
+| Two sections share persisted configuration / connection-test results | Shared service capability (appropriate scope), not a shared child VM |
+| Parent needs an adjacent editor to open | Narrow intent callback, injected as a capability |
+| Parent needs a child VM's domain/state as an API | Replace with a service capability or pure selector |
+| A section needs its own VM | Section host creates it; one owner per instance |
+
+Aggregator ViewModels receive already-built sub-ViewModels (or a factory
+capability) through typed options — with production wiring in a sibling
+`*_composition.ts` — rather than importing child `get*` factories themselves.
 
 ### ViewModel Rules
 
 - Export `type ...Interface` with **all data properties `readonly`** and
   **methods as method signatures** (`method(): void`, not `method: () => void`)
 - Export `type ...Options` alongside the class
-- Export a `getFeatureViewModel` factory function using `ClassName.create()` — **never `new ClassName()`**
+- Export a testable `createFeatureViewModel` factory in the ViewModel module using `ClassName.create()` — **never `new ClassName()`**; keep the production-wired `getFeatureViewModel` factory in the corresponding `*_composition.ts` file
 - Always extend `BaseViewModel` and `implements *Interface`
 - ViewModel files: `{name}_view_model.svelte.ts` (NOT `vm` shorthand)
 - Call `super.initialize()` **at the end** of `initialize()`
@@ -290,34 +404,43 @@ export const getFeatureViewModel = (
 - Logging via inherited `this.debug()` / `this.error()` etc. — never `$logger`
 - ViewModel `$state` fields are public by design — do NOT prefix them with `_`
   (exception to the universal private-member `_` rule)
-- **Sub-view components** should accept optional `viewModel` via `$props()` with a default factory — never create ViewModels in the parent's `<script>` block and pass them down
+- **Sub-view components** take their `viewModel` as a required prop; one owner (the rendered `BaseViewModelContainer` or the host composition) initializes and disposes each instance. Never write `__mounted` from application code.
 
-### Optional ViewModel Prop Pattern
+### Sub-View ViewModel Prop Pattern
 
-Sub-view components (reusable UI panels, editor modals) should self-instantiate
-their ViewModel via default `$props()`:
+Sub-view components (reusable UI panels, editor modals) are logicless: they
+receive a ready ViewModel and never construct one. The owner initializes and
+disposes it exactly once, normally through `BaseViewModelContainer`.
 
 ```svelte
-<!-- ✅ CORRECT — optional viewModel with default factory -->
+<!-- ✅ CORRECT — required prop; the owner supplies the instance -->
 <script lang="ts">
-  import { getMyViewModel, type MyViewModelInterface } from './my_view_model.svelte';
+  import type { MyViewModelInterface } from './my_view_model.svelte';
 
   type Props = {
-    viewModel?: MyViewModelInterface;
+    viewModel: MyViewModelInterface;
   };
 
-  const {
-    viewModel = getMyViewModel({ className: 'MyViewModel' }),
-  }: Props = $props();
+  const { viewModel }: Props = $props();
 </script>
-
-<!-- ❌ WRONG — creating ViewModel in parent's <script> -->
-<script lang="ts">
-  // parent_view.svelte
-  const childVm = getChildViewModel({ ... });
-</script>
-<ChildView viewModel={childVm} />
 ```
+
+A host (page or aggregator) builds the child in its `*_composition.ts` and
+passes it down for rendering — this is permitted composition, as long as exactly
+one owner initializes/disposes it (normally the child view's
+`BaseViewModelContainer`).
+
+```svelte
+<!-- ✅ CORRECT — host passes a child, container owns lifecycle -->
+<ChildView viewModel={hostViewModel.childViewModel} />
+
+<!-- ❌ WRONG — the view imports a production `get*` factory and
+     self-instantiates. Wire production dependencies in *_composition.ts. -->
+```
+
+For host-owned children, wire them through typed options in the host VM and
+build them in the host's `*_composition.ts` — the host VM module must not import
+child `get*` factories (M8).
 
 ---
 
@@ -325,6 +448,14 @@ their ViewModel via default `$props()`:
 
 Singleton classes with `$state` for external state management. Never use
 Svelte stores.
+
+Application-scoped singletons are the default for genuinely shared state (DB
+connection, game/campaign state, auth). **Scoped factories are also legitimate**
+when the scope is real — a settings session or a single editor may own its own
+instance. Do not promote editor visibility, form fields, or per-UI preview state
+to an application singleton merely because two components use it; and do not
+move a whole feature's state into a global service as a shortcut. Share only the
+fact or workflow that is actually shared.
 
 ```typescript
 // packages/frontend/services/src/lib/my_service.svelte.ts
@@ -428,5 +559,5 @@ When using `SharedArrayBuffer` for Web Workers, the document MUST be cross-origi
 | Skill         | Covers                                                    |
 | ------------- | --------------------------------------------------------- |
 | `svelte-page` | Scaffolding a new page (View + ViewModel files)           |
-| `aikami-ui`   | DaisyUI primitives vs components, typography, colors      |
+| `aikami-ui`   | Aikami UI primitives vs components, typography, colors    |
 | `pixijs-v8`   | Game engine boundary — no `$state` in game code, bridge   |

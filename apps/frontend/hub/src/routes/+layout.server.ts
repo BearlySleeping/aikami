@@ -1,6 +1,6 @@
 // apps/frontend/hub/src/routes/+layout.server.ts
 import type { LogLevel } from '@aikami/types';
-import type { AdminHookData } from '$types';
+import type { HubHookData } from '$types';
 import type { LayoutServerLoad } from './$types';
 
 export const load: LayoutServerLoad = (event) => {
@@ -17,5 +17,5 @@ export const load: LayoutServerLoad = (event) => {
     logLevel,
     sessionId,
     userSession,
-  } satisfies AdminHookData;
+  } satisfies HubHookData;
 };

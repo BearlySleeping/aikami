@@ -13,7 +13,12 @@ import { beforeEach, describe, expect, test } from 'bun:test';
 import { join } from 'node:path';
 import { runCatalogPublish } from '../pipeline.ts';
 import { runAttributionPreflight } from '../preflight.ts';
-import { FakeR2Client, makeFixtureContentPacks, makeFixtureGameData } from './fixtures.ts';
+import {
+  FakeR2Client,
+  makeFixtureContentPacks,
+  makeFixtureGameData,
+  noPreviousRelease,
+} from './fixtures.ts';
 
 describe('attribution preflight (AC-4)', () => {
   let gameDataDir: string;
@@ -125,7 +130,12 @@ describe('attribution preflight (AC-4)', () => {
     delete credits.credits['music:exploration:bgm_explore'];
     writeFileSync(creditsPath, JSON.stringify(credits));
 
-    const report = await runCatalogPublish({ config: config(), client, gameDataDir });
+    const report = await runCatalogPublish({
+      releaseReader: noPreviousRelease,
+      config: config(),
+      client,
+      gameDataDir,
+    });
 
     // 1. non-zero result
     expect(report.ok).toBe(false);

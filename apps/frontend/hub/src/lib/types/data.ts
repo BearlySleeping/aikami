@@ -12,7 +12,15 @@
 // first paint (I-8) — the page data type carries the promise itself, never a
 // blocked-on value.
 
-import type { AssetStats, CatalogAssetEntry, CategoryStats } from '@aikami/schemas';
+import type {
+  AssetStats,
+  CatalogAssetEntry,
+  CategoryStats,
+  CommunityAssetSummary,
+  ContentPackTerrain,
+  ThemeVersionDetail,
+  ThemeVersionSummary,
+} from '@aikami/schemas';
 
 // Re-export the shared stats contract so page data references resolve through
 // $types without a second source of truth (C-396: these shapes are defined
@@ -47,6 +55,12 @@ export type CatalogLandingPageData =
       categories: readonly CatalogCategorySummary[];
       /** ISO 8601 — when the index was published. */
       publishedAt: string;
+      /**
+       * Published maps from the `maps` shard — powers the landing's Walk
+       * Sandbox launcher. Best-effort: an empty list degrades the launcher
+       * to a disabled state, never a failed landing (C-396 degraded-mode rule).
+       */
+      mapEntries: readonly CatalogAssetEntry[];
     }
   | {
       status: 'error';
@@ -115,6 +129,34 @@ export type CatalogAssetPageData = {
  * on miss. Tileset entries are fetched so the CDN resolver can resolve
  * tileset references without a second index fetch.
  */
+/**
+ * Map studio page data — catalog entries the client-side resolver needs.
+ *
+ * The studio page is client-only (ssr = false): the server load validates
+ * catalog availability and provides entries; rendering, manifest parsing
+ * and preview all happen in the browser.
+ */
+export type MapStudioPageData = {
+  /** Tileset entries — resolvable by tag and (with path lookup) by game-data path. */
+  readonly tilesetEntries: readonly CatalogAssetEntry[];
+  /** Published map entries — loadable as editable starting points. */
+  readonly mapEntries: readonly CatalogAssetEntry[];
+  /** Injected origin; never hardcoded. */
+  readonly originUrl: string;
+  /** Pack terrain definitions for compiling corner16 terrain surfaces (C-507 gap). */
+  readonly terrains: readonly ContentPackTerrain[];
+  /** Atlas descriptor for real frame sampling (texture + packed frame map). */
+  readonly atlas: MapStudioAtlasDescriptor | undefined;
+};
+
+/** Atlas paths the studio hands to the preview to sample real frames. */
+export type MapStudioAtlasDescriptor = {
+  /** Game-data path or URL to the atlas texture. */
+  readonly textureUrl: string;
+  /** Optional game-data path or URL to the packed frame-map JSON. */
+  readonly spritesheetUrl?: string;
+};
+
 export type SandboxPageData = {
   /** Validated map entry from the catalog index. */
   readonly entry: CatalogAssetEntry;
@@ -122,4 +164,75 @@ export type SandboxPageData = {
   readonly tilesetEntries: readonly CatalogAssetEntry[];
   /** Injected origin; never hardcoded. */
   readonly originUrl: string;
+};
+
+// ---------------------------------------------------------------------------
+// LPC preview — character compositor
+// ---------------------------------------------------------------------------
+
+/**
+ * LPC preview page data.
+ *
+ * The index route has no `entry` (it renders a default character); the asset
+ * route carries the requested catalog component so the preview opens with it
+ * already applied to its slot.
+ */
+export type LpcPreviewPageData = {
+  /** The requested LPC asset, or undefined on the index route. */
+  readonly entry: CatalogAssetEntry | undefined;
+  /** Every LPC catalog entry — resolver + slot-catalog source. */
+  readonly lpcEntries: readonly CatalogAssetEntry[];
+  /** Injected CDN origin; never hardcoded. */
+  readonly originUrl: string;
+};
+
+// ---------------------------------------------------------------------------
+// Community assets — the public browse page (C-513 AC-4)
+// ---------------------------------------------------------------------------
+
+/**
+ * One category's public community-asset browse page (C-513 AC-4).
+ *
+ * Carries only what the listing query returned for the requested page. A
+ * pending or rejected submission is never in `assets` — the shared listing
+ * helper filters to `approved` + promoted rows — so the view has no path to
+ * rendering an unreviewed submission.
+ */
+export type CommunityCategoryPageData = {
+  readonly category: string;
+  readonly categoryLabel: string;
+  /** This page of approved, promoted revisions (newest first). */
+  readonly assets: readonly CommunityAssetSummary[];
+  /** Opaque cursor for the next page; absent on the last page. */
+  readonly nextCursor?: string;
+};
+
+/**
+ * The public theme listing page (C-530 AC-3).
+ *
+ * Carries only what `listThemeVersions` returned for the requested page: a
+ * pending, rejected or revoked version is never in `themes`, and `degraded`
+ * distinguishes "no themes yet" from "this deployment cannot serve themes"
+ * — the two are different messages and only one of them is the visitor's
+ * problem.
+ */
+export type ThemeListingPageData = {
+  /** This page of approved, promoted, non-revoked versions (newest first). */
+  readonly themes: readonly ThemeVersionSummary[];
+  /** Opaque cursor for the next page; absent on the last page. */
+  readonly nextCursor?: string;
+  /** True when the deployment has no intake binding (a 200, not a 503). */
+  readonly degraded: boolean;
+};
+
+/**
+ * One theme version's public detail page (C-530 AC-3 / AC-4).
+ *
+ * `detail` is the *same* projection the JSON route answers with, so the page
+ * and the API cannot disagree about what a package declares.
+ */
+export type ThemeDetailPageData = {
+  readonly detail: ThemeVersionDetail;
+  /** True when the visitor owns this version (drives the owner-only controls). */
+  readonly isOwner: boolean;
 };

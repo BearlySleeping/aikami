@@ -25,6 +25,12 @@ const OLLAMA_NATIVE = new Set(['ollama']);
 /** Providers that speak the OpenAI-compatible /v1/models endpoint. */
 const OPENAI_COMPAT = new Set(['llamacpp', 'custom', 'openai-compat']);
 
+/** Local ComfyUI HTTP API — probe GET /object_info. */
+const COMFYUI = new Set(['comfyui']);
+
+/** AUTOMATIC1111 / sd-server compatible HTTP API — probe GET /sdapi/v1/sd-models. */
+const SD_WEBUI = new Set(['webui', 'sdcpp']);
+
 /** Local providers that are keyless and may need URL-based probing. */
 const LOCAL_PROVIDERS = new Set([
   'ollama',
@@ -98,6 +104,16 @@ export const verifyConnection = async (
       return verifyOpenAiCompat(provider, baseUrl, elapsed, fetchFn, signal, timeoutMs);
     }
 
+    // ── ComfyUI ───────────────────────────────────────────────────────
+    if (COMFYUI.has(registryId)) {
+      return verifyComfyUi(provider, baseUrl, elapsed, fetchFn, signal, timeoutMs);
+    }
+
+    // ── AUTOMATIC1111 / sd-server ─────────────────────────────────────
+    if (SD_WEBUI.has(registryId)) {
+      return verifyWebUi(provider, baseUrl, elapsed, fetchFn, signal, timeoutMs);
+    }
+
     // ── Cloud providers with API key ─────────────────────────────────
     const endpoint = PROVIDER_ENDPOINTS[registryId];
     if (!endpoint) {
@@ -137,6 +153,8 @@ export const isLocalProvider = (registryId: string): boolean => LOCAL_PROVIDERS.
 export const hasVerificationStrategy = (registryId: string): boolean =>
   OLLAMA_NATIVE.has(registryId) ||
   OPENAI_COMPAT.has(registryId) ||
+  COMFYUI.has(registryId) ||
+  SD_WEBUI.has(registryId) ||
   registryId in PROVIDER_ENDPOINTS;
 
 // ---------------------------------------------------------------------------
@@ -276,6 +294,96 @@ const verifyOpenAiCompat = async (
     }
 
     return { ok: true, latencyMs: elapsed(), modelCount: obj.data.length };
+  } catch (err) {
+    return { ok: false, latencyMs: elapsed(), error: normalizeError(err) };
+  } finally {
+    cleanup();
+  }
+};
+
+/**
+ * Probes a ComfyUI instance at `GET <baseUrl>/object_info`.
+ *
+ * Acceptance: HTTP 200 + parseable JSON → ok. The JSON shape is not checked
+ * further because ComfyUI's object_info varies with the installed node set;
+ * the HTML guard in {@link parseJsonResponse} still rejects the SPA shell.
+ */
+const verifyComfyUi = async (
+  provider: AiProvider,
+  baseUrlOverride: string | undefined,
+  elapsed: () => number,
+  fetchFn: FetchTransport,
+  outerSignal?: AbortSignal,
+  timeoutMs?: number,
+): Promise<ConnectionTestResult> => {
+  const url = buildProbeUrl(baseUrlOverride ?? provider.baseUrl, '/object_info');
+  if (!url) {
+    return { ok: false, latencyMs: elapsed(), error: 'No endpoint configured — set a base URL' };
+  }
+
+  const { signal, cleanup } = createTimeoutSignal({ outerSignal, timeoutMs });
+
+  try {
+    const response = await fetchFn(url, { method: 'GET', signal });
+    if (!response.ok) {
+      return { ok: false, latencyMs: elapsed(), error: `HTTP ${response.status}` };
+    }
+
+    const parseResult = await parseJsonResponse(response);
+    if (!parseResult.ok) {
+      return { ok: false, latencyMs: elapsed(), error: parseResult.error };
+    }
+
+    return { ok: true, latencyMs: elapsed() };
+  } catch (err) {
+    return { ok: false, latencyMs: elapsed(), error: normalizeError(err) };
+  } finally {
+    cleanup();
+  }
+};
+
+/**
+ * Probes an AUTOMATIC1111 / sd-server HTTP API at
+ * `GET <baseUrl>/sdapi/v1/sd-models`.
+ *
+ * Acceptance: HTTP 200 + JSON array → ok.
+ */
+const verifyWebUi = async (
+  provider: AiProvider,
+  baseUrlOverride: string | undefined,
+  elapsed: () => number,
+  fetchFn: FetchTransport,
+  outerSignal?: AbortSignal,
+  timeoutMs?: number,
+): Promise<ConnectionTestResult> => {
+  const raw = baseUrlOverride ?? provider.baseUrl;
+  if (!raw) {
+    return { ok: false, latencyMs: elapsed(), error: 'No endpoint configured — set a base URL' };
+  }
+  const url = `${raw.replace(/\/+$/, '')}/sdapi/v1/sd-models`;
+
+  const { signal, cleanup } = createTimeoutSignal({ outerSignal, timeoutMs });
+
+  try {
+    const response = await fetchFn(url, { method: 'GET', signal });
+    if (!response.ok) {
+      return { ok: false, latencyMs: elapsed(), error: `HTTP ${response.status}` };
+    }
+
+    const parseResult = await parseJsonResponse(response);
+    if (!parseResult.ok) {
+      return { ok: false, latencyMs: elapsed(), error: parseResult.error };
+    }
+
+    if (!Array.isArray(parseResult.data)) {
+      return {
+        ok: false,
+        latencyMs: elapsed(),
+        error: 'Unexpected response shape — expected a JSON array of models',
+      };
+    }
+
+    return { ok: true, latencyMs: elapsed(), modelCount: parseResult.data.length };
   } catch (err) {
     return { ok: false, latencyMs: elapsed(), error: normalizeError(err) };
   } finally {

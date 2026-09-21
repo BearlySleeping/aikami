@@ -6,41 +6,30 @@
 //
 // Contract: C-243
 
+import type {
+  AssetEntrySchema,
+  AssetHashEntrySchema,
+  AssetHashesFileSchema,
+  AssetManifestSchema,
+  CompactSeedDocumentSchema,
+  CompactSeedRowSchema,
+  OfflineCoreDeclarationSchema,
+} from '@aikami/schemas';
+import type { Static } from 'typebox';
+
 // ---------------------------------------------------------------------------
 // Asset Entry
 // ---------------------------------------------------------------------------
 
 /** A single asset indexed in the manifest. */
-export type AssetEntry = {
-  /** Tag for referencing in prompts and code, e.g. "sprites:generic-fantasy:elf-male" */
-  tag: string;
-  /** Top-level category: music, sfx, ambient, sprites, backgrounds */
-  category: string;
-  /** Sub-category, e.g. "combat", "generic-fantasy", "nature" */
-  subcategory: string;
-  /** Filename without extension */
-  name: string;
-  /** Relative path from game-data root, e.g. "sprites/generic-fantasy/elf-male.png" */
-  path: string;
-  /** Lowercase file extension including dot, e.g. ".png" */
-  ext: string;
-};
+export type AssetEntry = Static<typeof AssetEntrySchema>;
 
 // ---------------------------------------------------------------------------
 // Asset Manifest
 // ---------------------------------------------------------------------------
 
 /** Full asset manifest — all discovered assets indexed by tag and category. */
-export type AssetManifest = {
-  /** ISO timestamp of last scan */
-  scannedAt: string;
-  /** Total asset count */
-  count: number;
-  /** All assets indexed by tag (primary lookup) */
-  assets: Record<string, AssetEntry>;
-  /** Assets grouped by category for quick listing */
-  byCategory: Record<string, AssetEntry[]>;
-};
+export type AssetManifest = Static<typeof AssetManifestSchema>;
 
 // ---------------------------------------------------------------------------
 // Asset Category
@@ -117,7 +106,14 @@ export type AssetRecord = {
 /** Row shape of the `asset_sources` table — a candidate download origin. */
 export type AssetSource = {
   assetId: string;
-  backend: 'bundled' | 'r2' | 'self-hosted';
+  /**
+   * Origin backend. `local-generated` (C-510) is written by
+   * `AssetRegistryRepository.registerGenerated` at `priority = -1` so a locally
+   * generated asset always outranks a seed `r2` row for the same tag. Readers
+   * that do not know the value must skip/warn, never crash — the column is a
+   * free-text `TEXT NOT NULL` with no CHECK constraint.
+   */
+  backend: 'bundled' | 'r2' | 'self-hosted' | 'local-generated';
   url: string;
   priority: number;
 };
@@ -136,24 +132,14 @@ export type InstallStateRecord = {
  * Emitted by the manifest scanner as part of the `asset_hashes.json` sidecar
  * (C-373). Keeps `AssetEntry`/`AssetManifest` frozen (C-372 resolution).
  */
-export type AssetHashEntry = {
-  /** Hex-encoded SHA-256 digest of the asset file bytes. */
-  hash: string;
-  /** File size in bytes. */
-  sizeBytes: number;
-};
+export type AssetHashEntry = Static<typeof AssetHashEntrySchema>;
 
 /**
  * Sidecar file emitted alongside `manifest.json` by `scan_assets.ts`.
  * Maps every manifest tag to its content hash + size so the local asset
  * registry can seed `assets.hash` without modifying the manifest shape.
  */
-export type AssetHashesFile = {
-  /** ISO timestamp of the scan — mirrors `AssetManifest.scannedAt`. */
-  scannedAt: string;
-  /** Tag → hash provenance (all keys must exist in the manifest). */
-  hashes: Record<string, AssetHashEntry>;
-};
+export type AssetHashesFile = Static<typeof AssetHashesFileSchema>;
 
 // ---------------------------------------------------------------------------
 // Compact Boot Seed (C-435)
@@ -174,6 +160,8 @@ export type AssetSeedRow = {
   category: string;
   /** File extension including the dot, for R2 key construction. */
   ext: string;
+  /** Verbatim license records for visual-definition provenance. */
+  licenses?: readonly string[];
 };
 
 /**
@@ -199,13 +187,7 @@ export type AssetSeedDocument = {
  * prefetch set: fetched once over the network, verified by hash, and pinned
  * in the OPFS / Tauri FS cache so every later run is fully offline.
  */
-export type OfflineCoreDeclaration = {
-  schemaVersion: 1;
-  /** Tags the client prefetches and pins on first run. */
-  tags: readonly string[];
-  /** Why each group is core — starting map, default body, boot UI. */
-  rationale: Readonly<Record<string, string>>;
-};
+export type OfflineCoreDeclaration = Static<typeof OfflineCoreDeclarationSchema>;
 
 // ---------------------------------------------------------------------------
 // Compact JSON format (C-435) — short keys for smaller file size
@@ -216,24 +198,13 @@ export type OfflineCoreDeclaration = {
  * Short keys save ~13% file size vs the full typed format.
  * t=tag, h=hash, s=sizeBytes, c=category, e=ext
  */
-export type CompactSeedRow = {
-  t: string;
-  h: string;
-  s: number;
-  c: string;
-  e: string;
-};
+export type CompactSeedRow = Static<typeof CompactSeedRowSchema>;
 
 /**
  * Compact JSON document format used in asset_seed.json.
  * sv=schemaVersion, g=generatedAt, o=originUrl, r=rows
  */
-export type CompactSeedDocument = {
-  sv: 1;
-  g: string;
-  o: string;
-  r: readonly CompactSeedRow[];
-};
+export type CompactSeedDocument = Static<typeof CompactSeedDocumentSchema>;
 
 /**
  * Parses a compact seed document (from asset_seed.json) into the typed format.
@@ -248,5 +219,6 @@ export const parseAssetSeed = (compact: CompactSeedDocument): AssetSeedDocument 
     sizeBytes: row.s,
     category: row.c,
     ext: row.e,
+    licenses: row.l ?? [],
   })),
 });

@@ -3,9 +3,9 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import { page } from '$app/state';
-import { authService } from '$services';
+import { authService } from '../../../services/auth/auth_service.svelte.ts';
 
 // ── Default icons ───────────────────────────────────────────────────────
 
@@ -33,8 +33,6 @@ const CUSTOM_ICONS = {
     'M20 7H4a2 2 0 00-2 2v10a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2zM12 3a3 3 0 013 3M9 3a3 3 0 013-3',
   '/dev/quest':
     'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4',
-  '/dev/save_load':
-    'M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4',
   '/dev/settings':
     'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z',
   '/dev/dialogs':
@@ -46,12 +44,11 @@ const CUSTOM_ICONS = {
 // ── Custom labels for routes that need non-default formatting ───────────
 
 const CUSTOM_LABELS = {
-  '/dev/save_load': 'Save/Load',
   '/dev/agent-editor': 'Agent Editor',
   '/dev/agent-pipeline': 'Agent Pipeline',
   '/dev/asset-browser': 'Asset Browser',
   '/dev/character-sheet': 'Character Sheet',
-  '/dev/combat-enhancements': 'Combat Enhancements',
+  '/dev/combat': 'Combat Debug Workspace',
   '/dev/gm-system': 'GM System',
   '/dev/image-gen': 'Image Gen',
   '/dev/lpc': 'LPC',
@@ -59,6 +56,7 @@ const CUSTOM_LABELS = {
   '/dev/lpc-inventory': 'LPC Inventory',
   '/dev/lpc-preview': 'LPC Preview',
   '/dev/lpc-walk': 'LPC Walk',
+  '/dev/studio': 'Creator Studio',
   '/dev/tauri-test': 'Tauri Test',
   '/dev/world-gen': 'World Gen',
   // Sandbox sub-routes
@@ -118,7 +116,6 @@ const FALLBACK_DEV_ROUTES = [
   '/dev/characters',
   '/dev/character-sheet',
   '/dev/combat',
-  '/dev/combat-enhancements',
   '/dev/cyoa',
   '/dev/dialogs',
   '/dev/dice',
@@ -136,9 +133,9 @@ const FALLBACK_DEV_ROUTES = [
   '/dev/macros',
   '/dev/music',
   '/dev/quest',
-  '/dev/save_load',
   '/dev/session',
   '/dev/settings',
+  '/dev/studio',
   '/dev/tauri-test',
   '/dev/text',
   '/dev/vendor',
@@ -146,7 +143,6 @@ const FALLBACK_DEV_ROUTES = [
   '/dev/world-gen',
   '/dev/sandbox/camera',
   '/dev/sandbox/chat-c424',
-  '/dev/sandbox/combat',
   '/dev/sandbox/dialogue',
   '/dev/sandbox/environment',
   '/dev/sandbox/map',

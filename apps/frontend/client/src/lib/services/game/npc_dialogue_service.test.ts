@@ -9,7 +9,24 @@
 // Contract: C-328 Integrate Bounded AI NPC Dialogue with Authored Fallbacks
 
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
+import type {
+  CommittedNarrativeEvent,
+  ContentPackManifest,
+  NpcRollResolutionOutput,
+  NpcStateDelta,
+} from '@aikami/types';
+import { encode } from 'gpt-tokenizer';
+import type { ConsequenceRequest, ConsequenceResult } from '$types';
+// These resolve to the same modules the service imports directly (it no
+// longer reads the `$services` barrel).
+import { campaignService } from '../campaign/campaign_service.svelte.ts';
+import { npcAwarenessService } from '../npc/npc_awareness_service.svelte.ts';
+import { companionReactionService } from './companion_reaction_service.svelte.ts';
+import { narrativeEventService } from './narrative_event_service.svelte.ts';
 import { NpcDialogueService, npcDialogueService } from './npc_dialogue_service.svelte';
+import { partyRosterService } from './party_roster_service.svelte.ts';
+import { questStateService } from './quest_state_service.svelte.ts';
+import { relationshipService } from './relationship_service.svelte.ts';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -29,13 +46,39 @@ const STUB_EMBERWATCH = {
       defaultDialogueKey: 'shade_guardian_manifest',
       combatStats: { hitPoints: 30 },
     },
+    village_guard: {
+      name: 'Bram the Guard',
+      defaultDialogueKey: 'bram_greeting',
+      isCompanion: true,
+      companionClassId: 'fighter',
+      initialApproval: 10,
+      personality: {
+        voice: 'Steady and plain-spoken.',
+        manner: 'Alert and loyal.',
+      },
+      agenda: [
+        'Keep the gates of Emberwatch shut against the Crimson Covenant',
+        'Prove to Elder Thalia that a guard oath can hold where a relic cannot',
+      ],
+      knowledge: ['The ward is renewed by the people who keep watch over it'],
+      boundaries: ['refuse|Threaten an innocent villager'],
+    },
   },
   dialogues: {
     elder_thalia_greeting: '"Greetings, traveler. Our village has need of your aid."',
     merchant_keth_greeting: '"Welcome! Finest wares this side of the kingdom!"',
     shade_guardian_manifest: '"You shall not pass."',
   },
-  quests: [{ id: 'fading_ward', name: 'The Fading Ward', offerDialogueKey: 'elder_thalia_offer' }],
+  quests: [
+    {
+      id: 'fading_ward',
+      name: 'The Fading Ward',
+      offerDialogueKey: 'elder_thalia_offer',
+      endings: {
+        renewed: { worldStateFlag: 'emberwatch.ending.renewed' },
+      },
+    },
+  ],
   encounters: [{ id: 'ruined_ward_encounter', encounterNpcIds: ['shade_guardian'] }],
 };
 
@@ -80,6 +123,14 @@ const makeExecutors = () => {
     }),
     startCombat: mock((_opts: { npcId: string; npcName: string; encounterId?: string }) => {
       execLog.push('startCombat');
+      return true;
+    }),
+    recruit: mock((_opts: { npcId: string; npcName: string }) => {
+      execLog.push('recruit');
+      return true;
+    }),
+    presentEvidence: mock((_opts: { npcId: string; evidenceId: string }) => {
+      execLog.push('presentEvidence');
       return true;
     }),
   };
@@ -152,6 +203,13 @@ const expectAbortRejection = async (promise: Promise<unknown>): Promise<void> =>
 // ---------------------------------------------------------------------------
 
 beforeEach(() => {
+  questStateService.getDiscoverableEvidence = () => [];
+  // The service resolves dialogue against the active campaign; pin a stable
+  // one (individual tests may override this).
+  Object.defineProperty(campaignService, 'activeCampaign', {
+    value: { id: 'default-emberwatch' },
+    configurable: true,
+  });
   const contentProvider = makeContentProvider();
   const textGenerator = makeTextGenerator();
   npcDialogueService.configure({
@@ -162,6 +220,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  questStateService.getDiscoverableEvidence = () => [];
+  Reflect.deleteProperty(globalThis, '__AIKAMI_E2E_DIALOGUE_INTENT__');
   // Reconfigure with fresh state to prevent test bleed
   const contentProvider = makeContentProvider();
   const textGenerator = makeTextGenerator();
@@ -169,6 +229,63 @@ afterEach(() => {
     contentProvider,
     textGenerator,
     executors: makeExecutors(),
+  });
+});
+
+describe('E2E intent seed', () => {
+  test('validates the seed and completes a previously failed turn', async () => {
+    npcDialogueService.configure({
+      contentProvider: makeContentProvider(),
+      textGenerator: makeTextGenerator({ error: new Error('provider unavailable') }),
+      executors: makeExecutors(),
+    });
+    const controller = new AbortController();
+    const options = {
+      npcId: 'village_elder',
+      npcName: 'Elder Thalia',
+      messages: [{ role: 'player' as const, content: 'Hello.' }],
+      signal: controller.signal,
+    };
+
+    await expect(npcDialogueService.analyzeIntent(options)).rejects.toThrow('provider unavailable');
+    expect(npcDialogueService.turnState.kind).toBe('failed');
+
+    (globalThis as Record<string, unknown>).__AIKAMI_E2E_DIALOGUE_INTENT__ = {
+      requiresRoll: false,
+      checkType: undefined,
+      difficultyClass: undefined,
+      modifierSource: undefined,
+      npcResponse: 'A fine day to you, traveler.',
+      suggestedChips: [],
+    };
+
+    const output = await npcDialogueService.analyzeIntent(options);
+
+    expect(output.npcResponse).toBe('A fine day to you, traveler.');
+    expect(npcDialogueService.turnState).toEqual({
+      kind: 'complete',
+      text: 'A fine day to you, traveler.',
+    });
+  });
+
+  test('ignores a seed that does not satisfy the intent schema', async () => {
+    (globalThis as Record<string, unknown>).__AIKAMI_E2E_DIALOGUE_INTENT__ = {
+      requiresRoll: false,
+    };
+    npcDialogueService.configure({
+      contentProvider: makeContentProvider(),
+      textGenerator: makeTextGenerator({ error: new Error('real pipeline reached') }),
+      executors: makeExecutors(),
+    });
+
+    await expect(
+      npcDialogueService.analyzeIntent({
+        npcId: 'village_elder',
+        npcName: 'Elder Thalia',
+        messages: [{ role: 'player', content: 'Hello.' }],
+        signal: new AbortController().signal,
+      }),
+    ).rejects.toThrow('real pipeline reached');
   });
 });
 
@@ -226,10 +343,10 @@ describe('AC-1: Provider failure surfaces an error', () => {
     ).rejects.toThrow('no capability');
   });
 
-  test('analyzeIntent: call 1 succeeds, call 2 rejects — propagates error and sets failed turn state', async () => {
+  test('analyzeIntent: call 1 succeeds, call 2 throws — recovers from the streamed narrative (C-499 AC-1)', async () => {
     const textGenerator = makeStreamingTextGenerator({
       chunks: ['The elder considers your words.'],
-      call2Error: new Error('envelope extraction failed'),
+      call2Error: new Error('No JSON object found in response'),
     });
     npcDialogueService.configure({
       contentProvider: makeContentProvider(),
@@ -238,6 +355,38 @@ describe('AC-1: Provider failure surfaces an error', () => {
     });
 
     const controller = new AbortController();
+    const output = await npcDialogueService.analyzeIntent({
+      npcId: 'village_elder',
+      npcName: 'Elder Thalia',
+      messages: [{ role: 'player', content: 'I try to persuade you.' }],
+      signal: controller.signal,
+    });
+
+    // The turn completes — it does NOT fail — using the recovered narrative.
+    expect(output.requiresRoll).toBe(false);
+    expect(output.npcResponse).toContain('The elder considers your words.');
+    // A pure-prose narrative recovers zero chips (C-499 edge case: chips are
+    // not guaranteed by the repair path — the empty-body retry in AC-2 is what
+    // restores the combat-chip envelope).
+    expect(output.suggestedChips).toEqual([]);
+    expect(npcDialogueService.turnState.kind).toBe('complete');
+  });
+
+  test('analyzeIntent: repair itself fails when the narrative is too short — surfaces the real error (C-499 AC-3)', async () => {
+    const textGenerator = makeStreamingTextGenerator({
+      chunks: ['Hi.'],
+      call2Error: new Error('No JSON object found in response'),
+    });
+    npcDialogueService.configure({
+      contentProvider: makeContentProvider(),
+      textGenerator,
+      executors: makeExecutors(),
+    });
+
+    const controller = new AbortController();
+    // The streamed narrative "Hi." is < 20 chars, so recoverIntentAnalysisOutput
+    // throws; analyzeIntent surfaces the original provider error while retaining
+    // the repair error as its cause (AC-3: no silent/endless turn).
     await expect(
       npcDialogueService.analyzeIntent({
         npcId: 'village_elder',
@@ -245,13 +394,11 @@ describe('AC-1: Provider failure surfaces an error', () => {
         messages: [{ role: 'player', content: 'I try to persuade you.' }],
         signal: controller.signal,
       }),
-    ).rejects.toThrow('envelope extraction failed');
+    ).rejects.toThrow('No JSON object found in response');
 
-    // Both the rejection AND the failed turn state must be present
     expect(npcDialogueService.turnState.kind).toBe('failed');
     if (npcDialogueService.turnState.kind === 'failed') {
       expect(npcDialogueService.turnState.reason).toBe('provider_error');
-      expect(npcDialogueService.turnState.fallbackOffered).toBe(false);
     }
   });
 
@@ -582,6 +729,79 @@ describe('AC-4: Context projection', () => {
     });
 
     expect(projection.gameStateFacts).toContain('Quest active: The Fading Ward');
+  });
+
+  test('projects only the NPC account compatible with the sampled truth', async () => {
+    const accountManifest = {
+      id: 'emberwatch',
+      name: 'Emberwatch',
+      version: '4.1.0',
+      updatedAt: '2026-09-10T00:00:00.000Z',
+      startingMapId: 'village',
+      maps: { village: { file: 'maps/village.json', name: 'Village' } },
+      npcs: {},
+      items: {},
+      dialogues: {},
+      truthVariants: [
+        { id: 'rollo_truth', label: 'Rollo', startingConditions: [] },
+        { id: 'thalia_truth', label: 'Thalia', startingConditions: [] },
+      ],
+      accounts: {
+        ward: [
+          {
+            npcId: 'village_elder',
+            claim: 'The ledger is false.',
+            supportsTruthId: 'rollo_truth',
+          },
+          {
+            npcId: 'village_elder',
+            claim: 'The seal is genuine.',
+            supportsTruthId: 'thalia_truth',
+          },
+        ],
+      },
+    } satisfies ContentPackManifest;
+    let capturedInput = '';
+    const textGenerator = mock(async (opts: Record<string, unknown>) => {
+      if (!opts.schema) {
+        const messages = (opts.messages as Array<{ role: string; content: string }>) ?? [];
+        capturedInput = messages.find((message) => message.role === 'user')?.content ?? '';
+        return { text: 'The elder considers.' };
+      }
+      return {
+        text: 'The elder considers.',
+        structured: {
+          requiresRoll: false,
+          npcResponse: 'The elder considers.',
+          suggestedChips: [],
+        },
+      };
+    });
+    npcDialogueService.configure({
+      contentProvider: { ...makeContentProvider(), manifest: accountManifest },
+      textGenerator,
+      executors: makeExecutors(),
+    });
+
+    const projection = npcDialogueService.buildContext({
+      npcId: 'village_elder',
+      npcName: 'Elder Thalia',
+      messages: [],
+    });
+
+    expect(projection.gameStateFacts).toContain('[NPC ACCOUNT: ward] The ledger is false.');
+    expect(projection.gameStateFacts).not.toContain('[NPC ACCOUNT: ward] The seal is genuine.');
+
+    await npcDialogueService.analyzeIntent({
+      npcId: 'village_elder',
+      npcName: 'Elder Thalia',
+      messages: [{ role: 'player', content: 'What happened to the ward?' }],
+      signal: new AbortController().signal,
+    });
+
+    const input = JSON.parse(capturedInput) as { gameStateFacts: string[] };
+    expect(input.gameStateFacts).toContain('[NPC ACCOUNT: ward] The ledger is false.');
+    expect(input.gameStateFacts).not.toContain('[NPC ACCOUNT: ward] The seal is genuine.');
   });
 });
 
@@ -1297,5 +1517,1146 @@ describe('C-401: two-call narrative streaming', () => {
     // The system prompt carries the explicit non-contradiction instruction.
     expect(systemPrompt).toContain('MUST NOT contradict');
     expect(systemPrompt).toContain('authoritative');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// C-488 AC-3: authored NPC identity in the production persona
+// ---------------------------------------------------------------------------
+
+describe('C-488 AC-3: authored identity in the production persona', () => {
+  const AUTHORED_ELDER = {
+    name: 'Elder Thalia',
+    defaultDialogueKey: 'elder_thalia_greeting',
+    personality: { voice: 'Measured and warm.', manner: 'Patient and authoritative.' },
+    agenda: ["Keep the Ward Wand sealed in Emberwatch's shrine."],
+    knowledge: ['The Ward Wand is a Vesperine relic.'],
+    secrets: ['She fears old enemies have breached the valley.'],
+    boundaries: ["She will not risk Emberwatch on a stranger's promise."],
+  };
+
+  test('buildContext persona includes every authored identity field', () => {
+    const contentProvider = makeContentProvider({ npcs: { authored_elder: AUTHORED_ELDER } });
+    npcDialogueService.configure({
+      contentProvider,
+      textGenerator: makeTextGenerator(),
+      executors: makeExecutors(),
+    });
+
+    const projection = npcDialogueService.buildContext({
+      npcId: 'authored_elder',
+      npcName: 'Elder Thalia',
+      messages: [],
+    });
+
+    expect(projection.persona).toContain('Measured and warm.');
+    expect(projection.persona).toContain('Patient and authoritative.');
+    expect(projection.persona).not.toContain(
+      'You are Elder Thalia, a character in a fantasy world.',
+    );
+    expect(projection.persona).toContain("Keep the Ward Wand sealed in Emberwatch's shrine.");
+    expect(projection.persona).toContain('The Ward Wand is a Vesperine relic.');
+    expect(projection.persona).toContain('She fears old enemies have breached the valley.');
+    expect(projection.persona).toContain("She will not risk Emberwatch on a stranger's promise.");
+  });
+
+  test('missing personality yields the exact canonical generic sentence', () => {
+    const contentProvider = makeContentProvider(); // village_elder has no identity
+    npcDialogueService.configure({
+      contentProvider,
+      textGenerator: makeTextGenerator(),
+      executors: makeExecutors(),
+    });
+
+    const projection = npcDialogueService.buildContext({
+      npcId: 'village_elder',
+      npcName: 'Elder Thalia',
+      messages: [],
+    });
+
+    expect(projection.persona).toBe('You are Elder Thalia, a character in a fantasy world.');
+  });
+
+  test('per-field fallback: each missing array field omits only its labelled block', () => {
+    const contentProvider = makeContentProvider({
+      npcs: {
+        partial: { name: 'Partial', agenda: ['Get the wand.'] },
+      },
+    });
+    npcDialogueService.configure({
+      contentProvider,
+      textGenerator: makeTextGenerator(),
+      executors: makeExecutors(),
+    });
+
+    const projection = npcDialogueService.buildContext({
+      npcId: 'partial',
+      npcName: 'Partial',
+      messages: [],
+    });
+    const persona = projection.persona;
+
+    expect(persona).toContain('You are Partial, a character in a fantasy world.');
+    expect(persona).toContain('[AGENDA]');
+    expect(persona).toContain('Get the wand.');
+    expect(persona).not.toContain('[KNOWLEDGE]');
+    expect(persona).not.toContain('[SECRETS]');
+    expect(persona).not.toContain('[BOUNDARIES]');
+    expect(persona).not.toContain('Voice:');
+  });
+
+  test('analyzeIntent sends the authored persona in npcContext.persona', async () => {
+    let capturedInput = '';
+    const textGenerator = mock(async (opts: Record<string, unknown>) => {
+      if (!opts.schema) {
+        const messages = (opts.messages as Array<{ role: string; content: string }>) ?? [];
+        capturedInput = messages.find((m) => m.role === 'user')?.content ?? '';
+        return { text: 'The elder considers.' };
+      }
+      return {
+        text: 'The elder considers.',
+        structured: {
+          requiresRoll: false,
+          npcResponse: 'The elder considers.',
+          suggestedChips: [],
+        },
+      };
+    });
+    npcDialogueService.configure({
+      contentProvider: makeContentProvider({ npcs: { authored_elder: AUTHORED_ELDER } }),
+      textGenerator,
+      executors: makeExecutors(),
+    });
+
+    await npcDialogueService.analyzeIntent({
+      npcId: 'authored_elder',
+      npcName: 'Elder Thalia',
+      messages: [{ role: 'player', content: 'Hello' }],
+      signal: new AbortController().signal,
+    });
+
+    const input = JSON.parse(capturedInput) as { npcContext: { persona: string } };
+    expect(input.npcContext.persona).toContain('Measured and warm.');
+    expect(input.npcContext.persona).toContain("Keep the Ward Wand sealed in Emberwatch's shrine.");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// C-488 AC-4: resolveRoll receives the same facts + history as analyzeIntent
+// ---------------------------------------------------------------------------
+
+describe('C-488 AC-4: resolveRoll receives the same facts', () => {
+  test('resolveRoll prompt contains persona, gameStateFacts, and recent history', async () => {
+    let capturedSystem = '';
+    let capturedUser = '';
+    const textGenerator = mock(async (opts: Record<string, unknown>) => {
+      if (!opts.schema) {
+        const messages = (opts.messages as Array<{ role: string; content: string }>) ?? [];
+        capturedSystem = messages.find((m) => m.role === 'system')?.content ?? '';
+        capturedUser = messages.find((m) => m.role === 'user')?.content ?? '';
+        return { text: 'Done.' };
+      }
+      return {
+        text: 'Done.',
+        structured: { narrativeResult: 'Done.', stateDeltas: [], suggestedChips: [] },
+      };
+    });
+    npcDialogueService.configure({
+      contentProvider: makeContentProvider(),
+      textGenerator,
+      executors: makeExecutors(),
+    });
+
+    await npcDialogueService.resolveRoll({
+      npcId: 'village_elder',
+      npcName: 'Elder Thalia',
+      messages: [
+        { role: 'player', content: 'Please hand it over.' },
+        { role: 'npc', content: 'No.' },
+      ],
+      signal: new AbortController().signal,
+      gameStateFacts: ['Quest active: The Fading Ward'],
+      checkType: 'persuasion',
+      difficultyClass: 12,
+      rollTotal: 15,
+      outcome: 'pass',
+      playerInput: 'I appeal to your honor.',
+    });
+
+    // Persona (generic fallback for the identity-less village_elder).
+    expect(capturedSystem).toContain('You are Elder Thalia, a character in a fantasy world.');
+    // The same facts the intent prompt receives.
+    expect(capturedUser).toContain('[GAME STATE]');
+    expect(capturedUser).toContain('Quest active: The Fading Ward');
+    expect(capturedUser).toContain('[CONVERSATION HISTORY]');
+    expect(capturedUser).toContain('Player: Please hand it over.');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// C-488 AC-6: prompt budget within 4,096 cl100k_base tokens
+// ---------------------------------------------------------------------------
+
+describe('C-488 AC-6: prompt budget (cl100k_base)', () => {
+  const TOKEN_MODEL = 'cl100k_base' as const;
+  const TOKEN_BUDGET = 4096;
+
+  const countTokens = (text: string): number => encode(text, { model: TOKEN_MODEL }).length;
+  const manifestUrl = new URL(
+    '../../../../../../../content/packs/emberwatch/manifest.json',
+    import.meta.url,
+  );
+
+  const stripIdentity = (npc: Record<string, unknown>): Record<string, unknown> => {
+    const stripped = { ...npc };
+    delete stripped.personality;
+    delete stripped.agenda;
+    delete stripped.knowledge;
+    delete stripped.secrets;
+    delete stripped.boundaries;
+    return stripped;
+  };
+
+  const captureContextPrompt = async (
+    npcId: string,
+    npcName: string,
+    npcEntry: Record<string, unknown>,
+  ): Promise<string> => {
+    let captured = '';
+    const textGenerator = mock(async (opts: Record<string, unknown>) => {
+      if (!opts.schema) {
+        const messages = (opts.messages as Array<{ role: string; content: string }>) ?? [];
+        captured = messages.find((m) => m.role === 'system')?.content ?? '';
+        return { text: 'Hello.' };
+      }
+      return { text: 'Hello.', structured: { narrative: 'Hello.' } };
+    });
+    npcDialogueService.configure({
+      contentProvider: makeContentProvider({ npcs: { [npcId]: npcEntry } }),
+      textGenerator,
+      executors: makeExecutors(),
+    });
+    await npcDialogueService.generateTurn({
+      npcId,
+      npcName,
+      messages: [],
+      signal: new AbortController().signal,
+    });
+    return captured;
+  };
+
+  const captureRollPrompt = async (
+    npcId: string,
+    npcName: string,
+    npcEntry: Record<string, unknown>,
+  ): Promise<string> => {
+    let system = '';
+    let user = '';
+    const textGenerator = mock(async (opts: Record<string, unknown>) => {
+      if (!opts.schema) {
+        const messages = (opts.messages as Array<{ role: string; content: string }>) ?? [];
+        system = messages.find((m) => m.role === 'system')?.content ?? '';
+        user = messages.find((m) => m.role === 'user')?.content ?? '';
+        return { text: 'Done.' };
+      }
+      return {
+        text: 'Done.',
+        structured: { narrativeResult: 'Done.', stateDeltas: [], suggestedChips: [] },
+      };
+    });
+    npcDialogueService.configure({
+      contentProvider: makeContentProvider({ npcs: { [npcId]: npcEntry } }),
+      textGenerator,
+      executors: makeExecutors(),
+    });
+    await npcDialogueService.resolveRoll({
+      npcId,
+      npcName,
+      messages: [],
+      signal: new AbortController().signal,
+      gameStateFacts: [],
+      checkType: 'persuasion',
+      difficultyClass: 12,
+      rollTotal: 15,
+      outcome: 'pass',
+      playerInput: 'I appeal to your honor.',
+    });
+    return `${system}\n${user}`;
+  };
+
+  test('every after-count stays <= 4096 cl100k_base tokens for all three NPCs', async () => {
+    const manifest = (await Bun.file(manifestUrl).json()) as {
+      npcs: Record<string, Record<string, unknown>>;
+    };
+
+    for (const expectedNpcId of ['village_elder', 'rollo_grasper', 'merchant']) {
+      expect(manifest.npcs[expectedNpcId], `${expectedNpcId} exists`).toBeDefined();
+    }
+
+    for (const [npcId, npc] of Object.entries(manifest.npcs)) {
+      const npcName = (npc.name as string) ?? npcId;
+      const generic = stripIdentity(npc);
+
+      const contextBefore = countTokens(await captureContextPrompt(npcId, npcName, generic));
+      const contextAfter = countTokens(await captureContextPrompt(npcId, npcName, npc));
+      const rollBefore = countTokens(await captureRollPrompt(npcId, npcName, generic));
+      const rollAfter = countTokens(await captureRollPrompt(npcId, npcName, npc));
+
+      // Budget assertions on the after counts only (identity displaces filler).
+      expect(contextAfter, `${npcId} context-projection after count`).toBeLessThanOrEqual(
+        TOKEN_BUDGET,
+      );
+      expect(rollAfter, `${npcId} resolveRoll after count`).toBeLessThanOrEqual(TOKEN_BUDGET);
+
+      // The after count must not blow the ceiling the before count never reached.
+      expect(contextBefore, `${npcId} context-projection before count`).toBeLessThanOrEqual(
+        TOKEN_BUDGET,
+      );
+      expect(rollBefore, `${npcId} resolveRoll before count`).toBeLessThanOrEqual(TOKEN_BUDGET);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// C-489: One authority path for consequences
+// ---------------------------------------------------------------------------
+
+/**
+ * Installs fresh mocks on the shared relationshipService double so each test
+ * starts with an empty, writable call history (the `.mock.calls` array itself
+ * is readonly and cannot be reassigned).
+ */
+const resetRelationshipService = () => {
+  relationshipService.deserialize({
+    characterRelationships: {},
+    factionStandings: {},
+    rememberedPromises: [],
+  });
+  relationshipService.applyDelta = mock(() => ({ trustAfter: 0, affinityAfter: 0 }));
+  relationshipService.adjustFactionStanding = mock(() => ({
+    factionId: '',
+    standing: 0,
+    tier: 'neutral',
+    lastChangedAt: '',
+  }));
+};
+
+/** Exercises consequence handling through the public roll-resolution path. */
+const resolveConsequences = async (options: {
+  deltas: NpcStateDelta[];
+  npcId?: string;
+  narrative?: string;
+}): Promise<NpcRollResolutionOutput> => {
+  const narrative = options.narrative ?? 'The outcome is decided.';
+  npcDialogueService.configure({
+    contentProvider: makeContentProvider(),
+    textGenerator: makeStreamingTextGenerator({
+      chunks: [narrative],
+      structured: {
+        narrativeResult: narrative,
+        stateDeltas: options.deltas,
+        suggestedChips: [],
+      },
+    }),
+    executors: makeExecutors(),
+  });
+
+  return npcDialogueService.resolveRoll({
+    npcId: options.npcId ?? 'village_elder',
+    npcName: 'Elder Thalia',
+    messages: [],
+    signal: new AbortController().signal,
+    checkType: 'persuasion',
+    difficultyClass: 12,
+    rollTotal: 18,
+    outcome: 'pass',
+    playerInput: 'I appeal to your honor.',
+  });
+};
+
+/** Runs the production consequence authority with the matching active event. */
+const runConsequence = (req: ConsequenceRequest): ConsequenceResult => {
+  (
+    npcDialogueService as unknown as {
+      _activeConsequenceEvent: { operationId: string; sourceEventId: string } | null;
+    }
+  )._activeConsequenceEvent = { operationId: req.operationId, sourceEventId: req.sourceEventId };
+  return (
+    npcDialogueService as unknown as {
+      _applyConsequences(r: ConsequenceRequest): ConsequenceResult;
+    }
+  )._applyConsequences(req);
+};
+
+const appliedDeltas = (result: ConsequenceResult): string[] => result.applied.map((d) => d.kind);
+
+describe('C-489 AC-1: accepted deltas are actually applied', () => {
+  beforeEach(() => {
+    resetRelationshipService();
+    npcDialogueService.configure({
+      contentProvider: makeContentProvider(),
+      textGenerator: makeTextGenerator(),
+      executors: makeExecutors(),
+    });
+  });
+
+  test('trust_change routes through the kernel and mutates relationship state', async () => {
+    const output = await resolveConsequences({
+      deltas: [{ kind: 'trust_change', target: 'npc-001', value: 3 }],
+    });
+
+    expect(output.stateDeltas.map((delta) => delta.kind)).toEqual(['trust_change']);
+    // The store (not a "valid" array) must have been mutated.
+    const calls = (relationshipService.applyDelta as unknown as { mock: { calls: unknown[][] } })
+      .mock.calls;
+    expect(calls).toHaveLength(1);
+    expect(calls[0][0]).toMatchObject({
+      characterId: 'npc-001',
+      trustDelta: 3,
+      affinityDelta: 0,
+      eventDescription: expect.stringContaining('Dialogue consequence'),
+    });
+  });
+
+  test('relationship_update with label affinity maps to affinityDelta', async () => {
+    const output = await resolveConsequences({
+      deltas: [{ kind: 'relationship_update', target: 'npc-001', value: 5, label: 'affinity' }],
+    });
+
+    expect(output.stateDeltas.map((delta) => delta.kind)).toEqual(['relationship_update']);
+    const calls = (relationshipService.applyDelta as unknown as { mock: { calls: unknown[][] } })
+      .mock.calls;
+    expect(calls).toHaveLength(1);
+    expect(calls[0][0]).toMatchObject({ characterId: 'npc-001', trustDelta: 0, affinityDelta: 5 });
+  });
+
+  test('relationship_update with label faction routes to adjustFactionStanding', async () => {
+    const output = await resolveConsequences({
+      deltas: [{ kind: 'relationship_update', target: 'ember_order', value: -2, label: 'faction' }],
+    });
+
+    expect(output.stateDeltas.map((delta) => delta.kind)).toEqual(['relationship_update']);
+    const calls = (
+      relationshipService.adjustFactionStanding as unknown as { mock: { calls: unknown[][] } }
+    ).mock.calls;
+    expect(calls).toHaveLength(1);
+    expect(calls[0][0]).toMatchObject({
+      factionId: 'ember_order',
+      delta: -2,
+      reason: expect.stringContaining('Dialogue consequence'),
+    });
+  });
+});
+
+describe('C-489 AC-2: one authority checks entitlement, idempotency and provenance', () => {
+  beforeEach(() => {
+    resetRelationshipService();
+    npcDialogueService.configure({
+      contentProvider: makeContentProvider(), // no getItem — no pack item is grantable
+      textGenerator: makeTextGenerator(),
+      executors: makeExecutors(),
+    });
+  });
+
+  test('an NPC is not entitled to grant an item the pack does not define', async () => {
+    const output = await resolveConsequences({
+      deltas: [{ kind: 'inventory_grant', target: 'legendary_sword', value: 1 }],
+    });
+
+    expect(output.stateDeltas).toEqual([]);
+    expect(output.narrativeResult).toContain('beyond what this character could grant');
+  });
+
+  test('flag_set accepts authored quest-ending labels and rejects unknown labels', async () => {
+    const authored = await resolveConsequences({
+      deltas: [
+        {
+          kind: 'flag_set',
+          target: 'fading_ward',
+          label: 'emberwatch.ending.renewed',
+        },
+      ],
+    });
+    const unknown = await resolveConsequences({
+      deltas: [{ kind: 'flag_set', target: 'fading_ward', label: 'invented.flag' }],
+    });
+
+    expect(authored.stateDeltas).toHaveLength(1);
+    expect(unknown.stateDeltas).toEqual([]);
+    expect(unknown.narrativeResult).toContain('beyond what this character could grant');
+  });
+
+  test('retrying the same operationId and canonical delta key is already-granted', () => {
+    const delta: NpcStateDelta = { kind: 'trust_change', target: 'npc-001', value: 2 };
+    const first = runConsequence({
+      operationId: 'op-retry',
+      sourceEventId: 'ev-retry',
+      npcId: 'village_elder',
+      deltas: [delta],
+    });
+    expect(appliedDeltas(first)).toEqual(['trust_change']);
+
+    const second = runConsequence({
+      operationId: 'op-retry',
+      sourceEventId: 'ev-retry',
+      npcId: 'village_elder',
+      deltas: [delta],
+    });
+    expect(appliedDeltas(second)).toEqual([]);
+    expect(second.rejected).toHaveLength(1);
+    expect(second.rejected[0].reason).toBe('already-granted');
+  });
+
+  test('an unknown sourceEventId is rejected as no-provenance', () => {
+    (
+      npcDialogueService as unknown as {
+        _activeConsequenceEvent: { operationId: string; sourceEventId: string } | null;
+      }
+    )._activeConsequenceEvent = { operationId: 'op-x', sourceEventId: 'the-loaded-event' };
+
+    const result = (
+      npcDialogueService as unknown as {
+        _applyConsequences(r: ConsequenceRequest): ConsequenceResult;
+      }
+    )._applyConsequences({
+      operationId: 'op-x',
+      sourceEventId: 'a-different-event',
+      npcId: 'village_elder',
+      deltas: [{ kind: 'trust_change', target: 'npc-001', value: 2 }],
+    });
+
+    expect(appliedDeltas(result)).toEqual([]);
+    expect(result.rejected).toHaveLength(1);
+    expect(result.rejected[0].reason).toBe('no-provenance');
+  });
+
+  test('a legitimate repeat under a new authoritative operation/event pair is a second grant', async () => {
+    const delta: NpcStateDelta = { kind: 'trust_change', target: 'npc-001', value: 2 };
+    const first = await resolveConsequences({ deltas: [delta] });
+    const second = await resolveConsequences({ deltas: [delta] });
+
+    expect(first.stateDeltas.map((applied) => applied.kind)).toEqual(['trust_change']);
+    expect(second.stateDeltas.map((applied) => applied.kind)).toEqual(['trust_change']);
+  });
+});
+
+describe('C-489 AC-3: state commits before narration is shown', () => {
+  beforeEach(() => {
+    resetRelationshipService();
+  });
+
+  test('resolveRoll mutates the store before the resolved narration is returned', async () => {
+    const chunks: string[] = [];
+    const textGenerator = mock(async (opts: Record<string, unknown>) => {
+      if (opts.schema) {
+        return {
+          text: 'You have earned my trust.',
+          structured: {
+            narrativeResult: 'You have earned my trust.',
+            stateDeltas: [{ kind: 'trust_change', target: 'npc-001', value: 2 }],
+            suggestedChips: [],
+          },
+        };
+      }
+      (opts.onChunk as ((t: string) => void) | undefined)?.('You have earned my trust.');
+      return { text: 'You have earned my trust.' };
+    });
+    npcDialogueService.configure({
+      contentProvider: makeContentProvider(),
+      textGenerator,
+      executors: makeExecutors(),
+    });
+
+    const output = await npcDialogueService.resolveRoll({
+      npcId: 'village_elder',
+      npcName: 'Elder Thalia',
+      messages: [],
+      signal: new AbortController().signal,
+      checkType: 'persuasion',
+      difficultyClass: 12,
+      rollTotal: 18,
+      outcome: 'pass',
+      playerInput: 'I appeal to your honor.',
+      onChunk: (text) => chunks.push(text),
+    });
+
+    // By the time the narration is returned (and would be appended to the
+    // transcript by the caller), the store mutation has already happened.
+    const calls = (relationshipService.applyDelta as unknown as { mock: { calls: unknown[][] } })
+      .mock.calls;
+    expect(calls.length).toBeGreaterThan(0);
+    expect(output.stateDeltas).toHaveLength(1);
+  });
+});
+
+describe('C-489 AC-4: rejection is coherent and logged', () => {
+  beforeEach(() => {
+    resetRelationshipService();
+  });
+
+  test('a rejected delta is reported with player-facing prose and excluded from applied', async () => {
+    const output = await resolveConsequences({
+      // No getItem on the stub content provider → not-entitled.
+      deltas: [{ kind: 'inventory_grant', target: 'nonexistent_item', value: 1 }],
+    });
+
+    expect(output.stateDeltas).toEqual([]);
+    expect(output.narrativeResult).toContain('beyond what this character could grant');
+    expect(output.narrativeResult).not.toContain('not-entitled');
+  });
+
+  test('resolveRoll surfaces reconciliation text instead of a narrated success', async () => {
+    const textGenerator = mock(async (opts: Record<string, unknown>) => {
+      if (opts.schema) {
+        return {
+          text: 'Here, take the wand.',
+          structured: {
+            narrativeResult: 'Here, take the wand.',
+            // Item not in the stub pack → rejected.
+            stateDeltas: [{ kind: 'inventory_grant', target: 'ward_wand', value: 1 }],
+            suggestedChips: [],
+          },
+        };
+      }
+      (opts.onChunk as ((t: string) => void) | undefined)?.('Here, take the wand.');
+      return { text: 'Here, take the wand.' };
+    });
+    npcDialogueService.configure({
+      contentProvider: makeContentProvider(),
+      textGenerator,
+      executors: makeExecutors(),
+    });
+
+    const output = await npcDialogueService.resolveRoll({
+      npcId: 'village_elder',
+      npcName: 'Elder Thalia',
+      messages: [],
+      signal: new AbortController().signal,
+      checkType: 'persuasion',
+      difficultyClass: 12,
+      rollTotal: 18,
+      outcome: 'pass',
+      playerInput: 'I ask for the wand.',
+    });
+
+    expect(output.stateDeltas).toHaveLength(0);
+    // Reconciliation text acknowledges the world did not change.
+    expect(output.narrativeResult).toContain('did not take effect');
+    expect(output.narrativeResult).toContain('beyond what this character could grant');
+    expect(output.narrativeResult).not.toContain('not-entitled');
+  });
+});
+
+describe('C-489 AC-6: the production relationship authority invokes the rules kernel', () => {
+  beforeEach(() => {
+    resetRelationshipService();
+    npcDialogueService.configure({
+      contentProvider: makeContentProvider(),
+      textGenerator: makeTextGenerator(),
+      executors: makeExecutors(),
+    });
+  });
+
+  test('an out-of-range trust delta is clamped by resolveCommand before persistence', async () => {
+    // value 200 is finite, so it passes validity; only the kernel's
+    // applyRelationshipDelta resolver clamps to [-100, 100]. If the authority
+    // forwarded the model's value verbatim, applyDelta would receive 200.
+    const output = await resolveConsequences({
+      deltas: [{ kind: 'trust_change', target: 'npc-001', value: 200 }],
+    });
+
+    const calls = (relationshipService.applyDelta as unknown as { mock: { calls: unknown[][] } })
+      .mock.calls;
+    expect(calls).toHaveLength(1);
+    // Kernel computed trustAfter = 100 (clamped from 200); persistence gets the
+    // resolved mechanical delta (100 - current 0).
+    expect(calls[0][0]).toMatchObject({ characterId: 'npc-001', trustDelta: 100 });
+    expect(output.stateDeltas[0]).toMatchObject({ kind: 'trust_change', value: 100 });
+  });
+
+  test('a rejected delta does not invoke the kernel or the store', async () => {
+    const output = await resolveConsequences({
+      npcId: 'unknown_npc',
+      deltas: [{ kind: 'trust_change', target: 'npc-001', value: 2 }],
+    });
+
+    const calls = (relationshipService.applyDelta as unknown as { mock: { calls: unknown[][] } })
+      .mock.calls;
+    expect(calls).toHaveLength(0);
+    expect(output.stateDeltas).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// C-491 AC-1: exactly one committed event per consequential resolution
+// ---------------------------------------------------------------------------
+
+/** Captures `narrativeEventService.record` options for assertion. */
+let recordMock = mock((opts: Record<string, unknown>) => ({
+  id: crypto.randomUUID(),
+  ...opts,
+}));
+
+const recordedEvents = (): Array<Record<string, unknown>> =>
+  recordMock.mock.calls.map((c) => c[0] as Record<string, unknown>);
+
+/** Resets the record stub and pins a non-empty active campaign. */
+const resetRecordStub = (): void => {
+  recordMock = mock((opts: Record<string, unknown>) => ({
+    id: crypto.randomUUID(),
+    ...opts,
+  }));
+  narrativeEventService.record = recordMock as unknown as typeof narrativeEventService.record;
+  Object.defineProperty(campaignService, 'activeCampaign', {
+    value: { id: 'camp-1' },
+    configurable: true,
+  });
+};
+
+/** Drives the production `_resolveRoll` seam with a delta batch. */
+const driveRoll = async (options: {
+  deltas: NpcStateDelta[];
+  checkType?: string;
+  outcome?: 'pass' | 'fail';
+  contentProvider?: ReturnType<typeof makeContentProvider>;
+  npcId?: string;
+}): Promise<NpcRollResolutionOutput> => {
+  const narrative = 'The outcome is decided.';
+  npcDialogueService.configure({
+    contentProvider: options.contentProvider ?? makeContentProvider(),
+    textGenerator: makeStreamingTextGenerator({
+      chunks: [narrative],
+      structured: {
+        narrativeResult: narrative,
+        stateDeltas: options.deltas,
+        suggestedChips: [],
+      },
+    }),
+    executors: makeExecutors(),
+  });
+  return npcDialogueService.resolveRoll({
+    npcId: options.npcId ?? 'village_elder',
+    npcName: 'Elder Thalia',
+    messages: [],
+    signal: new AbortController().signal,
+    checkType: options.checkType ?? 'persuasion',
+    difficultyClass: 12,
+    rollTotal: 18,
+    outcome: options.outcome ?? 'pass',
+    playerInput: 'I appeal to your honor.',
+  });
+};
+
+/** Content provider that additionally defines a grantable item. */
+const providerWithItem = (): ReturnType<typeof makeContentProvider> => ({
+  ...makeContentProvider(),
+  getItem: mock((itemId: string) =>
+    itemId === 'ward_wand' ? { id: 'ward_wand', name: 'Ward Wand' } : undefined,
+  ),
+});
+
+describe('C-491 AC-1: exactly one committed event per consequential resolution', () => {
+  beforeEach(() => {
+    resetRecordStub();
+  });
+
+  test('records exactly one ItemTransferred event with both applied deltas', async () => {
+    await driveRoll({
+      deltas: [
+        { kind: 'inventory_grant', target: 'ward_wand', value: 1 },
+        { kind: 'trust_change', target: 'npc-001', value: 2 },
+      ],
+      contentProvider: providerWithItem(),
+    });
+
+    const events = recordedEvents();
+    expect(events).toHaveLength(1);
+    const event = events[0];
+    expect(event?.kind).toBe('ItemTransferred');
+    expect(event?.informationKind).toBe('world_fact');
+    expect(event?.campaignId).toBe('camp-1');
+    expect(event?.actorId).toBe('village_elder');
+    const appliedKinds = (event?.deltasApplied as NpcStateDelta[] | undefined)?.map((d) => d.kind);
+    expect(appliedKinds).toContain('inventory_grant');
+    expect(appliedKinds).toContain('trust_change');
+  });
+
+  test('records WorldFlagChanged for a flag-only batch', async () => {
+    await driveRoll({
+      deltas: [{ kind: 'flag_set', target: 'emberwatch', label: 'emberwatch.ending.renewed' }],
+    });
+
+    const events = recordedEvents();
+    expect(events).toHaveLength(1);
+    expect(events[0]?.kind).toBe('WorldFlagChanged');
+    expect(events[0]?.informationKind).toBe('world_fact');
+  });
+
+  test('records nothing for a rejected-only resolution', async () => {
+    await driveRoll({
+      npcId: 'unknown_npc',
+      deltas: [{ kind: 'trust_change', target: 'npc-001', value: 2 }],
+    });
+
+    expect(recordedEvents()).toHaveLength(0);
+  });
+
+  test('records ThreatWitnessed (character belief) on an Intimidation success with no deltas', async () => {
+    await driveRoll({ deltas: [], checkType: 'Intimidation', outcome: 'pass' });
+
+    const events = recordedEvents();
+    expect(events).toHaveLength(1);
+    expect(events[0]?.kind).toBe('ThreatWitnessed');
+    expect(events[0]?.informationKind).toBe('character_belief');
+    expect(events[0]?.claimantId).toBe('village_elder');
+  });
+
+  test('a failed roll with no applied deltas records nothing', async () => {
+    await driveRoll({ deltas: [], outcome: 'fail' });
+    expect(recordedEvents()).toHaveLength(0);
+  });
+
+  test('evaluates every recruited companion in the committed witness set', async () => {
+    const contentProvider = makeContentProvider({
+      npcs: {
+        village_elder: STUB_EMBERWATCH.npcs.village_elder,
+        village_guard: STUB_EMBERWATCH.npcs.village_guard,
+        traveling_merchant: STUB_EMBERWATCH.npcs.traveling_merchant,
+      },
+    });
+    Object.defineProperty(npcAwarenessService, 'nearbyNpcIds', {
+      value: ['village_guard', 'traveling_merchant'],
+      configurable: true,
+    });
+    (partyRosterService as unknown as { hasMember: (npcId: string) => boolean }).hasMember = mock(
+      (npcId: string) => npcId === 'village_guard',
+    );
+    const originalEvaluateEvent = companionReactionService.evaluateEvent;
+    const originalFireUnpromptedTurn = companionReactionService.fireUnpromptedTurn;
+    const evaluateEvent = mock(() => undefined);
+    companionReactionService.evaluateEvent =
+      evaluateEvent as unknown as typeof companionReactionService.evaluateEvent;
+    const fireUnpromptedTurn = mock(() => true);
+    companionReactionService.fireUnpromptedTurn =
+      fireUnpromptedTurn as unknown as typeof companionReactionService.fireUnpromptedTurn;
+
+    try {
+      await driveRoll({
+        deltas: [],
+        checkType: 'Intimidation',
+        outcome: 'pass',
+        contentProvider,
+      });
+    } finally {
+      Object.defineProperty(npcAwarenessService, 'nearbyNpcIds', {
+        value: [],
+        configurable: true,
+      });
+      companionReactionService.evaluateEvent = originalEvaluateEvent;
+      companionReactionService.fireUnpromptedTurn = originalFireUnpromptedTurn;
+    }
+
+    expect(evaluateEvent).toHaveBeenCalledTimes(1);
+    expect(evaluateEvent.mock.calls[0]?.[0]).toMatchObject({ npcId: 'village_guard' });
+    expect(fireUnpromptedTurn).toHaveBeenCalledTimes(1);
+    expect(fireUnpromptedTurn.mock.calls[0]?.[0]).toMatchObject({ npcId: 'village_guard' });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// C-494 AC-3: companion references a witnessed event unprompted
+// ---------------------------------------------------------------------------
+
+describe('C-494 AC-3: companion witness recall', () => {
+  const companionProvider = () =>
+    makeContentProvider({
+      npcs: {
+        village_guard: {
+          name: 'Bram the Guard',
+          isCompanion: true,
+          companionClassId: 'fighter',
+          initialApproval: 10,
+          personality: { voice: 'Steady.', manner: 'Loyal.' },
+          agenda: ['Keep the gates shut'],
+          knowledge: ['The ward is renewed by the people who watch'],
+          boundaries: ['refuse|Threaten an innocent villager'],
+        },
+      },
+    });
+
+  const seedWitness = (events: Array<Record<string, unknown>>) => {
+    // The dialogue service reads witness recall through narrativeEventService
+    // and gates on partyRosterService.hasMember — both are controllable doubles
+    // from the $services barrel mocked in test_setup. witnessedBy mirrors the
+    // real service's witness filtering so only events whose witnesses include
+    // the queried npc are returned.
+    (partyRosterService as unknown as { hasMember: (id: string) => boolean }).hasMember = mock(
+      (id: string) => id === 'village_guard',
+    );
+    (narrativeEventService as unknown as { witnessedBy: (id: string) => unknown[] }).witnessedBy =
+      mock((id: string) => events.filter((e) => (e.witnesses as string[]).includes(id)));
+  };
+
+  beforeEach(() => {
+    (
+      companionReactionService as unknown as {
+        hasFired: (options: { npcId: string; eventId: string }) => boolean;
+      }
+    ).hasFired = mock(() => false);
+    (
+      companionReactionService as unknown as {
+        fireUnpromptedTurn: (options: {
+          npcId: string;
+          npc: Record<string, unknown>;
+          event: CommittedNarrativeEvent;
+        }) => boolean;
+      }
+    ).fireUnpromptedTurn = mock(() => true);
+  });
+
+  test('buildContext injects [COMPANION WITNESSED] lines for a recruited companion', () => {
+    seedWitness([
+      {
+        id: 'evt-1',
+        kind: 'PromiseMade',
+        summary: 'Bram witnessed the player promise to defend the village',
+        witnesses: ['village_guard'],
+      },
+    ]);
+    npcDialogueService.configure({
+      contentProvider: companionProvider(),
+      textGenerator: makeTextGenerator(),
+      executors: makeExecutors(),
+    });
+
+    const projection = npcDialogueService.buildContext({
+      npcId: 'village_guard',
+      npcName: 'Bram',
+      messages: [],
+    });
+
+    expect(projection.companionWitnessed).toContain(
+      '- Bram witnessed the player promise to defend the village',
+    );
+  });
+
+  test('does not inject witness recall for a non-companion NPC', () => {
+    seedWitness([
+      {
+        id: 'evt-2',
+        kind: 'ThreatWitnessed',
+        summary: 'Bram witnessed a threat',
+        witnesses: ['village_guard'],
+      },
+    ]);
+    npcDialogueService.configure({
+      contentProvider: makeContentProvider(),
+      textGenerator: makeTextGenerator(),
+      executors: makeExecutors(),
+    });
+
+    const projection = npcDialogueService.buildContext({
+      npcId: 'village_elder',
+      npcName: 'Elder Thalia',
+      messages: [],
+    });
+
+    expect(projection.companionWitnessed).toHaveLength(0);
+  });
+
+  test('omits events the companion did not witness', () => {
+    seedWitness([
+      {
+        id: 'evt-3',
+        kind: 'ThreatWitnessed',
+        summary: 'Keth witnessed a threat',
+        witnesses: ['traveling_merchant'],
+      },
+    ]);
+    npcDialogueService.configure({
+      contentProvider: companionProvider(),
+      textGenerator: makeTextGenerator(),
+      executors: makeExecutors(),
+    });
+
+    const projection = npcDialogueService.buildContext({
+      npcId: 'village_guard',
+      npcName: 'Bram',
+      messages: [],
+    });
+
+    // A threat the companion did NOT witness must never be injected.
+    expect(projection.companionWitnessed).toHaveLength(0);
+  });
+
+  test('consumes a pending witnessed event only after its generated turn', async () => {
+    const event = {
+      id: 'evt-pending',
+      campaignId: 'camp-1',
+      sequence: 1,
+      kind: 'PromiseMade',
+      informationKind: 'world_fact',
+      summary: 'Bram witnessed the player promise to defend the village',
+      witnesses: ['village_guard'],
+      recordedAt: new Date().toISOString(),
+    } satisfies CommittedNarrativeEvent;
+    const consumed = new Set<string>();
+    seedWitness([event]);
+    (
+      companionReactionService as unknown as {
+        hasFired: (options: { npcId: string; eventId: string }) => boolean;
+      }
+    ).hasFired = mock((options) => consumed.has(`${options.npcId}:${options.eventId}`));
+    const fireUnpromptedTurn = mock(
+      (options: { npcId: string; event: CommittedNarrativeEvent }) => {
+        consumed.add(`${options.npcId}:${options.event.id}`);
+        return true;
+      },
+    );
+    (
+      companionReactionService as unknown as {
+        fireUnpromptedTurn: typeof fireUnpromptedTurn;
+      }
+    ).fireUnpromptedTurn = fireUnpromptedTurn;
+    const textGenerator = makeTextGenerator({ text: 'I remember what you promised.' });
+    npcDialogueService.configure({
+      contentProvider: companionProvider(),
+      textGenerator,
+      executors: makeExecutors(),
+    });
+
+    const generate = () =>
+      npcDialogueService.generateTurn({
+        npcId: 'village_guard',
+        npcName: 'Bram',
+        messages: [],
+        signal: new AbortController().signal,
+      });
+    await generate();
+    await generate();
+
+    const firstCall = textGenerator.mock.calls[0]?.[0] as
+      | { messages?: Array<{ role: string; content: string }> }
+      | undefined;
+    const secondCall = textGenerator.mock.calls[2]?.[0] as
+      | { messages?: Array<{ role: string; content: string }> }
+      | undefined;
+    const firstPrompt = firstCall?.messages?.[0]?.content;
+    const secondPrompt = secondCall?.messages?.[0]?.content;
+    expect(firstPrompt).toContain('[COMPANION WITNESSED]');
+    expect(firstPrompt).toContain(event.summary);
+    expect(secondPrompt).not.toContain('[COMPANION WITNESSED]');
+    expect(fireUnpromptedTurn).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// C-494 AC-1: the companion recruits through the existing roster
+// ---------------------------------------------------------------------------
+
+describe('C-494 AC-1: recruit through the existing dialogue seam', () => {
+  const recruitProvider = () =>
+    makeContentProvider({
+      npcs: {
+        village_guard: {
+          name: 'Bram the Guard',
+          isCompanion: true,
+          companionClassId: 'fighter',
+          initialApproval: 10,
+          recruitDialogueKey: 'bram_recruit_offer',
+          dismissDialogueKey: 'bram_dismiss',
+          banterPool: ['bram_banter_ward'],
+        },
+        village_elder: { name: 'Elder Thalia', defaultDialogueKey: 'elder_thalia_greeting' },
+      },
+    });
+
+  test('deriveAllowedCommands includes recruit for a companion NPC', () => {
+    npcDialogueService.configure({
+      contentProvider: recruitProvider(),
+      textGenerator: makeTextGenerator(),
+      executors: makeExecutors(),
+    });
+    const allowed = npcDialogueService.deriveAllowedCommands('village_guard');
+    expect(allowed).toContain('recruit');
+  });
+
+  test('a non-companion NPC does not get the recruit command', () => {
+    npcDialogueService.configure({
+      contentProvider: recruitProvider(),
+      textGenerator: makeTextGenerator(),
+      executors: makeExecutors(),
+    });
+    const allowed = npcDialogueService.deriveAllowedCommands('village_elder');
+    expect(allowed).not.toContain('recruit');
+  });
+
+  test('executeCommand dispatches the recruit command to the roster executor', () => {
+    const executors = makeExecutors();
+    npcDialogueService.configure({
+      contentProvider: recruitProvider(),
+      textGenerator: makeTextGenerator(),
+      executors,
+    });
+    const ok = npcDialogueService.executeCommand({
+      kind: 'recruit',
+      npcId: 'village_guard',
+      npcName: 'Bram the Guard',
+      command: { kind: 'recruit' },
+    });
+    expect(ok).toBe(true);
+    expect(execLog).toContain('recruit');
+    expect(ok).toBe(true);
+    expect(execLog).toContain('recruit');
+  });
+
+  test('executeCommand dispatches the presentEvidence command to the executor', () => {
+    const executors = makeExecutors();
+    npcDialogueService.configure({
+      contentProvider: recruitProvider(),
+      textGenerator: makeTextGenerator(),
+      executors,
+    });
+    questStateService.getDiscoverableEvidence = () => [
+      {
+        id: 'the_ledger',
+        label: 'The Ledger',
+        presentToNpcId: 'village_guard',
+      },
+    ];
+    const ok = npcDialogueService.executeCommand({
+      kind: 'presentEvidence',
+      npcId: 'village_guard',
+      npcName: 'Bram the Guard',
+      command: { kind: 'presentEvidence', evidenceId: 'the_ledger' },
+    });
+    expect(ok).toBe(true);
+    expect(execLog).toContain('presentEvidence');
+  });
+
+  test('executeCommand rejects evidence for a different NPC before dispatch', () => {
+    const executors = makeExecutors();
+    npcDialogueService.configure({
+      contentProvider: recruitProvider(),
+      textGenerator: makeTextGenerator(),
+      executors,
+    });
+    questStateService.getDiscoverableEvidence = () => [
+      {
+        id: 'the_ledger',
+        label: 'The Ledger',
+        presentToNpcId: 'village_elder',
+      },
+    ];
+
+    const ok = npcDialogueService.executeCommand({
+      kind: 'presentEvidence',
+      npcId: 'village_guard',
+      npcName: 'Bram the Guard',
+      command: { kind: 'presentEvidence', evidenceId: 'the_ledger' },
+    });
+
+    expect(ok).toBe(false);
+    expect(execLog).not.toContain('presentEvidence');
   });
 });

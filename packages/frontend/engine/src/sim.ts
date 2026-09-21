@@ -71,18 +71,131 @@ export {
   extractTransitionZones,
   loadJtonMap,
   loadTilemap,
+  normalizeTilemap,
   resolveGid,
   TILED_FLIP_D,
   TILED_FLIP_H,
   TILED_FLIP_MASK,
   TILED_FLIP_V,
 } from './assets/map_loader.ts';
+// C-505 canonical scene module (no PixiJS)
+export * from './assets/scene/scene_index.ts';
 // Base engine class
 export {
   BaseEngineClass,
   type BaseEngineClassInterface,
   type BaseEngineClassOptions,
 } from './base_engine_class.ts';
+// AI combat perception snapshot (C-526 AC-2, AC-7)
+export type {
+  BuildCombatDecisionContextOptions,
+  CombatDecisionPolicy,
+} from './combat/combat_ai_perception.ts';
+export {
+  authoredTelegraphForCommand,
+  buildCombatDecisionContext,
+  derivePerceivableCombatantIds,
+  healthBandOf,
+  rangeBandForDistance,
+} from './combat/combat_ai_perception.ts';
+export type { CombatAiTurnCoordinatorOptions } from './combat/combat_ai_turns.ts';
+export { createCombatAiTurnCoordinator } from './combat/combat_ai_turns.ts';
+// Battlefield projection (C-515 AC-1)
+export type { SnapshotBattlefieldOptions } from './combat/combat_battlefield.ts';
+export { snapshotBattlefield } from './combat/combat_battlefield.ts';
+// Tactical preview bridge (C-515 AC-5)
+export type {
+  CombatPlanRejectedEvent,
+  CombatPreviewReadyEvent,
+  CombatPreviewRequestedCommand,
+} from './combat/combat_bridge_types.ts';
+// One command-admission envelope for every ordinary v2 command (review F-B).
+export type {
+  CombatCommandIdentity,
+  CombatCommandIdentityFields,
+  CombatCommandJournal,
+  CombatCommandJournalEntry,
+  CommandAdmissionRejection,
+  CommandAdmissionResult,
+} from './combat/combat_command_envelope.ts';
+export {
+  acceptedCommandsForReplay,
+  admitV2Command,
+  COMMAND_ADMISSION_REASON_CODE,
+  clearAllCombatCommandJournals,
+  clearCombatCommandJournal,
+  combatCommandDigest,
+  findCommandJournalEntry,
+  getCombatCommandJournal,
+  recordCommandOutcome,
+  restoreCombatCommandJournal,
+} from './combat/combat_command_envelope.ts';
+// The durable half of a retry checkpoint (stable actor bindings).
+export type { PersistedEncounterRetryRecord } from './combat/combat_encounter_retry.ts';
+export { captureRetryCheckpoint, restoreRetryCheckpoint } from './combat/combat_encounter_retry.ts';
+export type { HandleCombatPreviewRequestOptions } from './combat/combat_preview_handler.ts';
+export {
+  emitCombatPreviewResult,
+  handleCombatPreviewRequest,
+} from './combat/combat_preview_handler.ts';
+// Execution identity for a v2 encounter run (C-532 AC-3/AC-6).
+export {
+  clearEncounterRunIds,
+  getOrAllocateEncounterRunId,
+  peekEncounterRunId,
+  resetEncounterRunId,
+} from './combat/combat_run_identity.ts';
+// The atomic save/checkpoint boundary and its read barrier (review F-B).
+export type {
+  CombatActorBinding,
+  CombatSessionCheckpoint,
+} from './combat/combat_session_checkpoint.ts';
+export {
+  buildCombatSessionCheckpoint,
+  bumpCombatSessionRevision,
+  clearCombatSessionRevision,
+  combatSessionIsStable,
+  getCombatSessionEncounterId,
+  getCombatSessionRevision,
+  setCombatSessionRevision,
+} from './combat/combat_session_checkpoint.ts';
+// Combat projection adapter
+export type {
+  CombatApplicationRejection,
+  CombatApplicationResult,
+  CombatantIdMap,
+  CombatIdentityRegistry,
+  CombatSnapshotOptions,
+  DeriveCombatantIdOptions,
+} from './combat/combat_state_adapter.ts';
+export {
+  applyCombatResult,
+  COMBAT_STATS_FIELD_MAP,
+  createCombatIdentityRegistry,
+  deriveCombatantId,
+  getCombatIdentityRegistry,
+  getProjectedCombatRevision,
+  installCombatProjection,
+  registerCombatantIdentity,
+  resetCombatApplyGuard,
+  snapshotCombatState,
+  UNMAPPED_COMBAT_STATS_FIELDS,
+} from './combat/combat_state_adapter.ts';
+// Deterministic AI planner (C-526 AC-4/AC-6)
+export { chooseV2AiCommand } from './combat/combat_v2_ai.ts';
+// Engine-owned deterministic reaction policy (review F8).
+export { engineReactionPolicyFor, playerControlsCombatant } from './combat/combat_v2_events.ts';
+export { resolveEngineReactionPolicies } from './combat/combat_v2_reaction_policy.ts';
+// C-531 AC-7: the world-object block that outlives an encounter.
+export type { WorldObjectState } from './combat/combat_world_object_state.ts';
+export {
+  applyWorldObjectState,
+  captureWorldObjectState,
+  clearWorldObjectState,
+  getWorldObjectState,
+  persistWorldObjectState,
+  setWorldObjectState,
+} from './combat/combat_world_object_state.ts';
 // ECS components
 export type { AppearanceData } from './components/appearance.ts';
 export {
@@ -108,6 +221,16 @@ export {
   CollisionLayer,
   registerCollisionDataObservers,
 } from './components/collision_data.ts';
+export type { CombatIdentityData } from './components/combat_identity.ts';
+export {
+  CombatIdentity,
+  registerCombatIdentityObservers,
+} from './components/combat_identity.ts';
+export type { CombatMovementData } from './components/combat_movement.ts';
+export {
+  CombatMovement,
+  registerCombatMovementObservers,
+} from './components/combat_movement.ts';
 export type { CombatStatsData } from './components/combat_stats.ts';
 export { CombatStats, registerCombatStatsObservers } from './components/combat_stats.ts';
 export type { CombatTacticsData } from './components/combat_tactics.ts';
@@ -269,6 +392,7 @@ export {
 export type { CollisionGrid } from './systems/collision_system.ts';
 export {
   getMapPixelBounds,
+  getPathfindingGrid,
   getTerrainGrid,
   getTerrainTileSize,
   initializeSpatialGrid,
@@ -372,6 +496,7 @@ export {
   getNpcHaltReason,
   hasActivePath,
   type NpcHaltReason,
+  registerPathFollowHaltObservers,
   resetNpcHaltReasons,
   updatePathFollow,
 } from './systems/path_follow_system.ts';

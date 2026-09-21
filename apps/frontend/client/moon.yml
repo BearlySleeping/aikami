@@ -16,6 +16,9 @@ project:
 
 dependsOn:
   - 'parser'
+  - 'frontend-ai-gateway'
+  - 'frontend-configs'
+  - 'frontend-storage'
   - 'frontend-utils'
   - 'frontend-services'
   - 'frontend-theme'
@@ -36,13 +39,12 @@ fileGroups:
   configs:
     - 'package.json'
     - 'tsconfig.json'
-    - 'tailwind.config.*'
-    - 'svelte.config.*'
-    - 'vite.config.*'
+    - 'vite.config.ts'
   srcTauri:
     - 'src-tauri/**/*'
   unitTests:
     - 'src/**/*.test.ts'
+    - 'tests/**/*.test.ts'
   i18n:
     - 'messages/**/*'
     - 'project.inlang/**/*'
@@ -72,23 +74,61 @@ tasks:
     command: 'bun run dev'
     preset: 'server'
     env:
-      # C-418 Feature B: dev server must keep the (dev) sandbox routes even
-      # when CI sets NODE_ENV=production (the gate strips them otherwise).
+      # C-418 Feature B: belt-and-braces. The dev-route gate already includes
+      # `(dev)` for a Vite `serve` command, but pinning the flag here keeps the
+      # sandboxes present even if this task is ever run through a wrapper that
+      # presents itself as a build.
       AIKAMI_INCLUDE_DEV_ROUTES: 'true'
   build:
     # `bun run build` in package.json wraps back to `moon run client:build`
     # so direct calls still hit this task's cache/hashing. The real command
     # lives in the `build:app` script — see that script for `--mode` handling.
     command: 'bun run build:app'
+    deps:
+      # 🔴 Load-bearing ordering, not a convenience.
+      #
+      # `build` and `typecheck` both drive `svelte-kit sync` into the SAME
+      # `.svelte-kit/` directory, with DIFFERENT route sets: `typecheck` opts
+      # into the `(dev)` sandbox routes (AIKAMI_INCLUDE_DEV_ROUTES=true) while
+      # `build` runs the production dev-route gate, which excludes them. Run
+      # concurrently — which moon does by default — the build's sync rewrites
+      # `.svelte-kit/types` without the `(dev)` routes while svelte-check is
+      # reading them, and `typecheck` fails with `Cannot find module './$types'`
+      # from `src/routes/(dev)/+layout.svelte`.
+      #
+      # The race is latent: it only surfaces when the build cache is cold, so
+      # it appears and disappears with unrelated edits. Ordering build AFTER
+      # typecheck makes build the last writer, which is what its declared
+      # `outputs` (`.svelte-kit`, `build`) already assume.
+      - '~:typecheck'
     inputs:
       - '@group(sources)'
       - '@group(configs)'
       # Build-step scripts: the runner, the dev-route gate and the post-build
       # chunk-cycle guard all run as part of `bun run build`, so they are
-      # build inputs.
+      # build inputs. The ORT externalization plugin, the deploy-asset guard,
+      # the ineffective-dynamic-import ratchet, the diagnostic collector and
+      # the budget report are build steps too; the two baselines are read by
+      # the ratchets, so a baseline edit must invalidate the build cache.
       - 'scripts/build_client.ts'
       - 'scripts/gate_dev_routes.ts'
+      - 'scripts/dev_routes_gate.ts'
       - 'scripts/check_bundle.ts'
+      - 'scripts/check_deploy_assets.ts'
+      - 'scripts/check_ineffective_dynamic_imports.ts'
+      - 'scripts/diagnostic_collector.ts'
+      - 'scripts/ort_external_plugin.ts'
+      - 'scripts/report_bundle_budget.ts'
+      - 'scripts/bundle_budget.baseline.json'
+      - 'scripts/ineffective_dynamic_imports.baseline.json'
+      # 🔴 Load-bearing. The emitted route graph depends on this flag, so it MUST
+      # be part of the cache key. Without it moon serves a cached
+      # production-graph build for a dev-route request (and vice versa) purely
+      # on the ambient environment: `AIKAMI_INCLUDE_DEV_ROUTES=true bun moon run
+      # client:build -- --mode staging` printed `excluding (dev)` and `1 cached`,
+      # silently ignoring the opt-in. A `$`-prefixed input is moon's
+      # environment-variable input form.
+      - '$AIKAMI_INCLUDE_DEV_ROUTES'
       # 🔴 Load-bearing. Vite bundles these workspace packages FROM SOURCE via
       # TS path aliases — the emitted bundle contains their code, so their
       # files are real build inputs. They were previously absent from the hash,
@@ -103,9 +143,13 @@ tasks:
       - '/packages/frontend/*/src/**/*'
     options:
       cache: true
-      # C-418 Feature B decision (M5): staging builds intentionally SHIP the
-      # (dev) sandbox routes (AC-2 excludes only production). Set
-      # AIKAMI_INCLUDE_DEV_ROUTES=false to strip them from a staging build.
+      # The dev-route gate excludes `(dev)` from every build — staging
+      # included: a normal distributable build never ships the `(dev)` sandbox
+      # routes. The dev server keeps them with no configuration (the gate is
+      # command-derived), and a QA/dev *build* opts in with
+      # AIKAMI_INCLUDE_DEV_ROUTES=true (the `test`/`typecheck` tasks do).
+      # `scripts/check_deploy_assets.ts` fails a normal build if `(dev)` output
+      # leaks back in.
     outputs:
       - '.svelte-kit'
       - 'build'
@@ -127,6 +171,13 @@ tasks:
       mergeArgs: 'replace'
       cache: true
       runInCI: true
+    env:
+      # Typecheck is a development-time check over the full source tree,
+      # including the `(dev)` sandbox routes. `svelte-kit sync` resolves this
+      # config with `command: 'build'`, which would otherwise point
+      # `files.routes` at `.svelte-kit/routes-prod` and make `./$types`
+      # unresolvable from `src/routes`. Opt in exactly as `dev`/`test` do.
+      AIKAMI_INCLUDE_DEV_ROUTES: 'true'
   test:
     command: 'bun run test:unit'
     inputs:
@@ -135,8 +186,8 @@ tasks:
       - '@group(configs)'
     options:
       cache: true
-      timeout: 120
-      runInCI: false
+      timeout: 240
+      runInCI: true
     env:
       AIKAMI_INCLUDE_DEV_ROUTES: 'true'
   test-unit:
@@ -147,10 +198,36 @@ tasks:
       - '@group(configs)'
     options:
       cache: true
-      timeout: 120
-      runInCI: false
+      timeout: 240
+      runInCI: true
     env:
       AIKAMI_INCLUDE_DEV_ROUTES: 'true'
+  # Real-Svelte lane (Vitest Browser Mode + Playwright chromium). Runs in CI:
+  # the `validate` job installs the matching Chromium before `moon ci`, so this
+  # lane is a mandatory PR check, not a local-only pilot. Run locally with
+  # `bun run test:browser`.
+  #
+  # `cache: false` is deliberate. The lane compiles shared base classes and
+  # client source, so an input set that omitted them could reuse a passing
+  # result after the code under test changed. `client:build` documents the same
+  # concern; until the input set below is proven complete, never cache a pass.
+  test-browser:
+    command: 'bun run test:browser'
+    deps:
+      # Browser tests can transitively import `$lib/paraglide` (generated, not
+      # committed). Generate it first, exactly as `typecheck` does.
+      - '~:paraglide'
+    inputs:
+      - 'src/browser_tests/**/*'
+      - 'vitest.config.ts'
+      - '@group(sources)'
+      - '@group(configs)'
+      - '/packages/frontend/*/src/**/*'
+      - '/packages/shared/*/src/**/*'
+    options:
+      cache: false
+      timeout: 180
+      runInCI: true
   tauri-dev:
     command: 'bun run tauri:dev'
     preset: 'server'

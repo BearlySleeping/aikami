@@ -67,8 +67,8 @@ const { viewModel }: Props = $props();
               class="range range-primary"
               disabled={viewModel.isMuted}
               oninput={(e) => {
-                viewModel.setMusicVolume(Number(e.currentTarget.value) / 100);
-              }}
+  viewModel.setMusicVolume(Number(e.currentTarget.value) / 100);
+}}
             >
           </div>
 
@@ -87,8 +87,8 @@ const { viewModel }: Props = $props();
               value={viewModel.crossfadeDurationMs}
               class="range range-secondary"
               oninput={(e) => {
-                viewModel.setCrossfadeDuration(Number(e.currentTarget.value));
-              }}
+  viewModel.setCrossfadeDuration(Number(e.currentTarget.value));
+}}
             >
           </div>
 
@@ -183,7 +183,9 @@ const { viewModel }: Props = $props();
               </button>
             {/each}
           </div>
-          {#if viewModel.genreFilters.some((f) => f.active) || viewModel.intensityFilters.some((f) => f.active) || viewModel.moodFilters.some((f) => f.active)}
+          {#if viewModel.genreFilters.some((f) => f.active) ||
+  viewModel.intensityFilters.some((f) => f.active) ||
+  viewModel.moodFilters.some((f) => f.active)}
             <button
               type="button"
               class="btn btn-ghost btn-xs"
@@ -290,8 +292,7 @@ const { viewModel }: Props = $props();
                 class="select select-bordered select-sm w-full"
                 value={viewModel.sceneOverrides[sceneType.id]}
                 aria-label="{sceneType.label} track override"
-                onchange={(e) =>
-                  viewModel.setSceneOverride(sceneType.id, e.currentTarget.value)}
+                onchange={(e) => viewModel.setSceneOverride(sceneType.id, e.currentTarget.value)}
               >
                 {#each viewModel.trackOptions as opt}
                   <option value={opt.value}>{opt.label}</option>

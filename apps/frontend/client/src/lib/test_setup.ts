@@ -1,0 +1,343 @@
+// apps/frontend/client/src/lib/test_setup.ts
+// biome-ignore-all lint/style/useNamingConvention: Mock object properties must mirror PascalCase class names from @aikami/frontend-services for module mocking
+// Infrastructure setup for the Bun test runner — runs once before all test
+// files.
+//
+// 1. Polyfill Svelte 5 runes so .svelte.ts files are parseable without the
+//    Svelte compiler.
+//
+// 2. Provide browser API polyfills (indexedDB, localStorage, window,
+//    AudioContext, KeyboardEvent) that the Bun runtime lacks.
+//
+// 3. Set Vite env vars so @aikami/frontend-configs/environment.ts can
+//    validate without crashing in Bun.
+//
+// The legacy `$services` barrel mock, the `@aikami/frontend/services` root
+// mock, the global storage mock, and the feature-specific lorebook,
+// crypto-vault and preview stubs have all been removed. Base classes are
+// imported from the narrow `@aikami/frontend/services/base` entrypoint and
+// platform singletons from their own subpaths, so this lane never evaluates
+// the package aggregation. Migrated features inject capabilities with
+// feature-owned fixtures. This file is now infrastructure only.
+
+import { mock } from 'bun:test';
+
+// ── Svelte 5 runes ──────────────────────────────────────────────────────────
+
+(globalThis as Record<string, unknown>).$state = (value: unknown) => value;
+(globalThis as Record<string, unknown>).$state.raw = (value: unknown) => value;
+(globalThis as Record<string, unknown>).$state.snapshot = (value: unknown) => value;
+(globalThis as Record<string, unknown>).$derived = (value: unknown) => value;
+
+// ── IndexedDB polyfill (required by DraftStore in test env) ────────────────
+
+const _indexedStore = new Map<string, Map<string, Map<string, unknown>>>();
+const _indexedDatabaseVersions = new Map<string, number>();
+const _deletedDatabases = new Set<string>();
+
+/** Creates a request-like object that fires onsuccess on next microtask. */
+const _createRequest = <T>(result: T) => {
+  const request = {
+    onsuccess: undefined as (() => void) | undefined,
+    onerror: undefined as (() => void) | undefined,
+    result,
+    error: null as DOMException | null,
+  };
+  queueMicrotask(() => request.onsuccess?.());
+  return request;
+};
+
+(globalThis as Record<string, unknown>).indexedDB = {
+  open: (dbName: string, version?: number) => {
+    // Treat deleted databases as empty (Firebase Integrity check)
+    if (_deletedDatabases.has(dbName)) {
+      _deletedDatabases.delete(dbName);
+      _indexedStore.delete(dbName);
+      _indexedDatabaseVersions.delete(dbName);
+    }
+    if (!_indexedStore.has(dbName)) {
+      _indexedStore.set(dbName, new Map());
+    }
+    const dbStores = _indexedStore.get(dbName) ?? new Map();
+    const currentVersion = _indexedDatabaseVersions.get(dbName);
+    const requestedVersion = version ?? currentVersion ?? 1;
+    const shouldUpgrade = currentVersion === undefined || requestedVersion > currentVersion;
+    if (shouldUpgrade) {
+      _indexedDatabaseVersions.set(dbName, requestedVersion);
+    }
+    const db = {
+      objectStoreNames: {
+        contains: (storeName: string) => dbStores.has(storeName),
+      },
+      createObjectStore: (storeName: string, _options?: unknown) => {
+        if (!dbStores.has(storeName)) {
+          dbStores.set(storeName, new Map());
+        }
+        return {
+          createIndex: (..._args: unknown[]) => {},
+        };
+      },
+      transaction: (_storeName: string | string[], _mode: string) => ({
+        objectStore: (name: string) => {
+          const store = dbStores.get(name) ?? new Map();
+          const indexStore = new Map<string, Map<string, unknown[]>>();
+          return {
+            get: (key: string) => _createRequest(store.get(key)),
+            put: (value: Record<string, unknown>) => {
+              const key =
+                (value as { id?: string; chatId?: string }).id ??
+                (value as { chatId?: string }).chatId ??
+                '';
+              store.set(key, value);
+              return _createRequest(key);
+            },
+            delete: (key: string) => {
+              store.delete(key);
+              return _createRequest(undefined);
+            },
+            getAll: () => _createRequest(Array.from(store.values())),
+            index: (indexName: string) => {
+              if (!indexStore.has(indexName)) {
+                indexStore.set(indexName, new Map());
+              }
+              return {
+                getAll: (key: string) => {
+                  const results = Array.from(store.values()).filter(
+                    (doc) => (doc as Record<string, unknown>)[indexName] === key,
+                  );
+                  return _createRequest(results);
+                },
+              };
+            },
+          };
+        },
+      }),
+      onclose: null as (() => void) | null,
+      close: () => {},
+    };
+    const openRequest = {
+      onupgradeneeded: undefined as ((event: unknown) => void) | undefined,
+      onsuccess: undefined as ((event: unknown) => void) | undefined,
+      onerror: undefined as ((event: unknown) => void) | undefined,
+      result: db,
+      error: null as DOMException | null,
+    };
+    // Initial opens and later version increases both require an upgrade event.
+    if (shouldUpgrade) {
+      queueMicrotask(() => {
+        openRequest.onupgradeneeded?.({ target: openRequest } as unknown);
+        openRequest.onsuccess?.({ target: openRequest } as unknown);
+      });
+    } else {
+      queueMicrotask(() => openRequest.onsuccess?.({ target: openRequest } as unknown));
+    }
+    return openRequest;
+  },
+  deleteDatabase: (dbName: string) => {
+    _deletedDatabases.add(dbName);
+    _indexedStore.delete(dbName);
+    _indexedDatabaseVersions.delete(dbName);
+    const request = {
+      onsuccess: undefined as (() => void) | undefined,
+      onerror: undefined as (() => void) | undefined,
+      result: undefined,
+      error: null as DOMException | null,
+    };
+    queueMicrotask(() => request.onsuccess?.());
+    return request;
+  },
+};
+
+// ── Browser API polyfills (required by services in test env) ────────────────
+
+if (typeof KeyboardEvent === 'undefined') {
+  (globalThis as Record<string, unknown>).KeyboardEvent = class {
+    key: string;
+    constructor(_type: string, options?: { key?: string }) {
+      this.key = options?.key ?? '';
+    }
+    preventDefault = mock(() => {});
+    stopPropagation = mock(() => {});
+  };
+}
+
+if (typeof window === 'undefined') {
+  (globalThis as Record<string, unknown>).window = {
+    AudioContext: class {
+      state = 'suspended';
+      resume = mock(async () => {});
+      close = mock(async () => {});
+      createGain = mock(() => ({ connect: mock(() => {}), gain: { value: 1 } }));
+      createBufferSource = mock(() => ({
+        connect: mock(() => {}),
+        start: mock(() => {}),
+        stop: mock(() => {}),
+      }));
+      createDynamicsCompressor = mock(() => ({
+        connect: mock(() => {}),
+        threshold: { value: -24 },
+        knee: { value: 30 },
+        ratio: { value: 12 },
+        attack: { value: 0.003 },
+        release: { value: 0.25 },
+      }));
+      decodeAudioData = mock(async () => ({ duration: 1 }));
+      destination = {};
+    },
+    innerWidth: 1920,
+    innerHeight: 1080,
+    addEventListener: mock(() => {}),
+    removeEventListener: mock(() => {}),
+  };
+}
+
+const effectPolyfill = ((fn: () => void) => {
+  fn();
+}) as unknown as Record<string, unknown>; // guard-ignore lint/type-safety/casting: rune polyfill registration - Svelte 5 runes not available in test env
+effectPolyfill.root = (fn: () => void) => {
+  fn();
+  return () => {};
+};
+(globalThis as Record<string, unknown>).$effect = effectPolyfill;
+
+// ── Mock $logger alias required by game services ──────────────────────────
+
+// Must cover every method on BaseLoggerService — a missing one is a
+// TypeError at the call site, not a quiet no-op. `write` and `setLogLevel`
+// are used by BaseClass when a real base subclass logs (the preload's
+// former fake base classes stubbed them out, so they went unnoticed).
+mock.module('$logger', () => ({
+  logger: {
+    debug: mock(() => {}),
+    info: mock(() => {}),
+    log: mock(() => {}),
+    warn: mock(() => {}),
+    error: mock(() => {}),
+    spam: mock(() => {}),
+    write: mock(() => {}),
+    setLogLevel: mock(() => {}),
+  },
+  __esModule: true,
+}));
+
+// ── @aikami/utils ─────────────────────────────────────────────────────────
+//
+// NOT mocked. A previous revision replaced the whole barrel with a single
+// `toAppError` stub, which erased `BaseClass` and every other export and broke
+// ~300 tests with "Export named 'BaseClass' not found". The real module loads
+// fine under Bun and already exports `toAppError`.
+
+// ── Mock SvelteKit virtual modules required by transitive dependencies ──────
+
+mock.module('$app/navigation', () => ({
+  goto: mock(async () => {}),
+  afterNavigate: mock(() => {}),
+  beforeNavigate: mock(() => {}),
+  disableScrollHandling: mock(() => {}),
+}));
+
+mock.module('$app/state', () => ({
+  page: {
+    url: new URL('http://localhost/'),
+    params: {},
+    route: { id: '' },
+    status: 200,
+    error: null,
+    data: {},
+  },
+}));
+
+// `$app/env/public` is generated by the SvelteKit vite plugin, so it does not
+// exist under the Bun lane. C-510's asset-generation kill switch reads it.
+mock.module('$app/env/public', () => ({
+  PUBLIC_APP_ID: 'client',
+  PUBLIC_MODE: 'testing',
+  PUBLIC_LOG_LEVEL: 'ERROR',
+  PUBLIC_ASSETS_BASE_URL: undefined,
+  PUBLIC_VOICE_URL: undefined,
+  PUBLIC_IMAGE_URL: 'http://localhost:8188',
+  PUBLIC_OLLAMA_BASE_URL: undefined,
+  PUBLIC_IMAGE_ENGINE: 'auto',
+  PUBLIC_ASSET_GENERATION: 'true',
+  PUBLIC_ORT_WASM_URL: undefined,
+  PUBLIC_OPENROUTER_MODEL: undefined,
+  PUBLIC_AI_GATE_BYPASS: undefined,
+  PUBLIC_EMULATOR_PORT_OFFSET: undefined,
+  APP_VERSION: undefined,
+}));
+
+// ── Vite env vars required by @aikami/frontend-configs/environment.ts ─────
+
+process.env.PUBLIC_APP_ID = 'client';
+process.env.PUBLIC_MODE = 'testing';
+process.env.PUBLIC_IMAGE_URL = 'http://localhost:8188';
+
+// Silence all audible output in the unit-test lane. The AudioContext is a
+// mock here, but AudioService still reads this flag to pin its master gain to
+// zero so any real-browser lane (and future un-mocked audio) stays quiet.
+process.env.PUBLIC_MUTE_AUDIO = '1';
+
+// Ensure no OpenRouter API keys leak from the direnv environment.
+// Testing mode should have no external API keys so ConfigService
+// tests can assert empty apiKeys state.
+delete process.env.PUBLIC_OPENROUTER_API_KEY;
+delete process.env.PUBLIC_OPENROUTER_MODEL;
+delete process.env.OPENROUTER_API_KEY;
+delete process.env.PUBLIC_OLLAMA_MODEL;
+
+// ── Browser localStorage polyfill (Bun test env lacks it) ──
+
+const _localStore = new Map<string, string>();
+
+(globalThis as Record<string, unknown>).localStorage = {
+  getItem(key: string): string | null {
+    return _localStore.get(key) ?? null;
+  },
+  setItem(key: string, value: string): void {
+    _localStore.set(key, value);
+  },
+  removeItem(key: string): void {
+    _localStore.delete(key);
+  },
+  clear(): void {
+    _localStore.clear();
+  },
+  get length(): number {
+    return _localStore.size;
+  },
+  key(index: number): string | null {
+    const keys = [..._localStore.keys()];
+    return keys[index] ?? null;
+  },
+};
+
+// ── Browser sessionStorage polyfill ──
+//
+// C-528: the temporary Hide HUD flag is session-scoped (sessionStorage) rather
+// than a persisted preference, so a reload brings the chrome back. Bun has no
+// sessionStorage, so without this polyfill the service's storage guard would
+// silently make the flag in-memory-only and the reload assertion untestable.
+
+const _sessionStore = new Map<string, string>();
+
+(globalThis as Record<string, unknown>).sessionStorage = {
+  getItem(key: string): string | null {
+    return _sessionStore.get(key) ?? null;
+  },
+  setItem(key: string, value: string): void {
+    _sessionStore.set(key, value);
+  },
+  removeItem(key: string): void {
+    _sessionStore.delete(key);
+  },
+  clear(): void {
+    _sessionStore.clear();
+  },
+  get length(): number {
+    return _sessionStore.size;
+  },
+  key(index: number): string | null {
+    const keys = [..._sessionStore.keys()];
+    return keys[index] ?? null;
+  },
+};

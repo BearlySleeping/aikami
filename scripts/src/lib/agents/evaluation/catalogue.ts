@@ -1,31 +1,84 @@
 // scripts/src/lib/agents/evaluation/catalogue.ts
 //
 // C-480 AC-2: resolve maintainer-supplied family labels (Flash, Sonnet,
-// Opus, Astra — see docs/strategy/agent-platform-hardening.md) against the
+// Opus, Astra — see docs/reference/agent-platform-hardening.md) against the
 // actually-installed pi provider catalogue via `pi auth check ... --json`.
 // A family label is never treated as a literal provider/model slug, and an
 // unresolvable family fails preflight rather than silently substituting a
 // different model.
 
 import { spawn } from 'node:child_process';
-import type { CatalogueEntry, FamilyLabel } from './types.ts';
+import { getEnvWithFallback } from '../../cli_utils';
+import { isThinkingLevel } from '../contract_pipeline/models';
+import type { CatalogueEntry, FamilyLabel, ThinkingLevel } from './types.ts';
 
 /**
- * Ordered candidate provider/model slugs per family label. The first
- * candidate `pi auth check` reports valid for is the resolved entry.
- * Override via env for installations with different provider packages —
- * see `.pi/settings.json`'s `packages` for what's actually installed here.
+ * Env fallback keys per family label — the first non-empty value wins. When
+ * a family has no configured value, it yields no candidates and preflight
+ * fails closed (see resolveCatalogueEntry), never silently substituting a
+ * different model.
  */
-const familyCandidates = (): Readonly<Record<FamilyLabel, readonly string[]>> => ({
-  flash: [
-    process.env.EVAL_MODEL_FLASH ?? '',
-    'deepinfra/deepseek-ai/DeepSeek-V4-Flash',
-    'deepseek/deepseek-v4-flash',
-  ].filter(Boolean),
-  sonnet: [process.env.EVAL_MODEL_SONNET ?? '', 'claude-bridge/claude-sonnet-5'].filter(Boolean),
-  opus: [process.env.EVAL_MODEL_OPUS ?? '', 'claude-bridge/claude-opus-5'].filter(Boolean),
-  astra: [process.env.EVAL_MODEL_ASTRA ?? '', 'openai/gpt-5.1'].filter(Boolean),
-});
+const FAMILY_FALLBACK_KEYS = {
+  flash: ['EVAL_MODEL_FLASH', 'PI_MODEL_FLASH', 'MODEL_FLASH', 'MODEL'],
+  sonnet: ['EVAL_MODEL_SONNET', 'PI_MODEL_SONNET', 'MODEL_SONNET'],
+  opus: ['EVAL_MODEL_OPUS', 'PI_MODEL_OPUS', 'MODEL_OPUS'],
+  astra: ['EVAL_MODEL_ASTRA', 'PI_MODEL_ASTRA', 'MODEL_ASTRA'],
+} as const satisfies Readonly<Record<FamilyLabel, readonly string[]>>;
+
+/**
+ * Env fallback keys per family label for the reasoning-effort (thinking)
+ * setting — the first non-empty value wins. `FLASH_THINKING_LEVEL` is shared
+ * with the contract-pipeline flash tier so one knob drives all flash-class
+ * agents; sonnet/opus/astra have their own `{FAMILY}_THINKING_LEVEL` keys.
+ * All fall back to the global eval/pipeline/pi thinking settings.
+ */
+const FAMILY_THINKING_FALLBACK_KEYS = {
+  flash: ['FLASH_THINKING_LEVEL'],
+  sonnet: ['SONNET_THINKING_LEVEL'],
+  opus: ['OPUS_THINKING_LEVEL'],
+  astra: ['ASTRA_THINKING_LEVEL'],
+} as const satisfies Readonly<Record<FamilyLabel, readonly string[]>>;
+
+const GLOBAL_THINKING_FALLBACK = [
+  'EVAL_THINKING',
+  'CONTRACT_PIPELINE_THINKING',
+  'PI_THINKING',
+] as const;
+
+/**
+ * Resolve the effective reasoning-effort (thinking) level for a family label
+ * from env. Precedence:
+ *   {FAMILY}_THINKING_LEVEL → EVAL_THINKING → CONTRACT_PIPELINE_THINKING → PI_THINKING.
+ * Returns undefined when unset/invalid — callers fall back to their own
+ * default (the eval CLI uses `high`). Evaluated lazily so tests can set env
+ * vars between calls.
+ */
+export const resolveFamilyThinking = (options: {
+  family: FamilyLabel;
+  envResolver?: EnvResolver;
+}): ThinkingLevel | undefined => {
+  const { family, envResolver = getEnvWithFallback } = options;
+  const raw = envResolver([...FAMILY_THINKING_FALLBACK_KEYS[family], ...GLOBAL_THINKING_FALLBACK]);
+  return isThinkingLevel(raw) ? raw : undefined;
+};
+
+type EnvResolver = (keys: readonly string[]) => string | undefined;
+
+/**
+ * Candidate provider/model slugs per family label, resolved from the
+ * repo-root `.env`. Each family has at most one candidate — the configured
+ * value — because we never hardcode model slugs.
+ */
+const familyCandidates = (
+  envResolver: EnvResolver,
+): Readonly<Record<FamilyLabel, readonly string[]>> => {
+  const resolved = {} as Record<FamilyLabel, readonly string[]>;
+  for (const family of Object.keys(FAMILY_FALLBACK_KEYS) as FamilyLabel[]) {
+    const value = envResolver(FAMILY_FALLBACK_KEYS[family]);
+    resolved[family] = value ? [value] : [];
+  }
+  return resolved;
+};
 
 type AuthCheckResult = { status?: string; provider?: string; reason?: string };
 type AuthCheckResponse = { result: AuthCheckResult | null; diagnostics: string };
@@ -82,9 +135,10 @@ const splitSlug = (slug: string): { provider: string; model: string } => {
 export const resolveCatalogueEntry = async (options: {
   family: FamilyLabel;
   authCheck?: AuthCheck;
+  envResolver?: EnvResolver;
 }): Promise<CatalogueEntry> => {
-  const { family, authCheck = runAuthCheck } = options;
-  const candidates = familyCandidates()[family];
+  const { family, authCheck = runAuthCheck, envResolver = getEnvWithFallback } = options;
+  const candidates = familyCandidates(envResolver)[family];
   if (candidates.length === 0) {
     return {
       family,
@@ -124,10 +178,11 @@ export const resolveCatalogueEntry = async (options: {
 export const preflightCatalogue = async (options: {
   families: readonly FamilyLabel[];
   authCheck?: AuthCheck;
+  envResolver?: EnvResolver;
 }): Promise<{ entries: readonly CatalogueEntry[]; allAvailable: boolean }> => {
-  const { families, authCheck = runAuthCheck } = options;
+  const { families, authCheck = runAuthCheck, envResolver = getEnvWithFallback } = options;
   const entries = await Promise.all(
-    families.map((family) => resolveCatalogueEntry({ family, authCheck })),
+    families.map((family) => resolveCatalogueEntry({ family, authCheck, envResolver })),
   );
   return { entries, allAvailable: entries.every((entry) => entry.available) };
 };

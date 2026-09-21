@@ -7,7 +7,18 @@
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import type { ReleaseDocumentReader } from '@aikami/schemas';
 import type { R2ClientLike } from '../upload.ts';
+
+/**
+ * A `ReleaseDocumentReader` that publishes no release.
+ *
+ * The publish pipeline resolves the previous release over HTTPS by default so
+ * it cannot truncate a live catalog. Tests that are not exercising
+ * carry-forward must supply this stub instead, or they would depend on the
+ * network and on `assets.example.test` resolving.
+ */
+export const noPreviousRelease: ReleaseDocumentReader = async () => undefined;
 
 export const makeFixtureGameData = (): string => {
   const dir = mkdtempSync(join(tmpdir(), 'catalog-fixture-'));
@@ -214,6 +225,21 @@ export const makeFixtureGameData = (): string => {
     }),
   );
 
+  // Seed/metadata files (C-496 AC-4): the fixture must provide every seed
+  // file so the happy-path publish reports seed failures of zero and `ok`.
+  //
+  // `asset_seed.json` must be a well-formed COMPACT SEED, not an arbitrary
+  // object: the publisher parses it to union the candidate's rows with the
+  // previous release's, and a document it cannot parse is a seed failure.
+  writeFileSync(
+    join(dir, 'asset_seed.json'),
+    JSON.stringify({ sv: 1, g: '2026-01-01T00:00:00.000Z', o: '', r: [] }),
+  );
+  writeFileSync(join(dir, 'offline_core.json'), JSON.stringify({ core: ['lpc'] }));
+  writeFileSync(join(dir, 'lpc_credits.json'), JSON.stringify({ credits: [] }));
+  writeFileSync(join(dir, 'lpc_credits_supplement.json'), JSON.stringify({ credits: [] }));
+  writeFileSync(join(dir, 'audio_tracks.json'), JSON.stringify({ tracks: [] }));
+
   return dir;
 };
 
@@ -351,6 +377,8 @@ export class FakeR2Client implements R2ClientLike {
   failOnKey?: string;
   /** Number of putObject calls. */
   putCount = 0;
+  /** Keys in attempted publication order. */
+  readonly putKeys: string[] = [];
 
   async listKeys(prefix: string): Promise<string[]> {
     return [...this.objects.keys()].filter((key) => key.startsWith(prefix));
@@ -363,6 +391,7 @@ export class FakeR2Client implements R2ClientLike {
     cacheControl: string;
   }): Promise<void> {
     this.putCount++;
+    this.putKeys.push(options.key);
     if (this.failOnKey && options.key.includes(this.failOnKey)) {
       throw new Error(`injected failure for ${options.key}`);
     }

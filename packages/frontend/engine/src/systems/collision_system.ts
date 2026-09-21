@@ -5,6 +5,7 @@ import { CollisionData } from '../components/collision_data.ts';
 import { GridPosition } from '../components/grid_position.ts';
 import { SpatialLink } from '../components/spatial_link.ts';
 import { clearBresenhamGrid, setBresenhamGrid, setBresenhamTerrain } from '../math/bresenham.ts';
+import { buildActorPathGrid } from './actor_footprint.ts';
 import { buildTerrainGridFromBoolean, type TerrainGrid } from './terrain_grid.ts';
 
 // ---------------------------------------------------------------------------
@@ -51,6 +52,15 @@ export type CollisionGrid = {
 
 /** The currently active terrain grid (cost + blocksSight). */
 let _terrain: TerrainGrid | undefined;
+
+/**
+ * Footprint-aware terrain grid for pathfinding, derived from {@link _terrain}.
+ *
+ * Same dimensions/tile size, but `cost` marks a cell impassable when the
+ * actor collision box would overlap any solid tile there (see
+ * {@link buildActorPathGrid}). Rebuilt whenever the terrain changes.
+ */
+let _pathTerrain: TerrainGrid | undefined;
 
 /**
  * Absolute map width in pixels (`terrain.width * terrain.tileSize`).
@@ -100,6 +110,25 @@ const _gridMembership = new Set<number>();
 // ---------------------------------------------------------------------------
 
 /**
+ * Rebuilds the footprint-aware pathfinding grid for the active terrain.
+ *
+ * Clears the derived grid when no terrain is active.
+ */
+const _rebuildPathTerrain = (): void => {
+  if (!_terrain) {
+    _pathTerrain = undefined;
+    return;
+  }
+  _pathTerrain = {
+    width: _terrain.width,
+    height: _terrain.height,
+    tileSize: _terrain.tileSize,
+    cost: buildActorPathGrid(_terrain),
+    blocksSight: _terrain.blocksSight,
+  };
+};
+
+/**
  * Sets the active terrain grid for the current scene.
  *
  * Also initializes the spatial grid to match the terrain dimensions.
@@ -111,6 +140,7 @@ const _gridMembership = new Set<number>();
  */
 export const setTerrainGrid = (terrain: TerrainGrid, _world?: World): void => {
   _terrain = terrain;
+  _rebuildPathTerrain();
 
   _mapPixelWidth = terrain.width * terrain.tileSize;
   _mapPixelHeight = terrain.height * terrain.tileSize;
@@ -122,6 +152,17 @@ export const setTerrainGrid = (terrain: TerrainGrid, _world?: World): void => {
  * Returns the currently active terrain grid, or undefined when none is set.
  */
 export const getTerrainGrid = (): TerrainGrid | undefined => _terrain;
+
+/**
+ * Returns the footprint-aware terrain grid to use for pathfinding.
+ *
+ * Identical `width`/`height`/`tileSize` to {@link getTerrainGrid}, but its
+ * `cost` marks a cell impassable when the actor's 32×32 collision box would
+ * overlap a solid tile at that cell's centre. Use this for A* requests
+ * (click-to-move, party follow, GOAP); use {@link getTerrainGrid} for
+ * single-tile terrain queries (movement, vision).
+ */
+export const getPathfindingGrid = (): TerrainGrid | undefined => _pathTerrain;
 
 /**
  * Returns the active map tile size in world pixels.
@@ -159,6 +200,7 @@ export const setTerrainCellCost = (gx: number, gy: number, cost: number): void =
   const stored = Math.max(0, Math.min(255, Math.round(cost)));
   _terrain.cost[index] = stored;
   _terrain.blocksSight[index] = stored === 0 ? 1 : 0;
+  _rebuildPathTerrain();
 };
 
 /**
@@ -201,6 +243,7 @@ export const setCollisionGrid = (grid: CollisionGrid, world?: World): void => {
  */
 export const resetCollisionGrid = (): void => {
   _terrain = undefined;
+  _pathTerrain = undefined;
   _spatialGrid = undefined;
   _gridWidth = 0;
   _gridHeight = 0;

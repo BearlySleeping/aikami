@@ -28,11 +28,11 @@ describe('image engine capabilities (AC-5)', () => {
     expect(engine.capabilities.progress).toBe(true);
   });
 
-  test('sd-server declares the full capability set', () => {
+  test('sd-server does not advertise unimplemented ControlNet support', () => {
     const engine = new SdCppEngine('http://localhost:8188');
     expect(engine.capabilities.mask).toBe(true);
     expect(engine.capabilities.referenceImages).toBe(true);
-    expect(engine.capabilities.controlNet).toBe(true);
+    expect(engine.capabilities.controlNet).toBe(false);
     expect(engine.capabilities.lora).toBe(true);
     expect(engine.capabilities.negativePrompt).toBe(true);
     expect(engine.capabilities.initImage).toBe(true);

@@ -198,7 +198,7 @@ export const AIKAMI_MIGRATIONS: readonly Migration[] = [
 
       `CREATE TABLE IF NOT EXISTS asset_sources (
     asset_id TEXT NOT NULL REFERENCES assets(id),
-    backend TEXT NOT NULL, -- 'bundled' | 'r2' | 'self-hosted'
+    backend TEXT NOT NULL, -- 'bundled' | 'r2' | 'self-hosted' | 'local-generated' (C-510)
     url TEXT NOT NULL,
     priority INTEGER NOT NULL,
     PRIMARY KEY (asset_id, backend)
@@ -307,6 +307,98 @@ export const AIKAMI_MIGRATIONS: readonly Migration[] = [
     updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
   )`,
       `CREATE INDEX IF NOT EXISTS idx_custom_agents_folder ON custom_agents(folder)`,
+    ],
+  },
+
+  // ── v6: game_operations (operation provenance + recovery) ────────────
+  // Durable operation ledger (docs/design/game_ui_hud_overhaul.md §8): a turn,
+  // check, or generation writes a `pending` row before presentation and
+  // advances it to completed/failed from the authoritative result. Boot
+  // reconciliation flips stale `pending` rows to `interrupted` so a restart
+  // never rerolls or fabricates completion. JSON payloads are audit-only.
+  {
+    version: 6,
+    name: 'game_operations',
+    statements: [
+      `CREATE TABLE IF NOT EXISTS game_operations (
+    operation_id      TEXT PRIMARY KEY,
+    schema_version    INTEGER NOT NULL,
+    kind              TEXT NOT NULL,
+    status            TEXT NOT NULL,
+    campaign_id       TEXT NOT NULL,
+    conversation_id   TEXT,
+    turn_id           TEXT,
+    check_id          TEXT,
+    source_event_id   TEXT,
+    request           TEXT NOT NULL,
+    result            TEXT,
+    error             TEXT,
+    created_at        TEXT NOT NULL,
+    updated_at        TEXT NOT NULL
+  )`,
+      `CREATE INDEX IF NOT EXISTS idx_game_operations_campaign_status
+        ON game_operations(campaign_id, status)`,
+      `CREATE INDEX IF NOT EXISTS idx_game_operations_conversation
+        ON game_operations(conversation_id, created_at)`,
+    ],
+  },
+
+  // ── v7: generation provenance + candidate/acceptance records (C-518) ──
+  // Durable lineage for locally generated assets. Additive only: a reader at
+  // v6 ignores these tables, and the pre-existing `assets` / `asset_sources` /
+  // `install_state` rows keep resolving unchanged. The acceptance row binds a
+  // candidate to the *exact* prepared bytes and transformation chain it was
+  // accepted under, so changed bytes invalidate the acceptance rather than
+  // silently authorising new content. `generation_artifacts` records every
+  // hash a candidate owns, which is what makes reference-aware cleanup
+  // possible: a blob referenced by another tag is never deleted.
+  {
+    version: 7,
+    name: 'generation-provenance-and-candidates',
+    statements: [
+      `CREATE TABLE IF NOT EXISTS generation_candidates (
+    candidate_id      TEXT PRIMARY KEY,
+    tag               TEXT NOT NULL,
+    job_id            TEXT,
+    status            TEXT NOT NULL CHECK(status IN ('pending_review', 'accepted', 'rejected', 'superseded')),
+    prepared_hash     TEXT NOT NULL,
+    provenance_state  TEXT NOT NULL CHECK(provenance_state IN ('captured', 'unknown')),
+    record_json       TEXT,
+    revision_of       TEXT,
+    note              TEXT,
+    created_at        TEXT NOT NULL,
+    updated_at        TEXT NOT NULL
+  )`,
+      `CREATE INDEX IF NOT EXISTS idx_generation_candidates_tag
+        ON generation_candidates(tag, updated_at)`,
+      `CREATE INDEX IF NOT EXISTS idx_generation_candidates_prepared
+        ON generation_candidates(prepared_hash)`,
+
+      `CREATE TABLE IF NOT EXISTS generation_acceptances (
+    acceptance_id            TEXT PRIMARY KEY,
+    candidate_id             TEXT NOT NULL,
+    prepared_hash            TEXT NOT NULL,
+    validation_report_hash   TEXT NOT NULL,
+    transformation_hash      TEXT NOT NULL,
+    accepted_at              TEXT NOT NULL,
+    FOREIGN KEY (candidate_id) REFERENCES generation_candidates(candidate_id) ON DELETE CASCADE
+  )`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS idx_generation_acceptances_candidate
+        ON generation_acceptances(candidate_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_generation_acceptances_prepared
+        ON generation_acceptances(prepared_hash)`,
+
+      `CREATE TABLE IF NOT EXISTS generation_artifacts (
+    hash          TEXT NOT NULL,
+    candidate_id  TEXT NOT NULL,
+    role          TEXT NOT NULL CHECK(role IN ('raw', 'prepared', 'reference', 'validation_report')),
+    PRIMARY KEY (hash, candidate_id, role),
+    FOREIGN KEY (candidate_id) REFERENCES generation_candidates(candidate_id) ON DELETE CASCADE
+  )`,
+      `CREATE INDEX IF NOT EXISTS idx_generation_artifacts_hash
+        ON generation_artifacts(hash)`,
+      `CREATE INDEX IF NOT EXISTS idx_generation_artifacts_candidate
+        ON generation_artifacts(candidate_id)`,
     ],
   },
 ];

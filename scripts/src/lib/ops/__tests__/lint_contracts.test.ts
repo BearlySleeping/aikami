@@ -251,9 +251,12 @@ describe('checkProductionPath', () => {
     ].join('\n');
     const info = makeContract({ content });
     const issues = checkProductionPath(info);
-    expect(issues).toHaveLength(1);
-    expect(issues[0].rule).toBe('production-path');
-    expect(issues[0].severity).toBe('error');
+    // One row-level error per invalid row + one overall error
+    expect(issues).toHaveLength(3);
+    for (const issue of issues) {
+      expect(issue.rule).toBe('production-path');
+      expect(issue.severity).toBe('error');
+    }
   });
 
   test('fails approved contract with bare N/A cells', () => {
@@ -265,7 +268,8 @@ describe('checkProductionPath', () => {
     ].join('\n');
     const info = makeContract({ content });
     const issues = checkProductionPath(info);
-    expect(issues).toHaveLength(1);
+    // One row-level error for N/A + one overall error
+    expect(issues).toHaveLength(2);
   });
 
   test('passes with tooling command reference (bun run test exists in package.json)', () => {
@@ -299,7 +303,8 @@ describe('checkProductionPath', () => {
       '| AC-1 | Integration | `guard.test.ts` | tooling: `moon run client:guard` | Filled |',
     ].join('\n');
 
-    expect(checkProductionPath(makeContract({ content }))).toHaveLength(1);
+    // One row-level error + one overall error
+    expect(checkProductionPath(makeContract({ content }))).toHaveLength(2);
   });
 
   test('accepts whole-contract opt-out even with empty matrix cells', () => {
@@ -328,8 +333,10 @@ describe('checkProductionPath', () => {
     ].join('\n');
     const info = makeContract({ content });
     const issues = checkProductionPath(info);
-    expect(issues).toHaveLength(1);
+    // One row-level error + one overall error
+    expect(issues).toHaveLength(2);
     expect(issues[0].message).toContain('Route not found');
+    expect(issues[1].message).toContain('No AC has a valid Production Path');
   });
 
   test('handles thin contract with no production path in Verification', () => {
@@ -352,7 +359,12 @@ describe('checkProductionPath', () => {
     ].join('\n');
     const info = makeContract({ contractType: 'thin', content });
     const issues = checkProductionPath(info);
-    expect(issues).toHaveLength(1);
+    // Neither AC has a resolvable production path (bare backtick command without
+    // `tooling:` prefix does not resolve) → two AC errors + one overall
+    expect(issues).toHaveLength(3);
+    expect(issues[0].message).toContain('AC-1');
+    expect(issues[1].message).toContain('AC-2');
+    expect(issues[2].message).toContain('No AC has a production path');
   });
 
   test('passes thin contract with tooling in Verification', () => {
@@ -375,7 +387,9 @@ describe('checkProductionPath', () => {
     ].join('\n');
     const info = makeContract({ contractType: 'thin', content });
     const issues = checkProductionPath(info);
-    expect(issues).toHaveLength(0);
+    // AC-1 resolves but AC-2 does not → one per-AC error, no overall (hasValidPath=true)
+    expect(issues).toHaveLength(1);
+    expect(issues[0].message).toContain('AC-2');
   });
 
   test('rejects a thin-contract tooling command with no matching script', () => {
@@ -387,7 +401,8 @@ describe('checkProductionPath', () => {
     ].join('\n');
     const info = makeContract({ contractType: 'thin', content });
 
-    expect(checkProductionPath(info)).toHaveLength(1);
+    // One AC-level error + one overall error
+    expect(checkProductionPath(info)).toHaveLength(2);
   });
 
   test('accepts a route followed by a description', () => {
@@ -454,8 +469,10 @@ describe('checkProductionPath', () => {
     ].join('\n');
 
     const issues = checkProductionPath(makeContract({ content }));
-    expect(issues).toHaveLength(1);
+    // One row-level error + one overall error
+    expect(issues).toHaveLength(2);
     expect(issues[0].message).toContain('Component not found');
+    expect(issues[1].message).toContain('No AC has a valid Production Path');
   });
 
   test('attributes an empty unnamed row by row index', () => {
@@ -467,8 +484,10 @@ describe('checkProductionPath', () => {
     ].join('\n');
 
     const issues = checkProductionPath(makeContract({ content }));
-    expect(issues).toHaveLength(1);
+    // One row-level error (empty cell) + one overall error
+    expect(issues).toHaveLength(2);
     expect(issues[0].message).toContain('row 1: Empty Production Path cell');
+    expect(issues[1].message).toContain('No AC has a valid Production Path');
   });
 });
 

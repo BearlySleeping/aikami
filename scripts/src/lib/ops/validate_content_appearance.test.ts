@@ -1,60 +1,103 @@
 // scripts/src/lib/ops/validate_content_appearance.test.ts
 //
-// C-400 AC-5 — content appearance validator unit tests.
+// C-504 AC-4 — content appearance validator unit tests (runtime parity).
 //
 // Verifies:
-//   - parseGeneratedCatalog extracts slot → assetId lists from the real
-//     generated catalog text
-//   - in-range indices pass; out-of-range indices fail naming slot/range
-//   - head-slot indices must resolve to head/heads/* assets
-//   - 0 (intentionally empty) and short arrays (4-layer policy)
-//     never fail validation
+//   - loadCatalog returns the DERIVED catalog (the shape /game resolves)
+//   - legacy appearanceLayers migrate to the intended named identities
+//   - 0 (intentionally empty) and short arrays never fail validation
+//   - out-of-range / negative / non-integer legacy values fail naming slot
+//   - a named appearance referencing a missing asset fails with a diagnostic
 //   - the committed emberwatch pack passes the validator
 
 import { describe, expect, it } from 'bun:test';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { buildLpcCatalog, LEGACY_CATALOG_SNAPSHOT } from '@aikami/lpc';
 import {
   loadCatalog,
-  parseGeneratedCatalog,
   validateContentAppearance,
   validateNpcAppearance,
 } from './validate_content_appearance.js';
 
 const REPO_ROOT = join(import.meta.dir, '../../../..');
-const LEGACY_FIXTURE = join(
-  REPO_ROOT,
-  'packages/shared/lpc/tests/__fixtures__/legacy_catalog_order.json',
-);
 const CONTENT_PACKS_ROOT = join(REPO_ROOT, 'content/packs');
 
 const CATALOG = loadCatalog();
 
 // ---------------------------------------------------------------------------
-// parseGeneratedCatalog
+// loadCatalog
 // ---------------------------------------------------------------------------
 
-describe('parseGeneratedCatalog', () => {
-  it('parses the legacy catalog fixture into slot → variant lists', () => {
-    expect(existsSync(LEGACY_FIXTURE)).toBe(true);
-    const fixture = JSON.parse(readFileSync(LEGACY_FIXTURE, 'utf-8')) as {
-      slots: Array<{ slot: string; label: string; assetIds: string[] }>;
-    };
-    const slotsByName = new Map(fixture.slots.map((s) => [s.slot, s.assetIds]));
-    expect(slotsByName.has('head')).toBe(true);
-    expect(slotsByName.has('body')).toBe(true);
-    expect(slotsByName.has('hair')).toBe(true);
-    expect(slotsByName.has('torso')).toBe(true);
-    expect(slotsByName.has('legs')).toBe(true);
-    expect(slotsByName.has('feet')).toBe(true);
+describe('loadCatalog', () => {
+  it('builds the derived runtime catalog from the verified snapshot', () => {
+    const slots = CATALOG.map((s) => s.slot);
+    expect(slots).toContain('head');
+    expect(slots).toContain('body');
+    expect(slots).toContain('hair');
+    expect(slots).toContain('torso');
+    expect(slots).toContain('legs');
+    expect(slots).toContain('feet');
   });
 
-  it('handles a minimal fixture without crashing', () => {
-    const slots = parseGeneratedCatalog(`export const X = [{
-      slot: 'head',
-      variants: [{ assetId: 'head/heads/human_male' }],
-    }];`);
-    expect(slots).toEqual([{ slot: 'head', variants: ['head/heads/human_male'] }]);
+  it('AC-4: derived-catalog asset-ID universe equals the verified snapshot universe', () => {
+    // The runtime `getLpcCatalog()` builds from asset-store seed rows that are
+    // generated from the SAME LPC collection as the legacy snapshot. The
+    // validator's derived catalog is a deterministic permutation (lexicographic)
+    // of that universe, so position-independent named resolution holds as long
+    // as the two sets agree. Assert set equality here (the committed contract).
+    const entries: { tag: string; category: string; ext: string }[] = [];
+    for (const [, assetIds] of Object.entries(LEGACY_CATALOG_SNAPSHOT)) {
+      for (const assetId of assetIds) {
+        entries.push({
+          tag: `lpc:${assetId.replace(/\//g, ':')}:walk`,
+          category: 'lpc',
+          ext: 'webp',
+        });
+      }
+    }
+    const derivedAll = new Set(buildLpcCatalog({ entries }).allAssetIds);
+    const snapshotAll = new Set(Object.values(LEGACY_CATALOG_SNAPSHOT).flat());
+    expect(derivedAll.size).toBe(snapshotAll.size);
+    for (const id of snapshotAll) {
+      expect(derivedAll.has(id), `missing from derived catalog: ${id}`).toBe(true);
+    }
+    for (const id of derivedAll) {
+      expect(snapshotAll.has(id), `unexpected in derived catalog: ${id}`).toBe(true);
+    }
+  });
+
+  it('AC-4: every named appearance assetId referenced by committed packs exists in the runtime catalog universe', () => {
+    // Every named assetId the validator approves must exist in the universe the
+    // runtime catalog (and therefore the seed) is generated from — otherwise
+    // `/game` would resolve to a fallback the validator accepted.
+    const catalogIds = new Set(CATALOG.flatMap((s) => s.variants.map((v) => v.assetId)));
+    expect(existsSync(CONTENT_PACKS_ROOT)).toBe(true);
+    let checkedAssetCount = 0;
+    for (const packName of readdirSync(CONTENT_PACKS_ROOT)) {
+      const manifestPath = join(CONTENT_PACKS_ROOT, packName, 'manifest.json');
+      if (!existsSync(manifestPath)) {
+        continue;
+      }
+      const manifest = JSON.parse(readFileSync(manifestPath, 'utf-8')) as {
+        npcs?: Record<
+          string,
+          { appearance?: { components?: Array<{ assetId?: string }> } } | undefined
+        >;
+      };
+      for (const [npcId, npc] of Object.entries(manifest.npcs ?? {})) {
+        for (const component of npc?.appearance?.components ?? []) {
+          if (component.assetId && component.assetId !== '') {
+            checkedAssetCount++;
+            expect(
+              catalogIds.has(component.assetId),
+              `${npcId} references ${component.assetId}`,
+            ).toBe(true);
+          }
+        }
+      }
+    }
+    expect(checkedAssetCount).toBeGreaterThan(0);
   });
 });
 
@@ -65,7 +108,7 @@ describe('parseGeneratedCatalog', () => {
 describe('validateNpcAppearance', () => {
   const base = { packId: 'test', npcId: 'npc' } as const;
 
-  it('accepts all three Emberwatch NPC arrays unchanged', () => {
+  it('accepts all three Emberwatch NPC legacy arrays (migrated identities)', () => {
     const cases = [
       [2, 3, 65, 21, 20, 97], // village_elder
       [3, 123, 23, 22, 7, 95], // rollo_grasper
@@ -75,6 +118,18 @@ describe('validateNpcAppearance', () => {
       const errors = validateNpcAppearance({ ...base, appearanceLayers: layers, catalog: CATALOG });
       expect(errors, `layers ${layers.join(',')}`).toEqual([]);
     }
+  });
+
+  it('accepts named appearance for the shipped NPCs', () => {
+    const named = {
+      formatVersion: 1,
+      components: [
+        { slot: 'body', assetId: 'body/bodies_male', layerRole: 'front' },
+        { slot: 'head', assetId: 'head/heads/human_male', layerRole: 'front' },
+      ],
+    } as const;
+    const errors = validateNpcAppearance({ ...base, appearance: named, catalog: CATALOG });
+    expect(errors).toEqual([]);
   });
 
   it('accepts an index of 0 (intentionally empty) without validation errors', () => {
@@ -95,7 +150,7 @@ describe('validateNpcAppearance', () => {
     expect(errors).toEqual([]);
   });
 
-  it('rejects an out-of-range index naming slot, index, and valid range', () => {
+  it('rejects an out-of-range legacy index naming slot and snapshot', () => {
     const errors = validateNpcAppearance({
       ...base,
       appearanceLayers: [3, 3, 99999, 22, 7, 95],
@@ -103,22 +158,58 @@ describe('validateNpcAppearance', () => {
     });
     expect(errors).toHaveLength(1);
     expect(errors[0]?.slot).toBe('torso');
-    expect(errors[0]?.index).toBe(99999);
+    expect(errors[0]?.snapshot).toBe('legacy-catalog-order-v1');
     expect(errors[0]?.packId).toBe('test');
     expect(errors[0]?.npcId).toBe('npc');
-    expect(errors[0]?.validRange).toMatch(/^1\.\.\d+$/);
+    expect(errors[0]?.detail).toContain('outside the verified snapshot range');
   });
 
-  it('rejects a head-slot index that resolves to a non-head asset', () => {
-    // head slot index 1 → head/ears/avyon_adult (not a head/heads/* asset).
-    const errors = validateNpcAppearance({
-      ...base,
-      appearanceLayers: [3, 3, 23, 22, 7, 1],
-      catalog: CATALOG,
-    });
+  it('rejects a named appearance that references a missing asset', () => {
+    const named = {
+      formatVersion: 1,
+      components: [
+        { slot: 'body', assetId: 'body/bodies_male' },
+        { slot: 'head', assetId: 'head/heads/does_not_exist' },
+      ],
+    } as const;
+    const errors = validateNpcAppearance({ ...base, appearance: named, catalog: CATALOG });
     expect(errors).toHaveLength(1);
     expect(errors[0]?.slot).toBe('head');
-    expect(errors[0]?.detail).toContain('head/heads/');
+    expect(errors[0]?.assetId).toBe('head/heads/does_not_exist');
+    expect(errors[0]?.source).toBe('manifest:appearance');
+  });
+
+  it('rejects unsupported and duplicate named appearance slots', () => {
+    const named = {
+      formatVersion: 1,
+      components: [
+        { slot: 'body', assetId: 'body/bodies_male' },
+        { slot: 'body', assetId: 'body/bodies_female' },
+        { slot: 'cape', assetId: 'torso/chainmail_male' },
+      ],
+    } as const;
+    const errors = validateNpcAppearance({ ...base, appearance: named, catalog: CATALOG });
+
+    expect(errors.some((error) => error.detail.includes('duplicate'))).toBe(true);
+    expect(errors.some((error) => error.detail.includes('unsupported'))).toBe(true);
+  });
+
+  it('reports invalid legacy diagnostics when a named appearance is also present', () => {
+    const named = {
+      formatVersion: 1,
+      components: [{ slot: 'body', assetId: 'body/bodies_male' }],
+    } as const;
+    const errors = validateNpcAppearance({
+      ...base,
+      appearance: named,
+      appearanceLayers: [3, 3, 99999, 22, 7, 95],
+      catalog: CATALOG,
+    });
+
+    expect(errors).toHaveLength(1);
+    expect(errors[0]?.slot).toBe('torso');
+    expect(errors[0]?.source).toBe('manifest:appearanceLayers');
+    expect(errors[0]?.detail).toContain('outside the verified snapshot range');
   });
 
   it('rejects a negative index as out of range', () => {

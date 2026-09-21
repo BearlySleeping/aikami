@@ -1,0 +1,35 @@
+# apps/backend/audio/moon.yml
+$schema: 'https://moonrepo.dev/schemas/v2/project.json'
+
+language: 'typescript'
+layer: 'application'
+tags:
+  - 'audio'
+  - 'backend'
+  - 'application'
+  - 'container'
+
+project:
+  name: 'audio'
+  description: 'Local ACE-Step text-to-audio engine via the local-stack compose topology (C-511) — opt-in, container-only, no Bun source.'
+  channel: '#backend'
+  owner: 'Backend Team'
+
+dependsOn: []
+
+fileGroups:
+  configs:
+    - 'package.json'
+
+tasks:
+  build:
+    command: 'true'
+
+  dev:
+    command: 'bun run dev:docker'
+    preset: 'server'
+
+  test:
+    command: 'true'
+    options:
+      runInCI: false

@@ -11,6 +11,7 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services';
 import type { LpcSlotDef } from '@aikami/frontend-preview';
+import { buildLpcCatalog } from '@aikami/lpc';
 import type { CatalogAssetEntry } from '@aikami/schemas';
 import type { AssetResolver } from '@aikami/types';
 import type { ComponentType } from 'svelte';
@@ -46,6 +47,10 @@ export type CatalogAssetViewModelInterface = BaseViewModelInterface & {
 
   /** Which interactive preview to mount, if any. */
   readonly previewKind: PreviewKind;
+  /** True when this asset is a map that can open in the walk sandbox. */
+  readonly isMap: boolean;
+  /** True when this asset is an LPC component that can open in the compositor. */
+  readonly isLpc: boolean;
   /** Built in the browser from entries the server load already fetched. */
   readonly resolver: AssetResolver | undefined;
   /** Scoped LPC slot definitions built from shard entries. */
@@ -76,6 +81,10 @@ export type CatalogAssetViewModelInterface = BaseViewModelInterface & {
 
   goToCategory(): Promise<void>;
   goToLanding(): Promise<void>;
+  /** Open this map in the walk sandbox (map category only). */
+  goToSandbox(): Promise<void>;
+  /** Open this component in the LPC compositor (lpc category only). */
+  goToLpcPreview(): Promise<void>;
 };
 
 class CatalogAssetViewModel
@@ -188,6 +197,14 @@ class CatalogAssetViewModel
     return this._previewKind;
   }
 
+  get isMap(): boolean {
+    return this._previewKind === 'map';
+  }
+
+  get isLpc(): boolean {
+    return this._previewKind === 'lpc';
+  }
+
   get resolver(): AssetResolver | undefined {
     return this._resolver;
   }
@@ -244,7 +261,11 @@ class CatalogAssetViewModel
   /**
    * Build scoped LPC slot definitions from shard entries.
    * Called from the preview island's onMount (client-side only).
-   * Groups entries by slot name and creates LpcSlotDef objects.
+   *
+   * C-504: uses the SHARED {@link buildLpcCatalog} builder instead of a local
+   * tag-string reconstruction, so full nested path segments and animation
+   * states resolve correctly and path segments are never duplicated (the old
+   * code rebuilt `head/heads/human/human` from `lpc:head:heads:human:...:walk`).
    */
   async ensureLpcSlotsBuilt(): Promise<readonly LpcSlotDef[]> {
     if (this._lpcSlotsBuilt) {
@@ -256,70 +277,20 @@ class CatalogAssetViewModel
       return [];
     }
 
-    // Group LPC entries by slot (second segment of the tag)
-    const slotMap = new Map<string, Map<string, string>>();
-
-    for (const entry of this._dataEntries) {
-      if (entry.category !== 'lpc') {
-        continue;
-      }
-
-      const parts = entry.tag.split(':');
-      if (parts.length < 4) {
-        continue;
-      }
-
-      const slotName = parts[1] ?? '';
-      // Build the complete asset identity path expected by lpcTag() —
-      // slot/subcategory/assetId, using the full subcategory path.
-      // This prevents assets from different subcategories from colliding.
-      const subcategory = parts.slice(2, -1).join('/') ?? '';
-      const assetId = parts[3] ?? '';
-      const fullAssetPath = subcategory
-        ? `${slotName}/${subcategory}/${assetId}`
-        : `${slotName}/${assetId}`;
-
-      if (!slotName || !assetId) {
-        continue;
-      }
-
-      if (!slotMap.has(slotName)) {
-        slotMap.set(slotName, new Map());
-      }
-
-      const variantMap = slotMap.get(slotName);
-      if (variantMap && !variantMap.has(fullAssetPath)) {
-        // Use subcategory + assetId as the label for disambiguation
-        const label = subcategory ? `${subcategory}:${assetId}` : assetId;
-        variantMap.set(
-          fullAssetPath,
-          label.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
-        );
-      }
-    }
-
-    // Build LpcSlotDef array, sorted by slot name
-    const slots: LpcSlotDef[] = [];
-    const sortedSlotNames = [...slotMap.keys()].sort();
-
-    for (const slotName of sortedSlotNames) {
-      const variantMap = slotMap.get(slotName);
-      if (!variantMap) {
-        continue;
-      }
-      const variants = [...variantMap.entries()]
-        .sort(([a], [b]) => a.localeCompare(b))
-        .map(([assetId, label]) => ({ label, assetId }));
-
-      slots.push({
-        slot: slotName,
-        label: slotName.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
-        variants,
+    try {
+      const result = buildLpcCatalog({
+        entries: this._dataEntries.filter((e) => e.category === 'lpc'),
       });
+      this._lpcSlots = result.slots.map((slot) => ({
+        slot: slot.slot,
+        label: slot.label,
+        variants: slot.variants.map((v) => ({ assetId: v.assetId, label: v.label })),
+      }));
+    } catch (error) {
+      this.error('ensureLpcSlotsBuilt', error);
+      this._lpcSlots = [];
     }
-
-    this._lpcSlots = slots;
-    return slots;
+    return this._lpcSlots;
   }
   /**
    * Load the preview: dynamic imports, prop construction, URL state, error handling.
@@ -429,6 +400,28 @@ class CatalogAssetViewModel
       });
     } catch (error) {
       this.error('goToLanding', error);
+    }
+  }
+
+  async goToSandbox(): Promise<void> {
+    try {
+      await routerService.goToRoute('sandbox', {
+        pathParameters: { mapTag: this._entry.tag },
+        queryParameters: undefined,
+      });
+    } catch (error) {
+      this.error('goToSandbox', error);
+    }
+  }
+
+  async goToLpcPreview(): Promise<void> {
+    try {
+      await routerService.goToRoute('lpcPreviewAsset', {
+        pathParameters: { tag: this._entry.tag },
+        queryParameters: undefined,
+      });
+    } catch (error) {
+      this.error('goToLpcPreview', error);
     }
   }
 }

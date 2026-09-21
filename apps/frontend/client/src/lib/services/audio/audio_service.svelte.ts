@@ -1,9 +1,10 @@
 // apps/frontend/client/src/lib/services/audio/audio_service.svelte.ts
+
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import { audioContextManager } from './audio_context_manager';
 
 // ---------------------------------------------------------------------------
@@ -16,6 +17,18 @@ import { audioContextManager } from './audio_context_manager';
 //
 // Uses the singleton AudioContext from {@link audioContextManager}.
 // ---------------------------------------------------------------------------
+
+/**
+ * Whether `PUBLIC_MUTE_AUDIO=1` is set — the test/E2E audio kill switch.
+ *
+ * Read straight from `import.meta.env` so Vite inlines it at build time (see
+ * the client `.env.example`) and the Bun test lane picks it up from
+ * `process.env` via its preload. Deliberately NOT imported from
+ * `@aikami/frontend/configs`: Bun tests mock that package's alias, and
+ * depending on it here would break every test that transitively loads
+ * AudioService.
+ */
+const isAudioMuted = (): boolean => import.meta.env.PUBLIC_MUTE_AUDIO === '1';
 
 /** Options for constructing an AudioService. */
 export type AudioServiceOptions = BaseFrontendClassOptions;
@@ -97,6 +110,16 @@ export type AudioServiceInterface = BaseFrontendClassInterface & {
   transitionToBgm(trackUrl: string, durationMs?: number): Promise<void>;
 
   /**
+   * Fades the current BGM out to silence and clears the active track.
+   *
+   * Used for explicit authored silence (C-523) — distinct from
+   * {@link stopAll}, which also stops SFX. No-op when nothing is playing.
+   *
+   * @param durationMs — Fade duration in milliseconds (default 1500).
+   */
+  fadeOutBgm(durationMs?: number): Promise<void>;
+
+  /**
    * Plays a sound effect immediately and concurrently.
    *
    * Multiple SFX can overlap — each call creates an independent
@@ -136,7 +159,7 @@ export type AudioServiceInterface = BaseFrontendClassInterface & {
  *
  * TTS playback connects to the destination directly (the former
  * SharedArrayBuffer streaming pipeline that routed through a PannerNode
- * into the compressor was removed — see docs/gotchas/cross-origin-isolation.md):
+ * into the compressor was removed — see docs/guides/cross-origin-isolation.md):
  * ```
  * source → destination
  * ```
@@ -178,15 +201,15 @@ export class AudioService
 
   // ── Initialization ──
 
-  constructor(options: AudioServiceOptions) {
-    super(options);
-    this._ensureGraph();
-  }
-
   /**
    * Lazily builds the Web Audio gain chain on first use.
-   * Called from the constructor — safe because the AudioContext
-   * starts in a suspended state under autoplay policy.
+   *
+   * Intentionally NOT called from the constructor: constructing the
+   * AudioContext at module load (outside a user gesture) makes browsers log
+   * "An AudioContext was prevented from starting automatically" on every boot.
+   * Deferring to first use (playback, or access to `masterGainNode` /
+   * `masterCompressorNode`) means the shared context has usually been created
+   * inside the first gesture by the time audio actually plays.
    */
   private _ensureGraph(): void {
     if (this._masterGain) {
@@ -196,7 +219,10 @@ export class AudioService
     const ctx = audioContextManager.context;
 
     this._masterGain = ctx.createGain();
-    this._masterGain.gain.value = this.masterVolume;
+    // Test/E2E mute: PUBLIC_MUTE_AUDIO=1 pins the master gain to silence. The
+    // reactive `masterVolume` state is left untouched so the Settings UI and
+    // unit tests still observe the user's chosen level.
+    this._masterGain.gain.value = isAudioMuted() ? 0 : this.masterVolume;
 
     this._masterCompressor = ctx.createDynamicsCompressor();
     this._masterCompressor.threshold.value = -24;
@@ -269,7 +295,7 @@ export class AudioService
     const clamped = Math.max(0, Math.min(1, volume));
     this.masterVolume = clamped;
     if (this._masterGain) {
-      this._masterGain.gain.value = clamped;
+      this._masterGain.gain.value = isAudioMuted() ? 0 : clamped;
     }
   }
 
@@ -386,6 +412,53 @@ export class AudioService
       }
     } finally {
       this._crossfadeAbort = undefined;
+    }
+  }
+
+  /** @inheritdoc */
+  async fadeOutBgm(durationMs: number = 1500): Promise<void> {
+    const source = this._activeSource;
+    if (!source) {
+      this._activeTrackUrl = undefined;
+      return;
+    }
+
+    audioContextManager.unlock();
+    this._abortCrossfade();
+    this._crossfadeAbort = new AbortController();
+    const signal = this._crossfadeAbort.signal;
+    const ctx = audioContextManager.context;
+    this._ensureGraph();
+    const durationSeconds = Math.max(0, durationMs) / 1000;
+
+    try {
+      if (this._activeGain) {
+        this._activeGain.gain.cancelScheduledValues(ctx.currentTime);
+        this._activeGain.gain.setValueAtTime(this._activeGain.gain.value, ctx.currentTime);
+        this._activeGain.gain.linearRampToValueAtTime(0, ctx.currentTime + durationSeconds);
+      }
+      if (durationMs > 0) {
+        await this._delay(durationMs, signal);
+      }
+      if (signal.aborted) {
+        return;
+      }
+      this._stopSource(source);
+      this._activeSource = undefined;
+      this._activeTrackUrl = undefined;
+      this.isBgmPaused = false;
+      this._bgmStartTime = 0;
+      this._bgmPausedOffset = 0;
+      if (this._activeGain) {
+        this._activeGain.gain.value = 0;
+      }
+      this.debug('fadeOutBgm', { durationMs });
+    } catch {
+      // Aborted by a newer transition, which now owns the gain graph.
+    } finally {
+      if (this._crossfadeAbort?.signal === signal) {
+        this._crossfadeAbort = undefined;
+      }
     }
   }
 

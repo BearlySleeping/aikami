@@ -14,7 +14,7 @@ created_at: "2026-09-07T00:00:00Z"
 
 | Field | Value |
 |---|---|
-| **Source** | [`BACKLOG_C485_PLUS.md`](BACKLOG_C485_PLUS.md) § C-486, seeded from the 2026-09-06 external review (`docs/research/astra-game-review.md`); tightens the gate established by [C-335](C-335-enforce-the-playable-demo-release-gate.md) |
+| **Source** | [`BACKLOG_C485_PLUS.md`](BACKLOG_C485_PLUS.md) § C-486, seeded from the 2026-09-06 external review (`docs/reference/astra-game-review.md`); tightens the gate established by [C-335](C-335-enforce-the-playable-demo-release-gate.md) |
 | **Target** | `apps/e2e/tests/client/release_gate.spec.ts`, `apps/e2e/src/pom/game_page.ts` |
 | **Type** | full |
 | **Priority** | P0 — the gate currently cannot fail for the reasons it exists |

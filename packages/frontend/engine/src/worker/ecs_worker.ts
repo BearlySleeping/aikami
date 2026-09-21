@@ -1,6 +1,7 @@
 // packages/frontend/engine/src/worker/ecs_worker.ts
 /// <reference lib="webworker" />
 
+import { BASIC_COMBAT_ABILITIES, resolveCombatAbilityIds } from '@aikami/constants';
 import { PackConfigSchema } from '@aikami/schemas';
 import type { PackConfig } from '@aikami/types';
 import type { World } from 'bitecs';
@@ -23,6 +24,13 @@ import {
   type SpawnPointEntity,
   type TransitionZone,
 } from '../assets/map_loader.ts';
+import { createCombatAiWorkerBinding } from '../combat/combat_ai_worker_binding.ts';
+import { tryDispatchCombatCommand } from '../combat/combat_command_dispatch.ts';
+import { retryEncounterCommand } from '../combat/combat_encounter_retry.ts';
+import {
+  startEncounterFromCommand,
+  startEncounterWithFallback,
+} from '../combat/combat_encounter_start.ts';
 import {
   Appearance,
   DEFAULT_BODY_LAYER_ID,
@@ -33,6 +41,8 @@ import {
 } from '../components/appearance.ts';
 import { CameraFocus, registerCameraFocusObservers } from '../components/camera_focus.ts';
 import { CollisionData, registerCollisionDataObservers } from '../components/collision_data.ts';
+import { registerCombatIdentityObservers } from '../components/combat_identity.ts';
+import { registerCombatMovementObservers } from '../components/combat_movement.ts';
 import { CombatStats, registerCombatStatsObservers } from '../components/combat_stats.ts';
 import { Companion, registerCompanionObservers } from '../components/companion.ts';
 import { registerEnemyObservers } from '../components/enemy.ts';
@@ -75,7 +85,6 @@ import { createNPC } from '../entities/create_npc.ts';
 import { createPlayer, type PlayerCreateOptions } from '../entities/create_player.ts';
 import { createDefaultSandboxAvatar } from '../entities/create_sandbox_avatar.ts';
 import { updateFixedStepAccumulator } from '../frame_pacing.ts';
-import { findPath } from '../math/astar.ts';
 import { SpatialHashGrid } from '../math/spatial_hash_grid.ts';
 import {
   DEFAULT_LPC_SLOT_FALLBACKS,
@@ -88,6 +97,7 @@ import {
   serializeWorld,
 } from '../serialization/ecs_serializer.ts';
 import { getEngineGameMode, setEngineGameMode } from '../state/game_mode.ts';
+import { planActorPath } from '../systems/actor_footprint.ts';
 import {
   endDialogueZoom,
   getActiveNpcScreenPosition,
@@ -102,7 +112,7 @@ import {
 import {
   type CollisionGrid,
   getMapPixelBounds,
-  getTerrainGrid,
+  getPathfindingGrid,
   insertIntoSpatialGrid,
   isBlocksSight,
   isCellBlocked,
@@ -114,7 +124,6 @@ import {
   isCombatStageActive,
   setupCombatStage,
   teardownCombatStage,
-  triggerPlayerAttackAnimation,
 } from '../systems/combat_stage_system.ts';
 import { updateContextSystem } from '../systems/context_system.ts';
 import { updateDialogTriggers } from '../systems/dialog_trigger_system.ts';
@@ -143,7 +152,10 @@ import {
   updateMovement,
 } from '../systems/movement_system.ts';
 import { updatePartyFollow } from '../systems/party_follow_system.ts';
-import { updatePathFollow } from '../systems/path_follow_system.ts';
+import {
+  registerPathFollowHaltObservers,
+  updatePathFollow,
+} from '../systems/path_follow_system.ts';
 import { updatePressurePlates } from '../systems/pressure_plate_system.ts';
 import {
   animateEntitySystem,
@@ -152,11 +164,7 @@ import {
 } from '../systems/render_worker.ts';
 import { setVisionGrid, updateSpatialVision } from '../systems/spatial_vision_system.ts';
 import { buildTerrainGridFromBoolean } from '../systems/terrain_grid.ts';
-import {
-  handleCombatAction,
-  initCombat,
-  resetTurnTracking,
-} from '../systems/turn_manager_system.ts';
+import { emitCombatStateUpdate, initCombat } from '../systems/turn_manager_system.ts';
 import { updateZoningSystem } from '../systems/zoning_system.ts';
 import type { GameCommand, GameEvent, NPCSpawnData } from '../types.ts';
 
@@ -265,6 +273,18 @@ let _packConfig: PackConfig | undefined;
 /** The player entity ID, set during initialization. */
 let playerEntityId = 0;
 
+/**
+ * Per-combatant ability grants for the running v2 encounter (C-516 AC-2).
+ *
+ * Populated by `COMBAT_START_ENCOUNTER` and cleared on `RETRY_ENCOUNTER`, so
+ * the resolver grants each combatant its own abilities instead of the whole
+ * catalog.
+ */
+let _activeCombatAbilityIds: Record<string, string[]> | undefined;
+
+const _combatAbilityIds = (): Record<string, string[]> | undefined => _activeCombatAbilityIds;
+
+const _aiTurns = createCombatAiWorkerBinding();
 /** Last transition zones from LOAD_MAP — re-spawned after LOAD_GAME. */
 let _lastTransitionZones: TransitionZone[] | undefined;
 
@@ -352,6 +372,26 @@ const workerBridge: EngineBridge = {
   },
   async restoreSnapshot(_snapshot: string): Promise<void> {
     throw new Error('restoreSnapshot is only available on the main-thread bridge');
+  },
+  hasCommandHandler(_commandType: GameCommand['type']): boolean {
+    // The worker never sends commands to the UI.
+    return false;
+  },
+  onCommand<T extends GameCommand['type']>(
+    _commandType: T,
+    _handler: (command: Extract<GameCommand, { type: T }>) => void,
+  ): () => void {
+    // No-op: worker does not accept engine-side command registrations
+    return (): void => {};
+  },
+  setReady(_value: boolean): void {
+    // No-op: ready state is main-thread owned
+  },
+  setSnapshotHandler(): void {
+    // No-op: snapshot handling is main-thread owned
+  },
+  setRestoreHandler(): void {
+    // No-op: restore handling is main-thread owned
   },
 };
 
@@ -479,6 +519,20 @@ const handleBridgeCommand = (command: GameCommand): void => {
     _lastProcessedInputSequence = cmdWithSeq._seq;
   }
 
+  // Combat commands (C-145, C-166, C-514, C-515, C-516) are owned by the dispatcher.
+  if (
+    tryDispatchCombatCommand(command, {
+      world,
+      bridge: workerBridge,
+      playerEntityId,
+      abilityCatalog: BASIC_COMBAT_ABILITIES,
+      abilityIdsByCombatant: _combatAbilityIds(),
+      aiTurns: _aiTurns.coordinator() ?? undefined,
+    })
+  ) {
+    return;
+  }
+
   switch (command.type) {
     case 'STOP_PLAYER': {
       clearPlayerMovement();
@@ -523,33 +577,31 @@ const handleBridgeCommand = (command: GameCommand): void => {
       // cell and set PathFollow with the waypoints.
       if (world && playerEntityId > 0) {
         const pos = getComponent(world, playerEntityId, Position) as PositionData | undefined;
-        const terrain = getTerrainGrid();
+        // C-379: footprint-aware grid — a cell is only enterable when the
+        // actor's 32×32 box does not overlap a wall.
+        const terrain = getPathfindingGrid();
         if (pos && terrain) {
           const tileSize = terrain.tileSize;
           const fromX = Math.floor(pos.x / tileSize);
           const fromY = Math.floor(pos.y / tileSize);
-          const result = findPath({
-            grid: terrain,
-            start: { x: fromX, y: fromY },
+          // Footprint-aware plan: tolerates a start cell whose centre is
+          // blocked (the player standing at the bottom of a cell under a
+          // wall) by planning from the nearest standable cell.
+          const plan = planActorPath({
+            terrain,
+            fromCell: { x: fromX, y: fromY },
             goal: { x: command.cellX, y: command.cellY },
           });
-          if (result.path.length > 0) {
-            // Convert grid waypoints to world-pixel waypoints (tile centres).
-            const waypoints = new Float32Array(result.path.length * 2);
-            for (let i = 0; i < result.path.length; i++) {
-              waypoints[i * 2] = result.path[i].x * tileSize + tileSize / 2;
-              waypoints[i * 2 + 1] = result.path[i].y * tileSize + tileSize / 2;
-            }
+          if (plan) {
             // Clear existing velocity
             addComponent(world, playerEntityId, set(Velocity, { x: 0, y: 0 }));
-            // Set PathFollow — index 1 skips the start cell
             addComponent(
               world,
               playerEntityId,
               set(PathFollow, {
-                waypoints,
-                index: 1,
-                length: result.path.length,
+                waypoints: plan.waypoints,
+                index: plan.index,
+                length: plan.length,
                 speed: 150, // default player speed
                 repathAtMs: 0,
                 arriveRadius: command.arriveRadius,
@@ -557,6 +609,13 @@ const handleBridgeCommand = (command: GameCommand): void => {
             );
           } else {
             clearPlayerMovement();
+            // Tell the main thread to clear the click destination marker —
+            // the target cell is not standable / unreachable.
+            workerBridge.emit({
+              type: 'PLAYER_PATH_REJECTED',
+              cellX: command.cellX,
+              cellY: command.cellY,
+            });
           }
         }
       }
@@ -600,34 +659,103 @@ const handleBridgeCommand = (command: GameCommand): void => {
       });
       break;
     }
-    case 'COMBAT_ACTION': {
+    case 'COMBAT_START_ENCOUNTER': {
+      // ── C-516 AC-2: the single production encounter start ──
+      // Both funnels (the dialogue chip's authored roster and the collision
+      // trigger's derived roster) converge here. Legacy and v2 both come
+      // through this command; `initCombat` stays the legacy driver entry.
       if (world) {
-        handleCombatAction({
-          world,
-          playerEntityId,
-          action: command.action,
-          targetId: command.targetId,
-          bridge: workerBridge,
-          advantage: command.advantage,
-          bonusDamage: command.bonusDamage,
+        const requested = command.engine ?? 'legacy';
+        const attempt = (engine: 'legacy' | 'v2') =>
+          startEncounterFromCommand({
+            world: world as World,
+            bridge: workerBridge,
+            command: {
+              encounterId: command.encounterId,
+              seed: command.seed,
+              engine,
+              ...(command.roster === undefined ? {} : { roster: command.roster }),
+            },
+            playerEntityId,
+            abilityCatalog: BASIC_COMBAT_ABILITIES,
+            abilityIdsForClasses: resolveCombatAbilityIds,
+            // The v2 driver defers AI turns to the kernel-driven runner, so its
+            // hook is a no-op; the legacy branch starts through `initCombat`,
+            // which supplies the legacy AI hooks itself.
+            hooks: { runAiTurn: () => {}, emitStateUpdate: emitCombatStateUpdate },
+            startLegacy: (targetWorld, bridge, seed) => {
+              initCombat(targetWorld, bridge, seed);
+            },
+          });
+
+        // ── C-516 Migration & Rollback: a failed v2 start falls back to the
+        // legacy engine for THAT encounter, rather than leaving the player in a
+        // broken fight (the policy lives in the combat module so it is unit
+        // tested; validation runs before any spawn, so the world is untouched).
+        const outcome = startEncounterWithFallback({ requested, attempt });
+        const started = outcome.started;
+        // C-516 Observability: log the engine that actually ran, and whether a
+        // v2 rejection forced the legacy fallback.
+        logger.info('[WorkerEngine] combat:startEncounter', {
+          encounterId: command.encounterId,
+          requested,
+          engine: outcome.engine,
+          fellBack: outcome.fellBack,
+          started: started.ok,
+          ...(started.ok ? {} : { reasonCode: started.reasonCode }),
         });
-      }
-      break;
-    }
-    case 'COMBAT_ACTION_ANIMATE': {
-      // ── Trigger player attack animation during AI resolution (C-166) ──
-      if (world) {
-        triggerPlayerAttackAnimation(world);
+
+        if (started.ok) {
+          _activeCombatAbilityIds = started.abilityIdsByCombatant;
+          // C-516: the driver deliberately defers AI turns, so if an AI
+          // combatant won initiative nothing else would resolve its turn and
+          // the fight would stall on an unowned turn. Run the AI turns now —
+          // the coordinator resolves them or defers one to the client.
+          if (outcome.engine === 'v2') {
+            // An AI failure must never leave the encounter half-started: the
+            // turn driver is live, and a surfaced error beats an uncaught one.
+            try {
+              _aiTurns.startFromEncounter({
+                world,
+                bridge: workerBridge,
+                playerEntityId,
+                started,
+                llmAgentsEnabled: command.llmAgentsEnabled === true,
+              });
+            } catch (error) {
+              logger.error('[WorkerEngine] combat:startEncounterAiFailed', {
+                encounterId: command.encounterId,
+                error: error instanceof Error ? error.message : String(error),
+              });
+            }
+          }
+        } else {
+          // No engine could start it: surface a typed rejection so the UI can
+          // leave the overlay it optimistically opened (AC-2 / Edge Cases).
+          logger.warn('[WorkerEngine] combat:startEncounterRejected', {
+            encounterId: command.encounterId,
+            reasonCode: started.reasonCode,
+          });
+          workerBridge.emit({
+            type: 'COMBAT_START_REJECTED',
+            encounterId: command.encounterId,
+            reasonCode: started.reasonCode,
+            messageKey: started.messageKey,
+          });
+        }
       }
       break;
     }
     case 'RETRY_ENCOUNTER': {
-      // ── Retry encounter with preserved seed (C-330 AC-5) ──
-      // Resets turn tracking, reinitializes combat, and emits COMBAT_STARTED.
-      // The bridge listener picks up COMBAT_STARTED and calls combatService.startCombat.
+      // Engine-routed retry with the preserved seed (C-330 AC-5, C-516 AC-10).
       if (world) {
-        resetTurnTracking();
-        initCombat(world, workerBridge, command.combatSeed);
+        _activeCombatAbilityIds = retryEncounterCommand({
+          world,
+          bridge: workerBridge,
+          playerEntityId,
+          seed: command.combatSeed,
+          runAiTurns: (options) => _aiTurns.runRetryAiTurns(options),
+        });
       }
       break;
     }
@@ -662,13 +790,10 @@ const handleBridgeCommand = (command: GameCommand): void => {
       break;
     }
     case 'SET_ENVIRONMENT_CONFIG': {
-      // ── Dev sandbox: configure environment time/weather (C-213) ──
-      setEnvironmentConfig({
-        timeScale: (command as { timeScale?: number }).timeScale,
-        windVelocity: (command as { windVelocity?: number }).windVelocity,
-        rainIntensity: (command as { rainIntensity?: number }).rainIntensity,
-        startHour: (command as { startHour?: number }).startHour,
-      });
+      // ── Dev sandbox / game events: configure environment time/weather ──
+      // The command payload IS the config shape, so no field-by-field
+      // re-packing (which silently dropped new fields).
+      setEnvironmentConfig(command);
       break;
     }
     default: {
@@ -778,6 +903,11 @@ const initializeEngine = (
   registerNPCDialogObservers(world);
   registerAppearanceObservers(world);
   registerCombatStatsObservers(world);
+  // C-516: the v2 adapter reads CombatIdentity and the per-combatant movement
+  // allowance from these SoA components — without the observers the arrays stay
+  // empty and the roster projection finds no combatants.
+  registerCombatIdentityObservers(world);
+  registerCombatMovementObservers(world);
   registerEnemyObservers(world);
   registerCompanionObservers(world);
   registerResistancesObservers(world);
@@ -797,6 +927,7 @@ const initializeEngine = (
   registerVisionObserverObservers(world);
   registerVisionVisibleObservers(world);
   registerPathFollowObservers(world);
+  registerPathFollowHaltObservers(world);
   registerMapLocationObservers(world);
   registerZoneStatusObservers(world);
 
@@ -1557,11 +1688,13 @@ self.onmessage = (event: MessageEvent): void => {
       }
 
       case 'REQUEST_SNAPSHOT': {
+        const requestId = message.requestId as number | undefined;
         if (!world) {
           postMessage({
             type: 'SNAPSHOT_RESPONSE',
             payload: undefined,
             error: 'World not initialized',
+            requestId,
           });
           break;
         }
@@ -1576,22 +1709,25 @@ self.onmessage = (event: MessageEvent): void => {
             scope === 'world'
               ? serializeWorld(world)
               : serializePlayer(world, playerEntityId > 0 ? playerEntityId : 1);
-          postMessage({ type: 'SNAPSHOT_RESPONSE', payload });
+          postMessage({ type: 'SNAPSHOT_RESPONSE', payload, requestId });
         } catch (err) {
           postMessage({
             type: 'SNAPSHOT_RESPONSE',
             payload: undefined,
             error: err instanceof Error ? err.message : String(err),
+            requestId,
           });
         }
         break;
       }
 
       case 'RESTORE_PLAYER': {
+        const requestId = message.requestId as number | undefined;
         if (!world) {
           postMessage({
             type: 'ENGINE_ERROR',
             message: 'Cannot restore player: world not initialized',
+            requestId,
           });
           break;
         }
@@ -1614,7 +1750,11 @@ self.onmessage = (event: MessageEvent): void => {
           }
 
           if (restoredEid === undefined) {
-            postMessage({ type: 'ENGINE_ERROR', message: 'RESTORE_PLAYER: empty snapshot' });
+            postMessage({
+              type: 'ENGINE_ERROR',
+              message: 'RESTORE_PLAYER: empty snapshot',
+              requestId,
+            });
             break;
           }
 
@@ -1674,11 +1814,12 @@ self.onmessage = (event: MessageEvent): void => {
 
           _refreshPlayerAppearance(playerEntityId);
 
-          postMessage({ type: 'ENGINE_READY' });
+          postMessage({ type: 'ENGINE_READY', requestId });
         } catch (err) {
           postMessage({
             type: 'ENGINE_ERROR',
             message: `Restore player failed: ${err instanceof Error ? err.message : String(err)}`,
+            requestId,
           });
         } finally {
           if (wasRunning) {
@@ -1706,10 +1847,12 @@ self.onmessage = (event: MessageEvent): void => {
       }
 
       case 'LOAD_GAME': {
+        const requestId = message.requestId as number | undefined;
         if (!world) {
           postMessage({
             type: 'ENGINE_ERROR',
             message: 'Cannot load game: world not initialized',
+            requestId,
           });
           break;
         }
@@ -1881,12 +2024,13 @@ self.onmessage = (event: MessageEvent): void => {
           }
 
           queueMicrotask(() => {
-            postMessage({ type: 'ENGINE_READY' });
+            postMessage({ type: 'ENGINE_READY', requestId });
           });
         } catch (err) {
           postMessage({
             type: 'ENGINE_ERROR',
             message: `Load game failed: ${err instanceof Error ? err.message : String(err)}`,
+            requestId,
           });
         } finally {
           // ── RC-3 FIX: Always restore the tick loop state, even on error ──
@@ -1898,10 +2042,12 @@ self.onmessage = (event: MessageEvent): void => {
       }
 
       case 'LOAD_MAP': {
+        const requestId = message.requestId as number | undefined;
         if (!world) {
           postMessage({
             type: 'ENGINE_ERROR',
             message: 'Cannot load map: world not initialized',
+            requestId,
           });
           break;
         }
@@ -2020,6 +2166,7 @@ self.onmessage = (event: MessageEvent): void => {
             world,
             spawnPoints,
             packConfig: _packConfig,
+            lpcCatalog: _workerLpcCatalog,
             defeatedEnemies: defeatedEnemies as string[] | undefined,
             collectedPickups: collectedPickups as string[] | undefined,
             interactableStates: interactableStates as InteractableStateMap | undefined,
@@ -2139,14 +2286,23 @@ self.onmessage = (event: MessageEvent): void => {
             }
           }
 
-          // 7. Set camera map bounds and reset tracking for snap
+          // 7. Snap the camera to the new spawn, THEN apply the map bounds.
+          //    resetCameraTracking() clears the camera coords *and* the
+          //    map-bounds / screen-size configuration. Applying the bounds
+          //    before the reset (the previous order) left `mapPixel*` at 0,
+          //    so the `mapPixelWidth > 0` guard skipped viewport clamping
+          //    entirely and the camera could drift into empty background past
+          //    the map edge (C-497 AC-1/AC-2). Capture the live screen size,
+          //    reset for the snap, then restore both so clamping stays armed.
+          const screenBeforeReset = getScreenSize();
+          resetCameraTracking();
+          setScreenSize({ width: screenBeforeReset.width, height: screenBeforeReset.height });
           //    C-199: Support optional clamping bypass for visual testing.
           setMapBounds({
             width: mapPixelWidth as number,
             height: mapPixelHeight as number,
             disableClamping: disableClamping as boolean | undefined,
           });
-          resetCameraTracking();
 
           // 8. Notify main thread about the player entity (position updated)
           postMessage({ type: 'ENTITY_CREATED', eid: playerEntityId, tint: 0x00ff88 });
@@ -2273,7 +2429,7 @@ self.onmessage = (event: MessageEvent): void => {
           }
 
           queueMicrotask(() => {
-            postMessage({ type: 'MAP_LOADED' });
+            postMessage({ type: 'MAP_LOADED', requestId });
           });
         } catch (err) {
           // Ensure engine state is restored even on error
@@ -2283,6 +2439,7 @@ self.onmessage = (event: MessageEvent): void => {
           postMessage({
             type: 'ENGINE_ERROR',
             message: `Load map failed: ${err instanceof Error ? err.message : String(err)}`,
+            requestId,
           });
         } finally {
           // ── RC-3 FIX: Always restore the tick loop state, even on error ──

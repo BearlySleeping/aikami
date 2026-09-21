@@ -3,7 +3,7 @@ id: C-474
 title: "Load lean role contexts and resolve model configuration explicitly"
 source: direct
 contract_type: thin
-status: implemented
+status: in_progress
 github:
     issue_number: null
     issue_url: null
@@ -19,7 +19,7 @@ created_at: "2026-09-04T22:21:38Z"
 
 | Field                | Value                                                                                             |
 | -------------------- | ------------------------------------------------------------------------------------------------- |
-| **Source**           | Accepted agent-platform audit; PR 08 in [execution plan](../strategy/agent-platform-hardening.md) |
+| **Source**           | Accepted agent-platform audit; PR 08 in [execution plan](../reference/agent-platform-hardening.md) |
 | **Target**           | Pi resource/tool selection, pipeline role prompts and `models.ts`                                 |
 | **Type**             | thin                                                                                              |
 | **Priority**         | P1 — irrelevant always-on context and implicit model assumptions waste turns                      |
@@ -151,3 +151,10 @@ not the full contract scope.
 
 - Unit: `bun test src/lib/agents/contract_pipeline` — 342/342 pass (0 new
   failures).
+
+### Status reconciliation — 2026-09-17
+
+> Historical report preserved above. The YAML frontmatter previously said
+> `implemented` while the metadata table said `in_progress` and this report
+> states AC-2 through AC-5 are unfinished. The frontmatter was corrected to
+> `in_progress`. Only AC-1 is claimed complete; AC-2–AC-5 remain open.

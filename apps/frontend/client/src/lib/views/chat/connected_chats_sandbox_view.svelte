@@ -5,7 +5,7 @@
 // connected chats bridge with game chat, tag parser test area,
 // OOC chat panel, and connected chats settings panel.
 //
-// Styled with daisyUI — distinct visual treatment for notes,
+// Styled with Aikami UI — distinct visual treatment for notes,
 // influences, OOC, narration, and dialogue, inspired by
 // Marinara-Engine's message-type differentiation.
 //
@@ -13,8 +13,8 @@
 
 import { BaseViewModelContainer } from '$components';
 import ChatView from '$views/chat/chat_view.svelte';
+import { getConnectedChatsPanelViewModel } from '$views/chat/connected_chats_panel_composition.ts';
 import ConnectedChatsPanelView from '$views/chat/connected_chats_panel_view.svelte';
-import { getConnectedChatsPanelViewModel } from '$views/chat/connected_chats_panel_view_model.svelte.ts';
 import type { ConnectedChatsSandboxViewModel } from './connected_chats_sandbox_view_model.svelte.ts';
 
 type Props = {
@@ -119,28 +119,41 @@ const panelViewModel = getConnectedChatsPanelViewModel({
               <button
                 type="button"
                 class="btn btn-xs btn-outline btn-info"
-                onclick={() => { viewModel.tagTestInput = '<note>The wizard is watching the party</note>'; viewModel.parseTestTags(); }}
+                onclick={() => {
+  viewModel.tagTestInput = '<note>The wizard is watching the party</note>';
+  viewModel.parseTestTags();
+}}
               >
                 +note
               </button>
               <button
                 type="button"
                 class="btn btn-xs btn-outline btn-warning"
-                onclick={() => { viewModel.tagTestInput = '<influence>Make the NPC suspicious of outsiders</influence>'; viewModel.parseTestTags(); }}
+                onclick={() => {
+  viewModel.tagTestInput = '<influence>Make the NPC suspicious of outsiders</influence>';
+  viewModel.parseTestTags();
+}}
               >
                 +influence
               </button>
               <button
                 type="button"
                 class="btn btn-xs btn-outline btn-accent"
-                onclick={() => { viewModel.tagTestInput = '<ooc>What does my character know about dragons?</ooc>'; viewModel.parseTestTags(); }}
+                onclick={() => {
+  viewModel.tagTestInput = '<ooc>What does my character know about dragons?</ooc>';
+  viewModel.parseTestTags();
+}}
               >
                 +ooc
               </button>
               <button
                 type="button"
                 class="btn btn-xs btn-outline"
-                onclick={() => { viewModel.tagTestInput = '<note>watching</note>Text<influence>push</influence><ooc>question</ooc>'; viewModel.parseTestTags(); }}
+                onclick={() => {
+  viewModel.tagTestInput =
+    '<note>watching</note>Text<influence>push</influence><ooc>question</ooc>';
+  viewModel.parseTestTags();
+}}
               >
                 All three
               </button>
@@ -260,7 +273,7 @@ const panelViewModel = getConnectedChatsPanelViewModel({
               here.
             </div>
 
-            <!-- Messages area — daisyUI chat -->
+            <!-- Messages area — Aikami UI chat -->
             <div
               class="flex-1 overflow-y-auto min-h-0 border border-base-300 rounded-lg bg-base-100 p-2"
             >
@@ -304,25 +317,25 @@ const panelViewModel = getConnectedChatsPanelViewModel({
                 id="ooc-input"
                 data-testid="ooc-input"
                 onkeydown={(e) => {
-                  if (e.key === 'Enter') {
-                    const input = document.getElementById('ooc-input') as HTMLInputElement;
-                    if (input?.value.trim()) {
-                      viewModel.simulateOocPost(input.value.trim());
-                      input.value = '';
-                    }
-                  }
-                }}
+  if (e.key === 'Enter') {
+    const input = document.getElementById('ooc-input') as HTMLInputElement;
+    if (input?.value.trim()) {
+      viewModel.simulateOocPost(input.value.trim());
+      input.value = '';
+    }
+  }
+}}
               >
               <button
                 type="button"
                 class="btn btn-accent btn-xs"
                 onclick={() => {
-                  const input = document.getElementById('ooc-input') as HTMLInputElement;
-                  if (input?.value.trim()) {
-                    viewModel.simulateOocPost(input.value.trim());
-                    input.value = '';
-                  }
-                }}
+  const input = document.getElementById('ooc-input') as HTMLInputElement;
+  if (input?.value.trim()) {
+    viewModel.simulateOocPost(input.value.trim());
+    input.value = '';
+  }
+}}
               >
                 Send
               </button>
@@ -344,9 +357,9 @@ const panelViewModel = getConnectedChatsPanelViewModel({
                 type="button"
                 class="btn btn-outline btn-xs w-full"
                 onclick={() => {
-                  void viewModel.seedDemoLink();
-                  void panelViewModel.loadLinkData();
-                }}
+  void viewModel.seedDemoLink();
+  void panelViewModel.loadLinkData();
+}}
                 data-testid="seed-demo-link-btn"
               >
                 🌱 Seed Demo Link
@@ -366,21 +379,30 @@ const panelViewModel = getConnectedChatsPanelViewModel({
       <button
         type="button"
         class="btn btn-xs btn-ghost text-info hover:bg-info/10 font-mono"
-        onclick={() => { viewModel.tagTestInput = '<note>The wizard is watching</note>'; viewModel.parseTestTags(); }}
+        onclick={() => {
+  viewModel.tagTestInput = '<note>The wizard is watching</note>';
+  viewModel.parseTestTags();
+}}
       >
         &lt;note&gt;
       </button>
       <button
         type="button"
         class="btn btn-xs btn-ghost text-warning hover:bg-warning/10 font-mono"
-        onclick={() => { viewModel.tagTestInput = '<influence>Make them suspicious</influence>'; viewModel.parseTestTags(); }}
+        onclick={() => {
+  viewModel.tagTestInput = '<influence>Make them suspicious</influence>';
+  viewModel.parseTestTags();
+}}
       >
         &lt;influence&gt;
       </button>
       <button
         type="button"
         class="btn btn-xs btn-ghost text-accent hover:bg-accent/10 font-mono"
-        onclick={() => { viewModel.tagTestInput = '<ooc>What about dragons?</ooc>'; viewModel.parseTestTags(); }}
+        onclick={() => {
+  viewModel.tagTestInput = '<ooc>What about dragons?</ooc>';
+  viewModel.parseTestTags();
+}}
       >
         &lt;ooc&gt;
       </button>

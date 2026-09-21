@@ -93,6 +93,31 @@ export const variables = defineEnvVars({
     schema: optionalString('auto'),
   },
 
+  /**
+   * Kill switch for the local generated-asset write seam (C-510).
+   * Explicitly falsy ("false"/"0"/"off"/"no") disables
+   * `assetManager.registerGenerated`; anything else (including unset) is on.
+   */
+  PUBLIC_ASSET_GENERATION: {
+    public: true,
+    schema: optionalString('true'),
+  },
+
+  /** C-513: kill switch for the community publish surface (on by default). */
+  PUBLIC_ASSET_PUBLISHING: {
+    public: true,
+    schema: optionalString('true'),
+  },
+
+  /**
+   * C-521: kill switch for NEW audio generation only (on by default).
+   * Playback, saves and accepted assets are unaffected by it.
+   */
+  PUBLIC_AUDIO_GENERATION: {
+    public: true,
+    schema: optionalString('true'),
+  },
+
   /** Custom ONNX Runtime WebAssembly URL override. */
   PUBLIC_ORT_WASM_URL: {
     public: true,
@@ -108,6 +133,27 @@ export const variables = defineEnvVars({
   /** Bypass the AI gate (dev-only). */
   PUBLIC_AI_GATE_BYPASS: {
     public: true,
+    schema: optionalString(),
+  },
+
+  /**
+   * Combat resolver: "legacy" (default) or "v2". Unset/invalid resolves to
+   * legacy. Contract: C-516 AC-1.
+   */
+  PUBLIC_COMBAT_ENGINE: {
+    public: true,
+    static: true,
+    schema: optionalString(),
+  },
+
+  /**
+   * LLM-driven combat agents + outcome narration (C-526). Default off — only
+   * the exact literal `'1'` opts in, and it is read once and pinned at
+   * encounter start (C-526 AC-9).
+   */
+  PUBLIC_COMBAT_LLM_AGENTS: {
+    public: true,
+    static: true,
     schema: optionalString(),
   },
 

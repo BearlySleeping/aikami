@@ -342,9 +342,10 @@ class MyViewModel extends BaseViewModel {
 }
 ```
 
-## Styling with DaisyUI
+## Styling with Aikami UI
 
-All components use DaisyUI classes for styling:
+All components use the Aikami UI component classes owned by
+`@aikami/frontend/theme` (plain Tailwind v4 — no external component plugin):
 
 ```svelte
 <button class="btn btn-primary">Click Me</button>
@@ -357,7 +358,7 @@ All components use DaisyUI classes for styling:
 
 ### Responsive Design
 
-- Use DaisyUI's responsive classes
+- Use Tailwind's responsive utility variants
 - Mobile-first approach
 - Desktop and mobile variants when needed
 

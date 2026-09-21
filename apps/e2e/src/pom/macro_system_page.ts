@@ -213,7 +213,7 @@ export class MacroSystemPage {
       await this.addSectionButton.click();
       await this.page.waitForTimeout(300);
 
-      // Find the section card's textarea — DaisyUI may transform card classes.
+      // Find the section card's textarea — Aikami UI may transform card classes.
       // Use a combined approach: find textarea inside an element with bg-base-200
       // that also has a sibling section name input (distinguishes from template textarea).
       const allTextareas = this.page.locator('textarea');

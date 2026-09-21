@@ -10,86 +10,20 @@ import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import type {
   CharacterRelationship,
   FactionDefinition,
   FactionStanding,
-  FactionStandingTier,
-  FactionStandingTierDefinition,
   RelationshipState,
   RememberedPromise,
 } from '@aikami/types';
+import { campaignService } from '../campaign/campaign_service.svelte.ts';
+import { narrativeEventService } from './narrative_event_service.svelte.ts';
+import { buildFacts, computeTier } from './relationship_utils';
 import { registerSerializable } from './serializable_service';
 
 export type RelationshipServiceOptions = BaseFrontendClassOptions;
-// ---------------------------------------------------------------------------
-// Tier computation — exported for test use
-// ---------------------------------------------------------------------------
-
-/**
- * Computes the tier label for a given standing score + tier definitions.
- * Uses >= threshold comparison: the first tier whose threshold is ≤ current
- * standing wins. Returns 'neutral' if no tier matches (should not happen
- * with valid definitions).
- */
-const computeTier = (options: {
-  standing: number;
-  tiers: FactionStandingTierDefinition[];
-}): FactionStandingTier => {
-  // Tiers are sorted by threshold ascending — find the highest threshold ≤ standing
-  let best: FactionStandingTier = 'neutral';
-  for (const tier of options.tiers) {
-    if (options.standing >= tier.threshold) {
-      best = tier.tier;
-    } else {
-      break; // Remaining tiers have higher thresholds
-    }
-  }
-  return best;
-};
-
-// ---------------------------------------------------------------------------
-// Fact builders — transform state into compact prompt strings
-// ---------------------------------------------------------------------------
-
-const MAX_FACTS = 5;
-
-/** Builds compact fact strings for dialogue context injection. */
-const buildFacts = (options: {
-  standings: ReadonlyMap<string, FactionStanding>;
-  relationships: ReadonlyMap<string, CharacterRelationship>;
-  npcId: string;
-  npcFactionId?: string;
-}): string[] => {
-  const facts: string[] = [];
-
-  // Character relationship takes priority
-  const rel = options.relationships.get(options.npcId);
-  if (rel) {
-    facts.push(
-      `Your relationship with ${
-        options.npcId
-      }: Trust ${rel.trust}, Affinity ${rel.affinity} (${rel.relationshipType})`,
-    );
-  }
-
-  // Faction standings (only meaningful ones — not neutral-at-0)
-  for (const [factionId, standing] of options.standings) {
-    if (factionId === options.npcFactionId || standing.standing !== 0) {
-      if (facts.length >= MAX_FACTS) {
-        break;
-      }
-      facts.push(`${factionId} standing: ${standing.tier} (${standing.standing})`);
-    }
-  }
-
-  return facts.slice(0, MAX_FACTS);
-};
-
-// ---------------------------------------------------------------------------
-// Type exports
-// ---------------------------------------------------------------------------
 
 export type RelationshipServiceInterface = BaseFrontendClassInterface & {
   /** Get current faction standing, initializing from content pack default if unseen. */
@@ -109,8 +43,15 @@ export type RelationshipServiceInterface = BaseFrontendClassInterface & {
     delta: number;
     reason: string;
   }): FactionStanding;
-  /** Record a promise made to an NPC or faction. */
-  recordPromise(options: { targetId: string; description: string }): RememberedPromise;
+  /** Record a promise made to an NPC or faction. Also commits a PromiseMade event (C-491). */
+  recordPromise(options: {
+    targetId: string;
+    description: string;
+    /** Optional explicit campaign id; defaults to the active campaign. */
+    campaignId?: string;
+    /** Optional promise actor (always a witness); defaults to targetId. */
+    actorId?: string;
+  }): RememberedPromise;
   /** Get all promises for a target. */
   getPromises(targetId: string): RememberedPromise[];
   /** Fulfill or break a promise. */
@@ -287,7 +228,16 @@ class RelationshipService
   // ── Public API: promises ────────────────────────────────────────────
 
   /** @inheritdoc */
-  recordPromise(options: { targetId: string; description: string }): RememberedPromise {
+  recordPromise(options: {
+    targetId: string;
+    description: string;
+    campaignId?: string;
+    actorId?: string;
+  }): RememberedPromise {
+    const campaignId = options.campaignId ?? campaignService.activeCampaign?.id;
+    if (!campaignId) {
+      throw new Error('RelationshipService: recordPromise requires a campaignId');
+    }
     const promise: RememberedPromise = {
       id: `promise_${crypto.randomUUID()}`,
       targetId: options.targetId,
@@ -297,6 +247,18 @@ class RelationshipService
     };
     this._promises = [...this._promises, promise];
     this.debug('recordPromise', { targetId: options.targetId });
+
+    // C-491: commit a PromiseMade event — the promise actor is always a witness.
+    const actorId = options.actorId ?? options.targetId;
+    narrativeEventService.record({
+      campaignId,
+      kind: 'PromiseMade',
+      informationKind: 'world_fact',
+      summary: `Promise made: ${options.description}`,
+      subjectId: options.targetId,
+      actorId,
+    });
+
     return promise;
   }
 

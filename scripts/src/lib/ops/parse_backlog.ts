@@ -7,9 +7,10 @@
  *
  * DO NOT create a parallel parser elsewhere. This is the canonical one.
  *
- * ⚠️  MAINTENANCE: Pi extension at .pi/extensions/contract_factory.ts
- * maintains an inline copy of this parser (Pi extensions run in Node.js
- * and cannot import Bun-specific modules). Any change to the parsing
+ * ⚠️  MAINTENANCE: Pi extension at .pi/extensions/contract_factory.ts keeps an
+ * inline copy of this parser. Extensions now reach scripts through the Bun
+ * bridge (scripts/src/lib/pi/), so that copy can be retired in favor of a
+ * `contract.backlog.parse` command; until then, any change to the parsing
  * logic here MUST be mirrored there.
  */
 

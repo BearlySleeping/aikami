@@ -1,7 +1,7 @@
 <script lang="ts">
 // apps/frontend/client/src/lib/views/chat/choice_buttons_view.svelte
 //
-// Zero-logic view: CYOA choice buttons rendered as a DaisyUI join
+// Zero-logic view: CYOA choice buttons rendered as a Aikami UI join
 // stack below the latest AI message. All state and logic lives in
 // ChoiceButtonsViewModel.
 //

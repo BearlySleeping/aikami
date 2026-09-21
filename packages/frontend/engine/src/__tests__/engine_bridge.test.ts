@@ -247,3 +247,64 @@ describe('EngineBridge — createEngineBridge singleton', () => {
     expect(typeof bridge.isReady).toBe('function');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Owner-scoped engine registrations (onCommand / snapshot / restore)
+// ---------------------------------------------------------------------------
+
+describe('EngineBridge — owner-scoped registrations', () => {
+  it('onCommand unsubscribe stops forwarding without touching other handlers', () => {
+    const bridge = new MockEngineBridge();
+    const first: GameCommand[] = [];
+    const second: GameCommand[] = [];
+
+    const unsub = bridge.onCommand('SET_PLAYER_VELOCITY', (cmd) => {
+      first.push(cmd);
+    });
+    bridge.onCommand('SET_PLAYER_VELOCITY', (cmd) => {
+      second.push(cmd);
+    });
+
+    bridge.send({ type: 'SET_PLAYER_VELOCITY', velocity: { x: 1, y: 0 } });
+    expect(first).toHaveLength(1);
+    expect(second).toHaveLength(1);
+
+    unsub();
+    bridge.send({ type: 'SET_PLAYER_VELOCITY', velocity: { x: 2, y: 0 } });
+    expect(first).toHaveLength(1);
+    expect(second).toHaveLength(2);
+  });
+
+  it('onCommand unsubscribe is idempotent', () => {
+    const bridge = new MockEngineBridge();
+    const unsub = bridge.onCommand('SET_PLAYER_VELOCITY', () => {});
+    unsub();
+    expect(() => unsub()).not.toThrow();
+  });
+
+  it('snapshot handler is replaceable and clearable', async () => {
+    const bridge = new MockEngineBridge();
+    bridge.setSnapshotHandler(async () => 'first');
+    expect(await bridge.createSnapshot()).toBe('first');
+
+    bridge.setSnapshotHandler(async () => 'second');
+    expect(await bridge.createSnapshot()).toBe('second');
+
+    // Owner releases its registration on teardown — the capability is gone.
+    bridge.setSnapshotHandler(undefined);
+    await expect(bridge.createSnapshot()).rejects.toThrow('no snapshot handler');
+  });
+
+  it('restore handler is replaceable and clearable', async () => {
+    const bridge = new MockEngineBridge();
+    const restored: string[] = [];
+    bridge.setRestoreHandler(async (payload) => {
+      restored.push(payload);
+    });
+    await bridge.restoreSnapshot('a');
+    expect(restored).toEqual(['a']);
+
+    bridge.setRestoreHandler(undefined);
+    await expect(bridge.restoreSnapshot('b')).rejects.toThrow('no restore handler');
+  });
+});

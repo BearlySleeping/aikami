@@ -8,6 +8,7 @@
 
 import { BaseViewModelContainer } from '$components';
 import CombatSidebar from '../combat/combat_sidebar.svelte';
+import CombatPortraitStage from '../combat/components/combat_portrait_stage.svelte';
 import GameCanvasView from './canvas/game_canvas_view.svelte';
 import type { GameViewModelInterface } from './game_view_model.svelte';
 import GameUIView from './ui/game_ui_view.svelte';
@@ -24,18 +25,74 @@ const { viewModel }: Props = $props();
 <BaseViewModelContainer {viewModel} fillHeight={true}>
   <div
     class="w-screen h-screen overflow-hidden"
-    class:grid={viewModel.isCombat}
-    style={viewModel.isCombat ? 'grid-template-columns: 35vw 1fr;' : ''}
+    data-aikami-theme-scope
+    data-aikami-variant={viewModel.appearanceVariant}
+    class:grid={viewModel.isSplitCombat}
+    class:flex={viewModel.isSheetCombat}
+    class:flex-col-reverse={viewModel.isSheetCombat}
+    style={viewModel.combatShellStyle}
   >
-    <!-- Combat Sidebar — left grid column during combat -->
-    {#if viewModel.isCombat && viewModel.combatViewModel}
-      <CombatSidebar viewModel={viewModel.combatViewModel} />
+    <!-- Combat surface — the single authoritative combat interaction area.
+         The full-screen CombatView overlay was removed; the sidebar is the one
+         interaction surface and the portrait stage is the scene.
+         C-527 AC-4: ONE `CombatSidebar` instance in a container that adapts —
+         a left rail when split, a bottom action sheet when narrow. Because the
+         `{#if}` keys on combat, not on layout, crossing the breakpoint moves
+         the SAME instance (and its unsent form state) rather than remounting. -->
+    {#if viewModel.activeCombatViewModel && viewModel.hasCombatLayout}
+      <section
+        class="relative z-10 min-h-0 shrink-0 overflow-hidden bg-base-100 border-base-300"
+        class:border-r={viewModel.isSplitCombat}
+        class:border-t={viewModel.isSheetCombat}
+        style={viewModel.combatSheetStyle}
+        aria-label="Combat actions"
+        data-testid={viewModel.combatSurfaceTestId}
+      >
+        <CombatSidebar viewModel={viewModel.activeCombatViewModel} />
+      </section>
     {/if}
 
-    <!-- Right column / full viewport: Canvas + UI Layer -->
-    <div class="relative w-full h-full overflow-hidden">
+    <!-- Scene region: canvas + UI layer. Fills the viewport on its own, the
+         remaining grid column during a split, and the space above the sheet
+         when the layout is narrow. (C-527 AC-4) -->
+    <div
+      class="relative min-h-0 min-w-0 overflow-hidden"
+      class:flex-1={viewModel.isCombat}
+      class:h-full={!viewModel.isCombat}
+      data-testid="game-scene-region"
+    >
       <!-- Game canvas (renders PixiJS at WebGL native resolution) -->
       <GameCanvasView viewModel={viewModel.canvasViewModel} />
+
+      <!-- Combat portrait stage — only for encounters that are NOT on the v2
+           direct-control engine. Direct control needs the tactical world
+           canvas visible and interactive (click-to-move), so the portrait
+           stage is suppressed there; legacy combat keeps it as before.
+           (C-525 R-2) -->
+      {#if viewModel.activeCombatViewModel && !viewModel.activeCombatViewModel.isDirectControl}
+        <div class="absolute inset-0 z-0 bg-[#1a1a2e]">
+          <CombatPortraitStage
+            playerName={viewModel.activeCombatViewModel.playerName}
+            playerPortraitUrl={viewModel.activeCombatViewModel.playerPortraitUrl}
+            playerCurrentHealth={viewModel.activeCombatViewModel.playerHp}
+            playerMaxHealth={viewModel.activeCombatViewModel.playerMaxHp}
+            isPlayerTakingDamage={viewModel.activeCombatViewModel.isPlayerTakingDamage}
+            isPlayerActiveTurn={viewModel.activeCombatViewModel.isPlayerActiveTurn}
+            playerEyesSrc={viewModel.activeCombatViewModel.playerEyesSrc}
+            playerEyebrowsSrc={viewModel.activeCombatViewModel.playerEyebrowsSrc}
+            playerMouthSrc={viewModel.activeCombatViewModel.playerMouthSrc}
+            enemyName={viewModel.activeCombatViewModel.enemyName}
+            enemyPortraitUrl={viewModel.activeCombatViewModel.enemyPortraitUrl}
+            enemyCurrentHealth={viewModel.activeCombatViewModel.enemyHp}
+            enemyMaxHealth={viewModel.activeCombatViewModel.enemyMaxHp}
+            isEnemyTakingDamage={viewModel.activeCombatViewModel.isEnemyTakingDamage}
+            isEnemyActiveTurn={viewModel.activeCombatViewModel.isEnemyActiveTurn}
+            enemyEyesSrc={viewModel.activeCombatViewModel.enemyEyesSrc}
+            enemyEyebrowsSrc={viewModel.activeCombatViewModel.enemyEyebrowsSrc}
+            enemyMouthSrc={viewModel.activeCombatViewModel.enemyMouthSrc}
+          />
+        </div>
+      {/if}
 
       <!-- Game UI overlays (pause menu, dialogue, inventory, vendor, etc.) -->
       <GameUIView viewModel={viewModel.uiViewModel} />

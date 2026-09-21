@@ -4,7 +4,11 @@
 // Implements ContractHerdrAdapterInterface with controllable state —
 // no live Herdr, no filesystem, no real Git operations.
 
-import type { ContractHerdrAdapterInterface } from './herdr_adapter.ts';
+import type {
+  ContractHerdrAdapterInterface,
+  DeliveryRecord,
+  ReviewStartResult,
+} from './herdr_adapter.ts';
 import type { WorkerLaunchRequest } from './types.ts';
 
 /** Controllable agent status for test scenarios. */
@@ -43,6 +47,8 @@ export class FakeHerdrAdapter implements ContractHerdrAdapterInterface {
   private _reviewStarted = false;
   private _reviewPrompt = '';
   private _reviewBlocked = false;
+  /** Optional writer invoked on launch so tests can synthesize a worker result. */
+  private _resultWriter: ((request: WorkerLaunchRequest) => void) | undefined;
   /** Last review start result. */
   lastReviewStart: FakeReviewOutcome | null = null;
 
@@ -54,6 +60,12 @@ export class FakeHerdrAdapter implements ContractHerdrAdapterInterface {
     initialState?: FakeAgentState;
     workerActive?: boolean;
     paneAlive?: boolean;
+    /**
+     * Called synchronously on `launchWorker` with the launch request. Tests use
+     * it to write the result artifact the real worker would have produced, so
+     * the assembled loop can advance without a live agent.
+     */
+    resultWriter?: (request: WorkerLaunchRequest) => void;
   }) {
     this._workspaceId = options?.workspaceId ?? 'fake-ws';
     this._pipelinePaneId = options?.pipelinePaneId ?? 'fake-pipeline';
@@ -62,6 +74,7 @@ export class FakeHerdrAdapter implements ContractHerdrAdapterInterface {
     this._agentState = options?.initialState ?? { status: 'idle', paneText: '' };
     this._workerActive = options?.workerActive ?? true;
     this._paneAlive = options?.paneAlive ?? true;
+    this._resultWriter = options?.resultWriter;
   }
 
   // ── Controllable test state ──────────────────────────────────
@@ -146,6 +159,9 @@ export class FakeHerdrAdapter implements ContractHerdrAdapterInterface {
     this._launchedWorkers.push(request);
     const paneId = `fake-worker-${this._workerPaneIds.length + 1}`;
     this._workerPaneIds.push(paneId);
+    // Synthesize the result the real worker would have written, so the
+    // assembled loop advances deterministically without a live agent.
+    this._resultWriter?.(request);
     return { paneId };
   }
 
@@ -172,17 +188,17 @@ export class FakeHerdrAdapter implements ContractHerdrAdapterInterface {
     yolo?: boolean;
     blockedReview?: boolean;
     useWorktreeCwd?: boolean;
-  }): Promise<{ paneId: string; taskDelivered: boolean }> {
+  }): Promise<ReviewStartResult> {
     this._reviewStarted = true;
     this._reviewPrompt = options.prompt;
     this._reviewBlocked = !!options.blockedReview;
     const paneId = 'fake-review-pane';
-    const taskDelivered = true;
+    const delivery: DeliveryRecord = { attempted: true, acknowledged: true };
     this.lastReviewStart = {
       paneId,
-      startResult: { ok: true, paneId, taskDelivered },
+      startResult: { ok: true, paneId, taskDelivered: delivery.acknowledged },
     };
-    return { paneId, taskDelivered };
+    return { paneId, taskDelivered: delivery.acknowledged, delivery };
   }
 
   /** Record a review message and resolve true to indicate successful delivery. */

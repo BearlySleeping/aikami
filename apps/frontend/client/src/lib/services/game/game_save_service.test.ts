@@ -1,17 +1,34 @@
 // apps/frontend/client/src/lib/services/game/game_save_service.test.ts
-// $state, $derived, and @aikami/frontend/services mock are provided by test_preload.ts
+// $state, $derived are polyfilled by test_setup.ts
 //
 // Contract: C-334 Make Local Save, Continue, Autosave, and Recovery Reliable
 // Tests AC-1 (v2 envelope), AC-2 (manual save with metadata), AC-4 (corruption detection)
 
-import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
+import { afterAll, afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 
-import type { EngineBridge } from '@aikami/frontend/engine';
+import { type EngineBridge, MockEngineBridge } from '@aikami/frontend/engine';
+import type { CombatState } from '@aikami/types';
+import { COMBAT_RULES_VERSION, createCombatState } from '@aikami/utils';
+import { createRealLocalDatabase } from '../__tests__/local_database_fixture.ts';
 
-// test_preload.ts provides a fake getLocalDatabase() — the in-memory tables
-// are reset on every module reload. We import the reset helper directly.
+// Real in-memory libSQL database with the production migrations applied, so
+// the save envelope is exercised against actual SQLite semantics.
 
-import { resetLocalDatabase } from '@aikami/frontend/storage';
+const fixture = await createRealLocalDatabase();
+
+const realFrontendStorage = await import('@aikami/frontend/storage');
+
+mock.module('@aikami/frontend/storage', () => ({
+  // Spread the real module first: a mock that names only the functions a test
+  // needs breaks the moment a transitively-imported module consumes a new
+  // export (C-518 added the generation-record writers).
+  ...realFrontendStorage,
+  getLocalDatabase: mock(async () => fixture.db),
+}));
+
+import type { SaveWorldBlock } from './game_save_envelope.ts';
+import type { NarrativeEventServiceInterface } from './narrative_event_service.svelte.ts';
+import type { ServiceSnapshot } from './serializable_service';
 
 // ---------------------------------------------------------------------------
 // Mock EngineBridge
@@ -37,24 +54,115 @@ const MOCK_SNAPSHOT_PAYLOAD = JSON.stringify({
 /** Valid map-routing block for v3 saves (C-378: required). */
 const MAP_FIXTURE = { packId: 'emberwatch', mapId: 'village', playerX: 160, playerY: 192 };
 
-const createMockBridge = (): EngineBridge => ({
-  send: mock(() => {}),
-  on: mock(() => (): void => {}),
-  emit: mock(() => {}),
-  isReady: mock(() => true),
-  executeCommand: mock(() => {}),
-  triggerMacro: mock(() => {}),
-
-  async createSnapshot(): Promise<string> {
+const createMockBridge = (): MockEngineBridge => {
+  const bridge = new MockEngineBridge();
+  bridge.setReady(true);
+  bridge.setSnapshotHandler(async (): Promise<string> => {
     mockSnapshotCalls++;
     return MOCK_SNAPSHOT_PAYLOAD;
-  },
-
-  async restoreSnapshot(snapshot: string): Promise<void> {
+  });
+  bridge.setRestoreHandler(async (snapshot: string): Promise<void> => {
     mockRestoreCalls++;
     _mockLastRestorePayload = snapshot;
+  });
+  bridge.onCommand('WORLD_OBJECTS_REQUESTED', (command) => {
+    bridge.emit({
+      type: 'WORLD_OBJECTS_READY',
+      requestId: command.requestId,
+      worldObjects: null,
+    });
+  });
+  // C-532 / review F7 + F-B: the save path captures the live combat checkpoint
+  // ATOMICALLY with the world-object block, and reads the accepted-command
+  // boundary before and after the ECS snapshot. Default: no encounter running.
+  // A test that needs a live fight sets `checkpointStateForTest` before saving.
+  bridge.onCommand('COMBAT_SESSION_CHECKPOINT_REQUESTED', (command) => {
+    bridge.emit({
+      type: 'COMBAT_SESSION_CHECKPOINT_READY',
+      requestId: command.requestId,
+      sessionRevision: checkpointSessionRevisionForTest,
+      worldObjects: checkpointWorldObjectsForTest,
+      checkpoint:
+        checkpointStateForTest === null
+          ? null
+          : {
+              schemaVersion: checkpointStateForTest.schemaVersion,
+              rulesVersion: checkpointStateForTest.rulesVersion,
+              encounterId: checkpointStateForTest.encounterId,
+              encounterRunId: checkpointStateForTest.encounterRunId,
+              stateRevision: checkpointStateForTest.stateRevision,
+              sessionRevision: checkpointSessionRevisionForTest,
+              state: checkpointStateForTest,
+              journal: null,
+              initialCheckpoint: null,
+              pendingReaction: null,
+              settlement: checkpointStateForTest.settlement,
+              actorBindings: [],
+              worldObjects: checkpointWorldObjectsForTest,
+            },
+    });
+  });
+  bridge.onCommand('COMBAT_SESSION_REVISION_REQUESTED', (command) => {
+    bridge.emit({
+      type: 'COMBAT_SESSION_REVISION_READY',
+      requestId: command.requestId,
+      sessionRevision: checkpointSessionRevisionForTest,
+    });
+  });
+  return bridge;
+};
+
+/** The accepted-command boundary the mock engine reports (review F-B). */
+let checkpointSessionRevisionForTest = 0;
+
+/**
+ * The live combat checkpoint `createMockBridge` answers with.
+ *
+ * The MockEngineBridge keys handlers by command type, so a test cannot register
+ * a SECOND handler to override the default — the first reply wins. A mutable
+ * module-level value is the only way for a test to swap the checkpoint.
+ */
+let checkpointStateForTest: CombatState | null = null;
+
+const WORLD_OBJECTS_FIXTURE: SaveWorldBlock = {
+  bundle: {
+    bundleVersion: 1,
+    rulesVersion: 'combat-environment-1.0.0',
+    objectDefinitions: {
+      'emberwatch/barricade': {
+        definitionId: 'emberwatch/barricade',
+        name: 'Barricade',
+        durability: 5,
+        blocksMovement: true,
+        blocksSight: false,
+        cover: 'half',
+        affordanceIds: [],
+      },
+    },
+    affordances: {},
+    impactZones: {},
   },
-});
+  state: {
+    objects: {
+      'emberwatch/barricade-1': {
+        objectId: 'emberwatch/barricade-1',
+        definitionId: 'emberwatch/barricade',
+        position: { x: 2, y: 3 },
+        footprint: [{ x: 0, y: 0 }],
+        durability: 2,
+        state: 'broken',
+        ignited: false,
+        cover: 'half',
+        affordanceIds: [],
+        attachedToObjectId: null,
+      },
+    },
+    surfaces: [],
+    hazardTickStamps: [],
+  },
+};
+
+let checkpointWorldObjectsForTest: SaveWorldBlock | null = null;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -74,15 +182,26 @@ const getService = async (bridge?: EngineBridge) => {
 
 describe('GameSaveService (C-334)', () => {
   let bridge: EngineBridge;
+  let hydrateAllServices: (snapshots: ServiceSnapshot[]) => void;
+  let narrativeEventService: NarrativeEventServiceInterface;
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    checkpointStateForTest = null;
+    checkpointSessionRevisionForTest = 0;
+    checkpointWorldObjectsForTest = null;
     bridge = createMockBridge();
     resetMockBridge();
-    resetLocalDatabase();
+    await fixture.reset();
+    ({ hydrateAllServices } = await import('./serializable_service'));
+    ({ narrativeEventService } = await import('./narrative_event_service.svelte.ts'));
   });
 
   afterEach(() => {
-    // No cleanup needed — fake DB is reset on each test
+    // No cleanup needed — the real database is reset on each test
+  });
+
+  afterAll(async () => {
+    await fixture.close();
   });
 
   // ── Initialization ─────────────────────────────────────────────────
@@ -141,15 +260,75 @@ describe('GameSaveService (C-334)', () => {
     expect(service.availableSaves[0].mapName).toBe('World');
   });
 
-  test('saveGame should not allow concurrent saves', async () => {
+  test('a null world-object response is a valid empty world', async () => {
     const service = await getService(bridge);
 
-    // Manually set isSaving to simulate concurrent call
-    const rawService = service as unknown as { isSaving: boolean };
-    rawService.isSaving = true;
+    await service.saveGame({ slotId: 'empty-world', map: MAP_FIXTURE });
 
-    await service.saveGame({ slotId: 'test', map: MAP_FIXTURE });
-    expect(mockSnapshotCalls).toBe(0);
+    const payload = JSON.parse(await service.getSavePayload('empty-world')) as {
+      world?: unknown;
+    };
+    expect(payload.world).toBeUndefined();
+  });
+
+  test('a world-object timeout preserves the existing slot', async () => {
+    const service = await getService(bridge);
+    await service.saveGame({ slotId: 'timeout-safe', mapName: 'Original', map: MAP_FIXTURE });
+    const originalPayload = await service.getSavePayload('timeout-safe');
+
+    const timeoutBridge = new MockEngineBridge();
+    timeoutBridge.setReady(true);
+    timeoutBridge.setSnapshotHandler(async () => MOCK_SNAPSHOT_PAYLOAD);
+    const timeoutService = await getService(timeoutBridge);
+    await timeoutService.saveGame({
+      slotId: 'timeout-safe',
+      mapName: 'Replacement',
+      map: MAP_FIXTURE,
+    });
+
+    expect(await timeoutService.getSavePayload('timeout-safe')).toBe(originalPayload);
+  });
+
+  test('saveGame serializes concurrent saves so each write completes', async () => {
+    // Gate the first snapshot so we prove the second save does not start until
+    // the first settles (real serialization), not merely that both finish.
+    let releaseFirstSnapshot: (() => void) | undefined;
+    const firstSnapshotGate = new Promise<void>((resolve) => {
+      releaseFirstSnapshot = resolve;
+    });
+    let snapshotCalls = 0;
+    const gatedBridge = createMockBridge();
+    gatedBridge.setSnapshotHandler(async (): Promise<string> => {
+      snapshotCalls++;
+      if (snapshotCalls === 1) {
+        await firstSnapshotGate;
+      }
+      return MOCK_SNAPSHOT_PAYLOAD;
+    });
+    const service = await getService(gatedBridge);
+
+    // Fire two overlapping saves; the second must wait for the first.
+    const first = service.saveGame({ slotId: 'concurrent-a', map: MAP_FIXTURE });
+    const second = service.saveGame({ slotId: 'concurrent-b', map: MAP_FIXTURE });
+
+    // Let the queue start the first save; the second must still be waiting.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(snapshotCalls).toBe(1);
+
+    // Release the first save — only now may the second snapshot start.
+    if (!releaseFirstSnapshot) {
+      throw new Error('first snapshot gate was never created');
+    }
+    releaseFirstSnapshot();
+
+    await Promise.all([first, second]);
+    await service.fetchAvailableSaves();
+    expect(snapshotCalls).toBe(2);
+    expect(service.isSaving).toBe(false);
+    expect(service.availableSaves.map((save) => save.id).sort()).toEqual([
+      'concurrent-a',
+      'concurrent-b',
+    ]);
   });
 
   // ── C-378: never write a save without map routing ──────────────────
@@ -314,9 +493,11 @@ describe('GameSaveService (C-334)', () => {
     const payload = await service.getSavePayload('test');
     expect(typeof payload).toBe('string');
 
-    // Should be valid JSON with v4 envelope
+    // Should be valid JSON with the current envelope version. C-532 bumped it
+    // from 5 to 6 by adding the live combat checkpoint; the assertion is about
+    // the envelope SHAPE (version + checksum), not about a frozen number.
     const parsed = JSON.parse(payload);
-    expect(parsed.version).toBe(4);
+    expect(parsed.version).toBe(6);
     expect(typeof parsed.checksum).toBe('string');
     expect(parsed.checksum.length).toBe(64); // SHA-256 hex
   });
@@ -325,6 +506,101 @@ describe('GameSaveService (C-334)', () => {
     const service = await getService(bridge);
 
     await expect(service.getSavePayload('nonexistent')).rejects.toThrow('Save not found');
+  });
+
+  // ── AC-3 (C-381): v4 saves pin pack version + world seed ───────────
+
+  test('v4 saves persist packVersion and worldSeed through the checksum', async () => {
+    const service = await getService(bridge);
+
+    await service.saveGame({
+      slotId: 'v4-pin',
+      campaignId: 'camp-v4',
+      mapName: 'Emberwatch Village',
+      map: { packId: 'emberwatch', mapId: 'village', playerX: 320, playerY: 576 },
+      packVersion: '4.2.0',
+      worldSeed: '1700000000',
+    });
+
+    const payload = await service.getSavePayload('v4-pin');
+    const parsed = JSON.parse(payload) as {
+      version: number;
+      map: { packVersion?: string; worldSeed?: string };
+    };
+    // C-532 raised the envelope version to 6; the v4 pinning behaviour is
+    // unchanged and still asserted below.
+    expect(parsed.version).toBe(6);
+    expect(parsed.map.packVersion).toBe('4.2.0');
+    expect(parsed.map.worldSeed).toBe('1700000000');
+
+    // The pinned revision round-trips through checksum validation on load.
+    resetMockBridge();
+    await service.loadGame('v4-pin');
+    expect(mockRestoreCalls).toBe(1);
+  });
+
+  test('v4 checksum rejects a mutated packVersion before restoring', async () => {
+    const service = await getService(bridge);
+
+    await service.saveGame({
+      slotId: 'v4-pack-version-tamper',
+      campaignId: 'camp-v4',
+      mapName: 'Emberwatch Village',
+      map: { packId: 'emberwatch', mapId: 'village', playerX: 320, playerY: 576 },
+      packVersion: '4.2.0',
+      worldSeed: '1700000000',
+    });
+
+    const payload = await service.getSavePayload('v4-pack-version-tamper');
+    const parsed = JSON.parse(payload) as {
+      checksum: string;
+      map: { packVersion?: string; worldSeed?: string };
+    };
+    const tamperedPayload = {
+      ...parsed,
+      map: { ...parsed.map, packVersion: '4.2.1' },
+    };
+    expect(tamperedPayload.checksum).toBe(parsed.checksum);
+    await fixture.db.execute({
+      sql: 'UPDATE saves SET payload = ? WHERE id = ?',
+      args: [JSON.stringify(tamperedPayload), 'aikami_save_v4-pack-version-tamper'],
+    });
+
+    resetMockBridge();
+    await expect(service.loadGame('v4-pack-version-tamper')).rejects.toThrow('Save is corrupted');
+    expect(mockRestoreCalls).toBe(0);
+  });
+
+  test('v4 checksum rejects a mutated worldSeed before restoring', async () => {
+    const service = await getService(bridge);
+
+    await service.saveGame({
+      slotId: 'v4-world-seed-tamper',
+      campaignId: 'camp-v4',
+      mapName: 'Emberwatch Village',
+      map: { packId: 'emberwatch', mapId: 'village', playerX: 320, playerY: 576 },
+      packVersion: '4.2.0',
+      worldSeed: '1700000000',
+    });
+
+    const payload = await service.getSavePayload('v4-world-seed-tamper');
+    const parsed = JSON.parse(payload) as {
+      checksum: string;
+      map: { packVersion?: string; worldSeed?: string };
+    };
+    const tamperedPayload = {
+      ...parsed,
+      map: { ...parsed.map, worldSeed: '1700000001' },
+    };
+    expect(tamperedPayload.checksum).toBe(parsed.checksum);
+    await fixture.db.execute({
+      sql: 'UPDATE saves SET payload = ? WHERE id = ?',
+      args: [JSON.stringify(tamperedPayload), 'aikami_save_v4-world-seed-tamper'],
+    });
+
+    resetMockBridge();
+    await expect(service.loadGame('v4-world-seed-tamper')).rejects.toThrow('Save is corrupted');
+    expect(mockRestoreCalls).toBe(0);
   });
 
   // ── Read-only (no bridge) ──────────────────────────────────────────
@@ -389,6 +665,26 @@ describe('GameSaveService (C-334)', () => {
     // Fetch non-existent campaign
     await service.fetchAvailableSaves('camp-nonexistent');
     expect(service.availableSaves.length).toBe(0);
+  });
+
+  // ── AC-4 (C-491): older saves load with an empty narrative event record ──
+
+  test('AC-4 (C-491): an older save without a narrativeEvents snapshot resets the record', async () => {
+    narrativeEventService.reset();
+    narrativeEventService.record({
+      campaignId: 'camp-1',
+      kind: 'QuestResolved',
+      informationKind: 'world_fact',
+      summary: 'A quest was resolved.',
+      actorId: 'npcA',
+    });
+    expect(narrativeEventService.events).toHaveLength(1);
+
+    // A save written before this contract has no `narrativeEvents` snapshot.
+    hydrateAllServices([]);
+
+    expect(narrativeEventService.events).toHaveLength(0);
+    expect(narrativeEventService.serialize().nextSequence).toBe(1);
   });
 
   // ── sha256 utility ─────────────────────────────────────────────────
@@ -530,5 +826,216 @@ describe('GameSaveService (C-334)', () => {
     expect(result.version).toBeUndefined();
     expect(result.checksumValid).toBe(true);
     expect(result.serviceSnapshots).toBeUndefined();
+  });
+
+  // ── C-532 / review F7: the live combat checkpoint ──────────────────
+
+  test('a live v2 fight round-trips through the envelope and restores', async () => {
+    const state = createCombatState({
+      encounterId: 'emberwatch/proof_encounter',
+      rulesVersion: COMBAT_RULES_VERSION,
+      seed: 42,
+      combatants: [
+        {
+          combatantId: 'player',
+          name: 'Hero',
+          team: 'player',
+          position: { x: 1, y: 1 },
+          hp: 12,
+          maxHp: 20,
+          armorClass: 12,
+          attackBonus: 3,
+          initiative: 10,
+          abilityIds: [],
+          budget: {
+            movementRemaining: 3,
+            actionAvailable: false,
+            quickActionAvailable: true,
+            reactionAvailable: true,
+          },
+          downed: false,
+          defeated: false,
+        },
+      ],
+      abilityCatalog: {},
+      battlefield: { width: 5, height: 5, blockedCells: [] },
+    });
+    checkpointStateForTest = state;
+
+    const service = await getService(bridge);
+    await service.saveGame({
+      slotId: 'mid-fight',
+      campaignId: 'c1',
+      mapName: 'Inn',
+      map: MAP_FIXTURE,
+    });
+
+    const { parseSavePayloadEnvelope } = await import('./game_save_envelope');
+    const payload = await service.getSavePayload('mid-fight');
+    const parsed = parseSavePayloadEnvelope(payload);
+    // The mechanical truth survives: budgets and revision, not just presentation.
+    expect(parsed.combat?.state?.stateRevision).toBe(state.stateRevision);
+    expect(parsed.combat?.state?.combatants.player?.budget.movementRemaining).toBe(3);
+    expect(parsed.combat?.state?.combatants.player?.budget.actionAvailable).toBe(false);
+    expect(parsed.combat?.encounterRunId).toBe(state.encounterRunId);
+
+    const restored: unknown[] = [];
+    bridge.onCommand('COMBAT_CHECKPOINT_RESTORED', (command) => {
+      restored.push(command.state);
+    });
+    await service.loadGame('mid-fight');
+    expect(restored).toHaveLength(1);
+    expect(restored[0]).not.toBeNull();
+  });
+
+  test('a save between encounters preserves the committed world-object block', async () => {
+    checkpointWorldObjectsForTest = WORLD_OBJECTS_FIXTURE;
+    const service = await getService(bridge);
+
+    await service.saveGame({
+      slotId: 'between-fights',
+      campaignId: 'c1',
+      mapName: 'Inn',
+      map: MAP_FIXTURE,
+    });
+
+    const { parseSavePayloadEnvelope } = await import('./game_save_envelope');
+    const payload = await service.getSavePayload('between-fights');
+    const parsed = parseSavePayloadEnvelope(payload);
+    expect(parsed.combat).toBeUndefined();
+    expect(parsed.world).toEqual(WORLD_OBJECTS_FIXTURE);
+
+    const restoredObjects: unknown[] = [];
+    bridge.onCommand('WORLD_OBJECTS_RESTORED', (command) => {
+      restoredObjects.push(command.worldObjects);
+    });
+    await service.loadGame('between-fights');
+    expect(restoredObjects).toEqual([WORLD_OBJECTS_FIXTURE]);
+  });
+
+  test('an unknown combat rules version refuses the restore and preserves the slot', async () => {
+    const state = createCombatState({
+      encounterId: 'emberwatch/proof_encounter',
+      rulesVersion: 'combat-0.0.1',
+      seed: 1,
+      combatants: [],
+      abilityCatalog: {},
+      battlefield: { width: 2, height: 2, blockedCells: [] },
+    });
+    checkpointStateForTest = state;
+    const service = await getService(bridge);
+    await service.saveGame({
+      slotId: 'old-rules',
+      campaignId: 'c1',
+      mapName: 'Inn',
+      map: MAP_FIXTURE,
+    });
+
+    await expect(service.loadGame('old-rules')).rejects.toThrow(/unsupported combat rules version/);
+    // The original save is still there — a refusal never deletes it.
+    const { parseSavePayloadEnvelope } = await import('./game_save_envelope');
+    const payload = await service.getSavePayload('old-rules');
+    expect(parseSavePayloadEnvelope(payload).combat?.rulesVersion).toBe('combat-0.0.1');
+  });
+
+  // ── Review F-B: preflight runs before any runtime mutation ──────────────
+
+  test('a corrupt combat checkpoint fails the load WITHOUT touching the running game', async () => {
+    // A save whose nested combat state fails schema validation.
+    const state = createCombatState({
+      encounterId: 'emberwatch/proof_encounter',
+      rulesVersion: COMBAT_RULES_VERSION,
+      seed: 1,
+      combatants: [],
+      abilityCatalog: {},
+      battlefield: { width: 2, height: 2, blockedCells: [] },
+    });
+    checkpointStateForTest = state;
+    const service = await getService(bridge);
+    await service.saveGame({
+      slotId: 'corrupt-fight',
+      campaignId: 'c1',
+      mapName: 'Inn',
+      map: MAP_FIXTURE,
+    });
+
+    // Corrupt the persisted nested state in place, keeping the checksum valid by
+    // re-deriving it — a real corruption can happen before the digest is taken.
+    const { parseSavePayloadEnvelope, sha256 } = await import('./game_save_envelope');
+    const raw = await service.getSavePayload('corrupt-fight');
+    const envelope = JSON.parse(raw) as Record<string, unknown>;
+    const combat = envelope.combat as Record<string, unknown>;
+    const nested = combat.state as Record<string, unknown>;
+    // `stateRevision` must be an integer; a string is a schema violation.
+    nested.stateRevision = 'not-a-number';
+    envelope.checksum = await sha256(
+      JSON.stringify({
+        ecsSnapshot: envelope.ecsSnapshot,
+        serviceSnapshots: envelope.serviceSnapshots,
+        map: envelope.map,
+        world: envelope.world,
+        combat,
+      }),
+    );
+    const { getLocalDatabase } = await import('@aikami/frontend/storage');
+    const db = await getLocalDatabase();
+    await db.execute({
+      sql: 'UPDATE saves SET payload = ? WHERE id = ?',
+      args: [JSON.stringify(envelope), 'aikami_save_corrupt-fight'],
+    });
+    expect(parseSavePayloadEnvelope(JSON.stringify(envelope)).combat).toBeDefined();
+
+    // The load must refuse BEFORE restoring the world, the object block, the
+    // combat checkpoint or the services.
+    const restoreCalls = mockRestoreCalls;
+    const restoredCheckpoints: unknown[] = [];
+    const restoredObjects: unknown[] = [];
+    bridge.onCommand('COMBAT_CHECKPOINT_RESTORED', (command) =>
+      restoredCheckpoints.push(command.state),
+    );
+    bridge.onCommand('WORLD_OBJECTS_RESTORED', (command) =>
+      restoredObjects.push(command.worldObjects),
+    );
+
+    await expect(service.loadGame('corrupt-fight')).rejects.toThrow(/cannot be restored/i);
+
+    expect(mockRestoreCalls).toBe(restoreCalls);
+    expect(restoredCheckpoints).toHaveLength(0);
+    expect(restoredObjects).toHaveLength(0);
+    // And the slot is preserved verbatim.
+    expect(await service.getSavePayload('corrupt-fight')).toBe(JSON.stringify(envelope));
+  });
+
+  test('the load validates the nested combat checkpoint with real schemas', async () => {
+    const state = createCombatState({
+      encounterId: 'emberwatch/proof_encounter',
+      rulesVersion: COMBAT_RULES_VERSION,
+      seed: 1,
+      combatants: [],
+      abilityCatalog: {},
+      battlefield: { width: 2, height: 2, blockedCells: [] },
+    });
+    checkpointStateForTest = state;
+    const service = await getService(bridge);
+    await service.saveGame({
+      slotId: 'schema-check',
+      campaignId: 'c1',
+      mapName: 'Inn',
+      map: MAP_FIXTURE,
+    });
+
+    const { preflightCombatCheckpoint } = await import('./game_save_combat_preflight');
+    const raw = await service.getSavePayload('schema-check');
+    const { combat } = (await import('./game_save_envelope')).parseSavePayloadEnvelope(raw);
+    const good = preflightCombatCheckpoint({ checkpoint: combat });
+    expect(good.ok).toBe(true);
+
+    // A broad cast would have accepted this; the schema does not.
+    const tampered = { ...(combat as Record<string, unknown>), state: { schemaVersion: 4 } };
+    const bad = preflightCombatCheckpoint({ checkpoint: tampered });
+    expect(bad.ok).toBe(false);
+    if (!bad.ok) {
+      expect(bad.reason).toBe('invalidState');
+    }
   });
 });

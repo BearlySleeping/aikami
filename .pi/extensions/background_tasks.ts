@@ -55,12 +55,20 @@ type Task = {
   finishedAt?: number;
   exitCode?: number | null;
   killed?: boolean;
+  /** Whether to wake the agent with a completion notification. */
+  notify: boolean;
   /** Learned prior at launch time, used for the ETA. */
   expectedMs?: number;
 };
 
 const tasks = new Map<string, Task>();
 let taskCounter = 0;
+
+/** Set by the extension entrypoint; wakes the agent when a task exits. */
+let exitNotifier: ((task: Task, tail: string) => void) | undefined;
+
+/** Lines of output included in the completion notification. */
+const NOTIFY_TAIL_LINES = 15;
 
 /** Drops the oldest finished tasks once the registry grows past its cap. */
 const _evictOldTasks = (): void => {
@@ -124,7 +132,7 @@ const _details = (task: Task) => ({
 
 // ── Launch ─────────────────────────────────────────────────────────
 
-const _launch = (command: string, cwd: string, timeoutMs: number): Task => {
+const _launch = (command: string, cwd: string, timeoutMs: number, notify: boolean): Task => {
   taskCounter += 1;
   const id = `bg${taskCounter}`;
   const prior = getDurationPrior(command, { cwd });
@@ -140,6 +148,7 @@ const _launch = (command: string, cwd: string, timeoutMs: number): Task => {
     handle,
     startedAt: Date.now(),
     expectedMs: prior?.expectedMs,
+    notify,
   };
   tasks.set(id, task);
 
@@ -153,6 +162,18 @@ const _launch = (command: string, cwd: string, timeoutMs: number): Task => {
     if (result.code === 0 && !result.killed) {
       recordDuration(command, result.durationMs, { cwd });
     }
+
+    // Wake the agent with the result so it can keep working in parallel
+    // instead of blocking a turn on bg.wait. This is the pi-background-tasks
+    // pattern: durable terminal notification that triggers a follow-up turn.
+    if (task.notify && exitNotifier) {
+      try {
+        exitNotifier(task, displayTail(task.handle.output(), NOTIFY_TAIL_LINES));
+      } catch {
+        // Notification is best-effort; the task result is still collectable
+        // via bg.status / bg.wait.
+      }
+    }
     _evictOldTasks();
   });
 
@@ -163,6 +184,23 @@ const _launch = (command: string, cwd: string, timeoutMs: number): Task => {
 
 export default function (pi: ExtensionAPI) {
   const resolveCwd = (cwd?: string): string => cwd ?? process.cwd();
+
+  // When a task exits, inject its result into the conversation and trigger a
+  // turn if the agent is idle. deliverAs: 'followUp' means it lands after any
+  // in-flight tool calls rather than interrupting mid-turn.
+  exitNotifier = (task, tail) => {
+    pi.sendMessage(
+      {
+        customType: 'bg-task-complete',
+        content:
+          `${_headline(task)}${tail ? `\n\n${tail}` : ''}\n\n` +
+          `Full output: bg.status {id:"${task.id}", tailLines: 200}.`,
+        display: true,
+        details: _details(task),
+      },
+      { triggerTurn: true, deliverAs: 'followUp' },
+    );
+  };
 
   const requireTask = (id: string): Task | undefined => tasks.get(id);
 
@@ -185,7 +223,9 @@ export default function (pi: ExtensionAPI) {
     description:
       'Run long shell commands in the background and collect their results by exit code. ' +
       'Use this instead of bash for builds, test suites, deploys and dev servers — ' +
-      'bash blocks the whole turn, and completion here is the exact exit code, never a guess.',
+      'bash blocks the whole turn, and completion here is the exact exit code, never a guess. ' +
+      'By default you are automatically notified (and woken) when a task exits, so start it ' +
+      'and keep working — do NOT call bg.wait unless you have nothing else to do.',
     promptSnippet:
       'Use bg to run long commands (builds, test suites, deploys) without blocking the turn',
     actions: [
@@ -214,12 +254,25 @@ export default function (pi: ExtensionAPI) {
                 'Block up to this long for completion before returning. 0 returns immediately.',
             }),
           ),
+          notify: Type.Optional(
+            Type.Boolean({
+              default: true,
+              description:
+                'Wake the agent with the result when the task exits (default true). ' +
+                'Set false to collect manually with bg.wait/bg.status.',
+            }),
+          ),
           tailLines: Type.Optional(Type.Number({ default: DEFAULT_TAIL_LINES })),
         }),
         async execute(_toolCallId, params, signal, onUpdate) {
           const timeoutMs = Math.min(params.timeoutMs ?? DEFAULT_TIMEOUT_MS, MAX_TIMEOUT_MS);
           const tailLines = params.tailLines ?? DEFAULT_TAIL_LINES;
-          const task = _launch(params.command, resolveCwd(params.cwd), timeoutMs);
+          const task = _launch(
+            params.command,
+            resolveCwd(params.cwd),
+            timeoutMs,
+            params.notify ?? true,
+          );
 
           const waitMs = params.waitMs ?? 0;
           if (waitMs <= 0) {
@@ -231,8 +284,11 @@ export default function (pi: ExtensionAPI) {
                 {
                   type: 'text',
                   text:
-                    `⏳ Started ${task.id}: ${task.command}${eta}\n` +
-                    `Collect it with bg.wait {id:"${task.id}"} or peek with bg.status.`,
+                    `⏳ Started ${task.id}: ${params.command}${eta}\n` +
+                    ((params.notify ?? true)
+                      ? 'You will be notified with the exit code when it finishes — keep working on other tasks; no need to call bg.wait.\n'
+                      : '') +
+                    `Peek anytime with bg.status {id:"${task.id}"}.`,
                 },
               ],
               details: _details(task),

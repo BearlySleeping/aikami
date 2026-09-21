@@ -6,54 +6,24 @@
 // - C-151 AI Dynamic Music (sceneMood → BGM crossfade)
 //
 // Run with:
-//   bun test --preload ./src/lib/test_preload.ts --tsconfig tsconfig.test.json \
+//   bun test --preload ./src/lib/test_setup.ts --tsconfig tsconfig.test.json \
 //     src/lib/views/combat/combat_view_model.test.ts
 
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 
-// $state, $derived, $effect are polyfilled globally via test_preload.ts
-
-// The gatekeeping tests below mutate the real textGenerationService's
-// extractStructure. The ViewModel reads textGenerationService from the
-// barrel, so the barrel mock must expose the REAL singleton (the same
-// instance the tests import and patch).
-import { textGenerationService as realTextGenerationService } from '$lib/services/ai/text_generation_service.svelte.ts';
-
-mock.module('$services', () => ({
-  diceService: {
-    rollWithModifier: () => ({ roll: 17, modifier: 4, total: 21, success: true }),
-    async rollDice() {
-      return { roll: 17, modifier: 4, total: 21, success: true };
-    },
-  },
-  gameStateService: {
-    inventory: [],
-    worldGenOutput: undefined,
-  },
-  audioService: {
-    playBgm: () => {},
-    crossFadeBgm: () => {},
-    stopAll: () => {},
-  },
-  vendorService: undefined,
-  textGenerationService: realTextGenerationService,
-}));
-
 import {
-  CombatViewModel,
   type CombatViewModelInterface,
   type CombatViewModelOptions,
+  createCombatViewModel,
 } from './combat_view_model.svelte.ts';
+import { createCombatTestOptions } from './testing/combat_fixtures.ts';
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
 /** Creates a fresh CombatViewModel instance with test options. */
-const createViewModel = (): CombatViewModelInterface => {
-  const options: CombatViewModelOptions = {
-    className: 'CombatViewModelTest',
-  };
-  return CombatViewModel.create(options);
-};
+const createViewModel = (
+  overrides: Partial<CombatViewModelOptions> = {},
+): CombatViewModelInterface => createCombatViewModel(createCombatTestOptions(overrides));
 
 /** Extracts the active dice roll value with a non-null assertion guard. */
 const getDiceRoll = (vm: CombatViewModelInterface) => {
@@ -62,6 +32,36 @@ const getDiceRoll = (vm: CombatViewModelInterface) => {
     throw new Error('Expected activeDiceRoll to be non-null');
   }
   return roll;
+};
+
+/** Installs a spy bridge and active-combat state on a fresh ViewModel. */
+const armViewModel = (
+  vm: CombatViewModelInterface,
+  overrides: { enemyHp?: number; enemyMaxHp?: number; playerAttack?: number } = {},
+): Array<Record<string, unknown>> => {
+  const bridgeSendCalls: Array<Record<string, unknown>> = [];
+  (
+    vm as unknown as {
+      _bridge: { send: (cmd: Record<string, unknown>) => void; on: () => () => void };
+    }
+  )._bridge = {
+    send: (cmd: Record<string, unknown>) => {
+      bridgeSendCalls.push(cmd);
+    },
+    on: () => () => {},
+  };
+  vm.currentTurnEntity = 1;
+  vm.enemyEntityId = 2;
+  vm.enemyName = 'Goblin';
+  vm.playerHp = 80;
+  vm.playerMaxHp = 100;
+  vm.enemyHp = overrides.enemyHp ?? 60;
+  vm.enemyMaxHp = overrides.enemyMaxHp ?? 80;
+  vm.activeEntities = [1, 2];
+  vm.playerLevel = 3;
+  vm.playerAttack = overrides.playerAttack ?? 7;
+  vm.playerDefense = 14;
+  return bridgeSendCalls;
 };
 
 // ── Tests ─────────────────────────────────────────────────────────────────
@@ -198,49 +198,11 @@ describe('CombatViewModel — C-148 Combat Immersion', () => {
 
     beforeEach(() => {
       viewModel = createViewModel();
-      bridgeSendCalls = [];
-
-      // Set up mock engine bridge
-      const vm = viewModel as unknown as {
-        _bridge: { send: (cmd: Record<string, unknown>) => void; on: () => () => void };
-      };
-      vm._bridge = {
-        send: (cmd: Record<string, unknown>) => {
-          bridgeSendCalls.push(cmd);
-        },
-        on: () => () => {}, // No-op listener cleanup
-      };
-
-      // Put the ViewModel in an active combat state
-      viewModel.currentTurnEntity = 1;
-      viewModel.enemyEntityId = 2;
-      viewModel.enemyName = 'Goblin';
-      viewModel.playerHp = 80;
-      viewModel.playerMaxHp = 100;
-      viewModel.enemyHp = 60;
-      viewModel.enemyMaxHp = 80;
-      viewModel.activeEntities = [1, 2];
-      viewModel.playerLevel = 3;
-      viewModel.playerAttack = 7;
-      viewModel.playerDefense = 14;
+      bridgeSendCalls = armViewModel(viewModel);
     });
 
     test('should append invalidReason to combat log when actionValid is false', async () => {
-      // Mock textGenerationService to return a gatekept response
-      const extractStructureMod = await import(
-        '$lib/services/ai/text_generation_service.svelte.ts'
-      );
-      const origExtract = (
-        extractStructureMod.textGenerationService as {
-          extractStructure: (opts: Record<string, unknown>) => Promise<Record<string, unknown>>;
-        }
-      ).extractStructure;
-
-      (
-        extractStructureMod.textGenerationService as {
-          extractStructure: (opts: Record<string, unknown>) => Promise<Record<string, unknown>>;
-        }
-      ).extractStructure = async () => ({
+      const extractStructure = mock(async () => ({
         actionType: 'ATTACK',
         narrative: "You reach for your potion belt — but it's empty!",
         bonusDamage: 0,
@@ -249,7 +211,9 @@ describe('CombatViewModel — C-148 Combat Immersion', () => {
         actionValid: false,
         invalidReason:
           'You reach for a healing potion, but your bags are empty! The goblin snickers at your misfortune.',
-      });
+      }));
+      viewModel = createViewModel({ text: { extractStructure } });
+      bridgeSendCalls = armViewModel(viewModel);
 
       await viewModel.executeCustomAction('I drink a healing potion');
 
@@ -264,37 +228,19 @@ describe('CombatViewModel — C-148 Combat Immersion', () => {
 
       // Should not be stuck in resolving state
       expect(viewModel.isResolvingAiAction).toBe(false);
-
-      // Restore original
-      (
-        extractStructureMod.textGenerationService as {
-          extractStructure: (opts: Record<string, unknown>) => Promise<Record<string, unknown>>;
-        }
-      ).extractStructure = origExtract;
     });
 
     test('should dispatch COMBAT_ACTION when actionValid is true', async () => {
-      const extractStructureMod = await import(
-        '$lib/services/ai/text_generation_service.svelte.ts'
-      );
-      const origExtract = (
-        extractStructureMod.textGenerationService as {
-          extractStructure: (opts: Record<string, unknown>) => Promise<Record<string, unknown>>;
-        }
-      ).extractStructure;
-
-      (
-        extractStructureMod.textGenerationService as {
-          extractStructure: (opts: Record<string, unknown>) => Promise<Record<string, unknown>>;
-        }
-      ).extractStructure = async () => ({
+      const extractStructure = mock(async () => ({
         actionType: 'ATTACK',
         narrative: 'You swing your sword in a wide arc!',
         bonusDamage: 2,
         advantage: false,
         generateImage: false,
         actionValid: true,
-      });
+      }));
+      viewModel = createViewModel({ text: { extractStructure } });
+      bridgeSendCalls = armViewModel(viewModel);
 
       await viewModel.executeCustomAction('I swing my sword at the goblin');
 
@@ -306,13 +252,6 @@ describe('CombatViewModel — C-148 Combat Immersion', () => {
 
       // Should not be stuck in resolving state
       expect(viewModel.isResolvingAiAction).toBe(false);
-
-      // Restore original
-      (
-        extractStructureMod.textGenerationService as {
-          extractStructure: (opts: Record<string, unknown>) => Promise<Record<string, unknown>>;
-        }
-      ).extractStructure = origExtract;
     });
   });
 
@@ -326,62 +265,11 @@ describe('CombatViewModel — C-148 Combat Immersion', () => {
 
     beforeEach(() => {
       viewModel = createViewModel();
-      bridgeSendCalls = [];
-
-      // Set up mock engine bridge
-      const vm = viewModel as unknown as {
-        _bridge: { send: (cmd: Record<string, unknown>) => void; on: () => () => void };
-      };
-      vm._bridge = {
-        send: (cmd: Record<string, unknown>) => {
-          bridgeSendCalls.push(cmd);
-        },
-        on: () => () => {},
-      };
-
-      // Put the ViewModel in active combat state
-      viewModel.currentTurnEntity = 1;
-      viewModel.enemyEntityId = 2;
-      viewModel.enemyName = 'Goblin';
-      viewModel.playerHp = 80;
-      viewModel.playerMaxHp = 100;
-      viewModel.enemyHp = 60;
-      viewModel.enemyMaxHp = 80;
-      viewModel.activeEntities = [1, 2];
-      viewModel.playerLevel = 3;
-      viewModel.playerAttack = 7;
-      viewModel.playerDefense = 14;
-    });
-
-    afterEach(() => {
-      // Unmock audioService
-      try {
-        (
-          viewModel as unknown as {
-            _transitionBgmByMood: (mood: string) => Promise<void>;
-          }
-        )._transitionBgmByMood = async () => {};
-      } catch {
-        // No-op
-      }
+      bridgeSendCalls = armViewModel(viewModel);
     });
 
     test('should call _transitionBgmByMood when LLM returns sceneMood', async () => {
-      // Mock textGenerationService to return a response with sceneMood
-      const extractStructureMod = await import(
-        '$lib/services/ai/text_generation_service.svelte.ts'
-      );
-      const origExtract = (
-        extractStructureMod.textGenerationService as {
-          extractStructure: (opts: Record<string, unknown>) => Promise<Record<string, unknown>>;
-        }
-      ).extractStructure;
-
-      (
-        extractStructureMod.textGenerationService as {
-          extractStructure: (opts: Record<string, unknown>) => Promise<Record<string, unknown>>;
-        }
-      ).extractStructure = async () => ({
+      const extractStructure = mock(async () => ({
         actionType: 'ATTACK',
         narrative: 'With a thunderous roar, you strike the killing blow!',
         bonusDamage: 3,
@@ -389,16 +277,20 @@ describe('CombatViewModel — C-148 Combat Immersion', () => {
         generateImage: false,
         actionValid: true,
         sceneMood: 'triumph',
-      });
+      }));
+      viewModel = createViewModel({ text: { extractStructure } });
+      bridgeSendCalls = armViewModel(viewModel);
 
       // Spy on _transitionBgmByMood via method override
       let wasCalled = false;
       let receivedMood = '';
+      // C-151 (review guard): the mood crossfade is delegated to the composed
+      // `CombatBgmDirector`, so the spy belongs on the director, not on a
+      // ViewModel method that no longer exists.
       const vm = viewModel as unknown as {
-        _transitionBgmByMood: (mood: string) => Promise<void>;
+        _bgm: { transitionByMood: (mood: string) => Promise<void> };
       };
-      const origTransition = vm._transitionBgmByMood;
-      vm._transitionBgmByMood = async (mood: string) => {
+      vm._bgm.transitionByMood = async (mood: string) => {
         wasCalled = true;
         receivedMood = mood;
       };
@@ -410,46 +302,25 @@ describe('CombatViewModel — C-148 Combat Immersion', () => {
 
       // COMBAT_ACTION_ANIMATE + COMBAT_ACTION dispatched
       expect(bridgeSendCalls.length).toBe(2);
-
-      // Restore
-      (
-        extractStructureMod.textGenerationService as {
-          extractStructure: (opts: Record<string, unknown>) => Promise<Record<string, unknown>>;
-        }
-      ).extractStructure = origExtract;
-      vm._transitionBgmByMood = origTransition;
     });
 
     test('should NOT call _transitionBgmByMood when sceneMood is undefined', async () => {
-      const extractStructureMod = await import(
-        '$lib/services/ai/text_generation_service.svelte.ts'
-      );
-      const origExtract = (
-        extractStructureMod.textGenerationService as {
-          extractStructure: (opts: Record<string, unknown>) => Promise<Record<string, unknown>>;
-        }
-      ).extractStructure;
-
-      (
-        extractStructureMod.textGenerationService as {
-          extractStructure: (opts: Record<string, unknown>) => Promise<Record<string, unknown>>;
-        }
-      ).extractStructure = async () => ({
+      const extractStructure = mock(async () => ({
         actionType: 'ATTACK',
         narrative: 'You swing your sword at the goblin.',
         bonusDamage: 0,
         advantage: false,
         generateImage: false,
         actionValid: true,
-        // sceneMood intentionally omitted
-      });
+      }));
+      viewModel = createViewModel({ text: { extractStructure } });
+      bridgeSendCalls = armViewModel(viewModel);
 
       let wasCalled = false;
       const vm = viewModel as unknown as {
-        _transitionBgmByMood: (mood: string) => Promise<void>;
+        _bgm: { transitionByMood: (mood: string) => Promise<void> };
       };
-      const origTransition = vm._transitionBgmByMood;
-      vm._transitionBgmByMood = async () => {
+      vm._bgm.transitionByMood = async () => {
         wasCalled = true;
       };
 
@@ -459,14 +330,6 @@ describe('CombatViewModel — C-148 Combat Immersion', () => {
 
       // Engine command should still be dispatched
       expect(bridgeSendCalls.length).toBe(2);
-
-      // Restore
-      (
-        extractStructureMod.textGenerationService as {
-          extractStructure: (opts: Record<string, unknown>) => Promise<Record<string, unknown>>;
-        }
-      ).extractStructure = origExtract;
-      vm._transitionBgmByMood = origTransition;
     });
   });
 
@@ -593,5 +456,215 @@ describe('CombatViewModel — C-148 Combat Immersion', () => {
       expect(viewModel.encounterImages.length).toBe(0);
       expect(viewModel.combatLog.length).toBe(0);
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// C-489 AC-5: model-proposed advantage and bonus damage are recomputed from state
+// ---------------------------------------------------------------------------
+
+describe('executeCustomAction — C-489 AC-5 (recompute advantage/bonus from state)', () => {
+  let viewModel: CombatViewModelInterface;
+  let bridgeSendCalls: Array<Record<string, unknown>>;
+
+  beforeEach(() => {
+    viewModel = createViewModel();
+    bridgeSendCalls = armViewModel(viewModel, { enemyHp: 80, enemyMaxHp: 80, playerAttack: 5 });
+  });
+
+  test('ignores a model-proposed +10 bonus and fabricated advantage', async () => {
+    const extractStructure = mock(async () => ({
+      actionType: 'ATTACK',
+      narrative: 'You unleash a devastating blow!',
+      bonusDamage: 10, // model claims +10
+      advantage: true, // model claims advantage
+      generateImage: false,
+      actionValid: true,
+    }));
+    viewModel = createViewModel({ text: { extractStructure } });
+    bridgeSendCalls = armViewModel(viewModel, { enemyHp: 80, enemyMaxHp: 80, playerAttack: 5 });
+
+    await viewModel.executeCustomAction('I unleash a devastating blow');
+
+    const action = bridgeSendCalls.find((c) => c.type === 'COMBAT_ACTION');
+    if (!action) {
+      throw new Error('expected a COMBAT_ACTION to be dispatched');
+    }
+    // Enemy at full HP → no advantage from state; player attack 5 → +2 bonus.
+    expect(action.advantage).toBe(false);
+    expect(action.bonusDamage).toBe(2);
+  });
+
+  test('grants advantage from state when the enemy is wounded', async () => {
+    const extractStructure = mock(async () => ({
+      actionType: 'ATTACK',
+      narrative: 'You press the advantage!',
+      bonusDamage: 0,
+      advantage: false,
+      generateImage: false,
+      actionValid: true,
+    }));
+    viewModel = createViewModel({ text: { extractStructure } });
+    bridgeSendCalls = armViewModel(viewModel, { enemyHp: 20, enemyMaxHp: 80, playerAttack: 5 });
+
+    await viewModel.executeCustomAction('I press the advantage');
+
+    const action = bridgeSendCalls.find((c) => c.type === 'COMBAT_ACTION');
+    if (!action) {
+      throw new Error('expected a COMBAT_ACTION to be dispatched');
+    }
+    expect(action.advantage).toBe(true);
+  });
+});
+
+// ── C-514 AC-4: explicit end turn flows UI → bridge → engine ──────────────
+
+describe('CombatViewModel — C-514 AC-4 explicit end turn', () => {
+  type BridgeHandler = (event: Record<string, unknown>) => void;
+
+  /** Installs a spy bridge that captures the VM's bridge listeners. */
+  const installBridge = (
+    vm: CombatViewModelInterface,
+  ): { sent: Array<Record<string, unknown>>; emit: (type: string, event: unknown) => void } => {
+    const sent: Array<Record<string, unknown>> = [];
+    const handlers = new Map<string, BridgeHandler[]>();
+    const bridge = {
+      send: (cmd: Record<string, unknown>) => {
+        sent.push(cmd);
+      },
+      on: (type: string, handler: BridgeHandler) => {
+        const list = handlers.get(type) ?? [];
+        list.push(handler);
+        handlers.set(type, list);
+        return () => {
+          const current = handlers.get(type) ?? [];
+          handlers.set(
+            type,
+            current.filter((entry) => entry !== handler),
+          );
+        };
+      },
+    };
+    (vm as unknown as { _bridge: typeof bridge })._bridge = bridge;
+    (vm as unknown as { _registerListeners: () => void })._registerListeners();
+    // C-516: mounting the combat surface asks the engine to replay the live
+    // encounter state (`COMBAT_SYNC_REQUEST`), so a ViewModel that mounted after
+    // COMBAT_STARTED still renders the fight. These cases assert the commands
+    // the PLAYER issues, so drop the mount-time sync request.
+    for (let index = sent.length - 1; index >= 0; index--) {
+      if (sent[index]?.type === 'COMBAT_SYNC_REQUEST') {
+        sent.splice(index, 1);
+      }
+    }
+    return {
+      sent,
+      emit: (type, event) => {
+        for (const handler of handlers.get(type) ?? []) {
+          handler(event as Record<string, unknown>);
+        }
+      },
+    };
+  };
+
+  test('endTurn sends once while pending and allows another command after TURN_CHANGED', () => {
+    const vm = createViewModel();
+    const { sent, emit } = installBridge(vm);
+    vm.currentTurnEntity = 1;
+    vm.isPlayerTurn = true;
+
+    vm.endTurn();
+    vm.endTurn();
+
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toMatchObject({ type: 'COMBAT_END_TURN' });
+
+    emit('TURN_CHANGED', { currentEntityId: 1, activeEntities: [1, 2] });
+    vm.endTurn();
+    expect(sent).toHaveLength(2);
+  });
+
+  test('COMBAT_ENDED clears a pending end-turn command', () => {
+    const vm = createViewModel();
+    const { sent, emit } = installBridge(vm);
+    vm.currentTurnEntity = 1;
+
+    vm.endTurn();
+    emit('COMBAT_ENDED', { victory: true });
+    vm.currentTurnEntity = 1;
+    vm.endTurn();
+
+    expect(sent).toHaveLength(2);
+  });
+
+  test('endTurn does not mutate turn state locally', () => {
+    const vm = createViewModel();
+    installBridge(vm);
+    vm.currentTurnEntity = 1;
+    vm.isPlayerTurn = true;
+    vm.turnState = {
+      currentEntityId: 1,
+      currentEntityName: 'Player',
+      isPlayerTurn: true,
+      actionEconomy: {
+        movementRemaining: 6,
+        actionAvailable: true,
+        quickActionAvailable: true,
+        bonusActionAvailable: true,
+        reactionAvailable: true,
+      },
+      turnNumber: 3,
+    };
+
+    vm.endTurn();
+
+    // The engine owns advancement: nothing moved until TURN_CHANGED arrives.
+    expect(vm.currentTurnEntity).toBe(1);
+    expect(vm.isPlayerTurn).toBe(true);
+    expect(vm.turnState?.currentEntityId).toBe(1);
+    expect(vm.turnState?.turnNumber).toBe(3);
+  });
+
+  test('endTurn outside combat is a no-op', () => {
+    const vm = createViewModel();
+    const { sent } = installBridge(vm);
+    vm.currentTurnEntity = null;
+
+    vm.endTurn();
+
+    expect(sent).toHaveLength(0);
+  });
+
+  test('TURN_CHANGED moves the active turn and the following ACTION_ECONOMY_CHANGED sets the budget', () => {
+    const vm = createViewModel();
+    const { emit } = installBridge(vm);
+    vm.playerName = 'Hero';
+    vm.enemyName = 'Goblin';
+
+    emit('TURN_CHANGED', { currentEntityId: 2, activeEntities: [1, 2] });
+    expect(vm.currentTurnEntity).toBe(2);
+    expect(vm.turnState?.isPlayerTurn).toBe(false);
+
+    emit('ACTION_ECONOMY_CHANGED', {
+      type: 'ACTION_ECONOMY_CHANGED',
+      entityId: 2,
+      movementRemaining: 4,
+      actionAvailable: false,
+      quickActionAvailable: true,
+      bonusActionAvailable: true,
+      reactionAvailable: true,
+    });
+
+    expect(vm.turnState?.actionEconomy).toEqual({
+      movementRemaining: 4,
+      actionAvailable: false,
+      quickActionAvailable: true,
+      bonusActionAvailable: true,
+      reactionAvailable: true,
+    });
+
+    // The turn comes back to the player on a new round.
+    emit('TURN_CHANGED', { currentEntityId: 1, activeEntities: [1, 2] });
+    expect(vm.currentTurnEntity).toBe(1);
+    expect(vm.isPlayerTurn).toBe(true);
   });
 });

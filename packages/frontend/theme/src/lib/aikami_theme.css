@@ -1,0 +1,215 @@
+/* biome-ignore-all lint/suspicious/noUnknownAtRules: Tailwind v4 directives */
+/* packages/frontend/theme/src/lib/aikami_theme.css
+ *
+ * 🔴 GENERATED FILE — do not edit by hand.
+ *
+ * Source of truth: packages/frontend/theme/src/lib/theme/builtin/*.json,
+ * compiled by packages/frontend/theme/src/lib/theme/theme_css_generator.ts.
+ * Regenerate with:  bun moon run scripts:theme-build
+ * Verify (no writes): bun moon run scripts:theme-validate
+ *
+ * Aikami UI design tokens — the single source of truth for the client + hub
+ * semantic palette, radii, and control metrics.
+ *
+ * The raw palette lives in `:root` / the dark `@media` block as `--ui-*`
+ * custom properties; the `@theme` block then registers the semantic tokens with
+ * Tailwind v4 so utilities (`bg-base-100`, `text-primary`, `border-base-300`,
+ * `bg-primary/50`, ...) are generated exactly as before.
+ *
+ * Component classes that consume these tokens live in `./aikami_ui.css`.
+ *
+ * C-529 Directive 7: `data-aikami-theme-scope` marks the game shell and the
+ * appearance preview root. Those selectors inherit the built-in variants from
+ * `:root`; an installed community theme injects its own `--ui-*` declarations
+ * beneath that attribute only, so recovery controls and the trusted host chrome
+ * keep their styles.
+ */
+
+/* ── Light theme (parchment / warm slate) ── */
+:root {
+  color-scheme: light;
+
+  --ui-base-100: oklch(0.985 0.006 270);
+  --ui-base-200: oklch(0.94 0.01 270);
+  --ui-base-300: oklch(0.87 0.01 270);
+  --ui-panel: oklch(0.985 0.009 85);
+  --ui-elevated: oklch(1 0 0);
+  --ui-ink: oklch(0.93 0.014 82);
+  --ui-base-content: oklch(0.18 0.03 270);
+  --ui-muted-content: oklch(0.47 0.025 270);
+  --ui-primary-content: oklch(0.985 0.006 270);
+  --ui-secondary-content: oklch(0.985 0.006 270);
+  --ui-accent-content: oklch(0.18 0.03 270);
+  --ui-neutral-content: oklch(0.985 0.006 270);
+  --ui-info-content: oklch(29% 0.066 243.157);
+  --ui-success-content: oklch(37% 0.077 168.94);
+  --ui-warning-content: oklch(41% 0.112 45.904);
+  --ui-error-content: oklch(0.985 0.006 270);
+  --ui-primary: oklch(0.52 0.22 285);
+  --ui-secondary: oklch(0.25 0.05 270);
+  --ui-accent: oklch(0.62 0.18 48);
+  --ui-neutral: oklch(0.25 0.01 260);
+  --ui-info: oklch(74% 0.16 232.661);
+  --ui-success: oklch(76% 0.177 163.223);
+  --ui-warning: oklch(82% 0.189 84.429);
+  --ui-error: oklch(0.45 0.18 25);
+  --ui-focus-ring: oklch(0.52 0.22 285);
+  --ui-brass: oklch(0.58 0.09 74);
+  --ui-font-body: "Inter", system-ui, sans-serif;
+  --ui-font-display: "Source Serif 4", "Iowan Old Style", Palatino, Georgia, serif;
+  --ui-font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  --ui-weight-body: 400;
+  --ui-weight-medium: 500;
+  --ui-weight-strong: 600;
+  --ui-border: 1px;
+  --ui-radius-selector: 0.5rem;
+  --ui-radius-field: 0.25rem;
+  --ui-radius-box: 0.5rem;
+  --ui-size-selector: 0.25rem;
+  --ui-size-field: 0.25rem;
+  --ui-duration-enter: 160ms;
+  --ui-duration-exit: 120ms;
+
+  /* Legacy aliases consumed by aikami_ui.css. They point at the themeable
+   * `--ui-*` tokens, so a theme switch moves them too. */
+  --border: var(--ui-border);
+  --size-selector: var(--ui-size-selector);
+  --size-field: var(--ui-size-field);
+}
+
+/* ── Dark theme (obsidian / rune-glow) ── */
+/* Explicit dark selection lives OUTSIDE the OS media query so a user-selected
+ * dark theme applies even under a light OS preference. The media-query block
+ * below only handles the "no explicit choice" default. The token list is
+ * intentionally repeated because CSS has no way to share declarations between a
+ * media query and a plain rule. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --ui-base-100: oklch(0.13 0.015 260);
+  --ui-base-200: oklch(0.16 0.018 260);
+  --ui-base-300: oklch(0.24 0.02 260);
+  --ui-panel: oklch(0.15 0.015 68);
+  --ui-elevated: oklch(0.19 0.017 68);
+  --ui-ink: oklch(0.11 0.014 68);
+  --ui-base-content: oklch(0.9 0.01 270);
+  --ui-muted-content: oklch(0.68 0.01 270);
+  --ui-primary-content: oklch(0.13 0.015 260);
+  --ui-secondary-content: oklch(0.13 0.015 260);
+  --ui-accent-content: oklch(0.13 0.015 260);
+  --ui-neutral-content: oklch(0.9 0.01 270);
+  --ui-info-content: oklch(29% 0.066 243.157);
+  --ui-success-content: oklch(37% 0.077 168.94);
+  --ui-warning-content: oklch(41% 0.112 45.904);
+  --ui-error-content: oklch(0.9 0.01 270);
+  --ui-primary: oklch(0.65 0.22 285);
+  --ui-secondary: oklch(0.9 0.01 270);
+  --ui-accent: oklch(0.65 0.18 48);
+  --ui-neutral: oklch(0.32 0.01 260);
+  --ui-info: oklch(74% 0.16 232.661);
+  --ui-success: oklch(76% 0.177 163.223);
+  --ui-warning: oklch(82% 0.189 84.429);
+  --ui-error: oklch(0.5 0.18 25);
+  --ui-focus-ring: oklch(0.65 0.22 285);
+  --ui-brass: oklch(0.72 0.1 78);
+  --ui-font-body: "Inter", system-ui, sans-serif;
+  --ui-font-display: "Source Serif 4", "Iowan Old Style", Palatino, Georgia, serif;
+  --ui-font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  --ui-weight-body: 400;
+  --ui-weight-medium: 500;
+  --ui-weight-strong: 600;
+  --ui-border: 1px;
+  --ui-radius-selector: 0.5rem;
+  --ui-radius-field: 0.25rem;
+  --ui-radius-box: 0.5rem;
+  --ui-size-selector: 0.25rem;
+  --ui-size-field: 0.25rem;
+  --ui-duration-enter: 160ms;
+  --ui-duration-exit: 120ms;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    color-scheme: dark;
+
+    --ui-base-100: oklch(0.13 0.015 260);
+    --ui-base-200: oklch(0.16 0.018 260);
+    --ui-base-300: oklch(0.24 0.02 260);
+    --ui-panel: oklch(0.15 0.015 68);
+    --ui-elevated: oklch(0.19 0.017 68);
+    --ui-ink: oklch(0.11 0.014 68);
+    --ui-base-content: oklch(0.9 0.01 270);
+    --ui-muted-content: oklch(0.68 0.01 270);
+    --ui-primary-content: oklch(0.13 0.015 260);
+    --ui-secondary-content: oklch(0.13 0.015 260);
+    --ui-accent-content: oklch(0.13 0.015 260);
+    --ui-neutral-content: oklch(0.9 0.01 270);
+    --ui-info-content: oklch(29% 0.066 243.157);
+    --ui-success-content: oklch(37% 0.077 168.94);
+    --ui-warning-content: oklch(41% 0.112 45.904);
+    --ui-error-content: oklch(0.9 0.01 270);
+    --ui-primary: oklch(0.65 0.22 285);
+    --ui-secondary: oklch(0.9 0.01 270);
+    --ui-accent: oklch(0.65 0.18 48);
+    --ui-neutral: oklch(0.32 0.01 260);
+    --ui-info: oklch(74% 0.16 232.661);
+    --ui-success: oklch(76% 0.177 163.223);
+    --ui-warning: oklch(82% 0.189 84.429);
+    --ui-error: oklch(0.5 0.18 25);
+    --ui-focus-ring: oklch(0.65 0.22 285);
+    --ui-brass: oklch(0.72 0.1 78);
+    --ui-font-body: "Inter", system-ui, sans-serif;
+    --ui-font-display: "Source Serif 4", "Iowan Old Style", Palatino, Georgia, serif;
+    --ui-font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+    --ui-weight-body: 400;
+    --ui-weight-medium: 500;
+    --ui-weight-strong: 600;
+    --ui-border: 1px;
+    --ui-radius-selector: 0.5rem;
+    --ui-radius-field: 0.25rem;
+    --ui-radius-box: 0.5rem;
+    --ui-size-selector: 0.25rem;
+    --ui-size-field: 0.25rem;
+    --ui-duration-enter: 160ms;
+    --ui-duration-exit: 120ms;
+  }
+}
+
+/* Register the semantic palette with Tailwind v4. Values intentionally
+ * reference the `--ui-*` custom properties above so a theme switch only has to
+ * redefine those — the generated utilities track dark mode automatically. */
+@theme {
+  /* Semantic colors — a theme switch only redefines the `--ui-*` values. */
+  --color-base-100: var(--ui-base-100);
+  --color-base-200: var(--ui-base-200);
+  --color-base-300: var(--ui-base-300);
+  --color-panel: var(--ui-panel);
+  --color-elevated: var(--ui-elevated);
+  --color-ink: var(--ui-ink);
+  --color-base-content: var(--ui-base-content);
+  --color-muted-content: var(--ui-muted-content);
+  --color-primary-content: var(--ui-primary-content);
+  --color-secondary-content: var(--ui-secondary-content);
+  --color-accent-content: var(--ui-accent-content);
+  --color-neutral-content: var(--ui-neutral-content);
+  --color-info-content: var(--ui-info-content);
+  --color-success-content: var(--ui-success-content);
+  --color-warning-content: var(--ui-warning-content);
+  --color-error-content: var(--ui-error-content);
+  --color-primary: var(--ui-primary);
+  --color-secondary: var(--ui-secondary);
+  --color-accent: var(--ui-accent);
+  --color-neutral: var(--ui-neutral);
+  --color-info: var(--ui-info);
+  --color-success: var(--ui-success);
+  --color-warning: var(--ui-warning);
+  --color-error: var(--ui-error);
+  --color-focus-ring: var(--ui-focus-ring);
+  --color-brass: var(--ui-brass);
+
+  /* Radii — registered so Tailwind generates the `rounded-box`,
+   * `rounded-field`, and `rounded-selector` utilities the UI uses. */
+  --radius-selector: var(--ui-radius-selector);
+  --radius-field: var(--ui-radius-field);
+  --radius-box: var(--ui-radius-box);
+}

@@ -18,7 +18,7 @@ created_at: "2026-09-04T00:00:00Z"
 
 | Field | Value |
 |---|---|
-| **Source** | Accepted agent-platform audit; PR 01 in [execution plan](../strategy/agent-platform-hardening.md) |
+| **Source** | Accepted agent-platform audit; PR 01 in [execution plan](../reference/agent-platform-hardening.md) |
 | **Target** | `.pi/` dependency configuration, automation unit tasks and `.github/workflows/` |
 | **Type** | thin |
 | **Priority** | P0 — the regression suite for the development harness currently fails and is excluded from normal CI |

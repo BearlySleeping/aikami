@@ -8,13 +8,19 @@ import {
   BaseDevViewModel,
   type BaseDevViewModelInterface,
   type BaseDevViewModelOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import type { MacroContext } from '@aikami/parser';
 import { resolveMacros } from '@aikami/parser';
-import { macroPresetStore } from '$services';
+import type { MacroPresetStore } from '$services';
 import type { PromptPreset } from '$types';
 
 // ── Types ───────────────────────────────────────────────────────────────────
+
+/** The preset store operations the sandbox reads. */
+export type MacrosSandboxPresetCapabilities = Pick<
+  MacroPresetStore,
+  'presets' | 'loadPresets' | 'assemblePreset'
+>;
 
 export type MacrosSandboxViewModelInterface = BaseDevViewModelInterface & {
   /** Raw template input containing {{macro}} placeholders. */
@@ -53,7 +59,10 @@ export type MacrosSandboxViewModelInterface = BaseDevViewModelInterface & {
   resetAll: () => void;
 };
 
-export type MacrosSandboxViewModelOptions = BaseDevViewModelOptions & {};
+export type MacrosSandboxViewModelOptions = BaseDevViewModelOptions & {
+  /** Preset store. */
+  presetStore: MacrosSandboxPresetCapabilities;
+};
 
 // ── Default context values ──────────────────────────────────────────────────
 
@@ -89,6 +98,8 @@ class MacrosSandboxViewModel
   extends BaseDevViewModel<MacrosSandboxViewModelOptions>
   implements MacrosSandboxViewModelInterface
 {
+  private readonly _presetStore: MacrosSandboxPresetCapabilities;
+
   template = $state(DEFAULT_TEMPLATE);
 
   // Context mock fields
@@ -104,7 +115,13 @@ class MacrosSandboxViewModel
 
   // Preset integration
   presetId = $state<string | null>(null);
-  presets = $state(macroPresetStore.presets);
+  presets = $state<PromptPreset[]>([]);
+
+  constructor(options: MacrosSandboxViewModelOptions) {
+    super(options);
+    this._presetStore = options.presetStore;
+    this.presets = this._presetStore.presets;
+  }
 
   // ── Derived ────────────────────────────────────────────────────────────────
 
@@ -138,8 +155,8 @@ class MacrosSandboxViewModel
   // ── Initialize ─────────────────────────────────────────────────────────────
 
   override async initialize(): Promise<void> {
-    macroPresetStore.loadPresets();
-    this.presets = macroPresetStore.presets;
+    this._presetStore.loadPresets();
+    this.presets = this._presetStore.presets;
     await super.initialize();
   }
 
@@ -204,7 +221,7 @@ class MacrosSandboxViewModel
   selectPreset(options: { id: string }): void {
     const { id } = options;
     this.presetId = id;
-    const assembled = macroPresetStore.assemblePreset(id);
+    const assembled = this._presetStore.assemblePreset(id);
     if (assembled !== undefined) {
       this.template = assembled;
     }
@@ -226,11 +243,18 @@ class MacrosSandboxViewModel
     this.template = DEFAULT_TEMPLATE;
     this.presetId = null;
     this.resetContext();
-    macroPresetStore.loadPresets();
-    this.presets = macroPresetStore.presets;
+    this._presetStore.loadPresets();
+    this.presets = this._presetStore.presets;
   }
 }
 
-export const getMacrosSandboxViewModel = (
+/**
+ * Builds a macros-sandbox ViewModel from explicit capabilities.
+ *
+ * Callers outside production (tests, sandboxes) use this directly; production
+ * code goes through `getMacrosSandboxViewModel` in
+ * ./macros_sandbox_composition.ts.
+ */
+export const createMacrosSandboxViewModel = (
   options: MacrosSandboxViewModelOptions,
 ): MacrosSandboxViewModelInterface => MacrosSandboxViewModel.create(options);

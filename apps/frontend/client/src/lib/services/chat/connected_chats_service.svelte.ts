@@ -13,7 +13,7 @@ import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import type { BridgeContext, ChatLink } from '@aikami/types';
 import { authService } from '../auth/auth_service.svelte.ts';
 import { chatService } from './chat.svelte.ts';

@@ -1,7 +1,7 @@
 <script lang="ts">
+import { getImageViewModel } from '$views/dev/image/image_composition';
 // apps/frontend/client/src/routes/(dev)/dev/image/+page.svelte
 import ImageView from '$views/dev/image/image_view.svelte';
-import { getImageViewModel } from '$views/dev/image/image_view_model.svelte';
 
 const viewModel = getImageViewModel({
   className: 'ImageViewModel',

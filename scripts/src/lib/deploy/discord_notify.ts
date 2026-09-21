@@ -103,8 +103,9 @@ export const notifyDiscordRelease = async (options: {
     const repo = process.env.GITHUB_REPOSITORY || 'BearlySleeping/aikami';
     const downloadBase = `https://github.com/${repo}/releases/latest/download`;
     const release = await fetchRelease(tag);
+    const channel = mode === 'staging' ? 'releasesStaging' : 'releases';
     const posted = await postToDiscord({
-      channel: 'releases',
+      channel,
       embed: releaseEmbed({ tag, release, downloadBase }),
       roleMention: 'releasePings',
       mode,

@@ -6,10 +6,11 @@
 // rather than reaching back into a parent ViewModel.
 //
 // Run with:
-//   bun test --preload ./src/lib/test_preload.ts --tsconfig tsconfig.test.json \
+//   bun test --preload ./src/lib/test_setup.ts --tsconfig tsconfig.test.json \
 //     src/lib/views/chat/slash_command_autocomplete.test.ts
 
 import { describe, expect, test } from 'bun:test';
+import type { SlashCommandEntry } from '@aikami/constants';
 
 import {
   getSlashCommandAutocomplete,
@@ -18,8 +19,13 @@ import {
 
 const createAutocomplete = (
   onApply: (commandName: string) => void = () => {},
+  options?: { getCompletions?: (partial: string) => readonly SlashCommandEntry[] },
 ): SlashCommandAutocompleteInterface =>
-  getSlashCommandAutocomplete({ className: 'SlashCommandAutocompleteTest', onApply });
+  getSlashCommandAutocomplete({
+    className: 'SlashCommandAutocompleteTest',
+    onApply,
+    ...options,
+  });
 
 describe('SlashCommandAutocomplete (C-425)', () => {
   describe('update', () => {
@@ -50,6 +56,23 @@ describe('SlashCommandAutocomplete (C-425)', () => {
     test('hides completions once a space is typed (full command)', () => {
       const ac = createAutocomplete();
       ac.update('/roll 2d6');
+      expect(ac.visible).toBe(false);
+      expect(ac.completions).toHaveLength(0);
+    });
+
+    test('uses a custom getCompletions source when injected', () => {
+      const ac = createAutocomplete(undefined, {
+        getCompletions: (partial) =>
+          partial.startsWith('/gen')
+            ? [{ name: 'generate', description: 'd', usage: '/generate <prompt>' }]
+            : [],
+      });
+      ac.update('/gen');
+      expect(ac.visible).toBe(true);
+      expect(ac.completions.map((c) => c.name)).toEqual(['generate']);
+
+      // Non-matching input returns nothing via the custom source.
+      ac.update('/tree');
       expect(ac.visible).toBe(false);
       expect(ac.completions).toHaveLength(0);
     });

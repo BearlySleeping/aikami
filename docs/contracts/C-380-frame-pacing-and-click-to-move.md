@@ -1,7 +1,7 @@
 ---
 id: C-380
 title: "Frame Pacing & Point-and-Click Movement"
-source: "external architecture review (claude CLI) — docs/research/game_engine_architecture_review.md §3 B9, §4 Q1, Q5"
+source: "external architecture review (claude CLI) — docs/reference/game_engine_architecture_review.md §3 B9, §4 Q1, Q5"
 status: approved
 github:
   issue_number: null
@@ -18,7 +18,7 @@ created_at: "2026-08-11"
 
 | Field | Value |
 |---|---|
-| **Source** | `docs/research/game_engine_architecture_review.md` §3 (B9), §4 (Q1 sync cost, Q5 click-to-move) |
+| **Source** | `docs/reference/game_engine_architecture_review.md` §3 (B9), §4 (Q1 sync cost, Q5 click-to-move) |
 | **Target** | `packages/frontend/engine/src/worker/ecs_worker.ts` — tick clock + state timestamps; `game_world.ts` — interpolation, pointer input, unprojection; `engine_bridge.ts` + `types.ts` — `MOVE_TO_CELL`; `apps/frontend/client/` — cursor UI |
 | **Priority** | P1 — the sim runs on `setTimeout(16)` while rendering runs on rAF with **no interpolation**, producing continuous judder that no amount of texture work fixes. Point-and-click is greenfield and is the input model the game is meant to have. |
 | **Dependencies** | **C-379** (hard — click-to-move consumes its A* and `PathFollow`; file: `C-379-collision-and-movement-unification.md`). C-377 (pixel snap must land before interpolation, or sub-pixel interpolation reintroduces shimmer; file: `C-377-pixel-art-render-correctness.md`). |
@@ -69,7 +69,7 @@ C-377.**
 The SharedArrayBuffer zero-copy path was deliberately removed because it
 required cross-origin isolation (COOP: same-origin + COEP: require-corp), which
 breaks Firebase Auth popup sign-in and is unavailable in Tauri webviews — see
-`docs/gotchas/cross-origin-isolation.md`. The existing N-buffer transfer protocol
+`docs/guides/cross-origin-isolation.md`. The existing N-buffer transfer protocol
 (`ecs_worker.ts:1141-1249`) uses transferable `postMessage` with a 3-buffer pool
 and a starvation-copy fallback (`ecs_worker.ts:1174-1180`) that `slice(0)`s the
 whole 120KB buffer when no slot is free.
@@ -205,7 +205,7 @@ type ClickIntent =
 - **Offline/degraded mode**: N/A.
 - **Accessibility/input**: keyboard movement must remain fully functional and must interrupt an active click-path immediately. Pointer input must not become the only way to do anything. Cursor feedback must not be the sole signal for a rejected click — pair it with an audible or visual click-marker.
 - **Performance budget**: interpolation adds one buffer copy per state and a lerp per rendered entity — must not measurably move frame time on the village map. Verify at 144Hz where the render:sim ratio is highest.
-- **Security/privacy**: N/A — COOP/COEP was already evaluated and rejected (see `docs/gotchas/cross-origin-isolation.md`). The existing `COOP: same-origin-allow-popups` (no COEP) is unchanged.
+- **Security/privacy**: N/A — COOP/COEP was already evaluated and rejected (see `docs/guides/cross-origin-isolation.md`). The existing `COOP: same-origin-allow-popups` (no COEP) is unchanged.
 - **Persistence/migration**: N/A — no persistent state changes.
 - **Cancellation/retry/idempotency**: a new click supersedes the previous goal; a keyboard press cancels the path; entering DIALOGUE/COMBAT/MENU cancels it. Repeated identical clicks must be idempotent, not a repath storm.
 - **Observability**: log the resolved `ClickIntent` and the resulting path length under render-debug; expose the interpolation alpha in the existing debug metrics so pacing problems are diagnosable.
@@ -213,7 +213,7 @@ type ClickIntent =
 ## Migration & Rollback
 
 - **Old data compatibility**: N/A — no persisted state.
-- **Migration**: N/A — no COOP/COEP headers are added (they were already removed; see `docs/gotchas/cross-origin-isolation.md`).
+- **Migration**: N/A — no COOP/COEP headers are added (they were already removed; see `docs/guides/cross-origin-isolation.md`).
 - **Rollback**: `git revert`. Interpolation and pointer input are both additive and independently revertible.
 - **Feature flag or kill switch**: interpolation falls back to snap-to-latest when the state window has fewer than two entries — the pre-contract behaviour — so a bad blend degrades rather than breaks. Pointer input is a listener that can be removed without touching movement.
 - **Failure recovery**: if `simTimeMs` regresses or the window gaps (tab backgrounded), reset the window and snap for one frame rather than blending across the discontinuity.
@@ -223,7 +223,7 @@ type ClickIntent =
 - **In Scope:**
   - Fixed-timestep accumulator in the worker; tick index + timestamp + step in `STATE_UPDATE`
   - Main-thread two-state window and interpolated rendering, with pixel snap applied after blending
-  - Verification that the existing ArrayBuffer transfer path holds two states without detaching under interpolation (COOP/COEP/SharedArrayBuffer was already removed — see `docs/gotchas/cross-origin-isolation.md`)
+  - Verification that the existing ArrayBuffer transfer path holds two states without detaching under interpolation (COOP/COEP/SharedArrayBuffer was already removed — see `docs/guides/cross-origin-isolation.md`)
   - Screen→world unprojection co-located with the forward camera transform
   - Canvas-level pointer listener; `ClickIntent` resolution from the terrain/occupancy grids
   - `MOVE_TO_CELL` bridge command routed to `PathFollow`
@@ -310,7 +310,7 @@ into a good experience without the other.
 
 **Watch Points**:
 - The starvation branch (`ecs_worker.ts:1174-1180`) already `slice(0)`s — the main thread's window must not alias a buffer it has handed back.
-- The `crossOriginIsolated` / `SharedArrayBuffer` path was deliberately removed (`memory_config.ts:55-58`). Do NOT reintroduce it — see `docs/gotchas/cross-origin-isolation.md` for the full reasoning (breaks Firebase Auth popup sign-in).
+- The `crossOriginIsolated` / `SharedArrayBuffer` path was deliberately removed (`memory_config.ts:55-58`). Do NOT reintroduce it — see `docs/guides/cross-origin-isolation.md` for the full reasoning (breaks Firebase Auth popup sign-in).
 
 ### AC-4: A click on walkable ground walks the player there
 **Given** the player is idle and clicks a reachable walkable tile
@@ -398,7 +398,7 @@ into a good experience without the other.
 ## Implementation Sequence
 
 1. **Phase 1 (Clock)**: Fixed-timestep accumulator in the worker; add `tick`/`simTimeMs`/`stepMs` to both `STATE_UPDATE` branches. Verify with a mocked clock.
-2. **Phase 2 (Buffer safety)**: Verify the existing ArrayBuffer transfer path holds two states without detaching. The previous state view must be copied before the buffer is recycled. (COOP/COEP/SharedArrayBuffer was already removed — `memory_config.ts:55-58` — and must not be reintroduced; see `docs/gotchas/cross-origin-isolation.md`.)
+2. **Phase 2 (Buffer safety)**: Verify the existing ArrayBuffer transfer path holds two states without detaching. The previous state view must be copied before the buffer is recycled. (COOP/COEP/SharedArrayBuffer was already removed — `memory_config.ts:55-58` — and must not be reintroduced; see `docs/guides/cross-origin-isolation.md`.)
 3. **Phase 3 (Interpolation)**: Two-state window on the main thread; blend entity and camera positions; apply pixel snap after blending; fall back to snap-to-latest when the window is short or discontinuous.
 4. **Phase 4 (Unprojection)**: Inverse camera transform beside the forward one; round-trip test.
 5. **Phase 5 (Intent)**: Canvas pointer listener; `ClickIntent` resolution from the grids; `MOVE_TO_CELL` on the bridge routed to `PathFollow`.
@@ -410,7 +410,7 @@ into a good experience without the other.
 - **Interpolation without pixel snap looks worse than snapping.** C-377 AC-3 is a hard prerequisite; verify it is actually in the tree before starting Phase 3.
 - **The `ArrayBuffer` fallback detaches on transfer.** Holding a previous state means copying out before recycling. Under the starvation branch (`ecs_worker.ts:1174-1180`) the worker already `slice(0)`s — make sure the main thread's window does not alias a buffer it has handed back.
 - **A backgrounded tab produces a large elapsed gap.** Cap catch-up steps per wake-up and reset the interpolation window on resume, or the player teleports and the camera whips.
-- **COOP/COEP is not a concern here.** The `SharedArrayBuffer` path was already removed (`memory_config.ts:55-58`) and COOP/COEP was deliberately rejected because it breaks Firebase Auth popup sign-in (`docs/gotchas/cross-origin-isolation.md`). Do NOT reintroduce it.
+- **COOP/COEP is not a concern here.** The `SharedArrayBuffer` path was already removed (`memory_config.ts:55-58`) and COOP/COEP was deliberately rejected because it breaks Firebase Auth popup sign-in (`docs/guides/cross-origin-isolation.md`). Do NOT reintroduce it.
 - **Clicking during a portal transition** must be ignored — `isSimulationActive()` is false and a queued goal would fire on the new map at a meaningless cell.
 - **Do not let click routing grow a second interaction radius.** Reuse `interaction_target_selector`; two notions of "in range" will diverge.
 - **Do not add extrapolation "just in case".** It is the single most common source of rubber-banding in this pattern and there is no latency here to hide — the sim is in the same process tree.
@@ -421,7 +421,7 @@ Must be resolved before status becomes `approved`:
 
 - Fixed step size: 16.667ms (60Hz) or a coarser 20ms (50Hz) sim with interpolation covering the difference? Recommendation: 16.667ms — it matches the current effective rate, so no gameplay tuning shifts.
 - Clicking a blocked tile: reject, or route to the nearest walkable neighbour? Recommendation: nearest walkable neighbour within one cell, then reject — it matches player expectation when clicking a building edge.
-- ~~Can COOP/COEP be enabled given the current cross-origin inventory (Firebase Storage, auth, AI providers)?~~ **Resolved**: COOP/COEP was already evaluated and rejected — see `docs/gotchas/cross-origin-isolation.md`. The SharedArrayBuffer path was removed in `memory_config.ts:55-58`. This contract does not revisit that decision.
+- ~~Can COOP/COEP be enabled given the current cross-origin inventory (Firebase Storage, auth, AI providers)?~~ **Resolved**: COOP/COEP was already evaluated and rejected — see `docs/guides/cross-origin-isolation.md`. The SharedArrayBuffer path was removed in `memory_config.ts:55-58`. This contract does not revisit that decision.
 
 ## Amendments
 

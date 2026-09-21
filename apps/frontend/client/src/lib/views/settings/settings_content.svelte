@@ -7,6 +7,7 @@ import { GroupedTablist } from '@aikami/frontend/components';
 import AgentEditorView from '../agent/editor/agent_editor_view.svelte';
 import AgentListView from '../agent/list/agent_list_view.svelte';
 import AccountView from './account/account_view.svelte';
+import AiActivityView from './ai/ai_activity_view.svelte';
 import CapabilityDetailView from './ai/capability_detail_view.svelte';
 import SettingsAudioView from './audio/settings_audio_view.svelte';
 import AutonomousSettingsView from './autonomous/autonomous_settings_view.svelte';
@@ -14,6 +15,7 @@ import SettingsControlsView from './controls/settings_controls_view.svelte';
 import SettingsDisplayView from './display/settings_display_view.svelte';
 import ExportView from './export/export_view.svelte';
 import GameplayView from './gameplay/gameplay_view.svelte';
+import SettingsInterfaceView from './interface/settings_interface_view.svelte';
 import SettingsMusicView from './music/settings_music_view.svelte';
 import type { SettingsViewModelInterface } from './settings_view_model.svelte';
 
@@ -37,10 +39,10 @@ const { viewModel }: Props = $props();
             type="button"
             class="btn btn-ghost btn-block justify-start gap-3 text-left"
             onclick={() => {
-              viewModel.setActiveGroup(section.group);
-              viewModel.setActiveSection(section.id);
-              viewModel.clearSearch();
-            }}
+  viewModel.setActiveGroup(section.group);
+  viewModel.setActiveSection(section.id);
+  viewModel.clearSearch();
+}}
           >
             <span class="text-xs text-base-content/40 font-mono">{section.groupLabel}</span>
             <span class="font-medium">{section.label}</span>
@@ -71,12 +73,16 @@ const { viewModel }: Props = $props();
       <SettingsDisplayView viewModel={viewModel.displayViewModel} />
     {:else if viewModel.activeSectionId === 'gameplay'}
       <GameplayView viewModel={viewModel.gameplayViewModel} />
+    {:else if viewModel.activeSectionId === 'interface'}
+      <SettingsInterfaceView viewModel={viewModel.interfaceViewModel} />
     {:else if viewModel.activeSectionId === 'story-dialogue'}
       <CapabilityDetailView viewModel={viewModel.storyDialogueViewModel} />
     {:else if viewModel.activeSectionId === 'artwork'}
       <CapabilityDetailView viewModel={viewModel.artworkViewModel} />
     {:else if viewModel.activeSectionId === 'read-aloud'}
       <CapabilityDetailView viewModel={viewModel.readAloudViewModel} />
+    {:else if viewModel.activeSectionId === 'ai-activity'}
+      <AiActivityView viewModel={viewModel.aiActivityViewModel} />
     {:else if viewModel.activeSectionId === 'local-resources'}
       <div class="max-w-2xl mx-auto p-4">
         <h2 class="text-lg font-bold mb-4">Local Resources</h2>

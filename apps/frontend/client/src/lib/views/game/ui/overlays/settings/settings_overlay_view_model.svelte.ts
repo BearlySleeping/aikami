@@ -2,32 +2,56 @@
 //
 // In-game Settings overlay ViewModel — registry-driven section list (C-466).
 // Renders all sections flagged with 'pause' context, in registry order.
-// Preserves the existing revert-on-close behavior for audio.
+// Settings are immediate-save: edits persist as they change, so closing the
+// overlay rolls nothing back.
 // Adds a "Full Settings" navigation action to reach groups the overlay doesn't show.
+//
+// Lifecycle ownership: the overlay retains one ViewModel instance per visited
+// section for the duration of the overlay (so drafts survive tab switches), but
+// it does NOT initialize/dispose them. Each rendered section view's
+// BaseViewModelContainer is the single lifecycle owner. The overlay only reads
+// retained instances.
 import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-  routerService,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import type { SettingsAudioViewModelInterface } from '$lib/views/settings/audio/settings_audio_view_model.svelte';
 import type { SettingsControlsViewModelInterface } from '$lib/views/settings/controls/settings_controls_view_model.svelte';
 import type { SettingsDisplayViewModelInterface } from '$lib/views/settings/display/settings_display_view_model.svelte';
 import type { GameplayViewModelInterface } from '$lib/views/settings/gameplay/gameplay_view_model.svelte';
-import {
-  createSectionViewModelMount,
-  type SettingsSection,
-  type SimpleSectionViewModelMount,
-  sectionsForContext,
-} from '$lib/views/settings/settings_sections';
-import { gameOverlayService } from '$services';
+import type { SettingsInterfaceViewModelInterface } from '$lib/views/settings/interface/settings_interface_view_model.svelte';
+import { type SettingsSection, sectionsForContext } from '$lib/views/settings/settings_sections';
+import type { SimpleSectionViewModelMount } from '$lib/views/settings/settings_sections_composition';
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-/** Base configuration used to create the in-game settings overlay ViewModel. */
-export type SettingsOverlayViewModelOptions = BaseViewModelOptions;
+/** Router navigation capability for the overlay. */
+export type SettingsOverlayRouterCapabilities = {
+  goToHref(href: string): Promise<void>;
+};
+
+/** Overlay stack capability for the overlay. */
+export type SettingsOverlayStackCapabilities = {
+  popOverlay(): void;
+};
+
+/**
+ * Construction options for the in-game settings overlay.
+ *
+ * `createSectionMount` is the injected section-factory capability. Production
+ * wiring lives in `settings_overlay_composition.ts`; tests pass a fixture. The
+ * ViewModel never imports the production factory directly.
+ */
+export type SettingsOverlayViewModelOptions = BaseViewModelOptions & {
+  createSectionMount: (sectionId: string) => SimpleSectionViewModelMount | undefined;
+  /** Router capability. */
+  router: SettingsOverlayRouterCapabilities;
+  /** Overlay-stack capability. */
+  overlay: SettingsOverlayStackCapabilities;
+};
 
 // ---------------------------------------------------------------------------
 // Interface
@@ -48,11 +72,13 @@ export type SettingsOverlayViewModelInterface = BaseViewModelInterface & {
   readonly activeDisplayViewModel: SettingsDisplayViewModelInterface | undefined;
   /** Ready, typed ViewModel for the active section, when Gameplay is selected. */
   readonly activeGameplayViewModel: GameplayViewModelInterface | undefined;
+  /** Ready, typed ViewModel for the active section, when Interface is selected. */
+  readonly activeInterfaceViewModel: SettingsInterfaceViewModelInterface | undefined;
 
   /** Whether the overlay is visible (used by the view). */
   readonly isOpen: boolean;
 
-  setActiveSection(id: string): Promise<void>;
+  setActiveSection(id: string): void;
   close(): void;
   /** Navigates to the full /settings page, deep-linked to the active section. */
   navigateToFullSettings(): Promise<void>;
@@ -62,8 +88,8 @@ export type SettingsOverlayViewModelInterface = BaseViewModelInterface & {
 // Implementation
 // ---------------------------------------------------------------------------
 
-class SettingsOverlayViewModel
-  extends BaseViewModel<BaseViewModelOptions>
+export class SettingsOverlayViewModel
+  extends BaseViewModel<SettingsOverlayViewModelOptions>
   implements SettingsOverlayViewModelInterface
 {
   /** Registry-driven: all sections flagged for pause context. */
@@ -72,15 +98,21 @@ class SettingsOverlayViewModel
   activeSectionId = $state<string>('');
   isOpen = $state(true);
 
-  /** Cached section mounts, exposed only after their ViewModels initialize. */
-  private _sectionViewModelMounts = new Map<string, SimpleSectionViewModelMount>();
+  /** Retained section mounts for the overlay's lifetime. The section views' containers own lifecycle. */
+  private readonly _sectionViewModelMounts = new Map<string, SimpleSectionViewModelMount>();
   private _activeSectionMount: SimpleSectionViewModelMount | undefined = $state(undefined);
 
-  /** Cache pre-edit state for revert on close. */
-  private _preEditAudioVolume: number | undefined;
+  private readonly _createSectionMount: (
+    sectionId: string,
+  ) => SimpleSectionViewModelMount | undefined;
+  private readonly _router: SettingsOverlayRouterCapabilities;
+  private readonly _overlay: SettingsOverlayStackCapabilities;
 
-  constructor(options: BaseViewModelOptions) {
+  constructor(options: SettingsOverlayViewModelOptions) {
     super(options);
+    this._createSectionMount = options.createSectionMount;
+    this._router = options.router;
+    this._overlay = options.overlay;
 
     // Derive sections from the registry using the shared helper
     this.pauseSections = sectionsForContext('pause');
@@ -111,25 +143,28 @@ class SettingsOverlayViewModel
       : undefined;
   }
 
+  get activeInterfaceViewModel(): SettingsInterfaceViewModelInterface | undefined {
+    return this._activeSectionMount?.id === 'interface'
+      ? this._activeSectionMount.viewModel
+      : undefined;
+  }
+
   override async initialize(): Promise<void> {
-    const audioMount = await this._getOrCreateViewModelMount('audio');
-    this._preEditAudioVolume =
-      audioMount?.id === 'audio' ? audioMount.viewModel.masterVolume : undefined;
-    await this._activateSection(this.activeSectionId);
+    this._activateSection(this.activeSectionId);
     await super.initialize();
   }
 
-  async setActiveSection(id: string): Promise<void> {
+  setActiveSection(id: string): void {
     if (!this.pauseSections.some((s) => s.id === id)) {
       return;
     }
     this.activeSectionId = id;
-    await this._activateSection(id);
+    this._activateSection(id);
   }
 
   close(): void {
     this.isOpen = false;
-    gameOverlayService.popOverlay();
+    this._overlay.popOverlay();
   }
 
   /** Navigate to the full /settings page, deep-linked to the active section. */
@@ -140,20 +175,13 @@ class SettingsOverlayViewModel
     const section = activeSection?.id ?? 'controls';
     // Use goToHref because the settings route's typed queryParameters don't
     // include the ?section= / ?group= params that settings_view_model parses.
-    await routerService.goToHref(`/settings?group=${group}&section=${section}`);
+    await this._router.goToHref(`/settings?group=${group}&section=${section}`);
   }
 
   override async dispose(): Promise<void> {
-    // Revert audio changes that weren't explicitly saved
-    if (this._preEditAudioVolume !== undefined) {
-      const audioMount = this._sectionViewModelMounts.get('audio');
-      if (audioMount?.id === 'audio') {
-        audioMount.viewModel.setMasterVolume(this._preEditAudioVolume);
-      }
-    }
-    for (const mount of this._sectionViewModelMounts.values()) {
-      await mount.viewModel.dispose();
-    }
+    // Section ViewModels themselves are disposed by their rendered
+    // BaseViewModelContainer. Settings are immediate-save, so there is nothing
+    // to roll back here — just drop the retained references.
     this._sectionViewModelMounts.clear();
     this._activeSectionMount = undefined;
     await super.dispose();
@@ -161,32 +189,35 @@ class SettingsOverlayViewModel
 
   // ── Private helpers ──
 
-  private async _activateSection(sectionId: string): Promise<void> {
-    this._activeSectionMount = undefined;
-    const mount = await this._getOrCreateViewModelMount(sectionId);
-    if (this.activeSectionId === sectionId) {
-      this._activeSectionMount = mount;
-    }
+  private _activateSection(sectionId: string): void {
+    this._activeSectionMount = this._getOrCreateViewModelMount(sectionId);
   }
 
-  private async _getOrCreateViewModelMount(
-    sectionId: string,
-  ): Promise<SimpleSectionViewModelMount | undefined> {
+  /**
+   * Returns the retained section mount, creating it synchronously on first use.
+   * No `initialize()` here — the rendered section view's container owns the
+   * lifecycle, which avoids the duplicate-create / stale-cache races caused by
+   * populating the cache only after an async initialize resolved.
+   */
+  private _getOrCreateViewModelMount(sectionId: string): SimpleSectionViewModelMount | undefined {
     const existing = this._sectionViewModelMounts.get(sectionId);
     if (existing) {
       return existing;
     }
-    const mount = createSectionViewModelMount(sectionId);
+    const mount = this._createSectionMount(sectionId);
     if (!mount) {
       return undefined;
     }
-    await mount.viewModel.initialize();
-    mount.viewModel.__mounted = true;
     this._sectionViewModelMounts.set(sectionId, mount);
     return mount;
   }
 }
 
-export const getSettingsOverlayViewModel = (
-  options: BaseViewModelOptions,
+/**
+ * Testable factory — takes the section-factory capability explicitly and
+ * imports no production singletons. Production wiring lives in
+ * ./settings_overlay_composition.ts.
+ */
+export const createSettingsOverlayViewModel = (
+  options: SettingsOverlayViewModelOptions,
 ): SettingsOverlayViewModelInterface => SettingsOverlayViewModel.create(options);

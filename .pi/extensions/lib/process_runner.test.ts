@@ -35,6 +35,17 @@ describe('runCommand', () => {
     expect(result.code).toBe(0);
   });
 
+  test('records stdin EPIPE and resolves when a child rejects a large payload', async () => {
+    const result = await runCommand(
+      'node',
+      ['-e', 'process.stdin.destroy(); setTimeout(() => {}, 50);'],
+      { input: 'x'.repeat(16 * 1024 * 1024), timeoutMs: 5000 },
+    );
+
+    expect(result.stderr).toMatch(/stdin:.*(?:EPIPE|write|closed|destroyed)/i);
+    expect(result.killed).toBe(false);
+  });
+
   test('honours an already-aborted signal', async () => {
     const result = await runCommand('sleep', ['30'], {
       signal: AbortSignal.abort(),

@@ -1,0 +1,180 @@
+---
+title: Creating Your Own Assets
+description: Use the in-game Creator Studio to generate a portrait, prop or scene with your local engine, keep it in your library, and have the game render it.
+---
+
+The Creator Studio is the player-facing half of local asset generation: pick an
+asset type, write a prompt, generate with your local engine, review the result,
+and save it. Everything happens on your device — no account, no upload.
+
+## Open the studio
+
+From the start menu, open **Advanced → Creator Studio** (or navigate straight to
+`/studio/assets`). No campaign is required.
+
+1. Pick an **asset type** (a recipe). Image recipes generate immediately. Music,
+   ambience and one-shot recipes need the local **asset runner** — until its
+   browser-facing front door ships the studio lists them with that reason rather
+   than a bare disabled control (see **Audio assets** below).
+2. Write a **prompt**. For a portrait or expression, also give the **NPC id** so
+   the game can find the result in dialogue.
+3. **Generate**, then review the result — tag, extension, engine and seed are
+   shown so you can reproduce it. An audio candidate is reviewed with a decoded
+   **waveform**, labelled **Play/Pause**, **Loop audition** and **Mute**
+   controls, and a spoken status line.
+4. **Save to library**. The bytes are written to your local asset cache and a
+   registry row, and the asset resolves in-game through its tag.
+
+Saved assets appear in **My library** with their provenance (`generated:<engine>`)
+and size. You can rename or delete them; deleting also removes the cached bytes
+and warns you when a save references the tag. Locally generated assets are never
+evicted by the cache's LRU policy — they are your work, not catalog data.
+
+## Audio assets
+
+Music, ambience and sound effects go through a finishing stage that measures the
+*decoded* bytes and keeps a lossless master plus a runtime rendition:
+
+- A master is archived exactly as it arrived. Nothing is rewritten in place, and
+the archival hash is the lineage anchor every rendition points back to.
+- Music is delivered as 48 kHz stereo Opus in `.webm` at about **-18 LUFS**
+integrated (±2) with true peak at or below **-1 dBTP**; ambience targets about
+**-24 LUFS** (±3). Short one-shots are calibrated by peak/RMS instead, because a
+gated loudness measurement needs a 400 ms window a one-shot does not have.
+- A near-silent master is **refused**, never normalised up into a loud effect,
+and a clipped, truncated or DC-offset master fails with a named finding.
+- Loop bounds are authored in samples and re-checked against the *encoded*
+rendition, because encoder delay moves a sample-accurate cut.
+
+Sound effects are a distinct capability, not a music cue with a shorter
+duration. Until a licence-eligible SFX model is installed, SFX and ambience
+generation is refused with that stated reason rather than quietly producing a
+two-second orchestral stab from the music model. Importing an owned or licensed
+recording puts it through the same finishing and analysis path.
+
+New audio generation has its own switch (`PUBLIC_AUDIO_GENERATION`). Turning it
+off stops *new* generation only — the catalog, your saved assets and playback are
+untouched, and no accepted asset is ever rewritten.
+
+For the batch path (a whole asset brief, in the background), see
+`bun run --cwd apps/backend/image generate:batch`.
+
+### Binding a cue to a map
+
+Once a rendition is accepted and installed, a content pack can bind it to a
+map or context by its registry tag and hash, so the game plays *that* cue
+instead of whichever track happens to match the scene tags first. The binding
+lives in the pack manifest's optional `audio` section — see
+[Content Pack Authoring → Authored Audio Cue Bindings](./content-pack-authoring/#authored-audio-cue-bindings-c-523)
+for the field-by-field reference.
+
+One cue is live at a time. Map cues, the authoritative combat state and the
+Music DJ agent all submit their requests to a single arbitration authority,
+which applies a fixed priority — an explicit scripted cue beats combat, combat
+beats the current map's ambience or music — so a DJ pick can never start a
+second track on top of an authored map cue. Leaving combat restores the map cue
+that combat suspended. A binding that resolves to declared silence is held as
+intentional silence at its band, so a generic DJ pick cannot fill it in; a
+`declared_cue` fallback must stay on the same target bus and may not cycle.
+
+## Generating on a paired machine
+
+A browser cannot always reach a local engine: a page that is not in a secure
+context and a browser that refuses local-network access will both block the
+direct route, and a Tauri WebView often cannot reach loopback at all. The
+studio therefore resolves *two* transports and tells you which one it is using:
+
+| Transport | Needs | Shown as |
+|---|---|---|
+| **Local engine (direct)** | A running engine plus browser local-network access | picked automatically when the probe succeeds |
+| **Paired runner** | A Hub account, a paired device, and that device online | picked when direct access is unavailable and a device answers |
+
+When neither works the studio shows the reason and what to do next — pairing a
+machine, starting the engine, or simply keeping the local path below. It never
+reports success for a job that has not been dispatched.
+
+To pair a machine from a git checkout:
+
+```bash
+# 1. Mint a short-lived code on the Hub's Studio → Generation page, then:
+bun run --cwd apps/backend/local-stack runner:pair \
+  --hub https://hub.bearlysleeping.com --pair --code <CODE>
+
+# 2. Leave the runner polling (it claims one job at a time):
+bun run --cwd apps/backend/local-stack runner:pair \
+  --hub https://hub.bearlysleeping.com
+```
+
+Useful flags: `--label` (the name shown in the paired-device list), `--modalities
+image,audio`, `--resource-group gpu:0`, `--engine-url`, `--upload` (opt this
+device in to uploading private previews so you can review a result in the Hub),
+`--once` (exit after the first idle poll — handy for a smoke test), and
+`--credentials-dir` (a separate credential location, for a second runner on one
+host).
+
+The credential the runner stores is written owner-readable only
+(`~/.cache/aikami/runner/credentials.json`, mode `0600`) and is never printed. It
+is sent only to the configured Hub over HTTPS, on the authenticated requests that
+claim jobs and report results. Revoking the device from the Hub stops it claiming
+new jobs and stops Hub-side result retrieval — it does **not** delete anything
+already generated on the machine.
+
+### No account required
+
+Nothing above is needed to create assets. Local generation, the library, saved
+assets and playback all work with no account, no network and no paired device.
+Pairing only adds a second place a job can run, and a reviewer surface in the
+Hub. If you are offline, the studio says the paired route is unavailable and
+keeps using the local one.
+
+## What the game remembers about a saved asset
+
+Saving records more than the bytes. Each saved asset keeps its **generation
+lineage** on your device: the engine, the prompt, seed and model id it was
+produced with, the transformation chain that prepared the bytes, a content hash
+for the raw output and for the prepared artifact, and a scoped rights decision
+for each intended use.
+
+Two consequences worth knowing:
+
+- **Reloading is enough.** Close the app, reopen it and open the asset again —
+the lineage is still there; it is not rebuilt from guesswork. Assets generated
+before this feature simply report their history as *unknown*, which is honest:
+the game never invents provenance it did not record.
+- **Acceptance binds exact bytes.** A saved asset is *accepted* for local use.
+If the underlying prepared bytes change, the old acceptance no longer authorises
+the new content and the asset is treated as a new candidate instead. Accepted
+content is never silently re-pointed.
+
+The rights record keeps three separate questions apart — may the model be run
+(`inference`), may the output ship inside the game (`gameInclusion`), and may it
+be redistributed on its own (`standaloneDistribution`). A permission that has not
+been resolved is recorded as *unknown* and refuses at the point of publication
+rather than being inherited from the model's own licence. Saving an asset locally
+is not the same decision as approving it for community sharing, and the game
+keeps those separate.
+
+When you publish an asset, the public record carries only the complete shareable
+set: the provenance source, engine, prepared content hash and rights states. Your
+prompts, model ids, local file paths and private reference art never leave your
+device.
+
+## Generated portraits in play
+
+When contextual generation is enabled, the first time you talk to an NPC the game
+generates a portrait and registers it as `portraits:<npc>-neutral`. The dialogue
+avatar resolver checks that tag before falling back to the catalog sprite, so a
+generated portrait wins. Contextual generation is **off by default** and only
+runs when you opt in.
+
+## Related
+
+- [Generating assets locally](/guides/generating-assets) — the CLI pipeline and
+  the registry write seam the studio is built on.
+- [Image engine selection](/guides/image-engine-selection) — pointing the studio
+  at ComfyUI or sd-server.
+
+Source: `apps/frontend/client/src/lib/views/studio/`,
+`apps/frontend/client/src/lib/services/image/generated_asset_workflow.ts`,
+`apps/frontend/client/src/lib/views/studio/studio_hub_transport.ts`,
+`packages/frontend/storage/src/lib/generation_records.ts`.

@@ -43,7 +43,7 @@ import {
  * "Command failed: git push" error. Give every test here a generous ceiling.
  */
 const it = (name: string, fn: () => undefined | Promise<unknown>): void =>
-  baseIt(name, fn, { timeout: 30_000 });
+  baseIt(name, fn, { timeout: 60_000 });
 
 const git = (args: string[], cwd: string): string =>
   execFileSync('git', args, {
@@ -80,6 +80,13 @@ beforeEach(() => {
   git(['config', 'user.email', 'test@test.invalid'], root);
   git(['config', 'user.name', 'Test'], root);
   git(['config', 'commit.gpgsign', 'false'], root);
+  // Windows CI slowness guard: without the repo .gitattributes present, git's
+  // global core.autocrlf=true makes every add/commit/push here run LF→CRLF
+  // conversion and emit "LF will be replaced by CRLF" warnings. On a fresh
+  // Windows runner (plus Defender scans of the temp repos) that has blown the
+  // beforeEach past its timeout intermittently. These are throwaway LF repos,
+  // so pin autocrlf off — removes the conversion overhead and the noise.
+  git(['config', 'core.autocrlf', 'false'], root);
 
   contractPath = join(root, CONTRACT_REL);
   mkdirSync(join(root, 'docs/contracts'), { recursive: true });
@@ -207,7 +214,17 @@ describe('isolateContractInWorktree', () => {
   it('falls back to disk for a contract not yet committed to main', () => {
     const freshPath = join(root, 'docs/contracts/C-998-fresh.md');
     writeFileSync(freshPath, 'brand new, uncommitted\n');
-    isolateContractInWorktree({ repoRoot: root, worktreePath: worktree, contractPath: freshPath });
+    const result = isolateContractInWorktree({
+      repoRoot: root,
+      worktreePath: worktree,
+      contractPath: freshPath,
+    });
+    // 🔴 The untracked case is expected, not a failure: `update-index
+    // --skip-worktree` cannot mark a path that is not in the worktree index.
+    // It must not surface as a scary "Contract isolation failed" warning, and
+    // the seed must still land on disk for the agents to read.
+    expect(result.ok).toBe(true);
+    expect(result.message).toContain('not tracked');
     expect(readFileSync(join(worktree, 'docs/contracts/C-998-fresh.md'), 'utf-8')).toBe(
       'brand new, uncommitted\n',
     );
@@ -324,6 +341,28 @@ describe('commitContractContent', () => {
     expect(readFileSync(contractPath, 'utf-8')).toContain('approved');
     expect(hasUncommittedChanges({ cwd: root, path: CONTRACT_REL })).toBe(false);
   });
+
+  it('updates refs/remotes/origin/main so the next stage cannot read a stale contract (C-487/C-488)', () => {
+    // The critique auto-approve pushes to origin and the implement stage runs
+    // milliseconds later. If refs/remotes/origin/main is left stale here, a
+    // failed/stale fetch in readMainRef makes the implement stage seed its
+    // worktree from the pre-approve (draft) commit and block Phase 0 on a
+    // contract already approved on main.
+    git(['checkout', '-b', 'feat/unrelated'], root);
+
+    const result = commitContractContent({
+      repoRoot: root,
+      contractPath,
+      content: `${CONTRACT_BODY}\n| **Status** | approved |\n`,
+      message: 'docs(contracts): approve C-999',
+    });
+
+    expect(result.ok).toBe(true);
+    // No `git fetch` here: both local refs must already point at the pushed
+    // commit so a later read of main cannot observe the pre-approve content.
+    expect(git(['show', `refs/remotes/origin/main:${CONTRACT_REL}`], root)).toContain('approved');
+    expect(git(['show', `refs/heads/main:${CONTRACT_REL}`], root)).toContain('approved');
+  });
 });
 
 describe('pullContractFromWorktree', () => {
@@ -433,6 +472,7 @@ describe('concurrent writers racing the same push', () => {
     git(['config', 'user.email', 'other@test.invalid'], otherClone);
     git(['config', 'user.name', 'Other'], otherClone);
     git(['config', 'commit.gpgsign', 'false'], otherClone);
+    git(['config', 'core.autocrlf', 'false'], otherClone);
     writeFileSync(join(otherClone, 'code.ts'), 'export const a = 999;\n');
     git(['add', '-A'], otherClone);
     git(['commit', '-m', 'other pipeline commit'], otherClone);

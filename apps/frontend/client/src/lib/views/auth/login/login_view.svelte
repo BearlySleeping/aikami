@@ -11,8 +11,9 @@
 // the next page load with no button handler involvement.
 
 import { BaseViewModelContainer } from '$components';
+import { getLoginViewModel } from './login_composition.ts';
 import LoginControl from './login_control.svelte';
-import { getLoginViewModel, type LoginViewModelInterface } from './login_view_model.svelte';
+import type { LoginViewModelInterface } from './login_view_model.svelte';
 
 type Props = {
   /** Override the self-instantiated view model (tests/DI). */

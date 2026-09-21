@@ -11,7 +11,7 @@ import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import type { GalleryImage, ImageType } from '@aikami/types';
 
 export type GalleryServiceInterface = BaseFrontendClassInterface & {
@@ -36,6 +36,12 @@ export type GalleryServiceInterface = BaseFrontendClassInterface & {
    * @param id - The image ID to remove.
    */
   removeImage(id: string): void;
+  /**
+   * Returns every gallery image across all chats, most recent first. The World
+   * Codex gallery is a shared collection, so it reads this instead of a
+   * single chat.
+   */
+  getAllImages(): GalleryImage[];
   /**
    * Returns the total image count across all chats.
    */
@@ -99,6 +105,10 @@ export class GalleryService
     }
 
     return image;
+  }
+
+  getAllImages(): GalleryImage[] {
+    return [...this._images].sort((a, b) => b.generatedAt.localeCompare(a.generatedAt));
   }
 
   removeImage(id: string): void {

@@ -13,7 +13,8 @@
  *   - Verified: every downloaded artifact is SHA-256 checked against the
  *     pinned digest in models.manifest.json; a corrupt file is re-fetched.
  *   - Profile-scoped: only modalities enabled via COMPOSE_PROFILES are
- *     fetched (text → text, image → image, voice → tts, stt → stt).
+ *     fetched (text → text, image → image, voice → tts, stt → stt,
+ *     audio → audio).
  *   - STT tier-scoped (C-393): the stt profile fetches exactly the selected
  *     streaming + batch models plus the Silero VAD entry, gated by the
  *     STT_STREAM_MODEL / STT_BATCH_MODEL envs (default: minimal tier).
@@ -37,7 +38,7 @@ import { createWriteStream, existsSync } from 'node:fs';
 import { mkdir, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 
-export type Modality = 'text' | 'image' | 'tts' | 'stt';
+export type Modality = 'text' | 'image' | 'tts' | 'stt' | 'audio';
 
 export type ManifestEntry = {
   id: string;
@@ -73,10 +74,20 @@ export const PROFILE_MODALITY: Readonly<Record<string, readonly Modality[]>> = {
   image: ['image'],
   voice: ['tts'],
   stt: ['stt'],
+  // C-511: the audio profile fetches the whole ACE-Step checkpoint (one
+  // primary entry + its parts); the fetcher is profile-scoped, so nothing
+  // audio is downloaded unless the profile is explicitly enabled.
+  audio: ['audio'],
   client: [],
 } as const;
 
-export const ALL_MODALITIES: readonly Modality[] = ['text', 'image', 'tts', 'stt'] as const;
+export const ALL_MODALITIES: readonly Modality[] = [
+  'text',
+  'image',
+  'tts',
+  'stt',
+  'audio',
+] as const;
 
 // C-393: STT model tiers. The stt profile must NOT download every tier —
 // selecting a tier means fetching exactly the VAD model plus the entries

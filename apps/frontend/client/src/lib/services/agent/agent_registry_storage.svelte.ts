@@ -12,7 +12,7 @@ import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import { getLocalDatabase } from '@aikami/frontend/storage';
 import type { CustomAgentDefinition } from '$types';
 import { emulatorSeedService } from '../storage/emulator_seed_service.svelte.ts';

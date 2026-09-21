@@ -2,18 +2,53 @@
 //
 // C-464 AC-1/2/7: Account settings section — identity, sync status,
 // sign-out, and account deletion.
+//
+// Dependencies arrive through typed capability options. This module never
+// imports the `$services` barrel or any production singleton, so its tests can
+// inject fresh feature fixtures (see ./testing/account_fixtures.ts) instead of
+// mocking the global service registry. Production wiring lives in
+// ./account_composition.ts.
 
+import type { BackupEntry } from '@aikami/frontend/services/backup_client';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
-import type { SaveSlotEntry } from '@aikami/types';
-import { authService, gameStateSyncService, hubApiBase, hubAuthHeaders } from '$services';
+} from '@aikami/frontend/services/base';
+
+// ── Capability contracts ────────────────────────────────────────────────
+
+/** The identity fields the account view displays. */
+export type AccountUser = {
+  readonly displayName?: string;
+  readonly email?: string;
+};
+
+/** The account/identity operations the account view performs. */
+export type AccountCapabilities = {
+  readonly isLoggedIn: boolean;
+  readonly currentUser: AccountUser | undefined;
+  readonly uid: string | undefined;
+  signOut(): Promise<boolean>;
+  deleteAccount(): Promise<boolean>;
+  revokeAllSessions(): Promise<boolean>;
+};
+
+/** The cloud-backup capability the account view reads. */
+export type AccountBackupCapabilities = {
+  listBackups(): Promise<BackupEntry[]>;
+};
 
 // ── Types ───────────────────────────────────────────────────────────────
 
-export type AccountViewModelOptions = BaseViewModelOptions;
+export type AccountViewModelOptions = BaseViewModelOptions & {
+  /** Account/identity operations. */
+  account: AccountCapabilities;
+  /** Cloud backup listing. */
+  backups: AccountBackupCapabilities;
+  /** Platform online probe. Defaults to `navigator.onLine` when omitted. */
+  isOnline?: () => boolean;
+};
 
 export type AccountViewModelInterface = BaseViewModelInterface & {
   /** Whether the user is signed in. */
@@ -24,10 +59,10 @@ export type AccountViewModelInterface = BaseViewModelInterface & {
   readonly email: string | undefined;
   /** Whether the device is online. */
   readonly isOnline: boolean;
-  /** Sync slots from the local database. */
-  readonly syncSlots: SaveSlotEntry[];
-  /** Whether sync data is loading. */
-  readonly isSyncLoading: boolean;
+  /** Backups available for the signed-in user. */
+  readonly backups: BackupEntry[];
+  /** Whether backups are loading. */
+  readonly isBackupsLoading: boolean;
   /** Whether a sign-out is in progress. */
   readonly isSigningOut: boolean;
   /** Whether all account sessions are being revoked. */
@@ -41,8 +76,8 @@ export type AccountViewModelInterface = BaseViewModelInterface & {
   /** Whether delete account should be shown (only on signed-out states). */
   readonly showDeleteAccount: boolean;
 
-  /** Signs out the current user. */
-  signOut(): Promise<void>;
+  /** Signs out the current user. Resolves true when the sign-out succeeded. */
+  signOut(): Promise<boolean>;
   /** Revokes all sessions for the current account. */
   revokeAllSessions(): Promise<void>;
   /** Opens the delete account confirmation dialog. */
@@ -53,8 +88,12 @@ export type AccountViewModelInterface = BaseViewModelInterface & {
   updateDeleteConfirmText(value: string): void;
   /** Confirms and executes account deletion. */
   confirmDeleteAccount(): Promise<void>;
-  /** Refreshes the sync slots list. */
-  refreshSyncSlots(): Promise<void>;
+  /** Refreshes the cloud backups list. */
+  refreshBackups(): Promise<void>;
+  /** Formats a backup id for display (first 8 chars + ellipsis). */
+  formatBackupId(id: string): string;
+  /** Formats a backup size in bytes as a human-readable KB string. */
+  formatBackupSize(sizeBytes: number): string;
 };
 
 // ── Implementation ──────────────────────────────────────────────────────
@@ -63,28 +102,40 @@ class AccountViewModel
   extends BaseViewModel<AccountViewModelOptions>
   implements AccountViewModelInterface
 {
-  isSyncLoading = $state(false);
+  private readonly _account: AccountCapabilities;
+  private readonly _backups: AccountBackupCapabilities;
+  private readonly _isOnline: () => boolean;
+
+  isBackupsLoading = $state(false);
   isSigningOut = $state(false);
   isRevokingAllSessions = $state(false);
   isDeleteDialogOpen = $state(false);
   deleteConfirmText = $state('');
   isDeleting = $state(false);
-  syncSlots = $state<SaveSlotEntry[]>([]);
+  backups = $state<BackupEntry[]>([]);
+
+  constructor(options: AccountViewModelOptions) {
+    super(options);
+    this._account = options.account;
+    this._backups = options.backups;
+    this._isOnline =
+      options.isOnline ?? (() => (typeof navigator !== 'undefined' ? navigator.onLine : true));
+  }
 
   get isLoggedIn(): boolean {
-    return authService.isLoggedIn;
+    return this._account.isLoggedIn;
   }
 
   get displayName(): string | undefined {
-    return authService.currentUser?.displayName;
+    return this._account.currentUser?.displayName;
   }
 
   get email(): string | undefined {
-    return authService.currentUser?.email;
+    return this._account.currentUser?.email;
   }
 
   get isOnline(): boolean {
-    return typeof navigator !== 'undefined' ? navigator.onLine : true;
+    return this._isOnline();
   }
 
   get showDeleteAccount(): boolean {
@@ -93,18 +144,24 @@ class AccountViewModel
 
   override async initialize(): Promise<void> {
     if (this.isLoggedIn) {
-      await this.refreshSyncSlots();
+      await this.refreshBackups();
     }
     await super.initialize();
   }
 
-  async signOut(): Promise<void> {
+  async signOut(): Promise<boolean> {
     this.isSigningOut = true;
     try {
-      await authService.signOut();
+      const succeeded = await this._account.signOut();
+      if (!succeeded) {
+        this.error('signOut:failed');
+        return false;
+      }
       this.debug('signOut:success');
+      return true;
     } catch (error) {
       this.error('signOut', error);
+      return false;
     } finally {
       this.isSigningOut = false;
     }
@@ -113,17 +170,11 @@ class AccountViewModel
   async revokeAllSessions(): Promise<void> {
     this.isRevokingAllSessions = true;
     try {
-      const base = hubApiBase();
-      const response = await fetch(`${base}/account/sessions/revoke-all`, {
-        method: 'POST',
-        headers: hubAuthHeaders(),
-        credentials: 'include',
-      });
-      if (!response.ok) {
-        this.error('revokeAllSessions:failed', { status: response.status });
+      const succeeded = await this._account.revokeAllSessions();
+      if (!succeeded) {
+        this.error('revokeAllSessions:failed');
         return;
       }
-      authService.setCurrentUser(undefined);
       this.debug('revokeAllSessions:success');
     } catch (error) {
       this.error('revokeAllSessions', error);
@@ -132,18 +183,23 @@ class AccountViewModel
     }
   }
 
-  async refreshSyncSlots(): Promise<void> {
-    if (!authService.uid) {
-      return;
-    }
-    this.isSyncLoading = true;
+  async refreshBackups(): Promise<void> {
+    this.isBackupsLoading = true;
     try {
-      this.syncSlots = await gameStateSyncService.listSlots({ uid: authService.uid });
+      this.backups = await this._backups.listBackups();
     } catch (error) {
-      this.error('refreshSyncSlots', error);
+      this.error('refreshBackups', error);
     } finally {
-      this.isSyncLoading = false;
+      this.isBackupsLoading = false;
     }
+  }
+
+  formatBackupId(id: string): string {
+    return `${id.slice(0, 8)}…`;
+  }
+
+  formatBackupSize(sizeBytes: number): string {
+    return `${(sizeBytes / 1024).toFixed(1)} KB`;
   }
 
   openDeleteDialog(): void {
@@ -166,7 +222,7 @@ class AccountViewModel
     }
     this.isDeleting = true;
     try {
-      const success = await authService.deleteAccount();
+      const success = await this._account.deleteAccount();
       if (success) {
         this.closeDeleteDialog();
         this.debug('confirmDeleteAccount:success');
@@ -181,5 +237,12 @@ class AccountViewModel
   }
 }
 
-export const getAccountViewModel = (options: AccountViewModelOptions): AccountViewModelInterface =>
-  AccountViewModel.create(options);
+/**
+ * Builds an account ViewModel from explicit capabilities.
+ *
+ * Callers outside production (tests, sandboxes) use this directly; production
+ * code goes through `getAccountViewModel` in ./account_composition.ts.
+ */
+export const createAccountViewModel = (
+  options: AccountViewModelOptions,
+): AccountViewModelInterface => AccountViewModel.create(options);

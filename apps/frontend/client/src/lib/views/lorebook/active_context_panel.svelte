@@ -1,7 +1,7 @@
 <script lang="ts">
 // apps/frontend/client/src/lib/views/lorebook/active_context_panel.svelte
 //
-// DaisyUI drawer showing active keyword matches from lorebook scanning.
+// Aikami UI drawer showing active keyword matches from lorebook scanning.
 // Triggered from chat toolbar. Shows match reason ("constant" or
 // "matched: 'goblin'"), new-match highlight animation, and inline editing
 // toggle. Token budget indicator turns red when >2KB.

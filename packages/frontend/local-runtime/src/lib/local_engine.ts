@@ -20,6 +20,12 @@ export type EngineLoader = (
 export type LocalEngineOptions = {
   bundle: LocalModelBundle;
   loader: EngineLoader;
+  /**
+   * When true, a cache miss is passed to the loader as an empty file list
+   * instead of failing the load. Used by loaders that source their weights
+   * elsewhere (a native sidecar or transformers.js's own cache).
+   */
+  allowMissingAssets?: boolean;
 };
 
 // ---------------------------------------------------------------------------
@@ -29,6 +35,7 @@ export type LocalEngineOptions = {
 export class LocalEngine {
   private readonly _bundle: LocalModelBundle;
   private readonly _loader: EngineLoader;
+  private readonly _allowMissingAssets: boolean;
   private _backend: EngineBackend | null = null;
   private _state: LocalModelState;
   private _loadPromise: Promise<LocalModelState> | null = null;
@@ -37,6 +44,7 @@ export class LocalEngine {
   constructor(options: LocalEngineOptions) {
     this._bundle = options.bundle;
     this._loader = options.loader;
+    this._allowMissingAssets = options.allowMissingAssets ?? false;
     this._state = { status: 'not-downloaded', bytes: this._totalBytes() };
   }
 
@@ -82,7 +90,16 @@ export class LocalEngine {
       try {
         this._state = { status: 'loading' };
 
-        const files = await this._readFromCache(effectiveSignal);
+        let files: Array<{ path: string; data: ArrayBuffer }>;
+        try {
+          files = await this._readFromCache(effectiveSignal);
+        } catch (error) {
+          if (!this._allowMissingAssets || (error as Error)?.name === 'AbortError') {
+            throw error;
+          }
+          // Loader is self-sufficient (native sidecar / own cache).
+          files = [];
+        }
 
         if (effectiveSignal.aborted || generation !== this._loadGeneration) {
           this._state = { status: 'not-downloaded', bytes: this._totalBytes() };

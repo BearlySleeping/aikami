@@ -15,7 +15,7 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import type { LpcAnimationState } from '@aikami/lpc';
 import { getLpcAssetPath, getLpcCatalog } from '$lib/data/lpc_asset_catalog';
 import { sandboxRecipeResolver } from '../shared/lpc_sandbox_resolver';

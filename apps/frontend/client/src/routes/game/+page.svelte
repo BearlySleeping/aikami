@@ -6,8 +6,8 @@
 //
 // Contract: C-314 — Production game composition root
 
+import { getGameViewModel } from '$lib/views/game/game_composition.ts';
 import GameView from '$lib/views/game/game_view.svelte';
-import { getGameViewModel } from '$lib/views/game/game_view_model.svelte';
 
 const viewModel = getGameViewModel({ className: 'GameViewModel' });
 </script>

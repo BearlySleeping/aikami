@@ -8,6 +8,9 @@
 #   COMPOSE_PROFILES=text,image,voice,stt,client
 #   COMPOSE_FILE=compose.yaml:compose.cuda.yaml
 #
+# The C-511 `audio` profile is opt-in tooling and is deliberately NOT in the
+# shipped COMPOSE_PROFILES — see the `audio` service below.
+#
 # The user's runtime command is therefore plain `docker compose up -d` with
 # no flags. Override files carry the `deploy` device reservations and the
 # backend-specific image tags; this base file carries everything invariant.
@@ -18,7 +21,7 @@
 # because Docker Desktop provides no Metal passthrough.
 #
 # Ports (from packages/shared/constants/src/lib/development_ports.ts):
-#   text=11434  image=8188  voice=8089  stt=8087  client=5274
+#   text=11434  image=8188  voice=8089  stt=8087  audio=8094  client=5274
 # Host 8080 is abandoned — it belongs to Nordclaw's Firestore emulator.
 
 name: aikami-local-stack
@@ -40,7 +43,7 @@ services:
   # depends_on: { condition: service_completed_successfully } — a health
   # check cannot run on an exited container, so this is the correct gate.
   model-fetcher:
-    profiles: ["text", "image", "voice", "stt"]
+    profiles: ["text", "image", "voice", "stt", "audio"]
     # Pulls the published image by default (Compose's default pull_policy
     # only pulls when missing, never rebuilds); `docker compose build
     # model-fetcher` builds from docker/fetcher/Dockerfile locally instead —
@@ -233,6 +236,63 @@ services:
       timeout: 5s
       retries: 12
       start_period: 30s
+    restart: unless-stopped
+
+  # ── Audio engine — ACE-Step text-to-audio (music / sfx / ambient) ─────
+  # C-511. OPT-IN: the `audio` profile is deliberately absent from the
+  # shipped COMPOSE_PROFILES — the engine is a multi-gigabyte Python
+  # service and a surprise download or GPU grab is worse than a missing
+  # feature.
+  #
+  # Upstream publishes no digest-pinned image (its own docker-compose.yaml
+  # builds from the repo), so this service builds from a local Dockerfile that
+  # fetches and verifies a full upstream commit. The image's
+  # default CMD serves the Gradio UI on 7865; the CLI talks to `infer-api.py`,
+  # the checkpoint's only REST surface (`GET /health`, `POST /generate`), on
+  # 8000.
+  #
+  # ACE-Step's published image is CUDA-only (nvidia/cuda base + cu126
+  # torch), so the profile is unavailable without an NVIDIA GPU. Rather than
+  # fail with an opaque torch error, the command checks for the device and
+  # exits with a readable message.
+  #
+  # `infer-api.py` writes the generated WAV to the `output_path` the client
+  # sends (the CLI sends /models/audio/output/<id>.wav) and returns the path
+  # — hence the shared model volume and the writable output directory.
+  audio:
+    profiles: ["audio"]
+    build:
+      context: .
+      dockerfile: stack/ace-step.Dockerfile
+    # Run as the models-volume owner (the fetcher chowns it to 1000) so the
+    # engine can write /models/audio/output; MODELS_CHOWN=0 leaves the host
+    # bind tree alone, in which case this is the user's own uid.
+    user: "${AUDIO_UID:-1000}:${AUDIO_GID:-1000}"
+    command:
+      - bash
+      - -c
+      - |
+        if [ ! -e /dev/nvidiactl ] && [ ! -e /dev/nvidia0 ]; then
+          echo "[audio] ACE-Step requires an NVIDIA GPU — no /dev/nvidia* device is visible in this container." >&2
+          echo "[audio] The audio profile is CUDA-only in C-511; remove 'audio' from COMPOSE_PROFILES or run on an NVIDIA host." >&2
+          exit 1
+        fi
+        mkdir -p /models/audio/output
+        exec python infer-api.py
+    ports:
+      - "127.0.0.1:${AUDIO_PORT:-8094}:8000"
+    volumes:
+      - *model-volume
+    depends_on:
+      model-fetcher:
+        condition: service_completed_successfully
+    healthcheck:
+      # curl ships in the ACE-Step image (apt-get install curl).
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 20
+      start_period: 120s
     restart: unless-stopped
 
   # ── Client — the game client/app, prebuilt SPA behind nginx (opt-in

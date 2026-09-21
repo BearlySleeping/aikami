@@ -57,8 +57,14 @@
       "bytes": 4182230656,
       "sha256": "3c1868387a3a1ff504bbb87c33678321965ead381fcf87afbd0264daa600c082",
       "companions": [
-        { "role": "vae", "id": "image-anima-vae-qwen-image" },
-        { "role": "llm", "id": "image-anima-text-encoder-qwen3-0.6b" }
+        {
+          "role": "vae",
+          "id": "image-anima-vae-qwen-image"
+        },
+        {
+          "role": "llm",
+          "id": "image-anima-text-encoder-qwen3-0.6b"
+        }
       ]
     },
     {
@@ -192,6 +198,202 @@
       "targetPath": "stt/silero_vad.onnx",
       "bytes": 643854,
       "sha256": "9e2449e1087496d8d4caba907f23e0bd3f78d91fa552479bb9c23ac09cbb1fd6"
+    },
+    {
+      "id": "audio-ace-step-v1-3.5b",
+      "modality": "audio",
+      "tier": "any",
+      "license": "Apache-2.0",
+      "requiresAcknowledgement": false,
+      "kind": "file",
+      "repo": "ACE-Step/ACE-Step-v1-3.5B",
+      "revision": "82cd0d7b6322bd28cd4e830fe675ddb6180ce36c",
+      "file": "ace_step_transformer/diffusion_pytorch_model.safetensors",
+      "targetPath": "audio/ace-step-v1-3.5b/ace_step_transformer/diffusion_pytorch_model.safetensors",
+      "bytes": 6611422728,
+      "sha256": "e810f16728d8a2e0d1b9c3a907aac8c9a427ce38edbd890cb3dce5ff92da5aad",
+      "companions": [
+        {
+          "role": "audio_vae",
+          "id": "audio-ace-step-music-dcae"
+        },
+        {
+          "role": "vocoder",
+          "id": "audio-ace-step-music-vocoder"
+        },
+        {
+          "role": "text_encoder",
+          "id": "audio-ace-step-umt5-base"
+        },
+        {
+          "role": "text_encoder",
+          "id": "audio-ace-step-umt5-tokenizer"
+        },
+        {
+          "role": "config",
+          "id": "audio-ace-step-transformer-config"
+        },
+        {
+          "role": "config",
+          "id": "audio-ace-step-music-dcae-config"
+        },
+        {
+          "role": "config",
+          "id": "audio-ace-step-music-vocoder-config"
+        },
+        {
+          "role": "config",
+          "id": "audio-ace-step-umt5-config"
+        },
+        {
+          "role": "config",
+          "id": "audio-ace-step-umt5-tokenizer-config"
+        },
+        {
+          "role": "config",
+          "id": "audio-ace-step-umt5-special-tokens"
+        }
+      ]
+    },
+    {
+      "id": "audio-ace-step-music-dcae",
+      "modality": "audio",
+      "tier": "any",
+      "license": "Apache-2.0",
+      "requiresAcknowledgement": false,
+      "kind": "file",
+      "repo": "ACE-Step/ACE-Step-v1-3.5B",
+      "revision": "82cd0d7b6322bd28cd4e830fe675ddb6180ce36c",
+      "file": "music_dcae_f8c8/diffusion_pytorch_model.safetensors",
+      "targetPath": "audio/ace-step-v1-3.5b/music_dcae_f8c8/diffusion_pytorch_model.safetensors",
+      "bytes": 313646516,
+      "sha256": "2b0cb469307ac50659d1880db2a99bae47d0df335cbb36853964662d4b80e8ee"
+    },
+    {
+      "id": "audio-ace-step-music-vocoder",
+      "modality": "audio",
+      "tier": "any",
+      "license": "Apache-2.0",
+      "requiresAcknowledgement": false,
+      "kind": "file",
+      "repo": "ACE-Step/ACE-Step-v1-3.5B",
+      "revision": "82cd0d7b6322bd28cd4e830fe675ddb6180ce36c",
+      "file": "music_vocoder/diffusion_pytorch_model.safetensors",
+      "targetPath": "audio/ace-step-v1-3.5b/music_vocoder/diffusion_pytorch_model.safetensors",
+      "bytes": 206350988,
+      "sha256": "c92c9b46e28ab7b37b777780cf4308ad7ddac869636bb77aa61599358c4bc1c0"
+    },
+    {
+      "id": "audio-ace-step-umt5-base",
+      "modality": "audio",
+      "tier": "any",
+      "license": "Apache-2.0",
+      "requiresAcknowledgement": false,
+      "kind": "file",
+      "repo": "ACE-Step/ACE-Step-v1-3.5B",
+      "revision": "82cd0d7b6322bd28cd4e830fe675ddb6180ce36c",
+      "file": "umt5-base/model.safetensors",
+      "targetPath": "audio/ace-step-v1-3.5b/umt5-base/model.safetensors",
+      "bytes": 1127460248,
+      "sha256": "779cec0d210b2123e21d0a9cd8128f02b4d412627355028965a8be0b241cc3b6"
+    },
+    {
+      "id": "audio-ace-step-umt5-tokenizer",
+      "modality": "audio",
+      "tier": "any",
+      "license": "Apache-2.0",
+      "requiresAcknowledgement": false,
+      "kind": "file",
+      "repo": "ACE-Step/ACE-Step-v1-3.5B",
+      "revision": "82cd0d7b6322bd28cd4e830fe675ddb6180ce36c",
+      "file": "umt5-base/tokenizer.json",
+      "targetPath": "audio/ace-step-v1-3.5b/umt5-base/tokenizer.json",
+      "bytes": 16837459,
+      "sha256": "20a46ac256746594ed7e1e3ef733b83fbc5a6f0922aa7480eda961743de080ef"
+    },
+    {
+      "id": "audio-ace-step-transformer-config",
+      "modality": "audio",
+      "tier": "any",
+      "license": "Apache-2.0",
+      "requiresAcknowledgement": false,
+      "kind": "file",
+      "repo": "ACE-Step/ACE-Step-v1-3.5B",
+      "revision": "82cd0d7b6322bd28cd4e830fe675ddb6180ce36c",
+      "file": "ace_step_transformer/config.json",
+      "targetPath": "audio/ace-step-v1-3.5b/ace_step_transformer/config.json",
+      "bytes": 639,
+      "sha256": "4d78beb6afb4c7f3705256b44faaf60f3e1e2d78f4015ca87740f3695d7f5447"
+    },
+    {
+      "id": "audio-ace-step-music-dcae-config",
+      "modality": "audio",
+      "tier": "any",
+      "license": "Apache-2.0",
+      "requiresAcknowledgement": false,
+      "kind": "file",
+      "repo": "ACE-Step/ACE-Step-v1-3.5B",
+      "revision": "82cd0d7b6322bd28cd4e830fe675ddb6180ce36c",
+      "file": "music_dcae_f8c8/config.json",
+      "targetPath": "audio/ace-step-v1-3.5b/music_dcae_f8c8/config.json",
+      "bytes": 1034,
+      "sha256": "b14a49a8c52a52c2c8050098af1a946810a8a1a0b6e50abc75ba81371383cf04"
+    },
+    {
+      "id": "audio-ace-step-music-vocoder-config",
+      "modality": "audio",
+      "tier": "any",
+      "license": "Apache-2.0",
+      "requiresAcknowledgement": false,
+      "kind": "file",
+      "repo": "ACE-Step/ACE-Step-v1-3.5B",
+      "revision": "82cd0d7b6322bd28cd4e830fe675ddb6180ce36c",
+      "file": "music_vocoder/config.json",
+      "targetPath": "audio/ace-step-v1-3.5b/music_vocoder/config.json",
+      "bytes": 940,
+      "sha256": "39ddc4c417e01dc3be1862fcf315887358dd61b7f91c3cc8227f65072984bb55"
+    },
+    {
+      "id": "audio-ace-step-umt5-config",
+      "modality": "audio",
+      "tier": "any",
+      "license": "Apache-2.0",
+      "requiresAcknowledgement": false,
+      "kind": "file",
+      "repo": "ACE-Step/ACE-Step-v1-3.5B",
+      "revision": "82cd0d7b6322bd28cd4e830fe675ddb6180ce36c",
+      "file": "umt5-base/config.json",
+      "targetPath": "audio/ace-step-v1-3.5b/umt5-base/config.json",
+      "bytes": 848,
+      "sha256": "afae5da9a35e2b293cee66536f03fc2581cfc3f3d5707d3a262b552748de1572"
+    },
+    {
+      "id": "audio-ace-step-umt5-tokenizer-config",
+      "modality": "audio",
+      "tier": "any",
+      "license": "Apache-2.0",
+      "requiresAcknowledgement": false,
+      "kind": "file",
+      "repo": "ACE-Step/ACE-Step-v1-3.5B",
+      "revision": "82cd0d7b6322bd28cd4e830fe675ddb6180ce36c",
+      "file": "umt5-base/tokenizer_config.json",
+      "targetPath": "audio/ace-step-v1-3.5b/umt5-base/tokenizer_config.json",
+      "bytes": 61728,
+      "sha256": "ed9a3a8b0faa71a70a32847e0435fe036e6e112d4df4edb7bb48a921e344dc05"
+    },
+    {
+      "id": "audio-ace-step-umt5-special-tokens",
+      "modality": "audio",
+      "tier": "any",
+      "license": "Apache-2.0",
+      "requiresAcknowledgement": false,
+      "kind": "file",
+      "repo": "ACE-Step/ACE-Step-v1-3.5B",
+      "revision": "82cd0d7b6322bd28cd4e830fe675ddb6180ce36c",
+      "file": "umt5-base/special_tokens_map.json",
+      "targetPath": "audio/ace-step-v1-3.5b/umt5-base/special_tokens_map.json",
+      "bytes": 7079,
+      "sha256": "456b58fd240a06c743a7c2cf8008bec501240d68ebd1fc4018ea569505fea270"
     }
   ]
 }

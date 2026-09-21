@@ -1,34 +1,46 @@
 /* biome-ignore-all lint/suspicious/noUnknownAtRules: Tailwind v4 directives */
+/* biome-ignore-all lint/complexity/noImportantStyles: the reduced-motion accessibility override must beat component transitions */
+
+/* ── Self-hosted fonts (C-527 AC-6) ──
+ * Bundled from @fontsource (OFL-1.1 licensed, licence text ships in the
+ * package). No network request at boot and no CDN dependency: the WOFF2 bytes
+ * are emitted into the client build. If a face is ever missing, the
+ * `--font-sans` / `--font-display` stacks fall back to the platform serif /
+ * sans-serif, so the shell stays readable offline. */
+@import "@fontsource/inter/400.css";
+@import "@fontsource/inter/500.css";
+@import "@fontsource/inter/600.css";
+@import "@fontsource/source-serif-4/600.css";
+@import "@fontsource/source-serif-4/700.css";
+
 @import "tailwindcss";
-@import "@aikami/frontend/theme/brand_daisy.css";
-@plugin "daisyui" {
-  themes: false;
-}
+@import "@aikami/frontend/theme/aikami_theme.css";
+@import "@aikami/frontend/theme/aikami_ui.css";
+/* C-543: game-only readability + HUD scaling layer. Scoped beneath
+ * [data-aikami-theme-scope], so Hub/docs/site styles are untouched. */
+@import "@aikami/frontend/theme/aikami_game_ui.css";
 
 @theme {
-  --font-mono: "JetBrains Mono", monospace;
-  --font-sans: "Inter", sans-serif;
+  --font-mono: var(--ui-font-mono, "JetBrains Mono", ui-monospace, SFMono-Regular, monospace);
+  --font-sans: var(--ui-font-body, "Inter", system-ui, sans-serif);
+  /* Display/heading role — registered centrally so views use the
+   * `font-display` utility instead of inline font declarations. Source
+   * Serif 4 is preferred when bundled; the stack falls back to a local
+   * serif with no network request (no Google Fonts boot dependency).
+   *
+   * C-529: the leading `--ui-font-*` role lets an installed theme select a
+   * built-in font role without ever naming a family string, and the literal
+   * chain after it is the trusted offline fallback when no theme is installed. */
+  --font-display: var(
+    --ui-font-display,
+    "Source Serif 4",
+    "Iowan Old Style",
+    Palatino,
+    Georgia,
+    serif
+  );
   --animate-shake: shake 0.35s ease-in-out;
   --animate-rise: rise 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
-@keyframes shake {
-  0%,
-  100% {
-    transform: translate(0, 0);
-  }
-  20% {
-    transform: translate(-3px, 1px);
-  }
-  40% {
-    transform: translate(3px, -1px);
-  }
-  60% {
-    transform: translate(-2px, -1px);
-  }
-  80% {
-    transform: translate(2px, 1px);
-  }
 }
 
 /* ── Animations ──────────────────────────────────────────────────── */
@@ -86,4 +98,45 @@
 /* Hide the default emulator warning banner — replaced by our custom ModeIndicator component. */
 .firebase-emulator-warning {
   display: none;
+}
+
+/* Obsidian Chronicle sandbox: the large-text probe scales the whole shell so
+ * the reading column, composer, and management rows reflow together. */
+.obsidian-shell-text-large {
+  zoom: 1.2;
+}
+
+/* Reduced motion is a single, global policy — shakes, rises, pulses, and
+ * reveals across every presentation mode collapse to an instant state.
+ * Features can still opt into shorter non-vestibular transitions.
+ *
+ * 🔴 The effective policy is resolved by MotionPreferenceService (selection +
+ * OS preference) and published as `data-motion` on the document root, so this
+ * rule must NOT be nested inside the OS media query: an explicit `reduce`
+ * choice has to work while the OS allows motion. Because the attribute is on
+ * <html>, it also covers surfaces the game UI layer does not wrap — the combat
+ * sidebar and portaled/native dialogs. */
+[data-motion="reduced"],
+[data-motion="reduced"] *,
+[data-motion="reduced"] *::before,
+[data-motion="reduced"] *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+  scroll-behavior: auto !important;
+}
+
+/* Pre-policy fallback (script not yet run, or JS disabled): honour the OS
+ * preference unless the policy already resolved an explicit `full`/`reduce`
+ * choice. `data-motion="full"` must beat OS reduction, per the documented
+ * precedence. */
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-motion="full"]):not([data-motion="reduced"]) *,
+  :root:not([data-motion="full"]):not([data-motion="reduced"]) *::before,
+  :root:not([data-motion="full"]):not([data-motion="reduced"]) *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
 }

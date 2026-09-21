@@ -33,20 +33,20 @@ $effect(() => {
   aria-label="Credits"
   tabindex="-1"
   onclick={(e) => {
-    // Only dismiss when the backdrop itself is clicked — clicks that bubble
-    // up from the modal-box, credit links, or the Close button must not
-    // dismiss the modal.
-    if (e.target === e.currentTarget) {
-      onclose();
-    }
-  }}
+  // Only dismiss when the backdrop itself is clicked — clicks that bubble
+  // up from the modal-box, credit links, or the Close button must not
+  // dismiss the modal.
+  if (e.target === e.currentTarget) {
+    onclose();
+  }
+}}
   onkeydown={(e) => {
-    // Keyboard dismissal mirrors the backdrop-only click rule: Enter/Space
-    // only dismiss when the backdrop itself has focus.
-    if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) {
-      onclose();
-    }
-  }}
+  // Keyboard dismissal mirrors the backdrop-only click rule: Enter/Space
+  // only dismiss when the backdrop itself has focus.
+  if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) {
+    onclose();
+  }
+}}
 >
   <div class="modal-box max-w-lg" role="dialog" aria-modal="true" aria-label="Credits">
     <h3 class="text-lg font-bold mb-4">Credits</h3>

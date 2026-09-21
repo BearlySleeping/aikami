@@ -125,6 +125,50 @@ describe('LocalTaskPool', () => {
     expect(pool.engine.isLoaded).toBe(true);
   });
 
+  test('allowMissingAssets runs a self-sufficient loader with no cached files', async () => {
+    const loader = mock(async (_files: ReadonlyArray<{ path: string; data: ArrayBuffer }>) =>
+      createMockBackendWithGenerate(),
+    );
+    const pool = new LocalTaskPool({
+      bundle: TEST_BUNDLE,
+      loader,
+      allowMissingAssets: true,
+    });
+
+    await pool.ensureLoaded();
+
+    expect(pool.engine.isLoaded).toBe(true);
+    expect(loader).toHaveBeenCalledTimes(1);
+    expect(loader.mock.calls[0]?.[0]).toHaveLength(0);
+  });
+
+  test('without allowMissingAssets a cache miss fails the load', async () => {
+    const pool = new LocalTaskPool({
+      bundle: TEST_BUNDLE,
+      loader: async () => createMockBackendWithGenerate(),
+    });
+
+    await expect(pool.ensureLoaded()).rejects.toThrow();
+  });
+
+  test('text micro-tasks skip JSON validation and return raw output', async () => {
+    await seedCacheLocal();
+
+    const pool = new LocalTaskPool({
+      bundle: TEST_BUNDLE,
+      loader: async () => createMockBackendWithGenerate(),
+      validation: {
+        sanitizeJsonResponse: (raw) => raw,
+        validateAgainstSchema: () => false,
+      },
+    });
+    await pool.ensureLoaded();
+
+    const result = await pool.submit({ type: 'text', payload: { prompt: 'hello' } });
+    expect(result.ok).toBe(true);
+    expect(result.output).toBe('mock output');
+  });
+
   test('submit() executes a task and returns the result', async () => {
     await seedCacheLocal();
 

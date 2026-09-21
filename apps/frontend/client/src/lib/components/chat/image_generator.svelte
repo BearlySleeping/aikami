@@ -36,10 +36,10 @@ let prompt = $state('');
         class="btn btn-sm btn-primary"
         disabled={isGenerating || !prompt.trim()}
         onclick={() => {
-          const currentPrompt = prompt;
-          onGenerate?.(currentPrompt);
-          prompt = '';
-        }}
+  const currentPrompt = prompt;
+  onGenerate?.(currentPrompt);
+  prompt = '';
+}}
       >
         {#if isGenerating}
           <span class="loading loading-spinner loading-xs"></span>

@@ -1,12 +1,14 @@
 // scripts/src/lib/agents/contract_pipeline/types.ts
 // biome-ignore-all lint/style/useNamingConvention: contract statuses and stages are persisted domain values
+import type { GateOutcome } from './gate_outcome.ts';
 
 /**
  * 🔴 SINGLE SOURCE OF TRUTH: the PR target for every contract pipeline run.
  *
- * Currently `main` — early development, and CodeRabbit only reviews PRs
- * targeting main. Change this one constant (or set CONTRACT_PIPELINE_BASE_BRANCH)
- * to retarget the whole pipeline (e.g. back to `dev` later).
+ * Re-exported from `@aikami/constants` so Node-side pi extensions can read the
+ * same value at registration time without importing Bun-side script modules.
+ * Change it there (or set CONTRACT_PIPELINE_BASE_BRANCH) to retarget the whole
+ * pipeline (e.g. back to `dev` later).
  *
  * This is NOT the source a worktree is checked out from — that is the
  * operator's current branch by default (see `_worktreeSourceBranch` in
@@ -14,7 +16,7 @@
  * worker that branch's code. Only the eventual PR always targets this
  * constant.
  */
-export const PIPELINE_BASE_BRANCH = process.env.CONTRACT_PIPELINE_BASE_BRANCH ?? 'main';
+export { PIPELINE_BASE_BRANCH } from '@aikami/constants';
 
 /** Maximum autofix cycles before YOLO degrades to manual review. */
 export const MAX_AUTOFIX_CYCLES = 2;
@@ -338,7 +340,27 @@ export type RunManifest = {
    * is opened. `revision` prevents diagnostics from an earlier implementation
    * attempt being shown for newer code. Absent means the gate never ran.
    */
-  prePushValidation?: { ok: boolean; output: string; checkedAt: string; revision: string };
+  prePushValidation?: {
+    /** Canonical outcome. Optional only for manifests persisted before typed outcomes. */
+    outcome?: GateOutcome;
+    ok: boolean;
+    output: string;
+    checkedAt: string;
+    revision: string;
+  };
+  /**
+   * Revision-bound authorization to publish over a non-green gate outcome
+   * (see gate_outcome.ts). Written when YOLO deliberately proceeds past a red
+   * pre-push gate, or when an interactive run records explicit user
+   * permission. `gh_pr create` refuses a red verdict without a matching
+   * record for the exact outcome and revision.
+   */
+  publicationAuthorization?: {
+    outcome: 'failed' | 'unavailable' | 'cancelled';
+    revision: string;
+    grantedBy: string;
+    grantedAt: string;
+  };
   verificationFingerprint?: string;
   verificationContractHash?: string;
   /** Draft PR URL created after verification passes. */
@@ -371,14 +393,37 @@ export type RunManifest = {
   worktreeBranch?: string;
   blockedReason?: string;
   /**
-   * How many times a worker-reported `blocked`/`failed` has been escalated to
-   * the review captain instead of ending the run. Bounded by
-   * MAX_BLOCKED_ESCALATIONS so a captain that keeps sending work back into a
-   * stage that keeps blocking still terminates.
+   * How many worker-reported `blocked`/`failed` verdicts have been escalated
+   * to the review captain in the CURRENT episode. Reset to 0 whenever the
+   * captain decides `change` (it examined the block and chose to send the
+   * work back — C-526 attempt 2 then made real progress and still died on the
+   * spent budget) and whenever a run is resumed (a human intervened). Within
+   * one episode this is bounded by MAX_BLOCKED_ESCALATIONS.
    */
   blockedEscalations?: number;
+  /**
+   * Run-total count of review-captain consultations for worker-reported
+   * `blocked`/`failed` verdicts, across all episodes. NEVER reset — this is
+   * the bound that keeps a captain repassing a perpetually-blocking stage
+   * from looping forever. Bounded by MAX_BLOCKED_ESCALATION_ROUNDS.
+   */
+  blockedEscalationRounds?: number;
   /** Number of autofix cycles attempted during YOLO review. Used for circuit breaker. */
   autofixCycles: number;
+  /**
+   * How many times a red pre-push gate has been bounced back to the
+   * implementer instead of pushing and handing the diagnostics to the review
+   * captain. Bounded by MAX_GATE_BOUNCES (state_machine.ts); once spent, the
+   * branch pushes anyway and the captain gets the gate notes.
+   */
+  gateBounces?: number;
+  /**
+   * How many times a guard-halted verify stage (hard_timeout / cost_guard —
+   * the worker never produced its own verdict, so the submission was never
+   * evaluated) has been retried on the same commits instead of escalating to
+   * the review captain. Bounded by MAX_VERIFY_HALT_RETRIES.
+   */
+  verifyHaltRetries?: number;
   /** When true, contract-authoring stages (writer + critique) were skipped.
    *  Used during resume to prevent a draft path-sourced run from being reset
    *  to write_contract when resumed by run ID without a target. */

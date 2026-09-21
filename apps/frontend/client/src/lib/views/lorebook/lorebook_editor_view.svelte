@@ -1,7 +1,7 @@
 <script lang="ts">
 // apps/frontend/client/src/lib/views/lorebook/lorebook_editor_view.svelte
 //
-// DaisyUI CRUD form for lorebooks and entries. Pure view — delegates
+// Aikami UI CRUD form for lorebooks and entries. Pure view — delegates
 // all logic to LorebookEditorViewModel. Supports lorebook list sidebar,
 // entry cards with keyword chips, content textarea, constant toggle,
 // priority input, and inline editing.
@@ -29,9 +29,9 @@ const { viewModel }: Props = $props();
           placeholder="Lorebook name"
           value={viewModel.lorebookName}
           oninput={(e: Event) => {
-          const target = e.target as HTMLInputElement;
-          viewModel.setLorebookName(target.value);
-        }}
+  const target = e.target as HTMLInputElement;
+  viewModel.setLorebookName(target.value);
+}}
         >
         <button
           type="button"
@@ -70,9 +70,9 @@ const { viewModel }: Props = $props();
             class="input input-bordered input-sm flex-1"
             value={viewModel.lorebookName}
             oninput={(e: Event) => {
-            const target = e.target as HTMLInputElement;
-            viewModel.setLorebookName(target.value);
-          }}
+  const target = e.target as HTMLInputElement;
+  viewModel.setLorebookName(target.value);
+}}
             onblur={() => viewModel.updateLorebookName()}
           >
           <button
@@ -99,9 +99,9 @@ const { viewModel }: Props = $props();
               placeholder="goblin, orc, dragon"
               value={viewModel.entryKeywordInput}
               oninput={(e: Event) => {
-              const target = e.target as HTMLInputElement;
-              viewModel.setEntryKeywordInput(target.value);
-            }}
+  const target = e.target as HTMLInputElement;
+  viewModel.setEntryKeywordInput(target.value);
+}}
             >
           </div>
 
@@ -113,9 +113,9 @@ const { viewModel }: Props = $props();
               placeholder="World info content..."
               value={viewModel.entryContent}
               oninput={(e: Event) => {
-              const target = e.target as HTMLTextAreaElement;
-              viewModel.setEntryContent(target.value);
-            }}
+  const target = e.target as HTMLTextAreaElement;
+  viewModel.setEntryContent(target.value);
+}}
             ></textarea>
           </div>
 
@@ -128,9 +128,9 @@ const { viewModel }: Props = $props();
                 class="input input-bordered input-sm w-24"
                 value={viewModel.entryPriority}
                 oninput={(e: Event) => {
-                const target = e.target as HTMLInputElement;
-                viewModel.setEntryPriority(Number(target.value));
-              }}
+  const target = e.target as HTMLInputElement;
+  viewModel.setEntryPriority(Number(target.value));
+}}
               >
             </label>
 

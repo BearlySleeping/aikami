@@ -12,16 +12,33 @@ type Props = {
   stepIndex: number;
   totalSteps: number;
   reducedMotion: boolean;
+  anchor: string;
+  density: string;
+  effectiveScale: number;
   onDismiss(): void;
   onSkip(): void;
 };
 
-const { text, visible, stepIndex, totalSteps, reducedMotion, onDismiss, onSkip }: Props = $props();
+const {
+  text,
+  visible,
+  stepIndex,
+  totalSteps,
+  reducedMotion,
+  anchor,
+  density,
+  effectiveScale,
+  onDismiss,
+  onSkip,
+}: Props = $props();
 </script>
 
 {#if visible && text}
   <div
     class="onboarding-hint {reducedMotion ? 'no-animation' : ''}"
+    data-hud-anchor={anchor}
+    data-hud-density={density}
+    data-hud-scale={effectiveScale}
     role="status"
     aria-live="polite"
   >
@@ -49,10 +66,6 @@ const { text, visible, stepIndex, totalSteps, reducedMotion, onDismiss, onSkip }
 
 <style>
 .onboarding-hint {
-  position: absolute;
-  top: 4rem;
-  left: 50%;
-  transform: translateX(-50%);
   background: rgba(20, 20, 30, 0.92);
   color: #e2e8f0;
   padding: 0.625rem 1.5rem;
@@ -136,11 +149,11 @@ const { text, visible, stepIndex, totalSteps, reducedMotion, onDismiss, onSkip }
 @keyframes hint-slide-in {
   from {
     opacity: 0;
-    transform: translateX(-50%) translateY(-8px);
+    transform: translateY(-8px);
   }
   to {
     opacity: 1;
-    transform: translateX(-50%) translateY(0);
+    transform: translateY(0);
   }
 }
 </style>

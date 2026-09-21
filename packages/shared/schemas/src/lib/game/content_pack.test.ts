@@ -6,7 +6,18 @@
 
 import { describe, expect, test } from 'bun:test';
 import { Value } from 'typebox/value';
-import { ContentPackManifestSchema, PackConfigSchema } from './content_pack.ts';
+import emberwatchManifest from '../../../../../../content/packs/emberwatch/manifest.json';
+import innMap from '../../../../../../content/packs/emberwatch/maps/inn.json';
+import merchantShopMap from '../../../../../../content/packs/emberwatch/maps/merchant_shop.json';
+import oldRoadMap from '../../../../../../content/packs/emberwatch/maps/old_road.json';
+import villageMap from '../../../../../../content/packs/emberwatch/maps/village.json';
+import { checkPackAudioBindings } from '../media/audio_cue_binding.ts';
+import {
+  ContentPackManifestSchema,
+  NpcPortraitVariantsSchema,
+  PackConfigSchema,
+} from './content_pack.ts';
+import { normaliseLegacyStep } from './onboarding_hints.ts';
 
 /** Minimal valid manifest fixture. */
 const validManifest = {
@@ -566,6 +577,27 @@ describe('ContentPackManifestSchema', () => {
   });
 });
 
+describe('NpcPortraitVariantsSchema', () => {
+  test('accepts published catalog-backed portrait paths', () => {
+    expect(
+      Value.Check(NpcPortraitVariantsSchema, {
+        neutral: '/game-data/portraits/emberwatch/village_elder/neutral.png',
+        concerned: 'portraits/emberwatch/village_elder/concerned.webp',
+      }),
+    ).toBe(true);
+  });
+
+  test('rejects absolute, traversal, and unsupported portrait URLs', () => {
+    for (const neutral of [
+      'https://example.test/neutral.png',
+      '/game-data/portraits/../secrets/neutral.png',
+      '/game-data/portraits/emberwatch/village_elder/neutral.jpg',
+    ]) {
+      expect(Value.Check(NpcPortraitVariantsSchema, { neutral })).toBe(false);
+    }
+  });
+});
+
 describe('ContentPackManifestSchema — atlas tiles/props/entities (C-375)', () => {
   test('should accept tiles, props, entities and fallbackTile', () => {
     const manifest = {
@@ -686,7 +718,6 @@ describe('PackConfigSchema (C-376 AC-2)', () => {
     // fail validation (CodeRabbit review, C-376).
     expect(Value.Check(PackConfigSchema, { tiles: {} })).toBe(false);
   });
-
   test('prop isWalkable undefined is omitted by the projection contract', () => {
     // The client projection omits optional fields that are absent — it never
     // emits `isWalkable: undefined`. structuredClone preserves an explicit
@@ -737,5 +768,543 @@ describe('PackConfigSchema (C-376 AC-2)', () => {
   test('npcs is optional — legacy configs without it still validate (C-400)', () => {
     const legacy = { tiles: {}, props: {} };
     expect(Value.Check(PackConfigSchema, legacy)).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// C-488 AC-1 — authored NPC identity fields on the pack NPC schema
+// ---------------------------------------------------------------------------
+
+describe('ContentPackNpcEntrySchema — authored identity (C-488 AC-1)', () => {
+  test('accepts an NPC with all five authored identity fields', () => {
+    const manifest = {
+      ...validManifest,
+      npcs: {
+        // biome-ignore lint/style/useNamingConvention: manifest npc IDs use snake_case
+        village_elder: {
+          name: 'Elder Thalia',
+          personality: {
+            voice: 'Measured and warm.',
+            manner: 'Patient and authoritative.',
+          },
+          agenda: ["Keep the Ward Wand sealed in Emberwatch's shrine."],
+          knowledge: ['The Ward Wand is a Vesperine relic.'],
+          secrets: ['She fears old enemies have breached the valley.'],
+          boundaries: ["She will not risk Emberwatch on a stranger's promise."],
+        },
+      },
+    };
+    const result = Value.Parse(ContentPackManifestSchema, manifest);
+    const npc = result.npcs.village_elder;
+    expect(npc.personality?.voice).toBe('Measured and warm.');
+    expect(npc.personality?.manner).toBe('Patient and authoritative.');
+    expect(npc.agenda).toEqual(["Keep the Ward Wand sealed in Emberwatch's shrine."]);
+    expect(npc.knowledge).toEqual(['The Ward Wand is a Vesperine relic.']);
+    expect(npc.secrets).toEqual(['She fears old enemies have breached the valley.']);
+    expect(npc.boundaries).toEqual(["She will not risk Emberwatch on a stranger's promise."]);
+  });
+
+  test('accepts an NPC without identity fields (all optional)', () => {
+    const manifest = {
+      ...validManifest,
+      npcs: {
+        bob: { name: 'Bob' },
+      },
+    };
+    const result = Value.Parse(ContentPackManifestSchema, manifest);
+    expect(result.npcs.bob.personality).toBeUndefined();
+    expect(result.npcs.bob.agenda).toBeUndefined();
+    expect(result.npcs.bob.knowledge).toBeUndefined();
+    expect(result.npcs.bob.secrets).toBeUndefined();
+    expect(result.npcs.bob.boundaries).toBeUndefined();
+  });
+
+  test('rejects unknown keys on the NPC entry (additionalProperties: false)', () => {
+    const manifest = {
+      ...validManifest,
+      npcs: {
+        bob: { name: 'Bob', mood: 'grumpy' },
+      },
+    };
+    expect(Value.Check(ContentPackManifestSchema, manifest)).toBe(false);
+  });
+
+  test('rejects a string personality — the { voice, manner } object is normative', () => {
+    const manifest = {
+      ...validManifest,
+      npcs: {
+        bob: { name: 'Bob', personality: 'grumpy' },
+      },
+    };
+    expect(() => Value.Parse(ContentPackManifestSchema, manifest)).toThrow();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// C-488 AC-5 — shipped Emberwatch manifest carries authored identity
+// ---------------------------------------------------------------------------
+
+describe('C-488 AC-5 — Emberwatch manifest content', () => {
+  const manifest = Value.Parse(ContentPackManifestSchema, {
+    ...emberwatchManifest,
+    onboarding: {
+      ...emberwatchManifest.onboarding,
+      steps: emberwatchManifest.onboarding.steps.map((step) => normaliseLegacyStep(step)),
+    },
+  });
+
+  test('all three Emberwatch NPCs have a fully authored identity', () => {
+    for (const npcId of ['village_elder', 'rollo_grasper', 'merchant']) {
+      const npc = manifest.npcs[npcId];
+      expect(npc, `${npcId} exists`).toBeDefined();
+      expect(npc?.personality?.voice, `${npcId} voice`).toBeTruthy();
+      expect(npc?.personality?.manner, `${npcId} manner`).toBeTruthy();
+      expect(npc?.agenda?.length, `${npcId} agenda`).toBeGreaterThanOrEqual(1);
+      expect(npc?.knowledge?.length, `${npcId} knowledge`).toBeGreaterThanOrEqual(1);
+      expect(npc?.secrets?.length, `${npcId} secrets`).toBeGreaterThanOrEqual(1);
+      expect(npc?.boundaries?.length, `${npcId} boundaries`).toBeGreaterThanOrEqual(1);
+    }
+  });
+
+  test('keeps the proof encounter on the combat-only resolution path', () => {
+    expect(manifest.encounters?.proof_encounter?.allowNonCombatResolution).toBe(false);
+  });
+
+  test('Thalia and Rollo carry the exact conflicting first-agenda entries', () => {
+    expect(manifest.npcs.village_elder?.agenda?.[0]).toBe(
+      "Keep the Ward Wand sealed in Emberwatch's shrine.",
+    );
+    expect(manifest.npcs.rollo_grasper?.agenda?.[0]).toBe(
+      'Acquire the Ward Wand and sell it beyond Emberwatch.',
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// C-494 AC-2 — the companion entry carries all five identity characteristics
+// ---------------------------------------------------------------------------
+
+describe('C-494 AC-2 — Emberwatch companion identity', () => {
+  const manifest = Value.Parse(ContentPackManifestSchema, {
+    ...emberwatchManifest,
+    onboarding: {
+      ...emberwatchManifest.onboarding,
+      steps: emberwatchManifest.onboarding.steps.map((step) => normaliseLegacyStep(step)),
+    },
+  });
+
+  const companion = manifest.npcs.village_guard;
+
+  test('exactly one Emberwatch NPC is a recruitable companion', () => {
+    const companions = Object.entries(manifest.npcs).filter(([, npc]) => npc?.isCompanion);
+    expect(companions).toHaveLength(1);
+    expect(companions[0][0]).toBe('village_guard');
+  });
+
+  test('the companion carries the full companion field set', () => {
+    expect(companion?.isCompanion).toBe(true);
+    expect(companion?.recruitDialogueKey).toBeTruthy();
+    expect(companion?.dismissDialogueKey).toBeTruthy();
+    expect(companion?.companionClassId).toBe('fighter');
+    expect(companion?.initialApproval).toBe(10);
+    expect(companion?.banterPool?.length).toBeGreaterThan(0);
+  });
+
+  test('desire (agenda) is present', () => {
+    expect(companion?.agenda?.length).toBeGreaterThanOrEqual(1);
+  });
+
+  test('fear/manner (personality) is present', () => {
+    expect(companion?.personality?.voice).toBeTruthy();
+    expect(companion?.personality?.manner).toBeTruthy();
+  });
+
+  test('a revisable belief (knowledge) is present', () => {
+    expect(companion?.knowledge?.length).toBeGreaterThanOrEqual(1);
+  });
+
+  test('a relationship conflicting with another NPC (agenda entry naming a want) is present', () => {
+    const relationshipEntry = companion?.agenda?.find((entry) => /Elder Thalia/i.test(entry));
+    expect(relationshipEntry).toBeTruthy();
+  });
+
+  test('one boundary the companion will not casually cross is present', () => {
+    expect(companion?.boundaries?.length).toBeGreaterThanOrEqual(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// C-495 — dramatic structure: truth variants, accounts, evidence
+// ---------------------------------------------------------------------------
+
+describe('ContentPackManifestSchema — dramatic structure (C-495)', () => {
+  test('accepts a manifest with truthVariants, accounts, and evidence', () => {
+    const manifest = {
+      ...validManifest,
+      truthVariants: [
+        {
+          id: 'rollo_owns_the_ledger',
+          label: 'Rollo owns the ledger',
+          startingConditions: [
+            { key: 'whoOwesWhom', value: 'rollo' },
+            { key: 'missingEvidence', value: 'ledger' },
+          ],
+        },
+        {
+          id: 'thalia_owns_the_ledger',
+          label: 'Thalia owns the ledger',
+          startingConditions: [{ key: 'whoOwesWhom', value: 'thalia' }],
+        },
+      ],
+      accounts: {
+        // biome-ignore lint/style/useNamingConvention: manifest key
+        the_ledger: [
+          {
+            npcId: 'rollo_grasper',
+            claim: 'Rollo keeps the ledger.',
+            supportsTruthId: 'rollo_owns_the_ledger',
+          },
+          {
+            npcId: 'village_elder',
+            claim: "The ledger is Thalia's.",
+            supportsTruthId: 'thalia_owns_the_ledger',
+          },
+        ],
+      },
+      evidence: [
+        {
+          id: 'the_ledger',
+          label: 'The ledger',
+          discoverableAt: 'merchant_shop:ledger',
+          presentToNpcId: 'village_elder',
+          supportsTruthId: 'rollo_owns_the_ledger',
+        },
+      ],
+    };
+    const result = Value.Parse(ContentPackManifestSchema, manifest);
+    expect(result.truthVariants).toHaveLength(2);
+    expect(result.accounts?.the_ledger).toHaveLength(2);
+    expect(result.evidence?.[0].id).toBe('the_ledger');
+  });
+
+  test('accepts a manifest without the new keys (v4.0.0 absence path — AC-7)', () => {
+    const result = Value.Parse(ContentPackManifestSchema, validManifest);
+    expect(result.truthVariants).toBeUndefined();
+    expect(result.accounts).toBeUndefined();
+    expect(result.evidence).toBeUndefined();
+  });
+
+  test('rejects a truth variant missing its id', () => {
+    const manifest = {
+      ...validManifest,
+      truthVariants: [{ label: 'No id', startingConditions: [{ key: 'a', value: 'b' }] }],
+    };
+    expect(Value.Check(ContentPackManifestSchema, manifest)).toBe(false);
+  });
+
+  test('rejects an account missing its npcId or supportsTruthId', () => {
+    const missingNpc = {
+      ...validManifest,
+      accounts: { s: [{ claim: 'x', supportsTruthId: 't' }] },
+    };
+    expect(Value.Check(ContentPackManifestSchema, missingNpc)).toBe(false);
+    const missingTruth = {
+      ...validManifest,
+      accounts: { s: [{ npcId: 'n', claim: 'x' }] },
+    };
+    expect(Value.Check(ContentPackManifestSchema, missingTruth)).toBe(false);
+  });
+
+  test('rejects evidence missing discoverableAt or presentToNpcId', () => {
+    const bad = {
+      ...validManifest,
+      evidence: [{ id: 'e', label: 'E', presentToNpcId: 'n', supportsTruthId: 't' }],
+    };
+    expect(Value.Check(ContentPackManifestSchema, bad)).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// C-495 AC-1/AC-3/AC-4 — Emberwatch dramatic structure content
+// ---------------------------------------------------------------------------
+
+describe('C-495 AC-1/AC-3/AC-4 — Emberwatch dramatic structure content', () => {
+  const manifest = Value.Parse(ContentPackManifestSchema, {
+    ...emberwatchManifest,
+    onboarding: {
+      ...emberwatchManifest.onboarding,
+      steps: emberwatchManifest.onboarding.steps.map((step) => normaliseLegacyStep(step)),
+    },
+  });
+
+  const quest = manifest.quests?.fading_ward;
+
+  test('AC-1: ≥2 materially conflicting accounts exist for the dilemma', () => {
+    const dilemmaId = Object.keys(manifest.accounts ?? {})[0];
+    expect(dilemmaId).toBeDefined();
+    const accounts = manifest.accounts?.[dilemmaId] ?? [];
+    expect(accounts.length).toBeGreaterThanOrEqual(2);
+    // The conflict is material: the accounts must support different truth variants,
+    // so they cannot both be true under one sampled truth.
+    const supported = new Set(accounts.map((a) => a.supportsTruthId));
+    expect(supported.size).toBeGreaterThanOrEqual(2);
+  });
+
+  test('AC-3: ≥3 endings each with a distinct world-state flag and reaction dialogue', () => {
+    const endings = quest?.endings ?? {};
+    const ids = Object.keys(endings);
+    expect(ids.length).toBeGreaterThanOrEqual(3);
+    const flags = ids.map((id) => endings[id].worldStateFlag);
+    expect(new Set(flags).size).toBe(ids.length); // mutually exclusive flags
+    for (const id of ids) {
+      expect(endings[id].reactionDialogueKey, `${id} reaction key`).toBeTruthy();
+    }
+  });
+
+  test('AC-4: at least two endings are world-state-conditioned (reachable non-defaults)', () => {
+    const endings = quest?.endings ?? {};
+    const conditioned = Object.values(endings).filter((e) => e.requiresWorldStateFlag);
+    expect(conditioned.length).toBeGreaterThanOrEqual(2);
+  });
+
+  test('AC-2: ≥1 physical evidence is discoverable and presentable', () => {
+    const evidence = manifest.evidence ?? [];
+    const referencedMaps = new Map([
+      ['merchant_shop', merchantShopMap],
+      ['village', villageMap],
+      ['inn', innMap],
+      ['old_road', oldRoadMap],
+    ]);
+    expect(evidence.length).toBeGreaterThanOrEqual(1);
+    for (const e of evidence) {
+      expect(e.discoverableAt, 'discoverableAt resolves to a real map/prop').toBeTruthy();
+      expect(e.presentToNpcId in manifest.npcs, `${e.presentToNpcId} resolves to an NPC`).toBe(
+        true,
+      );
+
+      const [mapOrPropId, nestedPropId] = e.discoverableAt.split(':');
+      if (!nestedPropId) {
+        const knownStandalone =
+          mapOrPropId in manifest.maps || mapOrPropId in (manifest.props ?? {});
+        expect(knownStandalone, `${e.discoverableAt} resolves`).toBe(true);
+        continue;
+      }
+
+      expect(mapOrPropId in manifest.maps, `${mapOrPropId} resolves to a map`).toBe(true);
+      expect(nestedPropId in (manifest.props ?? {}), `${nestedPropId} resolves to a prop`).toBe(
+        true,
+      );
+      const map = referencedMaps.get(mapOrPropId);
+      expect(map, `${mapOrPropId} map content is loaded`).toBeDefined();
+      const propExistsInMap = map?.layers.some((layer) =>
+        layer.objects?.some((object) =>
+          object.properties?.some(
+            (property) => property.name === 'propId' && property.value === nestedPropId,
+          ),
+        ),
+      );
+      expect(propExistsInMap, `${nestedPropId} exists in ${mapOrPropId}`).toBe(true);
+    }
+  });
+
+  test('AC-5: truth variants form a bounded set (2–4) with starting conditions', () => {
+    const variants = manifest.truthVariants ?? [];
+    expect(variants.length).toBeGreaterThanOrEqual(2);
+    expect(variants.length).toBeLessThanOrEqual(4);
+    for (const v of variants) {
+      expect(v.startingConditions.length).toBeGreaterThan(0);
+    }
+  });
+
+  test('AC-5: every account and evidence references a declared truth variant', () => {
+    // The audit found evidence `supportsTruthId` values that matched no variant
+    // id, so `resolveEvidence` filtered every item out and evidence discovery
+    // silently did nothing. This guard makes the cross-reference explicit.
+    const variantIds = new Set((manifest.truthVariants ?? []).map((v) => v.id));
+    expect(variantIds.size).toBeGreaterThan(0);
+
+    for (const [situationId, accounts] of Object.entries(manifest.accounts ?? {})) {
+      for (const account of accounts) {
+        expect(
+          variantIds.has(account.supportsTruthId),
+          `account ${situationId}/${account.npcId} supports unknown truth "${account.supportsTruthId}"`,
+        ).toBe(true);
+      }
+    }
+
+    for (const evidence of manifest.evidence ?? []) {
+      expect(
+        variantIds.has(evidence.supportsTruthId),
+        `evidence ${evidence.id} supports unknown truth "${evidence.supportsTruthId}"`,
+      ).toBe(true);
+    }
+  });
+
+  test('AC-5: no authored content is a maintainer placeholder', () => {
+    // Placeholders were shipping in the published pack: reactions and accounts
+    // carried "[PLACEHOLDER — maintainer to author]" instead of authored text.
+    const serialized = JSON.stringify(manifest);
+    expect(serialized).not.toContain('PLACEHOLDER');
+    expect(serialized).not.toContain('maintainer to author');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// C-523 — optional authored audio cue bindings (pack.audio.v1)
+//
+// The section is optional and additive: the shipped 4.2.0 Emberwatch manifest
+// has no `audio` key, and must keep validating unchanged.
+// ---------------------------------------------------------------------------
+
+describe('ContentPackManifestSchema — C-523 authored audio bindings', () => {
+  const audioSection = {
+    schemaVersion: 'pack.audio.v1',
+    bindings: [
+      {
+        cueId: 'village.music',
+        target: 'music',
+        context: 'village',
+        source: { kind: 'asset', tag: 'music:exploration:village-theme', sha256: 'c'.repeat(64) },
+        resolution: 'required',
+        fallback: 'silence',
+      },
+    ],
+  };
+
+  /**
+   * The tag of an asset-backed binding, or `undefined` for intentional
+   * silence. Assertions must go through this rather than reading `.tag`
+   * directly, because the union deliberately has no such field on the
+   * silence arm.
+   */
+  const assetTag = (
+    binding: { source: { kind: string; tag?: string } } | undefined,
+  ): string | undefined => (binding?.source.kind === 'asset' ? binding.source.tag : undefined);
+
+  /** Looks up a declared binding, failing loudly when the pack omits it. */
+  const bindingFor = (
+    authored: { bindings: readonly { cueId: string }[] },
+    cueId: string,
+  ): { cueId: string; source: { kind: string; tag?: string; sha256?: string } } => {
+    const found = authored.bindings.find((binding) => binding.cueId === cueId);
+    if (found === undefined) {
+      throw new Error(`the shipped Emberwatch manifest must declare ${cueId}`);
+    }
+    return found as { cueId: string; source: { kind: string; tag?: string; sha256?: string } };
+  };
+
+  test('a manifest with no audio section still validates (every pack written before C-523)', () => {
+    // The absence of the section is the kill switch, so the pre-C-523 shape
+    // must keep loading unchanged. `validManifest` has no `audio` key.
+    const result = Value.Parse(ContentPackManifestSchema, validManifest);
+    expect(result.audio).toBeUndefined();
+  });
+
+  test('the shipped Emberwatch manifest authors a coherent audio section', () => {
+    const result = Value.Parse(ContentPackManifestSchema, emberwatchManifest);
+    const authored = result.audio;
+    if (authored === undefined) {
+      throw new Error('the shipped Emberwatch manifest must author an audio section');
+    }
+    expect(authored.schemaVersion).toBe('pack.audio.v1');
+    expect(checkPackAudioBindings(authored)).toEqual([]);
+
+    // Every authored context is one of the pack's own maps, `combat`, or the
+    // context of a published-bed cue (`bed.*`) — the pre-C-523 fallback bed.
+    const contexts = authored.bindings.map((binding) => binding.context);
+    for (const context of contexts) {
+      const isBed = context.startsWith('bed.');
+      expect(isBed || context === 'combat' || Object.hasOwn(emberwatchManifest.maps, context)).toBe(
+        true,
+      );
+    }
+    // The headline cues are pinned to real accepted renditions.
+    const village = bindingFor(authored, 'village.music');
+    expect(assetTag(village)).toBe('music:exploration:village_ward');
+    expect(village.source.sha256).toBe(
+      '22536060db87b024eaf717d57c8885067a7942052ecfef9ed8b51fc7766a5a98',
+    );
+    expect(assetTag(bindingFor(authored, 'inn.music'))).toBe('music:exploration:inn_hearth');
+    expect(assetTag(bindingFor(authored, 'old_road.music'))).toBe('music:exploration:old_road');
+    expect(assetTag(bindingFor(authored, 'ruined_shrine.music'))).toBe(
+      'music:exploration:ruined_shrine',
+    );
+    const combat = bindingFor(authored, 'combat.music');
+    expect(assetTag(combat)).toBe('music:combat:emberwatch_combat');
+    expect(combat.resolution).toBe('required');
+
+    // The two fallback beds are intentional silence: they must NOT claim a tag
+    // or a hash, because no bytes for them exist anywhere. This is the
+    // invariant that replaced the phantom `bgm_explore`/`bgm_combat` pins.
+    for (const cueId of ['bed.explore', 'bed.combat']) {
+      const bed = bindingFor(authored, cueId);
+      expect(bed.source).toEqual({ kind: 'silence' });
+      expect(bed.resolution).toBe('optional');
+      expect(bed.fallback).toBe('silence');
+    }
+  });
+
+  test('every declared_cue fallback names a cue the pack also declares', () => {
+    const authored = emberwatchManifest.audio;
+    if (authored === undefined) {
+      throw new Error('the shipped Emberwatch manifest must author an audio section');
+    }
+    const cueIds = new Set(authored.bindings.map((binding) => binding.cueId));
+    for (const binding of authored.bindings) {
+      if (binding.fallback === 'declared_cue') {
+        expect(cueIds.has(binding.fallbackCueId ?? '')).toBe(true);
+      }
+    }
+  });
+
+  test('accepts an authored audio section', () => {
+    const result = Value.Parse(ContentPackManifestSchema, {
+      ...validManifest,
+      audio: audioSection,
+    });
+    expect(result.audio?.bindings[0]?.cueId).toBe('village.music');
+  });
+
+  test('rejects an audio section with an unknown schemaVersion', () => {
+    expect(() =>
+      Value.Parse(ContentPackManifestSchema, {
+        ...validManifest,
+        audio: { ...audioSection, schemaVersion: 'pack.audio.v2' },
+      }),
+    ).toThrow();
+  });
+
+  test('rejects an audio binding whose asset source is missing its sha256', () => {
+    const [firstBinding] = audioSection.bindings;
+    if (firstBinding === undefined) {
+      throw new Error('the fixture must author at least one binding');
+    }
+    const binding = {
+      ...firstBinding,
+      source: { kind: 'asset', tag: 'music:exploration:village-theme' },
+    };
+    expect(() =>
+      Value.Parse(ContentPackManifestSchema, {
+        ...validManifest,
+        audio: { ...audioSection, bindings: [binding] },
+      }),
+    ).toThrow();
+  });
+
+  test('rejects a silence binding that also claims a tag', () => {
+    const binding = {
+      cueId: 'bed.explore',
+      target: 'music',
+      context: 'bed.explore',
+      source: { kind: 'silence', tag: 'music:exploration:bgm_explore' },
+      resolution: 'optional',
+      fallback: 'silence',
+    };
+    expect(() =>
+      Value.Parse(ContentPackManifestSchema, {
+        ...validManifest,
+        audio: { ...audioSection, bindings: [binding] },
+      }),
+    ).toThrow();
   });
 });

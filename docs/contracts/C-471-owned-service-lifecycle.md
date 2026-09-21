@@ -3,7 +3,7 @@ id: C-471
 title: "Own service processes and verify the correct application is ready"
 source: direct
 contract_type: full
-status: implemented
+status: approved
 github:
     issue_number: null
     issue_url: null
@@ -18,7 +18,7 @@ created_at: "2026-09-04T00:00:00Z"
 
 | Field                | Value                                                                                             |
 | -------------------- | ------------------------------------------------------------------------------------------------- |
-| **Source**           | Accepted agent-platform audit; PR 05 in [execution plan](../strategy/agent-platform-hardening.md) |
+| **Source**           | Accepted agent-platform audit; PR 05 in [execution plan](../reference/agent-platform-hardening.md) |
 | **Target**           | `scripts/src/lib/herdr/session.ts`, process helpers, service tool adapters                        |
 | **Type**             | full                                                                                              |
 | **Priority**         | P0 — restart can terminate unrelated/shared processes and readiness can test the wrong checkout   |
@@ -204,3 +204,25 @@ AC-2 remains incomplete: no reusable SERVICE_DEFS entry currently supplies an in
 - E2E: N/A (internal tooling contract — no browser path)
 - Visual: N/A (no UI changes)
 - Baseline: 9 pre-existing failures, 0 new failures
+
+### Amendment — 2026-09-17
+
+> Historical report preserved above; this amendment records what later work
+> changed. It does not rewrite the original claims.
+
+- **AC-2 is now materially further along.** The "Deviations" note above ("no
+  reusable SERVICE_DEFS entry currently supplies an instance-bound probe") is
+  partly superseded: the shared local-stack engines (`voice`, `image`, `text`,
+  `text-ollama`, `image-comfyui`, `audio`) now carry identity probes
+  (`scripts/src/lib/herdr/services/engine_probe.ts` and `audio.ts`), and the
+  run-owned application services (`client`, `hub`, `hub-worker`) now carry
+  instance-bound probes — `client`/`hub` via a dev-only `/.aikami/identity`
+  endpoint, `hub-worker` via a listener ownership record.
+- **AC-1 is strengthened beyond the original report.** `killPort` no longer
+  infers ownership from an executable name; it requires a persisted
+  `InstanceRecord` with PID creation identity (see
+  `scripts/src/lib/herdr/instance_registry.ts`), so a foreign Node/Python
+  process survives stop/restart/force-port operations.
+- **The contract's metadata status was corrected** from `implemented` to
+  `approved` (the metadata table was always authoritative; the frontmatter had
+  drifted). Reconciled under the C-47x status-consistency work.

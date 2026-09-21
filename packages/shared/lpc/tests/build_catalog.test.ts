@@ -3,6 +3,11 @@
 // AC-2: The catalog derives from published entries.
 
 import { describe, expect, test } from 'bun:test';
+import {
+  DEFAULT_LPC_SLOT_FALLBACKS,
+  projectLpcCatalog,
+  resolveLpcAppearance,
+} from '../src/lib/appearance.ts';
 import { buildLpcCatalog } from '../src/lib/build_catalog.ts';
 
 describe('buildLpcCatalog', () => {
@@ -60,6 +65,26 @@ describe('buildLpcCatalog', () => {
     // assetIdsBySlot
     expect(result.assetIdsBySlot.body).toEqual(['body/bodies_female', 'body/bodies_male']);
     expect(result.assetIdsBySlot.hair).toEqual(['hair/bangs_adult', 'hair/mohawk']);
+  });
+
+  test('carries verbatim licenses from catalog entries into render recipes', () => {
+    const catalog = buildLpcCatalog({
+      entries: [
+        {
+          tag: 'lpc:body:bodies_male:walk',
+          category: 'lpc',
+          ext: 'webp',
+          licenses: ['OGA-BY 3.0', 'GPL 3.0'],
+        },
+      ],
+    });
+    const result = resolveLpcAppearance({
+      layerIds: [1, 0, 0, 0, 0, 0],
+      catalog: projectLpcCatalog(catalog.slots),
+      fallbacks: DEFAULT_LPC_SLOT_FALLBACKS,
+    });
+
+    expect(result.recipes[0].licenses).toEqual(['GPL 3.0', 'OGA-BY 3.0']);
   });
 
   test('skips unparseable tags with debug log', () => {
@@ -120,5 +145,40 @@ describe('buildLpcCatalog', () => {
     expect(result1.assetIdsBySlot).toEqual(result2.assetIdsBySlot);
     // Verify complete slot structures match (including variant states)
     expect(JSON.stringify(result1.slots)).toBe(JSON.stringify(result2.slots));
+  });
+});
+
+describe('buildLpcCatalog — C-504 nested path + state reconstruction', () => {
+  test('full nested path segments resolve without duplication', () => {
+    const entries = [
+      // head/heads/human/female_elderly — nested tag must NOT become
+      // head/heads/human/human (the old Hub reconstruction duplicated it).
+      { tag: 'lpc:head:heads:human:female_elderly:walk', category: 'lpc', ext: 'webp' },
+      { tag: 'lpc:head:heads:human:female_elderly:spellcast', category: 'lpc', ext: 'webp' },
+      { tag: 'lpc:head:ears:avyon:skin_adult:walk', category: 'lpc', ext: 'webp' },
+      { tag: 'lpc:body:bodies_male:walk', category: 'lpc', ext: 'webp' },
+    ];
+
+    const result = buildLpcCatalog({ entries });
+    const headSlot = result.slots.find((s) => s.slot === 'head');
+    expect(headSlot).toBeDefined();
+    const variants = headSlot?.variants.map((v) => v.assetId) ?? [];
+
+    // No duplicated path segment.
+    expect(variants).toContain('head/heads/human/female_elderly');
+    expect(variants).toContain('head/ears/avyon/skin_adult');
+    expect(variants).not.toContain('head/heads/human/human');
+
+    // States are aggregated for the nested variant.
+    const nested = headSlot?.variants.find((v) => v.assetId === 'head/heads/human/female_elderly');
+    expect(nested?.states).toEqual(['spellcast', 'walk']);
+  });
+
+  test('state tag never bleeds into the assetId', () => {
+    const result = buildLpcCatalog({
+      entries: [{ tag: 'lpc:torso:clothes:robe_female:walk', category: 'lpc', ext: 'webp' }],
+    });
+    const torso = result.slots.find((s) => s.slot === 'torso');
+    expect(torso?.variants[0].assetId).toBe('torso/clothes/robe_female');
   });
 });

@@ -51,8 +51,13 @@ export const DEFAULT_LANCZOS_SIZE = 672;
 /**
  * Resamples a PNG screenshot to target dimensions using Lanczos-3 kernel.
  *
- * Uses sharp (if available) for square stretching — the image is resized
- * to exactly targetWidth × targetHeight regardless of original aspect ratio.
+ * By default this uses `fit: 'fill'` — the image is squeezed to exactly
+ * targetWidth × targetHeight regardless of original aspect ratio, which keeps
+ * tile-boundary alignment for sprites. Pass `fit: 'inside'` to preserve the
+ * aspect ratio and only bound the longest edge, which is what UI evidence
+ * needs (stretching a tall page screenshot to a square makes controls look
+ * clipped when they are not).
+ *
  * Falls back silently if sharp is not installed.
  *
  * The output is always PNG (lossless) — never JPEG or WebP, which
@@ -65,8 +70,10 @@ export const resizeLanczos = async (options: {
   filepath: string;
   width?: number;
   height?: number;
+  /** `'fill'` (default) squeezes to the exact box; `'inside'` preserves aspect. */
+  fit?: 'fill' | 'inside';
 }): Promise<void> => {
-  const { filepath, width = DEFAULT_LANCZOS_SIZE, height = width } = options;
+  const { filepath, width = DEFAULT_LANCZOS_SIZE, height = width, fit = 'fill' } = options;
 
   try {
     // Dynamic import — sharp is an optional peer dependency not declared in package.json
@@ -79,7 +86,7 @@ export const resizeLanczos = async (options: {
     const input = readFileSync(filepath);
     const resized = await sharp(input)
       .resize(width, height, {
-        fit: 'fill',
+        fit,
         kernel: 'lanczos3',
       })
       .png()

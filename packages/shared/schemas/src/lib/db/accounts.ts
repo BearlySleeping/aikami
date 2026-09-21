@@ -11,7 +11,6 @@ export const accountsRowSchema = Type.Object({
   id: Type.String(),
   accountId: Type.String(), // column: `account_id`
   providerId: Type.String(), // column: `provider_id`
-  issuer: Type.String(),
   userId: Type.String(), // column: `user_id`
   accessToken: Type.Union([Type.String(), Type.Null()]), // column: `access_token`
   refreshToken: Type.Union([Type.String(), Type.Null()]), // column: `refresh_token`

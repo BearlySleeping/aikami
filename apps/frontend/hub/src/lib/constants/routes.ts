@@ -58,6 +58,58 @@ export const routes = {
     routeId: '/(public)/catalog/[category]/[tag]',
     type: 'public',
   },
+  /**
+   * One category's public community-asset browse page (C-513 AC-4).
+   *
+   * Public for everyone: community assets are member submissions that a
+   * moderator has approved and promoted, so browsing carries no session.
+   */
+  communityCategory: {
+    getPath: ({ category }: { category: string }) => `/community/${category}`,
+    queryParameters: undefined,
+    routeId: '/(public)/community/[category]',
+    type: 'public',
+  },
+  /**
+   * Map studio — paste/upload a map manifest (native aikami.scene, Tiled
+   * JSON or JTON) and preview it with the same engine loader the game
+   * uses. Public for everyone; published-catalog assets render via the
+   * CDN resolver.
+   */
+  mapStudio: {
+    getPath: () => '/map-studio',
+    queryParameters: undefined,
+    routeId: '/(public)/map-studio',
+    type: 'public',
+  },
+  /**
+   * Walk sandbox — a client-only page that mounts the engine and lets the
+   * visitor walk a published catalog map with debug overlays. Public for
+   * everyone; `mapTag` must match a catalog `maps` entry.
+   */
+  sandbox: {
+    getPath: ({ mapTag }: { mapTag: string }) => `/sandbox/${encodeURIComponent(mapTag)}`,
+    queryParameters: undefined,
+    routeId: '/(public)/sandbox/[mapTag]',
+    type: 'public',
+  },
+  /**
+   * LPC preview — the character compositor tool. The index loads a default
+   * character from the LPC catalog; the asset route preloads one catalog
+   * component into its slot. Public for everyone.
+   */
+  lpcPreview: {
+    getPath: () => '/lpc-preview',
+    queryParameters: undefined,
+    routeId: '/(public)/lpc-preview',
+    type: 'public',
+  },
+  lpcPreviewAsset: {
+    getPath: ({ tag }: { tag: string }) => `/lpc-preview/${encodeURIComponent(tag)}`,
+    queryParameters: undefined,
+    routeId: '/(public)/lpc-preview/[tag]',
+    type: 'public',
+  },
 } as const satisfies Routes;
 
 export const searchParametersToKeep: Readonly<string[]> = [] as const;

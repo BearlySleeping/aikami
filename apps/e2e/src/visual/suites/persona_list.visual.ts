@@ -133,7 +133,7 @@ const setupPersonaList = async (page: import('playwright').Page): Promise<void> 
   // Wait for the persona list to render
   await page.waitForSelector('[data-testid="persona-list"]', { timeout: 10_000 });
 
-  // Give DaisyUI a moment to finish rendering
+  // Give Aikami UI a moment to finish rendering
   await page.waitForTimeout(1500);
 };
 

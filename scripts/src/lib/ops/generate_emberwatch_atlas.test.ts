@@ -9,13 +9,21 @@
 // dir) — the contract's Evidence Matrix path is updated to match.
 
 import { describe, expect, test } from 'bun:test';
-import { CORNER_WEDGE_TESTS, packAtlas, terrainOwnsPixel } from './generate_emberwatch_atlas.ts';
+import sharp from 'sharp';
+import {
+  CORNER_WEDGE_TESTS,
+  encodePng,
+  packAtlas,
+  terrainOwnsPixel,
+} from './generate_emberwatch_atlas.ts';
 import {
   ATLAS_CELL,
   ATLAS_HEIGHT,
   ATLAS_PADDING,
   ATLAS_TILE_SIZE,
   ATLAS_WIDTH,
+  cornerFrameName,
+  readManifestTerrains,
 } from './generate_emberwatch_tables.ts';
 
 describe('C-378 AC-5 — atlas packer', () => {
@@ -148,5 +156,233 @@ describe('C-378 AC-5 — atlas packer', () => {
       expect(frames[`dirt_${mask}.png`], `dirt_${mask}.png`).toBeDefined();
       expect(frames[`water_${mask}.png`], `water_${mask}.png`).toBeDefined();
     }
+  });
+
+  test('every declared corner16 terrain emits all 16 mask frames', () => {
+    const { frames } = packAtlas();
+    const cornerTerrains = readManifestTerrains().filter((t) => t.wang === 'corner16');
+    // The originally hardcoded pair plus the integrated material sets.
+    expect(cornerTerrains.map((t) => t.name)).toEqual(
+      expect.arrayContaining(['dirt', 'water', 'gravel', 'earth', 'cobblestone']),
+    );
+    for (const terrain of cornerTerrains) {
+      for (let mask = 0; mask < 16; mask++) {
+        const name = cornerFrameName(terrain.frameBase, mask);
+        expect(frames[name], `${terrain.name} mask ${mask} frame "${name}"`).toBeDefined();
+      }
+    }
+  });
+
+  test('packAtlas dispatches every corner16 painter with rendered base and overlay pixels', () => {
+    const { rgba, width, frames } = packAtlas();
+    const pixel = (key: string, x: number, y: number): number[] => {
+      const frame = frames[key]?.frame;
+      if (!frame) {
+        throw new Error(`Missing atlas frame: ${key}`);
+      }
+      const index = ((frame.y + y) * width + frame.x + x) * 4;
+      return Array.from(rgba.slice(index, index + 4));
+    };
+    const expectedPixels: Record<
+      string,
+      { mask0Base: number[]; mask0Overlay: number[]; mask15Overlay: number[] }
+    > = {
+      dirt: {
+        mask0Base: [61, 141, 66, 255],
+        mask0Overlay: [138, 90, 51, 255],
+        mask15Overlay: [147, 78, 57, 255],
+      },
+      water: {
+        mask0Base: [74, 143, 60, 255],
+        mask0Overlay: [46, 111, 176, 255],
+        mask15Overlay: [46, 111, 176, 255],
+      },
+      gravel: {
+        mask0Base: [85, 151, 66, 255],
+        mask0Overlay: [112, 108, 96, 255],
+        mask15Overlay: [104, 106, 99, 255],
+      },
+      earth: {
+        mask0Base: [112, 108, 96, 255],
+        mask0Overlay: [87, 50, 32, 255],
+        mask15Overlay: [78, 58, 40, 255],
+      },
+      cobblestone: {
+        mask0Base: [148, 103, 66, 255],
+        mask0Overlay: [154, 154, 154, 255],
+        mask15Overlay: [154, 154, 154, 255],
+      },
+    };
+
+    const cornerTerrains = readManifestTerrains().filter((terrain) => terrain.wang === 'corner16');
+    expect(cornerTerrains.map((terrain) => terrain.name).sort()).toEqual(
+      Object.keys(expectedPixels).sort(),
+    );
+    for (const terrain of cornerTerrains) {
+      const expected = expectedPixels[terrain.name];
+      if (!expected) {
+        throw new Error(`Missing expected pixels for terrain: ${terrain.name}`);
+      }
+      const mask0 = cornerFrameName(terrain.frameBase, 0);
+      const mask15 = cornerFrameName(terrain.frameBase, 15);
+      expect(pixel(mask0, 0, 0), `${terrain.name} mask 0 base`).toEqual(expected.mask0Base);
+      expect(pixel(mask0, 16, 16), `${terrain.name} mask 0 overlay`).toEqual(expected.mask0Overlay);
+      expect(pixel(mask15, 0, 0), `${terrain.name} mask 15 overlay`).toEqual(
+        expected.mask15Overlay,
+      );
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// C-504 — atlas alpha: terrain opaque, props/decor transparent outside art
+// ---------------------------------------------------------------------------
+
+describe('C-504 — atlas alpha', () => {
+  /** Content-local (lx, ly) alpha for a frame in the extruded atlas. */
+  const cellAlpha = (
+    rgba: Uint8Array,
+    width: number,
+    frames: Record<string, { frame: { x: number; y: number; w: number; h: number } }>,
+    key: string,
+    lx: number,
+    ly: number,
+  ): number => {
+    const { x, y } = frames[key].frame;
+    const col = (x - ATLAS_PADDING) / ATLAS_CELL;
+    const row = (y - ATLAS_PADDING) / ATLAS_CELL;
+    const px = col * ATLAS_CELL + ATLAS_PADDING + lx;
+    const py = row * ATLAS_CELL + ATLAS_PADDING + ly;
+    return rgba[(py * width + px) * 4 + 3] ?? 0;
+  };
+
+  test('terrain frames are fully opaque', () => {
+    const { rgba, width, frames } = packAtlas();
+    for (const key of [
+      'grass.png',
+      'dirt.png',
+      'water.png',
+      'brick_wall.png',
+      'roof.png',
+      'dirt_0.png',
+    ]) {
+      expect(frames[key], key).toBeDefined();
+      for (let ly = 0; ly < ATLAS_TILE_SIZE; ly++) {
+        for (let lx = 0; lx < ATLAS_TILE_SIZE; lx++) {
+          const a = cellAlpha(rgba, width, frames, key, lx, ly);
+          expect(a, `${key} pixel (${lx},${ly}) alpha`).toBe(255);
+        }
+      }
+    }
+  });
+
+  test('prop/decor frames leave unpainted regions transparent', () => {
+    const { rgba, width, frames } = packAtlas();
+    // Standalone props sit on a transparent base now (no opaque substrate).
+    for (const key of [
+      'well.png',
+      'chest.png',
+      'barrel.png',
+      'crate.png',
+      'table.png',
+      'bed.png',
+      'candle.png',
+      'plant.png',
+      'anvil.png',
+    ]) {
+      expect(frames[key], key).toBeDefined();
+      // A corner away from the art is unpainted → transparent.
+      expect(cellAlpha(rgba, width, frames, key, 0, 0), `${key} unpainted corner`).toBe(0);
+      // The art itself is opaque (at least one painted pixel).
+      let painted = false;
+      for (let ly = 0; ly < ATLAS_TILE_SIZE && !painted; ly++) {
+        for (let lx = 0; lx < ATLAS_TILE_SIZE && !painted; lx++) {
+          if (cellAlpha(rgba, width, frames, key, lx, ly) === 255) {
+            painted = true;
+          }
+        }
+      }
+      expect(painted, `${key} has opaque art`).toBe(true);
+    }
+  });
+
+  test('the 1px border preserves alpha (transparent prop edges stay transparent)', () => {
+    const { rgba, width, frames } = packAtlas();
+    const well = frames['well.png'].frame;
+    const col = (well.x - ATLAS_PADDING) / ATLAS_CELL;
+    const row = (well.y - ATLAS_PADDING) / ATLAS_CELL;
+    const x0 = col * ATLAS_CELL + ATLAS_PADDING;
+    const y0 = row * ATLAS_CELL + ATLAS_PADDING;
+    const idx = (px: number, py: number): number => (py * width + px) * 4;
+    // The (0,0) content corner of the well is transparent; its top-left
+    // border duplicate must be transparent too (RGBA, not forced 255).
+    expect(rgba[idx(x0, y0) + 3]).toBe(0);
+    expect(rgba[idx(x0 - 1, y0 - 1) + 3]).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// C-506 AC-1 — lossless output encoding
+// ---------------------------------------------------------------------------
+// The atlas is emitted as a lossless WebP (`cwebp -lossless` in main). This
+// test proves the output encoding round-trips without color shift or alpha
+// damage: every pixel with visible art (alpha > 0) must come back byte-
+// identical through the PNG → lossless-WebP → RGBA pipeline, and fully
+// transparent pixels (alpha == 0) must stay fully transparent.
+//
+// WebP lossless legitimately discards the RGB components of fully transparent
+// pixels (their colour is invisible), so we compare the visible art exactly
+// and assert transparency is preserved rather than demanding byte-equality on
+// invisible RGB noise.
+describe('C-506 AC-1 — lossless output encoding', () => {
+  test('PNG → lossless WebP → RGBA round-trips visible art byte-identically', async () => {
+    const { rgba, width, height } = packAtlas();
+
+    // Encode the pure RGBA buffer to the same PNG the generator writes.
+    const png = encodePng(width, height, rgba);
+
+    // Encode that PNG to a lossless WebP (mirrors `cwebp -lossless`) and
+    // decode it back to raw RGBA for comparison.
+    const webp = await sharp(png).webp({ lossless: true }).toBuffer();
+    const decoded = await sharp(webp).raw().toBuffer({ resolveWithObject: true });
+
+    expect(decoded.info.width).toBe(width);
+    expect(decoded.info.height).toBe(height);
+    expect(decoded.info.channels).toBe(4);
+    expect(decoded.data.length).toBe(rgba.length);
+
+    let opaqueDiff = 0;
+    let visibleDiff = 0;
+    let transparentToOpaque = 0;
+    for (let i = 0; i < rgba.length; i += 4) {
+      const srcAlpha = rgba[i + 3];
+      const dstAlpha = decoded.data[i + 3];
+      // A fully transparent source pixel must remain fully transparent.
+      if (srcAlpha === 0) {
+        if (dstAlpha !== 0) {
+          transparentToOpaque += 1;
+        }
+        continue;
+      }
+      // Visible pixels must round-trip byte-identically (RGBA).
+      const same =
+        rgba[i] === decoded.data[i] &&
+        rgba[i + 1] === decoded.data[i + 1] &&
+        rgba[i + 2] === decoded.data[i + 2] &&
+        dstAlpha === srcAlpha;
+      if (!same) {
+        visibleDiff += 1;
+      }
+      if (srcAlpha === 255 && dstAlpha !== 255) {
+        opaqueDiff += 1;
+      }
+    }
+
+    // Lossless: no visible pixel may shift a single byte.
+    expect(visibleDiff, 'visible (alpha>0) pixels shifted').toBe(0);
+    // Fully opaque art must stay fully opaque (no alpha degradation).
+    expect(opaqueDiff, 'opaque pixels lost alpha').toBe(0);
+    // Transparency must be preserved — no baked opaque substrate on props.
+    expect(transparentToOpaque, 'transparent pixels became opaque').toBe(0);
   });
 });

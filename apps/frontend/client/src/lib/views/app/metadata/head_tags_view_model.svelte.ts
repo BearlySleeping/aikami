@@ -3,10 +3,10 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-  type RouteName,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import { page } from '$app/state';
-import { routerService } from '$services';
+import type { RouteName } from '$router';
+import type { RouterServiceInterface } from '$services';
 
 const jsonLd = (data: Record<string, unknown>): string =>
   `<script type="application/ld+json">${JSON.stringify(data)}</script>`;
@@ -118,8 +118,13 @@ export type MetaTagProperties = {
 
 export type MetaTags = Partial<MetaTagProperties>;
 
+/** The router state the head-tags ViewModel reads. */
+export type HeadTagsRouterCapabilities = Pick<RouterServiceInterface, 'currentRoute'>;
+
 export type HeadTagsViewModelOptions = BaseViewModelOptions & {
   data?: BaseMetaTags;
+  /** Router state. */
+  router: HeadTagsRouterCapabilities;
 };
 
 export type HeadTagsViewModelInterface = BaseViewModelInterface & {
@@ -153,6 +158,8 @@ class HeadTagsViewModel
   extends BaseViewModel<HeadTagsViewModelOptions>
   implements HeadTagsViewModelInterface
 {
+  private readonly _router: HeadTagsRouterCapabilities;
+
   /**
    * The metadata for the page.
    */
@@ -160,11 +167,12 @@ class HeadTagsViewModel
 
   constructor(options: HeadTagsViewModelOptions) {
     super(options);
+    this._router = options.router;
     this._data = options.data;
   }
 
   get baseMetadata(): BaseMetaTags {
-    const currentRoute = routerService.currentRoute;
+    const currentRoute = this._router.currentRoute;
 
     const defaultMetadata: BaseMetaTags = {
       description: 'Aikami',
@@ -269,6 +277,12 @@ class HeadTagsViewModel
   }
 }
 
-export const getHeadTagsViewModel = (
+/**
+ * Builds a head-tags ViewModel from explicit capabilities.
+ *
+ * Callers outside production (tests, sandboxes) use this directly; production
+ * code goes through `getHeadTagsViewModel` in ./head_tags_composition.ts.
+ */
+export const createHeadTagsViewModel = (
   options: HeadTagsViewModelOptions,
 ): HeadTagsViewModelInterface => HeadTagsViewModel.create(options);

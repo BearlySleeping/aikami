@@ -41,6 +41,7 @@ const MANIFEST_MODALITY: Readonly<Record<StackModality, string | undefined>> = {
   image: 'image',
   voice: 'tts',
   stt: 'stt',
+  audio: 'audio',
   client: undefined,
   ollama: undefined,
   comfyui: undefined,

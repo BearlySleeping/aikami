@@ -19,6 +19,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { type ContentPackManifest, validatePack } from '@aikami/schemas';
 import type { PackConfig } from '@aikami/types';
+import { findDuplicateAtlasFrames } from '@aikami/utils';
 import { buildCollisionGrid, type TilemapData } from '../assets/map_loader.ts';
 
 // ---------------------------------------------------------------------------
@@ -56,6 +57,8 @@ type MapJson = {
       type: string;
       x: number;
       y: number;
+      width?: number;
+      height?: number;
       properties: Array<{ name: string; value: unknown }>;
     }>;
   }>;
@@ -70,6 +73,13 @@ type ManifestJson = {
     spritesheetUrl?: string;
     tileSize?: number;
   };
+  /**
+   * Irregular prop-atlas pages. Oversized transparent props (a 192×152 ward
+   * tree, a 256×224 inn) cannot live in the fixed 32px-cell grid atlas, so
+   * their frames come from these pages instead. Frames are resolved by name
+   * across the grid atlas and every page.
+   */
+  propAtlases?: Array<{ textureUrl?: string; spritesheetUrl?: string }>;
   tiles?: Record<string, { name?: string; frame?: string; isWalkable?: boolean; isWall?: boolean }>;
   props?: Record<string, { name?: string; frame?: string; isWalkable?: boolean }>;
   terrains?: Array<{
@@ -89,9 +99,12 @@ type ManifestJson = {
 
 const EMBERWATCH_FIXTURES = {
   packId: 'emberwatch',
-  // C-378: bumped for the new top-level `terrains` block + aikami map
-  // channels — consumers that cache/gate on the pack version observe it.
-  version: '3.2.0',
+  // 🔴 The pack version is NOT pinned here. It used to be a hard-coded literal
+  // and drifted twice (4.0.0 → 4.2.0 → the shipped 4.4.0), turning a real
+  // invariant into a stale expectation. The authoritative assertion now lives
+  // in the `pack version matches the registry entry` test below, which compares
+  // the manifest against `content/packs/index.json` — the registry the client
+  // reads — so a one-sided bump is caught instead of the fixture going stale.
   atlas: {
     path: join(
       import.meta.dir,
@@ -111,10 +124,16 @@ const EMBERWATCH_FIXTURES = {
   },
   fallbackTile: 'grass.png',
   footprints: {
-    village: { width: 20, height: 20 },
-    inn: { width: 16, height: 12 },
+    // Gate 3: the retained scenes were expanded to the plan's proposed
+    // extents; the two expansion maps already matched.
+    village: { width: 64, height: 48 },
+    inn: { width: 28, height: 20 },
     // biome-ignore lint/style/useNamingConvention: map file names use snake_case
-    merchant_shop: { width: 16, height: 12 },
+    merchant_shop: { width: 24, height: 18 },
+    // biome-ignore lint/style/useNamingConvention: map file names use snake_case
+    old_road: { width: 72, height: 36 },
+    // biome-ignore lint/style/useNamingConvention: map file names use snake_case
+    ruined_shrine: { width: 40, height: 36 },
   },
   spawnIds: ['village_gate', 'from_merchant', 'from_inn', 'inn_entrance', 'shop_entrance'],
   npcIds: ['village_elder', 'rollo_grasper', 'merchant'],
@@ -142,6 +161,8 @@ const EMBERWATCH_MAP_FILES = {
   village: 'maps/village.json',
   inn: 'maps/inn.json',
   merchantShop: 'maps/merchant_shop.json',
+  oldRoad: 'maps/old_road.json',
+  ruinedShrine: 'maps/ruined_shrine.json',
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -238,6 +259,61 @@ describe('Per-pack content audit (C-376 AC-6)', () => {
       }
       const frames = new Set(Object.keys(atlas?.frames ?? {}));
 
+      // Frames contributed by the irregular prop-atlas pages. A prop frame
+      // legitimately lives in either place; tile frames and the fallback tile
+      // must still come from the grid atlas (asserted separately below).
+      const propAtlasFrames = new Set<string>();
+      /** Per-page frame ownership, so page↔page collisions are detectable. */
+      const propAtlasFrameSources: { label: string; frames: string[] }[] = [];
+      const propAtlasPages = manifest.propAtlases ?? [];
+      /** Maps a manifest asset URL to its path under `static/`. */
+      const staticPathFor = (assetUrl: string): string =>
+        assetUrl.startsWith('/')
+          ? join(import.meta.dir, `../../../../../apps/frontend/client/static${assetUrl}`)
+          : assetUrl;
+
+      for (const [pageIndex, page] of propAtlasPages.entries()) {
+        // A page needs BOTH halves. Picking one via nullish coalescing would
+        // accept a half-declared page and then check the wrong file.
+        if (!page.textureUrl || !page.spritesheetUrl) {
+          test(`[${packId}] propAtlases[${pageIndex}] declares both textureUrl and spritesheetUrl`, () => {
+            expect({
+              textureUrl: page.textureUrl ?? null,
+              spritesheetUrl: page.spritesheetUrl ?? null,
+            }).toEqual({ textureUrl: expect.any(String), spritesheetUrl: expect.any(String) });
+          });
+          continue;
+        }
+        const texturePath = staticPathFor(page.textureUrl);
+        const sheetPath = staticPathFor(page.spritesheetUrl);
+        test(`[${packId}] propAtlases[${pageIndex}] texture exists at ${page.textureUrl}`, () => {
+          expect(existsSync(texturePath), `prop atlas texture ${texturePath} must exist`).toBe(
+            true,
+          );
+        });
+        test(`[${packId}] propAtlases[${pageIndex}] spritesheet exists at ${page.spritesheetUrl}`, () => {
+          expect(existsSync(sheetPath), `prop atlas spritesheet ${sheetPath} must exist`).toBe(
+            true,
+          );
+        });
+        if (!existsSync(texturePath) || !existsSync(sheetPath)) {
+          continue;
+        }
+        const pageDoc = readJson<AtlasJson>(sheetPath);
+        // Record ownership per page so a duplicate BETWEEN pages is visible
+        // rather than silently deduplicated into one set.
+        propAtlasFrameSources.push({
+          label: `propAtlases[${pageIndex}]`,
+          frames: Object.keys(pageDoc.frames ?? {}),
+        });
+        for (const name of Object.keys(pageDoc.frames ?? {})) {
+          propAtlasFrames.add(name);
+        }
+      }
+
+      /** Every frame a prop may reference: the grid atlas or any page. */
+      const propFrames = new Set([...frames, ...propAtlasFrames]);
+
       test(`[${packId}] atlas.json is readable at ${atlasUrl}`, () => {
         expect(atlas, `atlas ${atlasPath} must exist and parse`).toBeDefined();
       });
@@ -255,10 +331,26 @@ describe('Per-pack content audit (C-376 AC-6)', () => {
         }
       });
 
-      test(`[${packId}] every manifest props[y].frame exists in the atlas`, () => {
+      test(`[${packId}] every manifest props[y].frame exists in the atlas or a prop-atlas page`, () => {
         for (const [propId, def] of Object.entries(manifest.props ?? {})) {
-          expect(frames.has(def.frame ?? ''), `props[${propId}].frame ${def.frame}`).toBe(true);
+          expect(propFrames.has(def.frame ?? ''), `props[${propId}].frame ${def.frame}`).toBe(true);
         }
+      });
+
+      test(`[${packId}] a frame name is never declared by two atlas sources`, () => {
+        // The resolver indexes frames by name across all sources and drops an
+        // ambiguous name entirely, so a collision would silently degrade a
+        // prop to the fallback tile. The pack build rejects it too.
+        //
+        // Checked across the grid atlas AND every page, so a name shared by two
+        // prop-atlas pages is reported rather than deduplicated away.
+        const duplicates = findDuplicateAtlasFrames([
+          { label: 'atlas', frames: [...frames] },
+          ...propAtlasFrameSources,
+        ]);
+        expect(duplicates.map((entry) => `${entry.name} (${entry.sources.join(', ')})`)).toEqual(
+          [],
+        );
       });
 
       if (manifest.fallbackTile) {
@@ -313,7 +405,7 @@ describe('Per-pack content audit (C-376 AC-6)', () => {
           }
         });
 
-        test(`[${packId}/${mapPath}] every prop spawn frame exists in the atlas`, () => {
+        test(`[${packId}/${mapPath}] every prop spawn frame exists in the atlas or a prop-atlas page`, () => {
           for (const layer of map.layers) {
             if (layer.name !== 'spawns') {
               continue;
@@ -323,7 +415,7 @@ describe('Per-pack content audit (C-376 AC-6)', () => {
                 | string
                 | undefined;
               if (frame) {
-                expect(frames.has(frame), `${mapPath} spawn frame ${frame}`).toBe(true);
+                expect(propFrames.has(frame), `${mapPath} spawn frame ${frame}`).toBe(true);
               }
             }
           }
@@ -441,8 +533,23 @@ describe('Emberwatch content audit (C-375 AC-4 + C-376 AC-6 fixtures)', () => {
     }
   });
 
-  test('pack version bumped to the fixture version', () => {
-    expect(manifest.version).toBe(EMBERWATCH_FIXTURES.version);
+  test('pack version matches the registry entry', () => {
+    // `content/packs/index.json` is the registry the client reads, and its
+    // `PackIndexEntry.version` is documented as "cached from manifest". A
+    // mismatch means the pack was bumped in one place only — a real release
+    // defect. Deriving the expectation from the registry (instead of a literal)
+    // keeps this gate meaningful across every future bump.
+    const registry = readJson<{ packs: Array<{ id: string; version: string }> }>(
+      join(CONTENT_PACKS_ROOT, 'index.json'),
+    );
+    const entry = registry.packs.find((pack) => pack.id === EMBERWATCH_FIXTURES.packId);
+    expect(entry, 'emberwatch must be listed in content/packs/index.json').toBeDefined();
+    if (!entry) {
+      throw new Error('emberwatch registry entry is required');
+    }
+    expect(manifest.version).toBe(entry.version);
+    // Semver, so the value is a real version rather than a placeholder.
+    expect(manifest.version).toMatch(/^\d+\.\d+\.\d+$/);
   });
 
   test('C-417 AC-2: inn and merchant_shop declare interior lighting, village does not', () => {
@@ -462,15 +569,40 @@ describe('Emberwatch map audit (C-375 AC-5 + C-376 AC-6 fixtures)', () => {
     village: readJson<MapJson>(join(packDir, EMBERWATCH_MAP_FILES.village)),
     inn: readJson<MapJson>(join(packDir, EMBERWATCH_MAP_FILES.inn)),
     merchantShop: readJson<MapJson>(join(packDir, EMBERWATCH_MAP_FILES.merchantShop)),
+    oldRoad: readJson<MapJson>(join(packDir, EMBERWATCH_MAP_FILES.oldRoad)),
+    ruinedShrine: readJson<MapJson>(join(packDir, EMBERWATCH_MAP_FILES.ruinedShrine)),
   };
 
-  test('all three maps keep their fixture footprints', () => {
-    expect(maps.village.width).toBe(EMBERWATCH_FIXTURES.footprints.village.width);
-    expect(maps.village.height).toBe(EMBERWATCH_FIXTURES.footprints.village.height);
-    expect(maps.inn.width).toBe(EMBERWATCH_FIXTURES.footprints.inn.width);
-    expect(maps.inn.height).toBe(EMBERWATCH_FIXTURES.footprints.inn.height);
-    expect(maps.merchantShop.width).toBe(EMBERWATCH_FIXTURES.footprints.merchant_shop.width);
-    expect(maps.merchantShop.height).toBe(EMBERWATCH_FIXTURES.footprints.merchant_shop.height);
+  /** Manifest map id → parsed map, for cross-map transition checks. */
+  const mapsById: Record<string, MapJson> = {
+    village: maps.village,
+    inn: maps.inn,
+    // biome-ignore lint/style/useNamingConvention: map file names use snake_case
+    merchant_shop: maps.merchantShop,
+    // biome-ignore lint/style/useNamingConvention: map file names use snake_case
+    old_road: maps.oldRoad,
+    // biome-ignore lint/style/useNamingConvention: map file names use snake_case
+    ruined_shrine: maps.ruinedShrine,
+  };
+
+  const objectsOf = (map: MapJson, layerName: string) =>
+    map.layers.find((layer) => layer.name === layerName)?.objects ?? [];
+
+  const propsOf = (object: { properties: Array<{ name: string; value: unknown }> }) =>
+    Object.fromEntries(object.properties.map((p) => [p.name, p.value]));
+
+  test('all five maps keep their fixture footprints', () => {
+    const pairs = [
+      ['village', maps.village],
+      ['inn', maps.inn],
+      ['merchant_shop', maps.merchantShop],
+      ['old_road', maps.oldRoad],
+      ['ruined_shrine', maps.ruinedShrine],
+    ] as const;
+    for (const [name, map] of pairs) {
+      expect(map.width, `${name} width`).toBe(EMBERWATCH_FIXTURES.footprints[name].width);
+      expect(map.height, `${name} height`).toBe(EMBERWATCH_FIXTURES.footprints[name].height);
+    }
   });
 
   test('map tileset blocks match the atlas grid (544×272 extruded, 16 cols, 128 tiles)', () => {
@@ -524,6 +656,96 @@ describe('Emberwatch map audit (C-375 AC-5 + C-376 AC-6 fixtures)', () => {
     }
     for (const target of EMBERWATCH_FIXTURES.transitionTargets) {
       expect(transitionTargets.has(target), `transition target ${target}`).toBe(true);
+    }
+  });
+
+  // ── Gate 3/5: resized-scene compatibility ───────────────────────────────
+  // The retained maps grew from 20×20 / 16×12 / 16×12. These guards ensure the
+  // repositioned markers still describe a loadable, reciprocal world.
+
+  test('every spawn and transition marker stays inside its map extent (gate 3 resize)', () => {
+    for (const [mapId, map] of Object.entries(mapsById)) {
+      const boundsW = map.width * 32;
+      const boundsH = map.height * 32;
+      for (const layerName of ['spawns', 'transitions']) {
+        for (const obj of objectsOf(map, layerName)) {
+          const label = `${mapId} ${layerName} object ${obj.id} (${obj.type})`;
+          expect(obj.x, `${label} x`).toBeGreaterThanOrEqual(0);
+          expect(obj.y, `${label} y`).toBeGreaterThanOrEqual(0);
+          expect(obj.x, `${label} x origin`).toBeLessThan(boundsW);
+          expect(obj.y, `${label} y origin`).toBeLessThan(boundsH);
+          expect(obj.x + (obj.width ?? 0), `${label} x+width`).toBeLessThanOrEqual(boundsW);
+          expect(obj.y + (obj.height ?? 0), `${label} y+height`).toBeLessThanOrEqual(boundsH);
+        }
+      }
+    }
+  });
+
+  test('every transition resolves a target spawn on its target map (reciprocity)', () => {
+    for (const [mapId, map] of Object.entries(mapsById)) {
+      for (const obj of objectsOf(map, 'transitions')) {
+        const props = propsOf(obj);
+        const targetMapId = String(props.targetMap);
+        const targetSpawnId = String(props.targetSpawnId);
+        const target = mapsById[targetMapId];
+        const label = `${mapId} -> ${targetMapId} (${targetSpawnId})`;
+        expect(target, `${label} target map exists`).toBeDefined();
+        const spawnIds = new Set(
+          objectsOf(target, 'spawns')
+            .filter((o) => o.type === 'spawn')
+            .map((o) => String(propsOf(o).spawnId)),
+        );
+        expect(spawnIds.has(targetSpawnId), `${label} spawn marker exists`).toBe(true);
+
+        // The loader drops a transition whose numeric fallback is missing.
+        expect(typeof props.targetX, `${label} targetX numeric`).toBe('number');
+        expect(typeof props.targetY, `${label} targetY numeric`).toBe('number');
+        expect(Number(props.targetX), `${label} targetX in bounds`).toBeGreaterThanOrEqual(0);
+        expect(Number(props.targetY), `${label} targetY in bounds`).toBeGreaterThanOrEqual(0);
+        expect(Number(props.targetX), `${label} targetX in bounds`).toBeLessThan(target.width * 32);
+        expect(Number(props.targetY), `${label} targetY in bounds`).toBeLessThan(
+          target.height * 32,
+        );
+        expect(
+          (obj.width ?? 0) > 0 && (obj.height ?? 0) > 0,
+          `${label} trigger rect is non-degenerate`,
+        ).toBe(true);
+      }
+    }
+  });
+
+  test('no named arrival spawn sits inside a transition rectangle (C-138 retrigger)', () => {
+    // ZoningSystem tests the player's position inclusively against each
+    // transition rect, and LOAD_MAP drops the player exactly on the named
+    // arrival marker. A marker inside a rect therefore fires that transition
+    // on the first tick after the map loads: the player is bounced straight
+    // back to the map they came from and the destination is unreachable.
+    for (const [mapId, map] of Object.entries(mapsById)) {
+      const zones = objectsOf(map, 'transitions');
+      for (const spawnObj of objectsOf(map, 'spawns').filter((o) => o.type === 'spawn')) {
+        const spawnId = String(propsOf(spawnObj).spawnId);
+        for (const zone of zones) {
+          const label = `${mapId} arrival spawn ${spawnId} vs transition ${zone.id} -> ${String(propsOf(zone).targetMap)}`;
+          const inX = spawnObj.x >= zone.x && spawnObj.x <= zone.x + (zone.width ?? 0);
+          const inY = spawnObj.y >= zone.y && spawnObj.y <= zone.y + (zone.height ?? 0);
+          expect(inX && inY, label).toBe(false);
+        }
+      }
+    }
+  });
+
+  test('every spawn marker lands on a non-colliding cell', () => {
+    for (const [mapId, map] of Object.entries(mapsById)) {
+      const collision = map.layers.find((layer) => layer.name === 'collision')?.data;
+      expect(collision, `${mapId} has a collision layer`).toBeDefined();
+      for (const obj of objectsOf(map, 'spawns').filter((o) => o.type === 'spawn')) {
+        const col = Math.floor(obj.x / 32);
+        const row = Math.floor(obj.y / 32);
+        expect(
+          collision?.[row * map.width + col],
+          `${mapId} spawn ${propsOf(obj).spawnId} at cell (${col},${row})`,
+        ).toBe(0);
+      }
     }
   });
 });

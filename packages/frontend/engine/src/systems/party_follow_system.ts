@@ -23,8 +23,8 @@ import { GridPosition } from '../components/grid_position.ts';
 import { PathFollow } from '../components/path_follow.ts';
 import type { PositionData } from '../components/position.ts';
 import { Position } from '../components/position.ts';
-import { findPath } from '../math/astar.ts';
-import { getTerrainGrid, getTerrainTileSize } from './collision_system.ts';
+import { planActorPath } from './actor_footprint.ts';
+import { getPathfindingGrid, getTerrainTileSize } from './collision_system.ts';
 import { hasActivePath } from './path_follow_system.ts';
 
 /** Cached query terms — created once per world to avoid per-frame overhead. */
@@ -62,7 +62,9 @@ export const updatePartyFollow = (world: World, playerEid: number): void => {
   if (playerEid <= 0) {
     return;
   }
-  const terrain = getTerrainGrid();
+  // C-379: footprint-aware terrain — formation slots are only valid where
+  // the companion's 32×32 box does not overlap a wall.
+  const terrain = getPathfindingGrid();
   if (!terrain) {
     return;
   }
@@ -151,30 +153,22 @@ export const updatePartyFollow = (world: World, playerEid: number): void => {
       continue;
     }
 
-    const result = findPath({
-      grid: terrain,
-      start: { x: fromX, y: fromY },
-      goal,
-    });
-
-    if (result.path.length === 0) {
+    // Footprint-aware plan: tolerates a companion whose current cell centre
+    // is blocked (standing against a wall) by starting from the nearest
+    // standable cell.
+    const plan = planActorPath({ terrain, fromCell: { x: fromX, y: fromY }, goal });
+    if (!plan) {
       PathFollow.repathAtMs[eid] = Date.now() + 1000;
       continue;
-    }
-
-    const waypoints = new Float32Array(result.path.length * 2);
-    for (let i = 0; i < result.path.length; i++) {
-      waypoints[i * 2] = result.path[i].x * tileSize + tileSize / 2;
-      waypoints[i * 2 + 1] = result.path[i].y * tileSize + tileSize / 2;
     }
 
     addComponent(
       world,
       eid,
       set(PathFollow, {
-        waypoints,
-        index: 1,
-        length: result.path.length,
+        waypoints: plan.waypoints,
+        index: plan.index,
+        length: plan.length,
         speed: COMPANION_SPEED,
         repathAtMs: 0,
         arriveRadius: COMPANION_ARRIVE_RADIUS,

@@ -1,0 +1,492 @@
+// scripts/src/lib/ops/emberwatch_candidate.ts
+//
+// Builds and seals the Emberwatch release candidate.
+//
+//   --seal     build the lock from a CLEAN committed tree and write it
+//   --verify   re-derive and compare against the sealed lock
+//   --show     print the sealed lock's identity without re-deriving
+//
+// The lock is a RELEASE ARTIFACT, not a committed file: it lives under
+// `.local/releases/` so that `source.commit` is genuinely the commit the bytes
+// came from. A lock committed inside the commit it describes is circular and
+// permanently stale — see the schema header.
+//
+// Sealing refuses a dirty tree, with no escape hatch: a candidate intended for
+// staging or production must correspond to a committed source state, or the
+// lock cannot be re-derived by anyone else.
+//
+// Run: bun scripts/src/lib/ops/emberwatch_candidate.ts --seal
+//      bun scripts/src/lib/ops/emberwatch_candidate.ts --verify
+
+import { execFileSync } from 'node:child_process';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { CANDIDATE_GROUPS, type CandidateLock, CandidateLockSchema } from '@aikami/schemas';
+import { Value } from 'typebox/value';
+import {
+  buildGroups,
+  type DeclaredGroup,
+  type DeclaredMember,
+  diffCandidateLocks,
+  gate,
+  sealCandidate,
+} from '../catalog/candidate_lock.ts';
+import { releasePlaneDir } from './emberwatch_release_io.ts';
+import { runEmberwatchRightsAudit } from './emberwatch_rights_audit.ts';
+import { runSurfaceAudit } from './emberwatch_surface_audit.ts';
+
+const here = dirname(fileURLToPath(import.meta.url));
+const repository = join(here, '../../../..');
+
+const PACK_ROOT = join(repository, 'content/packs/emberwatch');
+const GAME_DATA = join(repository, 'apps/frontend/client/static/game-data');
+
+const IMAGES = ['.png', '.webp'] as const;
+const MEDIA = ['.webm', '.ogg', '.mp3', '.wav'] as const;
+
+const git = (args: string[]): string =>
+  execFileSync('git', args, { cwd: repository, encoding: 'utf8' }).trim();
+
+/** Resolves a manifest URL like `/game-data/sprites/tilesets/atlas.webp`. */
+const resolveGameDataUrl = (url: string): string => {
+  const marker = '/game-data/';
+  const index = url.indexOf(marker);
+  if (index === -1) {
+    return resolve(repository, url.replace(/^\//, ''));
+  }
+  return join(GAME_DATA, url.slice(index + marker.length));
+};
+
+/** Resolves a manifest URL like `/content-packs/emberwatch/maps/village.json`. */
+const resolvePackUrl = (url: string): string => {
+  const marker = '/content-packs/emberwatch/';
+  const index = url.indexOf(marker);
+  if (index === -1) {
+    return resolve(PACK_ROOT, url.replace(/^\//, ''));
+  }
+  return join(PACK_ROOT, url.slice(index + marker.length));
+};
+
+type PackManifest = {
+  version?: string;
+  atlas?: { textureUrl?: string; spritesheetUrl?: string };
+  propAtlases?: { textureUrl?: string; spritesheetUrl?: string }[];
+  maps?: Record<string, { file?: string }>;
+  npcs?: Record<string, { portraits?: { variants?: Record<string, string> } }>;
+  audio?: {
+    bindings?: {
+      source?: { kind?: string; tag?: string };
+    }[];
+  };
+};
+
+/** The manifest group: the pack's own descriptor, always required. */
+const manifestGroup = (): DeclaredGroup => ({
+  name: 'manifest',
+  members: [{ id: 'manifest.json', path: join(PACK_ROOT, 'manifest.json'), role: 'required' }],
+});
+
+/** Exactly the maps the manifest declares. */
+const mapsGroup = (manifest: PackManifest): DeclaredGroup => ({
+  name: 'maps',
+  members: Object.entries(manifest.maps ?? {}).map(([mapId, entry]) => ({
+    id: `maps/${mapId}.json`,
+    path: entry.file
+      ? resolvePackUrl(`/content-packs/emberwatch/${entry.file}`)
+      : join(PACK_ROOT, 'maps', `${mapId}.json`),
+    role: 'required' as const,
+  })),
+});
+
+/**
+ * Terrain atlas — texture + frame definition, both required.
+ *
+ * The earlier revision hashed a nonexistent directory here, so the group
+ * sealed EMPTY and could not notice a different atlas being promoted.
+ */
+const terrainAtlasGroup = (manifest: PackManifest): DeclaredGroup => {
+  const members: DeclaredMember[] = [];
+  if (manifest.atlas?.textureUrl) {
+    members.push({
+      id: 'tilesets/atlas.webp',
+      path: resolveGameDataUrl(manifest.atlas.textureUrl),
+      role: 'required',
+    });
+  }
+  if (manifest.atlas?.spritesheetUrl) {
+    members.push({
+      id: 'tilesets/atlas.json',
+      path: resolveGameDataUrl(manifest.atlas.spritesheetUrl),
+      role: 'required',
+    });
+  }
+  return { name: 'terrainAtlas', members };
+};
+
+/** Prop atlases — every page the manifest declares, plus the source art tree. */
+const propAtlasGroup = (manifest: PackManifest): DeclaredGroup => {
+  const members: DeclaredMember[] = [];
+  for (const [index, page] of (manifest.propAtlases ?? []).entries()) {
+    if (page.textureUrl) {
+      members.push({
+        id: `props/page${index}.webp`,
+        path: resolveGameDataUrl(page.textureUrl),
+        role: 'required',
+      });
+    }
+    if (page.spritesheetUrl) {
+      members.push({
+        id: `props/page${index}.json`,
+        path: resolveGameDataUrl(page.spritesheetUrl),
+        role: 'required',
+      });
+    }
+  }
+  const propsPagesPath = join(GAME_DATA, 'sprites/tilesets/props.pages.json');
+  if (existsSync(propsPagesPath)) {
+    members.push({ id: 'props/pages.json', path: propsPagesPath, role: 'optional' });
+  }
+  members.push({
+    id: 'props-src',
+    path: join(PACK_ROOT, 'props'),
+    role: 'optional',
+    tree: true,
+    extensions: IMAGES,
+  });
+  return { name: 'propAtlas', members };
+};
+
+/** Portraits — every variant the manifest binds, scoped to this pack. */
+const portraitsGroup = (manifest: PackManifest): DeclaredGroup => {
+  const members: DeclaredMember[] = [];
+  for (const npc of Object.values(manifest.npcs ?? {})) {
+    for (const url of Object.values(npc.portraits?.variants ?? {})) {
+      members.push({
+        id: `portraits/${url.split('/portraits/')[1] ?? url}`,
+        path: resolveGameDataUrl(url),
+        role: 'required',
+      });
+    }
+  }
+  return { name: 'portraits', members };
+};
+
+/** Authored non-LPC world art. */
+const enemyVisualsGroup = (): DeclaredGroup => ({
+  name: 'enemyVisuals',
+  members: [
+    {
+      id: 'enemies',
+      path: join(PACK_ROOT, 'enemies'),
+      role: 'optional',
+      tree: true,
+      extensions: IMAGES,
+    },
+  ],
+});
+
+/** Every authored cue the manifest binds to real bytes, resolved to the file that exists. */
+const audioGroup = (manifest: PackManifest): DeclaredGroup => {
+  const members: DeclaredMember[] = [];
+  for (const binding of manifest.audio?.bindings ?? []) {
+    // An intentional-silence cue names no bytes, so it contributes no member.
+    // Reading a removed `binding.tag` here would silently empty the whole
+    // group — which is exactly what happened when the source union landed.
+    const tag = binding.source?.kind === 'asset' ? binding.source.tag : undefined;
+    const [, , name] = (tag ?? '').split(':');
+    if (!name) {
+      continue;
+    }
+    for (const ext of MEDIA) {
+      const candidate = join(PACK_ROOT, 'audio', `${name}${ext}`);
+      if (existsSync(candidate)) {
+        members.push({ id: `audio/${name}${ext}`, path: candidate, role: 'required' });
+        break;
+      }
+    }
+  }
+  return { name: 'audio', members };
+};
+
+/**
+ * The compact boot seed and the offline-core declaration.
+ *
+ * Both are REQUIRED. `asset_seed.json` is a generated artifact (see
+ * `generate_asset_seed.ts`) and `offline_core.json` is committed; a candidate
+ * that cannot produce the seed is not a candidate, because the client cannot
+ * boot from a release whose seed is missing — and `runSeedPublish` refuses to
+ * publish one. Declaring them here is what makes that a SEAL failure rather
+ * than a publish-time surprise.
+ */
+const seedGroup = (): DeclaredGroup => ({
+  name: 'seed',
+  members: [
+    { id: 'asset_seed.json', path: join(GAME_DATA, 'asset_seed.json'), role: 'required' },
+    { id: 'offline_core.json', path: join(GAME_DATA, 'offline_core.json'), role: 'required' },
+  ],
+});
+
+/**
+ * Declares every group from the MANIFEST.
+ *
+ * Membership is what the pack says it ships, not what a directory walk happens
+ * to find. That distinction is what makes "a required member is missing" a
+ * decidable failure rather than a silently smaller group.
+ */
+export const declareGroups = (manifest: PackManifest): DeclaredGroup[] => [
+  manifestGroup(),
+  mapsGroup(manifest),
+  terrainAtlasGroup(manifest),
+  propAtlasGroup(manifest),
+  portraitsGroup(manifest),
+  enemyVisualsGroup(),
+  audioGroup(manifest),
+  seedGroup(),
+];
+
+export type SealOutcome =
+  | { ok: true; lock: CandidateLock; path: string }
+  | { ok: false; errors: readonly string[] };
+
+/** Builds the lock. Pure: no writes, no network. */
+export const buildCandidateLock = (): { lock: CandidateLock; missing: readonly string[] } => {
+  const manifest = JSON.parse(
+    readFileSync(join(PACK_ROOT, 'manifest.json'), 'utf8'),
+  ) as PackManifest;
+  const declared = declareGroups(manifest);
+  const { groups, missingRequired } = buildGroups(declared);
+
+  const rights = runEmberwatchRightsAudit();
+  const surface = runSurfaceAudit();
+  const surfaceErrors = surface.findings.filter((finding) => finding.severity === 'error');
+
+  const lock = sealCandidate({
+    schemaVersion: 'candidate.lock.v2',
+    source: {
+      commit: git(['rev-parse', 'HEAD']),
+      tree: git(['rev-parse', 'HEAD^{tree}']),
+    },
+    packId: 'emberwatch',
+    packVersion: manifest.version ?? '0.0.0',
+    sealedAt: new Date().toISOString(),
+    manifest: groups.manifest ?? { count: 0, digest: '', artifacts: [] },
+    maps: groups.maps ?? { count: 0, digest: '', artifacts: [] },
+    terrainAtlas: groups.terrainAtlas ?? { count: 0, digest: '', artifacts: [] },
+    propAtlas: groups.propAtlas ?? { count: 0, digest: '', artifacts: [] },
+    portraits: groups.portraits ?? { count: 0, digest: '', artifacts: [] },
+    enemyVisuals: groups.enemyVisuals ?? { count: 0, digest: '', artifacts: [] },
+    audio: groups.audio ?? { count: 0, digest: '', artifacts: [] },
+    seed: groups.seed ?? { count: 0, digest: '', artifacts: [] },
+    rights: gate({
+      passed: rights.ok,
+      report: {
+        digest: rights.digest,
+        totalEntries: rights.totalEntries,
+        totalBlocked: rights.totalBlocked,
+        roots: rights.roots,
+        releaseContent: rights.releaseContent,
+      },
+      summary: `${rights.totalEntries} artifacts, ${rights.totalBlocked} blocked`,
+    }),
+    surface: gate({
+      passed: surfaceErrors.length === 0,
+      report: { findings: surface.findings, stats: surface.stats },
+      summary: `${surface.stats.maps} maps, ${surface.stats.placedProps}/${surface.stats.props} props placed, ${surfaceErrors.length} error(s)`,
+    }),
+  });
+
+  return {
+    lock,
+    missing: missingRequired.map((m) => `${m.group}/${m.id} (${m.reason})`),
+  };
+};
+
+const describe = (lock: CandidateLock): string =>
+  [
+    `  candidate lock  ${lock.lockHash}`,
+    `  source commit   ${lock.source.commit}`,
+    `  source tree     ${lock.source.tree}`,
+    `  pack            ${lock.packId} ${lock.packVersion}`,
+    `  rights          ${lock.rights.passed ? 'PASS' : 'FAIL'} — ${lock.rights.summary}`,
+    `  surface         ${lock.surface.passed ? 'PASS' : 'FAIL'} — ${lock.surface.summary}`,
+    ...CANDIDATE_GROUPS.map((name) => {
+      const g = lock[name];
+      return `  ${name.padEnd(15)} ${String(g.count).padStart(3)} file(s)  ${g.digest.slice(0, 12)}…`;
+    }),
+  ].join('\n');
+
+const lockPath = (lockHash: string): string =>
+  join(releasePlaneDir(), `candidate-${lockHash}.json`);
+const latestPath = (): string => join(releasePlaneDir(), 'candidate.latest.json');
+
+/**
+ * The sealed candidate, or a refusal naming exactly where to look.
+ *
+ * Validation is delegated to `loadSealedCandidate` so a lock that has been
+ * edited (or that no longer re-derives) is refused with the same precise reason
+ * everywhere, instead of being read as if it were intact.
+ */
+const requireSealedCandidate = (): CandidateLock => {
+  const path = latestPath();
+  if (!existsSync(path)) {
+    console.error(`❌ no sealed candidate at ${path} — seal one first.`);
+    process.exit(1);
+  }
+  try {
+    return loadSealedCandidate();
+  } catch (error) {
+    console.error(`❌ ${error instanceof Error ? error.message : String(error)}`);
+    process.exit(1);
+  }
+};
+
+/**
+ * A candidate must correspond to a committed source state, or nobody else can
+ * re-derive it. There is deliberately no --allow-dirty.
+ */
+const assertCleanWorktree = (): void => {
+  const dirty = git(['status', '--porcelain']);
+  if (dirty.length === 0) {
+    return;
+  }
+  console.error(
+    '❌ refusing to seal — the working tree has uncommitted changes.\n' +
+      '   A candidate must correspond to a committed source state, or nobody else can\n' +
+      '   re-derive it. Commit or stash first; there is deliberately no --allow-dirty.',
+  );
+  for (const line of dirty.split('\n').slice(0, 10)) {
+    console.error(`     ${line}`);
+  }
+  process.exit(1);
+};
+
+const assertNoMissingMembers = (missing: readonly string[]): void => {
+  if (missing.length === 0) {
+    return;
+  }
+  console.error(
+    `❌ refusing to seal — ${missing.length} REQUIRED member(s) declared by the manifest are absent:`,
+  );
+  for (const entry of missing) {
+    console.error(`     ${entry}`);
+  }
+  console.error(
+    '   A required member that cannot be hashed would seal a smaller candidate than the\n' +
+      '   pack declares, and nothing downstream could notice.',
+  );
+  process.exit(1);
+};
+
+const assertLockSchema = (lock: CandidateLock): void => {
+  if (Value.Check(CandidateLockSchema, lock)) {
+    return;
+  }
+  console.error('❌ the candidate lock failed CandidateLockSchema validation — NOT written.');
+  for (const error of [...Value.Errors(CandidateLockSchema, lock)].slice(0, 5)) {
+    console.error(`   ${error.instancePath || '/'}: ${error.message}`);
+  }
+  process.exit(1);
+};
+
+/** Prints exactly which groups moved, and how. */
+const reportLockDiff = (options: {
+  diff: ReturnType<typeof diffCandidateLocks>;
+  sealed: CandidateLock;
+  lock: CandidateLock;
+}): void => {
+  const { diff, sealed, lock } = options;
+  console.error('❌ the working tree no longer matches the sealed candidate:');
+  if (diff.sourceChanged) {
+    console.error(
+      `   source: ${sealed.source.commit.slice(0, 10)} → ${lock.source.commit.slice(0, 10)}`,
+    );
+  }
+  for (const changed of diff.changedGroups) {
+    console.error(`   ${changed.group}:`);
+    for (const id of changed.added) {
+      console.error(`     + ${id}`);
+    }
+    for (const id of changed.removed) {
+      console.error(`     - ${id}`);
+    }
+    for (const id of changed.modified) {
+      console.error(`     ~ ${id}`);
+    }
+  }
+};
+
+/** `--verify`: the working tree must still re-derive the sealed candidate. */
+const verifyAgainstSealed = (lock: CandidateLock): void => {
+  const sealed = requireSealedCandidate();
+  const diff = diffCandidateLocks({ approved: sealed, promoting: lock });
+  if (diff.identical) {
+    console.log(`✅ candidate verified — ${sealed.lockHash}`);
+    console.log(describe(lock));
+    return;
+  }
+  reportLockDiff({ diff, sealed, lock });
+  process.exit(1);
+};
+
+/** Seals the candidate: gates first, then the two immutable lock artifacts. */
+const sealCandidateToDisk = (lock: CandidateLock): void => {
+  if (!lock.rights.passed || !lock.surface.passed) {
+    console.error('❌ refusing to seal — a gate failed:');
+    console.error(describe(lock));
+    process.exit(1);
+  }
+  mkdirSync(releasePlaneDir(), { recursive: true });
+  writeFileSync(lockPath(lock.lockHash), `${JSON.stringify(lock, null, 2)}\n`);
+  writeFileSync(latestPath(), `${JSON.stringify(lock, null, 2)}\n`);
+  console.log(`🔒 candidate sealed — ${lock.lockHash}`);
+  console.log(describe(lock));
+  console.log(`\n  written to ${lockPath(lock.lockHash)}`);
+};
+
+const main = (): void => {
+  const verify = process.argv.includes('--verify');
+
+  if (process.argv.includes('--show')) {
+    console.log(describe(requireSealedCandidate()));
+    return;
+  }
+
+  assertCleanWorktree();
+  const { lock, missing } = buildCandidateLock();
+  assertNoMissingMembers(missing);
+  assertLockSchema(lock);
+
+  if (verify) {
+    verifyAgainstSealed(lock);
+    return;
+  }
+  sealCandidateToDisk(lock);
+};
+
+/** Loads the sealed candidate, or throws with a precise reason. */
+export const loadSealedCandidate = (): CandidateLock => {
+  const path = latestPath();
+  if (!existsSync(path)) {
+    throw new Error(
+      `no sealed candidate at ${path}. Run: bun scripts/src/lib/ops/emberwatch_candidate.ts --seal`,
+    );
+  }
+  const parsed = JSON.parse(readFileSync(path, 'utf8')) as CandidateLock;
+  if (!Value.Check(CandidateLockSchema, parsed)) {
+    throw new Error(`the sealed candidate at ${path} fails CandidateLockSchema validation`);
+  }
+  const { lockHash: _ignored, ...rest } = parsed;
+  const recomputed = sealCandidate(rest).lockHash;
+  if (recomputed !== parsed.lockHash) {
+    throw new Error(
+      `the sealed candidate at ${path} has been modified: its lockHash is ${parsed.lockHash} but ` +
+        `its content re-derives to ${recomputed}`,
+    );
+  }
+  return parsed;
+};
+
+if (import.meta.main) {
+  main();
+}

@@ -1,0 +1,65 @@
+---
+title: Canonical Scene Format & Map Import
+description: The versioned `aikami.scene` document format, how supported map formats normalize into it, and how future authoring formats are kept out of the runtime.
+---
+
+The game treats a map as a **canonical scene** — one validated interpretation
+shared by rendering, collision, transitions and the shared map preview. Legacy
+Tiled JSON and JTON maps are normalized into this scene at the loader boundary;
+native `aikami.scene` documents are consumed directly.
+
+## One scene, one interpretation
+
+Every supported source is normalized into a single model with:
+
+- an **extent** (integer width/height in cells, tile size in pixels);
+- exactly **one authoritative ground source** — either a semantic `terrain`
+  channel or a `baked` frame grid, never both;
+- uniquely identified **decor/overhead visual layers** (ground is owned by the
+  surface, never a second ground layer);
+- uniquely identified **placements** with logical frame references and
+  explicit transforms;
+- **navigation** via authoritative terrain rules plus explicit blocking
+  overrides (never a second preview-only collision grid);
+- a bounded, optional **elevation** channel (preserved, traversal not yet
+  implemented).
+
+## Native scene documents
+
+A native scene is JSON with `"kind": "aikami.scene"` and a `schemaVersion`
+(currently `1`). Cells are stored **row-major** with compact frame palettes
+(index `0` reserved for empty) rather than per-cell `{x, y, tile}` objects.
+Placements keep readable stable ids; runtime palette indices are local to a
+compiled artifact, never persistent world identities.
+
+Import safety limits are enforced before allocation: at most 1,048,576 cells,
+32 authored visual layers, 65,536 placements, and a 64 MiB decoded buffer.
+Raising a limit requires a documented compatibility decision.
+
+## Import / export
+
+Legacy maps normalize through compatibility adapters that preserve
+dimensions, transforms, anchors, collision, transitions and stable object
+identities. Objects without a stable id are looked up in a persisted identity
+map; if identity cannot be established, conversion fails recoverably rather
+than resetting collected loot or door state.
+
+A native round trip — export to JSON, import again — preserves the normalized
+result. Canonical hashing is deterministic: object member ordering cannot
+change the revision, and ordered animation/layer lists keep their order.
+
+## Implemented vs. future authoring
+
+The **implemented** scene format is `aikami.scene` and is what the loader
+accepts. Region, biome and house authoring (`aikami.region`, `aikami.biome`,
+`aikami.house`) are **documented future formats**: submitting one to the
+current loader reports an unsupported authoring format instead of a blank map,
+a guessed forest, or a legacy fallback. Generation and compilation are not
+part of the runtime — installed compiled scenes work fully offline.
+
+## Source
+
+- Scene schema: `packages/shared/schemas/src/lib/game/scene.ts`
+- Scene constants & limits: `packages/shared/constants/src/lib/game/scene.ts`
+- Engine scene model, validator & compiler: `packages/frontend/engine/src/assets/scene/`
+- Legacy adapter: `packages/frontend/engine/src/assets/scene/tiled_adapter.ts`

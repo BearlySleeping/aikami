@@ -8,6 +8,15 @@
 // equivalent required checks.
 // AC-4: Failed or unavailable checks prevent promotion.
 // AC-5: Safety and cancellation cannot be bypassed.
+//
+// 🔴 Structural-guard coverage used to be claimed here while actually arriving
+// indirectly, through `:validate`'s dependency on `scripts:guard`. A profile
+// that says "guards run" while naming only `:typecheck` is not a policy, it is
+// a comment. The guard tasks below are derived from the guard registry
+// (`scripts/src/lib/ops/guards/registry.ts`) so the policy cannot list a guard
+// that no longer exists, or miss one that does.
+
+import { aggregateGuardTasks, guardByTask } from '../../ops/guards/registry.ts';
 
 /**
  * Named validation profiles reflecting different confidence levels.
@@ -93,6 +102,48 @@ const FOCUSED_POLICY = {
   excludedChecks: [':build', ':test', 'e2e:test'],
 } as const satisfies ProfilePolicy;
 
+/**
+ * The structural guards that gate a publication, in registry order.
+ *
+ * 🔴 `scripts:guard-whole-repo` — not `scripts:guard` — is what the pipeline
+ * runs here, because these are the guards whose correctness depends on reading
+ * the whole repository. They must run unconditionally: gating them on the
+ * affected-project graph is exactly what let oversized files reach `main` (see
+ * `.github/workflows/pr-checks.yml` and PR #339).
+ *
+ * The FULL `scripts:guard` aggregate still runs, as a dependency of
+ * `:validate` below — naming it here as well would run every guard twice.
+ */
+const STRUCTURAL_GUARD_CHECKS: readonly PolicyCheck[] = [
+  {
+    task: ':typecheck',
+    label: 'TypeScript typecheck (structural guard)',
+    required: true,
+    guard: true,
+  },
+  {
+    task: 'scripts:guard-whole-repo',
+    label: 'Structural guards (whole-repo, unconditional)',
+    required: true,
+    guard: true,
+  },
+  {
+    task: 'scripts:guard-policy-diff',
+    label: 'Guard policy change classification',
+    required: true,
+    guard: true,
+  },
+];
+
+/** Every guard the aggregate runs, as policy checks. Used by parity tests. */
+export const structuralGuardCoverage = (): readonly PolicyCheck[] =>
+  aggregateGuardTasks().map((task) => ({
+    task,
+    label: guardByTask(task)?.label ?? task,
+    required: true,
+    guard: true,
+  }));
+
 /** Pre-publication profile: everything needed before opening a PR. */
 const PRE_PUBLICATION_POLICY = {
   profile: 'pre_publication',
@@ -104,14 +155,7 @@ const PRE_PUBLICATION_POLICY = {
     { task: ':build', label: 'Build all affected', required: false, guard: false },
     { task: ':test', label: 'Test all affected', required: false, guard: false },
   ],
-  structuralGuards: [
-    {
-      task: ':typecheck',
-      label: 'TypeScript typecheck (structural guard)',
-      required: true,
-      guard: true,
-    },
-  ],
+  structuralGuards: STRUCTURAL_GUARD_CHECKS,
   excludedChecks: [],
 } as const satisfies ProfilePolicy;
 
@@ -125,14 +169,7 @@ const CI_POLICY = {
     { task: ':test', label: 'Test all affected', required: true, guard: false },
   ],
   optionalChecks: [],
-  structuralGuards: [
-    {
-      task: ':typecheck',
-      label: 'TypeScript typecheck (structural guard)',
-      required: true,
-      guard: true,
-    },
-  ],
+  structuralGuards: STRUCTURAL_GUARD_CHECKS,
   excludedChecks: [],
 } as const satisfies ProfilePolicy;
 

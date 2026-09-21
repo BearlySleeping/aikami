@@ -6,33 +6,20 @@ import { basename, join, resolve } from 'node:path';
 import { StringEnum } from '@earendil-works/pi-ai';
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import { Type } from 'typebox';
-import { captureGitState } from '../../scripts/src/lib/agents/contract_pipeline/git_state';
-import {
-  readManifest,
-  writeManifest,
-} from '../../scripts/src/lib/agents/contract_pipeline/manifest_store';
-import { runPrePushGate } from '../../scripts/src/lib/agents/contract_pipeline/pre_push_gate';
-import {
-  createWorkspaceGitReader,
-  deriveRunRepoRoot,
-  evaluatePublicationGate,
-  formatPublicationBlocks,
-} from '../../scripts/src/lib/agents/contract_pipeline/publication_gate';
-import { writeStageResult } from '../../scripts/src/lib/agents/contract_pipeline/stage_result';
+import { PIPELINE_BASE_BRANCH } from '../../packages/shared/constants/src/index.ts';
+import type { PrePushGateResult } from '../../scripts/src/lib/agents/contract_pipeline/pre_push_gate';
 import type {
   ContractReviewDecision,
   ContractWorkerRole,
+  RunManifest,
 } from '../../scripts/src/lib/agents/contract_pipeline/types';
-import { PIPELINE_BASE_BRANCH } from '../../scripts/src/lib/agents/contract_pipeline/types';
-import {
-  commitAll,
-  getGitHeadCommit,
-  pushBranch,
-  runGit,
-} from '../../scripts/src/lib/agents/git_worktree';
-import { publishWorktree } from '../../scripts/src/lib/herdr/worktree';
+import { runPiScript } from './lib/bridge.ts';
 import { isEnabled, isPipelineWorker } from './lib/gating.ts';
 import { runSyncOrThrow } from './lib/process_runner.ts';
+import {
+  createAuthorizePublicationAction,
+  type PublicationSummary,
+} from './lib/publication_authorization.ts';
 import { defineAction, registerNamespace } from './lib/tool_namespace.ts';
 
 // 🔴 RELAXED 2026-08-10: hard per-role mutation guards removed.
@@ -51,6 +38,9 @@ const environment = (name: string): string => {
   }
   return value;
 };
+
+/** Git state snapshot as returned by the `contract.captureGitState` bridge command. */
+type GitStateSnapshot = { fingerprint: string };
 
 const hashContract = (path: string): string =>
   existsSync(path) ? createHash('sha256').update(readFileSync(path)).digest('hex') : '';
@@ -180,13 +170,16 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
           if (['implementer', 'verifier'].includes(role)) {
             if (params.status === 'passed' && wsPath) {
               try {
-                const headCommit = getGitHeadCommit(wsPath);
+                const headCommit = await runPiScript<string>('git.headCommit', { cwd: wsPath });
                 const checkpointMsg = `Checkpoint: ${role} stage passed (attempt ${attempt})`;
                 // Use separate add + commit instead of `commit -a`.
                 // `commit -a` bypasses skip-worktree and picks up
                 // PROGRESS.md / PROMOTION.md / .envrc — causing merge conflicts.
-                runGit('add -A', { cwd: wsPath });
-                runGit(`commit --no-verify -m "${checkpointMsg}"`, { cwd: wsPath });
+                await runPiScript<string>('git.run', { command: 'add -A', cwd: wsPath });
+                await runPiScript<string>('git.run', {
+                  command: `commit --no-verify -m "${checkpointMsg}"`,
+                  cwd: wsPath,
+                });
                 console.log(`📝 Workspace checkpointed: ${headCommit}`);
               } catch (err: unknown) {
                 const message = err instanceof Error ? err.message : String(err);
@@ -194,7 +187,7 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
               }
             } else if ((params.status === 'failed' || params.status === 'blocked') && wsPath) {
               try {
-                const headCommit = getGitHeadCommit(wsPath);
+                const headCommit = await runPiScript<string>('git.headCommit', { cwd: wsPath });
                 console.error(
                   `❌ Task failed at commit: ${headCommit}. ` +
                     `Worktree kept for diagnostics at: ${wsPath}`,
@@ -206,8 +199,10 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
             }
           }
           // ── End workspace lifecycle hooks ──────────────────────
-          const gitState = captureGitState(process.cwd());
-          writeStageResult({
+          const gitState = await runPiScript<GitStateSnapshot>('contract.captureGitState', {
+            cwd: process.cwd(),
+          });
+          await runPiScript('contract.stage.writeResult', {
             resultPath,
             result: {
               runId,
@@ -256,12 +251,17 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
           }
           const runId = environment('CONTRACT_PIPELINE_RUN_ID');
           const reviewPath = environment('CONTRACT_PIPELINE_REVIEW_PATH');
-          const repoRoot = deriveRunRepoRoot();
-          const manifest = readManifest({ runId, cwd: repoRoot });
+          const repoRoot = await runPiScript<string>('contract.runRepoRoot', {});
+          const manifest = await runPiScript<RunManifest | null>('contract.manifest.read', {
+            runId,
+            repoRoot,
+          });
           if (!manifest) {
             throw new Error(`Run manifest not found: ${runId}`);
           }
-          const fingerprint = captureGitState(process.cwd()).fingerprint;
+          const fingerprint = (
+            await runPiScript<GitStateSnapshot>('contract.captureGitState', { cwd: process.cwd() })
+          ).fingerprint;
           const contractPath = environment('CONTRACT_PIPELINE_CONTRACT_PATH');
           const contractChanged =
             typeof manifest.verificationContractHash === 'string' &&
@@ -352,35 +352,62 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
             };
           }
 
-          const repoRoot = deriveRunRepoRoot();
+          const repoRoot = await runPiScript<string>('contract.runRepoRoot', {});
           const runId = deriveRunId();
           const base = `origin/${PIPELINE_BASE_BRANCH}`;
 
-          const gate = runPrePushGate({ cwd: wsPath, base, runId });
-          if (!gate.ran) {
+          const gate = await runPiScript<PrePushGateResult>('contract.prepushGate', {
+            cwd: wsPath,
+            base,
+            runId,
+          });
+          if (gate.outcome === 'unavailable' || gate.outcome === 'cancelled') {
+            // 🔴 Record the inconclusive outcome BEFORE returning. Leaving an
+            // older verdict (and any authorization bound to it) in place would
+            // let `contract.publication.evaluate` honor it even though this
+            // gate produced no evidence about the current commit — the exact
+            // fail-open `applyPrePushGate` closes in orchestrator.ts.
+            const inconclusiveManifest = await runPiScript<RunManifest | null>(
+              'contract.manifest.read',
+              { runId, repoRoot },
+            );
+            if (inconclusiveManifest) {
+              inconclusiveManifest.prePushValidation = {
+                outcome: gate.outcome,
+                ok: false,
+                output: gate.output,
+                checkedAt: new Date().toISOString(),
+                revision: await runPiScript<string>('git.headCommit', { cwd: wsPath }),
+              };
+              inconclusiveManifest.publicationAuthorization = undefined;
+              await runPiScript('contract.manifest.write', {
+                manifest: inconclusiveManifest,
+                repoRoot,
+              });
+            }
             return {
               content: [
                 {
                   type: 'text',
                   text: [
-                    '⚠️  Validation could not run (see `bun run infra:report`).',
+                    `⚠️  Validation could not run (\`${gate.outcome}\` — see \`bun run infra:report\`).`,
                     '',
-                    'The recorded verdict was left untouched, so `gh_pr create` will still',
-                    'refuse if it is stale. Resolve the tooling problem and run this again.',
+                    'The gate has no evidence about this commit, so `gh_pr create` will refuse.',
+                    'Resolve the tooling problem and run this again.',
                   ].join('\n'),
                 },
               ],
               isError: true,
-              details: { ran: false },
+              details: { outcome: gate.outcome },
             };
           }
 
           // `:fix` rewrote files in place — commit them so the verdict below
           // is recorded against a revision that actually contains them.
-          let head = getGitHeadCommit(wsPath);
+          let head = await runPiScript<string>('git.headCommit', { cwd: wsPath });
           let committed = false;
           try {
-            const after = commitAll({
+            const after = await runPiScript<string>('git.commitAll', {
               cwd: wsPath,
               message: 'style: apply `moon run :fix` before publication',
               authorName: 'Pi Agent',
@@ -400,24 +427,34 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
           // 🔴 Bind the verdict to the post-commit revision. A verdict stored
           // against a revision the branch has already moved past is exactly
           // the stale evidence publication_gate.ts exists to reject.
-          const manifest = readManifest({ runId, cwd: repoRoot });
+          const manifest = await runPiScript<RunManifest | null>('contract.manifest.read', {
+            runId,
+            repoRoot,
+          });
           if (manifest) {
             manifest.prePushValidation = {
-              ok: gate.ok,
+              outcome: gate.outcome,
+              ok: gate.outcome === 'passed',
               output: gate.output,
               checkedAt: new Date().toISOString(),
               revision: head,
             };
-            writeManifest({ manifest, cwd: repoRoot });
+            // A fresh verdict invalidates any old authorization — it was bound
+            // to a different outcome/revision and must be re-granted.
+            manifest.publicationAuthorization = undefined;
+            await runPiScript('contract.manifest.write', { manifest, repoRoot });
           }
 
           let pushed = false;
           let pushError: string | undefined;
-          if (params.push !== false && gate.ok) {
+          if (params.push !== false && gate.outcome === 'passed') {
             try {
-              pushBranch({
+              await runPiScript('git.pushBranch', {
                 cwd: wsPath,
-                branchName: runGit('rev-parse --abbrev-ref HEAD', { cwd: wsPath }),
+                branchName: await runPiScript<string>('git.run', {
+                  command: 'rev-parse --abbrev-ref HEAD',
+                  cwd: wsPath,
+                }),
               });
               pushed = true;
             } catch (err: unknown) {
@@ -425,10 +462,10 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
             }
           }
 
-          const publication = evaluatePublicationGate({
-            git: createWorkspaceGitReader(wsPath),
-            manifest: readManifest({ runId, cwd: repoRoot }),
-          });
+          const publication = await runPiScript<PublicationSummary>(
+            'contract.publication.evaluate',
+            { workspacePath: wsPath, runId },
+          );
 
           const pushLine = ((): string => {
             if (pushed) {
@@ -437,7 +474,8 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
             return pushError ? `⚠️  Push failed: ${pushError}` : '';
           })();
 
-          const lines = gate.ok
+          const passed = gate.outcome === 'passed';
+          const lines = passed
             ? [
                 `✅ **Validation passed** on \`${head.slice(0, 12)}\`.`,
                 '',
@@ -446,18 +484,19 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
                   : 'No auto-fixable changes were needed.',
                 pushLine,
                 '',
-                publication.ok
-                  ? '`gh_pr create` is now unblocked.'
-                  : formatPublicationBlocks(publication),
+                publication.ok ? '`gh_pr create` is now unblocked.' : publication.refusal,
               ]
             : [
                 '🔴 **Validation FAILED**.',
                 '',
                 'Fix the failures below, then run `contract_stage` action `validate` again.',
                 '',
-                'You MAY still open the PR with explicit permission from the user (YOLO proceeds',
-                'without asking) so CodeRabbit can fix them — a red verdict no longer blocks',
-                '`gh_pr create`. CI repeats these failures verbatim either way.',
+                '🔴 A red verdict does NOT authorize PR creation. To publish this exact',
+                'revision deliberately (so CodeRabbit can fix it on the PR), FIRST get',
+                'explicit permission from the user, then call `contract_stage` action',
+                '`authorizePublication` — it records a revision-bound authorization that',
+                '`gh_pr create` will honor for this commit only. YOLO records one',
+                'automatically. Any new commit voids the authorization.',
                 '',
                 '```',
                 gate.output,
@@ -466,25 +505,28 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
 
           return {
             content: [{ type: 'text', text: lines.filter((line) => line !== '').join('\n') }],
-            isError: !gate.ok || pushError !== undefined,
+            isError: !passed || pushError !== undefined,
             details: {
-              ok: gate.ok,
+              outcome: gate.outcome,
               revision: head,
               committed,
               pushed,
               publishable: publication.ok,
-              blocks: publication.blocks.map((block) => block.code),
-              warnings: publication.warnings.map((warning) => warning.code),
+              blocks: publication.blocks,
+              warnings: publication.warnings,
               workspacePath: wsPath,
               cwd: ctx.cwd,
             },
           };
         },
       }),
+      createAuthorizePublicationAction({
+        fallbackWorkspacePath: () => _wsPath,
+        resolveRunId: deriveRunId,
+      }),
       defineAction({
         action: 'reconcile',
         summary: 'Publish a worktree to a remote branch',
-
         parameters: Type.Object({
           workspacePath: Type.String({
             description: 'Absolute path to the Git Worktree directory.',
@@ -550,14 +592,17 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
           let headBranch: string;
           let headCommit: string;
           try {
-            const result = await publishWorktree({
-              checkoutPath: wsPath,
-              repoRoot,
-              base: baseBranch,
-              message: `Feat: Contract ${contractId} — pipeline reconcile`,
-              authorName: 'Pi Agent',
-              authorEmail: 'agent@pi.internal',
-            });
+            const result = await runPiScript<{ headBranch: string; headCommit: string }>(
+              'herdr.worktree.publish',
+              {
+                checkoutPath: wsPath,
+                repoRoot,
+                base: baseBranch,
+                message: `Feat: Contract ${contractId} — pipeline reconcile`,
+                authorName: 'Pi Agent',
+                authorEmail: 'agent@pi.internal',
+              },
+            );
             headBranch = result.headBranch;
             headCommit = result.headCommit;
           } catch (err: unknown) {
@@ -660,16 +705,28 @@ export default function contractPipelineExtension(pi: ExtensionAPI): void {
 
           if (existsSync(wsPath)) {
             try {
-              headCommit = getGitHeadCommit(wsPath);
-              logOutput = runGit('log -1 --format="%H %s"', { cwd: wsPath });
-              statusOutput = runGit('status', { cwd: wsPath });
+              headCommit = await runPiScript<string>('git.headCommit', { cwd: wsPath });
+              logOutput = await runPiScript<string>('git.run', {
+                command: 'log -1 --format="%H %s"',
+                cwd: wsPath,
+              });
+              statusOutput = await runPiScript<string>('git.run', {
+                command: 'status',
+                cwd: wsPath,
+              });
               // Post-mortem artifact: full diff of what the agent changed.
               if (headCommit) {
                 try {
-                  diffOutput = runGit(`diff ${headCommit}~1..${headCommit}`, { cwd: wsPath });
+                  diffOutput = await runPiScript<string>('git.run', {
+                    command: `diff ${headCommit}~1..${headCommit}`,
+                    cwd: wsPath,
+                  });
                 } catch {
                   // If only one commit, show working tree diff.
-                  diffOutput = runGit('diff HEAD', { cwd: wsPath });
+                  diffOutput = await runPiScript<string>('git.run', {
+                    command: 'diff HEAD',
+                    cwd: wsPath,
+                  });
                 }
               }
             } catch (err: unknown) {

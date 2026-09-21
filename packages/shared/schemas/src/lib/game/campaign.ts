@@ -53,6 +53,10 @@ export const CampaignSchema = Type.Object({
   lastSaveSlotId: Type.Optional(Type.String({ description: 'Last save slot ID' })),
   /** AI capability profile recorded at campaign creation. */
   capabilityProfile: CapabilityProfileSchema,
+  /** Hidden-truth variant sampled once at campaign creation (C-495). Absent → default variant. */
+  sampledTruthId: Type.Optional(
+    Type.String({ description: 'Sampled hidden-truth variant id (C-495)' }),
+  ),
 });
 
 export type Campaign = Static<typeof CampaignSchema>;

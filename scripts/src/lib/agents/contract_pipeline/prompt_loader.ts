@@ -34,7 +34,10 @@ export const feedbackMessage = (options: {
 }): string => {
   if (options.role === 'implementer') {
     return [
-      '## 🔴 Verifier requested changes — fix these before re-submitting',
+      // Neutral wording: the feedback can come from the verifier (changes
+      // requested) OR from a red pre-push gate (verifier passed, gate red) —
+      // the sections below carry their own, precise headers.
+      '## 🔴 Fix the issues below before re-submitting',
       'Read EACH issue below, fix it, then call `contract_stage_complete` with `passed`.',
       'Do NOT just re-call `contract_stage_complete` with the same code — you must make actual changes.',
       '',

@@ -28,6 +28,14 @@ fileGroups:
   configs:
     - 'package.json'
     - 'tsconfig.json'
+  # 🔴 Load-bearing. tests/better_auth.test.ts applies every SQL file in
+  # packages/backend/database/drizzle-d1 to an in-memory libsql database, so a
+  # migration change alters this suite's result without touching anything
+  # under this project. Without this input moon serves a cached pass and a
+  # broken migration ships green (it did: 0006 dropped account.issuer and this
+  # task kept its pre-change hash).
+  migrations:
+    - '/packages/backend/database/drizzle-d1/**/*'
   tests:
     - 'tests/**/*'
 
@@ -38,3 +46,4 @@ tasks:
       - '@group(sources)'
       - '@group(tests)'
       - '@group(configs)'
+      - '@group(migrations)'

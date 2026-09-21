@@ -97,10 +97,13 @@ document.documentElement.classList.toggle('dark', theme === 'dark');
 <meta name="author" content={site.author}>
 
 {noindex ? (
-    <meta name="robots" content="noindex, nofollow" />
-  ) : (
-    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
-  )}
+  <meta name="robots" content="noindex, nofollow" />
+) : (
+  <meta
+    name="robots"
+    content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1"
+  />
+)}
 
 <link href={canonicalURL} rel="canonical">
 <link href={canonicalURL} rel="alternate" hreflang="en">

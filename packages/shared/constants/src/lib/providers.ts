@@ -26,6 +26,10 @@ export type VerificationStrategy =
   | 'ollama'
   /** OpenAI-compatible: probe /v1/models */
   | 'openai_compat'
+  /** ComfyUI-native: probe /object_info */
+  | 'comfyui'
+  /** AUTOMATIC1111 / sd-server: probe /sdapi/v1/sd-models */
+  | 'webui'
   /** Cloud provider with fixed API endpoint: probe with auth header */
   | 'cloud_header_auth'
   /** Cloud provider with query-param API key (e.g. Google) */
@@ -180,7 +184,7 @@ export const VOICE_PROVIDERS = [
   {
     id: 'kokoro',
     label: 'Kokoro (local)',
-    description: 'Local Kokoro TTS via Docker',
+    description: 'On-device Kokoro TTS (browser WebGPU / desktop binary)',
     needsKey: false,
     needsUrl: true,
     isLocal: true,
@@ -250,7 +254,7 @@ export const IMAGE_PROVIDERS = [
     needsKey: false,
     needsUrl: true,
     isLocal: true,
-    verificationStrategy: 'none',
+    verificationStrategy: 'comfyui',
     supportsModelDiscovery: true,
     capabilities: ['image'],
   },
@@ -261,7 +265,18 @@ export const IMAGE_PROVIDERS = [
     needsKey: false,
     needsUrl: true,
     isLocal: true,
-    verificationStrategy: 'none',
+    verificationStrategy: 'webui',
+    supportsModelDiscovery: true,
+    capabilities: ['image'],
+  },
+  {
+    id: 'sdcpp',
+    label: 'sd-server (local)',
+    description: 'Local stable-diffusion.cpp engine',
+    needsKey: false,
+    needsUrl: true,
+    isLocal: true,
+    verificationStrategy: 'webui',
     supportsModelDiscovery: true,
     capabilities: ['image'],
   },

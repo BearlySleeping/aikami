@@ -79,7 +79,11 @@ let _isHovered = $state(false);
     <div
       class="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm"
       onclick={() => (isExpanded = false)}
-      onkeydown={(e: KeyboardEvent) => { if (e.key === 'Escape') { isExpanded = false; } }}
+      onkeydown={(e: KeyboardEvent) => {
+  if (e.key === 'Escape') {
+    isExpanded = false;
+  }
+}}
       role="dialog"
       aria-modal="true"
       tabindex="-1"

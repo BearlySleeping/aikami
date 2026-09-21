@@ -6,8 +6,21 @@
 //
 // Contract: C-248 Autonomous NPC Behavior Schedules
 
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { afterAll, afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
 import type { NpcSchedule } from '@aikami/types';
+import { createRealLocalDatabase } from '../__tests__/local_database_fixture.ts';
+
+const fixture = await createRealLocalDatabase();
+
+const realFrontendStorage = await import('@aikami/frontend/storage');
+
+mock.module('@aikami/frontend/storage', () => ({
+  // Spread the real module first: a mock that names only the functions a test
+  // needs breaks the moment a transitively-imported module consumes a new
+  // export (C-518 added the generation-record writers).
+  ...realFrontendStorage,
+  getLocalDatabase: mock(async () => fixture.db),
+}));
 
 // ── Mock Date ────────────────────────────────────────────────────────────
 
@@ -38,12 +51,10 @@ const restoreRealDate = (): void => {
 // ── Helpers ──────────────────────────────────────────────────────────────
 
 /**
- * Seeds a schedule row into the fake in-memory database provided by
- * test_preload's mock of @aikami/frontend/storage.
+ * Seeds a schedule row into the real in-memory database registered below.
  */
 const seedSchedule = async (npcId: string, schedule: NpcSchedule): Promise<void> => {
-  const repos = await import('@aikami/frontend/storage');
-  const db = await repos.getLocalDatabase();
+  const db = fixture.db;
   await db.execute({
     sql: 'INSERT OR REPLACE INTO npc_schedules (npc_id, data, updated_at) VALUES (?, ?, ?)',
     args: [npcId, JSON.stringify(schedule), schedule.updatedAt],
@@ -51,11 +62,10 @@ const seedSchedule = async (npcId: string, schedule: NpcSchedule): Promise<void>
 };
 
 /**
- * Resets the fake database tables between tests.
+ * Resets the real in-memory database between tests.
  */
 const resetDb = async (): Promise<void> => {
-  const repos = await import('@aikami/frontend/storage');
-  (repos as unknown as { resetLocalDatabase: () => void }).resetLocalDatabase();
+  await fixture.reset();
 };
 
 describe('NpcScheduleService', () => {
@@ -66,6 +76,10 @@ describe('NpcScheduleService', () => {
 
   afterEach(() => {
     restoreRealDate();
+  });
+
+  afterAll(async () => {
+    await fixture.close();
   });
 
   it('should return default schedule when no stored schedule exists', async () => {

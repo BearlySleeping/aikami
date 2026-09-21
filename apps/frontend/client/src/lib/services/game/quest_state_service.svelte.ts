@@ -18,17 +18,36 @@ import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import type {
   ActiveQuestState,
+  CommittedNarrativeEvent,
   ContentPackQuestEntry,
   ContentPackQuestObjective,
   QuestObjectiveFailureCondition,
   QuestObjectiveProgress,
   QuestProgress,
 } from '@aikami/types';
+import { campaignService } from '../campaign/campaign_service.svelte.ts';
 import { inventoryService } from './inventory_service.svelte';
+import { narrativeEventService } from './narrative_event_service.svelte.ts';
+import { partyRosterService } from './party_roster_service.svelte.ts';
 import { playerStateService } from './player_state_service.svelte';
+import { evaluateRequiredObjectives, findCompletedTerminalObjective } from './quest_completion';
+import {
+  commitEndingChoice,
+  type EligibleEnding,
+  listEligibleEndings,
+  requiresEndingChoice,
+  selectDefaultEnding,
+} from './quest_ending_selection';
+import {
+  type DiscoverableEvidence,
+  discoverEvidenceAt,
+  discoverEvidenceAtProp,
+  getDiscoverableEvidence,
+  presentEvidence,
+} from './quest_evidence';
 import { registerSerializable } from './serializable_service';
 
 export type QuestStateServiceOptions = BaseFrontendClassOptions;
@@ -82,6 +101,45 @@ export type QuestStateServiceInterface = BaseFrontendClassInterface & {
    */
   clearWorldStateFlag(flag: string): boolean;
 
+  /**
+   * Presents a discovered evidence item to its named NPC (C-495 AC-2).
+   * Records exactly one `EvidencePresented` event (idempotent — presenting
+   * the same evidence twice does not record twice) and sets a world-state flag
+   * that world-state-conditioned endings may require. Returns the committed
+   * event, or undefined when the evidence is not consistent with the sampled
+   * truth / not discoverable.
+   */
+  presentEvidence(options: {
+    evidenceId: string;
+    campaignId: string;
+    npcId: string;
+  }): CommittedNarrativeEvent | undefined;
+
+  /**
+   * Persists truth-compatible evidence whose authored discovery location has
+   * been reached. Discovery flags are serialized with quest world state.
+   */
+  discoverEvidenceAt(location: string): string[];
+
+  /**
+   * Commits the player's explicit final ending choice and resolves the quest
+   * (C-495). Evidence unlocks an option; it never chooses one, and the choice
+   * only exists at the quest's resolution point.
+   *
+   * Returns false when the quest is inactive/unknown, when it is not yet
+   * resolution-ready (the final objective is still open), or when the chosen
+   * ending exists but is locked. A successful choice delivers rewards, commits
+   * the ending world-state flag, records exactly one `QuestResolved` event and
+   * journal entry, and is idempotent — a repeated call after resolution is
+   * refused because the quest is no longer active.
+   */
+  chooseEnding(options: { questId: string; endingId: string }): boolean;
+
+  /** The endings a player may currently choose, with whether each is unlocked. */
+  getEligibleEndings(questId: string): EligibleEnding[];
+
+  /** Returns discovered evidence compatible with the campaign's sampled truth. */
+  getDiscoverableEvidence(campaignId?: string): DiscoverableEvidence[];
   /** Journal entries for completed and failed quests (C-339). */
   readonly journalEntries: readonly QuestJournalEntry[];
 
@@ -294,6 +352,60 @@ class QuestStateService
   }
 
   /** @inheritdoc */
+  presentEvidence(options: {
+    evidenceId: string;
+    campaignId: string;
+    npcId: string;
+  }): CommittedNarrativeEvent | undefined {
+    return presentEvidence({ context: this._evidenceContext(), ...options });
+  }
+
+  /** @inheritdoc */
+  chooseEnding(options: { questId: string; endingId: string }): boolean {
+    const { questId, endingId } = options;
+    const definition = this._getQuestDefinition(questId);
+    const progress = this._progress.find((entry) => entry.questId === questId);
+    if (!definition || !progress) {
+      return false;
+    }
+    const result = commitEndingChoice({
+      endings: definition.endings ?? {},
+      endingId,
+      questActive: progress.status === 'active',
+      resolutionReady: progress.awaitingEndingChoice === true,
+      worldStateFlags: this.worldStateFlags,
+      progress,
+    });
+    if (result !== 'ok') {
+      this.debug('chooseEnding:rejected', { questId, endingId, reason: result });
+      return false;
+    }
+    this.debug('chooseEnding', { questId, endingId });
+    // The player's decision IS the resolution: it authoritatively completes the
+    // quest and commits rewards, the ending flag, the QuestResolved event and
+    // the journal entry. `_completeQuest` is idempotent on a non-active quest.
+    this._completeQuest(progress, definition);
+    this._syncQuests();
+    return true;
+  }
+  /** @inheritdoc */
+  getEligibleEndings(questId: string): EligibleEnding[] {
+    return listEligibleEndings({
+      endings: this._getQuestDefinition(questId)?.endings ?? {},
+      worldStateFlags: this.worldStateFlags,
+    });
+  }
+  /** @inheritdoc */
+  discoverEvidenceAt(location: string): string[] {
+    return discoverEvidenceAt({ context: this._evidenceContext(), location });
+  }
+
+  /** @inheritdoc */
+  getDiscoverableEvidence(campaignId?: string): DiscoverableEvidence[] {
+    return getDiscoverableEvidence({ context: this._evidenceContext(), campaignId });
+  }
+
+  /** @inheritdoc */
   canAcceptQuest(questId: string): boolean {
     if (this._declinedQuestIds.includes(questId)) {
       return false;
@@ -418,12 +530,22 @@ class QuestStateService
 
   /** @inheritdoc */
   evaluateTriggers(trigger: QuestTriggerEvent): void {
+    if (
+      this._progress.some((progress) => progress.status === 'active') &&
+      !campaignService.activeCampaign?.id
+    ) {
+      throw new Error('QuestStateService: quest progression requires an active campaign');
+    }
     let changed = false;
 
     // Remember the last entered map so acceptQuest can retro-complete
     // zone objectives accepted while the player is already in the zone.
     if (trigger.type === 'MAP_ENTERED') {
       this._lastMapEntered = { mapUrl: trigger.mapUrl };
+      const mapId = this._contentPackLoader?.resolveMapId(trigger.mapUrl);
+      if (mapId) {
+        this.discoverEvidenceAt(mapId);
+      }
     }
 
     for (const progress of this._progress) {
@@ -658,6 +780,20 @@ class QuestStateService
         }),
       );
 
+      for (const eventType of [
+        'DOOR_OPENED',
+        'LEVER_TOGGLED',
+        'LOOT_GENERATED',
+        'READABLE_INTERACTED',
+        'TRAP_TRIGGERED',
+      ] as const) {
+        this._unsubscribers.push(
+          bridge.on(eventType, (event) => {
+            this._discoverEvidenceAtProp(event.spawnId);
+          }),
+        );
+      }
+
       // NPC_INTERACTED is already handled by the dialogue system.
       // We wire it here as a pass-through for quest evaluation.
       this._unsubscribers.push(
@@ -672,7 +808,27 @@ class QuestStateService
     }
   }
 
-  // ── Private: quest sync ──
+  // ── Private: evidence lifecycle ──
+
+  /** The quest-state accessors the evidence lifecycle reads and writes through. */
+  private _evidenceContext() {
+    return {
+      contentPackLoader: this._contentPackLoader,
+      sampledTruthId: campaignService.activeCampaign?.sampledTruthId,
+      activeCampaignId: campaignService.activeCampaign?.id,
+      worldStateFlags: this.worldStateFlags,
+      setWorldStateFlag: (flag: string) => this.setWorldStateFlag(flag),
+    };
+  }
+
+  /** Resolves standalone and map-qualified prop discovery locations. */
+  private _discoverEvidenceAtProp(propId: string): void {
+    discoverEvidenceAtProp({
+      context: this._evidenceContext(),
+      propId,
+      mapUrl: this._lastMapEntered?.mapUrl,
+    });
+  }
 
   /**
    * Rebuilds the quests array from internal _progress state.
@@ -709,6 +865,10 @@ class QuestStateService
         description: definition.description,
         status: progress.status,
         objectives,
+        ...(progress.chosenEndingId ? { chosenEndingId: progress.chosenEndingId } : {}),
+        // Always explicit for an active quest, so a consumer never has to tell
+        // "not resolution-ready" apart from "field not projected".
+        awaitingEndingChoice: progress.awaitingEndingChoice === true,
         repeatable: definition.repeatable,
         questChainId: definition.questChainId,
         chainOrder: definition.chainOrder,
@@ -802,109 +962,84 @@ class QuestStateService
 
   /**
    * Checks if a quest is complete or has failed.
-   * Only required (non-optional, non-failed, non-expired) objectives count toward completion.
-   * If all required paths are exhausted, quest fails.
+   *
+   * C-339: only required objectives count toward completion; a failed required
+   * objective fails the quest. C-495: completing the required path does not
+   * necessarily RESOLVE the quest — a quest that authors a real conclusion
+   * choice parks at its resolution point instead.
    */
   private _checkQuestCompletion(progress: QuestProgress, definition: ContentPackQuestEntry): void {
-    // Check if all required objectives are completed
-    let allRequiredComplete = true;
-    let anyRequiredFailed = false;
+    const { allRequiredComplete, anyRequiredFailed } = evaluateRequiredObjectives({
+      progress,
+      definition,
+    });
 
-    for (let i = 0; i < definition.objectives.length; i++) {
-      const objectiveDef = definition.objectives[i];
-      const progressEntry = progress.objectives.find((o) => o.objectiveIndex === i);
-      if (!progressEntry) {
-        continue;
-      }
-
-      const isOptional = objectiveDef.optional === true;
-
-      if (progressEntry.status === 'failed' || progressEntry.status === 'expired') {
-        if (!isOptional) {
-          anyRequiredFailed = true;
-        }
-      } else if (
-        progressEntry.status !== 'completed' &&
-        progressEntry.status !== 'skipped' &&
-        !isOptional
-      ) {
-        allRequiredComplete = false;
-      }
-    }
-
-    // If a required objective failed, the quest fails
     if (anyRequiredFailed) {
       this._failQuest(progress);
       return;
     }
-
     if (!allRequiredComplete) {
       return;
     }
 
-    // Mark remaining optional/locked objectives as skipped
-    for (const entry of progress.objectives) {
-      if (entry.status === 'locked' || entry.status === 'active') {
-        entry.status = 'skipped';
-      }
-    }
-
-    this._completeQuest(progress, definition);
+    this._skipRemainingObjectives(progress);
+    this._resolveOrAwaitEnding(progress, definition);
   }
 
   /**
-   * Checks if a completed terminal objective triggers quest completion.
-   * A terminal objective is one that no other objective depends on.
-   * Only applies to branching quests (at least one objective has prerequisites).
-   * When a terminal completes, other incomplete path objectives are skipped.
+   * Resolves a quest whose required objectives are all done — or parks it at
+   * its resolution point when the player still has a conclusion to choose.
+   *
+   * C-495: a quest that authors more than one reachable ending is a decision,
+   * not an outcome. Completing its last required objective moves it into the
+   * `awaitingEndingChoice` state instead of committing an ending, and
+   * `chooseEnding` performs the actual resolution. Quests with nothing to
+   * choose between (no endings, one ending, or every conclusion still locked)
+   * keep the existing auto-completion path.
+   */
+  private _resolveOrAwaitEnding(progress: QuestProgress, definition: ContentPackQuestEntry): void {
+    const awaiting = requiresEndingChoice({
+      endings: definition.endings ?? {},
+      worldStateFlags: this.worldStateFlags,
+    });
+    if (!awaiting) {
+      this._completeQuest(progress, definition);
+      return;
+    }
+    if (progress.awaitingEndingChoice) {
+      return; // Already resolution-ready — nothing further to do.
+    }
+    progress.awaitingEndingChoice = true;
+    this.debug('_resolveOrAwaitEnding:awaiting-ending-choice', { questId: progress.questId });
+  }
+
+  /**
+   * Checks if a completed required terminal objective triggers quest
+   * completion on a branching quest (see `findCompletedTerminalObjective`).
    */
   private _checkTerminalCompletion(
     progress: QuestProgress,
     definition: ContentPackQuestEntry,
   ): void {
-    // Only apply to branching quests (at least one objective has prerequisites)
-    const hasAnyPrerequisites = definition.objectives.some(
-      (o) => o.prerequisiteIndices && o.prerequisiteIndices.length > 0,
-    );
-    if (!hasAnyPrerequisites) {
-      return;
-    }
-
-    // Quest already completed — don't double-complete
+    // Quest already completed or failed — don't double-resolve.
     if (progress.status !== 'active') {
       return;
     }
-    const hasDependents = new Set<number>();
-    for (let i = 0; i < definition.objectives.length; i++) {
-      const prereqs = definition.objectives[i].prerequisiteIndices;
-      if (prereqs) {
-        for (const prereqIndex of prereqs) {
-          hasDependents.add(prereqIndex);
-        }
-      }
+    const terminalIndex = findCompletedTerminalObjective({ progress, definition });
+    if (terminalIndex === undefined) {
+      return;
     }
 
-    // Find terminal objectives (no one depends on them)
-    for (let i = 0; i < definition.objectives.length; i++) {
-      if (hasDependents.has(i)) {
-        continue; // Has dependents — not terminal
-      }
+    this._skipRemainingObjectives(progress);
+    this._resolveOrAwaitEnding(progress, definition);
+  }
 
-      const progressEntry = progress.objectives.find((o) => o.objectiveIndex === i);
-      if (progressEntry?.status !== 'completed') {
-        continue;
+  /** Marks every still-open optional/locked objective as skipped. */
+  private _skipRemainingObjectives(progress: QuestProgress): void {
+    for (const entry of progress.objectives) {
+      if (entry.status === 'locked' || entry.status === 'active') {
+        entry.status = 'skipped';
       }
-
-      // A terminal objective completed — this path is complete
-      // Skip all other non-completed, non-failed active/locked objectives
-      for (const entry of progress.objectives) {
-        if (entry.status === 'locked' || entry.status === 'active') {
-          entry.status = 'skipped';
-        }
-      }
-
-      this._completeQuest(progress, definition);
-      return;
     }
   }
 
@@ -916,20 +1051,33 @@ class QuestStateService
     if (progress.status !== 'active') {
       return; // Already completed or failed — idempotent guard
     }
+    const campaignId = campaignService.activeCampaign?.id;
+    if (!campaignId) {
+      throw new Error('QuestStateService: quest completion requires an active campaign');
+    }
     progress.status = 'completed';
     progress.completedAt = Date.now();
+    // The quest is resolved: it is no longer waiting for a decision.
+    progress.awaitingEndingChoice = undefined;
 
-    // Default ending: first available ending ID, or undefined
-    const endingIds = Object.keys(definition.endings ?? {});
-    if (endingIds.length > 0 && !progress.chosenEndingId) {
-      progress.chosenEndingId = endingIds[0];
+    // Ending selection (C-495): honour the player's explicit choice. Evidence
+    // UNLOCKS an ending but must never silently choose one, so when nothing was
+    // chosen the default (unconditioned) ending resolves — never a
+    // world-state-conditioned ending just because its flag happens to be set.
+    // Reached only for quests with nothing to choose between (see
+    // `_resolveOrAwaitEnding`) or after an explicit `chooseEnding`.
+    if (!progress.chosenEndingId) {
+      progress.chosenEndingId = selectDefaultEnding({ endings: definition.endings ?? {} });
     }
 
     // Deliver rewards (idempotent)
     this._deliverRewards(progress, definition);
 
-    // Create journal entry (C-339)
-    this._createJournalEntry(progress, definition);
+    // C-491 AC-5: commit exactly one QuestResolved event, then derive the
+    // journal entry from it (not a parallel copy). The event owns the narrative
+    // identity/timing; the definition owns the authored detail.
+    const event = this._recordQuestResolved({ progress, definition, campaignId });
+    this._createJournalEntry(progress, definition, event);
 
     // Track repeatable completion timestamp (C-339)
     if (definition.repeatable) {
@@ -1349,9 +1497,40 @@ class QuestStateService
   // ── Private: journal (C-339) ──
 
   /**
-   * Creates a journal entry for a completed or failed quest.
+   * C-491 AC-5: commits exactly one `QuestResolved` event for a completed quest
+   * and returns it. The actor is the quest-facing NPC (`offeredByNpcId` when
+   * present, else the player's active party NPC, else the player) so the
+   * witness set is never empty for completions that occur away from a scene cast.
    */
-  private _createJournalEntry(progress: QuestProgress, definition: ContentPackQuestEntry): void {
+  private _recordQuestResolved(options: {
+    progress: QuestProgress;
+    definition: ContentPackQuestEntry;
+    campaignId: string;
+  }): CommittedNarrativeEvent {
+    const { progress, definition, campaignId } = options;
+    const actorId = definition.offeredByNpcId ?? partyRosterService.members[0]?.npcId ?? 'player';
+    return narrativeEventService.record({
+      campaignId,
+      kind: 'QuestResolved',
+      informationKind: 'world_fact',
+      summary: `Quest completed: ${definition.name}`,
+      subjectId: progress.questId,
+      actorId,
+    });
+  }
+
+  /**
+   * Creates a journal entry for a completed or failed quest. When a `QuestResolved`
+   * event is supplied (completed path), the entry's identity/timing derive from
+   * the event — `questId` from `subjectId`, `timestamp` from `recordedAt` — so the
+   * journal is keyed to the single committed event rather than authored as a
+   * parallel copy (C-491 AC-5).
+   */
+  private _createJournalEntry(
+    progress: QuestProgress,
+    definition: ContentPackQuestEntry,
+    event?: CommittedNarrativeEvent,
+  ): void {
     const ending = progress.chosenEndingId
       ? definition.endings?.[progress.chosenEndingId]
       : undefined;
@@ -1376,10 +1555,10 @@ class QuestStateService
     }
 
     const entry: QuestJournalEntry = {
-      questId: progress.questId,
+      questId: event?.subjectId ?? progress.questId,
       title: definition.name,
       status: progress.status === 'completed' ? 'completed' : 'failed',
-      timestamp: progress.completedAt ?? Date.now(),
+      timestamp: event ? Date.parse(event.recordedAt) : (progress.completedAt ?? Date.now()),
       endingId: progress.chosenEndingId,
       endingTitle: ending?.title,
       narration: ending?.narration ?? definition.description,

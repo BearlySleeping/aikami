@@ -31,6 +31,60 @@ import { defineConfig, devices } from '@playwright/test';
 const EMULATOR_PORT_OFFSET = Number(process.env.PUBLIC_EMULATOR_PORT_OFFSET || 0);
 
 const CLIENT_PORT = 5274 + EMULATOR_PORT_OFFSET;
+// C-526 AC-10: a SECOND client server, started with `PUBLIC_COMBAT_LLM_AGENTS=1`.
+// The flag is `static: true`, so it must be set on the server that serves the
+// app — a separate port with its own env is the only way to run both the flag-off
+// and the enabled-agent lanes in one suite.
+const CLIENT_LLM_PORT = 5275 + EMULATOR_PORT_OFFSET;
+
+// The second client server AND the `client-llm-on` project exist ONLY when the
+// enabled-agent lane is selected. Playwright has one global `webServer` array, so
+// without this guard every unrelated E2E run would pay for an extra Vite dev
+// server it never uses.
+//
+// 🔴 The signal must travel in the ENVIRONMENT, not in `process.argv`. Playwright
+// forks a separate worker PROCESS per test file, and each worker re-evaluates
+// this config with its OWN argv — which does not contain `--project=…`. Deciding
+// from argv alone therefore defines the project during collection and then
+// throws "Project \"client-llm-on\" not found in the worker process" at run time.
+// Detecting the request here and promoting it to an env var, which Playwright
+// forwards to its workers, makes both processes agree.
+if (
+  process.env.E2E_LLM_LANE !== '1' &&
+  process.argv.some((argument) => argument.includes('client-llm-on'))
+) {
+  process.env.E2E_LLM_LANE = '1';
+}
+
+const LLM_LANE_ENABLED = process.env.E2E_LLM_LANE === '1';
+
+// ── Project selection promotion ───────────────────────────────
+//
+// The server lifecycle is orchestrated per-run by the E2E preflight
+// (src/services/preflight.ts, run from global_setup.ts), which needs to know
+// exactly which `--project` values were requested so it starts only the
+// servers those projects use — a `--project=game` run must not pay for a site
+// or hub server (C-526 remediation).
+//
+// 🔴 The signal must travel in the ENVIRONMENT, not in `process.argv`.
+// Playwright forks a separate worker PROCESS per test file, and each worker
+// re-evaluates this config with its OWN argv — which does not contain
+// `--project=…`. The main process resolves once and everything else (workers,
+// globalSetup) inherits `E2E_SELECTED_PROJECTS`. When no `--project` is given
+// (run all), nothing is promoted and the preflight assumes the full set.
+const projectArgValues: string[] = [];
+for (let index = 0; index < process.argv.length; index++) {
+  const argument = process.argv[index];
+  if (argument === '--project' && process.argv[index + 1]) {
+    projectArgValues.push(process.argv[index + 1] as string);
+  } else if (argument.startsWith('--project=')) {
+    projectArgValues.push(argument.slice('--project='.length));
+  }
+}
+if (projectArgValues.length > 0 && !process.env.E2E_SELECTED_PROJECTS) {
+  process.env.E2E_SELECTED_PROJECTS = projectArgValues.join(',');
+}
+
 const SITE_PORT = 5280 + EMULATOR_PORT_OFFSET;
 const HUB_PORT = 5276 + EMULATOR_PORT_OFFSET;
 const HUB_WORKER_PORT = 5278 + EMULATOR_PORT_OFFSET;
@@ -53,6 +107,7 @@ const HUB_SERVER_PORT = process.env.CI ? HUB_WORKER_PORT : HUB_PORT;
 // ── Dev server base URLs ──────────────────────────────────────
 
 const CLIENT_BASE_URL = `http://localhost:${CLIENT_PORT}`;
+const CLIENT_LLM_BASE_URL = `http://localhost:${CLIENT_LLM_PORT}`;
 const SITE_BASE_URL = `http://localhost:${SITE_PORT}`;
 // Hub SSR dev server (C-396): public catalog browse surface.
 const HUB_BASE_URL = `http://localhost:${HUB_SERVER_PORT}`;
@@ -121,6 +176,13 @@ export default defineConfig({
     // Default base URL — overridden per-project
     baseURL: CLIENT_BASE_URL,
 
+    // Mute all browser audio (BGM/SFX/TTS) during E2E runs. This is a
+    // browser-level mute that works even when attaching to an already-running
+    // dev server (reuseExistingServer), so it needs no build-time env.
+    launchOptions: {
+      args: ['--mute-audio'],
+    },
+
     // Capture trace on first retry
     trace: 'on-first-retry',
 
@@ -133,55 +195,19 @@ export default defineConfig({
 
   // ── Server lifecycle ──────────────────────────────────────
   //
-  // 🔴 `reuseExistingServer: !process.env.CI` is what lets one config serve
-  // both worlds. Locally your herdr tabs are already listening on these
-  // ports, so Playwright attaches to them and starts nothing — the workflow
-  // README.md documents stays exactly as it is. In CI there is no herdr (it
-  // is a nix flake input, not something a GitHub runner has), so Playwright
-  // starts each server itself and tears it down when the run ends.
+  // 🔴 There is deliberately NO `webServer` array. Playwright starts
+  // `webServer` entries BEFORE `globalSetup`, which made backgrounding build
+  // work impossible; more importantly a failed entry aborted the whole run
+  // before a single test executed, with only the generic
+  // "webServer was not able to start" as a signal (C-526 remediation).
   //
-  // CI serves BUILT output rather than `vite dev`: no HMR warm-up, no
-  // first-request compile stalls behind a 15s expect timeout, and the bytes
-  // under test are the bytes that ship. The heavy job runs the moon builds
-  // first — cache-warm — so these commands only have to serve. See
-  // .github/workflows/pr-checks.yml.
-  //
-  // Each app reads PORT (client/site vite+astro config, run_hub_worker.ts),
-  // so the contract port offset above propagates without a second source of
-  // truth for port numbers.
-  webServer: [
-    {
-      command: 'bun run preview',
-      cwd: '../frontend/client',
-      url: CLIENT_BASE_URL,
-      env: { PORT: String(CLIENT_PORT) },
-      reuseExistingServer: !process.env.CI,
-      timeout: 120_000,
-      stdout: 'pipe',
-      stderr: 'pipe',
-    },
-    {
-      command: 'bun run preview',
-      cwd: '../frontend/site',
-      url: SITE_BASE_URL,
-      env: { PORT: String(SITE_PORT) },
-      reuseExistingServer: !process.env.CI,
-      timeout: 120_000,
-      stdout: 'pipe',
-      stderr: 'pipe',
-    },
-    {
-      // See HUB_SERVER_PORT above for why CI and local differ here.
-      command: process.env.CI ? 'bun run dev:worker' : 'bun run dev',
-      cwd: '../frontend/hub',
-      url: HUB_BASE_URL,
-      env: { PORT: String(HUB_SERVER_PORT) },
-      reuseExistingServer: !process.env.CI,
-      timeout: 120_000,
-      stdout: 'pipe',
-      stderr: 'pipe',
-    },
-  ],
+  // Instead the per-run preflight in src/services/preflight.ts (driven by
+  // src/services/service_map.ts + E2E_SELECTED_PROJECTS above) runs from
+  // globalSetup: it probes each required server, reuses it when up (your
+  // herdr tabs), checks env seeds, falls back to the CI build recipe plus
+  // detached serve processes without herdr, and waits for readiness —
+  // failing with an actionable message. global_teardown stops only the
+  // servers the preflight spawned itself.
 
   // Timeout per test
   timeout: 60_000,
@@ -231,6 +257,10 @@ export default defineConfig({
     {
       name: 'client',
       testDir: './tests/client',
+      // C-526 AC-10: the enabled-agent spec asserts the flag is ON, so it must
+      // only ever run against the `client-llm-on` server. Running it here would
+      // assert the opposite of what this lane serves.
+      testIgnore: /combat_v2_llm\.spec\.ts/,
       use: {
         ...devices['Desktop Chrome'],
         baseURL: CLIENT_BASE_URL,
@@ -247,6 +277,7 @@ export default defineConfig({
         // output across headless CI machines with no dedicated GPU.
         launchOptions: {
           args: [
+            '--mute-audio',
             '--use-gl=angle',
             '--use-angle=gl',
             '--enable-webgl',
@@ -264,6 +295,41 @@ export default defineConfig({
       },
       dependencies: ['setup'],
     },
+
+    // ── Client Domain: enabled LLM agents (C-526 AC-10) ───
+    // The SAME test directory as `client`, narrowed to the enabled-agent spec,
+    // served from the flag-on server above. Keeping one testDir means shared
+    // helpers stay shared; the testMatch is what separates the lanes.
+    ...(LLM_LANE_ENABLED
+      ? [
+          {
+            name: 'client-llm-on',
+            testDir: './tests/client',
+            testMatch: /combat_v2_llm\.spec\.ts/,
+            use: {
+              ...devices['Desktop Chrome'],
+              baseURL: CLIENT_LLM_BASE_URL,
+              storageState: AUTH_STATE_FILE,
+              launchOptions: {
+                args: [
+                  '--mute-audio',
+                  '--use-gl=angle',
+                  '--use-angle=gl',
+                  '--enable-webgl',
+                  '--ignore-gpu-blocklist',
+                  '--disable-lcd-text',
+                  '--font-render-hinting=none',
+                  '--disable-font-subpixel-positioning',
+                  '--force-color-profile=srgb',
+                  '--disable-gpu-rasterization',
+                  '--disable-accelerated-2d-canvas',
+                ],
+              },
+            },
+            dependencies: ['setup'],
+          },
+        ]
+      : []),
 
     // ── Hub Domain (C-396) ────────────────────────────────
     // The hub is an SSR app on its own dev server. Hub tests manage their
@@ -289,6 +355,7 @@ export default defineConfig({
         // headless CI machines with no dedicated GPU.
         launchOptions: {
           args: [
+            '--mute-audio',
             '--use-gl=angle',
             '--use-angle=gl',
             '--enable-webgl',
@@ -338,6 +405,7 @@ export default defineConfig({
         },
         launchOptions: {
           args: [
+            '--mute-audio',
             '--use-gl=angle',
             '--use-angle=gl',
             '--enable-webgl',
@@ -368,6 +436,7 @@ export default defineConfig({
         storageState: AUTH_STATE_FILE,
         launchOptions: {
           args: [
+            '--mute-audio',
             '--use-gl=angle',
             '--use-angle=gl',
             '--enable-webgl',
@@ -400,6 +469,7 @@ export default defineConfig({
               storageState: AUTH_STATE_FILE,
               launchOptions: {
                 args: [
+                  '--mute-audio',
                   '--enable-webgpu',
                   '--enable-unsafe-webgpu',
                   '--enable-features=Vulkan,UseSkiaRenderer',

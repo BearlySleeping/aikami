@@ -57,8 +57,8 @@ const { viewModel }: Props = $props();
               value={Math.round(viewModel.masterVolume * 100)}
               class="range"
               oninput={(e) => {
-                viewModel.setMasterVolume(Number(e.currentTarget.value) / 100);
-              }}
+  viewModel.setMasterVolume(Number(e.currentTarget.value) / 100);
+}}
             >
           </div>
 
@@ -76,8 +76,8 @@ const { viewModel }: Props = $props();
               value={Math.round(viewModel.bgmVolume * 100)}
               class="range"
               oninput={(e) => {
-                viewModel.setBgmVolume(Number(e.currentTarget.value) / 100);
-              }}
+  viewModel.setBgmVolume(Number(e.currentTarget.value) / 100);
+}}
             >
           </div>
 
@@ -95,8 +95,8 @@ const { viewModel }: Props = $props();
               value={Math.round(viewModel.sfxVolume * 100)}
               class="range"
               oninput={(e) => {
-                viewModel.setSfxVolume(Number(e.currentTarget.value) / 100);
-              }}
+  viewModel.setSfxVolume(Number(e.currentTarget.value) / 100);
+}}
             >
           </div>
 
@@ -114,8 +114,8 @@ const { viewModel }: Props = $props();
               value={Math.round(viewModel.ttsVolume * 100)}
               class="range"
               oninput={(e) => {
-                viewModel.setTtsVolume(Number(e.currentTarget.value) / 100);
-              }}
+  viewModel.setTtsVolume(Number(e.currentTarget.value) / 100);
+}}
             >
           </div>
         </div>

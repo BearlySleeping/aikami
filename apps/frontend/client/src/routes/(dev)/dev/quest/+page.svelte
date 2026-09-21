@@ -33,6 +33,8 @@ const devActions = [
 ];
 </script>
 
-<QuestView {viewModel} />
+<div class="p-6">
+  <QuestView {viewModel} />
+</div>
 
 <DevToolsPanel actions={devActions} />

@@ -1,7 +1,7 @@
 <script lang="ts">
 // apps/frontend/client/src/lib/views/worldgen/world_gen_wizard_view.svelte
 //
-// DaisyUI template for the World Generation Wizard.
+// Aikami UI template for the World Generation Wizard.
 // Implements a 5-step wizard with step indicator, genre/tone chips,
 // setting textarea, difficulty radio, goals textarea, generating spinner,
 // preview cards, and error state.
@@ -32,17 +32,15 @@ const { viewModel }: Props = $props();
           <div
             class="w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium
             {i <= viewModel.steps.indexOf(viewModel.currentStep)
-              ? 'bg-primary text-primary-content'
-              : 'bg-base-300 text-base-content/50'}"
+  ? 'bg-primary text-primary-content'
+  : 'bg-base-300 text-base-content/50'}"
           >
             {i + 1}
           </div>
           {#if i < viewModel.steps.length - 1}
             <div
               class="h-1 w-12 mx-1 rounded
-              {i < viewModel.steps.indexOf(viewModel.currentStep)
-                ? 'bg-primary'
-                : 'bg-base-300'}"
+              {i < viewModel.steps.indexOf(viewModel.currentStep) ? 'bg-primary' : 'bg-base-300'}"
             ></div>
           {/if}
         </div>
@@ -253,7 +251,7 @@ const { viewModel }: Props = $props();
                     </ul>
                   </div>
                   <p class="text-xs text-base-content/50 mt-1">
-                    Quest givers: {arc.questGivers.join(", ")}
+                    Quest givers: {arc.questGivers.join(', ')}
                   </p>
                 </div>
               </div>
@@ -325,7 +323,9 @@ const { viewModel }: Props = $props();
     <!-- Navigation buttons -->
     <div class="flex justify-between mt-8 pt-4 border-t border-base-300">
       <div>
-        {#if !viewModel.isFirstStep && viewModel.currentStep !== 'generating' && viewModel.currentStep !== 'character_creation'}
+        {#if !viewModel.isFirstStep &&
+  viewModel.currentStep !== 'generating' &&
+  viewModel.currentStep !== 'character_creation'}
           <button type="button" class="btn btn-ghost" onclick={() => viewModel.goBack()}>
             ← Back
           </button>

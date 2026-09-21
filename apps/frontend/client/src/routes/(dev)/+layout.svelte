@@ -1,7 +1,7 @@
 <script lang="ts">
 // apps/frontend/client/src/routes/(dev)/+layout.svelte
 
-import { BaseDevViewModel } from '@aikami/frontend/services';
+import { BaseDevViewModel } from '@aikami/frontend/services/base';
 import DevView from '$lib/views/dev/layout/layout_view.dev.svelte';
 import { getDevViewModel } from '$lib/views/dev/layout/layout_view_model.dev.svelte.ts';
 import type { LayoutProps } from './$types';

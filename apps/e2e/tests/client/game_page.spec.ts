@@ -24,7 +24,7 @@ test.describe('Game Page (Separated Architecture)', () => {
   });
 
   test('should render the game UI layer', async ({ page }) => {
-    const uiLayer = page.locator('#game-ui-layer');
+    const uiLayer = page.getByTestId('game-ui-overlay-layer');
     await expect(uiLayer).toBeAttached();
   });
 

@@ -6,13 +6,13 @@
 // Contract: C-322 AC-1 (gateway delegation), AC-4 (shared gateway mock)
 //
 // Run with:
-//   bun test --preload ./src/lib/test_preload.ts --tsconfig tsconfig.test.json \
+//   bun test --preload ./src/lib/test_setup.ts --tsconfig tsconfig.test.json \
 //     src/lib/services/capability/capability_service.test.ts
 
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
 import type { AiCapability, AiDetectionResult, AiModeResolution } from '@aikami/types';
 
-// $state is polyfilled globally via test_preload.ts
+// $state is polyfilled globally via test_setup.ts
 
 // ── Mock @aikami/frontend/ai-gateway ──────────────────────────────────
 // Bun test can't resolve TypeScript path aliases for workspace packages.
@@ -31,9 +31,9 @@ mock.module('@aikami/frontend/ai-gateway', () => ({
 }));
 
 // ── Shared gateway mock ────────────────────────────────────────────────
-// The CapabilityService imports aiGatewayService from $services. Mock the
-// barrel with a mutable gateway surface so each test controls detection
-// results without stubbing globalThis.fetch.
+// CapabilityService imports aiGatewayService directly from its module. Mock
+// that collaborator with a mutable gateway surface so each test controls
+// detection results without stubbing globalThis.fetch or the whole barrel.
 
 /** Builds a default per-capability detection result. */
 const _availableResult = (capability: AiCapability): AiDetectionResult => {
@@ -78,20 +78,7 @@ const _resetGateway = (): void => {
 };
 _resetGateway();
 
-const _createSvcStub = () => {
-  const handler: ProxyHandler<Record<string, unknown>> = {
-    get(target, prop) {
-      if (!(prop in target)) {
-        (target as Record<string, unknown>)[prop] = mock(() => {});
-      }
-      return (target as Record<string, unknown>)[prop];
-    },
-  };
-  return new Proxy({} as Record<string, unknown>, handler) as Record<string, unknown>;
-};
-
-mock.module('$services', () => ({
-  ..._createSvcStub(),
+mock.module('../ai/ai_gateway_service.svelte.ts', () => ({
   aiGatewayService: {
     detect: (capability: AiCapability) => _detectImpl(capability),
     resolveMode: (capability: AiCapability) => _resolveModeImpl(capability),

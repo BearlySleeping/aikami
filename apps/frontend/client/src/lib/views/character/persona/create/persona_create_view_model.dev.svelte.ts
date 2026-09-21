@@ -4,7 +4,19 @@
 // NEVER import this file from production code or non-(dev) routes.
 
 import type { PersonaData } from '@aikami/types';
-import { personaCreationService } from '$services';
+import {
+  authService,
+  equipmentService,
+  imageGenerationService,
+  inventoryService,
+  personaCreationService,
+  personaService,
+  playerStateService,
+  routerService,
+  storageService,
+  textGenerationService,
+  worldStateService,
+} from '$services';
 import {
   PersonaCreateViewModel,
   type PersonaCreateViewModelOptions,
@@ -209,10 +221,41 @@ export class PersonaCreateDevViewModel extends PersonaCreateViewModel {
   }
 }
 
+type PersonaCreateDevOptions = Omit<
+  PersonaCreateViewModelOptions,
+  | 'personaCreation'
+  | 'imageGeneration'
+  | 'textGeneration'
+  | 'auth'
+  | 'storage'
+  | 'inventory'
+  | 'equipment'
+  | 'worldState'
+  | 'playerState'
+  | 'personas'
+  | 'router'
+>;
+
 /**
  * Factory function — returns a PersonaCreateDevViewModel with mock data.
  * Only use in (dev) routes or tests.
  */
 export const getPersonaCreateDevViewModel = (
-  options: PersonaCreateViewModelOptions,
-): PersonaCreateDevViewModel => new PersonaCreateDevViewModel(options);
+  options: PersonaCreateDevOptions,
+): PersonaCreateDevViewModel => {
+  const opts: PersonaCreateViewModelOptions = {
+    ...options,
+    personaCreation: personaCreationService,
+    imageGeneration: imageGenerationService,
+    textGeneration: textGenerationService,
+    auth: authService,
+    storage: storageService,
+    inventory: inventoryService,
+    equipment: equipmentService,
+    worldState: worldStateService,
+    playerState: playerStateService,
+    personas: personaService,
+    router: routerService,
+  };
+  return new PersonaCreateDevViewModel(opts);
+};

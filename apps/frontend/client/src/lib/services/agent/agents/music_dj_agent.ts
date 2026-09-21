@@ -8,13 +8,12 @@
 
 import { CROSSFADE_DURATION_DEFAULT_MS } from '@aikami/constants';
 import type { MusicCue, MusicSceneContext, Track } from '@aikami/types';
-import {
-  audioService,
-  sceneToMusicTags,
-  textGenerationService,
-  trackRegistryService,
-} from '$services';
-import type { AgentConfig, AgentPipelineContext, AgentRunResult } from '$types';
+import type { AgentConfig, AgentRunResult } from '$types';
+import { requestAudioCue } from '../../audio/audio_asset_resolver.ts';
+import { audioService } from '../../audio/audio_service.svelte.ts';
+import { sceneToMusicTags } from '../../audio/scene_to_music_tags.ts';
+import { trackRegistryService } from '../../audio/track_registry_service.svelte.ts';
+import { extractAgentStructure } from '../agent_llm.ts';
 
 /**
  * Executes the Music DJ post-agent.
@@ -31,18 +30,18 @@ import type { AgentConfig, AgentPipelineContext, AgentRunResult } from '$types';
  */
 export const runMusicDjAgent = async ({
   config,
-  _context,
   aiResponse,
+  signal,
 }: {
   config: AgentConfig;
-  _context: AgentPipelineContext;
   aiResponse: string;
+  signal?: AbortSignal;
 }): Promise<AgentRunResult> => {
   const start = performance.now();
 
   try {
     // ── Step 1: Extract scene context from the AI response ──
-    const sceneContext = await _extractSceneContext(aiResponse);
+    const sceneContext = await _extractSceneContext({ aiResponse, config, signal });
 
     // ── Step 2: Map scene to music tags ──
     const tags = sceneToMusicTags(sceneContext);
@@ -59,8 +58,18 @@ export const runMusicDjAgent = async ({
     });
 
     // ── Step 5: Dispatch cue if applicable ──
+    // A cancelled run must not start audio playback or report success.
+    if (signal?.aborted) {
+      return {
+        agentId: config.id,
+        phase: config.phase,
+        success: false,
+        error: 'Aborted',
+        durationMs: Math.round(performance.now() - start),
+      };
+    }
     if (cue && track) {
-      await _dispatchCue(cue, track);
+      await _dispatchCue(cue, track, signal);
     }
 
     return {
@@ -93,9 +102,16 @@ export const runMusicDjAgent = async ({
  * Extracts a MusicSceneContext from the AI response text using
  * structured extraction (lightweight LLM call).
  */
-const _extractSceneContext = async (aiResponse: string): Promise<MusicSceneContext> => {
+const _extractSceneContext = async (options: {
+  aiResponse: string;
+  config: AgentConfig;
+  signal?: AbortSignal;
+}): Promise<MusicSceneContext> => {
+  const { aiResponse, config, signal } = options;
   try {
-    const result = await textGenerationService.extractStructure({
+    const result = await extractAgentStructure({
+      config,
+      signal,
       schema: {
         type: 'object',
         properties: {
@@ -259,7 +275,14 @@ const _buildCue = (options: {
 /**
  * Dispatches a MusicCue to the audio service.
  */
-const _dispatchCue = async (cue: MusicCue, track: { url?: string; id: string }): Promise<void> => {
+const _dispatchCue = async (
+  cue: MusicCue,
+  track: { url?: string; id: string },
+  signal?: AbortSignal,
+): Promise<void> => {
+  if (signal?.aborted) {
+    return;
+  }
   const action = cue.action;
 
   switch (action.type) {
@@ -270,11 +293,34 @@ const _dispatchCue = async (cue: MusicCue, track: { url?: string; id: string }):
           action.type === 'crossfade'
             ? (action.durationMs ?? CROSSFADE_DURATION_DEFAULT_MS)
             : (action.fadeInMs ?? CROSSFADE_DURATION_DEFAULT_MS);
-        await audioService.transitionToBgm(track.url, durationMs);
+        // The signal may have aborted since the top-of-function check.
+        if (signal?.aborted) {
+          return;
+        }
+        // C-523: the DJ is not a second playback authority. Its pick enters the
+        // shared arbitration at the map band, so it cannot displace an authored
+        // map cue — the two would otherwise start competing tracks.
+        await requestAudioCue({
+          source: 'map',
+          context: 'dj',
+          url: track.url,
+          authored: false,
+          durationMs,
+        });
       }
       break;
     case 'pause':
-      audioService.stopAll();
+      // C-523: an autonomous DJ pause competes with authored playback, so it
+      // enters the shared authority as a stop request — it may silence generic
+      // music, but it can never displace an authored cue or SFX. Explicit user
+      // pause controls call `audioService.pauseBgm()` directly.
+      await requestAudioCue({
+        source: 'map',
+        context: 'dj:pause',
+        url: null,
+        authored: false,
+        intent: 'stop',
+      });
       break;
     case 'volume':
       if (action.target === 'music') {

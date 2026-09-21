@@ -5,15 +5,35 @@
 //
 // Contract: C-240 Session Management
 
-import { beforeEach, describe, expect, test } from 'bun:test';
+import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test';
+import { createRealLocalDatabase } from '../__tests__/local_database_fixture.ts';
+
+const fixture = await createRealLocalDatabase();
+
+const realFrontendStorage = await import('@aikami/frontend/storage');
+
+mock.module('@aikami/frontend/storage', () => ({
+  // Spread the real module first: a mock that names only the functions a test
+  // needs breaks the moment a transitively-imported module consumes a new
+  // export (C-518 added the generation-record writers).
+  ...realFrontendStorage,
+  getLocalDatabase: mock(async () => fixture.db),
+}));
 
 describe('SessionService', () => {
   let service: import('./session_service.svelte').SessionServiceInterface;
 
   beforeEach(async () => {
+    // service.reset() only clears `sessions`; the compaction test also writes
+    // `compacted_summaries`, so wipe the whole fixture to avoid cross-test bleed.
+    await fixture.reset();
     const mod = await import('./session_service.svelte');
     service = mod.sessionService;
     await service.reset();
+  });
+
+  afterAll(async () => {
+    await fixture.close();
   });
 
   test('should export a singleton instance', () => {

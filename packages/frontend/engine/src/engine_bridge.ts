@@ -1,4 +1,5 @@
 // apps/frontend/game/src/engine/engine_bridge.ts
+import { logger } from '$logger';
 import type { GameCommand, GameEvent } from './types.ts';
 
 // ---------------------------------------------------------------------------
@@ -97,6 +98,44 @@ export type EngineBridge = {
    * @throws If the engine is not initialized or the payload is invalid.
    */
   restoreSnapshot(snapshot: string): Promise<void>;
+
+  /**
+   * Registers an engine-side command handler. Called by the game engine
+   * implementation during initialization; returns an unsubscribe function.
+   *
+   * This is the engine-facing capability surface. UI code should dispatch
+   * commands with {@link send} instead of calling it directly.
+   */
+  onCommand<T extends GameCommand['type']>(
+    commandType: T,
+    handler: (command: Extract<GameCommand, { type: T }>) => void,
+  ): () => void;
+
+  /**
+   * Whether a forwarder exists for `commandType` yet.
+   *
+   * {@link send} DROPS a command whose type has no forwarder, so a caller that
+   * must not lose a command (an encounter start, a mode change) needs to know
+   * when the engine is actually routable. The world registers its forwarders
+   * while it boots, so "the overlay is open" is NOT the same as "commands are
+   * routed".
+   */
+  hasCommandHandler(commandType: GameCommand['type']): boolean;
+
+  /** Sets the engine ready flag. Engine-owned; UI reads {@link isReady}. */
+  setReady(value: boolean): void;
+
+  /**
+   * Registers (or clears, with `undefined`) the snapshot delegate the
+   * engine installs so {@link createSnapshot} can delegate to the worker.
+   */
+  setSnapshotHandler(handler: ((scope?: 'player' | 'world') => Promise<string>) | undefined): void;
+
+  /**
+   * Registers (or clears, with `undefined`) the restore delegate the
+   * engine installs so {@link restoreSnapshot} can delegate to the worker.
+   */
+  setRestoreHandler(handler: ((snapshot: string) => Promise<void>) | undefined): void;
 };
 
 // ===========================================================================
@@ -132,6 +171,14 @@ class EngineBridgeImpl implements EngineBridge {
   send(command: GameCommand): void {
     const handlers = this._commandHandlers.get(command.type);
     if (!handlers) {
+      // A command whose type has no registered forwarder is DROPPED here, on
+      // the main thread — the worker never sees it. Log loudly instead of
+      // failing silently: this exact drop made `COMBAT_START_ENCOUNTER`
+      // unreachable in production before C-516 registered a forwarder for it.
+      logger.warn('[engine_bridge] send:no-handler', {
+        type: command.type,
+        registered: [...this._commandHandlers.keys()],
+      });
       return;
     }
 
@@ -169,6 +216,11 @@ class EngineBridgeImpl implements EngineBridge {
   /** @inheritdoc */
   isReady(): boolean {
     return this._ready;
+  }
+
+  /** @inheritdoc */
+  hasCommandHandler(commandType: GameCommand['type']): boolean {
+    return this._commandHandlers.has(commandType);
   }
 
   /** @inheritdoc */
@@ -271,16 +323,18 @@ class EngineBridgeImpl implements EngineBridge {
   /**
    * Registers the snapshot handler callback. Called by GameWorld during
    * initialization so {@link createSnapshot} delegates to the worker.
+   * Pass `undefined` to clear the registration on teardown.
    */
-  setSnapshotHandler(handler: (scope?: 'player' | 'world') => Promise<string>): void {
+  setSnapshotHandler(handler: ((scope?: 'player' | 'world') => Promise<string>) | undefined): void {
     this._snapshotHandler = handler;
   }
 
   /**
    * Registers the restore handler callback. Called by GameWorld during
    * initialization so {@link restoreSnapshot} delegates to the worker.
+   * Pass `undefined` to clear the registration on teardown.
    */
-  setRestoreHandler(handler: (snapshot: string) => Promise<void>): void {
+  setRestoreHandler(handler: ((snapshot: string) => Promise<void>) | undefined): void {
     this._restoreHandler = handler;
   }
 
@@ -364,18 +418,23 @@ export class MockEngineBridge implements EngineBridge {
     return this._impl.onCommand(commandType, handler);
   }
 
+  /** @inheritdoc */
+  hasCommandHandler(commandType: GameCommand['type']): boolean {
+    return this._impl.hasCommandHandler(commandType);
+  }
+
   /** @see EngineBridgeImpl.setReady */
   setReady(value: boolean): void {
     this._impl.setReady(value);
   }
 
   /** @see EngineBridgeImpl.setSnapshotHandler */
-  setSnapshotHandler(handler: (scope?: 'player' | 'world') => Promise<string>): void {
+  setSnapshotHandler(handler: ((scope?: 'player' | 'world') => Promise<string>) | undefined): void {
     this._impl.setSnapshotHandler(handler);
   }
 
   /** @see EngineBridgeImpl.setRestoreHandler */
-  setRestoreHandler(handler: (snapshot: string) => Promise<void>): void {
+  setRestoreHandler(handler: ((snapshot: string) => Promise<void>) | undefined): void {
     this._impl.setRestoreHandler(handler);
   }
 

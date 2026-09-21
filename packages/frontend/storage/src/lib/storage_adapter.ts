@@ -78,6 +78,17 @@ export type LocalDatabaseInterface = {
   sync(): Promise<void>;
 
   /**
+   * Flushes any write-behind cache so the committed data is durable now.
+   *
+   * Adapters whose writes land in the backing store synchronously (native
+   * SQLite, OPFS) may omit this. The WASM IndexedDB-snapshot adapter debounces
+   * its snapshot, so a caller that must not lose the write — a user-initiated
+   * save that has to survive an immediate reload — awaits this before
+   * reporting success.
+   */
+  flush?(): Promise<void>;
+
+  /**
    * Exports the full database as raw bytes for backup or transfer.
    *
    * @returns The complete database file as a Uint8Array.

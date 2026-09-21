@@ -6,6 +6,7 @@
 // this file only defines the service-layer function contracts.
 // Contract: C-320
 
+import type { TextTask } from '@aikami/constants';
 import type {
   AiCapability,
   AiChatMessage,
@@ -32,6 +33,11 @@ export type AiTextGenerationOptions = {
   model?: string;
   /** Explicit provider endpoint override. */
   endpoint?: string;
+  /**
+   * Task type — drives role-based routing and the per-task generation
+   * preset (max tokens, temperature). Defaults to `narration`.
+   */
+  task?: TextTask;
   /** Cancellation signal — propagated to the upstream provider fetch. */
   signal?: AbortSignal;
   /**
@@ -164,4 +170,5 @@ export type AiModeResolver = (options: {
   capability: AiCapability;
   model?: string;
   endpoint?: string;
+  task?: TextTask;
 }) => AiModeResolution;

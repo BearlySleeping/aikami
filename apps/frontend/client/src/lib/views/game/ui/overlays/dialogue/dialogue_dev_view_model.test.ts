@@ -3,13 +3,13 @@
 // Unit tests for DialogueDevViewModel (C-162 dev sandbox controls).
 //
 // Run with:
-//   bun test --preload ./src/lib/test_preload.ts --tsconfig tsconfig.test.json \
+//   bun test --preload ./src/lib/test_setup.ts --tsconfig tsconfig.test.json \
 //     src/lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.dev.test.ts
 
 // biome-ignore-all lint/style/useNamingConvention: Mock object properties mirror PascalCase class names from @aikami/frontend-services
-import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
+import { beforeEach, describe, expect, mock, test } from 'bun:test';
 
-// $state, $derived, $effect are polyfilled globally via test_preload.ts
+// $state, $derived, $effect are polyfilled globally via test_setup.ts
 
 // ---------------------------------------------------------------------------
 // Mock: imageGenerationService
@@ -23,8 +23,7 @@ let mockImageGenResult: { url: string; isDemo: boolean } = {
 let mockImageGenIsGenerating = false;
 let mockImageGenIsReady = true;
 
-const IMAGE_GEN_SVC_PATH =
-  '/home/sonny/Development/Projects/passion/aikami/apps/frontend/client/src/lib/services/image/image_generation_service.svelte.ts';
+const IMAGE_GEN_SVC_PATH = '../../../../../services/image/image_generation_service.svelte.ts';
 
 mock.module(IMAGE_GEN_SVC_PATH, () => ({
   imageGenerationService: {
@@ -69,12 +68,6 @@ const COMBAT_PATH =
   '/home/sonny/Development/Projects/passion/aikami/apps/frontend/client/src/lib/services/game/combat_service.svelte.ts';
 mock.module(COMBAT_PATH, () => ({
   combatService: { enemyName: 'Unknown Enemy', enemyHp: 0, enemyMaxHp: 0 },
-}));
-
-const GAME_STATE_PATH =
-  '/home/sonny/Development/Projects/passion/aikami/apps/frontend/client/src/lib/services/game/game_state_service.svelte.ts';
-mock.module(GAME_STATE_PATH, () => ({
-  gameStateService: { worldGenOutput: undefined, quests: [], characterSheetSummary: undefined },
 }));
 
 const TIME_PATH =
@@ -169,44 +162,6 @@ mock.module('$services', () => ({
 }));
 
 // ---------------------------------------------------------------------------
-// Mock: $lib/services/ai/clients (OllamaClient)
-// ---------------------------------------------------------------------------
-
-const createMockOllamaClient = (): Record<string, unknown> => {
-  const streamChatSpy = mock(async function* (this: unknown, _prompt: string) {
-    for (const chunk of [] as string[]) {
-      yield chunk;
-    }
-  });
-
-  return {
-    OllamaClient: class {
-      streamChat = streamChatSpy;
-    },
-    OllamaConnectionError: class extends Error {
-      constructor(baseUrl: string) {
-        super(`Ollama connection refused at ${baseUrl}`);
-        this.name = 'OllamaConnectionError';
-      }
-    },
-    OllamaTimeoutError: class extends Error {
-      constructor(timeoutMs: number) {
-        super(`Ollama request timed out after ${timeoutMs}ms`);
-        this.name = 'OllamaTimeoutError';
-      }
-    },
-    OllamaStreamError: class extends Error {
-      constructor(status: number, msg: string) {
-        super(`Ollama stream error (${status}): ${msg}`);
-        this.name = 'OllamaStreamError';
-      }
-    },
-  };
-};
-
-mock.module('$lib/services/ai/clients/index.ts', () => createMockOllamaClient());
-
-// ---------------------------------------------------------------------------
 // Mock: URL and setTimeout globals (not available in Bun)
 // ---------------------------------------------------------------------------
 
@@ -242,6 +197,7 @@ import {
   type DevNpcPreset,
   DialogueDevViewModel,
 } from './dialogue_overlay_view_model.dev.svelte';
+import type { DialogueOverlayCapabilities } from './dialogue_overlay_view_model.svelte';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -257,6 +213,67 @@ const createNpcData = (
   ...overrides,
 });
 
+const createCapabilities = (): DialogueOverlayCapabilities => ({
+  combat: { lastCombatOptions: undefined },
+  dice: { rollD20: () => ({ natural: 14, total: 14 }) },
+  draft: {
+    saveDraft: mock(async () => {}),
+    loadDraft: mock(async () => undefined),
+    clearDraft: mock(async () => {}),
+  },
+  expression: {
+    detectExpression: mock(async () => ({ expressionMap: {}, detectionTier: 'keyword' as const })),
+  },
+  gameMode: { currentMode: 'EXPLORE' },
+  image: {
+    generateImage: mock(async () => {
+      if (mockImageGenShouldThrow) {
+        throw mockImageGenShouldThrow;
+      }
+      return mockImageGenResult;
+    }),
+  },
+  messageBranch: {
+    swipeAlternative: mock(() => {}),
+    clearAlternatives: mock(() => {}),
+    addAlternative: mock(() => {}),
+    enrichMessage: mock(
+      (options: { id: string; text: string; sender: string; timestamp: Date }) => ({
+        ...options,
+        alternativeCount: 1,
+        alternativeLabel: '',
+        canSwipeLeft: false,
+        canSwipeRight: false,
+        showActions: true,
+      }),
+    ),
+  },
+  quest: {
+    acceptQuest: mock(() => true),
+    declineQuest: mock(() => true),
+    getOfferableQuests: mock(() => []),
+  },
+  router: { goToHref: mock(async () => {}) },
+  tts: {
+    status: 'uninitialized' as const,
+    isPlaying: false,
+    initialize: mock(async () => {}),
+    speak: mock(async () => {}),
+    stop: mock(() => {}),
+  },
+  chunker: class {
+    onSentence(_handler: (event: { sentence: string }) => void): void {}
+    feed(_token: string): void {}
+    close(): void {}
+  },
+  gameStateFacts: mock(() => []),
+  playerState: {
+    characterSheet: undefined,
+    isCharacterSheetAuthored: false,
+    classId: undefined,
+  },
+});
+
 const createDevVM = (options?: {
   initialDiceOutcome?: 'random' | 'always_succeed' | 'always_fail';
   initialUseMockAi?: boolean;
@@ -266,6 +283,7 @@ const createDevVM = (options?: {
 }) =>
   new DialogueDevViewModel({
     className: 'TestDialogueDevVM',
+    ...createCapabilities(),
     npcData: createNpcData(),
     onEndChat: () => {},
     initialDiceOutcome: options?.initialDiceOutcome,
@@ -288,10 +306,6 @@ describe('DialogueDevViewModel', () => {
     mockImageGenIsReady = true;
     revokedUrls.length = 0;
     pendingTimeouts.length = 0;
-  });
-
-  afterEach(() => {
-    mock.module('$lib/services/ai/clients/index.ts', () => createMockOllamaClient());
   });
 
   // ── Initial state ────────────────────────────────────────────────────

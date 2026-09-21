@@ -6,10 +6,10 @@ import TypingIndicator from '$lib/components/chat/typing_indicator.svelte';
 import GuidedComposer from '$lib/components/messaging/guided_composer.svelte';
 import RichMessageList from '$lib/components/messaging/rich_message_list.svelte';
 import RichMessageRow from '$lib/components/messaging/rich_message_row.svelte';
+import { getAddressModeTogggleViewModel } from '$views/gm/address_mode_toggle_composition.ts';
 import AddressModeToggleView from '$views/gm/address_mode_toggle_view.svelte';
-import { getAddressModeTogggleViewModel } from '$views/gm/address_mode_toggle_view_model.svelte.ts';
+import { getPushStoryButtonViewModel } from '$views/gm/push_story_button_composition.ts';
 import PushStoryButtonView from '$views/gm/push_story_button_view.svelte';
-import { getPushStoryButtonViewModel } from '$views/gm/push_story_button_view_model.svelte.ts';
 import type { ChatViewModelInterface } from './chat_view_model.svelte.ts';
 import ChoiceButtonsView from './choice_buttons_view.svelte';
 
@@ -86,7 +86,9 @@ const pushStoryViewModel = getPushStoryButtonViewModel({
             emptyText="No messages yet. Start the conversation!"
             isStreaming={viewModel.isTyping}
           >
-            {#snippet renderRow(message)}
+            {#snippet renderRow(
+  message,
+)}
               <RichMessageRow
                 {message}
                 characterName={viewModel.npc?.name ?? ''}
@@ -118,9 +120,9 @@ const pushStoryViewModel = getPushStoryButtonViewModel({
                       type="button"
                       class:menu-active={i === viewModel.selectedSlashCompletion}
                       onmousedown={(e) => {
-                        e.preventDefault();
-                        viewModel.selectAndApplySlashCompletion(i);
-                      }}
+  e.preventDefault();
+  viewModel.selectAndApplySlashCompletion(i);
+}}
                     >
                       <span class="font-mono font-bold">/{cmd.name}</span>
                       <span class="text-xs text-base-content/50">{cmd.description}</span>
@@ -144,10 +146,10 @@ const pushStoryViewModel = getPushStoryButtonViewModel({
               isSending={viewModel.isSending}
               sendLabel="Send"
               textareaRef={(el) => {
-                if (el) {
-                  viewModel.setFocusTextareaCallback(() => el.focus());
-                }
-              }}
+  if (el) {
+    viewModel.setFocusTextareaCallback(() => el.focus());
+  }
+}}
             >
               {#snippet extras()}
                 {#if viewModel.impersonationConfig.quickButtonEnabled}

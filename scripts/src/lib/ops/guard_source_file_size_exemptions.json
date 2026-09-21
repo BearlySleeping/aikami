@@ -1,0 +1,40 @@
+{
+  "_comment": "Permanent source-file-size exemptions. Each entry needs maxLines, a rationale, an owner, and a kind. The classification is VERIFIED against the file: \"declarative\" may contain no logic at all; \"generated\" must match a generated-file convention or name its source. These do not expire, but the ceiling is still a ratchet (it may only be lowered). See .pi/skills/aikami-conventions/SKILL.md.",
+  "packages/backend/database/src/lib/schema.ts": {
+    "maxLines": 1003,
+    "rationale": "Cohesive declarative Drizzle schema for the repository database. C-530 adds the theme-slug ownership table beside the theme publishing tables and their foreign-key relationships; splitting the schema would scatter one relational model across modules without creating a responsibility boundary.",
+    "owner": "@aikami/platform",
+    "kind": "declarative"
+  },
+  "packages/shared/constants/src/lib/country_codes.ts": {
+    "maxLines": 6844,
+    "rationale": "Cohesive ISO-3166 country/region table: one nested literal per country, consumed as a single lookup dataset. Splitting it would scatter one data structure across files without creating a responsibility boundary.",
+    "owner": "@aikami/platform",
+    "kind": "declarative"
+  },
+  "packages/shared/constants/src/lib/locale_codes.ts": {
+    "maxLines": 1658,
+    "rationale": "Cohesive locale registry (one record per locale) consumed as a single lookup table. It is declarative data with no logic; file boundaries would add imports, not cohesion.",
+    "owner": "@aikami/platform",
+    "kind": "declarative"
+  },
+  "packages/shared/lpc/src/lib/legacy_catalog_snapshot.ts": {
+    "maxLines": 1240,
+    "rationale": "Generated legacy LPC catalog ordering snapshot (DO NOT hand-edit; regenerated from the test fixture and kept in parity by a test). A single frozen data structure that must not be split because legacy appearance indices depend on its exact order.",
+    "owner": "@aikami/lpc",
+    "kind": "generated",
+    "source": "packages/shared/lpc/tests/__fixtures__/legacy_catalog_order.json"
+  },
+  "packages/shared/schemas/src/lib/game/content_pack.ts": {
+    "maxLines": 1144,
+    "rationale": "+9: C-523 adds the manifest's optional, versioned `audio` section (`PackAudioBindingsSchema`) plus its import. `ContentPackManifestSchema` is not strict at the top level, so an authored `audio` field is already accepted by every reader \u2014 typing it is what turns a silently-ignored section into a validated one (the contract's explicit ordering: schema, then reader, then authored fields). This file is the single manifest schema and the repo's documented home for pack-level sections, so an additive optional section has nowhere else to go. Converted from the grandfathered baseline entry to a reviewed exception because raising a baseline entry is rejected as unauthorized expansion against the base ref, which is the guard's documented remedy for exactly this diagnostic.",
+    "owner": "@aikami/platform",
+    "kind": "declarative"
+  },
+  "packages/shared/utils/src/lib/form/weak_passwords.ts": {
+    "maxLines": 3347,
+    "rationale": "Cohesive static password blocklist (top 10000 common passwords, filtered). It is a single reference dataset with no logic; splitting adds imports without creating a responsibility boundary.",
+    "owner": "@aikami/platform",
+    "kind": "declarative"
+  }
+}

@@ -1,7 +1,7 @@
 // apps/frontend/client/src/lib/views/dev/layout/layout_view_model.dev.test.ts
 import { describe, expect, mock, test } from 'bun:test';
 
-// $state and $derived are polyfilled globally via test_preload.ts
+// $state and $derived are polyfilled globally via test_setup.ts
 
 // Mock $app/state for page.url.pathname
 mock.module('$app/state', () => ({
@@ -40,7 +40,6 @@ describe('DevViewModel', () => {
     expect(routes).toContain('/dev/combat');
     expect(routes).toContain('/dev/inventory');
     expect(routes).toContain('/dev/quest');
-    expect(routes).toContain('/dev/save_load');
     expect(routes).toContain('/dev/settings');
     const sandboxItem = viewModel.navItems.find((item) => item.route === '/dev/sandbox');
     const childRoutes = sandboxItem?.children?.map((child) => child.route) ?? [];

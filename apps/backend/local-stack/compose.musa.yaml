@@ -8,6 +8,11 @@
 #   COMPOSE_FILE=compose.yaml:compose.musa.yaml
 #   COMPOSE_PROFILES=text,image,voice,stt,client
 
+# C-511 note: the `audio` profile (ACE-Step) is CUDA-only — its published
+# image is built on nvidia/cuda with cu126 torch. Enabling `audio` here
+# produces a readable failure from the service itself rather than a torch
+# crash; leave it out of COMPOSE_PROFILES on this backend.
+
 services:
   text:
     image: ghcr.io/ggml-org/llama.cpp:server-musa@sha256:8b597fc8ba155bfdbca4ae553f3f5753ac5de1028ee5acb407fb6205b8702bc1

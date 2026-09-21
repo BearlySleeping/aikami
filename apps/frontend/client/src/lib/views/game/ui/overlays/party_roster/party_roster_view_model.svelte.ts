@@ -1,7 +1,13 @@
 // apps/frontend/client/src/lib/views/game/ui/overlays/party_roster/party_roster_view_model.svelte.ts
 //
 // Party roster overlay ViewModel — manages the party roster overlay UI state.
-// Displays member list with approval bars, stats, and Talk/Equipment/Dismiss buttons.
+// Displays member list with approval bars, stats, and Talk/Equipment/Dismiss
+// buttons.
+//
+// Dependencies arrive through typed capability options. This module never
+// imports the `$services` barrel or any production singleton, so its tests can
+// inject fresh feature fixtures (see ./testing/party_roster_fixtures.ts).
+// Production wiring lives in ./party_roster_composition.ts.
 //
 // Contract: C-340 Build Party and Companion Gameplay (AC-3)
 
@@ -9,23 +15,62 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import type { PartyRosterEntry } from '@aikami/types';
-import { gameEngineService, gameOverlayService, partyRosterService } from '$services';
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
+// ── Capability contracts ────────────────────────────────────────────────
 
-export type PartyRosterViewModelOptions = BaseViewModelOptions;
+/** The roster state and operations the overlay reads. */
+export type PartyRosterCapabilities = {
+  readonly members: readonly PartyRosterEntry[];
+  readonly maxSize: number;
+  isEmpty(): boolean;
+  dismiss(npcId: string): boolean;
+};
+
+/** The engine operations needed to strip Companion.recruited on dismiss. */
+export type PartyRosterEngineCapabilities = {
+  getEntityIdForNpc(npcId: string): number | undefined;
+  sendCommand(command: {
+    type: 'SET_COMPANION_RECRUITED';
+    entityId: number;
+    recruited: boolean;
+  }): void;
+};
+
+/** The overlay operations the roster performs. */
+export type PartyRosterOverlayCapabilities = {
+  openTalkToParty(options: { npcId: string; name: string }): void;
+  closePartyRoster(): void;
+};
+
+// ── Types ───────────────────────────────────────────────────────────────
+
+export type PartyRosterViewModelOptions = BaseViewModelOptions & {
+  /** Roster capability. */
+  roster: PartyRosterCapabilities;
+  /** Engine capability. */
+  engine: PartyRosterEngineCapabilities;
+  /** Overlay capability. */
+  overlay: PartyRosterOverlayCapabilities;
+  presentation?: 'standalone' | 'management';
+};
+
+/** Domain roster entry plus display-only values owned by this ViewModel. */
+export type PartyRosterMemberView = PartyRosterEntry & {
+  readonly classInitial: string;
+  readonly approvalLabel: string;
+};
 
 export type PartyRosterViewModelInterface = BaseViewModelInterface & {
-  readonly members: readonly PartyRosterEntry[];
+  readonly members: readonly PartyRosterMemberView[];
   readonly maxSize: number;
   readonly isEmpty: boolean;
   readonly showConfirmDismiss: boolean;
   readonly confirmDismissNpcId: string;
   readonly confirmDismissName: string;
+  readonly overlayClass: string;
+  readonly isStandalonePresentation: boolean;
 
   /** Dismiss a companion (with confirmation). */
   requestDismiss(options: { npcId: string; name: string }): void;
@@ -35,38 +80,92 @@ export type PartyRosterViewModelInterface = BaseViewModelInterface & {
   /** Open Talk to Party for a companion. */
   talkToCompanion(options: { npcId: string; name: string }): void;
 
-  /** Open equipment/character dashboard for a companion. */
-  viewEquipment(options: { npcId: string }): void;
+  /**
+   * C-543 PART C: companion equipment inspection. The domain does not expose a
+   * companion-scoped equipment surface yet, so this surfaces an honest notice
+   * instead of silently opening the player's own character sheet.
+   */
+  viewEquipment(options: { npcId: string; name: string }): void;
+  readonly equipmentNotice: string;
+  readonly hasEquipmentNotice: boolean;
+  dismissEquipmentNotice(): void;
 
   /** Close the overlay. */
   handleBackdropClick(event: MouseEvent): void;
   handleKeyDown(event: KeyboardEvent): void;
   handleDismissKeyDown(event: KeyboardEvent): void;
   close(): void;
+  approvalBarClass(approval: number): string;
+  approvalTextClass(approval: number): string;
 };
 
-// ---------------------------------------------------------------------------
-// Implementation
-// ---------------------------------------------------------------------------
+// ── Implementation ──────────────────────────────────────────────────────
 
 class PartyRosterViewModel
   extends BaseViewModel<PartyRosterViewModelOptions>
   implements PartyRosterViewModelInterface
 {
+  private readonly _roster: PartyRosterCapabilities;
+  private readonly _engine: PartyRosterEngineCapabilities;
+  private readonly _overlay: PartyRosterOverlayCapabilities;
+  private readonly _presentation: 'standalone' | 'management';
+
   showConfirmDismiss = $state<boolean>(false);
   confirmDismissNpcId = $state<string>('');
   confirmDismissName = $state<string>('');
+  /** C-543 PART C — honest notice for the unsupported companion-equipment path. */
+  equipmentNotice = $state<string>('');
 
-  get members(): readonly PartyRosterEntry[] {
-    return partyRosterService.members;
+  constructor(options: PartyRosterViewModelOptions) {
+    super(options);
+    this._roster = options.roster;
+    this._engine = options.engine;
+    this._overlay = options.overlay;
+    this._presentation = options.presentation ?? 'standalone';
+  }
+
+  get overlayClass(): string {
+    return 'pointer-events-auto absolute inset-0 z-30 flex items-center justify-center bg-black/70 backdrop-blur-sm';
+  }
+
+  get isStandalonePresentation(): boolean {
+    return this._presentation === 'standalone';
+  }
+
+  approvalBarClass(approval: number): string {
+    if (approval > 0) {
+      return 'progress-success';
+    }
+    if (approval < 0) {
+      return 'progress-error';
+    }
+    return 'progress-neutral';
+  }
+
+  approvalTextClass(approval: number): string {
+    if (approval > 0) {
+      return 'text-success';
+    }
+    if (approval < 0) {
+      return 'text-error';
+    }
+    return '';
+  }
+
+  get members(): readonly PartyRosterMemberView[] {
+    return this._roster.members.map((member) => ({
+      ...member,
+      classInitial: member.classId.charAt(0).toUpperCase(),
+      approvalLabel: member.approval > 0 ? `+${member.approval}` : String(member.approval),
+    }));
   }
 
   get maxSize(): number {
-    return partyRosterService.maxSize;
+    return this._roster.maxSize;
   }
 
   get isEmpty(): boolean {
-    return partyRosterService.isEmpty();
+    return this._roster.isEmpty();
   }
 
   /** @inheritdoc */
@@ -79,13 +178,13 @@ class PartyRosterViewModel
   /** @inheritdoc */
   confirmDismiss(): void {
     if (this.confirmDismissNpcId) {
-      const dismissed = partyRosterService.dismiss(this.confirmDismissNpcId);
+      const dismissed = this._roster.dismiss(this.confirmDismissNpcId);
       if (dismissed) {
         // Strip Companion.recruited on the ECS entity so it stops following
         // and drops out of the combat turn order (C-340 AC-1).
-        const entityId = gameEngineService.getEntityIdForNpc(this.confirmDismissNpcId);
+        const entityId = this._engine.getEntityIdForNpc(this.confirmDismissNpcId);
         if (entityId !== undefined) {
-          gameEngineService.sendCommand({
+          this._engine.sendCommand({
             type: 'SET_COMPANION_RECRUITED',
             entityId,
             recruited: false,
@@ -107,27 +206,40 @@ class PartyRosterViewModel
 
   /** @inheritdoc */
   talkToCompanion(options: { npcId: string; name: string }): void {
-    gameOverlayService.openTalkToParty(options);
+    this._overlay.openTalkToParty(options);
     this.debug('talkToCompanion', { npcId: options.npcId });
   }
 
   /** @inheritdoc */
-  viewEquipment(_options: { npcId: string }): void {
-    // Open character dashboard scoped to this companion
-    gameOverlayService.openCharacterDashboard();
-    this.debug('viewEquipment', { npcId: _options.npcId });
+  viewEquipment(options: { npcId: string; name: string }): void {
+    // Companion-scoped equipment inspection is not a supported domain
+    // capability yet (PartyRosterEntry exposes `equipmentSlotIds`, but there is
+    // no companion equipment read/write surface). Opening the player's own
+    // dashboard here was misleading; surface an honest notice and record the
+    // missing capability as follow-up instead.
+    this.equipmentNotice = `${options.name}'s equipment can't be inspected yet — companion equipment management isn't implemented.`;
+    this.debug('viewEquipment:unsupported', { npcId: options.npcId });
+  }
+
+  /** @inheritdoc */
+  dismissEquipmentNotice(): void {
+    this.equipmentNotice = '';
+  }
+
+  get hasEquipmentNotice(): boolean {
+    return this.equipmentNotice.length > 0;
   }
 
   /** Closes the roster when the backdrop itself is clicked. */
   handleBackdropClick(event: MouseEvent): void {
-    if (event.target === event.currentTarget) {
+    if (this._presentation === 'standalone' && event.target === event.currentTarget) {
       this.close();
     }
   }
 
   /** Closes the roster when Escape is pressed. */
   handleKeyDown(event: KeyboardEvent): void {
-    if (event.key === 'Escape') {
+    if (this._presentation === 'standalone' && event.key === 'Escape') {
       this.close();
     }
   }
@@ -143,10 +255,16 @@ class PartyRosterViewModel
 
   /** @inheritdoc */
   close(): void {
-    gameOverlayService.closePartyRoster();
+    this._overlay.closePartyRoster();
   }
 }
 
-export const getPartyRosterViewModel = (
+/**
+ * Builds a party-roster ViewModel from explicit capabilities.
+ *
+ * Callers outside production (tests, sandboxes) use this directly; production
+ * code goes through `getPartyRosterViewModel` in ./party_roster_composition.ts.
+ */
+export const createPartyRosterViewModel = (
   options: PartyRosterViewModelOptions,
 ): PartyRosterViewModelInterface => PartyRosterViewModel.create(options);

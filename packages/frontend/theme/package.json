@@ -5,13 +5,20 @@
   "exports": {
     ".": "./src/index.ts",
     "./brand_tokens.css": "./src/lib/brand_tokens.css",
-    "./brand_daisy.css": "./src/lib/brand_daisy.css"
+    "./aikami_theme.css": "./src/lib/aikami_theme.css",
+    "./aikami_ui.css": "./src/lib/aikami_ui.css",
+    "./aikami_game_ui.css": "./src/lib/aikami_game_ui.css"
   },
   "scripts": {
+    "test": "bun test",
     "lint": "biome lint .",
     "format": "biome format .",
     "typecheck": "tsgo --noEmit",
     "fix": "biome check --write . --error-on-warnings"
   },
-  "dependencies": {}
+  "dependencies": {
+    "@aikami/constants": "workspace:*",
+    "@aikami/schemas": "workspace:*",
+    "@aikami/types": "workspace:*"
+  }
 }

@@ -22,12 +22,25 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { deflateSync } from 'node:zlib';
 import {
+  buf,
+  clearCell,
+  fillCell,
+  fillRect,
+  H,
+  hline,
+  makeRng,
+  noiseCell,
+  setPx,
+  TILE,
+  vline,
+  W,
+} from './generate_emberwatch_canvas.ts';
+import {
   ATLAS_CELL,
   ATLAS_COLS,
   ATLAS_HEIGHT,
   ATLAS_PADDING,
   ATLAS_ROWS,
-  ATLAS_TILE_SIZE,
   ATLAS_WIDTH,
   buildFrames,
   CORNER16_FRAMES,
@@ -48,18 +61,10 @@ import {
 // deleted (AC-5).
 // ---------------------------------------------------------------------------
 
-const TILE = ATLAS_TILE_SIZE; // 32 — frame content size
 const CELL = ATLAS_CELL; // 34 — cell pitch in the final atlas
 const PAD = ATLAS_PADDING; // 1 — extrusion border width
 const CW = ATLAS_WIDTH; // 544 — final atlas width
 const CH = ATLAS_HEIGHT; // 272 — final atlas height
-
-// Content scratch buffer dimensions (painters write here at 32px pitch) —
-// derived from the shared grid constants so the scratch buffer can never be
-// smaller than the atlas grid it feeds (an ATLAS_ROWS/COLS change propagates
-// instead of silently reading past the buffer end).
-const W = ATLAS_COLS * TILE; // 512
-const H = ATLAS_ROWS * TILE; // 256
 
 /**
  * Allocates 16 contiguous cells (a full atlas row) per corner16 terrain
@@ -100,121 +105,6 @@ const registerTerrainFrames = (frames: Record<string, [number, number]>): void =
       }
       frames[name] = [col, row];
       nextCell += 1;
-    }
-  }
-};
-
-// ---------------------------------------------------------------------------
-// Canvas
-// ---------------------------------------------------------------------------
-
-/** RGBA buffer (row-major). Fully opaque output. */
-const buf = new Uint8Array(W * H * 4);
-
-const setPx = (x: number, y: number, r: number, g: number, b: number): void => {
-  if (x < 0 || x >= W || y < 0 || y >= H) {
-    return;
-  }
-  const i = (y * W + x) * 4;
-  buf[i] = r;
-  buf[i + 1] = g;
-  buf[i + 2] = b;
-  buf[i + 3] = 255;
-};
-
-/** Fills a tile-local rectangle (0..TILE coords) at a grid cell. */
-const fillRect = (
-  col: number,
-  row: number,
-  x0: number,
-  y0: number,
-  w: number,
-  h: number,
-  r: number,
-  g: number,
-  b: number,
-): void => {
-  const ox = col * TILE;
-  const oy = row * TILE;
-  for (let y = y0; y < y0 + h; y++) {
-    for (let x = x0; x < x0 + w; x++) {
-      setPx(ox + x, oy + y, r, g, b);
-    }
-  }
-};
-
-/** Fills the whole cell with a color. */
-const fillCell = (col: number, row: number, r: number, g: number, b: number): void => {
-  fillRect(col, row, 0, 0, TILE, TILE, r, g, b);
-};
-
-/** Draws horizontal/vertical 1px lines within a cell. */
-const hline = (
-  col: number,
-  row: number,
-  x0: number,
-  x1: number,
-  y: number,
-  r: number,
-  g: number,
-  b: number,
-): void => {
-  for (let x = x0; x <= x1; x++) {
-    setPx(col * TILE + x, row * TILE + y, r, g, b);
-  }
-};
-
-const vline = (
-  col: number,
-  row: number,
-  x: number,
-  y0: number,
-  y1: number,
-  r: number,
-  g: number,
-  b: number,
-): void => {
-  for (let y = y0; y <= y1; y++) {
-    setPx(col * TILE + x, row * TILE + y, r, g, b);
-  }
-};
-
-/** Deterministic PRNG (mulberry32). */
-const makeRng = (seed: number): (() => number) => {
-  let a = seed >>> 0;
-  return () => {
-    a |= 0;
-    a = (a + 0x6d2b79f5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-};
-
-/** Applies deterministic per-pixel noise within a cell (single channel shift). */
-const noiseCell = (
-  col: number,
-  row: number,
-  seed: number,
-  amount: number,
-  rShift: number,
-  gShift: number,
-  bShift: number,
-): void => {
-  const rng = makeRng(seed);
-  const ox = col * TILE;
-  const oy = row * TILE;
-  for (let y = 0; y < TILE; y++) {
-    for (let x = 0; x < TILE; x++) {
-      const i = ((oy + y) * W + (ox + x)) * 4;
-      if (rng() < amount) {
-        const dr = Math.floor((rng() - 0.5) * rShift);
-        const dg = Math.floor((rng() - 0.5) * gShift);
-        const db = Math.floor((rng() - 0.5) * bShift);
-        buf[i] = Math.max(0, Math.min(255, buf[i] + dr));
-        buf[i + 1] = Math.max(0, Math.min(255, buf[i + 1] + dg));
-        buf[i + 2] = Math.max(0, Math.min(255, buf[i + 2] + db));
-      }
     }
   }
 };
@@ -279,6 +169,39 @@ const paintDirt = (col: number, row: number): void => {
       setPx(col * TILE + x, row * TILE + y, 153, 104, 63);
     } else {
       setPx(col * TILE + x, row * TILE + y, 122, 76, 42);
+    }
+  }
+};
+
+/** Loose packed gravel: muted grey-brown, dense small-stone speckle. */
+const paintGravel = (col: number, row: number): void => {
+  fillCell(col, row, 112, 108, 96);
+  noiseCell(col, row, col * 43 + row * 71 + 4, 0.7, 34, 32, 26);
+  const rng = makeRng(col * 59 + row * 37 + 8);
+  for (let i = 0; i < 40; i++) {
+    const x = Math.floor(rng() * TILE);
+    const y = Math.floor(rng() * TILE);
+    const v = rng();
+    if (v < 0.4) {
+      setPx(col * TILE + x, row * TILE + y, 138, 134, 122);
+    } else if (v < 0.7) {
+      setPx(col * TILE + x, row * TILE + y, 88, 84, 74);
+    }
+  }
+};
+
+/** Dark packed earth: cooler and deeper than the dirt road material. */
+const paintEarth = (col: number, row: number): void => {
+  fillCell(col, row, 78, 58, 40);
+  noiseCell(col, row, col * 67 + row * 29 + 6, 0.65, 26, 20, 16);
+  const rng = makeRng(col * 97 + row * 53 + 12);
+  for (let i = 0; i < 22; i++) {
+    const x = Math.floor(rng() * TILE);
+    const y = Math.floor(rng() * TILE);
+    if (rng() < 0.5) {
+      setPx(col * TILE + x, row * TILE + y, 96, 72, 50);
+    } else {
+      setPx(col * TILE + x, row * TILE + y, 62, 46, 32);
     }
   }
 };
@@ -472,7 +395,7 @@ const paintWater = (col: number, row: number): void => {
 };
 
 const paintFence = (col: number, row: number): void => {
-  fillCell(col, row, 74, 143, 60); // grass behind
+  clearCell(col, row); // C-504: transparent unpainted region
   noiseCell(col, row, col * 29 + row * 71 + 23, 0.3, 20, 22, 14);
   // vertical slats at x=6..9 and x=22..25
   for (const sx of [6, 22]) {
@@ -497,7 +420,7 @@ const paintFencePost = (col: number, row: number): void => {
 // ---- Props ----------------------------------------------------------------
 
 const paintWell = (col: number, row: number): void => {
-  fillCell(col, row, 74, 143, 60); // grass base
+  clearCell(col, row); // C-504: transparent unpainted region
   noiseCell(col, row, col * 19 + row * 41 + 31, 0.3, 18, 20, 12);
   // stone ring
   fillRect(col, row, 4, 12, 24, 16, 130, 130, 134);
@@ -517,7 +440,7 @@ const paintWell = (col: number, row: number): void => {
 };
 
 const paintNoticeBoard = (col: number, row: number): void => {
-  fillCell(col, row, 74, 143, 60);
+  clearCell(col, row); // C-504: transparent unpainted region
   noiseCell(col, row, col * 23 + row * 67 + 19, 0.3, 18, 20, 12);
   // posts
   fillRect(col, row, 3, 10, 4, 20, 110, 68, 38);
@@ -534,7 +457,7 @@ const paintNoticeBoard = (col: number, row: number): void => {
 };
 
 const paintVillageGate = (col: number, row: number): void => {
-  fillCell(col, row, 74, 143, 60);
+  clearCell(col, row); // C-504: transparent unpainted region
   noiseCell(col, row, col * 43 + row * 53 + 41, 0.3, 18, 20, 12);
   // stone base posts
   fillRect(col, row, 1, 8, 6, 22, 130, 130, 134);
@@ -557,7 +480,7 @@ const paintChest = (
   row: number,
   band: readonly [number, number, number] = [192, 192, 196],
 ): void => {
-  fillCell(col, row, 74, 143, 60);
+  clearCell(col, row); // C-504: transparent unpainted region
   noiseCell(col, row, col * 11 + row * 79 + 27, 0.3, 18, 20, 12);
   // body
   fillRect(col, row, 4, 14, 24, 14, 181, 132, 90);
@@ -574,7 +497,7 @@ const paintChest = (
 };
 
 const paintBarrel = (col: number, row: number): void => {
-  fillCell(col, row, 74, 143, 60);
+  clearCell(col, row); // C-504: transparent unpainted region
   noiseCell(col, row, col * 7 + row * 91 + 37, 0.3, 18, 20, 12);
   // barrel body (tapered)
   fillRect(col, row, 6, 6, 20, 24, 160, 106, 63);
@@ -593,7 +516,7 @@ const paintBarrel = (col: number, row: number): void => {
 };
 
 const paintCrate = (col: number, row: number): void => {
-  fillCell(col, row, 74, 143, 60);
+  clearCell(col, row); // C-504: transparent unpainted region
   noiseCell(col, row, col * 17 + row * 13 + 45, 0.3, 18, 20, 12);
   // body
   fillRect(col, row, 5, 8, 22, 22, 160, 106, 63);
@@ -610,7 +533,7 @@ const paintCrate = (col: number, row: number): void => {
 };
 
 const paintCounter = (col: number, row: number): void => {
-  fillCell(col, row, 110, 68, 38); // dark floor behind
+  clearCell(col, row); // C-504: transparent unpainted region
   // top
   fillRect(col, row, 2, 8, 28, 6, 185, 132, 84);
   hline(col, row, 2, 29, 8, 205, 152, 100);
@@ -623,7 +546,7 @@ const paintCounter = (col: number, row: number): void => {
 };
 
 const paintTable = (col: number, row: number): void => {
-  fillCell(col, row, 110, 68, 38); // floor
+  clearCell(col, row); // C-504: transparent unpainted region
   // legs
   fillRect(col, row, 3, 16, 5, 12, 96, 56, 32);
   fillRect(col, row, 24, 16, 5, 12, 96, 56, 32);
@@ -634,7 +557,7 @@ const paintTable = (col: number, row: number): void => {
 };
 
 const paintBed = (col: number, row: number): void => {
-  fillCell(col, row, 110, 68, 38); // floor
+  clearCell(col, row); // C-504: transparent unpainted region
   // frame
   fillRect(col, row, 1, 6, 30, 22, 96, 56, 32);
   // mattress
@@ -649,7 +572,7 @@ const paintBed = (col: number, row: number): void => {
 };
 
 const paintRug = (col: number, row: number): void => {
-  fillCell(col, row, 110, 68, 38); // floor
+  clearCell(col, row); // C-504: transparent unpainted region
   // rug body
   fillRect(col, row, 4, 6, 24, 20, 160, 48, 64);
   // border
@@ -669,7 +592,7 @@ const paintRug = (col: number, row: number): void => {
 };
 
 const paintBookshelf = (col: number, row: number): void => {
-  fillCell(col, row, 110, 68, 38); // floor
+  clearCell(col, row); // C-504: transparent unpainted region
   // frame
   fillRect(col, row, 4, 2, 24, 28, 110, 68, 38);
   hline(col, row, 4, 27, 2, 140, 92, 56);
@@ -699,7 +622,7 @@ const paintBookshelf = (col: number, row: number): void => {
 };
 
 const paintFireplace = (col: number, row: number): void => {
-  fillCell(col, row, 110, 68, 38); // floor
+  clearCell(col, row); // C-504: transparent unpainted region
   // stone hearth
   fillRect(col, row, 3, 8, 26, 22, 125, 125, 128);
   hline(col, row, 3, 28, 8, 152, 152, 156);
@@ -717,7 +640,7 @@ const paintFireplace = (col: number, row: number): void => {
 };
 
 const paintCandle = (col: number, row: number): void => {
-  fillCell(col, row, 110, 68, 38); // floor
+  clearCell(col, row); // C-504: transparent unpainted region
   // stand
   fillRect(col, row, 13, 20, 6, 10, 96, 56, 32);
   fillRect(col, row, 11, 26, 10, 4, 122, 74, 42);
@@ -730,7 +653,7 @@ const paintCandle = (col: number, row: number): void => {
 };
 
 const paintPlant = (col: number, row: number): void => {
-  fillCell(col, row, 110, 68, 38); // floor
+  clearCell(col, row); // C-504: transparent unpainted region
   // pot
   fillRect(col, row, 9, 20, 14, 10, 170, 84, 58);
   hline(col, row, 8, 21, 20, 190, 104, 72);
@@ -744,7 +667,7 @@ const paintPlant = (col: number, row: number): void => {
 };
 
 const paintAnvil = (col: number, row: number): void => {
-  fillCell(col, row, 110, 68, 38); // floor
+  clearCell(col, row); // C-504: transparent unpainted region
   // base
   fillRect(col, row, 8, 22, 16, 8, 58, 58, 62);
   // body
@@ -840,7 +763,7 @@ const paintFlagstone = (col: number, row: number): void => {
 };
 
 const paintRugRound = (col: number, row: number): void => {
-  fillCell(col, row, 110, 68, 38);
+  clearCell(col, row); // C-504: transparent unpainted region
   // round rug
   for (let y = 8; y < 26; y++) {
     for (let x = 8; x < 24; x++) {
@@ -975,26 +898,36 @@ const paintCornerFrame = (
   }
 };
 
-const paintDirtCorner = (col: number, row: number, mask: number): void => {
-  paintCornerFrame(col, row, mask, paintGrass, paintDirt);
-};
-
-const paintWaterCorner = (col: number, row: number, mask: number): void => {
-  paintCornerFrame(col, row, mask, paintGrass, paintWater);
+/**
+ * Base + overlay painters per corner-16 terrain id.
+ *
+ * The overlay is the terrain the cell owns; the base is the material the
+ * frame composites over (the terrain directly beneath it in the biome) and is
+ * baked into the unset regions exactly like the original dirt/water-over-grass
+ * sets. Adding a new corner-16 set is one entry here plus its manifest
+ * `terrains` declaration — the frame registrar and painter derive the rest.
+ */
+const CORNER_TERRAIN_PAINTERS: Record<
+  string,
+  { base: (col: number, row: number) => void; overlay: (col: number, row: number) => void }
+> = {
+  dirt: { base: paintGrass, overlay: paintDirt },
+  water: { base: paintGrass, overlay: paintWater },
+  gravel: { base: paintGrass, overlay: paintGravel },
+  earth: { base: paintGravel, overlay: paintEarth },
+  cobblestone: { base: paintWoodFloor, overlay: paintCobble },
 };
 
 const paintFrame = (key: string, col: number, row: number): void => {
-  // C-378 corner-16 terrain frames: `dirt_<mask>.png` / `water_<mask>.png`.
-  const cornerMatch = /^(dirt|water)_(\d{1,2})\.png$/.exec(key);
+  // C-378 corner-16 terrain frames: `<terrain>_<mask>.png`. Only ids with a
+  // registered painter pair are corner frames; an unknown id falls through to
+  // the default below rather than being silently mis-painted.
+  const cornerMatch = /^([a-z0-9_]+?)_(\d{1,2})\.png$/.exec(key);
   if (cornerMatch) {
-    const terrain = cornerMatch[1];
+    const painters = CORNER_TERRAIN_PAINTERS[cornerMatch[1]];
     const mask = Number(cornerMatch[2]);
-    if (mask >= 0 && mask < 16) {
-      if (terrain === 'dirt') {
-        paintDirtCorner(col, row, mask);
-      } else {
-        paintWaterCorner(col, row, mask);
-      }
+    if (painters && mask >= 0 && mask < 16) {
+      paintCornerFrame(col, row, mask, painters.base, painters.overlay);
       return;
     }
   }
@@ -1148,10 +1081,16 @@ const paintFrame = (key: string, col: number, row: number): void => {
 };
 
 const drawAll = (frames: Record<string, [number, number]>): void => {
-  // Base fill: dark neutral for unused cells
+  // Base fill: TRANSPARENT (C-504). Terrain painters paint their full cell
+  // opaque; prop/decor painters leave unpainted regions transparent instead
+  // of showing an opaque grass/floor substrate. No global chroma deletion.
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
-      setPx(x, y, 47, 95, 42);
+      const i = (y * W + x) * 4;
+      buf[i] = 0;
+      buf[i + 1] = 0;
+      buf[i + 2] = 0;
+      buf[i + 3] = 0;
     }
   }
   for (const [key, [col, row]] of Object.entries(frames)) {
@@ -1194,7 +1133,15 @@ const chunk = (type: string, data: Uint8Array): Uint8Array => {
   return out;
 };
 
-const encodePng = (width: number, height: number, rgba: Uint8Array): Uint8Array => {
+/**
+ * Encodes row-major RGBA bytes as PNG data.
+ *
+ * The `rgba` input stores each pixel as `[red, green, blue, alpha]` bytes and
+ * must contain exactly `width × height × 4` bytes.
+ *
+ * @returns PNG-encoded data.
+ */
+export const encodePng = (width: number, height: number, rgba: Uint8Array): Uint8Array => {
   const signature = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
   const ihdr = new Uint8Array(13);
   const ihdrView = new DataView(ihdr.buffer);
@@ -1308,10 +1255,13 @@ export const packAtlas = (): PackedAtlas => {
       const srcY = cellY * TILE + srcLocalY;
       const si = (srcY * W + srcX) * 4;
       const di = (y * CW + x) * 4;
+      // C-504: the 1px edge extrusion copies the full RGBA pixel — a
+      // transparent prop edge stays transparent (the old code forced alpha
+      // 255, painting an opaque border around transparent props).
       extruded[di] = buf[si];
       extruded[di + 1] = buf[si + 1];
       extruded[di + 2] = buf[si + 2];
-      extruded[di + 3] = 255;
+      extruded[di + 3] = buf[si + 3];
     }
   }
 
@@ -1346,9 +1296,11 @@ const main = (): void => {
   writeFileSync(pngPath, png);
 
   // Convert PNG → WebP via cwebp (available in the Nix devShell).
-  // (vips `copy` with the [Q=90] suffix misbehaves under Bun's execFileSync.)
+  // C-504: LOSS LESS — pixel-art output must round-trip without color shift
+  // (the old `-q 90` lossy mode blurred alpha edges and shifted palette
+  // colours).
   try {
-    execFileSync('cwebp', ['-q', '90', pngPath, '-o', webpPath], { stdio: 'inherit' });
+    execFileSync('cwebp', ['-lossless', pngPath, '-o', webpPath], { stdio: 'inherit' });
   } catch (error) {
     const code = (error as { code?: string } | null)?.code;
     const hint =

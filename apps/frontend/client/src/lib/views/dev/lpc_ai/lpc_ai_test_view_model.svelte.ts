@@ -9,7 +9,7 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import { getLpcCatalog } from '$lib/data/lpc_asset_catalog';
 
 // ── Types ────────────────────────────────────────────────────────────────

@@ -9,7 +9,7 @@ import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import { getLocalDatabase } from '@aikami/frontend/storage';
 import type { PlayerJournalEntry } from '$types';
 import { registerSerializable, type SerializableService } from './serializable_service';

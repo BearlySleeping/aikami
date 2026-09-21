@@ -3,6 +3,85 @@ $schema: 'https://moonrepo.dev/schemas/v2/tasks.json'
 inheritedBy:
   tag: 'scripts'
 
+# =============================================================================
+# File Groups
+# =============================================================================
+fileGroups:
+  # Every file whose change can alter what counts as acceptable debt. Used by
+  # guard-policy-diff so a guard-policy change is always classified, whichever
+  # policy artifact moved.
+  guard-policy:
+    - '/scripts/src/lib/ops/guard_*'
+    - '/scripts/src/lib/ops/guards/**/*'
+    - '/scripts/src/lib/agents/contract_pipeline/validation_policy.ts'
+    - '/scripts/src/lib/agents/contract_pipeline/pre_push_gate.ts'
+
+  # The monorepo tree the structural guards read: apps/, packages/, scripts/,
+  # and .pi/ source. Shared by guard-type-safety and guard-source-file-size so
+  # the exclusion list lives in exactly one place.
+  #
+  # 🔴 Every `!` line below is load-bearing, and so is the fact that they are
+  # explicit rather than left to `.gitignore`. moon walks these root-anchored
+  # `**/*` globs from disk and does NOT skip gitignored paths, so without them
+  # `bun run guard` hashes a nested worktree's node_modules — thousands of
+  # symlinks-to-directories that moon cannot hash and logs a WARN for. It
+  # printed ~4,300 WARN lines per run and buried the guard output it exists to
+  # show. (`hasher.ignorePatterns` in .moon/workspace.yml does NOT help here:
+  # moon decides "is this a file?" before that filter is applied.)
+  #
+  # The set mirrors each guard's own `isExcludedDir()`
+  # (scripts/src/lib/ops/guard_{type_safety,source_file_size}_helpers.ts):
+  # moon must hash exactly what the guard reads. Build-output patterns are
+  # ANCHORED to project roots on purpose — a blanket `**/dist/**` would silently
+  # drop tracked source that merely lives in a directory called `dist`, e.g.
+  # scripts/src/lib/dist/{config,upload_ort}.ts.
+  guard-scan:
+    - '/apps/**/*'
+    - '!/apps/**/node_modules/**'
+    - '!/apps/**/.svelte-kit/**'
+    - '!/apps/**/.astro/**'
+    - '!/apps/**/dist/**'
+    - '!/apps/**/build/**'
+    - '!/apps/**/.build/**'
+    - '!/apps/**/.wrangler/**'
+    - '!/apps/**/.vercel/**'
+    - '!/apps/**/.netlify/**'
+    - '!/apps/**/target/**'
+    - '!/apps/**/test-results/**'
+    - '!/apps/**/playwright-report/**'
+    - '!/apps/**/coverage/**'
+    - '!/apps/**/.vitest/**'
+    - '/packages/**/*'
+    - '!/packages/**/node_modules/**'
+    - '!/packages/**/dist/**'
+    - '!/packages/**/build/**'
+    - '!/packages/**/coverage/**'
+    - '/scripts/**/*'
+    - '!/scripts/**/node_modules/**'
+    # Anchored, not `!/scripts/**/dist/**` — scripts/src/lib/dist/ is tracked
+    # source (see the note above).
+    - '!/scripts/dist/**'
+    - '!/scripts/build/**'
+    - '!/scripts/tmp/**'
+    - '/.pi/**/*'
+    # Agent-local nested git worktrees — full repo copies, gitignored, absent on
+    # CI, and never project source.
+    - '!/.pi/workspaces/**'
+    - '!/.pi/npm/**'
+    - '!/.pi/git/**'
+    - '!/.pi/generated-skills/**'
+    - '!/.pi/cache/**'
+    - '!/.pi/contract-runs/**'
+    - '!/.pi/swarm/**'
+    - '!/.pi/background-tasks/**'
+    - '!/.pi/autofix/**'
+    - '!/.pi/github/**'
+    - '!/.pi/.screenshots/**'
+    # A live Chromium instance owns lock/socket files here; a socket is not a
+    # hashable file, and walking the profile races the browser process.
+    - '!/.pi/.chromium-profile/**'
+    - '!**/*.cache/**'
+
 tasks:
   # Aggregates every guard-* structural check into one target: `bun run
   # guard` (root), `moon run scripts:guard`, or `moon run :guard` (only this
@@ -10,18 +89,73 @@ tasks:
   # in this project because their `bun run src/lib/ops/guard_*.ts` commands
   # are relative to it, even though most scan apps/frontend/client and
   # apps/frontend/hub, not scripts' own source.
+  #
+  # 🔴 Keep this list in sync with GUARDS in
+  # scripts/src/lib/ops/guards/registry.ts — that registry is the source of
+  # truth for the guard set, and
+  # scripts/src/lib/ops/__tests__/guard_registry.test.ts fails if this file,
+  # the pre-push attribution list or the coverage matrix drifts from it.
   guard:
     deps:
       - '~:guard-mvvm-conventions'
       - '~:guard-service-conventions'
-      - '~:guard-service-mock-coverage'
       - '~:guard-image-component'
       - '~:guard-data-plane'
       - '~:guard-type-safety'
       - '~:guard-orphaned-capability'
+      - '~:guard-test-boundary'
+      - '~:guard-view-model-composition'
+      - '~:guard-source-file-size'
+      - '~:guard-cognitive-complexity'
     options:
       cache: false
       runInCI: true
+
+  # 🔴 `guard:whole-repo` is the deterministic aggregate the PR gate runs
+  # UNCONDITIONALLY, outside Moon's affected-project graph. A guard that reads
+  # the whole repository has no owning project, and a push to `main` whose diff
+  # resolves to nothing would otherwise skip it entirely — which is how four
+  # oversized files reached main unnoticed (see the header of
+  # guard_source_file_size.ts and PR #339).
+  guard-whole-repo:
+    deps:
+      - '~:guard-type-safety'
+      - '~:guard-test-boundary'
+      - '~:guard-source-file-size'
+      - '~:guard-cognitive-complexity'
+      - '~:guard-policy-diff'
+    options:
+      cache: false
+      runInCI: true
+
+  # Classifies a diff as debt reduction / policy expansion / refactor. Runs in
+  # CI so a PR that changes what counts as acceptable debt is labelled as such.
+  guard-policy-diff:
+    command: 'bun run src/lib/ops/guard_policy_diff.ts'
+    inputs:
+      - 'src/lib/ops/guard_policy_diff.ts'
+      - 'src/lib/ops/guards/**/*'
+      - '/biome.json'
+      - '/.moon/tasks/**/*'
+      - '/.github/workflows/**/*'
+      - '@group(guard-policy)'
+    options:
+      cache: false
+      runInCI: true
+
+  # The sanctioned contraction step: runs --update-baseline on every ratcheted
+  # guard, which is REDUCTION-ONLY by construction. Integrated into the
+  # pipeline's fix/validate flow (see pre_push_gate.ts) rather than left as a
+  # command each agent is told to remember. Never runs in CI — it writes files.
+  guard-contract:
+    command: 'bun run src/lib/ops/guard_contract.ts'
+    inputs:
+      - 'src/lib/ops/guard_contract.ts'
+      - 'src/lib/ops/guards/**/*'
+      - 'src/lib/ops/guard_*.ts'
+    options:
+      cache: false
+      runInCI: false
 
   test:
     command: 'bun test'
@@ -47,11 +181,35 @@ tasks:
       - 'src/lib/agents/contract_pipeline/**/*'
       - 'src/lib/agents/evaluation/**/*'
       - 'src/lib/herdr/**/*'
+      - 'src/lib/pi/**/*'
       - 'src/lib/env/**/*'
+      - 'src/lib/ops/__tests__/**/*'
+      - 'src/lib/ops/guards/**/*'
+      - 'src/lib/ops/guard_*'
+      - 'src/lib/theme/**/*'
+      - 'package.json'
+      # The registry parity test reads these, so a change to any of them must
+      # re-run this suite rather than silently leaving the assertion stale.
+      - '/.moon/tasks/**/*'
+      - '/.github/workflows/pr-checks.yml'
+      - '/docs/contracts/STRICTNESS_COVERAGE_MATRIX.md'
+      - '/.pi/skills/aikami-conventions/SKILL.md'
       - '@group(configs)'
     options:
       mergeArgs: 'replace'
       runInCI: true
+
+  # Headless replay of an exported combat reproduction bundle. Mirrors the
+  # root `replay:combat` package script so it is runnable from moon too:
+  #   bun moon run scripts:replay-combat -- ./bundle.json
+  # `cache: false` because the output depends on the supplied file, which is
+  # not a tracked project input.
+  replay-combat:
+    command: 'bun run src/lib/ops/replay_combat_reproduction.ts'
+    options:
+      cache: false
+      mergeArgs: 'replace'
+      runInCI: false
 
   typecheck:
     command: 'bun run typecheck'
@@ -94,6 +252,10 @@ tasks:
   # C-475 AC-5: agent guidance drift checks — manifest coverage, reference
   # resolution, canonical example structure, and generator reproducibility.
   # Runs in moon ci. No network, AI, or service dependencies.
+  #
+  # Note: the guard-registry parity assertions live in
+  # `scripts:automation-unit`, not here, because they read the guard registry and
+  # the Moon task file rather than agent guidance.
   validate-agent-guidance:
     command: 'bun run src/lib/ops/validate_agent_guidance.ts'
     inputs:
@@ -146,6 +308,7 @@ tasks:
     inputs:
       - 'src/lib/ops/guard_mvvm_conventions.ts'
       - 'src/lib/ops/guard_mvvm_conventions_baseline.json'
+      - 'src/lib/ops/guards/**/*'
       - '/apps/frontend/client/src/**/*_view.svelte'
       - '/apps/frontend/client/src/**/*_view_model.svelte.ts'
       - '/apps/frontend/hub/src/**/*_view.svelte'
@@ -159,23 +322,25 @@ tasks:
     inputs:
       - 'src/lib/ops/guard_service_conventions.ts'
       - 'src/lib/ops/guard_service_conventions_baseline.json'
+      - 'src/lib/ops/guards/**/*'
       - '/apps/frontend/client/src/lib/services/**/*_service.svelte.ts'
       - '/apps/frontend/hub/src/lib/client/services/**/*_service.svelte.ts'
     options:
       cache: false
       runInCI: true
 
-  # Every '$services' barrel export must have a matching key in
-  # test_preload.ts's localServicesMockBase() — the regression class behind
-  # PRs #241, #243, and the C-466/C-467 test-infra fix (2026-09-05). Ratchet
-  # guard; see guard_service_mock_coverage_baseline.json.
-  guard-service-mock-coverage:
-    command: 'bun run src/lib/ops/guard_service_mock_coverage.ts'
+  # Orphaned runtime capabilities in the client service layer. Defined here (and
+  # NOT inherited by every project) because it is a whole-service-tree guard:
+  # running it once per project was 39 no-op targets per CI run.
+  guard-orphaned-capability:
+    command: 'bun run src/lib/ops/guard_orphaned_capability.ts'
     inputs:
-      - 'src/lib/ops/guard_service_mock_coverage.ts'
-      - 'src/lib/ops/guard_service_mock_coverage_baseline.json'
+      - 'src/lib/ops/guard_orphaned_capability.ts'
+      - 'src/lib/ops/guard_orphaned_capability_baseline.json'
+      - 'src/lib/ops/guards/**/*'
       - '/apps/frontend/client/src/lib/services/**/*'
-      - '/apps/frontend/client/src/lib/test_preload.ts'
+      - '/packages/frontend/**/*'
+      - '/docs/contracts/**/*'
     options:
       cache: false
       runInCI: true
@@ -214,17 +379,87 @@ tasks:
       - 'src/lib/ops/guard_type_safety.ts'
       - 'src/lib/ops/guard_type_safety_helpers.ts'
       - 'src/lib/ops/guard_type_safety_baseline.json'
-      - '/apps/**/*'
-      - '!/apps/**/node_modules/**'
-      - '!/apps/**/.svelte-kit/**'
-      - '!/apps/**/dist/**'
-      - '!/apps/**/build/**'
-      - '/packages/**/*'
-      - '!/packages/**/node_modules/**'
-      - '!/packages/**/dist/**'
-      - '!/packages/**/build/**'
-      - '/.pi/**/*'
-      - '!/.pi/generated-skills/**'
+      - 'src/lib/ops/guards/**/*'
+      - '@group(guard-scan)'
+    options:
+      cache: false
+      runInCI: true
+
+  # ViewModel composition-boundary ratchet: a *_view_model.svelte.ts must not
+  # import the `$services` barrel or the aggregate `@aikami/frontend/services`
+  # root at runtime. See guard_view_model_composition_baseline.json.
+  guard-view-model-composition:
+    command: 'bun run src/lib/ops/guard_view_model_composition.ts'
+    inputs:
+      - 'src/lib/ops/guard_view_model_composition.ts'
+      - 'src/lib/ops/guard_view_model_composition_baseline.json'
+      - 'src/lib/ops/guards/**/*'
+      - '/apps/frontend/client/src/lib/views/**/*'
+    options:
+      cache: false
+      runInCI: true
+
+  # Pragmatic source-file-size guard: flags new oversized modules (production
+  # hard limit 800, tests 1500), warns above 500/800, and ratchets existing
+  # debt via guard_source_file_size_baseline.json. Permanent exemptions live in
+  # guard_source_file_size_exemptions.json (classification verified); mutable
+  # modules above the hard limit need an expiring waiver in
+  # guard_source_file_size_waivers.json. In CI, BASE_REF makes the guard reject
+  # unauthorized allowance expansion — including converting a baseline entry
+  # into a larger waiver — against the trusted base revision.
+  guard-source-file-size:
+    command: 'bun run src/lib/ops/guard_source_file_size.ts'
+    inputs:
+      - 'src/lib/ops/guard_source_file_size.ts'
+      - 'src/lib/ops/guard_source_file_size_helpers.ts'
+      - 'src/lib/ops/guard_source_file_size_output.ts'
+      - 'src/lib/ops/guard_source_file_size_baseline.json'
+      - 'src/lib/ops/guard_source_file_size_exemptions.json'
+      - 'src/lib/ops/guard_source_file_size_waivers.json'
+      - 'src/lib/ops/guards/**/*'
+      - '@group(guard-scan)'
+    options:
+      cache: false
+      runInCI: true
+
+  # Threshold-calibration report: distributions by category and the largest
+  # files, so the 800-line boundary is argued from measured data rather than
+  # taste. `bun run guard:source-size-report`.
+  guard-source-size-report:
+    command: 'bun run src/lib/ops/guard_source_file_size.ts --report'
+    inputs:
+      - 'src/lib/ops/guard_source_file_size.ts'
+      - 'src/lib/ops/guard_source_file_size_helpers.ts'
+      - 'src/lib/ops/guard_source_file_size_output.ts'
+      - 'src/lib/ops/guards/**/*'
+      - '@group(guard-scan)'
+    options:
+      cache: false
+      runInCI: false
+
+  # Cognitive-complexity ratchet: Biome's own
+  # complexity/noExcessiveCognitiveComplexity score, ratcheted per file on both
+  # the number of excessive functions and the worst score. Independent of LOC.
+  guard-cognitive-complexity:
+    command: 'bun run src/lib/ops/guard_cognitive_complexity.ts'
+    inputs:
+      - 'src/lib/ops/guard_cognitive_complexity.ts'
+      - 'src/lib/ops/guard_cognitive_complexity_baseline.json'
+      - 'src/lib/ops/guards/**/*'
+      - '/biome.json'
+      - '@group(guard-scan)'
+    options:
+      cache: false
+      runInCI: true
+
+  # Production source must not import test helpers (test_preload.ts,
+  # feature testing/ fixtures, *.test.ts). Shipping code cannot depend on
+  # test scaffolding; see guard_test_boundary.ts.
+  guard-test-boundary:
+    command: 'bun run src/lib/ops/guard_test_boundary.ts'
+    inputs:
+      - 'src/lib/ops/guard_test_boundary.ts'
+      - '@group(guard-scan)'
     options:
       cache: false
       runInCI: true
@@ -243,3 +478,40 @@ tasks:
     options:
       cache: false
       runInCI: true
+
+  # C-529 AC-1 / AC-4 / AC-7 — the declared theme validator.
+  #
+  # Validates the shipped built-in token source through the SAME compiler a
+  # community package goes through, and fails when
+  # `packages/frontend/theme/src/lib/aikami_theme.css` is not byte-identical to
+  # the generated output (the manual-divergence drift gate).
+  #
+  # With arguments it validates a local package directory or token file and
+  # emits machine-readable diagnostics:
+  #   bun moon run scripts:theme-validate -- ./my-theme
+  #
+  # Documented for creators in
+  # apps/frontend/docs/src/content/docs/guides/theming-your-interface.mdx.
+  theme-validate:
+    command: 'bun run src/lib/theme/theme_cli.ts validate'
+    inputs:
+      - 'src/lib/theme/**/*'
+      - '/packages/frontend/theme/src/lib/theme/**/*'
+      - '/packages/frontend/theme/src/lib/aikami_theme.css'
+      - '/packages/shared/constants/src/lib/game/theme.ts'
+      - '/packages/shared/schemas/src/lib/game/theme.ts'
+    options:
+      cache: false
+      runInCI: true
+
+  # Regenerates the built-in stylesheet from the validated token source. Run
+  # this (and commit the result) after editing
+  # `packages/frontend/theme/src/lib/theme/builtin/*.json`.
+  theme-build:
+    command: 'bun run src/lib/theme/theme_cli.ts build --write'
+    inputs:
+      - 'src/lib/theme/**/*'
+      - '/packages/frontend/theme/src/lib/theme/**/*'
+    options:
+      cache: false
+      runInCI: false

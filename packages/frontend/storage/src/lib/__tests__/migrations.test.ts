@@ -161,6 +161,21 @@ for (const kind of ['wasm', 'turso'] as const) {
       for (const index of SCHEMA_INDEXES) {
         expect(names).toContain(index);
       }
+
+      for (const table of ['generation_acceptances', 'generation_artifacts']) {
+        const foreignKeys = await db.query({
+          sql: `PRAGMA foreign_key_list('${table}')`,
+          args: [],
+        });
+        expect(
+          foreignKeys.rows.some(
+            (row) =>
+              row.table === 'generation_candidates' &&
+              row.from === 'candidate_id' &&
+              row.to === 'candidate_id',
+          ),
+        ).toBe(true);
+      }
     });
 
     // ── AC-2: Legacy v0 database converges on the identical schema ────

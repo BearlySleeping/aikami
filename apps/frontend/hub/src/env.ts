@@ -80,6 +80,27 @@ export const variables = defineEnvVars({
     schema: optionalString(),
   },
 
+  /**
+   * C-513: comma-separated account ids allowed to moderate community assets.
+   * Comma-separated rather than a table so moderation is an ops decision that
+   * fails closed — an absent value means nobody can approve anything.
+   */
+  MODERATION_ACCOUNT_IDS: {
+    schema: optionalString(),
+  },
+
+  /**
+   * C-530: the Hub theme-publishing feature gate. Absent ⇒ enabled.
+   *
+   * Setting it to `0` hides the new entry points and blocks new publishes
+   * without deleting approved versions or breaking already-installed packs
+   * (AC-9). The local client installer never consults this value, so a player
+   * keeps their installed theme with the gate off or the Hub unreachable.
+   */
+  THEME_PUBLISHING_ENABLED: {
+    schema: optionalString(),
+  },
+
   // ── Public (client-safe) ───────────────────────────────────────────────
 
   /** Unique app identifier, e.g. "hub". */

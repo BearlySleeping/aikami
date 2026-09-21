@@ -107,6 +107,17 @@ export const QuestProgressSchema = Type.Object({
     description: 'Whether rewards have been delivered (idempotency guard)',
   }),
   chosenEndingId: Type.Optional(Type.String({ description: 'Ending ID chosen by player' })),
+  /**
+   * C-495: true once every required objective is done and the quest authors a
+   * real conclusion choice. The quest stays `active` until `chooseEnding`
+   * commits the player's decision — evidence unlocks an ending, it never
+   * selects one, and completing the last objective must not resolve a
+   * multi-ending quest by itself. Serialized with the rest of the progress
+   * record so a reload while the choice is pending preserves it.
+   */
+  awaitingEndingChoice: Type.Optional(
+    Type.Boolean({ description: 'Quest is resolution-ready and awaits the player ending choice' }),
+  ),
 });
 
 // ── Top-level save envelope structure (extended for C-339) ──

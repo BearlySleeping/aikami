@@ -26,8 +26,11 @@
     "typecheck": "moon run :typecheck",
     "validate": "moon run :validate",
     "guard": "moon run scripts:guard",
-    "guard:all": "moon run scripts:guard-mvvm-conventions scripts:guard-service-conventions scripts:guard-service-mock-coverage scripts:guard-image-component scripts:guard-data-plane scripts:guard-type-safety scripts:guard-orphaned-capability",
-    "guard:show-all": "bun run --cwd scripts src/lib/ops/guard_mvvm_conventions.ts --show-all; bun run --cwd scripts src/lib/ops/guard_service_conventions.ts --show-all; bun run --cwd scripts src/lib/ops/guard_service_mock_coverage.ts --show-all; bun run --cwd scripts src/lib/ops/guard_image_component.ts; bun run --cwd scripts src/lib/ops/guard_data_plane.ts; bun run --cwd scripts src/lib/ops/guard_type_safety.ts --show-all; bun run --cwd scripts src/lib/ops/guard_orphaned_capability.ts --show-all",
+    "guard:whole-repo": "moon run scripts:guard-whole-repo",
+    "guard:all": "moon run scripts:guard",
+    "guard:policy-diff": "bun run --cwd scripts src/lib/ops/guard_policy_diff.ts",
+    "guard:source-size-report": "bun run --cwd scripts src/lib/ops/guard_source_file_size.ts --report",
+    "guard:show-all": "s=0; bun run --cwd scripts src/lib/ops/guard_mvvm_conventions.ts --show-all; s=$((s|$?)); bun run --cwd scripts src/lib/ops/guard_service_conventions.ts --show-all; s=$((s|$?)); bun run --cwd scripts src/lib/ops/guard_image_component.ts; s=$((s|$?)); bun run --cwd scripts src/lib/ops/guard_data_plane.ts; s=$((s|$?)); bun run --cwd scripts src/lib/ops/guard_type_safety.ts --show-all; s=$((s|$?)); bun run --cwd scripts src/lib/ops/guard_orphaned_capability.ts --show-all; s=$((s|$?)); bun run --cwd scripts src/lib/ops/guard_test_boundary.ts; s=$((s|$?)); bun run --cwd scripts src/lib/ops/guard_view_model_composition.ts --show-all; s=$((s|$?)); bun run --cwd scripts src/lib/ops/guard_source_file_size.ts --show-all; s=$((s|$?)); bun run --cwd scripts src/lib/ops/guard_cognitive_complexity.ts --show-all; s=$((s|$?)); exit $s",
     "ci": "bun run validate && bun run test",
     "ci:report": "bun run scripts/src/lib/ci/report.ts",
     "scripts": "bun run scripts/src/index.ts",
@@ -39,11 +42,17 @@
     "pre-commit": "bun run scripts/src/lib/ops/pre_commit.ts",
     "sync-workspace": "bun run scripts/src/lib/ops/sync_workspace.ts",
     "guard-workspace-boundary": "bun run scripts/src/lib/ops/guard_workspace_boundary.ts",
+    "emberwatch:release": "bun run scripts/src/lib/ops/emberwatch_release.ts",
+    "emberwatch:audit": "bun run scripts/src/lib/ops/emberwatch_coverage_audit.ts",
+    "emberwatch:accept": "bun run scripts/src/lib/ops/emberwatch_accept.ts",
+    "emberwatch:brief": "bun run scripts/src/lib/ops/rebase_emberwatch_brief.ts",
+    "emberwatch:props": "bun run scripts/src/lib/ops/sync_emberwatch_props.ts",
     "test:blackbox": "bun run scripts/src/lib/test_blackbox/run.ts",
     "herdr:start": "bun run scripts/src/lib/herdr/start.ts",
     "workspace:cleanup": "bun run scripts/src/lib/ops/workspace_cleanup.ts",
     "herdr:pi": "bun run scripts/src/lib/herdr/start_pi.ts",
     "herdr:task": "bun run scripts/src/lib/herdr/task.ts",
+    "worktree:bootstrap": "bun run scripts/src/lib/herdr/worktree_bootstrap.ts",
     "scout": "bun run scripts/src/lib/agents/scout/run.ts",
     "guru": "bun run scripts/src/lib/agents/guru/run.ts",
     "worker": "bun run scripts/src/lib/agents/worker/run.ts",
@@ -78,6 +87,7 @@
     "deps:check": "syncpack lint --dependency-types prod,dev",
     "preview": "bun run scripts/src/lib/ops/preview_client.ts",
     "herdr:preview": "bun run scripts/src/lib/ops/preview_client.ts",
+    "replay:combat": "bun run scripts/src/lib/ops/replay_combat_reproduction.ts",
     "contract": "bun run scripts/src/lib/agents/contract_pipeline.ts",
     "contract:pipeline": "bun run scripts/src/lib/agents/contract_pipeline.ts",
     "stack": "bun run --cwd apps/backend/local-stack init --",
@@ -96,22 +106,28 @@
     "setup:env": "bun run decrypt-secrets --mode emulator",
     "encrypt-secrets": "bun run scripts/src/lib/ops/encrypt_secrets.ts",
     "sync-env": "bun run scripts/src/lib/ops/sync_env.ts",
-    "infra:report": "bun run scripts/src/lib/ops/infra_report_cli.ts"
+    "infra:report": "bun run scripts/src/lib/ops/infra_report_cli.ts",
+    "emberwatch:legacy-bootstrap": "bun run scripts/src/lib/ops/legacy_catalog_bootstrap.ts",
+    "emberwatch:build-candidate": "bun run scripts/src/lib/ops/emberwatch_release.ts --build-candidate",
+    "emberwatch:candidate": "bun run scripts/src/lib/ops/emberwatch_candidate.ts"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.12",
-    "@google-cloud/secret-manager": "^7.0.0",
-    "@moonrepo/cli": "2.5.4",
-    "@types/bun": "1.4.1",
-    "@types/node": "26.4.1",
+    "@biomejs/biome": "2.5.13",
+    "@google-cloud/secret-manager": "7.1.0",
+    "@moonrepo/cli": "2.5.5",
+    "@types/bun": "1.4.2",
+    "@types/node": "26.6.1",
     "@typescript/native-preview": "7.0.0-dev.20260707.2",
     "syncpack": "15.3.3",
     "typescript": "6.0.3"
   },
   "dependencies": {
-    "typebox": "1.3.26"
+    "typebox": "1.3.34"
   },
-  "overrides": {},
+  "overrides": {
+    "@huggingface/transformers": "4.3.0",
+    "onnxruntime-web": "1.31.0-dev.20260914-8d85527a0"
+  },
   "trustedDependencies": [
     "@biomejs/biome"
   ]

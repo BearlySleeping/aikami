@@ -3,7 +3,7 @@ import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import type { DiceCardData } from '@aikami/types';
 import { createSeedableRng, type SeedableRng } from '@aikami/utils';
 import type { DiceHistoryEntry } from '$types';

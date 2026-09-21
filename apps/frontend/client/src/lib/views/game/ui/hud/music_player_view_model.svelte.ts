@@ -1,7 +1,11 @@
 // apps/frontend/client/src/lib/views/game/ui/hud/music_player_view_model.svelte.ts
 //
-// MusicPlayerViewModel — thin ViewModel over the MusicPlayerService
-// singleton powering the optional mini music-player overlay.
+// MusicPlayerViewModel — thin ViewModel over the mini music-player overlay.
+//
+// Dependencies arrive through typed capability options. This module never
+// imports the `$services` barrel or any production singleton, so its tests can
+// inject fresh feature fixtures. Production wiring lives in
+// ./music_player_composition.ts.
 //
 // Contract: C-150 (audio engine), C-249 (music tags)
 
@@ -9,15 +13,50 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
-import { buildMusicSceneContext } from '$lib/utils/music_utils';
-import { gameEngineService, gameOverlayService, musicPlayerService, timeService } from '$services';
+} from '@aikami/frontend/services/base';
+import type { MusicSceneContext } from '@aikami/types';
+import type { GameOverlayType } from '$types';
+
+// ---------------------------------------------------------------------------
+// Capabilities
+// ---------------------------------------------------------------------------
+
+/** Playback state and controls the music-player overlay consumes. */
+export type MusicPlayerCapabilities = {
+  readonly visible: boolean;
+  readonly currentTrack: { title: string } | null;
+  readonly vibeLabel: string;
+  readonly isPlaying: boolean;
+  readonly isPaused: boolean;
+  readonly hasSimilarTracks: boolean;
+  readonly feedback: string;
+  setVisible(v: boolean): void;
+  resume(): Promise<void>;
+  pause(): void;
+  skip(): Promise<void>;
+  stop(): void;
+  setSceneContext(ctx: MusicSceneContext): void;
+};
+
+/** Live game-state reads the ViewModel watches to derive the scene context. */
+export type MusicPlayerContextCapabilities = {
+  readonly playerScene: string;
+  readonly currentMapId: string;
+  readonly gameHour: number;
+  readonly rainIntensity: number;
+  readonly activeOverlay: GameOverlayType;
+  /** Builds the current scene context from live game state. */
+  buildSceneContext(): MusicSceneContext;
+};
 
 // ---------------------------------------------------------------------------
 // Options
 // ---------------------------------------------------------------------------
 
-export type MusicPlayerViewModelOptions = BaseViewModelOptions;
+export type MusicPlayerViewModelOptions = BaseViewModelOptions & {
+  player: MusicPlayerCapabilities;
+  context: MusicPlayerContextCapabilities;
+};
 
 // ---------------------------------------------------------------------------
 // Interface
@@ -66,82 +105,97 @@ export type MusicPlayerViewModelInterface = BaseViewModelInterface & {
 // ---------------------------------------------------------------------------
 
 class MusicPlayerViewModel
-  extends BaseViewModel<BaseViewModelOptions>
+  extends BaseViewModel<MusicPlayerViewModelOptions>
   implements MusicPlayerViewModelInterface
 {
+  private readonly _player: MusicPlayerCapabilities;
+  private readonly _context: MusicPlayerContextCapabilities;
+
+  constructor(options: MusicPlayerViewModelOptions) {
+    super(options);
+    this._player = options.player;
+    this._context = options.context;
+  }
+
   get visible(): boolean {
-    return musicPlayerService.visible;
+    return this._player.visible;
   }
 
   get currentTrackTitle(): string {
-    return musicPlayerService.currentTrack?.title ?? 'No music playing';
+    return this._player.currentTrack?.title ?? 'No music playing';
   }
 
   get vibeLabel(): string {
-    return musicPlayerService.vibeLabel;
+    return this._player.vibeLabel;
   }
 
   get isPlaying(): boolean {
-    return musicPlayerService.isPlaying;
+    return this._player.isPlaying;
   }
 
   get isPaused(): boolean {
-    return musicPlayerService.isPaused;
+    return this._player.isPaused;
   }
 
   get hasSimilarTracks(): boolean {
-    return musicPlayerService.hasSimilarTracks;
+    return this._player.hasSimilarTracks;
   }
 
   get hasActiveTrack(): boolean {
-    return musicPlayerService.currentTrack !== null;
+    return this._player.currentTrack !== null;
   }
 
   get feedback(): string {
-    return musicPlayerService.feedback;
+    return this._player.feedback;
   }
 
   hide(): void {
-    musicPlayerService.setVisible(false);
+    this._player.setVisible(false);
   }
 
   async togglePlayPause(): Promise<void> {
-    if (musicPlayerService.isPaused) {
-      await musicPlayerService.resume();
-    } else if (musicPlayerService.isPlaying) {
-      musicPlayerService.pause();
+    if (this._player.isPaused) {
+      await this._player.resume();
+    } else if (this._player.isPlaying) {
+      this._player.pause();
     } else {
       // Stopped — resume the vibe-appropriate track.
-      await musicPlayerService.skip();
+      await this._player.skip();
     }
   }
 
   async skip(): Promise<void> {
-    await musicPlayerService.skip();
+    await this._player.skip();
   }
 
   stop(): void {
-    musicPlayerService.stop();
+    this._player.stop();
   }
 
   override async initialize(): Promise<void> {
     // Watch the live game state (scene, clock, weather, combat) and push
-    // the refreshed vibe context into the service for similar-track matching.
+    // the refreshed vibe context into the player for similar-track matching.
     this.registerEffectRoot(() => {
       $effect(() => {
         // Touch reactive inputs so the effect re-runs on change.
-        void gameEngineService.playerScene;
-        void gameEngineService.currentMapId;
-        void timeService.gameHour;
-        void timeService.rainIntensity;
-        void gameOverlayService.activeOverlay;
-        musicPlayerService.setSceneContext(buildMusicSceneContext());
+        void this._context.playerScene;
+        void this._context.currentMapId;
+        void this._context.gameHour;
+        void this._context.rainIntensity;
+        void this._context.activeOverlay;
+        this._player.setSceneContext(this._context.buildSceneContext());
       });
     });
     await super.initialize();
   }
 }
 
-export const getMusicPlayerViewModel = (
-  options: BaseViewModelOptions,
+/**
+ * Builds a music-player ViewModel from explicit capabilities.
+ *
+ * Callers outside production (tests, sandboxes) use this directly; production
+ * code goes through `getMusicPlayerViewModel` in ./music_player_composition.ts.
+ */
+export const createMusicPlayerViewModel = (
+  options: MusicPlayerViewModelOptions,
 ): MusicPlayerViewModelInterface => MusicPlayerViewModel.create(options);

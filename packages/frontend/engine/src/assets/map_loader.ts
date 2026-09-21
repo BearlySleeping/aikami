@@ -10,6 +10,13 @@ import {
   type TerrainGrid,
 } from '../systems/terrain_grid.ts';
 import { jtonToTilemapData, parseJtonMap } from './jton_parser.ts';
+import {
+  extractProperties,
+  extractSpawnPoints,
+  parseObjectLayers,
+  readNumberField,
+  readStringField,
+} from './tilemap_object_layers.ts';
 
 // ---------------------------------------------------------------------------
 // Map Asset Loader — parses Tiled JSON tilemap format
@@ -516,16 +523,34 @@ export const TILED_FLIP_BITS = TILED_FLIP_MASK;
 
 /**
  * Validates and parses raw Tiled JSON into a {@link TilemapData} struct.
+ *
+ * Exported so callers that already hold parsed JSON — the unified scene
+ * loader's raw-JSON branch, the preview's in-memory manifest path — normalize
+ * through exactly the same rules the fetch-based {@link loadTilemap} applies.
+ * Casting raw Tiled JSON straight to `TilemapData` skips the split of
+ * `objectgroup` layers out of `layers` (and the flip-bit masking), so a map
+ * with spawn/transition objects would fail the scene adapter with
+ * `layer "spawns" has no band`.
+ *
+ * @param raw - Parsed Tiled JSON object.
+ * @param url - Source URL or label, used in error messages.
+ * @returns The normalized tilemap data.
+ */
+export const normalizeTilemap = (raw: unknown, url = '<inline>'): TilemapData =>
+  _parseTilemap(raw as Record<string, unknown>, url);
+
+/**
+ * Validates and parses raw Tiled JSON into a {@link TilemapData} struct.
  */
 const _parseTilemap = (raw: Record<string, unknown>, url: string): TilemapData => {
   if (!raw || typeof raw !== 'object') {
     throw new Error(`MapLoader: invalid JSON at "${url}"`);
   }
 
-  const width = _getNumber(raw, 'width', url);
-  const height = _getNumber(raw, 'height', url);
-  const tilewidth = _getNumber(raw, 'tilewidth', url);
-  const tileheight = _getNumber(raw, 'tileheight', url);
+  const width = readNumberField(raw, 'width', url);
+  const height = readNumberField(raw, 'height', url);
+  const tilewidth = readNumberField(raw, 'tilewidth', url);
+  const tileheight = readNumberField(raw, 'tileheight', url);
 
   if (width <= 0 || height <= 0) {
     throw new Error(`MapLoader: invalid dimensions (${width}×${height}) at "${url}"`);
@@ -599,7 +624,7 @@ const _parseTilemap = (raw: Record<string, unknown>, url: string): TilemapData =
   }
 
   // Extract objectgroup layers (spawn points for NPCs and props)
-  const objectLayers = _parseObjectLayers(rawLayers, url);
+  const objectLayers = parseObjectLayers(rawLayers, url);
 
   return {
     width,
@@ -618,15 +643,15 @@ const _parseTilemap = (raw: Record<string, unknown>, url: string): TilemapData =
  * Parses a single tileset entry from raw JSON.
  */
 const _parseTileset = (raw: Record<string, unknown>, url: string): TilemapTileset => {
-  const firstgid = _getNumber(raw, 'firstgid', url);
-  const name = _getString(raw, 'name', url);
-  const image = _getString(raw, 'image', url);
-  const imagewidth = _getNumber(raw, 'imagewidth', url);
-  const imageheight = _getNumber(raw, 'imageheight', url);
-  const tilewidth = _getNumber(raw, 'tilewidth', url);
-  const tileheight = _getNumber(raw, 'tileheight', url);
-  const columns = _getNumber(raw, 'columns', url);
-  const tilecount = _getNumber(raw, 'tilecount', url);
+  const firstgid = readNumberField(raw, 'firstgid', url);
+  const name = readStringField(raw, 'name', url);
+  const image = readStringField(raw, 'image', url);
+  const imagewidth = readNumberField(raw, 'imagewidth', url);
+  const imageheight = readNumberField(raw, 'imageheight', url);
+  const tilewidth = readNumberField(raw, 'tilewidth', url);
+  const tileheight = readNumberField(raw, 'tileheight', url);
+  const columns = readNumberField(raw, 'columns', url);
+  const tilecount = readNumberField(raw, 'tilecount', url);
 
   return {
     firstgid,
@@ -652,9 +677,9 @@ const _parseLayer = (
   expectedHeight: number,
   url: string,
 ): TilemapLayer => {
-  const name = _getString(raw, 'name', url);
-  const width = _getNumber(raw, 'width', url);
-  const height = _getNumber(raw, 'height', url);
+  const name = readStringField(raw, 'name', url);
+  const width = readNumberField(raw, 'width', url);
+  const height = readNumberField(raw, 'height', url);
   const visible = raw.visible !== false;
 
   if (width !== expectedWidth || height !== expectedHeight) {
@@ -737,156 +762,10 @@ const _parseLayer = (
 };
 
 /**
- * Extracts a required numeric field from a raw object.
+ * Re-exported so `map_loader.ts` remains the public entry point for spawn
+ * extraction — the implementation lives in `tilemap_object_layers.ts`.
  */
-const _getNumber = (obj: Record<string, unknown>, key: string, url: string): number => {
-  const value = obj[key];
-  if (typeof value !== 'number' || !Number.isFinite(value)) {
-    throw new Error(
-      `MapLoader: missing or invalid "${key}" field (got "${String(value)}") at "${url}"`,
-    );
-  }
-  return value;
-};
-
-/**
- * Extracts a required string field from a raw object.
- */
-const _getString = (obj: Record<string, unknown>, key: string, url: string): string => {
-  const value = obj[key];
-  if (typeof value !== 'string' || value.length === 0) {
-    throw new Error(
-      `MapLoader: missing or invalid "${key}" field (got "${String(value)}") at "${url}"`,
-    );
-  }
-  return value;
-};
-
-/**
- * Parses objectgroup layers from raw Tiled JSON into {@link ObjectLayer} entries.
- *
- * Returns `undefined` when no objectgroup layers are present —
- * this keeps TilemapData compact for maps without spawn data.
- */
-const _parseObjectLayers = (
-  rawLayers: Record<string, unknown>[],
-  url: string,
-): ObjectLayer[] | undefined => {
-  const objectGroups = rawLayers.filter((layer) => layer.type === 'objectgroup');
-
-  if (objectGroups.length === 0) {
-    return undefined;
-  }
-
-  return objectGroups.map((layer) => {
-    const name = _getString(layer, 'name', url);
-    const objects = layer.objects as Record<string, unknown>[] | undefined;
-
-    if (!Array.isArray(objects)) {
-      throw new Error(`MapLoader: objectgroup layer "${name}" has no "objects" array at "${url}"`);
-    }
-
-    return { name, objects };
-  });
-};
-
-/**
- * Extracts spawn points from all objectgroup layers in a parsed tilemap.
- *
- * Each Tiled object is mapped to a {@link SpawnPoint} with its type,
- * pixel position, and custom properties.
- *
- * @param tilemap - The parsed tilemap data.
- * @returns Flat array of spawn points, or empty array if no object layers exist.
- */
-export const extractSpawnPoints = (tilemap: TilemapData): SpawnPoint[] => {
-  if (!tilemap.objectLayers || tilemap.objectLayers.length === 0) {
-    return [];
-  }
-
-  const spawnPoints: SpawnPoint[] = [];
-
-  for (const objectLayer of tilemap.objectLayers) {
-    for (const object of objectLayer.objects) {
-      const spawnPoint = _parseSpawnPoint(object, objectLayer.name);
-      if (spawnPoint) {
-        spawnPoints.push(spawnPoint);
-      }
-    }
-  }
-
-  return spawnPoints;
-};
-
-/**
- * Parses a single Tiled object into a {@link SpawnPoint}.
- *
- * Tiled objects can define custom properties in two formats:
- * - An array of `{ name, type, value }` entries (Tiled 1.x)
- * - A flat `{ key: value }` object (some Tiled exporters)
- *
- * Objects without a `type` field are skipped (they carry no spawn logic).
- */
-const _parseSpawnPoint = (
-  object: Record<string, unknown>,
-  layerName: string,
-): SpawnPoint | undefined => {
-  const id = object.id;
-  if (id === undefined) {
-    logger.debug('_parseSpawnPoint:skipped-no-id', { layerName });
-    return undefined;
-  }
-
-  const type = object.type;
-  if (typeof type !== 'string' || type.length === 0) {
-    logger.debug('_parseSpawnPoint:skipped-no-type', { layerName, id });
-    return undefined;
-  }
-
-  const x = typeof object.x === 'number' ? object.x : 0;
-  const y = typeof object.y === 'number' ? object.y : 0;
-
-  const properties = _extractProperties(object);
-
-  return {
-    id: String(id),
-    type,
-    x,
-    y,
-    properties,
-  };
-};
-
-/**
- * Extracts custom properties from a Tiled object.
- *
- * Handles both array-style `[{ name, type, value }]` and
- * flat-object `{ key: value }` property formats.
- */
-const _extractProperties = (object: Record<string, unknown>): Record<string, unknown> => {
-  const raw = object.properties;
-
-  // Array format: [{ name: "key", type: "string", value: "val" }]
-  if (Array.isArray(raw)) {
-    const result: Record<string, unknown> = {};
-    for (const entry of raw) {
-      if (entry && typeof entry === 'object' && 'name' in entry && 'value' in entry) {
-        const { name, value } = entry as { name: string; value: unknown };
-        if (typeof name === 'string' && name.length > 0) {
-          result[name] = value;
-        }
-      }
-    }
-    return result;
-  }
-
-  // Flat object format: { key: value }
-  if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
-    return { ...(raw as Record<string, unknown>) };
-  }
-
-  return {};
-};
+export { extractSpawnPoints };
 
 // ---------------------------------------------------------------------------
 // String hashing — DJB2 for spawn/portal ID resolution (C-172)
@@ -937,7 +816,7 @@ export const extractSpawnPointEntities = (tilemap: TilemapData): SpawnPointEntit
         continue;
       }
 
-      const properties = _extractProperties(object);
+      const properties = extractProperties(object);
       const spawnId = properties.spawnId;
       if (typeof spawnId !== 'string' || spawnId.length === 0) {
         logger.debug('extractSpawnPointEntities:skipped-no-spawnId', {
@@ -1350,7 +1229,7 @@ const _parseTransitionZone = (object: Record<string, unknown>): TransitionZone |
     return undefined;
   }
 
-  const properties = _extractProperties(object);
+  const properties = extractProperties(object);
 
   const targetMap = properties.targetMap;
   if (typeof targetMap !== 'string' || targetMap.length === 0) {

@@ -12,6 +12,7 @@ import { visualizer } from 'rollup-plugin-visualizer';
 import { createLogger, defineConfig, type PluginOption } from 'vite';
 import devtoolsJson from 'vite-plugin-devtools-json';
 import { PORTS } from '../../../packages/shared/constants/src/index.ts';
+import { devIdentityPlugin } from '../../../scripts/src/lib/ops/dev_identity_plugin.ts';
 
 const projectDirectory = dirname(fileURLToPath(import.meta.url));
 const rootDirectory = resolve(projectDirectory, '../../..');
@@ -133,6 +134,14 @@ export default defineConfig(({ mode }) => {
         '@aikami/constants': toPackagesPath('shared/constants/src'),
         '@aikami/lpc': toPackagesPath('shared/lpc/src'),
         '@aikami/lpc/*': toPackagesPath('shared/lpc/src/lib/*'),
+        '@aikami/frontend/services/base': toPackagesPath('frontend/services/src/base'),
+        '@aikami/frontend/services/r2_storage': toPackagesPath('frontend/services/src/r2_storage'),
+        '@aikami/frontend/services/backup_client': toPackagesPath(
+          'frontend/services/src/backup_client',
+        ),
+        '@aikami/frontend/services/router': toPackagesPath('frontend/services/src/router'),
+        '@aikami/frontend/services/preference': toPackagesPath('frontend/services/src/preference'),
+        '@aikami/frontend/services/dialog': toPackagesPath('frontend/services/src/dialog'),
         '@aikami/frontend/services': toPackagesPath('frontend/services/src'),
         '@aikami/frontend/services/*': toPackagesPath('frontend/services/src/lib/*'),
         '@aikami/logger': toPackagesPath('shared/logger/src'),
@@ -159,6 +168,9 @@ export default defineConfig(({ mode }) => {
         '@aikami/utils': toPackagesPath('shared/utils/src'),
       },
     }) as PluginOption,
+    // C-471 AC-2 / brief P1: dev-only identity endpoint so the pipeline's
+    // readiness probe can prove THIS checkout answered. Never in a build.
+    devIdentityPlugin({ service: 'hub' }) as PluginOption,
   ];
 
   if (mode === 'development' && process.env.DEBUG === '1') {

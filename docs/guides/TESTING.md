@@ -1,19 +1,21 @@
 # Testing Strategy
 
-Testing approach for the Aikami monorepo.
+Testing approach for the Aikami monorepo. For the contributor-facing short
+version see [CONTRIBUTING testing](../../CONTRIBUTING.md#testing); for the CI
+pipelines see [`CI_CD.md`](CI_CD.md).
 
 ## Test Layers
 
 ```
 ┌──────────────────────────────────┐
-│    Blackbox (E2E)                │  scripts/src/test_blackbox/
-│    Hub API + Client + Playwright │
+│    E2E / visual (Playwright)     │  apps/e2e/tests, apps/e2e/src/visual
+│    Production routes + game      │
 ├──────────────────────────────────┤
-│    Integration                   │  Per-app tests/
-│    D1 repositories, API routes   │
+│    Integration                   │  per-project tests/ (D1 repos, API routes)
 ├──────────────────────────────────┤
-│    Unit                          │  Co-located *.test.ts
-│    Vitest, schema validation     │
+│    Unit                          │  co-located *.test.ts, `bun test`
+└──────────────────────────────────┘
+│    Blackbox                      │  scripts/src/lib/test_blackbox/
 └──────────────────────────────────┘
 ```
 
@@ -21,93 +23,56 @@ Testing approach for the Aikami monorepo.
 
 **Location:** `src/**/*.test.ts` (co-located with source)
 
-**Runner:** `bun test` (Bun's built-in runner) across the monorepo
-
-**What's tested:**
-- TypeBox schema validation (packages/shared/schemas/src/lib/*.test.ts)
-- Business logic validation
-- Utility functions
-- AI response parsing
-
-**Coverage:** Partial — the schemas package has 15+ test files; backend coverage is thinner.
+**Runner:** `bun test` (Bun's built-in runner), invoked through Moon so that
+prerequisites and path mappings are set up:
 
 ```bash
-bun run test              # All unit tests via moon
-bun run moon run schemas:test  # Just schemas
+bun moon run schemas:test      # one project
+bun moon run client:test       # client
+bun moon run hub:test          # hub — runs svelte-kit sync first (see below)
+bun run test                   # every project (slow)
 ```
+
+> 🔴 Do **not** run a bare `bun test <file>` in `apps/frontend/hub` — its
+> `tsconfig.test.json` extends the generated `.svelte-kit/tsconfig.json`, so a
+> bare run sees no path mappings and fails with a misleading module error. Use
+> `bun moon run hub:test`.
+
+**What's tested:** TypeBox schema validation, business logic, utility functions,
+AI response parsing, and engine systems (the engine has a large unit suite).
 
 ## Integration Tests
 
-**Location:** Per-project `tests/` directories
+**Location:** per-project `tests/` directories.
 
-**Hub API tests:**
-```bash
-bun test apps/frontend/hub/src/lib
-```
-- Elysia route tests run against a mock D1 binding
-- Better Auth is exercised end-to-end through its real HTTP handler
-  (`packages/backend/auth/tests/better_auth.test.ts`)
+- Hub API — Elysia route tests against a mocked D1 binding; Better Auth is
+  exercised end-to-end through its real handler
+  (`packages/backend/auth/tests/better_auth.test.ts`).
+- Database — D1 schema/repository tests under
+  `packages/backend/database/tests/`.
 
-**Database tests:**
-```bash
-bun test packages/backend/database/tests/
-```
+## E2E and Visual Tests
 
-## Blackbox (E2E) Tests
+**Location:** `apps/e2e/tests/` (Playwright specs) and `apps/e2e/src/visual/`
+(AI visual suites).
 
-**Runner:** `scripts/src/test_blackbox/run.ts`
+E2E exercises production routes (POM-based) and the game loop. Visual suites
+compare rendered output. Evidence for appearance-related acceptance criteria
+belongs here, not in unit mocks.
 
-**Architecture:**
-```
-scripts/src/test_blackbox/
-├── run.ts                     # Entry point
-├── emulator_manager.ts        # Firestack emulator lifecycle
-├── dev_server_manager.ts      # Client dev server lifecycle
-├── test_runner.ts             # Suite execution
-├── reporter.ts                # Terminal + JSON reports
-└── suites/
-    ├── schema_check.ts        # TypeScript compilation check
-    ├── functions.api.ts       # Functions emulator health
-    └── client.e2e.ts             # Playwright browser tests
-```
+## Blackbox Tests
 
-**Client Playwright Tests** (`apps/frontend/client/tests/`):
-- `emulator-login.spec.ts` — auth flow with emulator
-- `basic.spec.ts` — core Client functionality
-- `chat.spec.ts`, `chat-sending.spec.ts`, `chat-store.spec.ts` — chat features
-- `onboarding.spec.ts` — new user flow
-- `i18n.spec.ts` — internationalization
-- `character-card.spec.ts` — character display
+**Runner:** `scripts/src/lib/test_blackbox/run.ts` (`bun run test:blackbox`).
 
-**Running:**
-```bash
-bun run test:blackbox                    # All suites
-bun run test:blackbox schema-check       # Just schemas
-bun run test:blackbox client                # Just Client
-bun run test:blackbox --no-cross-service # Skip cross-service
-```
-
-**CI mode:**
-```bash
-CI=true bun run test:blackbox
-```
-
-## Test Status
-
-| Layer | Coverage | Status |
-|-------|----------|--------|
-| Unit (schemas) | 15+ test files | ✅ Active |
-| Unit (functions) | 1 test file | ⚠️ Minimal |
-| Unit (Client) | None | ❌ Missing |
-| Unit (game engine) | Some (string registry, etc.) | ⚠️ Partial — packages/frontend/engine |
-| Integration (hub API + D1) | Configured | ✅ Active |
-| Blackbox (schema-check) | Working | ✅ Active |
-| Blackbox (functions) | Health probe | ⚠️ Basic |
-| Blackbox (Client Playwright) | 8 spec files | ✅ Active |
+Manages the dev-server / Docker / herdr service lifecycle for a full integration
+pass. Suites live under `scripts/src/lib/test_blackbox/suites/`. `CI=true`
+selects CI behavior.
 
 ## Known Test Issues
 
-1. **Schema test type errors**: Pre-existing TS errors in test files (unused vars, strict null checks). Tests pass at runtime but `tsc` reports errors.
-2. **Client svelte-check warnings**: Accessibility warnings in Client components, pre-existing.
-3. **No Client unit tests**: ViewModels and services lack unit test coverage.
-4. **Functions test coverage**: Only 1 test file for 5 controllers.
+- **Pre-existing client/hub `test:unit` failures** — tracked as a TODO seed
+  (C-539) with a note to re-measure before quoting.
+- **Client svelte-check accessibility warnings** — pre-existing; see
+  [`../architecture/limitations.md`](../architecture/limitations.md).
+- **No Playwright visual regression baseline** for every surface — the visual
+  suites cover declared cases, not a whole-app screenshot diff.

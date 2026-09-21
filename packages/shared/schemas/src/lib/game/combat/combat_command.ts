@@ -1,0 +1,218 @@
+// packages/shared/schemas/src/lib/game/combat/combat_command.ts
+//
+// Bounded Combat-01 command vocabulary — explicit discriminated variants,
+// never a patch object (architecture §8.4).
+//
+// `interact`, `disengage` and `respondToReaction` are explicitly deferred
+// (interactions → Combat-07, reactions → Combat-08). The `useAbility` variant
+// plus a `basic_melee` catalog entry is the "basic attack".
+//
+// Contract: C-509 AC-1
+
+import Type, { type Static } from 'typebox';
+import { COMBAT_ENVIRONMENT_BOUNDS } from './combat_environment';
+import { GridPointSchema } from './combat_grid';
+import {
+  COMBAT_REACTION_BOUNDS,
+  EncounterRunIdSchema,
+  ReactionChoiceSchema,
+  ReactionChoiceSourceSchema,
+} from './combat_reaction';
+
+// ---------------------------------------------------------------------------
+// Command variants — discriminated on `kind`
+// ---------------------------------------------------------------------------
+
+/** Moves along a contiguous, in-bounds, unblocked cell path. */
+export const CombatMoveCommandSchema = Type.Object(
+  {
+    kind: Type.Literal('move'),
+    combatantId: Type.String({ minLength: 1 }),
+    path: Type.Array(GridPointSchema, {
+      minItems: 1,
+      description: 'Ordered contiguous cells; each step is adjacent to the previous',
+    }),
+  },
+  { additionalProperties: false },
+);
+
+export type CombatMoveCommand = Static<typeof CombatMoveCommandSchema>;
+
+/** Uses a catalogued ability against zero or more resolved targets. */
+export const CombatUseAbilityCommandSchema = Type.Object(
+  {
+    kind: Type.Literal('useAbility'),
+    combatantId: Type.String({ minLength: 1 }),
+    abilityId: Type.String({ minLength: 1 }),
+    targetIds: Type.Array(Type.String({ minLength: 1 }), {
+      description: 'Resolved combatantIds; sorted+deduped during normalization',
+    }),
+  },
+  { additionalProperties: false },
+);
+
+export type CombatUseAbilityCommand = Static<typeof CombatUseAbilityCommandSchema>;
+
+/** Spends the action to defend. Emits no event in Combat-01. */
+export const CombatDefendCommandSchema = Type.Object(
+  {
+    kind: Type.Literal('defend'),
+    combatantId: Type.String({ minLength: 1 }),
+  },
+  { additionalProperties: false },
+);
+
+export type CombatDefendCommand = Static<typeof CombatDefendCommandSchema>;
+
+/** Spends the action to hold. Emits no event in Combat-01. */
+export const CombatWaitCommandSchema = Type.Object(
+  {
+    kind: Type.Literal('wait'),
+    combatantId: Type.String({ minLength: 1 }),
+  },
+  { additionalProperties: false },
+);
+
+export type CombatWaitCommand = Static<typeof CombatWaitCommandSchema>;
+
+/** Ends the actor's turn and advances the initiative index. */
+export const CombatEndTurnCommandSchema = Type.Object(
+  {
+    kind: Type.Literal('endTurn'),
+    combatantId: Type.String({ minLength: 1 }),
+  },
+  { additionalProperties: false },
+);
+
+export type CombatEndTurnCommand = Static<typeof CombatEndTurnCommandSchema>;
+
+/**
+ * Uses one authored affordance on one authored object (Combat-07).
+ *
+ * The command names stable authored ids only — never a numeric mechanic, a
+ * dice value, an effect definition or a state patch. `targetObjectId` is
+ * required and nullable: it names the second object an approach uses (e.g. the
+ * oil pool a brazier is tipped into), or is `null` when no target exists.
+ */
+export const CombatInteractWithObjectCommandSchema = Type.Object(
+  {
+    kind: Type.Literal('interactWithObject'),
+    combatantId: Type.String({ minLength: 1 }),
+    objectId: Type.String({ minLength: 1, maxLength: COMBAT_ENVIRONMENT_BOUNDS.idChars }),
+    affordanceId: Type.String({ minLength: 1, maxLength: COMBAT_ENVIRONMENT_BOUNDS.idChars }),
+    targetObjectId: Type.Union([
+      Type.String({ minLength: 1, maxLength: COMBAT_ENVIRONMENT_BOUNDS.idChars }),
+      Type.Null(),
+    ]),
+  },
+  { additionalProperties: false },
+);
+
+export type CombatInteractWithObjectCommand = Static<typeof CombatInteractWithObjectCommandSchema>;
+
+/**
+ * Declares a retreat along a legal movement path (Combat-08).
+ *
+ * Retreat is NOT a free teleport: it is ordinary validated movement that the
+ * actor declares as a withdrawal. It is legal only when the encounter's
+ * authored morale rules offer a `retreat` response AND the actor's mechanical
+ * morale has reached the break threshold. The path must not increase the
+ * actor's distance to the nearest authored exit-zone cell, so a "retreat"
+ * cannot wander away from the exit.
+ *
+ * A retreating actor still on the battlefield remains a participant until it
+ * reaches an exit-zone cell (`escaped`) or surrenders.
+ */
+export const CombatRetreatCommandSchema = Type.Object(
+  {
+    kind: Type.Literal('retreat'),
+    combatantId: Type.String({ minLength: 1 }),
+    path: Type.Array(GridPointSchema, {
+      minItems: 1,
+      description: 'Ordered contiguous cells; each step is adjacent to the previous',
+    }),
+  },
+  { additionalProperties: false },
+);
+
+export type CombatRetreatCommand = Static<typeof CombatRetreatCommandSchema>;
+
+/**
+ * Ends the actor's hostile participation without inventing damage (Combat-08).
+ *
+ * Legal only when the authored morale rules offer a `surrender` response AND
+ * the actor's morale has reached the break threshold. HP, identity and the
+ * initiative slot are preserved; the actor becomes non-hostile and ineligible
+ * for ordinary attack targeting for the remainder of the encounter.
+ */
+export const CombatSurrenderCommandSchema = Type.Object(
+  {
+    kind: Type.Literal('surrender'),
+    combatantId: Type.String({ minLength: 1 }),
+  },
+  { additionalProperties: false },
+);
+
+export type CombatSurrenderCommand = Static<typeof CombatSurrenderCommandSchema>;
+
+/**
+ * Resolves one open reaction window (Combat-08).
+ *
+ * The command carries window identity AND version plus the encounter-run
+ * identity, so a duplicate or stale choice is rejected before any reaction
+ * resource or RNG is spent. `source` records how the choice came to exist —
+ * a player decision, a pinned AI policy, or an optional player-enabled timer.
+ */
+export const CombatResolveReactionCommandSchema = Type.Object(
+  {
+    kind: Type.Literal('resolveReaction'),
+    /** The reactor deciding. Must be the window's current reactor. */
+    combatantId: Type.String({ minLength: 1 }),
+    /** Encounter-run identity the worker revalidates. */
+    encounterRunId: EncounterRunIdSchema,
+    windowId: Type.String({ minLength: 1, maxLength: COMBAT_REACTION_BOUNDS.idChars }),
+    windowVersion: Type.Integer({
+      minimum: 1,
+      maximum: COMBAT_REACTION_BOUNDS.maxVersion,
+    }),
+    choice: ReactionChoiceSchema,
+    source: ReactionChoiceSourceSchema,
+  },
+  { additionalProperties: false },
+);
+
+export type CombatResolveReactionCommand = Static<typeof CombatResolveReactionCommandSchema>;
+
+/**
+ * Discriminated union of every Combat-01/07/08 command.
+ * Unknown `kind` values and extra fields fail validation.
+ */
+export const CombatCommandSchema = Type.Union([
+  CombatMoveCommandSchema,
+  CombatUseAbilityCommandSchema,
+  CombatDefendCommandSchema,
+  CombatWaitCommandSchema,
+  CombatEndTurnCommandSchema,
+  CombatInteractWithObjectCommandSchema,
+  CombatRetreatCommandSchema,
+  CombatSurrenderCommandSchema,
+  CombatResolveReactionCommandSchema,
+]);
+
+export type CombatCommand = Static<typeof CombatCommandSchema>;
+
+/** The `kind` discriminator values of {@link CombatCommandSchema}. */
+export type CombatCommandKind = CombatCommand['kind'];
+
+/** Every Combat-01 command kind, in canonical order. */
+export const COMBAT_COMMAND_KINDS: readonly CombatCommandKind[] = [
+  'move',
+  'useAbility',
+  'defend',
+  'wait',
+  'endTurn',
+  'interactWithObject',
+  'retreat',
+  'surrender',
+  'resolveReaction',
+] as const;

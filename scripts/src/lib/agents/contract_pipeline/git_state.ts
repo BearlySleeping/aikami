@@ -23,10 +23,11 @@ const gitLines = (options: { cwd: string; args: string[] }): string[] => {
 };
 
 /** Return all tracked and untracked paths currently changed from HEAD. */
-export const changedPaths = (cwd: string): string[] => {
+export const changedPaths = (cwd: string, options?: { excludePaths?: string[] }): string[] => {
   const t = gitLines({ cwd, args: ['diff', '--name-only', 'HEAD'] });
   const u = gitLines({ cwd, args: ['ls-files', '--others', '--exclude-standard'] });
-  return [...new Set([...t, ...u])].sort();
+  const excluded = new Set(options?.excludePaths ?? []);
+  return [...new Set([...t, ...u])].filter((path) => !excluded.has(path)).sort();
 };
 
 const fileHash = (options: { cwd: string; path: string }): string => {
@@ -54,9 +55,12 @@ export const contentHash = (path: string): string => {
 };
 
 /** Build a content-aware snapshot of the current Git working state. */
-export const captureGitState = (cwd: string): GitStateSnapshot => {
+export const captureGitState = (
+  cwd: string,
+  options?: { excludePaths?: string[] },
+): GitStateSnapshot => {
   const files: Record<string, string> = {};
-  for (const path of changedPaths(cwd)) {
+  for (const path of changedPaths(cwd, options)) {
     files[path] = fileHash({ cwd, path });
   }
   return { files, fingerprint: fingerprintFiles(files) };

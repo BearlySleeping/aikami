@@ -10,10 +10,11 @@ import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
-} from '@aikami/frontend/services';
-import { textGenerationService, worldStateService } from '$services';
+} from '@aikami/frontend/services/base';
 import type { SessionSummary } from '$types';
+import { textGenerationService } from '../ai/text_generation_service.svelte.ts';
 import { registerSerializable, type SerializableService } from '../game/serializable_service';
+import { worldStateService } from '../game/world_state_service.svelte.ts';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -193,7 +194,8 @@ class SessionSummaryService
       schemaName: 'SessionSummary',
       prompt,
       systemPrompt: 'Summarize RPG sessions concisely. JSON only. No markdown, no explanations.',
-      // Low temperature for focused summarization
+      // Routes to the summarization role and its low-temperature token budget.
+      task: 'summarization',
     })) as {
       synopsis: string;
       keyEvents: string[];

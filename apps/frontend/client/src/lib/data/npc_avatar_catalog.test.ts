@@ -1,5 +1,7 @@
 // apps/frontend/client/src/lib/data/npc_avatar_catalog.test.ts
+
 import { describe, expect, test } from 'bun:test';
+import { existsSync } from 'node:fs';
 import {
   NPC_AVATAR_SPRITE_MAP,
   PERSONA_AVATAR_SPRITE_MAP,
@@ -25,6 +27,17 @@ const SPRITE_PORTRAIT_PATHS: Record<string, string> = {
   troll: 'game-data/portraits/npc/troll/neutral.webp',
 };
 
+/**
+ * The on-disk game-data catalog (portraits, audio_tracks.json) is gitignored
+ * and fetched on demand from R2 (C-435 debundle), so a fresh checkout / CI
+ * has no portrait files. These catalog-integrity tests verify real shipped
+ * assets where game-data is present (local tooling checkouts) and skip
+ * cleanly when it is absent rather than failing a PR that never had it.
+ */
+const hasGameDataCatalog = existsSync(
+  new URL('../../../static/game-data/portraits/npc/', import.meta.url),
+);
+
 // ---------------------------------------------------------------------------
 // Emberwatch coverage — every character must resolve to a real portrait
 // ---------------------------------------------------------------------------
@@ -37,21 +50,24 @@ describe('npc_avatar_catalog — emberwatch coverage', () => {
     }
   });
 
-  test('every emberwatch NPC portrait file exists on disk (game-data catalog)', async () => {
-    for (const npcId of EMBERWATCH_NPC_IDS) {
-      const _url = resolveNpcAvatarUrl({ npcId });
-      // When the asset store is unavailable, the fallback URL is /game-data/portraits/npc/{sprite}/{expression}.webp
-      // Check the game-data catalog path instead
-      const sprite = NPC_AVATAR_SPRITE_MAP[npcId];
-      const expectedPath = SPRITE_PORTRAIT_PATHS[sprite];
-      if (expectedPath) {
-        await expect(
-          Bun.file(new URL(`../../../static/${expectedPath}`, import.meta.url)).exists(),
-          `portrait file ${expectedPath} should exist for NPC ${npcId} (sprite ${sprite})`,
-        ).resolves.toBe(true);
+  test.skipIf(!hasGameDataCatalog)(
+    'every emberwatch NPC portrait file exists on disk (game-data catalog)',
+    async () => {
+      for (const npcId of EMBERWATCH_NPC_IDS) {
+        const _url = resolveNpcAvatarUrl({ npcId });
+        // When the asset store is unavailable, the fallback URL is /game-data/portraits/npc/{sprite}/{expression}.webp
+        // Check the game-data catalog path instead
+        const sprite = NPC_AVATAR_SPRITE_MAP[npcId];
+        const expectedPath = SPRITE_PORTRAIT_PATHS[sprite];
+        if (expectedPath) {
+          await expect(
+            Bun.file(new URL(`../../../static/${expectedPath}`, import.meta.url)).exists(),
+            `portrait file ${expectedPath} should exist for NPC ${npcId} (sprite ${sprite})`,
+          ).resolves.toBe(true);
+        }
       }
-    }
-  });
+    },
+  );
 
   test('no emberwatch NPC resolves to the LPC body spritesheet fallback', () => {
     for (const npcId of EMBERWATCH_NPC_IDS) {
@@ -73,17 +89,20 @@ describe('npc_avatar_catalog — catalog integrity', () => {
     }
   });
 
-  test('every mapped NPC sprite has a neutral portrait in the game-data catalog', async () => {
-    for (const [npcId, sprite] of Object.entries(NPC_AVATAR_SPRITE_MAP)) {
-      const expectedPath = SPRITE_PORTRAIT_PATHS[sprite];
-      if (expectedPath) {
-        await expect(
-          Bun.file(new URL(`../../../static/${expectedPath}`, import.meta.url)).exists(),
-          `neutral.webp for sprite ${sprite} (NPC ${npcId}) at ${expectedPath}`,
-        ).resolves.toBe(true);
+  test.skipIf(!hasGameDataCatalog)(
+    'every mapped NPC sprite has a neutral portrait in the game-data catalog',
+    async () => {
+      for (const [npcId, sprite] of Object.entries(NPC_AVATAR_SPRITE_MAP)) {
+        const expectedPath = SPRITE_PORTRAIT_PATHS[sprite];
+        if (expectedPath) {
+          await expect(
+            Bun.file(new URL(`../../../static/${expectedPath}`, import.meta.url)).exists(),
+            `neutral.webp for sprite ${sprite} (NPC ${npcId}) at ${expectedPath}`,
+          ).resolves.toBe(true);
+        }
       }
-    }
-  });
+    },
+  );
 
   test('every mapped persona sprite is registered with expressions', () => {
     for (const [personaId, sprite] of Object.entries(PERSONA_AVATAR_SPRITE_MAP)) {
@@ -100,25 +119,31 @@ describe('npc_avatar_catalog — catalog integrity', () => {
     }
   });
 
-  test('every mapped player class sprite has a neutral portrait in the game-data catalog', async () => {
-    for (const [classId, sprite] of Object.entries(PLAYER_CLASS_AVATAR_SPRITE_MAP)) {
-      const expectedPath = SPRITE_PORTRAIT_PATHS[sprite];
-      if (expectedPath) {
-        await expect(
-          Bun.file(new URL(`../../../static/${expectedPath}`, import.meta.url)).exists(),
-          `neutral.webp for sprite ${sprite} (class ${classId}) at ${expectedPath}`,
-        ).resolves.toBe(true);
+  test.skipIf(!hasGameDataCatalog)(
+    'every mapped player class sprite has a neutral portrait in the game-data catalog',
+    async () => {
+      for (const [classId, sprite] of Object.entries(PLAYER_CLASS_AVATAR_SPRITE_MAP)) {
+        const expectedPath = SPRITE_PORTRAIT_PATHS[sprite];
+        if (expectedPath) {
+          await expect(
+            Bun.file(new URL(`../../../static/${expectedPath}`, import.meta.url)).exists(),
+            `neutral.webp for sprite ${sprite} (class ${classId}) at ${expectedPath}`,
+          ).resolves.toBe(true);
+        }
       }
-    }
-  });
+    },
+  );
 
-  test('placeholder avatar file exists in game-data catalog', async () => {
-    await expect(
-      Bun.file(
-        new URL('../../../static/game-data/portraits/npc/placeholder.svg', import.meta.url),
-      ).exists(),
-    ).resolves.toBe(true);
-  });
+  test.skipIf(!hasGameDataCatalog)(
+    'placeholder avatar file exists in game-data catalog',
+    async () => {
+      await expect(
+        Bun.file(
+          new URL('../../../static/game-data/portraits/npc/placeholder.svg', import.meta.url),
+        ).exists(),
+      ).resolves.toBe(true);
+    },
+  );
 });
 
 // ---------------------------------------------------------------------------

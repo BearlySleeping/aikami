@@ -2,12 +2,14 @@
 //
 // The pipeline's stand-in for the pre-commit hook.
 //
-// 🔴 Why this exists. Every commit path in the contract pipeline passes
-// `--no-verify` — `commitAll` (agents/git_worktree.ts) and the per-stage
-// checkpoint in .pi/extensions/contract_pipeline.ts. That is deliberate:
-// checkpoints must stay fast, and ops/pre_commit.ts does docs/contract-sync
-// work that must not run inside a worktree. The consequence, though, is that
-// NOTHING in a pipeline run ever runs lint, format or typecheck. The
+// 🔴 Why this exists. Contract pipeline checkpoints normally pass
+// `--no-verify` — through `commitAll` (agents/git_worktree.ts) and the
+// per-stage checkpoint in .pi/extensions/contract_pipeline.ts. That is
+// deliberate: checkpoints must stay fast, and ops/pre_commit.ts does
+// docs/contract-sync work that must not run inside a worktree. The red-gate
+// :fix sweep is the exception and explicitly opts into hook verification.
+// Without this publication gate, though, the normal pipeline path would never
+// run lint, format or typecheck. The
 // `node_modules/.bin` symlink in herdr/worktree.ts makes the hook *able* to
 // run in a worktree, but it only fires for an agent that runs `git commit`
 // itself — and the agents don't; the orchestrator sweeps their edits up.
@@ -21,11 +23,14 @@
 // So the check moves to the one place it belongs: once, in the worktree,
 // after the verifier passes and before the branch is pushed.
 //
-// 🔴 Node-only. No `Bun.*`, no import of cli_utils.ts — this module is
-// reachable from orchestrator.ts, which .pi/extensions/* loads under Node.
-// See scripts/src/lib/env/runtime_boundary.test.ts.
+// 🔴 `node:`-only. No `Bun.*`, no import of cli_utils.ts — this module is
+// exercised from the contract pipeline, which pi reaches through the Bun
+// bridge (scripts/src/lib/pi/); keeping it dependency-light keeps the bridge
+// invocation cheap.
 import { spawnSync } from 'node:child_process';
+import { isWholeRepoGuardTask, validateConstituentTasks } from '../../ops/guards/registry.ts';
 import { reportInfraIssue } from '../../ops/infra_report.ts';
+import type { GateOutcome } from './gate_outcome.ts';
 import { getRequiredChecks } from './validation_policy.ts';
 
 /** Cap on the diagnostics carried into the review prompt. */
@@ -34,49 +39,68 @@ export const MAX_GATE_OUTPUT_CHARS = 4000;
 /**
  * Outcome of running the pipeline's pre-push validation gate.
  *
- * AC-4: Failed or unavailable checks prevent promotion.
- * The `unavailable` field distinguishes "checks ran and passed" from
- * "checks could not be run" — the latter is an infrastructure issue that
- * must still block promotion, not silently convert to ok.
+ * 🔴 One outcome vocabulary (C-474-family brief, P1). `outcome` is the single
+ * source of truth:
+ *
+ * | outcome       | meaning                                            | promotion |
+ * |---------------|----------------------------------------------------|-----------|
+ * | `passed`      | ran; every required check passed                   | allowed   |
+ * | `failed`      | ran; the code is red                               | blocked (authorization required) |
+ * | `unavailable` | could not run (missing moon, bad base, spawn fail)  | blocked — never green |
+ * | `cancelled`   | interrupted before a verdict                        | blocked   |
+ *
+ * `ran` and `ok` are retained as derived, read-only views for existing
+ * callers and logs. They are computed from `outcome`, never set independently:
+ * `ran === (outcome === 'passed' || outcome === 'failed')` and
+ * `ok === (outcome === 'passed')`.
+ *
+ * 🔴 Before this change, an infrastructure failure returned `ok: true` and the
+ * gate was treated as green. Unknown is now distinct from passed: it reports
+ * `unavailable`, which blocks promotion and is surfaced as an infra issue.
  */
 export type PrePushGateResult = {
+  /** The single verdict. */
+  outcome: GateOutcome;
   /**
-   * Whether the gate actually reached a verdict. False means the gate could
-   * not run (moon missing, base ref unresolvable) — reported as an infra
-   * issue and treated as `ok`, because a broken gate must never block a run.
+   * Derived: whether the gate actually reached a verdict (`passed`/`failed`).
+   * False for `unavailable`/`cancelled`. Kept for logs and legacy callers.
    */
   ran: boolean;
-  /**
-   * True when `:validate` is green, or when the gate could not run.
-   *
-   * AC-4: When checks are unavailable (could not run but infrastructure is
-   * fine), this is false — unavailable checks must prevent promotion.
-   */
+  /** Derived: true only when `outcome === 'passed'`. */
   ok: boolean;
-  /**
-   * True when the gate ran but one or more required checks could not be
-   * executed (e.g. moon binary found but task definition missing).
-   * AC-4: unavailable checks prevent promotion.
-   */
-  unavailable?: boolean;
-  /** Combined stdout+stderr of the failing step, truncated. Empty when ok. */
+  /** Combined stdout+stderr of the failing step, truncated. Empty when passed. */
   output: string;
 };
+
+/** Build a `PrePushGateResult` from the one authoritative `outcome`. */
+const gateResult = (options: { outcome: GateOutcome; output?: string }): PrePushGateResult => ({
+  outcome: options.outcome,
+  ran: options.outcome === 'passed' || options.outcome === 'failed',
+  ok: options.outcome === 'passed',
+  output: options.output ?? '',
+});
 
 /**
  * A command runner, injectable so tests never shell out.
  * Returns the exit status plus combined output.
  */
-export type GateRunner = (options: { command: string; args: string[]; cwd: string }) => {
+export type GateRunner = (options: {
+  command: string;
+  args: string[];
+  cwd: string;
+  /** Extra environment for this step only. */
+  env?: Record<string, string>;
+}) => {
   status: number | null;
   output: string;
   spawnFailed: boolean;
 };
 
-const defaultRunner: GateRunner = ({ command, args, cwd }) => {
+const defaultRunner: GateRunner = ({ command, args, cwd, env }) => {
   const result = spawnSync(command, args, {
     cwd,
     encoding: 'utf8',
+    env: env === undefined ? process.env : { ...process.env, ...env },
     // Windows: `bun` may resolve through a .cmd shim.
     shell: process.platform === 'win32',
     windowsHide: true,
@@ -94,24 +118,23 @@ const truncate = (text: string, limit: number = MAX_GATE_OUTPUT_CHARS): string =
     : `${text.slice(0, limit)}\n… (${text.length - limit} more characters truncated)`;
 
 /**
- * Named tasks that make up the `:validate` aggregate (see
- * `.moon/tasks/all.yml`'s `validate` task and `scripts/moon.yml`'s `guard`
- * task). Kept in sync by hand — these are stable structural targets, not
- * derived from the affected-file graph, so there is no single source to
- * read them from at runtime without shelling out to `moon` again.
+ * Named tasks that make up the `:validate` aggregate.
+ *
+ * 🔴 DERIVED from the guard registry, not maintained here. This list used to be
+ * hand-written and had already drifted: it knew `guard-mvvm-conventions`,
+ * `guard-service-conventions`, `guard-image-component`, `guard-data-plane` and
+ * `guard-type-safety`, but not `guard-orphaned-capability`,
+ * `guard-test-boundary`, `guard-view-model-composition`,
+ * `guard-source-file-size`, `guard-cognitive-complexity` or
+ * `guard-policy-diff`. A guard could therefore fail `moon run :validate` and
+ * the attribution pass below would not know it existed, handing the review
+ * captain an opaque blob instead of a named check.
+ *
+ * `scripts/src/lib/ops/__tests__/guard_registry.test.ts` pins the registry
+ * against `.moon/tasks/all.yml`'s `validate` task and
+ * `.moon/tasks/scripts.yml`'s `guard` task, so the three cannot diverge again.
  */
-const VALIDATE_CONSTITUENT_TASKS = [
-  { task: ':lint', label: 'Lint' },
-  { task: ':format', label: 'Format' },
-  { task: ':typecheck', label: 'Typecheck' },
-  { task: 'scripts:guard-mvvm-conventions', label: 'Guard: MVVM conventions' },
-  { task: 'scripts:guard-service-conventions', label: 'Guard: service conventions' },
-  { task: 'scripts:guard-service-mock-coverage', label: 'Guard: service mock coverage' },
-  { task: 'scripts:guard-image-component', label: 'Guard: image component' },
-  { task: 'scripts:guard-data-plane', label: 'Guard: data plane' },
-  { task: 'scripts:guard-type-safety', label: 'Guard: type safety' },
-  { task: 'scripts:validate-agent-guidance', label: 'Agent guidance' },
-] as const;
+const VALIDATE_CONSTITUENT_TASKS = validateConstituentTasks();
 
 const GATE_SETUP_FAILURE_PATTERNS = [
   /(?:script|module) not found ["'`]?moon\b/i,
@@ -147,12 +170,21 @@ const attributeValidateFailure = (options: {
   affected: readonly string[];
   fallback: string;
 }): string => {
+  const baseArg = options.affected.find((arg) => arg.startsWith('--base='));
+  const base = baseArg?.slice('--base='.length);
   const failing: { label: string; task: string; output: string }[] = [];
   for (const { task, label } of VALIDATE_CONSTITUENT_TASKS) {
+    // A whole-repo guard must be re-run without `--affected`: its inputs span
+    // the repository, and gating it on the affected graph is exactly the bug
+    // that let oversized files reach main (see .github/workflows/pr-checks.yml).
+    const args = isWholeRepoGuardTask(task)
+      ? ['moon', 'run', task]
+      : ['moon', 'run', task, ...options.affected];
     const result = options.run({
       command: 'bun',
-      args: ['moon', 'run', task, ...options.affected],
+      args,
       cwd: options.cwd,
+      ...(base === undefined ? {} : { env: { AIKAMI_GUARD_BASE_REF: base } }),
     });
     // Best-effort: a spawn hiccup or an unrelated setup failure on the
     // re-run must not hide the original diagnostic — just skip attributing it.
@@ -173,6 +205,68 @@ const attributeValidateFailure = (options: {
     .map(({ label, task, output }) => `### ${label} (${task})\n${truncate(output, perTaskBudget)}`)
     .join('\n\n');
   return truncate(attributed);
+};
+
+/** One step in the gate: a labelled moon invocation and whether it is a verdict. */
+type GateStep = {
+  label: string;
+  args: readonly string[];
+  verdict: boolean;
+  env?: Record<string, string>;
+};
+
+/**
+ * Builds the ordered gate steps for a profile.
+ *
+ * Order matters: `:fix` first (it mutates), then the read-only checks, then the
+ * sanctioned contraction, and `:validate` last as the verdict.
+ *
+ * 🔴 A whole-repo guard runs WITHOUT `--affected`. Its inputs span the
+ * repository, so the affected-project graph is the wrong gate: on a base whose
+ * diff resolves to nothing it would be skipped entirely. See
+ * `.github/workflows/pr-checks.yml`.
+ *
+ * The contraction step is not a verdict: it can legitimately refuse (there is
+ * real growth to fix) and `:validate` reports that properly.
+ */
+const buildGateSteps = (options: {
+  profile: import('./validation_policy.ts').ValidationProfile;
+  affected: readonly string[];
+  baseEnv: Record<string, string>;
+}): GateStep[] => {
+  const steps: GateStep[] = [];
+  const addedTasks = new Set<string>();
+
+  for (const check of getRequiredChecks(options.profile)) {
+    if (addedTasks.has(check.task)) {
+      continue;
+    }
+    addedTasks.add(check.task);
+    const concurrencyArgs = check.task === ':fix' ? ['--concurrency', '8'] : [];
+    steps.push({
+      label: check.task,
+      args: isWholeRepoGuardTask(check.task)
+        ? ['moon', 'run', check.task]
+        : ['moon', 'run', check.task, ...options.affected, ...concurrencyArgs],
+      verdict: check.task !== ':fix',
+      env: options.baseEnv,
+    });
+  }
+
+  steps.push({
+    label: 'scripts:guard-contract',
+    args: ['moon', 'run', 'scripts:guard-contract'],
+    verdict: false,
+  });
+
+  steps.push({
+    label: ':validate',
+    args: ['moon', 'run', ':validate', ...options.affected],
+    verdict: true,
+    env: options.baseEnv,
+  });
+
+  return steps;
 };
 
 /**
@@ -205,36 +299,19 @@ export const runPrePushGate = (options: {
   profile?: import('./validation_policy.ts').ValidationProfile;
 }): PrePushGateResult => {
   const run = options.runner ?? defaultRunner;
-  const affected = ['--affected', `--base=${options.base}`];
-  const profile = options.profile ?? 'pre_publication';
-
-  // AC-2: Derive required checks from shared policy.
-  const policyChecks = getRequiredChecks(profile);
-  const steps: { label: string; args: readonly string[]; verdict: boolean }[] = [];
-  const addedTasks = new Set<string>();
-
-  for (const check of policyChecks) {
-    if (addedTasks.has(check.task)) {
-      continue;
-    }
-    addedTasks.add(check.task);
-    const concurrencyArgs = check.task === ':fix' ? ['--concurrency', '8'] : [];
-    steps.push({
-      label: check.task,
-      args: ['moon', 'run', check.task, ...affected, ...concurrencyArgs],
-      verdict: check.task !== ':fix',
-    });
-  }
-
-  // `:fix` is mutating, so use the read-only aggregate as its final verdict.
-  steps.push({
-    label: ':validate',
-    args: ['moon', 'run', ':validate', ...affected],
-    verdict: true,
+  const steps = buildGateSteps({
+    profile: options.profile ?? 'pre_publication',
+    affected: ['--affected', `--base=${options.base}`],
+    baseEnv: { AIKAMI_GUARD_BASE_REF: options.base },
   });
 
   for (const step of steps) {
-    const result = run({ command: 'bun', args: [...step.args], cwd: options.cwd });
+    const result = run({
+      command: 'bun',
+      args: [...step.args],
+      cwd: options.cwd,
+      ...(step.env === undefined ? {} : { env: step.env }),
+    });
 
     // 🔴 Distinguish "the gate found problems" from "the gate could not run".
     // A missing moon binary or an unresolvable base ref is an infrastructure
@@ -249,7 +326,10 @@ export const runPrePushGate = (options: {
         cwd: options.cwd,
         runId: options.runId,
       });
-      return { ran: false, ok: true, output: '' };
+      // 🔴 NOT green. The gate could not run, so it has no evidence about the
+      // code. Reporting `passed` here (the old `{ ran: false, ok: true }`) let
+      // a missing moon binary authorize a PR. `unavailable` blocks promotion.
+      return gateResult({ outcome: 'unavailable', output: truncate(result.output) });
     }
 
     if (!step.verdict) {
@@ -264,15 +344,15 @@ export const runPrePushGate = (options: {
           ? attributeValidateFailure({
               run,
               cwd: options.cwd,
-              affected,
+              affected: ['--affected', `--base=${options.base}`],
               fallback: truncate(result.output),
             })
           : truncate(result.output);
-      return { ran: true, ok: false, output };
+      return gateResult({ outcome: 'failed', output });
     }
   }
 
-  return { ran: true, ok: true, output: '' };
+  return gateResult({ outcome: 'passed' });
 };
 
 /**
@@ -284,32 +364,34 @@ export const runPrePushGate = (options: {
  * the code in the branch, which CI will repeat verbatim the moment a PR
  * exists.
  *
- * AC-4: Unavailable checks are distinguished from known-failing checks so
- * the captain can decide whether to fix the code or the infrastructure.
+ * `unavailable` and `failed` are distinct: the captain must know whether to
+ * fix the code or the infrastructure.
  */
 export const formatGateNotesForPrompt = (result: PrePushGateResult | undefined): string => {
   if (!result || result.ok) {
     return '';
   }
-  const header = result.unavailable
+  const unavailable = result.outcome === 'unavailable' || result.outcome === 'cancelled';
+  const header = unavailable
     ? '## 🔴 Pre-push validation UNAVAILABLE — required checks could not run'
     : '## 🔴 Pre-push validation FAILED';
-  const body = result.unavailable
+  const body = unavailable
     ? [
         '',
-        'The branch was pushed (a branch push runs no CI), but one or more required',
-        'checks could not be executed. This may be an infrastructure issue (missing',
-        'task definitions, broken toolchain) or a code issue that prevents the check',
-        'from running. Check the output below and resolve before opening the PR.',
+        'The branch was pushed (a branch push runs no CI), but the gate could not',
+        'reach a verdict. This is an infrastructure issue (missing task definitions,',
+        'broken toolchain, unresolvable base) rather than a code defect. Check the',
+        'output below and resolve before opening the PR.',
       ]
     : [
         '',
         'The branch was pushed (a branch push runs no CI), but `moon run :validate`',
         'is red on it. CI will repeat these failures on the PR check.',
         '',
-        'You MAY still create the PR — ask the user for explicit permission first.',
-        '(YOLO mode: proceed without asking.) CodeRabbit can then fix the failures',
-        'on the PR. Otherwise fix them in the worktree, then re-validate.',
+        '🔴 A red verdict does NOT authorize PR creation on its own. `gh_pr create`',
+        'requires an explicit, revision-bound authorization record for this exact',
+        'commit (see `contract_stage` action `validate`). YOLO records one; otherwise',
+        'fix the failures and re-validate.',
       ];
   return [
     '',
@@ -323,9 +405,9 @@ export const formatGateNotesForPrompt = (result: PrePushGateResult | undefined):
     // one verdict, bound to the commit it checked.
     'After each round of fixes, call `contract_stage` action `validate` — it applies',
     '`:fix`, re-runs `:validate`, commits, pushes, and records the verdict against the',
-    'resulting commit. `gh_pr create` REFUSES only on hard blocks (dirty worktree,',
-    'stale or unrecorded verdict, unpushed commits). A RED verdict is a warning,',
-    'not a refusal — with user permission (or in YOLO), PR creation proceeds.',
+    'resulting commit. `gh_pr create` REFUSES unless the recorded verdict is GREEN on',
+    'the current commit, or an explicit authorization covers this exact verdict and',
+    'revision.',
     '',
     '```',
     result.output,

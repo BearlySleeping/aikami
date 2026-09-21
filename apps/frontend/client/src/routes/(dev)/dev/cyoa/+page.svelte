@@ -5,8 +5,8 @@
 //
 // Contract: C-245
 
+import { getCyoaSandboxViewModel } from '$views/chat/cyoa_sandbox_composition.ts';
 import CyoaSandboxView from '$views/chat/cyoa_sandbox_view.svelte';
-import { getCyoaSandboxViewModel } from '$views/chat/cyoa_sandbox_view_model.svelte.ts';
 
 const viewModel = getCyoaSandboxViewModel({
   className: 'CyoaSandboxViewModel',

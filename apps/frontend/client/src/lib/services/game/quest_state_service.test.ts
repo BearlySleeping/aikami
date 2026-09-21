@@ -5,14 +5,32 @@
 //
 // Contract: C-329 Integrate the Demo Quest from Offer Through Reward
 
-import { beforeEach, describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 import type { ContentPackLoaderInterface } from '@aikami/frontend/engine/sim';
 import type { ContentPackQuestEntry } from '@aikami/types';
 import { inventoryService } from './inventory_service.svelte';
+import { narrativeEventService } from './narrative_event_service.svelte.ts';
 import { playerStateService } from './player_state_service.svelte';
+
+// QuestStateService reads the active campaign id directly from the campaign
+// service. Provide a stable campaign so progression tests don't depend on the
+// retired `$services` barrel stub.
+mock.module('../campaign/campaign_service.svelte.ts', () => ({
+  campaignService: { activeCampaign: { id: 'default-emberwatch' } },
+}));
 
 // ── Mock content pack quest data ──
 
+/**
+ * An ORDINARY completion-pipeline quest: one authored conclusion, so there is
+ * nothing for the player to decide between and the quest auto-completes.
+ *
+ * C-495: a quest that authors more than one reachable ending is a decision, and
+ * finishing its objectives parks it at a resolution point instead (see
+ * `quest_ending_selection.test.ts` and `emberwatch_story.test.ts`, which cover
+ * that lifecycle). Keeping this fixture single-ending keeps the C-339
+ * completion/reward/journal tests about the pipeline they actually test.
+ */
 const FADING_WARD_QUEST: ContentPackQuestEntry = {
   id: 'fading_ward',
   name: 'The Fading Ward',
@@ -34,11 +52,6 @@ const FADING_WARD_QUEST: ContentPackQuestEntry = {
       title: 'Ward Renewed',
       narration: 'You place your hands upon the fading crystal and channel your energy into it.',
       worldStateFlag: 'emberwatch.ending.renewed',
-    },
-    sacrificed: {
-      title: 'Sacrificed',
-      narration: 'You sacrifice the ward energy, releasing it into the world.',
-      worldStateFlag: 'emberwatch.ending.sacrificed',
     },
   },
 };
@@ -1288,7 +1301,12 @@ describe('QuestStateService', () => {
       const mod = await import('./quest_state_service.svelte');
       service = mod.questStateService;
       service.reset();
+      narrativeEventService.reset();
       service.configure({ contentPackLoader: createExtendedMockLoader() });
+    });
+
+    afterEach(() => {
+      narrativeEventService.reset();
     });
 
     test('creates journal entry on quest completion', () => {
@@ -1308,6 +1326,35 @@ describe('QuestStateService', () => {
       expect(entry?.title).toBe('The Fading Ward');
       expect(entry?.objectiveResults.length).toBe(3);
       expect(entry?.rewards.length).toBe(3);
+    });
+
+    test('C-491 AC-5: journal derives from a single QuestResolved event', () => {
+      service.acceptQuest({ questId: 'fading_ward', npcId: 'village_elder' });
+      service.evaluateTriggers({ type: 'MAP_ENTERED', mapUrl: 'maps/old_road.json' });
+      service.evaluateTriggers({ type: 'MAP_ENTERED', mapUrl: 'maps/ruined_ward_shrine.json' });
+      service.evaluateTriggers({
+        type: 'ENCOUNTER_COMPLETED',
+        encounterId: 'ruined_ward_encounter',
+        victory: true,
+      });
+
+      // Exactly one QuestResolved event is committed.
+      const events = narrativeEventService.events.filter((e) => e.kind === 'QuestResolved');
+      expect(events).toHaveLength(1);
+      const event = events[0];
+      expect(event?.subjectId).toBe('fading_ward');
+      // With no quest-facing or party NPC, the player fallback is the resolved actor.
+      expect(event?.witnesses[0]).toBe('player');
+
+      // The journal entry is keyed to the committed event, not a parallel copy.
+      const entry = service.journalEntries.find((e) => e.questId === 'fading_ward');
+      expect(entry).toBeDefined();
+      expect(entry?.questId).toBe(event?.subjectId);
+      expect(entry?.timestamp).toBe(Date.parse(event?.recordedAt ?? ''));
+      // Authored narrative fields still resolve from the quest definition.
+      expect(entry?.title).toBe('The Fading Ward');
+      expect(entry?.status).toBe('completed');
+      expect(entry?.objectiveResults.length).toBe(3);
     });
 
     test('creates journal entry on quest failure', () => {

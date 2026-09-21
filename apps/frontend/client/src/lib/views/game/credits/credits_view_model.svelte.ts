@@ -3,7 +3,7 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 
 // ---------------------------------------------------------------------------
 // Credit entry types
@@ -75,11 +75,6 @@ const CREDIT_GROUPS: CreditGroup[] = [
         name: 'Tailwind CSS',
         url: 'https://tailwindcss.com/',
         description: 'Utility-first CSS framework for responsive styling across the entire app.',
-      },
-      {
-        name: 'daisyUI',
-        url: 'https://daisyui.com/',
-        description: 'UI component library built on Tailwind CSS providing themed components.',
       },
     ],
   },

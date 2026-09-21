@@ -1,10 +1,10 @@
 # Feature Promotion Matrix
 
-> Auto-generated: 2026-09-06
+> Auto-generated: 2026-09-16
 
 Tracks which features have progressed from dev sandboxes through production integration to release readiness.
 
-**Summary**: 9 sandbox, 27 integrated, 2 release_verified, 160 unassessed (active only; 119 archived contracts excluded)
+**Summary**: 9 sandbox, 27 integrated, 2 release_verified, 199 unassessed (active only; 119 archived contracts excluded)
 
 ## 🚀 Release Verified
 
@@ -200,8 +200,8 @@ Tracks which features have progressed from dev sandboxes through production inte
 | C-456 | Group Chat And Systemic Npc Interactions | 🛠️ implemented | v1 | full |
 | C-457 | Gm Prompt Assembly Upgrade | 🛠️ implemented | v1 | full |
 | C-458 | In House Memory And Lore Retrieval System | 🛠️ implemented | v1 | full |
-| C-459 | Ai Gm Narrative Director Enhancements | 🛠️ implemented | v1 | full |
-| C-460 | Npc Behavioral Autonomy Layer | 🛠️ implemented | v1 | full |
+| C-459 | Ai Gm Narrative Director Enhancements | 🛠️ implemented | v2 | full |
+| C-460 | Npc Behavioral Autonomy Layer | 🛠️ implemented | v2 | full |
 | C-466 | Unify Settings Mounts | 🛠️ implemented | v1 | full |
 | C-467 | Tauri Local Ai Install Wizard | 🛠️ implemented | v1 | full |
 | C-468 | Agent Test Foundation | 🛠️ implemented | v2 | thin |
@@ -220,7 +220,46 @@ Tracks which features have progressed from dev sandboxes through production inte
 | C-481 | Ai Configuration Convergence | 🛠️ implemented | v2 | full |
 | C-482 | Managed Ai Runtime Lifecycle | 🛠️ implemented | v2 | full |
 | C-483 | Guided Ai Setup | 👍 approved | v2 | full |
-| C-484 | Capability First Settings | 👍 approved | v2 | full |
-| C-485 | Production Path Evidence Gate | 📝 draft | v2 | full |
-| C-486 | Unconditional Release Journey | 📝 draft | v2 | full |
+| C-484 | Capability First Settings | 🛠️ implemented | v2 | full |
+| C-485 | Production Path Evidence Gate | 🛠️ implemented | v2 | full |
+| C-486 | Unconditional Release Journey | 🛠️ implemented | v2 | full |
+| C-487 | Free Text Skill Checks Honour The Character Sheet | 🛠️ implemented | v2 | full |
+| C-488 | Authored Npc Identity In The Content Pack | 🛠️ implemented | v2 | full |
+| C-489 | One Authority Path For Consequences | 🛠️ implemented | v2 | full |
+| C-490 | Transcript Branching Must Not Imply Rewinding The World | 🛠️ implemented | v2 | thin |
+| C-491 | Committed Narrative Event Record | 🛠️ implemented | v2 | full |
+| C-492 | Memory Retrieval Correctness And Production Wiring | 👍 approved | v2 | full |
+| C-493 | Wire Group Scenes Into The Production Party Path | 👍 approved | v2 | thin |
+| C-494 | One Companion Who Reacts | 🛠️ implemented | v2 | full |
+| C-495 | Emberwatch Dramatic Structure | 🛠️ implemented | v2 | full |
+| C-496 | Shared Visual Assets And Playback | 🛠️ implemented | v2 | full |
+| C-497 | Camera Framing And Default Asset Review | 🛠️ implemented | v2 | thin |
+| C-498 | Preset Means Character Is Ready | 👍 approved | v2 | thin |
+| C-504 | Stable Character Appearance Identity | 🛠️ implemented | v2 | full |
+| C-505 | Canonical Scene Data And Authoring Boundary | 🛠️ implemented | v2 | full |
+| C-506 | Emberwatch Visual Readability | 🛠️ implemented | v2 | thin |
+| C-517 | Generation Request And Format Correctness | 🛠️ implemented | v1 | full |
+| C-518 | Generation Provenance And Candidate Records | 🛠️ implemented | v1 | full |
+| C-519 | Durable Asset Jobs And Batch Execution | 🛠️ implemented | v1 | full |
+| C-520 | Versioned Image Workflows And Asset Preparation | 🛠️ implemented | v1 | full |
+| C-521 | Music Sfx Generation And Audio Preparation | 🛠️ implemented | v1 | full |
+| C-522 | Hub And Client Generation Runner Access | 🛠️ implemented | v1 | full |
+| C-523 | Emberwatch Asset Pilot And Offline Integration | 🛠️ implemented | v1 | full |
+| C-524 | Optional Hosted Asset Provider Comparison | 🛠️ implemented | v1 | full |
+| C-527 | Coherent Play Shell And Management Navigation | 🛠️ implemented | v2 | full |
+| C-528 | Player Hud Presets And Layout Editor | 🛠️ implemented | v2 | full |
+| C-529 | Declarative Theme Runtime And Creator Tools | 🛠️ implemented | v2 | full |
+| C-530 | Hub Theme Publishing And Installation | 📝 draft | v2 | full |
+| C-531 | Combat 07 Affordances And Improvised Actions | 🛠️ implemented | v1 | full |
+| C-532 | Combat 08 Objectives Morale Reactions And Release Gate | 🛠️ implemented | v1 | full |
+| C-533 | Show NPC mood on the LPC sprite | ⏳ not_started (no contract file) | v1 | full |
+| C-534 | Stop per-frame `zoning.position` logging | ⏳ not_started (no contract file) | v1 | full |
+| C-535 | Ship real default persona avatars | ⏳ not_started (no contract file) | v1 | full |
+| C-536 | Keep NPC dialogue memory across session exit and re-enter | ⏳ not_started (no contract file) | v1 | full |
+| C-537 | Re-enable Tauri updater artifact signing | ⏳ not_started (no contract file) | v1 | full |
+| C-538 | Investigate herdr Windows output capture | ⏳ not_started (no contract file) | v1 | full |
+| C-539 | Restore `bun run test:unit` for client and hub | ⏳ not_started (no contract file) | v1 | full |
+| C-540 | Resolve the `check_bundle.ts` facade-getter suppression | ⏳ not_started (no contract file) | v1 | full |
+| C-541 | Migrate client and hub off deprecated `kit.alias` | ⏳ not_started (no contract file) | v1 | full |
+| C-542 | Tauri OPFS `sqlite3_vfs` persistence | ⏳ not_started (no contract file) | v1 | full |
 

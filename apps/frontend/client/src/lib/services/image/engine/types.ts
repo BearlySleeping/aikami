@@ -108,7 +108,7 @@ export type ImageEngineCallbacks = {
 /**
  * Narrow image-specific engine interface.
  * One file per implementation, capability flags on the instance, and a
- * factory that selects one (mirrors `.../ai/clients/ai/factory.ts`).
+ * factory that selects one.
  */
 export type ImageEngineClient = {
   /** Engine id. */

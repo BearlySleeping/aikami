@@ -4,15 +4,37 @@
 // thumbnails in a masonry grid, supports full-res expansion via modal, and
 // allows deletion of individual images.
 //
+// Dependencies arrive through typed capability options. This module never
+// imports the `$services` barrel or any production singleton, so its tests can
+// inject fresh feature fixtures (see ./testing/gallery_fixtures.ts). Production
+// wiring lives in ./gallery_composition.ts.
+//
 // Contract: C-242 Image Generation Pipeline
 
 import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import type { GalleryImage } from '@aikami/types';
-import { galleryService } from '$services';
+
+// ── Capability contracts ────────────────────────────────────────────────
+
+/** The gallery operations and observable state the panel reads. */
+export type GalleryCapabilities = {
+  readonly totalCount: number;
+  getImagesForChat(chatId: string): GalleryImage[];
+  removeImage(id: string): void;
+};
+
+// ── Types ───────────────────────────────────────────────────────────────
+
+export type GalleryViewModelOptions = BaseViewModelOptions & {
+  /** Initial chat ID to display. */
+  chatId?: string;
+  /** Gallery capability. */
+  gallery: GalleryCapabilities;
+};
 
 export type GalleryViewModelInterface = BaseViewModelInterface & {
   /** Images for the current chat, most recent first. */
@@ -33,20 +55,20 @@ export type GalleryViewModelInterface = BaseViewModelInterface & {
   deleteExpanded(): void;
 };
 
-export type GalleryViewModelOptions = BaseViewModelOptions & {
-  /** Initial chat ID to display. */
-  chatId?: string;
-};
+// ── Implementation ──────────────────────────────────────────────────────
 
-export class GalleryViewModel
+class GalleryViewModel
   extends BaseViewModel<GalleryViewModelOptions>
   implements GalleryViewModelInterface
 {
+  private readonly _gallery: GalleryCapabilities;
   private _chatId = $state<string>('');
+
   expandedImageUrl = $state<string | null>(null);
 
   constructor(options: GalleryViewModelOptions) {
     super(options);
+    this._gallery = options.gallery;
     this._chatId = options.chatId ?? '';
   }
 
@@ -54,11 +76,11 @@ export class GalleryViewModel
     if (!this._chatId) {
       return [];
     }
-    return galleryService.getImagesForChat(this._chatId);
+    return this._gallery.getImagesForChat(this._chatId);
   }
 
   get totalCount(): number {
-    return galleryService.totalCount;
+    return this._gallery.totalCount;
   }
 
   setChatId(chatId: string): void {
@@ -80,7 +102,7 @@ export class GalleryViewModel
         this.expandedImageUrl = null;
       }
     }
-    galleryService.removeImage(id);
+    this._gallery.removeImage(id);
   }
 
   deleteExpanded(): void {
@@ -95,5 +117,12 @@ export class GalleryViewModel
   }
 }
 
-export const getGalleryViewModel = (options: GalleryViewModelOptions): GalleryViewModelInterface =>
-  GalleryViewModel.create(options);
+/**
+ * Builds a gallery ViewModel from explicit capabilities.
+ *
+ * Callers outside production (tests, sandboxes) use this directly; production
+ * code goes through `getGalleryViewModel` in ./gallery_composition.ts.
+ */
+export const createGalleryViewModel = (
+  options: GalleryViewModelOptions,
+): GalleryViewModelInterface => GalleryViewModel.create(options);

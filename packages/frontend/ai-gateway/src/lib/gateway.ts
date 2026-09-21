@@ -7,6 +7,7 @@
 // all in-flight calls. Errors surface exclusively as AiGatewayException.
 // Contract: C-320
 
+import type { TextTask } from '@aikami/constants';
 import type { AiCapability, AiDetectionResult, AiMode, AiModeResolution } from '@aikami/types';
 import type { AiAdapterRegistry } from './adapter_registry.ts';
 import { DETECTION_TIMEOUT_MS } from './detection.ts';
@@ -97,6 +98,7 @@ export const createAiProviderGateway = (options: AiProviderGatewayOptions): AiPr
     capability: AiCapability;
     model?: string;
     endpoint?: string;
+    task?: TextTask;
   }): AiModeResolution => {
     try {
       return resolveMode(options2);
@@ -154,8 +156,18 @@ export const createAiProviderGateway = (options: AiProviderGatewayOptions): AiPr
     },
 
     async generateText(options2: AiTextGenerationOptions): Promise<AiTextGenerationResult> {
-      const { messages, onChunk, schema, schemaName, model, endpoint, signal, mode, onResolve } =
-        options2;
+      const {
+        messages,
+        onChunk,
+        schema,
+        schemaName,
+        model,
+        endpoint,
+        task,
+        signal,
+        mode,
+        onResolve,
+      } = options2;
 
       // Resolution happens exactly once, here at the gateway boundary.
       let resolution: AiModeResolution;
@@ -173,7 +185,7 @@ export const createAiProviderGateway = (options: AiProviderGatewayOptions): AiPr
           endpoint,
         });
       } else {
-        resolution = resolveNormalized({ capability: 'text', model, endpoint });
+        resolution = resolveNormalized({ capability: 'text', model, endpoint, task });
         adapter = registry.getText(resolution.mode);
         if (!adapter) {
           throw missingAdapterError({ capability: 'text', mode: resolution.mode });

@@ -1,6 +1,6 @@
 <script lang="ts">
 // apps/frontend/client/src/routes/+layout.svelte
-// `$appCss` is an absolute alias (svelte.config.js) so the same layout
+// `$appCss` is an absolute alias (vite.config.ts) so the same layout
 // resolves correctly from the filtered production routes copy at
 // `.svelte-kit/routes-prod` (C-418 Feature B).
 import '$appCss';
@@ -13,8 +13,8 @@ import '$appCss';
 import 'pixi.js/unsafe-eval';
 
 import { untrack } from 'svelte';
+import { getAppViewModel } from '$lib/views/app/app_composition.ts';
 import AppView from '$lib/views/app/app_view.svelte';
-import { getAppViewModel } from '$lib/views/app/app_view_model.svelte.ts';
 import type { LayoutProps } from './$types';
 
 let { data, children }: LayoutProps = $props();

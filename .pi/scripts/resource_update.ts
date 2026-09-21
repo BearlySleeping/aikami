@@ -62,12 +62,6 @@ const GIT_SKILL_SOURCES: SkillSource[] = [
     targetSubdir: 'pixijs',
   },
   {
-    name: 'daisyUI',
-    repoUrl: 'https://github.com/saadeghi/daisyui.git',
-    sourceSubdir: 'skills/daisyui',
-    targetSubdir: 'daisyui',
-  },
-  {
     name: 'Herdr',
     repoUrl: 'https://github.com/ogulcancelik/herdr.git',
     sourceSubdir: 'skills/herdr',
@@ -288,7 +282,7 @@ Options:
   --help       Show this help
 
 Arguments:
-  name         Update only the specified resource (e.g., pixijs, daisyui)
+  name         Update only the specified resource (e.g., pixijs, herdr)
 
 Examples:
   bun run resource-update           # update all managed resources

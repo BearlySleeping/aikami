@@ -141,7 +141,10 @@ const handleGlobalClick = () => {
                                         <li>
                                           <a
                                             href="."
-                                            onclick={(e) => { e.preventDefault(); viewModel.navigateToFolder(child.path); }}
+                                            onclick={(e) => {
+  e.preventDefault();
+  viewModel.navigateToFolder(child.path);
+}}
                                             ><svg
                                               aria-hidden="true"
                                               xmlns="http://www.w3.org/2000/svg"
@@ -165,7 +168,10 @@ const handleGlobalClick = () => {
                                 {:else}
                                   <a
                                     href="."
-                                    onclick={(e) => { e.preventDefault(); viewModel.navigateToFolder(entry.path); }}
+                                    onclick={(e) => {
+  e.preventDefault();
+  viewModel.navigateToFolder(entry.path);
+}}
                                     ><svg
                                       aria-hidden="true"
                                       xmlns="http://www.w3.org/2000/svg"
@@ -192,7 +198,10 @@ const handleGlobalClick = () => {
                       <li>
                         <a
                           href="."
-                          onclick={(e) => { e.preventDefault(); viewModel.navigateToFolder(category.path); }}
+                          onclick={(e) => {
+  e.preventDefault();
+  viewModel.navigateToFolder(category.path);
+}}
                           ><svg
                             aria-hidden="true"
                             xmlns="http://www.w3.org/2000/svg"
@@ -331,7 +340,11 @@ const handleGlobalClick = () => {
                 type="button"
                 class="card card-compact bg-base-200 hover:bg-base-300 cursor-pointer text-center transition-colors"
                 onclick={() => viewModel.openAssetPreview(file)}
-                oncontextmenu={(e) => { e.preventDefault(); e.stopPropagation(); viewModel.openContextMenu(file, e.clientX, e.clientY); }}
+                oncontextmenu={(e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  viewModel.openContextMenu(file, e.clientX, e.clientY);
+}}
               >
                 <div class="card-body p-2 items-center gap-1">
                   <div class="text-2xl leading-none">
@@ -373,7 +386,10 @@ const handleGlobalClick = () => {
             <button
               type="button"
               class="btn btn-sm btn-primary"
-              onclick={() => { showDropInfo = false; droppedFileNames = []; }}
+              onclick={() => {
+  showDropInfo = false;
+  droppedFileNames = [];
+}}
             >
               Got it
             </button>
@@ -405,7 +421,11 @@ const handleGlobalClick = () => {
       class="fixed z-50 menu menu-sm bg-base-200 rounded-box shadow-lg border border-base-300 p-1 min-w-36"
       style="left: {viewModel.contextMenu.x}px; top: {viewModel.contextMenu.y}px;"
       onclick={(e) => e.stopPropagation()}
-      onkeydown={(e: KeyboardEvent) => { if (e.key === 'Escape') { viewModel.closeContextMenu(); } }}
+      onkeydown={(e: KeyboardEvent) => {
+  if (e.key === 'Escape') {
+    viewModel.closeContextMenu();
+  }
+}}
       role="menu"
       tabindex="-1"
     >
@@ -438,7 +458,11 @@ const handleGlobalClick = () => {
     <dialog
       class="modal modal-open"
       onclick={() => viewModel.closeUploadInfo()}
-      onkeydown={(e: KeyboardEvent) => { if (e.key === 'Escape') { viewModel.closeUploadInfo(); } }}
+      onkeydown={(e: KeyboardEvent) => {
+  if (e.key === 'Escape') {
+    viewModel.closeUploadInfo();
+  }
+}}
     >
       <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
       <div
@@ -495,7 +519,11 @@ const handleGlobalClick = () => {
     <dialog
       class="modal modal-open"
       onclick={() => viewModel.closePreview()}
-      onkeydown={(e: KeyboardEvent) => { if (e.key === 'Escape') { viewModel.closePreview(); } }}
+      onkeydown={(e: KeyboardEvent) => {
+  if (e.key === 'Escape') {
+    viewModel.closePreview();
+  }
+}}
     >
       <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
       <div
@@ -511,7 +539,9 @@ const handleGlobalClick = () => {
         </div>
         <p class="text-xs font-mono text-base-content/50 mb-4">{viewModel.previewAsset.tag}</p>
         {#if viewModel.hasPreview}
-          {#if viewModel.previewAsset.ext === '.mp3' || viewModel.previewAsset.ext === '.ogg' || viewModel.previewAsset.ext === '.wav'}
+          {#if viewModel.previewAsset.ext === '.mp3' ||
+  viewModel.previewAsset.ext === '.ogg' ||
+  viewModel.previewAsset.ext === '.wav'}
             {#if viewModel.previewUrl}
               <audio controls class="w-full">
                 <source src={viewModel.previewUrl}>

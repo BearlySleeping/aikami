@@ -57,7 +57,6 @@ const ROW_SCHEMA_CASES = [
       id: 'credential-1',
       accountId: 'provider-account-1',
       providerId: 'provider-1',
-      issuer: 'https://issuer.example',
       userId: 'user-1',
       accessToken: 'access-token',
       refreshToken: 'refresh-token',

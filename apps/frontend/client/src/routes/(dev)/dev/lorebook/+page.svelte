@@ -7,8 +7,8 @@
 
 import DevToolsPanel from '$lib/components/dev/dev_tools_panel.svelte';
 import type { DevAction } from '$types';
+import { getLorebookSandboxViewModel } from '$views/lorebook/lorebook_sandbox_composition.ts';
 import LorebookSandboxView from '$views/lorebook/lorebook_sandbox_view.svelte';
-import { getLorebookSandboxViewModel } from '$views/lorebook/lorebook_sandbox_view_model.svelte';
 
 const sandboxViewModel = getLorebookSandboxViewModel({
   className: 'LorebookSandboxViewModel',

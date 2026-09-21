@@ -9,7 +9,7 @@
     "format": "bunx biome format --write stack/*.ts",
     "typecheck": "bunx tsc --noEmit -p tsconfig.json",
     "fix": "bunx biome check --write stack/*.ts && bash -n bin/run-native-llm.sh bin/run-native-tts.sh bin/run-native-stt.sh docker/voice/entrypoint.sh scripts/emit_config.sh scripts/check.sh",
-    "test": "bun test stack/*.test.ts",
+    "test": "bun test stack",
     "test:install": "sh scripts/install.test.sh",
     "test:install:windows": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install.test.ps1",
     "bundle": "sh scripts/bundle_stack.sh",
@@ -27,6 +27,7 @@
     "stage:client": "rm -rf .build/client && mkdir -p .build && cp -R ../../frontend/client/build .build/client && bash ./scripts/emit_config.sh > .build/client/config.json",
     "build:client:docker": "bun run build:client && docker build -f Dockerfile.client -t aikami-client .",
     "build:sd-server:cpu": "docker build -f docker/sd-server/Dockerfile.cpu -t ghcr.io/bearlysleeping/aikami-sd-server:cpu docker/sd-server",
+    "runner:pair": "bun stack/pair_runner.ts",
     "run:native-tts": "bash bin/run-native-tts.sh",
     "run:native-stt": "bash bin/run-native-stt.sh",
     "run:native-llm": "bash bin/run-native-llm.sh"
@@ -36,7 +37,10 @@
     "@aikami/local-ai": "workspace:*",
     "@aikami/schemas": "workspace:*",
     "@aikami/types": "workspace:*",
-    "@clack/prompts": "^1.7.0"
+    "@clack/prompts": "1.8.1"
   },
-  "devDependencies": {}
+  "devDependencies": {},
+  "exports": {
+    "./generation": "./stack/generation/index.ts"
+  }
 }

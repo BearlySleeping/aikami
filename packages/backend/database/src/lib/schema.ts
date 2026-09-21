@@ -20,7 +20,15 @@
 // hand-written DDL.
 
 import { sql } from 'drizzle-orm';
-import { check, index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import {
+  check,
+  index,
+  integer,
+  primaryKey,
+  sqliteTable,
+  text,
+  uniqueIndex,
+} from 'drizzle-orm/sqlite-core';
 
 // ── Better Auth identity tables ─────────────────────────────────────────
 // Exact column shapes per Better Auth's D1/Drizzle adapter. Timestamps are
@@ -70,8 +78,14 @@ export const accounts = sqliteTable(
     id: text('id').primaryKey(),
     accountId: text('account_id').notNull(),
     providerId: text('provider_id').notNull(),
-    /** OAuth issuer — Better Auth requires this field on the account table. */
-    issuer: text('issuer').notNull(),
+    // 🔴 No `issuer` column. Better Auth 1.7.0–1.7.2 required one (NOT NULL,
+    // unique with `account_id`); 1.7.3 removed that requirement and went back
+    // to recognising an account by (providerId, accountId), as in 1.6. It
+    // therefore never writes `issuer`, and a NOT NULL column here rejects
+    // every sign-up and account link — Better Auth's own schema check detects
+    // exactly that and refuses to serve (SCHEMA_MISMATCH). See
+    // drizzle-d1/0006_drop_account_issuer.sql and
+    // https://www.better-auth.com/docs/guides/1-7-upgrade-guide
     userId: text('user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
@@ -85,11 +99,11 @@ export const accounts = sqliteTable(
     createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
     updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
   },
-  (table) => [
-    index('account_user_id_idx').on(table.userId),
-    // One identity per (issuer, accountId) — Better Auth's account model.
-    uniqueIndex('account_issuer_account_id_unique').on(table.issuer, table.accountId),
-  ],
+  // No unique index on (providerId, accountId): Better Auth 1.7.3 does not
+  // declare one, and enforcing it in the database would fail the migration
+  // on any 1.7.0–1.7.2 rows that share a provider key across issuers — which
+  // the upgrade guide asks you to resolve by hand before upgrading.
+  (table) => [index('account_user_id_idx').on(table.userId)],
 );
 
 /** A Better Auth verification token (email verification, password reset, …). */
@@ -234,8 +248,730 @@ export const accountBackups = sqliteTable(
   (table) => [index('account_backups_account_id_idx').on(table.accountId)],
 );
 
-// ── Row types (exported for repositories + the conformance test) ────────
+// ── Community map studio tables (C-508) ─────────────────────────────────
+// Per-user drafts + hub-published community maps. The curated catalog remains
+// a CI-owned static R2 index; these rows back the hub-served community
+// namespace that the map studio writes to.
 
+/**
+ * A creator's private, owner-scoped map draft. The native scene document is
+ * stored inline (the API bounds it) so a draft reloads with no catalog access.
+ */
+export const mapDrafts = sqliteTable(
+  'map_drafts',
+  {
+    /** Stable internal id — uuid, server-generated. */
+    id: text('id').primaryKey(),
+    /** Owner — CASCADE FK to user.id (a deleted account's drafts go with it). */
+    ownerAccountId: text('owner_account_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    /** Human-readable draft name. */
+    name: text('name').notNull(),
+    /** Native `aikami.scene` JSON. */
+    document: text('document').notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (table) => [index('map_drafts_owner_account_id_idx').on(table.ownerAccountId)],
+);
+
+/**
+ * A published community map. Immutable per revision: a re-publish appends a
+ * new revision. `documentHash` verifies the bytes and `r2Key` points at the
+ * durable catalog-bucket copy.
+ */
+export const communityMaps = sqliteTable(
+  'community_maps',
+  {
+    /** Stable internal id — uuid, server-generated. */
+    id: text('id').primaryKey(),
+    /** Url-safe public identifier, immutable once created. */
+    slug: text('slug').notNull(),
+    /** Owner — RESTRICT FK to user.id (published rows are moderated). */
+    ownerAccountId: text('owner_account_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    /** Display title. */
+    title: text('title').notNull(),
+    /** Monotonic revision, starting at 1. */
+    revision: integer('revision').notNull(),
+    /** sha256 of the document bytes. */
+    documentHash: text('document_hash').notNull(),
+    /** R2 object key: community/{slug}/{revision}.json (catalog bucket). */
+    r2Key: text('r2_key').notNull(),
+    /** Size of the uploaded document in bytes. */
+    sizeBytes: integer('size_bytes').notNull(),
+    /** This revision's native `aikami.scene` JSON (served without an R2 round-trip). */
+    document: text('document').notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (table) => [
+    uniqueIndex('community_maps_slug_revision_unique').on(table.slug, table.revision),
+    check(
+      'community_maps_slug_url_safe',
+      sql`${table.slug} NOT GLOB '*[^a-z0-9-]*' AND length(${table.slug}) > 0`,
+    ),
+    check('community_maps_revision_positive', sql`${table.revision} >= 1`),
+    index('community_maps_owner_account_id_idx').on(table.ownerAccountId),
+    index('community_maps_updated_at_idx').on(table.updatedAt, table.id),
+  ],
+);
+
+// ── Community asset publishing tables (C-513) ───────────────────────────
+// Reserve → upload to a *private* intake bucket → commit a pending row →
+// promote into the shared content-addressed `assets/` namespace at moderation
+// time. There is no cross-store transaction between D1 and R2, so the staging
+// row is the recovery point that makes the sequence representable.
+
+/** `asset_publish_staging.state` — the attempt state machine. */
+export const ASSET_PUBLISH_STAGING_STATES = [
+  'reserved',
+  'uploaded',
+  'committed',
+  'rolled_back',
+  'orphaned',
+] as const;
+/** One in-flight publish attempt's state. */
+export type AssetPublishStagingState = (typeof ASSET_PUBLISH_STAGING_STATES)[number];
+
+/**
+ * One in-flight (or abandoned) community-asset publish attempt.
+ *
+ * AC-8's recovery point: `reserved` → `uploaded` → `committed`, with
+ * `rolled_back` for a failed upload and `orphaned` for a row whose bytes were
+ * never confirmed. Ownership is CASCADE — an abandoned attempt is not a
+ * published record.
+ */
+export const assetPublishStaging = sqliteTable(
+  'asset_publish_staging',
+  {
+    /** Stable internal id — uuid, server-generated (== the upload id). */
+    id: text('id').primaryKey(),
+    /** Owner — CASCADE FK to user.id (an abandoned attempt is not a publication). */
+    ownerAccountId: text('owner_account_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    /** Reserved public identifier. */
+    slug: text('slug').notNull(),
+    /** Reserved revision, >= 1. */
+    revision: integer('revision').notNull(),
+    title: text('title').notNull(),
+    /** CatalogCategory value. */
+    category: text('category').notNull(),
+    /** Resolver tag, url-safe. */
+    tag: text('tag').notNull(),
+    /** Lowercase extension including the dot. */
+    ext: text('ext').notNull(),
+    /** Declared at reservation; must equal the upload's Content-Length. */
+    sizeBytes: integer('size_bytes').notNull(),
+    /** Hub-computed sha256 of the uploaded bytes; absent while `reserved`. */
+    sha256: text('sha256'),
+    /** `staging/<accountId>/<uploadId>` in the private intake bucket. */
+    stagingKey: text('staging_key').notNull(),
+    /** Attempt state — SQLite CHECK constraint (see below). */
+    state: text('state').$type<AssetPublishStagingState>().notNull().default('reserved'),
+    /** Redacted provenance projection (never prompts or local paths). */
+    provenanceJson: text('provenance_json').notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (table) => [
+    // One *live* reservation per (owner, slug, revision). Rolled-back attempts
+    // are excluded so a retry after a failed upload can re-reserve.
+    uniqueIndex('asset_publish_staging_live_unique')
+      .on(table.ownerAccountId, table.slug, table.revision)
+      .where(sql`${table.state} <> 'rolled_back'`),
+    check(
+      'asset_publish_staging_slug_url_safe',
+      sql`${table.slug} NOT GLOB '*[^a-z0-9-]*' AND length(${table.slug}) > 0`,
+    ),
+    check('asset_publish_staging_revision_positive', sql`${table.revision} >= 1`),
+    check(
+      'asset_publish_staging_state_valid',
+      sql`${table.state} IN ('reserved', 'uploaded', 'committed', 'rolled_back', 'orphaned')`,
+    ),
+    index('asset_publish_staging_owner_account_id_idx').on(table.ownerAccountId),
+    index('asset_publish_staging_staging_key_idx').on(table.stagingKey),
+    index('asset_publish_staging_state_updated_at_idx').on(table.state, table.updatedAt),
+  ],
+);
+
+/**
+ * Atomic per-account publish reservations for one fixed quota window.
+ *
+ * Unlike an isolate-local counter, the composite primary key lets D1
+ * serialize concurrent reservations across every Worker isolate.
+ */
+export const assetPublishRateLimits = sqliteTable(
+  'asset_publish_rate_limits',
+  {
+    ownerAccountId: text('owner_account_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    windowStartedAt: integer('window_started_at', { mode: 'timestamp_ms' }).notNull(),
+    hits: integer('hits').notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.ownerAccountId, table.windowStartedAt] })],
+);
+
+/** `community_assets.moderation_state` — the only states that ever exist. */
+export const COMMUNITY_ASSET_MODERATION_STATES = ['pending', 'approved', 'rejected'] as const;
+/** One committed revision's moderation state. */
+export type CommunityAssetModerationState = (typeof COMMUNITY_ASSET_MODERATION_STATES)[number];
+
+/**
+ * An immutable committed community-asset revision, content-addressed.
+ *
+ * `r2Key` and `promotedAt` are written by the approval-time copy into
+ * `CATALOG_BUCKET` — absent ⇒ the bytes are still only in the private intake
+ * bucket and are not public (AC-1, AC-3, AC-6). Ownership is RESTRICT (C-508
+ * precedent): a published row is moderated, never cascaded away.
+ */
+export const communityAssets = sqliteTable(
+  'community_assets',
+  {
+    /** Stable internal id — uuid, server-generated. */
+    id: text('id').primaryKey(),
+    /** Owner — RESTRICT FK to user.id (published rows are moderated). */
+    ownerAccountId: text('owner_account_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    /** Url-safe public identifier. */
+    slug: text('slug').notNull(),
+    /** Monotonic revision, starting at 1. */
+    revision: integer('revision').notNull(),
+    title: text('title').notNull(),
+    /** CatalogCategory value. */
+    category: text('category').notNull(),
+    /** Resolver tag. */
+    tag: text('tag').notNull(),
+    /** Content address — hub-computed, never client-claimed. */
+    sha256: text('sha256').notNull(),
+    /** `assets/<hash[0:2]>/<hash><ext>` — written at promotion, NOT at publish. */
+    r2Key: text('r2_key'),
+    sizeBytes: integer('size_bytes').notNull(),
+    /** Lowercase extension including the dot. */
+    ext: text('ext').notNull(),
+    /** Redacted projection of AssetProvenance — the single source of truth. */
+    provenanceJson: text('provenance_json').notNull(),
+    /** Derived from provenanceJson for gate/index queries (SPDX or 'proprietary'). */
+    license: text('license'),
+    /** Moderation state — SQLite CHECK constraint (see below). */
+    moderationState: text('moderation_state')
+      .$type<CommunityAssetModerationState>()
+      .notNull()
+      .default('pending'),
+    /** Operator reason for a rejection. */
+    moderationNote: text('moderation_note'),
+    moderatedByAccountId: text('moderated_by_account_id'),
+    moderatedAt: integer('moderated_at', { mode: 'timestamp_ms' }),
+    /** Set by the approval-time copy into CATALOG_BUCKET; absent ⇒ not public. */
+    promotedAt: integer('promoted_at', { mode: 'timestamp_ms' }),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (table) => [
+    uniqueIndex('community_assets_slug_revision_unique').on(table.slug, table.revision),
+    check(
+      'community_assets_slug_url_safe',
+      sql`${table.slug} NOT GLOB '*[^a-z0-9-]*' AND length(${table.slug}) > 0`,
+    ),
+    check('community_assets_revision_positive', sql`${table.revision} >= 1`),
+    check(
+      'community_assets_moderation_state_valid',
+      sql`${table.moderationState} IN ('pending', 'approved', 'rejected')`,
+    ),
+    check(
+      'community_assets_ext_lowercase',
+      sql`${table.ext} LIKE '.%' AND ${table.ext} = lower(${table.ext})`,
+    ),
+    index('community_assets_owner_account_id_idx').on(table.ownerAccountId),
+    index('community_assets_updated_at_idx').on(table.updatedAt, table.id),
+    // Public browse reads only approved + promoted rows.
+    index('community_assets_browse_idx').on(
+      table.moderationState,
+      table.promotedAt,
+      table.updatedAt,
+    ),
+    // Reference-aware cleanup: is this content address still referenced?
+    index('community_assets_sha256_idx').on(table.sha256),
+  ],
+);
+
+// ── C-530: Hub theme publishing ────────────────────────────────────────
+//
+// Additive only. A theme package is a bounded ZIP whose manifest carries
+// `kind: 'aikami-theme'`, so it gets its own tables rather than being smuggled
+// through `community_assets` (a `.zip` is in neither the image nor the audio
+// extension map, and the catalog scan category union must not learn `themes`).
+// The three-state moderation union is reused verbatim — removal is a separate
+// `revoked_at` marker, never a fourth state, because SQLite cannot alter the
+// existing CHECK in place and a rebuild of a live table buys nothing.
+
+/** One in-flight theme-version publish attempt's state. */
+export const THEME_PUBLISH_STAGING_STATES = [
+  'reserved',
+  'uploaded',
+  'committed',
+  'rolled_back',
+  'orphaned',
+] as const;
+/** One theme-version publish attempt's state. */
+export type ThemePublishStagingState = (typeof THEME_PUBLISH_STAGING_STATES)[number];
+
+/** One globally claimed theme slug and the account allowed to publish versions under it. */
+export const themeSlugs = sqliteTable(
+  'theme_slugs',
+  {
+    /** Url-safe public theme id. */
+    slug: text('slug').primaryKey(),
+    /** Account that owns every immutable version published under this slug. */
+    ownerAccountId: text('owner_account_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (table) => [
+    check(
+      'theme_slugs_slug_url_safe',
+      sql`${table.slug} NOT GLOB '*[^a-z0-9-]*' AND length(${table.slug}) > 0`,
+    ),
+    index('theme_slugs_owner_account_id_idx').on(table.ownerAccountId),
+  ],
+);
+
+/**
+ * One in-flight (or abandoned) theme-version publish attempt.
+ *
+ * The reserve-generated row id doubles as the upload id — the same idempotency
+ * handle C-513 already supplies. `theme_publish_staging_live_unique` permits
+ * exactly one live reservation per `(owner, slug, version)` and excludes
+ * `rolled_back`, so a retry after a failed upload can re-reserve while a
+ * concurrent duplicate cannot mint a second live row.
+ */
+export const themePublishStaging = sqliteTable(
+  'theme_publish_staging',
+  {
+    /** Stable internal id — uuid, server-generated (== the upload id). */
+    id: text('id').primaryKey(),
+    /** Owner — CASCADE FK to user.id (an abandoned attempt is not a publication). */
+    ownerAccountId: text('owner_account_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    /** Reserved theme id (the manifest `id`, url-safe). */
+    slug: text('slug').notNull(),
+    /** Reserved immutable version. */
+    version: text('version').notNull(),
+    /** Declared at reservation; must equal the upload's Content-Length. */
+    sizeBytes: integer('size_bytes').notNull(),
+    /** Hub-computed sha256 of the uploaded package; absent while `reserved`. */
+    sha256: text('sha256'),
+    /** `staging/<accountId>/<uploadId>` in the private intake bucket. */
+    stagingKey: text('staging_key').notNull(),
+    /** Attempt state — SQLite CHECK constraint (see below). */
+    state: text('state').$type<ThemePublishStagingState>().notNull().default('reserved'),
+    /** Redacted provenance projection (never prompts or local paths). */
+    provenanceJson: text('provenance_json').notNull(),
+    /** Creator-supplied update notes, shown on the detail surface. */
+    notes: text('notes'),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (table) => [
+    uniqueIndex('theme_publish_staging_live_unique')
+      .on(table.ownerAccountId, table.slug, table.version)
+      .where(sql`${table.state} <> 'rolled_back'`),
+    check(
+      'theme_publish_staging_slug_url_safe',
+      sql`${table.slug} NOT GLOB '*[^a-z0-9-]*' AND length(${table.slug}) > 0`,
+    ),
+    check(
+      'theme_publish_staging_version_semver',
+      sql`${table.version} NOT GLOB '*[^0-9.]*' AND length(${table.version}) >= 5`,
+    ),
+    check(
+      'theme_publish_staging_state_valid',
+      sql`${table.state} IN ('reserved', 'uploaded', 'committed', 'rolled_back', 'orphaned')`,
+    ),
+    index('theme_publish_staging_owner_account_id_idx').on(table.ownerAccountId),
+    index('theme_publish_staging_staging_key_idx').on(table.stagingKey),
+    index('theme_publish_staging_state_updated_at_idx').on(table.state, table.updatedAt),
+  ],
+);
+
+/**
+ * An immutable committed theme version, content-addressed.
+ *
+ * `r2_key` and `promoted_at` are written by the approval-time copy into
+ * `CATALOG_BUCKET` — absent ⇒ the bytes are still only in the private intake
+ * bucket and are not public. `revoked_at` withdraws public distribution
+ * without touching the moderation state or the audit trail. Ownership is
+ * RESTRICT (C-508 precedent): a published version is moderated, never
+ * cascaded away.
+ */
+export const themeVersions = sqliteTable(
+  'theme_versions',
+  {
+    /** Stable internal id — uuid, server-generated. */
+    id: text('id').primaryKey(),
+    /** Owner — RESTRICT FK to user.id (published rows are moderated). */
+    ownerAccountId: text('owner_account_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    /** Url-safe public theme id. */
+    slug: text('slug').notNull(),
+    /** Immutable semver version. */
+    version: text('version').notNull(),
+    /** Display name from the validated manifest. */
+    name: text('name').notNull(),
+    /** Manifest display name — display only, never an identity. */
+    authorDisplayName: text('author_display_name').notNull(),
+    /** Package-level licence from the validated manifest. */
+    license: text('license').notNull(),
+    /** Theme API compatibility range from the validated manifest. */
+    themeApiRange: text('theme_api_range').notNull(),
+    /** The validated manifest, exactly as accepted. */
+    manifestJson: text('manifest_json').notNull(),
+    /** The validated token files per variant, exactly as accepted. */
+    variantsJson: text('variants_json').notNull(),
+    /** Derived display facts (font roles, token counts) — never a fabricated field. */
+    variantFactsJson: text('variant_facts_json').notNull(),
+    /** Declared package asset count. */
+    assetCount: integer('asset_count').notNull(),
+    /** Declared total package bytes. */
+    packageBytes: integer('package_bytes').notNull(),
+    /** Content address — hub-computed, never client-claimed. */
+    sha256: text('sha256').notNull(),
+    /** `assets/<hash[0:2]>/<hash><ext>` — written at promotion, NOT at publish. */
+    r2Key: text('r2_key'),
+    /** Lowercase extension including the dot. Always `.zip` for a theme. */
+    ext: text('ext').notNull().default('.zip'),
+    /** Redacted projection of AssetProvenance — the single source of truth. */
+    provenanceJson: text('provenance_json').notNull(),
+    /** Moderation state — the same closed three-state union as community assets. */
+    moderationState: text('moderation_state')
+      .$type<CommunityAssetModerationState>()
+      .notNull()
+      .default('pending'),
+    /** Operator reason for a rejection or a revocation. */
+    moderationNote: text('moderation_note'),
+    moderatedByAccountId: text('moderated_by_account_id'),
+    moderatedAt: integer('moderated_at', { mode: 'timestamp_ms' }),
+    /** Set by the approval-time copy into CATALOG_BUCKET; absent ⇒ not public. */
+    promotedAt: integer('promoted_at', { mode: 'timestamp_ms' }),
+    /** Withdrawn public distribution. Never a fourth moderation state. */
+    revokedAt: integer('revoked_at', { mode: 'timestamp_ms' }),
+    /** True when the package ships an optional HUD preset (a separate opt-in). */
+    hasHudPreset: integer('has_hud_preset', { mode: 'boolean' }).notNull().default(false),
+    /** Creator-supplied update notes. */
+    notes: text('notes'),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (table) => [
+    uniqueIndex('theme_versions_slug_version_unique').on(table.slug, table.version),
+    check(
+      'theme_versions_slug_url_safe',
+      sql`${table.slug} NOT GLOB '*[^a-z0-9-]*' AND length(${table.slug}) > 0`,
+    ),
+    check(
+      'theme_versions_version_semver',
+      sql`${table.version} NOT GLOB '*[^0-9.]*' AND length(${table.version}) >= 5`,
+    ),
+    check(
+      'theme_versions_moderation_state_valid',
+      sql`${table.moderationState} IN ('pending', 'approved', 'rejected')`,
+    ),
+    check(
+      'theme_versions_revoked_requires_approval',
+      sql`${table.revokedAt} IS NULL OR ${table.moderationState} = 'approved'`,
+    ),
+    index('theme_versions_owner_account_id_idx').on(table.ownerAccountId),
+    index('theme_versions_browse_idx').on(
+      table.moderationState,
+      table.promotedAt,
+      table.revokedAt,
+      table.updatedAt,
+    ),
+    index('theme_versions_sha256_idx').on(table.sha256),
+  ],
+);
+
+// ── C-522: generation runner pairing + dispatch ────────────────────────
+//
+// Additive only (identity/save-backup rows untouched, AC-7). The Hub routes
+// *who owns which pending job*; the machine keeps the bytes. Only hashes.
+
+/** `runner_devices.platform` — the only values a paired runner may claim. */
+export const RUNNER_DEVICE_PLATFORMS = ['linux', 'macos', 'windows', 'unknown'] as const;
+/** One paired-runner platform. */
+export type RunnerDevicePlatform = (typeof RUNNER_DEVICE_PLATFORMS)[number];
+
+/**
+ * One paired creator device. `token_hash` is `sha256(token)`; the token itself
+ * is returned exactly once at pairing time. `revoked_at` is the revocation
+ * fence — a revoked device fails the claim gate but its running job is
+ * untouched.
+ */
+export const runnerDevices = sqliteTable(
+  'runner_devices',
+  {
+    /** Server-issued device id, also the `GenerationLease.owner` on the Hub. */
+    id: text('id').primaryKey(),
+    /** Owner — CASCADE: a deleted account leaves no orphaned device rows. */
+    ownerAccountId: text('owner_account_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    label: text('label').notNull(),
+    platform: text('platform').$type<RunnerDevicePlatform>().notNull(),
+    /** JSON string[] of advertised modalities (allowlisted by the API). */
+    modalitiesJson: text('modalities_json').notNull(),
+    /** JSON string[] of physical resource groups, e.g. `["gpu:0"]`. */
+    resourceGroupsJson: text('resource_groups_json').notNull(),
+    /** `sha256(token)` — never the credential. */
+    tokenHash: text('token_hash').notNull(),
+    tokenExpiresAt: integer('token_expires_at', { mode: 'timestamp_ms' }).notNull(),
+    /** Explicit opt-in for private preview upload; default is local-only. */
+    artifactUploadEnabled: integer('artifact_upload_enabled', { mode: 'boolean' })
+      .notNull()
+      .default(false),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+    /** Updated by every authenticated poll — drives the liveness projection. */
+    lastSeenAt: integer('last_seen_at', { mode: 'timestamp_ms' }).notNull(),
+    revokedAt: integer('revoked_at', { mode: 'timestamp_ms' }),
+  },
+  (table) => [
+    // A token must resolve to exactly one device, or authentication is ambiguous.
+    uniqueIndex('runner_devices_token_hash_unique').on(table.tokenHash),
+    index('runner_devices_owner_account_id_idx').on(table.ownerAccountId),
+    check(
+      'runner_devices_platform_valid',
+      sql`${table.platform} IN ('linux', 'macos', 'windows', 'unknown')`,
+    ),
+  ],
+);
+
+/**
+ * A short-lived, single-use pairing code. It expires in minutes and is consumed
+ * exactly once — `consumed_at` doubles as the replay guard, and the row is kept
+ * so a replayed code reports `pairing_code_invalid`, not `not_found`.
+ */
+export const runnerPairingCodes = sqliteTable(
+  'runner_pairing_codes',
+  {
+    /** The human-typed code (UPPER + dashes); primary key prevents collisions. */
+    code: text('code').primaryKey(),
+    ownerAccountId: text('owner_account_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+    expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull(),
+    consumedAt: integer('consumed_at', { mode: 'timestamp_ms' }),
+    /** The device the code bound, once consumed. */
+    deviceId: text('device_id'),
+  },
+  (table) => [
+    index('runner_pairing_codes_owner_account_id_idx').on(table.ownerAccountId),
+    index('runner_pairing_codes_expires_at_idx').on(table.expiresAt),
+  ],
+);
+
+/** `generation_dispatches.status` — the C-519 job lifecycle, verbatim. */
+export const GENERATION_DISPATCH_STATUSES = [
+  'planned',
+  'queued',
+  'running',
+  'preparing',
+  'awaiting_review',
+  'succeeded',
+  'failed',
+  'interrupted',
+  'cancelled',
+  'reconciliation_required',
+] as const;
+/** One dispatch status — the shared C-519 lifecycle. */
+export type GenerationDispatchStatus = (typeof GENERATION_DISPATCH_STATUSES)[number];
+
+/** `generation_dispatches.modality` — the shared `GenerationModality` values. */
+export const GENERATION_DISPATCH_MODALITIES = ['image', 'audio', 'video'] as const;
+/** One dispatch modality. */
+export type GenerationDispatchModality = (typeof GENERATION_DISPATCH_MODALITIES)[number];
+
+/**
+ * One Hub-side dispatch: owner/device routing metadata plus the C-519 job
+ * identity (`job_id`/`request_key`/`effective_spec_hash`/`attempt`).
+ * `lease_id` (unique when present) plus an echoed `attempt` make the claim
+ * exclusive: `UPDATE ... WHERE status = 'queued' AND lease_id IS NULL` is
+ * honored only when D1 reports exactly one changed row.
+ */
+export const generationDispatches = sqliteTable(
+  'generation_dispatches',
+  {
+    id: text('id').primaryKey(),
+    ownerAccountId: text('owner_account_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    deviceId: text('device_id')
+      .notNull()
+      .references(() => runnerDevices.id, { onDelete: 'cascade' }),
+    jobId: text('job_id').notNull(),
+    requestKey: text('request_key').notNull(),
+    effectiveSpecHash: text('effective_spec_hash').notNull(),
+    /** Fencing generation — bumped only by an explicit new attempt. */
+    attempt: integer('attempt').notNull().default(1),
+    /** Denormalised recipe modality — lets the claim gate reject a mismatch. */
+    modality: text('modality').$type<GenerationDispatchModality>().notNull(),
+    /** The allowlisted job description (`GenerationDispatchSpec`). */
+    specJson: text('spec_json').notNull(),
+    status: text('status').$type<GenerationDispatchStatus>().notNull().default('queued'),
+    /** The shared C-519 lease, flattened. Present ⇔ a runner holds it. */
+    leaseId: text('lease_id'),
+    leaseResourceGroup: text('lease_resource_group'),
+    leaseOwner: text('lease_owner'),
+    leasePid: integer('lease_pid'),
+    leaseAcquiredAt: integer('lease_acquired_at', { mode: 'timestamp_ms' }),
+    leaseExpiresAt: integer('lease_expires_at', { mode: 'timestamp_ms' }),
+    claimedAt: integer('claimed_at', { mode: 'timestamp_ms' }),
+    candidateCount: integer('candidate_count').notNull().default(0),
+    candidateId: text('candidate_id'),
+    preparedHash: text('prepared_hash'),
+    /** Structured failure (`GenerationJobFailure`), JSON. */
+    failureJson: text('failure_json'),
+    /** Split cancellation record (`GenerationJobCancellation`), JSON. */
+    cancellationJson: text('cancellation_json'),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (table) => [
+    // Idempotency: re-submitting the same request key + attempt never duplicates.
+    uniqueIndex('generation_dispatches_job_attempt_unique').on(
+      table.ownerAccountId,
+      table.jobId,
+      table.attempt,
+    ),
+    // The claim scan: "oldest queued dispatch for this device".
+    index('generation_dispatches_claim_idx').on(table.deviceId, table.status, table.createdAt),
+    index('generation_dispatches_owner_updated_idx').on(table.ownerAccountId, table.updatedAt),
+    // One lease id may back at most one dispatch — the cross-owner fence.
+    uniqueIndex('generation_dispatches_lease_id_unique')
+      .on(table.leaseId)
+      .where(sql`${table.leaseId} IS NOT NULL`),
+    check('generation_dispatches_attempt_positive', sql`${table.attempt} >= 1`),
+    check(
+      'generation_dispatches_modality_valid',
+      sql`${table.modality} IN ('image', 'audio', 'video')`,
+    ),
+    check(
+      'generation_dispatches_status_valid',
+      sql`${table.status} IN ('planned', 'queued', 'running', 'preparing', 'awaiting_review', 'succeeded', 'failed', 'interrupted', 'cancelled', 'reconciliation_required')`,
+    ),
+    check('generation_dispatches_candidate_count_non_negative', sql`${table.candidateCount} >= 0`),
+  ],
+);
+
+/** `runner_artifact_tickets.kind` — the artifact classes a runner may upload. */
+export const RUNNER_ARTIFACT_KINDS = ['image', 'audio'] as const;
+/** One private artifact class. */
+export type RunnerArtifactKind = (typeof RUNNER_ARTIFACT_KINDS)[number];
+
+/**
+ * A private, owner-scoped, expiring handle to one staged artifact. This is NOT
+ * a publication: `staging_key` lives under the private intake namespace, never
+ * under `assets/`, so it cannot reach the public catalog; expiry is on read.
+ */
+export const runnerArtifactTickets = sqliteTable(
+  'runner_artifact_tickets',
+  {
+    id: text('id').primaryKey(),
+    ownerAccountId: text('owner_account_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    deviceId: text('device_id')
+      .notNull()
+      .references(() => runnerDevices.id, { onDelete: 'cascade' }),
+    dispatchId: text('dispatch_id')
+      .notNull()
+      .references(() => generationDispatches.id, { onDelete: 'cascade' }),
+    candidateId: text('candidate_id').notNull(),
+    kind: text('kind').$type<RunnerArtifactKind>().notNull(),
+    mimeType: text('mime_type').notNull(),
+    bytes: integer('bytes').notNull(),
+    sha256: text('sha256').notNull(),
+    /** Private staging key — never a public catalog key. */
+    stagingKey: text('staging_key').notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+    expiresAt: integer('expires_at', { mode: 'timestamp_ms' }).notNull(),
+    uploadedAt: integer('uploaded_at', { mode: 'timestamp_ms' }),
+  },
+  (table) => [
+    index('runner_artifact_tickets_owner_expires_idx').on(table.ownerAccountId, table.expiresAt),
+    index('runner_artifact_tickets_dispatch_idx').on(table.dispatchId),
+    // Reference-aware cleanup: is this content address still referenced?
+    index('runner_artifact_tickets_sha256_idx').on(table.sha256),
+    check('runner_artifact_tickets_kind_valid', sql`${table.kind} IN ('image', 'audio')`),
+    check('runner_artifact_tickets_bytes_positive', sql`${table.bytes} > 0`),
+  ],
+);
+
+/** `generation_candidates.status` — a private review outcome, not a publication. */
+export const GENERATION_CANDIDATE_STATUSES = ['pending', 'accepted', 'rejected'] as const;
+/** One private candidate review state. */
+export type GenerationCandidateStatus = (typeof GENERATION_CANDIDATE_STATUSES)[number];
+
+/**
+ * One *private* candidate a paired runner produced — the C-522 completion seam.
+ * Existence here means "the owner has a result to review"; it never means
+ * "published". There is no public-catalog `r2_key` and no FK into
+ * `community_assets`, so the only route out is the explicit reserve/upload
+ * path in the publishing API.
+ *
+ * `(owner_account_id, prepared_hash)` is unique so a re-reported completion of
+ * the same bytes resolves to the *same* candidate rather than duplicating.
+ */
+export const generationCandidates = sqliteTable(
+  'generation_candidates',
+  {
+    id: text('id').primaryKey(),
+    ownerAccountId: text('owner_account_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    dispatchId: text('dispatch_id')
+      .notNull()
+      .references(() => generationDispatches.id, { onDelete: 'cascade' }),
+    jobId: text('job_id').notNull(),
+    itemId: text('item_id').notNull(),
+    recipeId: text('recipe_id').notNull(),
+    providerProfileId: text('provider_profile_id').notNull(),
+    effectiveSpecHash: text('effective_spec_hash').notNull(),
+    attempt: integer('attempt').notNull(),
+    seed: integer('seed').notNull(),
+    /** Verified SHA-256 of the produced bytes — byte identity, not a claim. */
+    preparedHash: text('prepared_hash').notNull(),
+    status: text('status').$type<GenerationCandidateStatus>().notNull().default('pending'),
+    /** Redacted provenance projection (never the private prompt). */
+    provenanceJson: text('provenance_json').notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+  },
+  (table) => [
+    uniqueIndex('generation_candidates_owner_prepared_hash_unique').on(
+      table.ownerAccountId,
+      table.preparedHash,
+    ),
+    index('generation_candidates_dispatch_idx').on(table.dispatchId),
+    index('generation_candidates_owner_status_idx').on(table.ownerAccountId, table.status),
+    check('generation_candidates_attempt_positive', sql`${table.attempt} >= 1`),
+    check(
+      'generation_candidates_status_valid',
+      sql`${table.status} IN ('pending', 'accepted', 'rejected')`,
+    ),
+  ],
+);
+
+// ── Row types (exported for repositories + the conformance test) ────────
 export type D1UserRow = typeof users.$inferSelect;
 export type D1SessionRow = typeof sessions.$inferSelect;
 export type D1AccountRow = typeof accounts.$inferSelect;
@@ -244,6 +980,19 @@ export type D1DeviceCodeRow = typeof deviceCodes.$inferSelect;
 export type D1PackRow = typeof packs.$inferSelect;
 export type D1PackVersionRow = typeof packVersions.$inferSelect;
 export type D1AccountBackupRow = typeof accountBackups.$inferSelect;
+export type D1MapDraftRow = typeof mapDrafts.$inferSelect;
+export type D1CommunityMapRow = typeof communityMaps.$inferSelect;
+export type D1AssetPublishStagingRow = typeof assetPublishStaging.$inferSelect;
+export type D1AssetPublishRateLimitRow = typeof assetPublishRateLimits.$inferSelect;
+export type D1CommunityAssetRow = typeof communityAssets.$inferSelect;
+export type D1ThemeSlugRow = typeof themeSlugs.$inferSelect;
+export type D1ThemePublishStagingRow = typeof themePublishStaging.$inferSelect;
+export type D1ThemeVersionRow = typeof themeVersions.$inferSelect;
+export type D1RunnerDeviceRow = typeof runnerDevices.$inferSelect;
+export type D1RunnerPairingCodeRow = typeof runnerPairingCodes.$inferSelect;
+export type D1GenerationDispatchRow = typeof generationDispatches.$inferSelect;
+export type D1RunnerArtifactTicketRow = typeof runnerArtifactTickets.$inferSelect;
+export type D1GenerationCandidateRow = typeof generationCandidates.$inferSelect;
 
 // ── Backward-compatible aliases (C-436: pg schema removed, types kept) ──
 // These were previously exported from the pg schema (schema.ts, pg-core).

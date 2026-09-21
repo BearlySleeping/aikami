@@ -28,9 +28,9 @@ let { controller }: Props = $props();
         class="select select-sm w-full bg-base-100"
         value={controller.animationState}
         onchange={(e: Event) => {
-          const target = e.target as HTMLSelectElement;
-          controller.setAnimationState(Number.parseInt(target.value, 10) as unknown as LpcAnimationState); // guard-ignore lint/type-safety/casting: LPC animation enum cast for debug panel - value guaranteed by animation system
-        }}
+  const target = e.target as HTMLSelectElement;
+  controller.setAnimationState(Number.parseInt(target.value, 10) as unknown as LpcAnimationState); // guard-ignore lint/type-safety/casting: LPC animation enum cast for debug panel - value guaranteed by animation system
+}}
       >
         {#each controller.animationStateOptions as option}
           <option value={option.value}>{option.label}</option>
@@ -44,9 +44,9 @@ let { controller }: Props = $props();
         class="select select-sm w-full bg-base-100"
         value={controller.facingDirection}
         onchange={(e: Event) => {
-          const target = e.target as HTMLSelectElement;
-          controller.setFacingDirection(Number.parseInt(target.value, 10) as unknown as LpcDirection); // guard-ignore lint/type-safety/casting: LPC animation enum cast for debug panel - value guaranteed by animation system
-        }}
+  const target = e.target as HTMLSelectElement;
+  controller.setFacingDirection(Number.parseInt(target.value, 10) as unknown as LpcDirection); // guard-ignore lint/type-safety/casting: LPC animation enum cast for debug panel - value guaranteed by animation system
+}}
       >
         {#each controller.directionOptions as option}
           <option value={option.value}>{option.label}</option>
@@ -115,7 +115,8 @@ let { controller }: Props = $props();
         value={controller.animationFrame}
         max={controller.maxFrame}
         disabled={controller.isPlaying}
-        oninput={(e: Event) => controller.setAnimationFrame(Number.parseInt((e.target as HTMLInputElement).value, 10))}
+        oninput={(e: Event) =>
+  controller.setAnimationFrame(Number.parseInt((e.target as HTMLInputElement).value, 10))}
       >
     </label>
   </fieldset>

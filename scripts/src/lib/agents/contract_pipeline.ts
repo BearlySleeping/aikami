@@ -909,12 +909,16 @@ const launchBackground = async (options: {
   // is a defensive sweep for the case where the child could not adopt the
   // pane and left it here.
   if (ready.workspaceId && ready.workspaceId !== launcherWorkspaceId) {
-    const stillHere = await herdrJson<{ result: { panes: { pane_id: string }[] } }>([
-      'pane',
-      'list',
-      '--workspace',
-      launcherWorkspaceId,
-    ]).catch(() => null);
+    // `quiet: true` — the child usually auto-closes this workspace when it
+    // adopts the launcher pane (`pane move` reaps an emptied workspace), so
+    // `workspace_not_found` here is the expected happy path, not a defect.
+    // A `null` result means "already gone" → nothing left to sweep. The
+    // `.catch` also absorbs a herdr timeout/spawn rejection (herdrJson only
+    // converts non-zero exits, not transport errors).
+    const stillHere = await herdrJson<{ result: { panes: { pane_id: string }[] } }>(
+      ['pane', 'list', '--workspace', launcherWorkspaceId],
+      { quiet: true },
+    ).catch(() => null);
     if (stillHere?.result?.panes?.length === 0) {
       await herdr(['workspace', 'close', launcherWorkspaceId]).catch(() => {});
     }

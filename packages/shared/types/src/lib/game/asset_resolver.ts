@@ -22,6 +22,8 @@ export type AssetResolver = {
    * A no-op for resolvers that do not hold refcounts.
    */
   readonly release: (url: string) => void;
+  /** Returns verbatim license metadata for a resolved catalog tag when available. */
+  readonly resolveLicenses?: (tag: string) => readonly string[] | undefined;
   /** Identifies the strategy in logs and tests. */
   readonly kind: 'registry' | 'cdn' | 'fixture';
 };

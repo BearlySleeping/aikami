@@ -13,14 +13,59 @@ export const MAX_VERIFY_LOOPS = 2;
 
 /**
  * How many worker-reported `blocked`/`failed` verdicts are escalated to the
- * review captain before the run really does end.
+ * review captain PER EPISODE before the run really does end.
  *
- * 🔴 One. The captain gets exactly one shot at a blocked stage: it can
- * diagnose, fix trivia, push a branch, open a draft PR, or send the work back
- * to the implementer. If the stage blocks a second time, the escalation
- * itself is not working and ending the run is the honest outcome.
+ * An episode ends whenever the captain itself decides `change` (it examined
+ * the block and chose to send the work back) or a human resumes the run —
+ * both reset this counter in the orchestrator. Within one episode:
+ *
+ * 🔴 One. If the stage blocks again with no captain decision and no human
+ * intervention in between, the escalation itself is not working and ending
+ * the run is the honest outcome. The run-total bound across episodes is
+ * {@link MAX_BLOCKED_ESCALATION_ROUNDS}.
  */
 export const MAX_BLOCKED_ESCALATIONS = 1;
+
+/**
+ * Hard run-total bound on how many times a worker-reported `blocked`/`failed`
+ * verdict may be escalated to the review captain, across ALL episodes.
+ *
+ * 🔴 Without this, resetting the per-episode budget on every captain `change`
+ * would let a captain that keeps repassing a perpetually-blocking stage loop
+ * forever. C-526 showed why the reset is needed (attempt 2 completed AC-5 +
+ * AC-7 — real progress — yet the run died terminally on a spent budget), and
+ * this constant is what keeps the reset bounded: three consultations total,
+ * then the run ends for real.
+ */
+export const MAX_BLOCKED_ESCALATION_ROUNDS = 3;
+
+/**
+ * How many times a guard-halted `verify` stage is retried on the same
+ * commits before the halt is escalated to the review captain.
+ *
+ * 🔴 A guard halt (`hard_timeout`, `cost_guard`) means the worker NEVER
+ * produced its own verdict — the submission was never evaluated at all.
+ * Treating that as a substantive `blocked` verdict burns the run's single
+ * MAX_BLOCKED_ESCALATIONS on pure infrastructure noise and sends the review
+ * captain a "failure" with no findings to act on (C-497: the captain could
+ * only repass to the implementer, whose honest zero-diff `passed` then
+ * terminally blocked the run). Retrying the verifier on the same commits is
+ * the honest move: the work is still there, only the evaluation is missing.
+ */
+export const MAX_VERIFY_HALT_RETRIES = 1;
+
+/**
+ * How many times a red pre-push gate is bounced back to the implementer
+ * before the branch is pushed anyway and the review captain takes over.
+ *
+ * The gate runs `:fix` first, so what survives a red gate is real code work
+ * (typecheck errors, guard violations) — implementer work, not reviewer
+ * work. Bouncing it keeps the captain in its role and stops 9-out-of-10
+ * review sessions from opening with a must-fix lint report. Once the budget
+ * is spent, the old behavior applies: push (a branch push runs no CI) and
+ * hand the diagnostics to the captain as must-fix-first notes.
+ */
+export const MAX_GATE_BOUNCES = 2;
 
 /**
  * Decide where a stage verdict sends the run.
@@ -46,28 +91,35 @@ export const resolveNextStage = (options: {
   verifyLoops: number;
   /** Escalations already spent on this run. Absent is treated as zero. */
   blockedEscalations?: number;
+  /** Captain consultations for blocked/failed verdicts this run, across all
+   * episodes. Absent is treated as zero. */
+  blockedEscalationRounds?: number;
 }): {
   next: ContractPipelineStage;
   verifyLoops: number;
   blockedEscalations: number;
+  blockedEscalationRounds: number;
   /** True when this transition spent an escalation — the caller must record
    *  `blockedReason` so the review captain is briefed as a blocked review. */
   escalated: boolean;
 } => {
   const spent = options.blockedEscalations ?? 0;
+  const rounds = options.blockedEscalationRounds ?? 0;
   const unchanged = {
     verifyLoops: options.verifyLoops,
     blockedEscalations: spent,
+    blockedEscalationRounds: rounds,
     escalated: false,
   };
   if (options.verdict.status === 'blocked' || options.verdict.status === 'failed') {
-    if (spent >= MAX_BLOCKED_ESCALATIONS) {
+    if (spent >= MAX_BLOCKED_ESCALATIONS || rounds >= MAX_BLOCKED_ESCALATION_ROUNDS) {
       return { next: 'blocked', ...unchanged };
     }
     return {
       next: 'review',
       verifyLoops: options.verifyLoops,
       blockedEscalations: spent + 1,
+      blockedEscalationRounds: rounds + 1,
       escalated: true,
     };
   }
@@ -90,6 +142,7 @@ export const resolveNextStage = (options: {
       next: verifyLoops >= MAX_VERIFY_LOOPS ? 'review' : 'implement',
       verifyLoops,
       blockedEscalations: spent,
+      blockedEscalationRounds: rounds,
       escalated: false,
     };
   }

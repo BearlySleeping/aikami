@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test } from 'bun:test';
 
-// $state, $derived, and @aikami/frontend/services mock are provided by test_preload.ts
+// $state, $derived are polyfilled by test_setup.ts
 
 import type { DiceServiceInterface } from './dice_service.svelte.ts';
 

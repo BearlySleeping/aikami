@@ -1,7 +1,7 @@
 // apps/frontend/client/src/lib/services/config/config_service.test.ts
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
 
-// $state and $derived are polyfilled globally via test_preload.ts
+// $state and $derived are polyfilled globally via test_setup.ts
 
 // ---------------------------------------------------------------------------
 // Mock localStorage
@@ -60,8 +60,12 @@ mock.module('$logger', () => ({
   logger: {
     debug: mock(() => {}),
     info: mock(() => {}),
+    log: mock(() => {}),
     warn: mock(() => {}),
     error: mock(() => {}),
+    spam: mock(() => {}),
+    write: mock(() => {}),
+    setLogLevel: mock(() => {}),
   },
   __esModule: true,
 }));

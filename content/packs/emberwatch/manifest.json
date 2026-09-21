@@ -1,23 +1,35 @@
 {
   "id": "emberwatch",
   "name": "Emberwatch: The Fading Ward",
-  "version": "3.2.0",
-  "updatedAt": "2026-08-08T00:00:00.000Z",
+  "version": "5.0.0",
+  "updatedAt": "2026-09-18T00:00:00.000Z",
   "description": "The ward protecting Emberwatch is fading. Elder Thalia needs the Ward Wand to renew it — but the wand rests in the hands of a rogue at the inn. Persuade or fight to get it back.",
   "startingMapId": "village",
-  "tileSize": 32,
   "atlas": {
     "textureUrl": "/game-data/sprites/tilesets/atlas.webp",
-    "spritesheetUrl": "/game-data/sprites/tilesets/atlas.json"
+    "spritesheetUrl": "/game-data/sprites/tilesets/atlas.json",
+    "tileSize": 32,
+    "provenance": {
+      "source": "generated:gpt"
+    }
   },
   "fallbackTile": "grass.png",
+  "propAtlases": [
+    {
+      "textureUrl": "/game-data/sprites/tilesets/props.webp",
+      "spritesheetUrl": "/game-data/sprites/tilesets/props.json"
+    }
+  ],
   "terrains": [
     {
       "name": "grass",
       "precedence": 0,
       "wang": "fill",
       "frameBase": "grass.png",
-      "variants": ["grass_variant.png", "grass_dark.png"],
+      "variants": [
+        "grass_variant.png",
+        "grass_dark.png"
+      ],
       "isWalkable": true
     },
     {
@@ -33,6 +45,27 @@
       "wang": "corner16",
       "frameBase": "water_0.png",
       "isWalkable": false
+    },
+    {
+      "name": "gravel",
+      "precedence": 3,
+      "wang": "corner16",
+      "frameBase": "gravel_0.png",
+      "isWalkable": true
+    },
+    {
+      "name": "earth",
+      "precedence": 4,
+      "wang": "corner16",
+      "frameBase": "earth_0.png",
+      "isWalkable": true
+    },
+    {
+      "name": "cobblestone",
+      "precedence": 5,
+      "wang": "corner16",
+      "frameBase": "cobblestone_0.png",
+      "isWalkable": true
     }
   ],
   "tiles": {
@@ -40,290 +73,434 @@
       "name": "grass",
       "frame": "grass.png",
       "isWalkable": true,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "2": {
       "name": "grass_variant",
       "frame": "grass_variant.png",
       "isWalkable": true,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "3": {
       "name": "grass_dark",
       "frame": "grass_dark.png",
       "isWalkable": true,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "4": {
       "name": "dirt",
       "frame": "dirt.png",
       "isWalkable": true,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "5": {
       "name": "path_tough",
       "frame": "path_tough.png",
       "isWalkable": true,
       "isWall": false,
-      "movementCost": 0.8
+      "movementCost": 0.8,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "6": {
       "name": "stone_floor",
       "frame": "stone_floor.png",
       "isWalkable": true,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "7": {
       "name": "wood_floor",
       "frame": "wood_floor.png",
       "isWalkable": true,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "8": {
       "name": "brick",
       "frame": "brick.png",
       "isWalkable": false,
-      "isWall": true
+      "isWall": true,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "9": {
       "name": "brick_wall",
       "frame": "brick_wall.png",
       "isWalkable": false,
-      "isWall": true
+      "isWall": true,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "10": {
       "name": "wood_wall",
       "frame": "wood_wall.png",
       "isWalkable": false,
-      "isWall": true
+      "isWall": true,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "11": {
       "name": "stone_wall",
       "frame": "stone_wall.png",
       "isWalkable": false,
-      "isWall": true
+      "isWall": true,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "12": {
       "name": "wall_top",
       "frame": "wall_top.png",
       "isWalkable": false,
-      "isWall": true
+      "isWall": true,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "13": {
       "name": "roof",
       "frame": "roof.png",
       "isWalkable": false,
-      "isWall": true
+      "isWall": true,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "14": {
       "name": "water",
       "frame": "water.png",
       "isWalkable": false,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "15": {
       "name": "fence",
       "frame": "fence.png",
       "isWalkable": false,
-      "isWall": true
+      "isWall": true,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "16": {
       "name": "wood_fence",
       "frame": "wood_fence.png",
       "isWalkable": false,
-      "isWall": true
+      "isWall": true,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "17": {
       "name": "well",
       "frame": "well.png",
       "isWalkable": false,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "18": {
       "name": "notice_board",
       "frame": "notice_board.png",
       "isWalkable": false,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "19": {
       "name": "village_gate",
       "frame": "village_gate.png",
       "isWalkable": true,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "20": {
       "name": "chest",
       "frame": "chest.png",
       "isWalkable": false,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "21": {
       "name": "red_chest",
       "frame": "red_chest.png",
       "isWalkable": false,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "22": {
       "name": "barrel",
       "frame": "barrel.png",
       "isWalkable": false,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "23": {
       "name": "crate",
       "frame": "crate.png",
       "isWalkable": false,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "24": {
       "name": "counter",
       "frame": "counter.png",
       "isWalkable": false,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "25": {
       "name": "table",
       "frame": "table.png",
       "isWalkable": false,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "26": {
       "name": "bed",
       "frame": "bed.png",
       "isWalkable": false,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "27": {
       "name": "rug",
       "frame": "rug.png",
       "isWalkable": true,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "28": {
       "name": "bookshelf",
       "frame": "bookshelf.png",
       "isWalkable": false,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "29": {
       "name": "fireplace",
       "frame": "fireplace.png",
       "isWalkable": false,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "30": {
       "name": "candle",
       "frame": "candle.png",
       "isWalkable": false,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "31": {
       "name": "plant",
       "frame": "plant.png",
       "isWalkable": false,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "32": {
       "name": "anvil",
       "frame": "anvil.png",
       "isWalkable": false,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "33": {
       "name": "path_tough_variant",
       "frame": "path_tough_variant.png",
       "isWalkable": true,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "34": {
       "name": "stone_floor_variant",
       "frame": "stone_floor_variant.png",
       "isWalkable": true,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "35": {
       "name": "wood_floor_variant",
       "frame": "wood_floor_variant.png",
       "isWalkable": true,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "36": {
       "name": "sand",
       "frame": "sand.png",
       "isWalkable": true,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "37": {
       "name": "grass_edge_n",
       "frame": "grass_edge_n.png",
       "isWalkable": true,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "38": {
       "name": "grass_edge_s",
       "frame": "grass_edge_s.png",
       "isWalkable": true,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "39": {
       "name": "grass_edge_w",
       "frame": "grass_edge_w.png",
       "isWalkable": true,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "40": {
       "name": "grass_edge_e",
       "frame": "grass_edge_e.png",
       "isWalkable": true,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "41": {
       "name": "water_edge",
       "frame": "water_edge.png",
       "isWalkable": false,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "42": {
       "name": "bridge",
       "frame": "bridge.png",
       "isWalkable": true,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "43": {
       "name": "steps",
       "frame": "steps.png",
       "isWalkable": true,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "44": {
       "name": "column",
       "frame": "column.png",
       "isWalkable": false,
-      "isWall": true
+      "isWall": true,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "45": {
       "name": "window",
       "frame": "window.png",
       "isWalkable": false,
-      "isWall": true
+      "isWall": true,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "46": {
       "name": "wood_door",
       "frame": "wood_door.png",
       "isWalkable": false,
-      "isWall": true
+      "isWall": true,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "47": {
       "name": "flagstone",
       "frame": "flagstone.png",
       "isWalkable": true,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     },
     "48": {
       "name": "rug_round",
       "frame": "rug_round.png",
       "isWalkable": true,
-      "isWall": false
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     }
   },
   "entities": {
@@ -332,7 +509,7 @@
       "frame": "char_hero_idle.png",
       "anchor": {
         "x": 0.5,
-        "y": 1.0
+        "y": 1
       },
       "collision": {
         "type": "rect",
@@ -342,12 +519,83 @@
     }
   },
   "props": {
+    "ward_tree_landmark": {
+      "name": "The Ward Tree",
+      "frame": "ward_large.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 44,
+        "height": 22
+      }
+    },
+    "ward_grove_a": {
+      "name": "Ward Grove (unlit)",
+      "frame": "ward_small_a.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 28,
+        "height": 16
+      }
+    },
+    "ward_grove_b": {
+      "name": "Ward Grove (lit)",
+      "frame": "ward_small_b.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 28,
+        "height": 16
+      }
+    },
+    "ward_grove_c": {
+      "name": "Ward Grove (lit)",
+      "frame": "ward_small_c.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 28,
+        "height": 16
+      }
+    },
     "village_well": {
       "name": "Old Stone Well",
       "frame": "well.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
       "anchor": {
         "x": 0.5,
-        "y": 1.0
+        "y": 1
       },
       "isWalkable": false,
       "collision": {
@@ -358,10 +606,30 @@
     },
     "notice_board": {
       "name": "Village Notice Board",
-      "frame": "notice_board.png",
+      "frame": "prop_notice_board.png",
+      "provenance": {
+        "source": "generated:local-sdcpp-anima"
+      },
       "anchor": {
         "x": 0.5,
-        "y": 1.0
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 20,
+        "height": 10
+      }
+    },
+    "road_notice": {
+      "name": "Road Marker",
+      "frame": "prop_notice_board.png",
+      "provenance": {
+        "source": "generated:local-sdcpp-anima"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
       },
       "isWalkable": false,
       "collision": {
@@ -372,19 +640,161 @@
     },
     "village_gate": {
       "name": "Emberwatch Village Gate",
-      "frame": "village_gate.png",
+      "frame": "prop_gate.png",
+      "provenance": {
+        "source": "generated:local-sdcpp-anima"
+      },
       "anchor": {
         "x": 0.5,
-        "y": 1.0
+        "y": 1
       },
       "isWalkable": true
     },
-    "inn_barrel": {
-      "name": "Barrel",
-      "frame": "barrel.png",
+    "woodland_oak": {
+      "name": "Woodland Oak",
+      "frame": "oak.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
       "anchor": {
         "x": 0.5,
-        "y": 1.0
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 30,
+        "height": 16
+      }
+    },
+    "woodland_oak_2": {
+      "name": "Woodland Oak",
+      "frame": "oak.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 30,
+        "height": 16
+      }
+    },
+    "woodland_oak_3": {
+      "name": "Woodland Oak",
+      "frame": "oak.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 30,
+        "height": 16
+      }
+    },
+    "woodland_oak_4": {
+      "name": "Woodland Oak",
+      "frame": "oak.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 30,
+        "height": 16
+      }
+    },
+    "woodland_birch": {
+      "name": "Woodland Birch",
+      "frame": "birch.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 14
+      }
+    },
+    "woodland_birch_2": {
+      "name": "Woodland Birch",
+      "frame": "birch.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 14
+      }
+    },
+    "shrine_oak": {
+      "name": "Woodland Oak",
+      "frame": "oak.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 30,
+        "height": 16
+      }
+    },
+    "shrine_birch": {
+      "name": "Woodland Birch",
+      "frame": "birch.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 14
+      }
+    },
+    "inn_barrel": {
+      "name": "Barrel",
+      "frame": "prop_barrel.png",
+      "provenance": {
+        "source": "generated:local-sdcpp-anima"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
       },
       "isWalkable": false,
       "collision": {
@@ -395,10 +805,81 @@
     },
     "inn_barrel_2": {
       "name": "Barrel",
-      "frame": "barrel.png",
+      "frame": "prop_barrel.png",
+      "provenance": {
+        "source": "generated:local-sdcpp-anima"
+      },
       "anchor": {
         "x": 0.5,
-        "y": 1.0
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 20,
+        "height": 20
+      }
+    },
+    "waystation_barrel": {
+      "name": "Waystation Barrel",
+      "frame": "prop_barrel.png",
+      "provenance": {
+        "source": "generated:local-sdcpp-anima"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 20,
+        "height": 20
+      }
+    },
+    "shop_barrel": {
+      "name": "Barrel",
+      "frame": "prop_barrel.png",
+      "provenance": {
+        "source": "generated:local-sdcpp-anima"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 20,
+        "height": 20
+      }
+    },
+    "shop_barrel_2": {
+      "name": "Barrel",
+      "frame": "prop_barrel.png",
+      "provenance": {
+        "source": "generated:local-sdcpp-anima"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 20,
+        "height": 20
+      }
+    },
+    "shrine_barrel": {
+      "name": "Barrel",
+      "frame": "prop_barrel.png",
+      "provenance": {
+        "source": "generated:local-sdcpp-anima"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
       },
       "isWalkable": false,
       "collision": {
@@ -410,9 +891,114 @@
     "inn_crate": {
       "name": "Crate",
       "frame": "crate.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
       "anchor": {
         "x": 0.5,
-        "y": 1.0
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 22
+      }
+    },
+    "shop_crate": {
+      "name": "Crate",
+      "frame": "crate.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 22
+      }
+    },
+    "shop_crate_2": {
+      "name": "Crate",
+      "frame": "crate.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 22
+      }
+    },
+    "shop_crate_3": {
+      "name": "Crate",
+      "frame": "crate.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 22
+      }
+    },
+    "waystation_crate": {
+      "name": "Crate",
+      "frame": "crate.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 22
+      }
+    },
+    "waystation_crate_2": {
+      "name": "Crate",
+      "frame": "crate.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 22
+      }
+    },
+    "shrine_crate": {
+      "name": "Crate",
+      "frame": "crate.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
       },
       "isWalkable": false,
       "collision": {
@@ -424,9 +1010,12 @@
     "shop_counter_l": {
       "name": "Counter",
       "frame": "counter.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
       "anchor": {
         "x": 0.5,
-        "y": 1.0
+        "y": 1
       },
       "isWalkable": false,
       "collision": {
@@ -438,9 +1027,12 @@
     "shop_counter_r": {
       "name": "Counter",
       "frame": "counter.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
       "anchor": {
         "x": 0.5,
-        "y": 1.0
+        "y": 1
       },
       "isWalkable": false,
       "collision": {
@@ -449,18 +1041,1264 @@
         "height": 18
       }
     },
-    "shop_crate": {
-      "name": "Crate",
-      "frame": "crate.png",
+    "shop_counter_m": {
+      "name": "Counter",
+      "frame": "counter.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
       "anchor": {
         "x": 0.5,
-        "y": 1.0
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 28,
+        "height": 18
+      }
+    },
+    "inn_counter": {
+      "name": "Service Counter",
+      "frame": "counter.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 28,
+        "height": 18
+      }
+    },
+    "inn_counter_2": {
+      "name": "Service Counter",
+      "frame": "counter.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 28,
+        "height": 18
+      }
+    },
+    "inn_table": {
+      "name": "Ale Table",
+      "frame": "table.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 26,
+        "height": 22
+      },
+      "environment": {
+        "durability": 6,
+        "blocksMovement": true,
+        "blocksSight": false,
+        "cover": "half"
+      }
+    },
+    "inn_table_2": {
+      "name": "Ale Table",
+      "frame": "table.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 26,
+        "height": 22
+      },
+      "environment": {
+        "durability": 6,
+        "blocksMovement": true,
+        "blocksSight": false,
+        "cover": "half"
+      }
+    },
+    "inn_table_3": {
+      "name": "Ale Table",
+      "frame": "table.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 26,
+        "height": 22
+      },
+      "environment": {
+        "durability": 6,
+        "blocksMovement": true,
+        "blocksSight": false,
+        "cover": "half"
+      }
+    },
+    "inn_chair": {
+      "name": "Chair",
+      "frame": "chair.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 16,
+        "height": 10
+      }
+    },
+    "inn_chair_2": {
+      "name": "Chair",
+      "frame": "chair.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 16,
+        "height": 10
+      }
+    },
+    "inn_chair_3": {
+      "name": "Chair",
+      "frame": "chair.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 16,
+        "height": 10
+      }
+    },
+    "inn_chair_4": {
+      "name": "Chair",
+      "frame": "chair.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 16,
+        "height": 10
+      }
+    },
+    "inn_chair_5": {
+      "name": "Chair",
+      "frame": "chair.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 16,
+        "height": 10
+      }
+    },
+    "inn_chair_6": {
+      "name": "Chair",
+      "frame": "chair.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 16,
+        "height": 10
+      }
+    },
+    "shop_chair": {
+      "name": "Chair",
+      "frame": "chair.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 16,
+        "height": 10
+      }
+    },
+    "inn_bed": {
+      "name": "Guest Bed",
+      "frame": "bed.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 30,
+        "height": 22
+      }
+    },
+    "inn_hearth": {
+      "name": "Hearth",
+      "frame": "prop_hearth.png",
+      "provenance": {
+        "source": "generated:local-sdcpp-anima"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 44,
+        "height": 20
+      }
+    },
+    "inn_shelf": {
+      "name": "Storage Shelf",
+      "frame": "bookshelf.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 24,
+        "height": 14
+      }
+    },
+    "shop_shelf": {
+      "name": "Storage Shelf",
+      "frame": "bookshelf.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 24,
+        "height": 14
+      }
+    },
+    "shop_shelf_2": {
+      "name": "Storage Shelf",
+      "frame": "bookshelf.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 24,
+        "height": 14
+      }
+    },
+    "yard_anvil": {
+      "name": "Smith Anvil",
+      "frame": "anvil.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 24,
+        "height": 16
+      }
+    },
+    "inn_brazier": {
+      "name": "Brazier",
+      "frame": "prop_brazier.png",
+      "provenance": {
+        "source": "generated:local-sdcpp-anima"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
       },
       "isWalkable": false,
       "collision": {
         "type": "rect",
         "width": 22,
         "height": 22
+      },
+      "environment": {
+        "durability": 4,
+        "blocksMovement": true,
+        "blocksSight": false,
+        "cover": "none",
+        "affordances": [
+          {
+            "affordanceId": "tip_over",
+            "name": "Tip the brazier over",
+            "actionCost": "action",
+            "requirements": [
+              {
+                "kind": "adjacent",
+                "value": true
+              },
+              {
+                "kind": "objectState",
+                "value": "intact"
+              }
+            ],
+            "check": {
+              "category": "athletics",
+              "dc": 12,
+              "modifierSource": "athletics"
+            },
+            "successEffects": [
+              {
+                "kind": "setIgnited",
+                "objectSelector": "source",
+                "ignited": true
+              },
+              {
+                "kind": "createSurface",
+                "surfaceKind": "fire",
+                "cellSelector": "sourceFootprint",
+                "expiresAfterRound": null
+              },
+              {
+                "kind": "createSurface",
+                "surfaceKind": "fire",
+                "cellSelector": "adjacent",
+                "expiresAfterRound": null
+              },
+              {
+                "kind": "setObjectState",
+                "objectSelector": "source",
+                "state": "broken"
+              }
+            ],
+            "failureEffects": [
+              {
+                "kind": "setObjectState",
+                "objectSelector": "source",
+                "state": "broken"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "shrine_brazier": {
+      "name": "Brazier",
+      "frame": "prop_brazier.png",
+      "provenance": {
+        "source": "generated:local-sdcpp-anima"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 22
+      },
+      "environment": {
+        "durability": 4,
+        "blocksMovement": true,
+        "blocksSight": false,
+        "cover": "none"
+      }
+    },
+    "inn_oil_pool": {
+      "name": "Spilled Oil",
+      "frame": "prop_oil_pool.png",
+      "provenance": {
+        "source": "generated:local-sdcpp-anima"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": true,
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 22
+      },
+      "environment": {
+        "durability": 1,
+        "blocksMovement": false,
+        "blocksSight": false,
+        "cover": "none",
+        "affordances": [
+          {
+            "affordanceId": "ignite_oil",
+            "name": "Ignite the oil",
+            "actionCost": "quick",
+            "requirements": [
+              {
+                "kind": "adjacent",
+                "value": true
+              }
+            ],
+            "check": null,
+            "successEffects": [
+              {
+                "kind": "createSurface",
+                "surfaceKind": "fire",
+                "cellSelector": "sourceFootprint",
+                "expiresAfterRound": null
+              },
+              {
+                "kind": "createSurface",
+                "surfaceKind": "fire",
+                "cellSelector": "adjacent",
+                "expiresAfterRound": null
+              },
+              {
+                "kind": "removeSurface",
+                "surfaceSelector": "surfaces:oil"
+              }
+            ],
+            "failureEffects": []
+          }
+        ]
+      }
+    },
+    "inn_support": {
+      "name": "Rotting Support",
+      "frame": "prop_support.png",
+      "provenance": {
+        "source": "generated:local-sdcpp-anima"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 22
+      },
+      "environment": {
+        "durability": 3,
+        "blocksMovement": true,
+        "blocksSight": false,
+        "cover": "half",
+        "affordances": [
+          {
+            "affordanceId": "cut_support",
+            "name": "Cut the support",
+            "actionCost": "action",
+            "requirements": [
+              {
+                "kind": "adjacent",
+                "value": true
+              },
+              {
+                "kind": "objectState",
+                "value": "intact"
+              }
+            ],
+            "check": null,
+            "successEffects": [
+              {
+                "kind": "setObjectState",
+                "objectSelector": "source",
+                "state": "broken"
+              },
+              {
+                "kind": "dropPayload",
+                "objectSelector": "source",
+                "impactZone": "emberwatch/crate_zone"
+              }
+            ],
+            "failureEffects": [
+              {
+                "kind": "dropPayload",
+                "objectSelector": "source",
+                "impactZone": "emberwatch/crate_zone"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "waystation_support": {
+      "name": "Rotting Support",
+      "frame": "prop_support.png",
+      "provenance": {
+        "source": "generated:local-sdcpp-anima"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 22
+      },
+      "environment": {
+        "durability": 3,
+        "blocksMovement": true,
+        "blocksSight": false,
+        "cover": "half"
+      }
+    },
+    "inn_hanging_crate": {
+      "name": "Hanging Crate",
+      "frame": "crate.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 22
+      },
+      "environment": {
+        "durability": 5,
+        "blocksMovement": false,
+        "blocksSight": false,
+        "cover": "none"
+      }
+    },
+    "sella_receipt": {
+      "name": "Sella's Custody Receipt",
+      "frame": "prop_receipt.png",
+      "provenance": {
+        "source": "generated:local-sdcpp-anima"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 20,
+        "height": 10
+      }
+    },
+    "tess_component": {
+      "name": "Intact Ward Component",
+      "frame": "prop_component.png",
+      "provenance": {
+        "source": "generated:local-sdcpp-anima"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 24,
+        "height": 14
+      }
+    },
+    "waystation_cart": {
+      "name": "Abandoned Cart",
+      "frame": "prop_cart.png",
+      "provenance": {
+        "source": "generated:local-sdcpp-anima"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 40,
+        "height": 24
+      }
+    },
+    "shrine_arch": {
+      "name": "Shrine Arch",
+      "frame": "shrine_arch.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": true
+    },
+    "ward_socket": {
+      "name": "Ward Socket",
+      "frame": "prop_ward_socket.png",
+      "provenance": {
+        "source": "generated:local-sdcpp-anima"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 24,
+        "height": 16
+      }
+    },
+    "road_oak_0": {
+      "name": "Woodland Oak",
+      "frame": "oak.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 30,
+        "height": 16
+      }
+    },
+    "road_birch_0": {
+      "name": "Woodland Birch",
+      "frame": "birch.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 14
+      }
+    },
+    "road_oak_1": {
+      "name": "Woodland Oak",
+      "frame": "oak.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 30,
+        "height": 16
+      }
+    },
+    "road_birch_1": {
+      "name": "Woodland Birch",
+      "frame": "birch.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 14
+      }
+    },
+    "road_oak_2": {
+      "name": "Woodland Oak",
+      "frame": "oak.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 30,
+        "height": 16
+      }
+    },
+    "road_birch_2": {
+      "name": "Woodland Birch",
+      "frame": "birch.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 14
+      }
+    },
+    "road_oak_3": {
+      "name": "Woodland Oak",
+      "frame": "oak.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 30,
+        "height": 16
+      }
+    },
+    "road_birch_3": {
+      "name": "Woodland Birch",
+      "frame": "birch.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 14
+      }
+    },
+    "road_oak_4": {
+      "name": "Woodland Oak",
+      "frame": "oak.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 30,
+        "height": 16
+      }
+    },
+    "road_birch_4": {
+      "name": "Woodland Birch",
+      "frame": "birch.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 14
+      }
+    },
+    "road_oak_5": {
+      "name": "Woodland Oak",
+      "frame": "oak.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 30,
+        "height": 16
+      }
+    },
+    "road_birch_5": {
+      "name": "Woodland Birch",
+      "frame": "birch.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 14
+      }
+    },
+    "road_oak_6": {
+      "name": "Woodland Oak",
+      "frame": "oak.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 30,
+        "height": 16
+      }
+    },
+    "road_birch_6": {
+      "name": "Woodland Birch",
+      "frame": "birch.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 14
+      }
+    },
+    "road_oak_7": {
+      "name": "Woodland Oak",
+      "frame": "oak.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 30,
+        "height": 16
+      }
+    },
+    "road_birch_7": {
+      "name": "Woodland Birch",
+      "frame": "birch.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 14
+      }
+    },
+    "road_oak_8": {
+      "name": "Woodland Oak",
+      "frame": "oak.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 30,
+        "height": 16
+      }
+    },
+    "road_birch_8": {
+      "name": "Woodland Birch",
+      "frame": "birch.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 14
+      }
+    },
+    "road_oak_9": {
+      "name": "Woodland Oak",
+      "frame": "oak.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 30,
+        "height": 16
+      }
+    },
+    "road_birch_9": {
+      "name": "Woodland Birch",
+      "frame": "birch.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 14
+      }
+    },
+    "road_oak_10": {
+      "name": "Woodland Oak",
+      "frame": "oak.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 30,
+        "height": 16
+      }
+    },
+    "road_birch_10": {
+      "name": "Woodland Birch",
+      "frame": "birch.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 14
+      }
+    },
+    "road_oak_11": {
+      "name": "Woodland Oak",
+      "frame": "oak.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 30,
+        "height": 16
+      }
+    },
+    "road_birch_11": {
+      "name": "Woodland Birch",
+      "frame": "birch.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 14
+      }
+    },
+    "road_oak_12": {
+      "name": "Woodland Oak",
+      "frame": "oak.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 30,
+        "height": 16
+      }
+    },
+    "road_birch_12": {
+      "name": "Woodland Birch",
+      "frame": "birch.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 14
+      }
+    },
+    "road_oak_13": {
+      "name": "Woodland Oak",
+      "frame": "oak.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 30,
+        "height": 16
+      }
+    },
+    "road_birch_13": {
+      "name": "Woodland Birch",
+      "frame": "birch.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 14
+      }
+    },
+    "road_oak_14": {
+      "name": "Woodland Oak",
+      "frame": "oak.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 30,
+        "height": 16
+      }
+    },
+    "road_birch_14": {
+      "name": "Woodland Birch",
+      "frame": "birch.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 14
+      }
+    },
+    "road_oak_15": {
+      "name": "Woodland Oak",
+      "frame": "oak.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 30,
+        "height": 16
+      }
+    },
+    "road_birch_15": {
+      "name": "Woodland Birch",
+      "frame": "birch.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 14
+      }
+    },
+    "road_oak_16": {
+      "name": "Woodland Oak",
+      "frame": "oak.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 30,
+        "height": 16
+      }
+    },
+    "road_birch_16": {
+      "name": "Woodland Birch",
+      "frame": "birch.png",
+      "provenance": {
+        "source": "generated:gpt"
+      },
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "isWalkable": false,
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 14
       }
     }
   },
@@ -469,57 +2307,188 @@
       "file": "maps/village.json",
       "name": "Emberwatch Village",
       "defaultSpawnId": "village_gate",
-      "defaultX": 320,
-      "defaultY": 576
+      "defaultX": 1024,
+      "defaultY": 1440
     },
     "inn": {
       "file": "maps/inn.json",
       "name": "The Guttering Candle Inn",
       "defaultSpawnId": "inn_entrance",
       "defaultX": 256,
-      "defaultY": 320,
+      "defaultY": 344,
       "interior": true
     },
     "merchant_shop": {
       "file": "maps/merchant_shop.json",
       "name": "Mara's Provisions",
       "defaultSpawnId": "shop_entrance",
-      "defaultX": 256,
-      "defaultY": 320,
+      "defaultX": 384,
+      "defaultY": 480,
       "interior": true
+    },
+    "old_road": {
+      "file": "maps/old_road.json",
+      "name": "The Old Road",
+      "defaultSpawnId": "old_road_from_village",
+      "defaultX": 1088,
+      "defaultY": 1120
+    },
+    "ruined_shrine": {
+      "file": "maps/ruined_shrine.json",
+      "name": "The Ruined Shrine",
+      "defaultSpawnId": "ruin_from_old_road",
+      "defaultX": 608,
+      "defaultY": 1088
     }
   },
   "npcs": {
     "village_elder": {
       "name": "Elder Thalia",
       "defaultDialogueKey": "elder_thalia_greeting",
-      "appearanceLayers": [2, 3, 65, 21, 20, 97],
+      "appearanceLayers": [
+        2,
+        3,
+        65,
+        21,
+        20,
+        97
+      ],
+      "appearance": {
+        "formatVersion": 1,
+        "components": [
+          {
+            "slot": "body",
+            "assetId": "body/bodies_female",
+            "layerRole": "front"
+          },
+          {
+            "slot": "hair",
+            "assetId": "hair/bangs_adult",
+            "layerRole": "front"
+          },
+          {
+            "slot": "torso",
+            "assetId": "torso/clothes/robe_female",
+            "layerRole": "front"
+          },
+          {
+            "slot": "legs",
+            "assetId": "legs/pants_female",
+            "layerRole": "front"
+          },
+          {
+            "slot": "feet",
+            "assetId": "feet/shoes/basic_thin",
+            "layerRole": "front"
+          },
+          {
+            "slot": "head",
+            "assetId": "head/heads/human/female_elderly",
+            "layerRole": "front"
+          }
+        ],
+        "legacyProvenance": {
+          "source": "manifest:appearanceLayers",
+          "snapshot": "legacy-catalog-order-v1"
+        }
+      },
       "isVendor": false,
       "initialSuggestions": [
         {
           "id": "elder_ask_ward",
-          "label": "\ud83d\udd6f\ufe0f Ask about the ward",
+          "label": "🕯️ Ask about the ward",
           "intentType": "quest",
-          "prefillText": "The ward is failing, you said \u2014 can you tell me what happened to it?"
+          "prefillText": "The ward is failing, you said — can you tell me what happened to it?"
         },
         {
           "id": "elder_offer_help",
-          "label": "\ud83e\udd1d Offer to help",
+          "label": "🤝 Offer to help",
           "intentType": "quest",
-          "prefillText": "I would like to help Emberwatch \u2014 is there a task you need done?"
+          "prefillText": "I would like to help Emberwatch — is there a task you need done?"
         },
         {
           "id": "elder_ask_wand",
-          "label": "\ud83e\ude84 Ask about the Ward Wand",
+          "label": "🪄 Ask about the Ward Wand",
           "intentType": "quest",
-          "prefillText": "You mentioned the Ward Wand \u2014 what is it, and where can I find it?"
+          "prefillText": "You mentioned the Ward Wand — what is it, and where can I find it?"
         }
-      ]
+      ],
+      "personality": {
+        "voice": "Measured and warm, the cadence of a village elder who has led Emberwatch for decades.",
+        "manner": "Patient and authoritative; she weighs every word, especially when the ward is at stake."
+      },
+      "agenda": [
+        "Keep the Ward Wand sealed in Emberwatch's shrine.",
+        "Renew the fading ward before the corruption beyond the hills pours in."
+      ],
+      "knowledge": [
+        "The Ward Wand is a relic of the Vesperine Order, carved from the heartwood of the first ward tree.",
+        "Rollo the Grasper keeps the wand at the Guttering Candle inn, east of the village square."
+      ],
+      "secrets": [
+        "She fears the Vesperine Order's old enemies may have already breached the valley."
+      ],
+      "boundaries": [
+        "She will not risk Emberwatch's safety on a stranger's promise, no matter how earnest."
+      ],
+      "portraits": {
+        "variants": {
+          "neutral": "/game-data/portraits/emberwatch/village_elder/neutral.png",
+          "concerned": "/game-data/portraits/emberwatch/village_elder/concerned.png",
+          "relieved": "/game-data/portraits/emberwatch/village_elder/relieved.png"
+        }
+      }
     },
     "rollo_grasper": {
       "name": "Rollo the Grasper",
       "defaultDialogueKey": "rollo_greeting",
-      "appearanceLayers": [3, 123, 23, 22, 7, 95],
+      "appearanceLayers": [
+        3,
+        123,
+        23,
+        22,
+        7,
+        95
+      ],
+      "appearance": {
+        "formatVersion": 1,
+        "components": [
+          {
+            "slot": "body",
+            "assetId": "body/bodies_male",
+            "layerRole": "front"
+          },
+          {
+            "slot": "hair",
+            "assetId": "hair/plain_adult",
+            "layerRole": "front"
+          },
+          {
+            "slot": "torso",
+            "assetId": "torso/chainmail_male",
+            "layerRole": "front"
+          },
+          {
+            "slot": "legs",
+            "assetId": "legs/pants_male",
+            "layerRole": "front"
+          },
+          {
+            "slot": "feet",
+            "assetId": "feet/boots/basic_male",
+            "layerRole": "front"
+          },
+          {
+            "slot": "head",
+            "assetId": "head/heads/human_male",
+            "layerRole": "front"
+          }
+        ],
+        "legacyProvenance": {
+          "source": "manifest:appearanceLayers",
+          "snapshot": "legacy-catalog-order-v1"
+        }
+      },
       "isVendor": false,
       "combatStats": {
         "hitPoints": 20,
@@ -532,56 +2501,742 @@
       "initialSuggestions": [
         {
           "id": "rollo_ask_wand",
-          "label": "\ud83e\ude84 Ask about the Ward Wand",
+          "label": "🪄 Ask about the Ward Wand",
           "intentType": "quest",
-          "prefillText": "I hear you hold the Ward Wand \u2014 the one Emberwatch needs."
+          "prefillText": "I hear you hold the Ward Wand — the one Emberwatch needs."
         },
         {
           "id": "rollo_persuade",
-          "label": "\ud83d\udde3\ufe0f Reason with him",
+          "label": "🗣️ Reason with him",
           "intentType": "skill_check",
-          "prefillText": "Emberwatch needs that wand to survive \u2014 name your price, please."
+          "prefillText": "Emberwatch needs that wand to survive — name your price, please."
         },
         {
           "id": "rollo_intimidate",
-          "label": "\ud83d\ude21 Intimidate him",
+          "label": "😡 Intimidate him",
           "intentType": "skill_check",
           "prefillText": "Hand over the wand now, or I will take it from you by force."
         },
         {
           "id": "rollo_leave",
-          "label": "\ud83d\udeb6 Turn back",
+          "label": "🚶 Turn back",
           "intentType": "dialogue",
-          "prefillText": "Fine. Keep your trinket for now \u2014 but this is not over."
+          "prefillText": "Fine. Keep your trinket for now — but this is not over."
         }
-      ]
+      ],
+      "personality": {
+        "voice": "A wheedling, self-serving drawl that sharpens into a snarl when cornered.",
+        "manner": "Sly and opportunistic; he measures every person by what they can pay or take."
+      },
+      "agenda": [
+        "Acquire the Ward Wand and sell it beyond Emberwatch.",
+        "Turn a profit before the ward fails and the village has nothing left to offer."
+      ],
+      "knowledge": [
+        "The wand hums when held, and its warmth never fades.",
+        "Every buyer with coin has heard of it, but none has met his price yet."
+      ],
+      "secrets": [
+        "He did not find the wand off a dead man's hands; he pried it from a shrine guardian's corpse."
+      ],
+      "boundaries": [
+        "He will not give the wand away for free, no matter how desperate the plea."
+      ],
+      "portraits": {
+        "variants": {
+          "neutral": "/game-data/portraits/emberwatch/rollo_grasper/neutral.png",
+          "relieved": "/game-data/portraits/emberwatch/rollo_grasper/relieved.png",
+          "guarded": "/game-data/portraits/emberwatch/rollo_grasper/guarded.png"
+        }
+      }
+    },
+    "ash_hound": {
+      "name": "Ash Hound",
+      "defaultDialogueKey": "ash_hound_greeting",
+      "appearance": {
+        "formatVersion": 1,
+        "components": [
+          {
+            "slot": "body",
+            "assetId": "body/bodies_male",
+            "layerRole": "front"
+          },
+          {
+            "slot": "hair",
+            "assetId": "hair/plain_adult",
+            "layerRole": "front"
+          },
+          {
+            "slot": "torso",
+            "assetId": "torso/chainmail_male",
+            "layerRole": "front"
+          },
+          {
+            "slot": "legs",
+            "assetId": "legs/pants_male",
+            "layerRole": "front"
+          },
+          {
+            "slot": "feet",
+            "assetId": "feet/boots/basic_male",
+            "layerRole": "front"
+          },
+          {
+            "slot": "head",
+            "assetId": "head/heads/human_male",
+            "layerRole": "front"
+          }
+        ],
+        "legacyProvenance": {
+          "source": "manifest:appearanceLayers",
+          "snapshot": "legacy-catalog-order-v1"
+        }
+      },
+      "visual": {
+        "kind": "static",
+        "url": "/emberwatch/enemies/ash_hound.png",
+        "width": 214,
+        "height": 192
+      },
+      "isVendor": false,
+      "combatStats": {
+        "hitPoints": 9,
+        "armorClass": 12,
+        "attackBonus": 4,
+        "damage": "1d4",
+        "initiativeBonus": 2,
+        "xpValue": 15
+      }
+    },
+    "cinder_thrall": {
+      "name": "Cinder Thrall",
+      "defaultDialogueKey": "cinder_thrall_greeting",
+      "appearance": {
+        "formatVersion": 1,
+        "components": [
+          {
+            "slot": "body",
+            "assetId": "body/bodies_male",
+            "layerRole": "front"
+          },
+          {
+            "slot": "hair",
+            "assetId": "hair/plain_adult",
+            "layerRole": "front"
+          },
+          {
+            "slot": "torso",
+            "assetId": "torso/chainmail_male",
+            "layerRole": "front"
+          },
+          {
+            "slot": "legs",
+            "assetId": "legs/pants_male",
+            "layerRole": "front"
+          },
+          {
+            "slot": "feet",
+            "assetId": "feet/boots/basic_male",
+            "layerRole": "front"
+          },
+          {
+            "slot": "head",
+            "assetId": "head/heads/human_male",
+            "layerRole": "front"
+          }
+        ],
+        "legacyProvenance": {
+          "source": "manifest:appearanceLayers",
+          "snapshot": "legacy-catalog-order-v1"
+        }
+      },
+      "visual": {
+        "kind": "static",
+        "url": "/emberwatch/enemies/cinder_thrall.png",
+        "width": 102,
+        "height": 166
+      },
+      "isVendor": false,
+      "combatStats": {
+        "hitPoints": 12,
+        "armorClass": 11,
+        "attackBonus": 3,
+        "damage": "1d6",
+        "initiativeBonus": 0,
+        "xpValue": 20
+      }
+    },
+    "ember_warden": {
+      "name": "Ember Warden",
+      "defaultDialogueKey": "ember_warden_greeting",
+      "appearance": {
+        "formatVersion": 1,
+        "components": [
+          {
+            "slot": "body",
+            "assetId": "body/bodies_male",
+            "layerRole": "front"
+          },
+          {
+            "slot": "hair",
+            "assetId": "hair/plain_adult",
+            "layerRole": "front"
+          },
+          {
+            "slot": "torso",
+            "assetId": "torso/chainmail_male",
+            "layerRole": "front"
+          },
+          {
+            "slot": "legs",
+            "assetId": "legs/pants_male",
+            "layerRole": "front"
+          },
+          {
+            "slot": "feet",
+            "assetId": "feet/boots/basic_male",
+            "layerRole": "front"
+          },
+          {
+            "slot": "head",
+            "assetId": "head/heads/human_male",
+            "layerRole": "front"
+          }
+        ],
+        "legacyProvenance": {
+          "source": "manifest:appearanceLayers",
+          "snapshot": "legacy-catalog-order-v1"
+        }
+      },
+      "visual": {
+        "kind": "static",
+        "url": "/emberwatch/enemies/ember_warden.png",
+        "width": 106,
+        "height": 259
+      },
+      "isVendor": false,
+      "combatStats": {
+        "hitPoints": 18,
+        "armorClass": 13,
+        "attackBonus": 4,
+        "damage": "1d6",
+        "initiativeBonus": 1,
+        "xpValue": 35
+      }
     },
     "merchant": {
       "name": "Mara the Merchant",
       "defaultDialogueKey": "merchant_mara_greeting",
-      "appearanceLayers": [3, 91, 127, 22, 19, 95],
+      "appearanceLayers": [
+        3,
+        91,
+        127,
+        22,
+        19,
+        95
+      ],
+      "appearance": {
+        "formatVersion": 1,
+        "components": [
+          {
+            "slot": "body",
+            "assetId": "body/bodies_male",
+            "layerRole": "front"
+          },
+          {
+            "slot": "hair",
+            "assetId": "hair/long_adult",
+            "layerRole": "front"
+          },
+          {
+            "slot": "torso",
+            "assetId": "torso/clothes/vest_male",
+            "layerRole": "front"
+          },
+          {
+            "slot": "legs",
+            "assetId": "legs/pants_male",
+            "layerRole": "front"
+          },
+          {
+            "slot": "feet",
+            "assetId": "feet/shoes/basic_male",
+            "layerRole": "front"
+          },
+          {
+            "slot": "head",
+            "assetId": "head/heads/human_male",
+            "layerRole": "front"
+          }
+        ],
+        "legacyProvenance": {
+          "source": "manifest:appearanceLayers",
+          "snapshot": "legacy-catalog-order-v1"
+        }
+      },
       "isVendor": true,
       "vendorInventory": "ironSword,steelSword,healthPotion,manaPotion,ironArmor,woodenShield",
       "initialSuggestions": [
         {
           "id": "mara_browse",
-          "label": "\ud83d\udcb0 Browse the wares",
+          "label": "💰 Browse the wares",
           "intentType": "trade",
           "prefillText": "I would like to see what wares you have for sale today."
         },
         {
           "id": "mara_wand",
-          "label": "\ud83e\ude84 Ask about the Ward Wand",
+          "label": "🪄 Ask about the Ward Wand",
           "intentType": "quest",
-          "prefillText": "A traveling merchant hears everything \u2014 have you heard of the Ward Wand?"
+          "prefillText": "A traveling merchant hears everything — have you heard of the Ward Wand?"
         },
         {
           "id": "mara_news",
-          "label": "\ud83d\uddde\ufe0f Ask for news",
+          "label": "🗞️ Ask for news",
           "intentType": "dialogue",
           "prefillText": "What news have you heard around the village lately?"
         }
-      ]
+      ],
+      "personality": {
+        "voice": "Bright, practiced shopkeeper's charm with a knowing edge.",
+        "manner": "Friendly but observant; she catalogues every customer's purse and patience."
+      },
+      "agenda": [
+        "Keep her shop profitable through the ward crisis.",
+        "Steer adventurers toward the supplies they will need against Rollo."
+      ],
+      "knowledge": [
+        "Rollo has been trying to sell the Ward Wand for months.",
+        "The elder would pay dearly to have the wand returned."
+      ],
+      "secrets": [
+        "She has quietly overstocked potions, expecting the crisis to drive prices up."
+      ],
+      "boundaries": [
+        "She will not undercut her own prices, even for a cause as desperate as the ward."
+      ],
+      "portraits": {
+        "variants": {
+          "neutral": "/game-data/portraits/emberwatch/merchant/neutral.png"
+        }
+      }
+    },
+    "village_guard": {
+      "name": "Bram the Guard",
+      "defaultDialogueKey": "bram_greeting",
+      "appearanceLayers": [
+        3,
+        123,
+        23,
+        22,
+        7,
+        95
+      ],
+      "isCompanion": true,
+      "recruitDialogueKey": "bram_recruit_offer",
+      "dismissDialogueKey": "bram_dismiss",
+      "companionClassId": "fighter",
+      "initialApproval": 10,
+      "combatStats": {
+        "hitPoints": 18,
+        "armorClass": 13,
+        "attackBonus": 3,
+        "damage": "1d8",
+        "initiativeBonus": 2,
+        "xpValue": 0
+      },
+      "banterPool": [
+        "bram_banter_ward",
+        "bram_banter_covenant"
+      ],
+      "personality": {
+        "voice": "Steady and plain-spoken, the voice of a guard who has seen the wall hold and the wall fail.",
+        "manner": "Alert and loyal; he answers with his chin up, but his hands always drift toward his sword hilt when the ward is mentioned."
+      },
+      "agenda": [
+        "Keep the gates of Emberwatch shut against the Crimson Covenant until the ward is renewed",
+        "Prove to Elder Thalia that a guard's oath can hold where a relic cannot"
+      ],
+      "knowledge": [
+        "The ward is renewed not by magic alone but by the people who keep watch over it"
+      ],
+      "secrets": [
+        "He nearly abandoned his post the night the ward first flickered, and has never told anyone."
+      ],
+      "boundaries": [
+        "refuse|Threaten an innocent villager",
+        "object|Give the Ward Wand to Rollo"
+      ],
+      "portraits": {
+        "variants": {
+          "neutral": "/game-data/portraits/emberwatch/village_guard/neutral.png"
+        }
+      }
+    },
+    "innkeeper_sella": {
+      "name": "Sella",
+      "defaultDialogueKey": "sella_greeting",
+      "appearance": {
+        "formatVersion": 1,
+        "components": [
+          {
+            "slot": "body",
+            "assetId": "body/bodies_female",
+            "layerRole": "front"
+          },
+          {
+            "slot": "hair",
+            "assetId": "hair/bangs_bun_adult",
+            "layerRole": "front"
+          },
+          {
+            "slot": "torso",
+            "assetId": "torso/aprons/apron_female",
+            "layerRole": "front"
+          },
+          {
+            "slot": "legs",
+            "assetId": "legs/pants_female",
+            "layerRole": "front"
+          },
+          {
+            "slot": "feet",
+            "assetId": "feet/shoes/basic_thin",
+            "layerRole": "front"
+          },
+          {
+            "slot": "head",
+            "assetId": "head/heads/human_female",
+            "layerRole": "front"
+          }
+        ]
+      },
+      "isVendor": false,
+      "personality": {
+        "voice": "Brisk and dry, a publican used to cutting a story short before it costs her a paying room.",
+        "manner": "Practical and unsentimental; she softens only when someone is genuinely in danger."
+      },
+      "agenda": [
+        "Keep the inn open and the road trade alive through the ward crisis."
+      ],
+      "knowledge": [
+        "Saw who carried the Ward Wand into the inn and when."
+      ],
+      "secrets": [
+        "Kept a written custody receipt for the wand she has not shown anyone."
+      ],
+      "boundaries": [
+        "Will not name a guest as a thief without proof."
+      ],
+      "portraits": {
+        "variants": {
+          "neutral": "/game-data/portraits/emberwatch/innkeeper_sella/neutral.png"
+        }
+      }
+    },
+    "smith_orra": {
+      "name": "Orra",
+      "defaultDialogueKey": "orra_greeting",
+      "appearance": {
+        "formatVersion": 1,
+        "components": [
+          {
+            "slot": "body",
+            "assetId": "body/bodies_muscular",
+            "layerRole": "front"
+          },
+          {
+            "slot": "hair",
+            "assetId": "hair/balding_adult",
+            "layerRole": "front"
+          },
+          {
+            "slot": "torso",
+            "assetId": "torso/aprons/apron_male",
+            "layerRole": "front"
+          },
+          {
+            "slot": "legs",
+            "assetId": "legs/pants_muscular",
+            "layerRole": "front"
+          },
+          {
+            "slot": "feet",
+            "assetId": "feet/boots/basic_male",
+            "layerRole": "front"
+          },
+          {
+            "slot": "head",
+            "assetId": "head/heads/human_male",
+            "layerRole": "front"
+          }
+        ]
+      },
+      "isVendor": false,
+      "personality": {
+        "voice": "Blunt and concrete, a smith who trusts metal more than talk.",
+        "manner": "Works while she speaks; interrupts herself to finish a strike."
+      },
+      "agenda": [
+        "Repair the physical ward conduits before the next corruption tide."
+      ],
+      "knowledge": [
+        "The ward fails at its joints, not its heart — the conduits were never maintained."
+      ],
+      "secrets": [
+        "She warned the council about the conduit debt years ago and was ignored."
+      ],
+      "boundaries": [
+        "Will not hand over tools she has not tested herself."
+      ],
+      "portraits": {
+        "variants": {
+          "neutral": "/game-data/portraits/emberwatch/smith_orra/neutral.png"
+        }
+      }
+    },
+    "cartographer_ivo": {
+      "name": "Ivo",
+      "defaultDialogueKey": "ivo_greeting",
+      "appearance": {
+        "formatVersion": 1,
+        "components": [
+          {
+            "slot": "body",
+            "assetId": "body/bodies_male",
+            "layerRole": "front"
+          },
+          {
+            "slot": "hair",
+            "assetId": "hair/curly_short_adult",
+            "layerRole": "front"
+          },
+          {
+            "slot": "torso",
+            "assetId": "torso/clothes/longsleeve/formal_male",
+            "layerRole": "front"
+          },
+          {
+            "slot": "legs",
+            "assetId": "legs/pants_male",
+            "layerRole": "front"
+          },
+          {
+            "slot": "feet",
+            "assetId": "feet/shoes/basic_male",
+            "layerRole": "front"
+          },
+          {
+            "slot": "head",
+            "assetId": "head/heads/human_male",
+            "layerRole": "front"
+          }
+        ]
+      },
+      "isVendor": false,
+      "personality": {
+        "voice": "Precise and a little eager, delighted to be asked anything about roads.",
+        "manner": "Answers questions with directions, whether or not directions were requested."
+      },
+      "agenda": [
+        "Chart both approaches to the ruined shrine before someone walks the wrong one."
+      ],
+      "knowledge": [
+        "The old road splits at the waystation: a short exposed bridge or a longer woodland trail."
+      ],
+      "secrets": [
+        "He has never actually walked the woodland trail himself."
+      ],
+      "boundaries": [
+        "Will not send anyone down a route he cannot describe in full."
+      ],
+      "portraits": {
+        "variants": {
+          "neutral": "/game-data/portraits/emberwatch/cartographer_ivo/neutral.png"
+        }
+      }
+    },
+    "shrine_keeper_nemi": {
+      "name": "Nemi",
+      "defaultDialogueKey": "nemi_greeting",
+      "appearance": {
+        "formatVersion": 1,
+        "components": [
+          {
+            "slot": "body",
+            "assetId": "body/bodies_female",
+            "layerRole": "front"
+          },
+          {
+            "slot": "hair",
+            "assetId": "hair/long_adult",
+            "layerRole": "front"
+          },
+          {
+            "slot": "torso",
+            "assetId": "torso/clothes/robe_female",
+            "layerRole": "front"
+          },
+          {
+            "slot": "legs",
+            "assetId": "legs/pants_female",
+            "layerRole": "front"
+          },
+          {
+            "slot": "feet",
+            "assetId": "feet/shoes/basic_thin",
+            "layerRole": "front"
+          },
+          {
+            "slot": "head",
+            "assetId": "head/heads/human_female",
+            "layerRole": "front"
+          }
+        ]
+      },
+      "isVendor": false,
+      "personality": {
+        "voice": "Quiet and deliberate, a keeper who has spent years listening to a failing ward.",
+        "manner": "Never rushes a question; states costs as plainly as benefits."
+      },
+      "agenda": [
+        "See the ward renewed without hiding what the old rite demands."
+      ],
+      "knowledge": [
+        "The renewal rite can bind the ward to one keeper or to the whole village."
+      ],
+      "secrets": [
+        "The centralized ward has failed before, and the failure was concealed."
+      ],
+      "boundaries": [
+        "Will not perform the rite on a lie or a guess."
+      ],
+      "portraits": {
+        "variants": {
+          "neutral": "/game-data/portraits/emberwatch/shrine_keeper_nemi/neutral.png"
+        }
+      }
+    },
+    "apprentice_tess": {
+      "name": "Tess",
+      "defaultDialogueKey": "tess_greeting",
+      "appearance": {
+        "formatVersion": 1,
+        "components": [
+          {
+            "slot": "body",
+            "assetId": "body/bodies_teen",
+            "layerRole": "front"
+          },
+          {
+            "slot": "hair",
+            "assetId": "hair/bob_adult",
+            "layerRole": "front"
+          },
+          {
+            "slot": "torso",
+            "assetId": "torso/clothes/shortsleeve/shortsleeve_female",
+            "layerRole": "front"
+          },
+          {
+            "slot": "legs",
+            "assetId": "legs/pants_teen",
+            "layerRole": "front"
+          },
+          {
+            "slot": "feet",
+            "assetId": "feet/boots/basic_thin",
+            "layerRole": "front"
+          },
+          {
+            "slot": "head",
+            "assetId": "head/heads/human_female",
+            "layerRole": "front"
+          }
+        ]
+      },
+      "isVendor": false,
+      "personality": {
+        "voice": "Bright and rattled, an apprentice holding herself together by naming every part she can.",
+        "manner": "Talks fast, then stops to check the instrument she is carrying."
+      },
+      "agenda": [
+        "Get the intact ward component back to Emberwatch."
+      ],
+      "knowledge": [
+        "The waystation conduit cracked along a joint, not from any monster attack."
+      ],
+      "secrets": [
+        "She is afraid the failure was her master’s negligence, not bad luck."
+      ],
+      "boundaries": [
+        "Will not abandon the component to save herself."
+      ],
+      "portraits": {
+        "variants": {
+          "neutral": "/game-data/portraits/emberwatch/apprentice_tess/neutral.png"
+        }
+      }
+    },
+    "woodcutter_ada": {
+      "name": "Ada",
+      "defaultDialogueKey": "ada_greeting",
+      "appearance": {
+        "formatVersion": 1,
+        "components": [
+          {
+            "slot": "body",
+            "assetId": "body/bodies_female",
+            "layerRole": "front"
+          },
+          {
+            "slot": "hair",
+            "assetId": "hair/high_ponytail/fg_adult",
+            "layerRole": "front"
+          },
+          {
+            "slot": "torso",
+            "assetId": "torso/clothes/longsleeve/longsleeves_cuffed_female",
+            "layerRole": "front"
+          },
+          {
+            "slot": "legs",
+            "assetId": "legs/pants_female",
+            "layerRole": "front"
+          },
+          {
+            "slot": "feet",
+            "assetId": "feet/boots/basic_thin",
+            "layerRole": "front"
+          },
+          {
+            "slot": "head",
+            "assetId": "head/heads/human_female",
+            "layerRole": "front"
+          }
+        ]
+      },
+      "isVendor": false,
+      "personality": {
+        "voice": "Low and weathered, a woodcutter who prefers trees to people and both to the ward.",
+        "manner": "Points with her axe; says only what the forest already shows."
+      },
+      "agenda": [
+        "Understand why the roots along the old road are twisting toward the shrine."
+      ],
+      "knowledge": [
+        "The woodland trail is safe if you follow the cut stumps, and the culvert is the quick risk."
+      ],
+      "secrets": [
+        "She has seen lights moving beneath the culvert at night."
+      ],
+      "boundaries": [
+        "Will not cut a tree that the ward tree’s roots still reach."
+      ],
+      "portraits": {
+        "variants": {
+          "neutral": "/game-data/portraits/emberwatch/woodcutter_ada/neutral.png"
+        }
+      }
     }
   },
   "items": {
@@ -645,24 +3300,54 @@
     }
   },
   "dialogues": {
-    "elder_thalia_greeting": "Ah, a traveler! Welcome to Emberwatch. I am Elder Thalia, keeper of this village's lore. You arrive at a troubling time \u2014 the ward that has shielded our valley for centuries is fading fast. If it fails, the corruption beyond the hills will pour in, and Emberwatch will fall.",
-    "elder_thalia_offer": "The Ward Wand can renew the ward \u2014 a relic of the Vesperine Order, carved from the heartwood of the first ward tree. With it in my hands I can mend the ward and save the valley. But the wand was lost years ago. Word has it a rogue named Rollo the Grasper took it and now keeps it at the Guttering Candle inn, east of the square. Will you bring it back to me? Emberwatch would be forever in your debt.",
-    "elder_thalia_progress": "Have you found the Ward Wand yet? Rollo the Grasper holds it at the inn, east of the village square. He is a stubborn, slippery sort \u2014 he may need convincing, or a firmer hand than words.",
-    "elder_thalia_decline": "I understand \u2014 the burden is heavy and the roads are rough. Should you change your mind, I will be here, and the ward will still be fading.",
-    "elder_thalia_complete": "You found it! The Ward Wand \u2014 I can feel its warmth from here. With this, the ward will blaze bright once more. Emberwatch owes you a debt it can never repay.",
-    "elder_thalia_ending_renewed": "You returned the Ward Wand! The ward blazes bright once more \u2014 I felt its pulse from the village center. Emberwatch owes you everything, brave soul. The Vesperine Order smiles upon you.",
-    "rollo_greeting": "What do you want? I'm busy. If it's about that glowing stick \u2014 it's mine. Found it fair and square off a dead man's hands. Now scram.",
-    "rollo_ask_wand": "The Ward Wand? Sure, I've got it. Pretty thing \u2014 hums when you hold it. But it's worth a fortune to the right buyer, and you're not that buyer. Go on, get lost.",
-    "rollo_persuasion_success": "Hmph. You make a decent argument, adventurer. Emberwatch folk are good people, and if the ward dies we're all in the muck anyway. Fine \u2014 take the wand. Don't make me regret this.",
-    "rollo_persuasion_failure": "Nice try. I've heard better sob stories from street rats. The wand stays with me. Come back when you have real coin \u2014 or real steel.",
-    "rollo_intimidation_success": "W-wait! Easy now! Fine, fine \u2014 take it! It's not worth dying over a glowing stick. J-just don't hurt me!",
+    "elder_thalia_greeting": "Ah, a traveler! Welcome to Emberwatch. I am Elder Thalia, keeper of this village's lore. You arrive at a troubling time — the ward that has shielded our valley for centuries is fading fast. If it fails, the corruption beyond the hills will pour in, and Emberwatch will fall.",
+    "elder_thalia_offer": "The Ward Wand can renew the ward — a relic of the Vesperine Order, carved from the heartwood of the first ward tree. With it in my hands I can mend the ward and save the valley. But the wand was lost years ago. Word has it a rogue named Rollo the Grasper took it and now keeps it at the Guttering Candle inn, east of the square. Will you bring it back to me? Emberwatch would be forever in your debt.",
+    "elder_thalia_progress": "Have you found the Ward Wand yet? Rollo the Grasper holds it at the inn, east of the village square. He is a stubborn, slippery sort — he may need convincing, or a firmer hand than words.",
+    "elder_thalia_decline": "I understand — the burden is heavy and the roads are rough. Should you change your mind, I will be here, and the ward will still be fading.",
+    "elder_thalia_complete": "You found it! The Ward Wand — I can feel its warmth from here. With this, the ward will blaze bright once more. Emberwatch owes you a debt it can never repay.",
+    "elder_thalia_ending_renewed": "You returned the Ward Wand! The ward blazes bright once more — I felt its pulse from the village center. Emberwatch owes you everything, brave soul. The Vesperine Order smiles upon you.",
+    "elder_thalia_ending_reconciled": "You showed me what I refused to see. The ward was never one relic's burden — it was ours, and I let the work of keeping it go quiet for fear of the panic the truth would cause. Emberwatch stands because you made us look at it together. I will not carry the watch alone again.",
+    "bram_ending_darkened": "The ward has gone dark. I have kept this gate for years, and tonight I keep it against the dark. Whatever comes, we face it together.",
+    "rollo_greeting": "What do you want? I'm busy. If it's about that glowing stick — it's mine. Found it fair and square off a dead man's hands. Now scram.",
+    "rollo_ask_wand": "The Ward Wand? Sure, I've got it. Pretty thing — hums when you hold it. But it's worth a fortune to the right buyer, and you're not that buyer. Go on, get lost.",
+    "rollo_persuasion_success": "Hmph. You make a decent argument, adventurer. Emberwatch folk are good people, and if the ward dies we're all in the muck anyway. Fine — take the wand. Don't make me regret this.",
+    "rollo_persuasion_failure": "Nice try. I've heard better sob stories from street rats. The wand stays with me. Come back when you have real coin — or real steel.",
+    "rollo_intimidation_success": "W-wait! Easy now! Fine, fine — take it! It's not worth dying over a glowing stick. J-just don't hurt me!",
     "rollo_intimidation_failure": "Ha! You think a few harsh words scare me? I've stared down worse than you in alleys across the realm. Try again when you've grown a spine.",
     "rollo_fight_start": "Oh, you want it the hard way? Fine! Let's see how tough you really are!",
-    "rollo_defeated": "Enough! Mercy! Take the wand \u2014 it's yours! Just... just let me keep my teeth.",
-    "rollo_news": "Hear a lot, sitting here. The ward's failing \u2014 everyone knows it. That's why I'm holding onto the wand, see. When the price is right, I'll sell it back to the very folk who need it. Business.",
-    "merchant_mara_greeting": "Welcome to Mara's Provisions! Fine steel, sturdy armor, potent potions \u2014 everything an adventurer needs to stay alive out there. What can I get for you today?",
-    "merchant_mara_wand": "The Ward Wand? Oh yes \u2014 Rollo's prized trinket. He's been trying to sell it for months, but no buyer with a brain will touch it. The elder would pay dearly to have it back, though. Talk to Rollo at the Guttering Candle inn, east side of the village. And mind your coin purse around him.",
-    "merchant_mara_news": "The whole valley's on edge, dear. The ward's fading, the elder's frantic, and that lout Rollo's been bragging at the inn that he holds the one thing that can fix it \u2014 the Ward Wand. If you're planning to deal with him, buy some potions first. You'll need them."
+    "rollo_defeated": "Enough! Mercy! Take the wand — it's yours! Just... just let me keep my teeth.",
+    "proof_encounter_start": "Three shapes block the way — a hound of ash, a thrall of cinder, and a warden wreathed in embers.",
+    "proof_encounter_victory": "The embers gutter and die. The way is clear.",
+    "ash_hound_greeting": "The hound's ribs glow through its hide.",
+    "cinder_thrall_greeting": "The thrall shambles forward, ash falling from its hands.",
+    "ember_warden_greeting": "The warden raises a hand wreathed in ember-light.",
+    "rollo_news": "Hear a lot, sitting here. The ward's failing — everyone knows it. That's why I'm holding onto the wand, see. When the price is right, I'll sell it back to the very folk who need it. Business.",
+    "merchant_mara_greeting": "Welcome to Mara's Provisions! Fine steel, sturdy armor, potent potions — everything an adventurer needs to stay alive out there. What can I get for you today?",
+    "merchant_mara_wand": "The Ward Wand? Oh yes — Rollo's prized trinket. He's been trying to sell it for months, but no buyer with a brain will touch it. The elder would pay dearly to have it back, though. Talk to Rollo at the Guttering Candle inn, east side of the village. And mind your coin purse around him.",
+    "merchant_mara_news": "The whole valley's on edge, dear. The ward's fading, the elder's frantic, and that lout Rollo's been bragging at the inn that he holds the one thing that can fix it — the Ward Wand. If you're planning to deal with him, buy some potions first. You'll need them.",
+    "bram_greeting": "\"Easy, traveler. Name your business before you cross the gate.\"",
+    "bram_recruit_offer": "\"You fight the way I was taught to fight — straight and for the people behind you. If the ward is to hold, I would rather stand beside you than behind a wall. Say the word, and I will follow.\"",
+    "bram_dismiss": "\"You have your reasons. I will keep the gate in your absence. Call on me when the wall needs a spear.\"",
+    "bram_banter_ward": "\"The ward is a song, the elders say. A song has to be sung by someone.\"",
+    "bram_banter_covenant": "\"The Covenant comes at night. So do we.\"",
+    "sella_greeting": "Welcome to the Guttering Candle. Keep your boots off the good rug and your coin where I can see it.",
+    "sella_receipt": "Rollo came in with the Ward Wand and paid to keep a room. I wrote him a receipt — I keep every one.",
+    "orra_greeting": "Mind the sparks. If you've come about the ward, I can talk while I work.",
+    "orra_kit": "These are the couplings I could salvage. Not enough of them to set the conduits right, so I need to know what is still standing out there.",
+    "ivo_greeting": "You'll want the shrine marked before you walk the old road. I chart both ways.",
+    "ivo_routes": "The bridge road is short and exposed. The woodland trail is longer, but the trees keep you. Pick your trouble.",
+    "nemi_greeting": "The shrine keeps its own counsel. State your business, and speak plainly.",
+    "nemi_choice": "You can seat the wand and trust the old ward to hold — or break the circle and share the watch. Both have a price.",
+    "tess_greeting": "Don't mind the waystation; it has held worse weather than this. The conduit there finally failed.",
+    "tess_component": "I saved one intact ward component. Get me home and it's the village's.",
+    "ada_greeting": "Hear that? The roots are pulling in ways they should not. Something under the old road is wrong.",
+    "ada_trail": "Follow the cut stumps and you will not lose the woodland path. The culvert is the risky way.",
+    "orra_offer": "Walk the old road to the waystation and tell me what is still standing out there. Then I can keep the ward up another season.",
+    "orra_progress": "The waystation is north, along the old road. Mind the river crossing.",
+    "sella_offer": "Tess is stranded at the old-road waystation. Go and see that she is all right, and I will settle the debt.",
+    "sella_progress": "Take the north road out of the square. She is at the waystation, past the bridge.",
+    "ada_offer": "Walk the woodland trail and I will mark it for Ivo. Better a long safe road than a short drowned one.",
+    "ada_progress": "Follow the cut stumps through the old road. The culvert is quicker and I would not take it."
   },
   "quests": {
     "fading_ward": {
@@ -675,19 +3360,55 @@
           "completeOnNpcInteract": "village_elder"
         },
         {
-          "text": "Find the Ward Wand's keeper at the inn",
+          "text": "Find the Ward Wand’s keeper at the inn",
           "completeOnMapEnter": "inn",
-          "prerequisiteIndices": [0]
+          "prerequisiteIndices": [
+            0
+          ]
+        },
+        {
+          "text": "Ask Sella how the wand came to the inn",
+          "completeOnNpcInteract": "innkeeper_sella",
+          "prerequisiteIndices": [
+            1
+          ],
+          "optional": true
+        },
+        {
+          "text": "Enter Mara’s shop to look for the repair ledger",
+          "completeOnMapEnter": "merchant_shop",
+          "prerequisiteIndices": [
+            1
+          ],
+          "optional": true
         },
         {
           "text": "Obtain the Ward Wand from its keeper",
           "completeOnItemPickup": "wardWand",
-          "prerequisiteIndices": [1]
+          "prerequisiteIndices": [
+            1
+          ]
         },
         {
-          "text": "Return the Ward Wand to Elder Thalia",
+          "text": "Walk the old road toward the ruined shrine",
+          "completeOnMapEnter": "old_road",
+          "prerequisiteIndices": [
+            4
+          ]
+        },
+        {
+          "text": "Reach the ruined shrine forecourt",
+          "completeOnMapEnter": "ruined_shrine",
+          "prerequisiteIndices": [
+            5
+          ]
+        },
+        {
+          "text": "Return to Elder Thalia and decide the ward’s fate",
           "completeOnNpcInteract": "village_elder",
-          "prerequisiteIndices": [2]
+          "prerequisiteIndices": [
+            6
+          ]
         }
       ],
       "offerDialogueKey": "elder_thalia_offer",
@@ -707,9 +3428,158 @@
       "endings": {
         "ward_renewed": {
           "title": "The Ward Renewed",
-          "narration": "You place the Ward Wand into Elder Thalia's hands. She raises it toward the sky and speaks the old words of the Vesperine Order. A pulse of warm light rolls outward from the village, and the fading ward blazes bright once more. Emberwatch is saved \u2014 and the valley will remember the one who brought the wand home.",
+          "narration": "Thalia seats the wand in the old stone cradle. Amber light climbs the ward tree, limb by limb, and rolls across the rooftops. The wall will hold. Beside her, Orra lays the broken conduit on the council table: this time, the work of keeping it alive will not stay hidden.",
           "reactionDialogueKey": "elder_thalia_ending_renewed",
           "worldStateFlag": "emberwatch.ending.renewed"
+        },
+        "ward_reconciled": {
+          "title": "The Shared Watch",
+          "narration": "Nemi breaks the circle of the old rite and invites the villagers inside it. Bram takes the first watch; Mara opens the repair ledger; even Rollo places a hand against the roots. The ward returns as a hundred smaller lights, moving from doorway to doorway. No keeper will carry it alone again.",
+          "reactionDialogueKey": "elder_thalia_ending_reconciled",
+          "requiresWorldStateFlag": "evidence.presented.the_ledger",
+          "worldStateFlag": "emberwatch.ending.reconciled"
+        },
+        "ward_darkened": {
+          "title": "A Watch Without Magic",
+          "narration": "The wand falls quiet in its stone cradle. Beyond the gate the night is only night again — dangerous, and no longer held at bay by a promise. Lanterns appear along the wall. Bram lifts the bar, looks back at the people gathering behind him, and says, \"Then we keep watch ourselves.\"",
+          "reactionDialogueKey": "bram_ending_darkened",
+          "requiresWorldStateFlag": "evidence.presented.elders_seal",
+          "worldStateFlag": "emberwatch.ending.darkened"
+        }
+      }
+    },
+    "tools_for_tomorrow": {
+      "id": "tools_for_tomorrow",
+      "name": "Tools for Tomorrow",
+      "description": "Orra needs a first-hand account of the old-road waystation before she trusts the ward conduits to hold.",
+      "objectives": [
+        {
+          "text": "Ask Orra about the ward conduits",
+          "completeOnNpcInteract": "smith_orra"
+        },
+        {
+          "text": "Walk the old road out past the river crossing",
+          "completeOnMapEnter": "old_road",
+          "prerequisiteIndices": [
+            0
+          ]
+        },
+        {
+          "text": "Tell Orra what is left standing at the waystation",
+          "completeOnNpcInteract": "smith_orra",
+          "prerequisiteIndices": [
+            1
+          ]
+        }
+      ],
+      "offerDialogueKey": "orra_offer",
+      "progressDialogueKey": "orra_progress",
+      "offeredByNpcId": "smith_orra",
+      "rewards": [
+        {
+          "type": "gold",
+          "amount": 75
+        },
+        {
+          "type": "xp",
+          "amount": 120
+        }
+      ],
+      "endings": {
+        "done": {
+          "title": "Tools for Tomorrow",
+          "narration": "Orra listens to your account of the waystation with her hammer still, then sets it down. \"So the frame held, and the runs are sound.\" She takes the metal up again with a purpose. \"Then the conduits will hold another season.\" She does not say thank you; the work says it for her.",
+          "worldStateFlag": "emberwatch.side.tools_for_tomorrow"
+        }
+      }
+    },
+    "a_room_kept_warm": {
+      "id": "a_room_kept_warm",
+      "name": "A Room Kept Warm",
+      "description": "Sella wants word of Tess, stranded at the old-road waystation.",
+      "objectives": [
+        {
+          "text": "Ask Sella about the waystation",
+          "completeOnNpcInteract": "innkeeper_sella"
+        },
+        {
+          "text": "Speak with Tess at the old-road waystation",
+          "completeOnNpcInteract": "apprentice_tess",
+          "prerequisiteIndices": [
+            0
+          ]
+        },
+        {
+          "text": "Report back to Sella",
+          "completeOnNpcInteract": "innkeeper_sella",
+          "prerequisiteIndices": [
+            1
+          ]
+        }
+      ],
+      "offerDialogueKey": "sella_offer",
+      "progressDialogueKey": "sella_progress",
+      "offeredByNpcId": "innkeeper_sella",
+      "rewards": [
+        {
+          "type": "gold",
+          "amount": 75
+        },
+        {
+          "type": "xp",
+          "amount": 120
+        }
+      ],
+      "endings": {
+        "done": {
+          "title": "A Room Kept Warm",
+          "narration": "Sella listens, then hangs the spare key back on its hook. \"She has a bed for the night, then.\" She pours a second cup she does not drink, and leaves it warming by the hearth.",
+          "worldStateFlag": "emberwatch.side.a_room_kept_warm"
+        }
+      }
+    },
+    "mark_the_safe_trail": {
+      "id": "mark_the_safe_trail",
+      "name": "Mark the Safe Trail",
+      "description": "Ada wants the woodland route walked and reported to Ivo.",
+      "objectives": [
+        {
+          "text": "Ask Ada about the woodland trail",
+          "completeOnNpcInteract": "woodcutter_ada"
+        },
+        {
+          "text": "Enter the old road to find the woodland trail",
+          "completeOnMapEnter": "old_road",
+          "prerequisiteIndices": [
+            0
+          ]
+        },
+        {
+          "text": "Report the route to Ivo",
+          "completeOnNpcInteract": "cartographer_ivo",
+          "prerequisiteIndices": [
+            1
+          ]
+        }
+      ],
+      "offerDialogueKey": "ada_offer",
+      "progressDialogueKey": "ada_progress",
+      "offeredByNpcId": "woodcutter_ada",
+      "rewards": [
+        {
+          "type": "gold",
+          "amount": 75
+        },
+        {
+          "type": "xp",
+          "amount": 120
+        }
+      ],
+      "endings": {
+        "done": {
+          "title": "Mark the Safe Trail",
+          "narration": "Ivo copies Ada’s cut-stump markers onto his map with the care of a man redrawing a coastline. The woodland trail is on the chart now, and it will not be lost again.",
+          "worldStateFlag": "emberwatch.side.mark_the_safe_trail"
         }
       }
     }
@@ -719,7 +3589,9 @@
       "id": "inn_wand_encounter",
       "mapId": "inn",
       "name": "Rollo the Grasper",
-      "enemyNpcIds": ["rollo_grasper"],
+      "enemyNpcIds": [
+        "rollo_grasper"
+      ],
       "allowNonCombatResolution": true,
       "nonCombatSkillCheck": {
         "skill": "persuasion",
@@ -735,7 +3607,7 @@
         {
           "itemId": "wardWand",
           "quantity": 1,
-          "dropChance": 1.0
+          "dropChance": 1
         },
         {
           "itemId": "healthPotion",
@@ -743,49 +3615,325 @@
           "dropChance": 0.5
         }
       ]
+    },
+    "proof_encounter": {
+      "id": "proof_encounter",
+      "mapId": "inn",
+      "name": "Emberwatch Proof Encounter",
+      "enemyNpcIds": [
+        "ash_hound",
+        "cinder_thrall",
+        "ember_warden"
+      ],
+      "allowNonCombatResolution": false,
+      "startDialogueKey": "proof_encounter_start",
+      "victoryDialogueKey": "proof_encounter_victory",
+      "loot": [],
+      "environment": {
+        "objects": [
+          {
+            "objectId": "emberwatch/table-1",
+            "propId": "inn_table",
+            "cell": {
+              "x": 10,
+              "y": 9
+            }
+          },
+          {
+            "objectId": "emberwatch/brazier-1",
+            "propId": "inn_brazier",
+            "cell": {
+              "x": 9,
+              "y": 10
+            }
+          },
+          {
+            "objectId": "emberwatch/oil-1",
+            "propId": "inn_oil_pool",
+            "cell": {
+              "x": 9,
+              "y": 9
+            }
+          },
+          {
+            "objectId": "emberwatch/support-1",
+            "propId": "inn_support",
+            "cell": {
+              "x": 7,
+              "y": 10
+            }
+          },
+          {
+            "objectId": "emberwatch/crate-1",
+            "propId": "inn_hanging_crate",
+            "cell": {
+              "x": 7,
+              "y": 9
+            },
+            "attachedToObjectId": "emberwatch/support-1"
+          }
+        ],
+        "impactZones": {
+          "emberwatch/crate_zone": {
+            "zoneId": "emberwatch/crate_zone",
+            "offsets": [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 0,
+                "y": 1
+              },
+              {
+                "x": 1,
+                "y": 1
+              }
+            ],
+            "diceExpression": "2d6",
+            "damageType": "bludgeoning"
+          }
+        }
+      },
+      "objectiveRules": {
+        "definitions": [
+          {
+            "objectiveId": "objective.stop_ritual",
+            "kind": "interact_before_deadline",
+            "required": true,
+            "hidden": false,
+            "rule": {
+              "kind": "interact_before_deadline",
+              "objectId": "emberwatch/brazier-1",
+              "affordanceId": "tip_over",
+              "deadlineRound": 3,
+              "requiredActorIds": [
+                "player"
+              ]
+            }
+          },
+          {
+            "objectiveId": "objective.rout_warden",
+            "kind": "defeat_or_rout",
+            "required": false,
+            "hidden": false,
+            "rule": {
+              "kind": "defeat_or_rout",
+              "hostileIds": [
+                "ember_warden"
+              ]
+            }
+          }
+        ],
+        "protectedActorIds": []
+      },
+      "moraleRules": {
+        "startingMorale": 60,
+        "breakThreshold": 30,
+        "triggers": [
+          {
+            "triggerKind": "leader_defeated",
+            "magnitude": 25
+          },
+          {
+            "triggerKind": "ally_removed",
+            "magnitude": 10
+          },
+          {
+            "triggerKind": "objective_failed",
+            "magnitude": 20
+          }
+        ],
+        "responses": [
+          {
+            "responseKind": "retreat",
+            "exitZoneId": "emberwatch/south_gate"
+          },
+          {
+            "responseKind": "surrender",
+            "exitZoneId": null
+          }
+        ],
+        "exitZones": [
+          {
+            "zoneId": "emberwatch/south_gate",
+            "cells": [
+              {
+                "x": 6,
+                "y": 11
+              },
+              {
+                "x": 7,
+                "y": 11
+              }
+            ]
+          }
+        ],
+        "leaderIds": [
+          "ember_warden"
+        ]
+      },
+      "reactionRegistry": {
+        "definitions": [
+          {
+            "reactionId": "reaction.opportunity_attack",
+            "triggerKind": "opportunity_attack",
+            "abilityId": "opportunity_strike",
+            "threatRangeCells": 1
+          }
+        ]
+      }
     }
   },
   "credits": {
-    "design": ["Aikami Studio"],
-    "writing": ["Aikami Studio"],
-    "art": ["Liberated Pixel Cup (LPC) asset contributors"],
-    "music": ["Chainsmoker \u2014 Exploration Theme"],
-    "thanks": ["The open-source game development community", "The LPC asset artists"]
+    "design": [
+      "Aikami Studio"
+    ],
+    "writing": [
+      "Aikami Studio"
+    ],
+    "art": [
+      "Liberated Pixel Cup (LPC) asset contributors"
+    ],
+    "music": [
+      "Original Emberwatch score (ACE-Step generated)"
+    ],
+    "thanks": [
+      "The open-source game development community",
+      "The LPC asset artists"
+    ]
   },
   "onboarding": {
     "steps": [
       {
         "id": "hint_move",
-        "action": "move_up",
-        "text": "Use {key} to move \u2014 try walking around!",
+        "action": {
+          "kind": "input",
+          "actionId": "move_up"
+        },
+        "text": "Use {key} to move — try walking around!",
         "trigger": "map_loaded"
       },
       {
         "id": "hint_interact",
-        "action": "interact",
+        "action": {
+          "kind": "input",
+          "actionId": "interact"
+        },
         "text": "Press {key} to interact with people and objects",
         "trigger": "near_interactable"
       },
       {
         "id": "hint_quest_log",
-        "action": "open_quest_log",
+        "action": {
+          "kind": "input",
+          "actionId": "open_quest_log"
+        },
         "text": "Press {key} to open your quest log",
         "trigger": "after_previous"
       },
       {
         "id": "hint_inventory",
-        "action": "open_inventory",
+        "action": {
+          "kind": "input",
+          "actionId": "open_inventory"
+        },
         "text": "Press {key} to check your inventory",
         "trigger": "after_previous"
       },
       {
         "id": "hint_pause",
-        "action": "open_menu",
+        "action": {
+          "kind": "input",
+          "actionId": "open_menu"
+        },
         "text": "Press {key} to pause and save your game",
         "trigger": "after_previous"
       }
     ]
   },
+  "truthVariants": [
+    {
+      "id": "rollo_owns_the_ledger",
+      "label": "Rollo keeps the true ledger",
+      "startingConditions": [
+        {
+          "key": "whoOwesWhom",
+          "value": "rollo"
+        },
+        {
+          "key": "missingEvidence",
+          "value": "the_ledger"
+        },
+        {
+          "key": "wardProximity",
+          "value": "fading"
+        }
+      ]
+    },
+    {
+      "id": "thalia_owns_the_seal",
+      "label": "Thalia's seal hides the truth",
+      "startingConditions": [
+        {
+          "key": "whoOwesWhom",
+          "value": "thalia"
+        },
+        {
+          "key": "missingEvidence",
+          "value": "elders_seal"
+        },
+        {
+          "key": "wardProximity",
+          "value": "near_breaking"
+        }
+      ]
+    }
+  ],
+  "accounts": {
+    "the_ward_truth": [
+      {
+        "npcId": "rollo_grasper",
+        "claim": "The ward has been failing for years because the village let its conduits rot while the council told everyone the relic would hold forever. I found the true ledger in the shop and I kept it — the repairs were paid for and never done. I took the wand because no one else would act.",
+        "supportsTruthId": "rollo_owns_the_ledger"
+      },
+      {
+        "npcId": "village_elder",
+        "claim": "The ward has held for centuries because the order kept its seal and its rites without fail; the only failure is Rollo, who robbed a dead guardian and now peddles our relic. There is no negligence here — only theft, and the sooner the wand is returned to the cradle the sooner we are safe.",
+        "supportsTruthId": "thalia_owns_the_seal"
+      }
+    ]
+  },
+  "evidence": [
+    {
+      "id": "the_ledger",
+      "label": "The Merchant's Repair Ledger",
+      "discoverableAt": "merchant_shop:shop_counter_l",
+      "presentToNpcId": "village_elder",
+      "supportsTruthId": "rollo_owns_the_ledger"
+    },
+    {
+      "id": "sella_receipt",
+      "label": "Sella's Custody Receipt",
+      "discoverableAt": "inn:sella_receipt",
+      "presentToNpcId": "village_elder",
+      "supportsTruthId": "rollo_owns_the_ledger"
+    },
+    {
+      "id": "tess_component",
+      "label": "Intact Ward Component",
+      "discoverableAt": "old_road:tess_component",
+      "presentToNpcId": "shrine_keeper_nemi",
+      "supportsTruthId": "thalia_owns_the_seal"
+    },
+    {
+      "id": "elders_seal",
+      "label": "The Elder's Broken Seal",
+      "discoverableAt": "village:village_well",
+      "presentToNpcId": "rollo_grasper",
+      "supportsTruthId": "thalia_owns_the_seal"
+    }
+  ],
   "factions": {
     "town_guard": {
       "id": "town_guard",
@@ -823,7 +3971,7 @@
     "emberwatch_citizens": {
       "id": "emberwatch_citizens",
       "name": "Emberwatch Citizens",
-      "description": "The common folk of Emberwatch \u2014 farmers, craftsmen, and merchants who call this village home.",
+      "description": "The common folk of Emberwatch — farmers, craftsmen, and merchants who call this village home.",
       "defaultStanding": 10,
       "standingTiers": [
         {
@@ -886,5 +4034,108 @@
         }
       ]
     }
+  },
+  "audio": {
+    "schemaVersion": "pack.audio.v1",
+    "bindings": [
+      {
+        "cueId": "bed.explore",
+        "target": "music",
+        "context": "bed.explore",
+        "source": {
+          "kind": "silence"
+        },
+        "resolution": "optional",
+        "fallback": "silence"
+      },
+      {
+        "cueId": "bed.combat",
+        "target": "music",
+        "context": "bed.combat",
+        "source": {
+          "kind": "silence"
+        },
+        "resolution": "optional",
+        "fallback": "silence"
+      },
+      {
+        "cueId": "village.music",
+        "target": "music",
+        "context": "village",
+        "source": {
+          "kind": "asset",
+          "tag": "music:exploration:village_ward",
+          "sha256": "22536060db87b024eaf717d57c8885067a7942052ecfef9ed8b51fc7766a5a98"
+        },
+        "resolution": "required",
+        "fallback": "declared_cue",
+        "fallbackCueId": "bed.explore"
+      },
+      {
+        "cueId": "combat.music",
+        "target": "music",
+        "context": "combat",
+        "source": {
+          "kind": "asset",
+          "tag": "music:combat:emberwatch_combat",
+          "sha256": "7989c905e85ef41948860ae0e7d042a9fc412ae478eb2ed2ee6b30e0634caf9a"
+        },
+        "resolution": "required",
+        "fallback": "declared_cue",
+        "fallbackCueId": "bed.combat"
+      },
+      {
+        "cueId": "inn.music",
+        "target": "music",
+        "context": "inn",
+        "source": {
+          "kind": "asset",
+          "tag": "music:exploration:inn_hearth",
+          "sha256": "a01b7aa92d2fc01cf9240e03d278a18c8e73da66567ae2f8cb2d601c8e08b4dc"
+        },
+        "resolution": "optional",
+        "fallback": "declared_cue",
+        "fallbackCueId": "bed.explore"
+      },
+      {
+        "cueId": "merchant_shop.music",
+        "target": "music",
+        "context": "merchant_shop",
+        "source": {
+          "kind": "asset",
+          "tag": "music:exploration:inn_hearth",
+          "sha256": "a01b7aa92d2fc01cf9240e03d278a18c8e73da66567ae2f8cb2d601c8e08b4dc"
+        },
+        "resolution": "optional",
+        "fallback": "declared_cue",
+        "fallbackCueId": "bed.explore"
+      },
+      {
+        "cueId": "old_road.music",
+        "target": "music",
+        "context": "old_road",
+        "source": {
+          "kind": "asset",
+          "tag": "music:exploration:old_road",
+          "sha256": "cb1c05a159a346322790efdfe31335225ddd3e37d3bd10cede4c03a4b8162ba1"
+        },
+        "resolution": "optional",
+        "fallback": "declared_cue",
+        "fallbackCueId": "bed.explore"
+      },
+      {
+        "cueId": "ruined_shrine.music",
+        "target": "music",
+        "context": "ruined_shrine",
+        "source": {
+          "kind": "asset",
+          "tag": "music:exploration:ruined_shrine",
+          "sha256": "46fe67554780fda4ff516e6aea4b05e2a6713bf76811a09b50df58cff11e8ce7"
+        },
+        "resolution": "optional",
+        "fallback": "declared_cue",
+        "fallbackCueId": "bed.explore"
+      }
+    ]
   }
 }

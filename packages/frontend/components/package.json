@@ -13,9 +13,6 @@
     "svelte": "^5.0.0"
   },
   "scripts": {
-    "dev": "storybook dev --port 6006",
-    "build": "storybook build",
-    "test": "test-storybook",
     "lint": "biome lint .",
     "format": "biome format .",
     "typecheck": "tsgo --noEmit",
@@ -23,6 +20,6 @@
   },
   "devDependencies": {
     "svelte": "5.57.0",
-    "vite": "8.2.2"
+    "vite": "8.3.0"
   }
 }

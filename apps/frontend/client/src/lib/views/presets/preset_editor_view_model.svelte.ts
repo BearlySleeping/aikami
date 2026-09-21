@@ -8,9 +8,17 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
-import { macroPresetStore } from '$services';
+} from '@aikami/frontend/services/base';
+import type { MacroPresetStore } from '$services';
 import type { PromptPreset, PromptSection } from '$types';
+
+// ── Capability contracts ────────────────────────────────────────────────
+
+/** The preset store operations the editor performs. */
+export type PresetEditorPresetCapabilities = Pick<
+  MacroPresetStore,
+  'presets' | 'loadPresets' | 'savePreset' | 'deletePreset' | 'duplicatePreset'
+>;
 
 export type PresetEditorViewModelInterface = BaseViewModelInterface & {
   /** All available presets (built-in + user-defined). */
@@ -54,16 +62,27 @@ export type PresetEditorViewModelInterface = BaseViewModelInterface & {
   discardChanges: () => void;
 };
 
-export type PresetEditorViewModelOptions = BaseViewModelOptions & {};
+export type PresetEditorViewModelOptions = BaseViewModelOptions & {
+  /** Preset store capability. */
+  presetStore: PresetEditorPresetCapabilities;
+};
 
 class PresetEditorViewModel
   extends BaseViewModel<PresetEditorViewModelOptions>
   implements PresetEditorViewModelInterface
 {
-  presets = $state<PromptPreset[]>(macroPresetStore.presets);
+  private readonly _presetStore: PresetEditorPresetCapabilities;
+
+  presets = $state<PromptPreset[]>([]);
   selectedPresetId = $state<string | null>(null);
   newSectionName = $state('');
   newPresetName = $state('');
+
+  constructor(options: PresetEditorViewModelOptions) {
+    super(options);
+    this._presetStore = options.presetStore;
+    this.presets = this._presetStore.presets;
+  }
 
   /** Sections of the selected preset, or empty array. */
   get sections(): PromptSection[] {
@@ -91,8 +110,8 @@ class PresetEditorViewModel
 
   override async initialize(): Promise<void> {
     await super.initialize();
-    macroPresetStore.loadPresets();
-    this.presets = macroPresetStore.presets;
+    this._presetStore.loadPresets();
+    this.presets = this._presetStore.presets;
   }
 
   selectPreset(options: { id: string }): void {
@@ -190,12 +209,12 @@ class PresetEditorViewModel
       return undefined;
     }
 
-    const id = macroPresetStore.savePreset({
+    const id = this._presetStore.savePreset({
       name,
       sections: this._tempSections,
     });
     this.selectedPresetId = id;
-    this.presets = macroPresetStore.presets;
+    this.presets = this._presetStore.presets;
     this.newPresetName = '';
     this._tempSections = [];
     return id;
@@ -206,8 +225,8 @@ class PresetEditorViewModel
     if (!preset) {
       return;
     }
-    macroPresetStore.deletePreset(preset.id);
-    this.presets = macroPresetStore.presets;
+    this._presetStore.deletePreset(preset.id);
+    this.presets = this._presetStore.presets;
     this.selectedPresetId = null;
   }
 
@@ -216,17 +235,17 @@ class PresetEditorViewModel
     if (!preset) {
       return undefined;
     }
-    const newId = macroPresetStore.duplicatePreset(preset.id);
+    const newId = this._presetStore.duplicatePreset(preset.id);
     if (newId) {
-      this.presets = macroPresetStore.presets;
+      this.presets = this._presetStore.presets;
       this.selectedPresetId = newId;
     }
     return newId;
   }
 
   discardChanges(): void {
-    macroPresetStore.loadPresets();
-    this.presets = macroPresetStore.presets;
+    this._presetStore.loadPresets();
+    this.presets = this._presetStore.presets;
     this.selectedPresetId = null;
     this.newPresetName = '';
     this.newSectionName = '';
@@ -291,6 +310,6 @@ class PresetEditorViewModel
   }
 }
 
-export const getPresetEditorViewModel = (
+export const createPresetEditorViewModel = (
   options: PresetEditorViewModelOptions,
 ): PresetEditorViewModelInterface => PresetEditorViewModel.create(options);

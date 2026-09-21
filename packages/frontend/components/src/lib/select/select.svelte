@@ -14,11 +14,11 @@ type Props = {
   options: SelectOption[];
   /** Optional callback triggered when the value changes. */
   onchange?: (value: string) => void;
-  /** DaisyUI sizing modifier. @default 'md' */
+  /** Aikami UI sizing modifier. @default 'md' */
   size?: 'xs' | 'sm' | 'md' | 'lg';
-  /** Applies the 'select-bordered' DaisyUI class if true. @default true */
+  /** Applies the 'select-bordered' Aikami UI class if true. @default true */
   bordered?: boolean;
-  /** Additional Tailwind/DaisyUI classes to apply to the root select element. */
+  /** Additional Tailwind/Aikami UI classes to apply to the root select element. */
   class?: string;
 };
 

@@ -19,7 +19,7 @@ created_at: "2026-09-04T22:21:38Z"
 
 | Field | Value |
 |---|---|
-| **Source** | Accepted agent-platform audit; PR 11 in [execution plan](../strategy/agent-platform-hardening.md) |
+| **Source** | Accepted agent-platform audit; PR 11 in [execution plan](../reference/agent-platform-hardening.md) |
 | **Target** | Frontend test configuration, compiled ViewModel/component fixtures and testing guidance |
 | **Type** | full |
 | **Priority** | P1 — identity rune polyfills cannot verify reactivity, effects or disposal |

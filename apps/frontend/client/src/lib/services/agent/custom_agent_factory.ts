@@ -6,6 +6,7 @@
 //
 // Contract: C-247 Custom Agent Creation
 
+import type { TextTask } from '@aikami/constants';
 import type {
   AgentConfig,
   AgentPipelineContext,
@@ -28,6 +29,9 @@ export const customAgentToConfig = (definition: CustomAgentDefinition): AgentCon
   timeout: definition.timeout,
   enabled: definition.enabled,
   contextKey: definition.contextKey,
+  // Custom agents are user-defined structured extractions — route them to the
+  // `structured` role rather than the narration fallback.
+  task: 'agent-custom',
 });
 
 /**
@@ -48,12 +52,16 @@ export const runCustomAgent = async ({
   definition,
   aiResponse,
   mockInput,
+  signal,
+  task,
 }: {
   config: AgentConfig;
   context: AgentPipelineContext;
   definition: CustomAgentDefinition;
   aiResponse?: string;
   mockInput?: string;
+  signal?: AbortSignal;
+  task?: TextTask;
 }): Promise<AgentRunResult> => {
   const start = performance.now();
 
@@ -105,6 +113,8 @@ export const runCustomAgent = async ({
       prompt: systemPrompt,
       systemPrompt: resolvedPrompt,
       model: definition.connectionId,
+      signal,
+      task,
     });
 
     return {

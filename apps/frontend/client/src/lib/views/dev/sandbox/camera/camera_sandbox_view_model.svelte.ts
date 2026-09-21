@@ -11,28 +11,35 @@ import type {
   GameWorld,
   GameWorldOptions,
   LpcLayerRecipe,
+  TextureManager,
 } from '@aikami/frontend/engine';
-import { createEngineBridge, GameWorld as GW, TextureManager } from '@aikami/frontend/engine';
 import type { AssetTagResolver } from '@aikami/frontend/engine/sim';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
-import type { LpcAnimationState } from '@aikami/lpc';
-import { getLpcAssetPath } from '$lib/data/lpc_asset_catalog';
-import { gameModeService } from '$services';
+} from '@aikami/frontend/services/base';
+import type { GameModeServiceInterface } from '$services';
 
-/** Lazily-resolved ECS worker constructor (SSR-safe dynamic import). */
-let _ecsWorkerCtor: (new () => Worker) | undefined;
+// ── Capability contracts ────────────────────────────────────────────────
 
-const _resolveEcsWorker = async (): Promise<new () => Worker> => {
-  if (_ecsWorkerCtor) {
-    return _ecsWorkerCtor;
-  }
-  const mod = await import('@aikami/frontend/engine/worker/ecs_worker.ts?worker&type=module');
-  _ecsWorkerCtor = mod.default as unknown as new () => Worker; // guard-ignore lint/type-safety/casting: game world private state access for dev sandbox visualization
-  return _ecsWorkerCtor;
+/** Game-mode transitions the sandbox drives. */
+export type GameModeCapabilities = Pick<GameModeServiceInterface, 'setMode'>;
+
+/** Engine construction, asset resolution, and content loading. */
+export type CameraSandboxEngineCapabilities = {
+  createBridge(): EngineBridge;
+  createWorld(options: GameWorldOptions): GameWorld;
+  createTextureManager(): TextureManager;
+  resolveEcsWorker(): Promise<new () => Worker>;
+  assetUrlResolver: NonNullable<GameWorldOptions['assetUrlResolver']>;
+  resolveTag: AssetTagResolver;
+  releaseUrl(url: string): void;
+  loadContentPack(options: {
+    packId: string;
+    resolveTag?: AssetTagResolver;
+    releaseUrl?: (url: string) => void;
+  }): Promise<{ resolveMapUrl(mapId: string): string }>;
 };
 
 // ---------------------------------------------------------------------------
@@ -82,7 +89,12 @@ export type CameraSandboxViewModelInterface = BaseViewModelInterface & {
   destroyEngine: () => void;
 };
 
-export type CameraSandboxViewModelOptions = BaseViewModelOptions & {};
+export type CameraSandboxViewModelOptions = BaseViewModelOptions & {
+  /** Game-mode capability. */
+  mode: GameModeCapabilities;
+  /** Engine construction capability. */
+  engine: CameraSandboxEngineCapabilities;
+};
 
 // ---------------------------------------------------------------------------
 // ViewModel
@@ -92,6 +104,9 @@ class CameraSandboxViewModel
   extends BaseViewModel<CameraSandboxViewModelOptions>
   implements CameraSandboxViewModelInterface
 {
+  private readonly _mode: GameModeCapabilities;
+  private readonly _engine: CameraSandboxEngineCapabilities;
+
   engineReady = $state<boolean>(false);
   engineError = $state<string | undefined>(undefined);
   currentMap = $state<string | undefined>(undefined);
@@ -114,11 +129,15 @@ class CameraSandboxViewModel
   private _readyCleanup: (() => void) | undefined;
   private _cameraUpdateCleanup: (() => void) | undefined;
   private _initialMapLoaded = false;
-  private _assetTagResolver: AssetTagResolver | undefined;
-  private _releaseUrl: ((url: string) => void) | undefined;
 
   /** Max debug log entries to keep in memory. */
   private static readonly _maxLog = 30;
+
+  constructor(options: CameraSandboxViewModelOptions) {
+    super(options);
+    this._mode = options.mode;
+    this._engine = options.engine;
+  }
 
   private _addLog(label: string, detail = ''): void {
     const entry: DebugLogEntry = { time: Date.now(), label, detail };
@@ -141,7 +160,7 @@ class CameraSandboxViewModel
     });
 
     try {
-      this._engineBridge = createEngineBridge();
+      this._engineBridge = this._engine.createBridge();
 
       this._readyCleanup = this._engineBridge.on('GAME_READY', () => {
         this._addLog('GAME_READY');
@@ -245,8 +264,8 @@ class CameraSandboxViewModel
         }
       });
 
-      const EcsWorker = await _resolveEcsWorker();
-      const tm = new TextureManager();
+      const EcsWorker = await this._engine.resolveEcsWorker();
+      const tm = this._engine.createTextureManager();
       const paletteBytes = new Uint8Array(1024);
 
       const SandboxRecipes: LpcLayerRecipe[] = [
@@ -258,11 +277,6 @@ class CameraSandboxViewModel
         { slot: 'head', assetId: 'head/heads/human_male', hexPalette: paletteBytes },
       ];
 
-      const { assetTagResolver } = await import('$lib/services/assets/registry_resolver');
-      const { assetManager } = await import('$lib/services/assets/asset_manager.svelte');
-      this._assetTagResolver = assetTagResolver;
-      this._releaseUrl = (url: string) => assetManager.releaseUrl(url);
-
       const worldOptions: GameWorldOptions = {
         className: 'GameWorld',
         bridge: this._engineBridge,
@@ -271,14 +285,13 @@ class CameraSandboxViewModel
           layerIds
             .map((id, idx) => (id > 0 ? SandboxRecipes[idx] : null))
             .filter(Boolean) as LpcLayerRecipe[],
-        assetUrlResolver: (slot, assetId, state) =>
-          getLpcAssetPath(slot, assetId, state as unknown as LpcAnimationState), // guard-ignore lint/type-safety/casting: game world private state access for dev sandbox visualization
+        assetUrlResolver: this._engine.assetUrlResolver,
         workerFactory: () => new EcsWorker(),
         // C-434: registry-backed tag resolver for maps and tilesets.
-        resolveTag: this._assetTagResolver,
-        releaseUrl: this._releaseUrl,
+        resolveTag: this._engine.resolveTag,
+        releaseUrl: this._engine.releaseUrl,
       };
-      this._gameWorld = GW.create(worldOptions);
+      this._gameWorld = this._engine.createWorld(worldOptions);
 
       // Key press (E): main-thread NPC proximity → send INTERACT to worker,
       // and switch game mode to DIALOGUE so the worker tracks zoom state.
@@ -287,7 +300,7 @@ class CameraSandboxViewModel
         this._addLog('E_KEY', `NPC=${npc.npcName} eid=${npc.eid}`);
         this.interactionHint = undefined;
         // Update mode state (read by ModeIndicator)
-        gameModeService.setMode('DIALOGUE');
+        this._mode.setMode('DIALOGUE');
         this.mockDialogueActive = true;
         // Switch mode to DIALOGUE — required for zoom tracking
         this._engineBridge?.send({ type: 'SET_GAME_MODE', mode: 'DIALOGUE' });
@@ -315,14 +328,10 @@ class CameraSandboxViewModel
     }
 
     try {
-      // Load the content pack through the asset manager (R2-backed registry)
-      // instead of hardcoding a static path that no longer exists.
-      const { loadContentPack } = await import('@aikami/frontend/engine');
-
-      const pack = await loadContentPack({
+      const pack = await this._engine.loadContentPack({
         packId: 'emberwatch',
-        resolveTag: this._assetTagResolver,
-        releaseUrl: this._releaseUrl,
+        resolveTag: this._engine.resolveTag,
+        releaseUrl: this._engine.releaseUrl,
       });
 
       // Re-check after async gap — the GameWorld may have been destroyed.
@@ -354,7 +363,7 @@ class CameraSandboxViewModel
     }
 
     this.mockDialogueActive = true;
-    gameModeService.setMode('DIALOGUE');
+    this._mode.setMode('DIALOGUE');
     this._addLog('MOCK_ON', 'sending SET_GAME_MODE DIALOGUE');
     this._engineBridge.send({ type: 'SET_GAME_MODE', mode: 'DIALOGUE' });
   }
@@ -369,7 +378,7 @@ class CameraSandboxViewModel
     this.trackingNpcPosition = false;
     this.activeNpcName = '';
     this.activeNpcDialog = '';
-    gameModeService.setMode('EXPLORE');
+    this._mode.setMode('EXPLORE');
     this._addLog('MOCK_OFF');
     this._engineBridge.send({ type: 'SET_GAME_MODE', mode: 'EXPLORE' });
   }
@@ -411,6 +420,13 @@ class CameraSandboxViewModel
   }
 }
 
-export const getCameraSandboxViewModel = (
+/**
+ * Builds a camera-sandbox ViewModel from explicit capabilities.
+ *
+ * Callers outside production (tests, sandboxes) use this directly; production
+ * code goes through `getCameraSandboxViewModel` in
+ * ./camera_composition.ts.
+ */
+export const createCameraSandboxViewModel = (
   options: CameraSandboxViewModelOptions,
 ): CameraSandboxViewModelInterface => CameraSandboxViewModel.create(options);

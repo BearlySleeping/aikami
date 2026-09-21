@@ -17,11 +17,12 @@ import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import type { MusicSceneContext, Track } from '@aikami/types';
 import { MUSIC_VIBE_TAGS } from '$lib/data/music_track_catalog';
-import { audioService, trackRegistryService } from '$services';
+import { audioService } from './audio_service.svelte.ts';
 import { sceneToMusicTags } from './scene_to_music_tags';
+import { trackRegistryService } from './track_registry_service.svelte.ts';
 
 /** localStorage key for the music player visibility toggle. */
 const MUSIC_PLAYER_VISIBLE_KEY = 'aikami:music-player:visible';

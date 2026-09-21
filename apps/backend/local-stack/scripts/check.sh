@@ -414,8 +414,24 @@ INIT_TMP="$(mktemp -d)"
 trap 'rm -rf "${INIT_TMP:-}"' EXIT
 INIT_ENV="$INIT_TMP/.env"
 INIT_LOG="$INIT_TMP/init.out"
-if timeout 60 bun stack/init.ts --yes --no-color --env-path "$INIT_ENV" >"$INIT_LOG" 2>&1; then
-    ok "AC-8: stack init --yes runs non-interactively (exit 0)"
+# The default plan is attempted first — it is what a user actually runs. On a
+# host with too little free space the wizard's AC-6 shortfall guard correctly
+# exits 2; that is the guard doing its job, not an AC-8 failure, so the check
+# retries with the smallest plan. Either way the whole non-interactive path is
+# exercised (detect → recommend → render → prompt bypass → env write).
+init_run() {
+    timeout 60 bun stack/init.ts "$@" >"$INIT_LOG" 2>&1
+}
+if init_run --yes --no-color --env-path "$INIT_ENV"; then
+    ok "AC-8: stack init --yes runs non-interactively (exit 0) — default plan"
+elif grep -q 'short by' "$INIT_LOG"; then
+    echo "note - AC-8: default plan exceeds this volume's free space; retrying with --tier cpu --modalities text"
+    if init_run --yes --no-color --tier cpu --modalities text --text-source bundled --env-path "$INIT_ENV"; then
+        ok "AC-8: stack init --yes runs non-interactively (exit 0) — smallest plan"
+    else
+        bad "AC-8: stack init --yes failed — see $INIT_LOG"
+        tail -30 "$INIT_LOG" >&2
+    fi
 else
     bad "AC-8: stack init --yes failed — see $INIT_LOG"
     tail -30 "$INIT_LOG" >&2

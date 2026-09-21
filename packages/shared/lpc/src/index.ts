@@ -1,8 +1,10 @@
 // packages/shared/lpc/src/index.ts — public surface
 
 export {
+  FRAMES_PER_STATE,
   getLpcFrameIndex,
   getLpcStateRow,
+  LPC_STATE_NAMES,
   LpcAnimationState,
   LpcDirection,
   velocityToDirection,
@@ -24,6 +26,13 @@ export {
 } from './lib/appearance.ts';
 export { buildLpcCatalog } from './lib/build_catalog.ts';
 export {
+  type ElapsedClip,
+  type ElapsedClipFrame,
+  ElapsedTimeActor,
+  resolveClipFrameAtTime,
+  totalClipDuration,
+} from './lib/elapsed_time.ts';
+export {
   getMaxKnownDepth,
   LPC_LAYER_ORDER,
   type LpcLayer,
@@ -33,7 +42,39 @@ export {
   resolveLayerDepth,
   sortLayersByDepth,
 } from './lib/layer_order.ts';
+export {
+  LEGACY_CATALOG_SNAPSHOT,
+  LEGACY_CATALOG_SNAPSHOT_ID,
+} from './lib/legacy_catalog_snapshot.ts';
 export { LEGACY_INDEX_REMAP } from './lib/legacy_remap.ts';
+export {
+  type AppearanceCatalog,
+  type AppearanceCatalogSlot,
+  type AppearanceDiagnostic,
+  type AppearanceNormalizationStatus,
+  isNamedAppearance,
+  legacyToNamed,
+  type NamedAppearance,
+  type NamedAppearanceComponent,
+  type NamedAppearanceProvenance,
+  namedToLayerIds,
+  normalizeLayerRole,
+  normalizeNamed,
+  normalizePersonaRecipe,
+  type ResolveNpcAppearanceOptions,
+  type ResolveNpcAppearanceResult,
+  resolveNpcAppearance,
+} from './lib/named_appearance.ts';
+export {
+  type LpcBodySuffix,
+  type LpcRig,
+  RIG_SUFFIXES,
+  type RigCompatDiagnostic,
+  type RigCompatibleAssetResult,
+  resolveBaseAppearanceRecipe,
+  resolveBodyRig,
+  resolveRigCompatibleAsset,
+} from './lib/rig_compat.ts';
 export {
   type LpcCellFamily,
   type LpcSheetGeometry,
@@ -46,3 +87,7 @@ export type {
   LpcSlotVariant,
 } from './lib/slot_model.ts';
 export { type LpcTag, lpcStateSuffix, lpcTag } from './lib/tags.ts';
+export {
+  type CompileLpcSpriteOptions,
+  compileLpcSpriteToVisualDefinition,
+} from './lib/visual_adapter.ts';

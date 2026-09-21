@@ -169,7 +169,7 @@ to look, never *whether* the thing finished. Its worst failure is polling slight
 | Stream progress via `onUpdate` — **never `console.log`**, which corrupts pi's TUI             | `registration.test.ts` review  |
 | Register a tool family as one namespace, not N tools                                          | `tool_namespace.ts`            |
 | No `promptGuidelines` on any tool                                                             | `registration.test.ts`         |
-| Always use `hypa_shell` / `hypa_read` / `hypa_grep` for shell and file ops                    | pi-hypa extension              |
+| rtk compaction is automatic via the `rtk` extension — do not prefix manually | `rtk.ts` extension                  |
 | Always use `validate()` instead of raw moon commands                                          | `moon_integration.ts`          |
 | Use `ctx_execute` for analysis; `ctx_fetch_and_index` for web docs                             | context-mode                   |
 | Load `aikami-conventions` first before any code                                               | `dev.md` prompt 🔴             |
@@ -209,7 +209,7 @@ stand-in pi API and asserts what registers — namespace action lists, no duplic
 | `aikami-conventions`   | **🔴 LOAD FIRST** before ANY code — TS strictness, imports, arrow functions, `_` prefix, snake_case |
 | `svelte-conventions`   | Svelte 5 runes, zero-logic Views, ViewModel pattern, services, client aliases                    |
 | `backend-conventions`  | Cloudflare D1 (Drizzle) + R2 + Better Auth + Elysia route handlers, backend testing             |
-| `aikami-ui`            | UI styling — DaisyUI primitives vs components, typography, semantic colors                       |
+| `aikami-ui`            | UI styling — Aikami UI primitives vs components, typography, semantic colors                     |
 | `svelte-page`          | Scaffolding SvelteKit pages (View + ViewModel)                                                   |
 | `new-project`          | Scaffolding new monorepo projects/packages                                                       |
 | `contract-implementer` | Implementing features from `docs/contracts/`                                                     |

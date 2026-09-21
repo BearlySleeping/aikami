@@ -45,7 +45,48 @@ describe('evaluatePublicationGate', () => {
     expect(codes(result)).toContain('stale_validation');
   });
 
-  it('warns — but does not block — when validation is red at HEAD', () => {
+  it('blocks — and is unavailable — when validation is red at HEAD without authorization', () => {
+    const result = evaluatePublicationGate({
+      git: gitReader(),
+      manifest: manifestWith({
+        outcome: 'failed',
+        ok: false,
+        output: 'client:format',
+        checkedAt: 'n',
+        revision: HEAD,
+      }),
+    });
+    expect(result.ok).toBe(false);
+    expect(result.outcome).toBe('failed');
+    expect(codes(result)).toContain('failed_validation');
+    expect(result.warnings).toEqual([]);
+  });
+
+  it('permits a red verdict only when a revision-bound authorization covers it', () => {
+    const result = evaluatePublicationGate({
+      git: gitReader(),
+      manifest: manifestWith({
+        outcome: 'failed',
+        ok: false,
+        output: 'client:format',
+        checkedAt: 'n',
+        revision: HEAD,
+      }),
+      authorization: {
+        outcome: 'failed',
+        revision: HEAD,
+        grantedBy: 'user',
+        grantedAt: 'now',
+      },
+    });
+    expect(result.ok).toBe(true);
+    expect(result.outcome).toBe('failed');
+    expect(result.authorized).toBe(true);
+    expect(codes(result)).toEqual([]);
+    expect(result.warnings.map((w) => w.code)).toEqual(['failed_validation']);
+  });
+
+  it('rejects an authorization bound to a different revision', () => {
     const result = evaluatePublicationGate({
       git: gitReader(),
       manifest: manifestWith({
@@ -54,15 +95,123 @@ describe('evaluatePublicationGate', () => {
         checkedAt: 'n',
         revision: HEAD,
       }),
+      authorization: {
+        outcome: 'failed',
+        revision: OLDER,
+        grantedBy: 'user',
+        grantedAt: 'now',
+      },
     });
+    expect(result.ok).toBe(false);
+    expect(codes(result)).toContain('failed_validation');
+  });
+
+  it('rejects failed authorization for unavailable validation', () => {
+    const result = evaluatePublicationGate({
+      git: gitReader(),
+      manifest: manifestWith({
+        outcome: 'unavailable',
+        ok: false,
+        output: 'moon unavailable',
+        checkedAt: 'n',
+        revision: HEAD,
+      }),
+      authorization: {
+        outcome: 'failed',
+        revision: HEAD,
+        grantedBy: 'user',
+        grantedAt: 'now',
+      },
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.outcome).toBe('unavailable');
+    expect(codes(result)).toContain('failed_validation');
+  });
+
+  it('retains the legacy ok fallback for manifests without a typed outcome', () => {
+    const result = evaluatePublicationGate({
+      git: gitReader(),
+      manifest: manifestWith({ ok: true, output: '', checkedAt: 'now', revision: HEAD }),
+    });
+    expect(result.outcome).toBe('passed');
     expect(result.ok).toBe(true);
+  });
+
+  // 🔴 `cancelled` must not be collapsed into `unavailable`: the authorization
+  // that permits publication is bound to the exact outcome, so the two cannot
+  // be interchangeable.
+  it('reports a cancelled verdict as cancelled, not unavailable', () => {
+    const result = evaluatePublicationGate({
+      git: gitReader(),
+      manifest: manifestWith({
+        outcome: 'cancelled',
+        ok: false,
+        output: 'interrupted',
+        checkedAt: 'n',
+        revision: HEAD,
+      }),
+    });
+
+    expect(result.outcome).toBe('cancelled');
+    expect(result.validationOutcome).toBe('cancelled');
+    expect(result.ok).toBe(false);
+    expect(codes(result)).toContain('failed_validation');
+  });
+
+  it('permits a cancelled verdict only under a matching cancelled authorization', () => {
+    const result = evaluatePublicationGate({
+      git: gitReader(),
+      manifest: manifestWith({
+        outcome: 'cancelled',
+        ok: false,
+        output: 'interrupted',
+        checkedAt: 'n',
+        revision: HEAD,
+      }),
+      authorization: {
+        outcome: 'cancelled',
+        revision: HEAD,
+        grantedBy: 'user',
+        grantedAt: 'now',
+      },
+    });
+
+    expect(result.outcome).toBe('cancelled');
+    expect(result.ok).toBe(true);
+    expect(result.authorized).toBe(true);
     expect(codes(result)).toEqual([]);
     expect(result.warnings.map((w) => w.code)).toEqual(['failed_validation']);
+  });
+
+  it('rejects a failed authorization for a cancelled validation', () => {
+    const result = evaluatePublicationGate({
+      git: gitReader(),
+      manifest: manifestWith({
+        outcome: 'cancelled',
+        ok: false,
+        output: 'interrupted',
+        checkedAt: 'n',
+        revision: HEAD,
+      }),
+      authorization: {
+        outcome: 'failed',
+        revision: HEAD,
+        grantedBy: 'user',
+        grantedAt: 'now',
+      },
+    });
+
+    expect(result.outcome).toBe('cancelled');
+    expect(result.ok).toBe(false);
+    expect(result.authorized).toBeUndefined();
+    expect(codes(result)).toContain('failed_validation');
   });
 
   it('blocks when no verdict was ever recorded', () => {
     const result = evaluatePublicationGate({ git: gitReader(), manifest: undefined });
     expect(codes(result)).toEqual(['never_validated']);
+    expect(result.outcome).toBe('unavailable');
   });
 
   it('blocks uncommitted changes, which would never reach the PR', () => {
@@ -79,6 +228,7 @@ describe('evaluatePublicationGate', () => {
       manifest: manifestWith({ ok: true, output: '', checkedAt: 'now', revision: HEAD }),
     });
     expect(codes(result)).toEqual(['unpushed_commits']);
+    expect(result.outcome).toBe('unavailable');
   });
 
   it('blocks when the branch does not exist on the remote at all', () => {
@@ -126,7 +276,7 @@ describe('evaluatePublicationGate', () => {
     expect(codes(result)).toEqual(['dirty_worktree', 'never_validated', 'unpushed_commits']);
   });
 
-  it('is indeterminate — and permissive — when git cannot be read', () => {
+  it('fails closed — and reports unavailable — when git cannot be read', () => {
     const result = evaluatePublicationGate({
       git: gitReader({
         head: () => {
@@ -135,11 +285,12 @@ describe('evaluatePublicationGate', () => {
       }),
       manifest: undefined,
     });
-    expect(result.indeterminate).toBe(true);
-    expect(result.ok).toBe(true);
+    expect(result.outcome).toBe('unavailable');
+    expect(result.ok).toBe(false);
+    expect(codes(result)).toEqual(['unreadable_workspace']);
   });
 
-  it('is indeterminate — and permissive — when the remote cannot be read', () => {
+  it('fails closed — and reports unavailable — when the remote cannot be read', () => {
     const result = evaluatePublicationGate({
       git: gitReader({
         remoteHead: () => {
@@ -148,8 +299,9 @@ describe('evaluatePublicationGate', () => {
       }),
       manifest: undefined,
     });
-    expect(result.indeterminate).toBe(true);
-    expect(result.ok).toBe(true);
+    expect(result.outcome).toBe('unavailable');
+    expect(result.ok).toBe(false);
+    expect(codes(result)).toEqual(['unreadable_workspace']);
   });
 
   it('names every block and its remedy in the rendered refusal', () => {
@@ -163,7 +315,7 @@ describe('evaluatePublicationGate', () => {
     expect(text).toContain('contract_stage');
   });
 
-  it('renders a standalone warning for a red verdict without hard blocks', () => {
+  it('renders a standalone warning for a red verdict published under authorization', () => {
     const result = evaluatePublicationGate({
       git: gitReader(),
       manifest: manifestWith({
@@ -172,6 +324,12 @@ describe('evaluatePublicationGate', () => {
         checkedAt: 'n',
         revision: HEAD,
       }),
+      authorization: {
+        outcome: 'failed',
+        revision: HEAD,
+        grantedBy: 'user',
+        grantedAt: 'now',
+      },
     });
     const warning = formatPublicationWarning(result);
     expect(warning).toContain('failed_validation');

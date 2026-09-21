@@ -12,14 +12,14 @@ import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import type {
   AiCapability,
   AiDetectionResult,
   CapabilitySnapshot,
   DetectionStatus,
 } from '@aikami/types';
-import { aiGatewayService } from '$services';
+import { aiGatewayService } from '../ai/ai_gateway_service.svelte.ts';
 
 /** Options used to construct the AI capability-detection service. */
 export type CapabilityServiceOptions = BaseFrontendClassOptions;

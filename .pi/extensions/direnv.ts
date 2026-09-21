@@ -25,15 +25,20 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import { Type } from 'typebox';
-import {
-  hasDirenv,
-  isDirenvLoaded,
-  resolveAikamiEnv,
-} from '../../scripts/src/lib/env/direnv_detect';
+import { runPiScript } from './lib/bridge.ts';
 import { runSync } from './lib/process_runner.ts';
 import { defineAction, registerNamespace } from './lib/tool_namespace.ts';
 
 const VALID_MODES = ['emulator', 'staging', 'production'] as const;
+
+/** Environment facts resolved on the Bun side in a single bridge round-trip. */
+type DirenvInfo = {
+  hasDirenv: boolean;
+  isLoaded: boolean;
+  mode: string;
+  projectId: string;
+  isEmulator: boolean;
+};
 
 // ── Helpers ───────────────────────────────────────────────────────────
 
@@ -44,6 +49,9 @@ function getEnv(key: string): string | undefined {
 function getRoot(): string {
   return getEnv('AIKAMI_ROOT') || process.cwd();
 }
+
+const fetchDirenvInfo = (): Promise<DirenvInfo> =>
+  runPiScript<DirenvInfo>('env.direnv.info', { root: getRoot() });
 
 function readEnvLocal(): Record<string, string> {
   const file = path.join(getRoot(), '.env.local');
@@ -75,15 +83,14 @@ function writeEnvLocal(key: string, value: string): void {
 
 // ── Tool: direnv_status ───────────────────────────────────────────────
 
-function buildStatusReport(): string {
+function buildStatusReport(info: DirenvInfo): string {
   // Non-direnv machines: derive mode/project from .env.local so the status
   // is accurate even when .envrc never ran.
-  const env = resolveAikamiEnv(getRoot());
-  const mode = getEnv('AIKAMI_MODE') || env.mode;
-  const projectId = getEnv('AIKAMI_PROJECT_ID') || env.projectId;
+  const mode = getEnv('AIKAMI_MODE') || info.mode;
+  const projectId = getEnv('AIKAMI_PROJECT_ID') || info.projectId;
   const isEmu = mode === 'emulator';
-  const nixReady = isDirenvLoaded();
-  const direnvPresent = hasDirenv();
+  const nixReady = info.isLoaded;
+  const direnvPresent = info.hasDirenv;
   const root = getRoot();
   const playwrightOk = getEnv('PLAYWRIGHT_BROWSERS_PATH') !== undefined;
   const geminiOk = getEnv('GEMINI_API_KEY') !== undefined;
@@ -130,8 +137,9 @@ function buildStatusReport(): string {
 async function switchMode(mode: string): Promise<string> {
   writeEnvLocal('AIKAMI_MODE', mode);
 
+  const info = await fetchDirenvInfo();
   let reloadFailed = false;
-  if (hasDirenv()) {
+  if (info.hasDirenv) {
     // Reload direnv via bash — this re-evaluates .envrc. runSync returns a
     // result (it does not throw on non-zero exit), so treat any non-zero
     // code as a failed reload rather than reporting success.
@@ -150,14 +158,13 @@ async function switchMode(mode: string): Promise<string> {
   // direnv reload only affects new shells, so this pi session needs the
   // env applied regardless of whether the reload succeeded. New shells read
   // AIKAMI_MODE from .env.local anyway.
-  const env = resolveAikamiEnv(getRoot());
-  process.env.AIKAMI_MODE = env.mode;
-  process.env.AIKAMI_ENV = env.mode;
-  process.env.AIKAMI_PROJECT_ID = env.projectId;
-  process.env.AIKAMI_IS_EMULATOR = env.isEmulator ? '1' : '0';
+  process.env.AIKAMI_MODE = info.mode;
+  process.env.AIKAMI_ENV = info.mode;
+  process.env.AIKAMI_PROJECT_ID = info.projectId;
+  process.env.AIKAMI_IS_EMULATOR = info.isEmulator ? '1' : '0';
 
   let applyNote: string;
-  if (hasDirenv()) {
+  if (info.hasDirenv) {
     if (reloadFailed) {
       applyNote =
         'direnv reload failed — run `direnv reload` to refresh env vars; env updated in this session.';
@@ -177,8 +184,8 @@ async function switchMode(mode: string): Promise<string> {
 // After adding, triggers direnv reload so the package is immediately
 // available in the devShell.
 
-function addNixPackage(packageName: string): string {
-  if (!hasDirenv()) {
+function addNixPackage(packageName: string, direnvPresent: boolean): string {
+  if (!direnvPresent) {
     return (
       '❌ direnv not installed — flake.nix packages only take effect via the ' +
       'Nix devShell (loaded by direnv). Install tools manually instead ' +
@@ -229,8 +236,8 @@ function addNixPackage(packageName: string): string {
 
 // ── Tool: direnv_add_secret ───────────────────────────────────────────
 
-function addSecretKey(secretKey: string): string {
-  if (!hasDirenv()) {
+function addSecretKey(secretKey: string, direnvPresent: boolean): string {
+  if (!direnvPresent) {
     return (
       '❌ direnv not installed — secrets.sh is loaded by .envrc, so secrets ' +
       'only apply inside a direnv/Nix environment. Without direnv, set the ' +
@@ -284,16 +291,16 @@ export default function (pi: ExtensionAPI) {
 
         parameters: Type.Object({}),
         async execute(_toolCallId, _params, _signal, _onUpdate, _ctx) {
-          const report = buildStatusReport();
-          const env = resolveAikamiEnv(getRoot());
+          const info = await fetchDirenvInfo();
+          const report = buildStatusReport(info);
           return {
             content: [{ type: 'text', text: report }],
             details: {
-              mode: getEnv('AIKAMI_MODE') || env.mode,
-              projectId: getEnv('AIKAMI_PROJECT_ID') || env.projectId,
+              mode: getEnv('AIKAMI_MODE') || info.mode,
+              projectId: getEnv('AIKAMI_PROJECT_ID') || info.projectId,
               // Derive from the resolved mode value so staging → false and
               // emulator → true consistently with `mode`/`projectId`.
-              isEmulator: (getEnv('AIKAMI_MODE') || env.mode) === 'emulator',
+              isEmulator: (getEnv('AIKAMI_MODE') || info.mode) === 'emulator',
               nixReady: getEnv('AIKAMI_NIX_READY') === '1' || getEnv('IN_NIX_SHELL') !== undefined,
             },
           };
@@ -329,7 +336,8 @@ export default function (pi: ExtensionAPI) {
           }),
         }),
         async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
-          const result = addNixPackage(params.packageName);
+          const info = await fetchDirenvInfo();
+          const result = addNixPackage(params.packageName, info.hasDirenv);
           return {
             content: [{ type: 'text', text: result }],
             details: { packageName: params.packageName },
@@ -347,7 +355,8 @@ export default function (pi: ExtensionAPI) {
           }),
         }),
         async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
-          const result = addSecretKey(params.secretKey);
+          const info = await fetchDirenvInfo();
+          const result = addSecretKey(params.secretKey, info.hasDirenv);
           return {
             content: [{ type: 'text', text: result }],
             details: { secretKey: params.secretKey },

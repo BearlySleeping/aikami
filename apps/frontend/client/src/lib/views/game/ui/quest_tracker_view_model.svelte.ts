@@ -2,6 +2,12 @@
 //
 // Quest tracker HUD ViewModel — exposes the current active quest's first
 // incomplete objective as a compact 1-2 line display.
+//
+// Dependencies arrive through typed capability options. This module never
+// imports the `$services` barrel or any production singleton, so its tests can
+// inject fresh feature fixtures (see ./testing/quest_tracker_fixtures.ts).
+// Production wiring lives in ./quest_tracker_composition.ts.
+//
 // Contract: C-329 Integrate the Demo Quest from Offer Through Reward
 
 import type { QuestData } from '@aikami/frontend/engine/sim';
@@ -9,8 +15,21 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
-import { questStateService } from '$services';
+} from '@aikami/frontend/services/base';
+
+// ── Capability contracts ────────────────────────────────────────────────
+
+/** The quest list the tracker derives from (read reactively). */
+export type QuestTrackerQuestStateCapabilities = {
+  readonly quests: QuestData[];
+};
+
+// ── Types ───────────────────────────────────────────────────────────────
+
+export type QuestTrackerViewModelOptions = BaseViewModelOptions & {
+  /** Quest-state capability. */
+  questState: QuestTrackerQuestStateCapabilities;
+};
 
 export type QuestTrackerViewModelInterface = BaseViewModelInterface & {
   readonly activeQuests: readonly QuestData[];
@@ -18,14 +37,21 @@ export type QuestTrackerViewModelInterface = BaseViewModelInterface & {
   readonly currentObjectiveText: string;
 };
 
-export type QuestTrackerViewModelOptions = BaseViewModelOptions & {};
+// ── Implementation ──────────────────────────────────────────────────────
 
 class QuestTrackerViewModel
   extends BaseViewModel<QuestTrackerViewModelOptions>
   implements QuestTrackerViewModelInterface
 {
+  private readonly _questState: QuestTrackerQuestStateCapabilities;
+
+  constructor(options: QuestTrackerViewModelOptions) {
+    super(options);
+    this._questState = options.questState;
+  }
+
   get activeQuests(): readonly QuestData[] {
-    return questStateService.quests.filter((q) => q.status === 'active');
+    return this._questState.quests.filter((q) => q.status === 'active');
   }
 
   get hasQuests(): boolean {
@@ -48,6 +74,12 @@ class QuestTrackerViewModel
   }
 }
 
-export const getQuestTrackerViewModel = (
+/**
+ * Builds a quest-tracker ViewModel from explicit capabilities.
+ *
+ * Callers outside production (tests, sandboxes) use this directly; production
+ * code goes through `getQuestTrackerViewModel` in ./quest_tracker_composition.ts.
+ */
+export const createQuestTrackerViewModel = (
   options: QuestTrackerViewModelOptions,
 ): QuestTrackerViewModelInterface => QuestTrackerViewModel.create(options);

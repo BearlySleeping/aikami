@@ -247,21 +247,37 @@ type ReferenceRegistries = {
 const quotedValues = (source: string): Set<string> =>
   new Set(Array.from(source.matchAll(/['"]([\w-]+)['"]/g), (match) => match[1]));
 
+/**
+ * Every `defineAction({ action: '…' })` declared under `.pi/extensions`.
+ *
+ * 🔴 Scans `lib/` too, not just `contract_pipeline.ts`: an action body may be
+ * extracted into `lib/` (e.g. `lib/publication_authorization.ts`) while still
+ * being registered on a namespace in its extension module. Reading only the
+ * extension module would then report every documented reference to that action
+ * as "unknown".
+ */
+const collectStageActions = (extensionsDir: string): Set<string> => {
+  const actions = new Set<string>();
+  for (const file of walkDir(extensionsDir)) {
+    if (!file.endsWith('.ts') || file.endsWith('.test.ts')) {
+      continue;
+    }
+    const source = readFileSync(file, 'utf-8');
+    for (const match of source.matchAll(/defineAction\s*\(\s*\{\s*action:\s*['"]([\w-]+)['"]/g)) {
+      if (match[1]) {
+        actions.add(match[1]);
+      }
+    }
+  }
+  return actions;
+};
+
 const loadReferenceRegistries = (): ReferenceRegistries => {
-  const contractPipeline = readFileSync(
-    resolve(ROOT, '.pi/extensions/contract_pipeline.ts'),
-    'utf-8',
-  );
   const herdrExtension = readFileSync(
     resolve(ROOT, '.pi/extensions/herdr_orchestrator.ts'),
     'utf-8',
   );
-  const stageActions = new Set(
-    Array.from(
-      contractPipeline.matchAll(/defineAction\s*\(\s*\{\s*action:\s*['"]([\w-]+)['"]/g),
-      (match) => match[1],
-    ),
-  );
+  const stageActions = collectStageActions(resolve(ROOT, '.pi/extensions'));
   const herdrTool = herdrExtension.match(
     /name:\s*['"]herdr_session['"][\s\S]*?action:\s*Type\.String\s*\(\s*\{\s*enum:\s*\[([^\]]+)\]/,
   );
@@ -400,6 +416,10 @@ const checkExamples = (): CheckResult => {
 
     const content = readFileSync(examplePath, 'utf-8');
 
+    // Canonical examples are compiled in isolation with explicit flags, so the
+    // project tsconfig (present at ROOT) must not be consulted. Modern tsgo
+    // errors with TS5112 unless we say so explicitly — without it, every
+    // canonical example fails before any real type check runs.
     const typeScriptResult = spawnSync(
       'tsgo',
       [
@@ -414,6 +434,7 @@ const checkExamples = (): CheckResult => {
         'ESNext',
         '--types',
         'bun',
+        '--ignoreConfig',
         examplePath,
       ],
       { cwd: ROOT, encoding: 'utf-8' },

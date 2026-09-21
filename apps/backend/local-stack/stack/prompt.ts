@@ -106,7 +106,13 @@ export const confirm = async (
   }
   if (options.style === 'rich') {
     const answer = await clackConfirm({ message: question, initialValue: defaultValue });
-    return isCancel(answer) ? CANCELLED : answer;
+    // 🔴 `@clack/core` 1.5.0 changed `isCancel` from `value is symbol` to
+    // `value is typeof CANCEL_SYMBOL`. A `unique symbol` cannot be subtracted
+    // from the primitive `symbol`, so the false branch is still
+    // `boolean | symbol` and no longer satisfies the `boolean` return type.
+    // Narrowing on the runtime shape restores the discrimination 1.4.x gave us
+    // — clack's `confirm` only ever resolves to a boolean or its cancel symbol.
+    return typeof answer === 'boolean' ? answer : CANCELLED;
   }
   process.stdout.write(`${question} ${defaultValue ? '[Y/n]' : '[y/N]'} `);
   const input = await readLine();

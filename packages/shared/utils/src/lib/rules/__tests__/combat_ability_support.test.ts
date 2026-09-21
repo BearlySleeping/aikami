@@ -1,0 +1,268 @@
+// packages/shared/utils/src/lib/rules/__tests__/combat_ability_support.test.ts
+//
+// Combat-08 follow-up (review F5): truthful ability support and targeting.
+//
+//   - a reaction-only ability is unavailable as an ordinary action and spends
+//     nothing;
+//   - an ability whose declared effect is not implemented is rejected with
+//     `unsupportedInV2` instead of consuming its cost and doing nothing;
+//   - basic melee cannot resolve several targets for one cost;
+//   - the catalog never ships an unimplemented ACTIVE feature as available.
+//
+// Contract: C-516 AC-3; C-525 AC-4; C-532 AC-3.
+
+// biome-ignore-all lint/style/useNamingConvention: authored ability ids are snake_case content ids
+
+import { describe, expect, it } from 'bun:test';
+import type { CombatAbilityDefinition, CombatState } from '@aikami/types';
+import {
+  COMBAT_RULES_VERSION,
+  createCombatState,
+  resolveCombatCommand,
+  resolvePartyEscape,
+} from '../combat_kernel';
+import { ABILITY_CATALOG, GOBLIN_1, GOBLIN_2, makeCombatants, PLAYER_ID } from './combat_fixtures';
+
+const catalog = (
+  overrides: Partial<CombatAbilityDefinition> & { abilityId: string },
+): CombatAbilityDefinition => ({
+  name: overrides.abilityId,
+  kind: 'melee_attack',
+  actionCost: 'action',
+  attackBonus: 0,
+  damageDice: '1d6',
+  damageType: 'slashing',
+  rangeCells: 1,
+  requiresLineOfSight: false,
+  ...overrides,
+});
+
+const buildState = (
+  abilities: Record<string, CombatAbilityDefinition>,
+  actorAbilityIds: string[],
+): CombatState => {
+  const combatants = makeCombatants().map((combatant) =>
+    combatant.combatantId === PLAYER_ID ? { ...combatant, abilityIds: actorAbilityIds } : combatant,
+  );
+  return createCombatState({
+    encounterId: 'emberwatch-encounter-1',
+    rulesVersion: COMBAT_RULES_VERSION,
+    seed: 1337,
+    combatants,
+    abilityCatalog: { ...ABILITY_CATALOG, ...abilities },
+    battlefield: { width: 8, height: 8, blockedCells: [] },
+    objectives: [],
+  });
+};
+
+describe('review F5: reaction-only abilities are unavailable as ordinary actions', () => {
+  it('rejects opportunity_strike used as an ordinary action and changes nothing', () => {
+    const state = buildState(
+      {
+        opportunity_strike: catalog({
+          abilityId: 'opportunity_strike',
+          actionCost: 'reaction',
+          activation: 'reaction',
+          maxTargets: 1,
+        }),
+      },
+      ['basic_melee', 'opportunity_strike'],
+    );
+
+    const result = resolveCombatCommand({
+      state,
+      command: {
+        kind: 'useAbility',
+        combatantId: PLAYER_ID,
+        abilityId: 'opportunity_strike',
+        targetIds: [GOBLIN_1],
+      },
+    });
+
+    expect(result.valid).toBe(false);
+    if (!result.valid) {
+      expect(result.reasonCode).toBe('abilityNotAvailable');
+    }
+    // Nothing spent: the caller's state is the input, untouched.
+    expect(state.combatants[PLAYER_ID]?.budget.reactionAvailable).toBe(true);
+    expect(state.combatants[PLAYER_ID]?.budget.actionAvailable).toBe(true);
+  });
+});
+
+describe('review F5: unsupported abilities spend nothing', () => {
+  it('rejects an ability with supported: false using unsupportedInV2', () => {
+    const state = buildState(
+      {
+        second_wind: catalog({
+          abilityId: 'second_wind',
+          kind: 'utility',
+          actionCost: 'quick',
+          damageDice: null,
+          damageType: null,
+          rangeCells: 0,
+          supported: false,
+        }),
+      },
+      ['basic_melee', 'second_wind'],
+    );
+
+    const result = resolveCombatCommand({
+      state,
+      command: {
+        kind: 'useAbility',
+        combatantId: PLAYER_ID,
+        abilityId: 'second_wind',
+        targetIds: [],
+      },
+    });
+
+    expect(result.valid).toBe(false);
+    if (!result.valid) {
+      expect(result.reasonCode).toBe('unsupportedInV2');
+    }
+    expect(state.combatants[PLAYER_ID]?.budget.quickActionAvailable).toBe(true);
+  });
+});
+
+describe('review F5: one cost targets one creature unless authored otherwise', () => {
+  it('rejects a basic melee that names two in-range targets', () => {
+    // Place both goblins adjacent to the hero so both are individually legal.
+    const combatants = makeCombatants().map((combatant) => {
+      if (combatant.combatantId === GOBLIN_1) {
+        return { ...combatant, position: { x: 1, y: 0 } };
+      }
+      if (combatant.combatantId === GOBLIN_2) {
+        return { ...combatant, position: { x: 0, y: 1 } };
+      }
+      return combatant;
+    });
+    const state = createCombatState({
+      encounterId: 'emberwatch-encounter-1',
+      rulesVersion: COMBAT_RULES_VERSION,
+      seed: 1337,
+      combatants,
+      abilityCatalog: ABILITY_CATALOG,
+      battlefield: { width: 8, height: 8, blockedCells: [] },
+      objectives: [],
+    });
+
+    const result = resolveCombatCommand({
+      state,
+      command: {
+        kind: 'useAbility',
+        combatantId: PLAYER_ID,
+        abilityId: 'basic_melee',
+        targetIds: [GOBLIN_1, GOBLIN_2],
+      },
+    });
+
+    expect(result.valid).toBe(false);
+    if (!result.valid) {
+      expect(result.reasonCode).toBe('targetInvalid');
+    }
+  });
+
+  it('accepts a single in-range target', () => {
+    const state = buildState({}, ['basic_melee']);
+    const result = resolveCombatCommand({
+      state,
+      command: {
+        kind: 'useAbility',
+        combatantId: PLAYER_ID,
+        abilityId: 'basic_melee',
+        targetIds: [GOBLIN_1],
+      },
+    });
+    expect(result.valid).toBe(true);
+  });
+});
+
+describe('review F9: the party-level FLEE exit settles as an escape', () => {
+  it('commits an escape settlement and preserves the party HP', () => {
+    const state = buildState({}, ['basic_melee']);
+    const playerHp = state.combatants[PLAYER_ID]?.hp;
+    const result = resolvePartyEscape({ state });
+
+    expect(result.valid).toBe(true);
+    if (!result.valid) {
+      return;
+    }
+    expect(result.state.phase).toBe('ended');
+    expect(result.state.settlement?.result).toBe('escape');
+    expect(result.state.settlement?.reasonCode).toBe('escaped_encounter');
+    // Disengaging is not a fight: HP is untouched and the party is escaped.
+    expect(result.state.combatants[PLAYER_ID]?.hp).toBe(playerHp);
+    expect(result.state.participation[PLAYER_ID]?.status).toBe('escaped');
+  });
+
+  it('is legal on ANY turn — an AI actor being active does not block the exit', () => {
+    const state = buildState({}, ['basic_melee']);
+    // Force an enemy to be the active combatant.
+    const enemyIndex = state.initiative.order.indexOf(GOBLIN_1);
+    state.initiative.activeIndex = enemyIndex;
+    const result = resolvePartyEscape({ state });
+    expect(result.valid).toBe(true);
+  });
+
+  it('leaves defeated and surrendered friendlies unchanged', () => {
+    const state = buildState({}, ['basic_melee']);
+    const defeatedId = 'defeated-ally';
+    const surrenderedId = 'surrendered-ally';
+    const template = state.combatants[GOBLIN_1];
+    const participation = state.participation[PLAYER_ID];
+    expect(template).toBeDefined();
+    expect(participation).toBeDefined();
+    if (template === undefined || participation === undefined) {
+      return;
+    }
+    state.combatants[defeatedId] = {
+      ...structuredClone(template),
+      combatantId: defeatedId,
+      team: 'ally',
+      defeated: true,
+    };
+    state.combatants[surrenderedId] = {
+      ...structuredClone(template),
+      combatantId: surrenderedId,
+      team: 'ally',
+    };
+    state.participation[defeatedId] = { ...participation, status: 'defeated' };
+    state.participation[surrenderedId] = { ...participation, status: 'surrendered' };
+
+    const result = resolvePartyEscape({ state });
+    expect(result.valid).toBe(true);
+    if (!result.valid) {
+      return;
+    }
+    expect(result.state.participation[defeatedId]?.status).toBe('defeated');
+    expect(result.state.participation[surrenderedId]?.status).toBe('surrendered');
+    expect(
+      result.events.filter(
+        (event) =>
+          event.kind === 'participationChanged' &&
+          (event.combatantId === defeatedId || event.combatantId === surrenderedId),
+      ),
+    ).toEqual([]);
+  });
+
+  it('refuses without marking when no friendly still contests', () => {
+    const state = buildState({}, ['basic_melee']);
+    const participation = state.participation[PLAYER_ID];
+    expect(participation).toBeDefined();
+    if (participation === undefined) {
+      return;
+    }
+    state.participation[PLAYER_ID] = { ...participation, status: 'defeated' };
+    expect(resolvePartyEscape({ state }).valid).toBe(false);
+    expect(state.participation[PLAYER_ID]?.status).toBe('defeated');
+  });
+
+  it('refuses a stale revision and an already-ended encounter', () => {
+    const state = buildState({}, ['basic_melee']);
+    expect(resolvePartyEscape({ state, basedOnRevision: state.stateRevision + 5 }).valid).toBe(
+      false,
+    );
+    const ended = { ...state, phase: 'ended' as const };
+    expect(resolvePartyEscape({ state: ended }).valid).toBe(false);
+  });
+});

@@ -89,13 +89,27 @@ export type LpcDirection = (typeof LpcDirection)[keyof typeof LpcDirection];
  *   SHOOT:    13 frames  (cols 0–12, full row)
  *   DIE:       6 frames  (cols 0–5)
  */
-const FRAMES_PER_STATE = {
+export const FRAMES_PER_STATE = {
   [LpcAnimationState.Spellcast]: 7,
   [LpcAnimationState.Thrust]: 8,
   [LpcAnimationState.Walk]: 9,
   [LpcAnimationState.Slash]: 6,
   [LpcAnimationState.Shoot]: 13,
   [LpcAnimationState.Die]: 6,
+} as const;
+
+/**
+ * Human-readable state names keyed by {@link LpcAnimationState}.
+ *
+ * Used by the visual adapter to derive clip names such as `walk.east`.
+ */
+export const LPC_STATE_NAMES: Record<LpcAnimationState, string> = {
+  [LpcAnimationState.Spellcast]: 'spellcast',
+  [LpcAnimationState.Thrust]: 'thrust',
+  [LpcAnimationState.Walk]: 'walk',
+  [LpcAnimationState.Slash]: 'slash',
+  [LpcAnimationState.Shoot]: 'shoot',
+  [LpcAnimationState.Die]: 'die',
 } as const;
 
 // ---------------------------------------------------------------------------

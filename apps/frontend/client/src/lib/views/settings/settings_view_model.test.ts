@@ -2,58 +2,70 @@
 //
 // Unit tests for SettingsViewModel — group/section selection and deep links.
 // Contract: C-333 grouped shell (feat/settings-shell-groups)
+//
+// The aggregate ViewModel receives every sub-ViewModel as a construction
+// capability, so these tests inject inert stubs and never touch the global
+// service registry.
 
-// biome-ignore-all lint/style/useNamingConvention: Mock object properties must mirror PascalCase class names for module mocking
+// biome-ignore-all lint/style/useNamingConvention: capability stubs mirror PascalCase ViewModel names
 
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
-import type { SettingsViewModel as SettingsViewModelClass } from './settings_view_model.svelte.ts';
+import type { BaseViewModelInterface } from '@aikami/frontend/services/base';
+import type { AgentEditorViewModelInterface } from '../agent/editor/agent_editor_view_model.svelte';
+import type { AgentListViewModelInterface } from '../agent/list/agent_list_view_model.svelte';
+import type { AccountViewModelInterface } from './account/account_view_model.svelte';
+import type { AiActivityViewModelInterface } from './ai/ai_activity_view_model.svelte';
+import type { AiCapabilityBadgeViewModelInterface } from './ai/ai_capability_badge_view_model.svelte';
+import { createAiConnectionStatus } from './ai/ai_connection_status.svelte';
+import type { CapabilityDetailViewModelInterface } from './ai/capability_detail_view_model.svelte';
+import type { SettingsAudioViewModelInterface } from './audio/settings_audio_view_model.svelte';
+import type { AutonomousSettingsViewModelInterface } from './autonomous/autonomous_settings_view_model.svelte';
+import type { SettingsControlsViewModelInterface } from './controls/settings_controls_view_model.svelte';
+import type { SettingsDisplayViewModelInterface } from './display/settings_display_view_model.svelte';
+import type { ExportViewModelInterface } from './export/export_view_model.svelte';
+import type { GameplayViewModelInterface } from './gameplay/gameplay_view_model.svelte';
+import type { SettingsInterfaceViewModelInterface } from './interface/settings_interface_view_model.svelte';
+import type { SettingsMusicViewModelInterface } from './music/settings_music_view_model.svelte';
+import {
+  createSettingsViewModel,
+  type SettingsViewModelInterface,
+  type SettingsViewModelOptions,
+} from './settings_view_model.svelte.ts';
 
-const _stubViewModel = (extra: Record<string, unknown> = {}) => ({
-  masterVolume: 1,
-  setMasterVolume: () => {},
-  aiConnectionStatus: 'not_configured',
-  ...extra,
+/** Inert sub-ViewModel stand-in for capabilities the tests never exercise. */
+const subStub = {} as BaseViewModelInterface;
+
+const buildOptions = (
+  overrides: Partial<SettingsViewModelOptions> = {},
+): SettingsViewModelOptions => ({
+  className: 'SettingsViewModel',
+  router: { goBack: mock(async () => {}) },
+  connectionStatus: createAiConnectionStatus(),
+  createAccount: () => subStub as AccountViewModelInterface,
+  createGameplay: () => subStub as GameplayViewModelInterface,
+  createInterface: () => subStub as SettingsInterfaceViewModelInterface,
+  createAudio: () => subStub as SettingsAudioViewModelInterface,
+  createDisplay: () => subStub as SettingsDisplayViewModelInterface,
+  createControls: () => subStub as SettingsControlsViewModelInterface,
+  createMusic: () => subStub as SettingsMusicViewModelInterface,
+  createAutonomous: () => subStub as AutonomousSettingsViewModelInterface,
+  createExport: () => subStub as ExportViewModelInterface,
+  createAiCapabilityBadge: () => subStub as AiCapabilityBadgeViewModelInterface,
+  createCapabilityDetail: () => subStub as CapabilityDetailViewModelInterface,
+  createAiActivity: () => subStub as AiActivityViewModelInterface,
+  createAgentList: () => subStub as AgentListViewModelInterface,
+  createAgentEditor: () => subStub as AgentEditorViewModelInterface,
+  ...overrides,
 });
 
-mock.module('../agent/editor/agent_editor_view_model.svelte.ts', () => ({
-  getAgentEditorViewModel: () => _stubViewModel(),
-}));
-mock.module('../agent/list/agent_list_view_model.svelte.ts', () => ({
-  getAgentListViewModel: () => _stubViewModel(),
-}));
-mock.module('./audio/settings_audio_view_model.svelte', () => ({
-  getSettingsAudioViewModel: () => _stubViewModel(),
-}));
-mock.module('./autonomous/autonomous_settings_view_model.svelte', () => ({
-  getAutonomousSettingsViewModel: () => _stubViewModel(),
-}));
-mock.module('./connection/connection_manager_view_model.svelte', () => ({
-  getConnectionManagerViewModel: () => _stubViewModel(),
-}));
-mock.module('./controls/settings_controls_view_model.svelte', () => ({
-  getSettingsControlsViewModel: () => _stubViewModel(),
-}));
-mock.module('./display/settings_display_view_model.svelte', () => ({
-  getSettingsDisplayViewModel: () => _stubViewModel(),
-}));
-mock.module('./export/export_view_model.svelte', () => ({
-  getExportViewModel: () => _stubViewModel(),
-}));
-mock.module('./gameplay/gameplay_view_model.svelte', () => ({
-  getGameplayViewModel: () => _stubViewModel(),
-}));
-mock.module('./music/settings_music_view_model.svelte', () => ({
-  getSettingsMusicViewModel: () => _stubViewModel(),
-}));
-
-type SettingsViewModelType = InstanceType<typeof SettingsViewModelClass>;
+const createVm = (overrides: Partial<SettingsViewModelOptions> = {}): SettingsViewModelInterface =>
+  createSettingsViewModel(buildOptions(overrides));
 
 describe('SettingsViewModel — group/section selection', () => {
-  let vm: SettingsViewModelType;
+  let vm: SettingsViewModelInterface;
 
-  beforeEach(async () => {
-    const { SettingsViewModel } = await import('./settings_view_model.svelte.ts');
-    vm = SettingsViewModel.create({ className: 'SettingsViewModel' });
+  beforeEach(() => {
+    vm = createVm();
   });
 
   test('defaults to the Play group with Controls as the active section', () => {
@@ -71,6 +83,7 @@ describe('SettingsViewModel — group/section selection', () => {
       'audio',
       'display',
       'gameplay',
+      'interface',
     ]);
   });
 
@@ -78,7 +91,7 @@ describe('SettingsViewModel — group/section selection', () => {
     vm.setActiveGroup('ai');
     expect(vm.activeGroupId).toBe('ai');
     expect(vm.activeSectionId).toBe('story-dialogue');
-    expect(vm.sectionsInActiveGroup.length).toBe(3);
+    expect(vm.sectionsInActiveGroup.length).toBe(4);
     expect(vm.sectionsInActiveGroup[0].id).toBe('story-dialogue');
   });
 
@@ -92,12 +105,6 @@ describe('SettingsViewModel — group/section selection', () => {
 
 describe('SettingsViewModel — deep links', () => {
   const originalLocation = window.location;
-  let settingsViewModelClass: typeof SettingsViewModelClass;
-
-  beforeEach(async () => {
-    const { SettingsViewModel } = await import('./settings_view_model.svelte.ts');
-    settingsViewModelClass = SettingsViewModel;
-  });
 
   afterEach(() => {
     Object.defineProperty(window, 'location', {
@@ -117,7 +124,7 @@ describe('SettingsViewModel — deep links', () => {
 
   test('?section=<id> selects that section and its owning group', async () => {
     setSearch('?section=music');
-    const vm = settingsViewModelClass.create({ className: 'SettingsViewModel' });
+    const vm = createVm();
     await vm.initialize();
     expect(vm.activeSectionId).toBe('music');
     expect(vm.activeGroupId).toBe('content');
@@ -125,7 +132,7 @@ describe('SettingsViewModel — deep links', () => {
 
   test('?group=<id> selects that group and its first section', async () => {
     setSearch('?group=data');
-    const vm = settingsViewModelClass.create({ className: 'SettingsViewModel' });
+    const vm = createVm();
     await vm.initialize();
     expect(vm.activeGroupId).toBe('data');
     expect(vm.activeSectionId).toBe('export');
@@ -133,7 +140,7 @@ describe('SettingsViewModel — deep links', () => {
 
   test('an unknown ?section= falls back to the default', async () => {
     setSearch('?section=does-not-exist');
-    const vm = settingsViewModelClass.create({ className: 'SettingsViewModel' });
+    const vm = createVm();
     await vm.initialize();
     expect(vm.activeSectionId).toBe('controls');
     expect(vm.activeGroupId).toBe('play');
@@ -141,11 +148,10 @@ describe('SettingsViewModel — deep links', () => {
 });
 
 describe('SettingsViewModel — search', () => {
-  let vm: SettingsViewModelType;
+  let vm: SettingsViewModelInterface;
 
-  beforeEach(async () => {
-    const { SettingsViewModel } = await import('./settings_view_model.svelte.ts');
-    vm = SettingsViewModel.create({ className: 'SettingsViewModel' });
+  beforeEach(() => {
+    vm = createVm();
   });
 
   test('isSearching is false by default', () => {

@@ -17,7 +17,11 @@
 
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import type { AssetSeedDocument, AssetSeedRow } from '@aikami/types';
-import { AssetRegistryRepository, BUNDLED_SOURCE_BACKEND } from '../assets.ts';
+import {
+  ASSET_REGISTRY_SEEDED_KEY,
+  AssetRegistryRepository,
+  BUNDLED_SOURCE_BACKEND,
+} from '../assets.ts';
 import { AIKAMI_MIGRATIONS } from '../migrations.ts';
 import { WasmStorageAdapter } from '../wasm_storage_adapter.ts';
 
@@ -131,7 +135,7 @@ describe('AssetRegistryRepository', () => {
     expect(hero?.license).toBe('unknown');
 
     expect(await registry.list()).toHaveLength(3);
-    expect(await registry.isSeeded('2026-08-23T00:00:00.000Z')).toBe(true);
+    expect(await registry.isSeeded(makeSeed())).toBe(true);
   });
 
   test('de-bundled assets resolve from R2 at priority 0', async () => {
@@ -287,15 +291,80 @@ describe('AssetRegistryRepository', () => {
   test('isSeeded is false for a different seed revision', async () => {
     await registry.seedFromCompactSeed({ seed: makeSeed(), r2BaseUrl: R2_BASE });
 
-    expect(await registry.isSeeded('2026-08-23T00:00:00.000Z')).toBe(true);
-    expect(await registry.isSeeded('2099-01-01T00:00:00.000Z')).toBe(false);
+    expect(await registry.isSeeded(makeSeed())).toBe(true);
+    expect(
+      await registry.isSeeded(makeSeed(undefined, { generatedAt: '2099-01-01T00:00:00.000Z' })),
+    ).toBe(false);
+  });
+
+  test('isSeeded is false when a tag hash changes at the same generatedAt (republish)', async () => {
+    // Regression: idempotency was keyed on `generatedAt` alone, so a
+    // republished asset — same tag, new hash, same timestamp — was treated as
+    // already seeded. The registry kept the old hash, reconcile() compared
+    // against it, found nothing stale, and the previous revision kept being
+    // served from cache by tag even though the new bytes were downloaded.
+    await registry.seedFromCompactSeed({ seed: makeSeed(), r2BaseUrl: R2_BASE });
+    expect(await registry.isSeeded(makeSeed())).toBe(true);
+
+    const republished = makeSeed([{ ...HERO, hash: HASH_B }, FOREST, BODY_WALK]);
+    expect(await registry.isSeeded(republished)).toBe(false);
+  });
+
+  test('isSeeded is false when the row set changes at the same generatedAt', async () => {
+    await registry.seedFromCompactSeed({ seed: makeSeed(), r2BaseUrl: R2_BASE });
+    expect(await registry.isSeeded(makeSeed())).toBe(true);
+
+    // Same timestamp, an extra asset added by a republish.
+    const extended = makeSeed([
+      HERO,
+      FOREST,
+      BODY_WALK,
+      { ...HERO, tag: 'sprites:new', hash: HASH_B },
+    ]);
+    expect(await registry.isSeeded(extended)).toBe(false);
+  });
+
+  test('isSeeded is false when only row metadata changes at the same generatedAt', async () => {
+    // The digest covers every persisted seed field, not just tag→hash: a
+    // metadata-only republish (corrected category/size/ext) still leaves the
+    // registry holding stale rows, so it must re-seed too.
+    await registry.seedFromCompactSeed({ seed: makeSeed(), r2BaseUrl: R2_BASE });
+    expect(await registry.isSeeded(makeSeed())).toBe(true);
+
+    const recategorised = makeSeed([{ ...HERO, category: 'props' }, FOREST, BODY_WALK]);
+    expect(await registry.isSeeded(recategorised)).toBe(false);
+
+    const resized = makeSeed([{ ...HERO, sizeBytes: HERO.sizeBytes + 1 }, FOREST, BODY_WALK]);
+    expect(await registry.isSeeded(resized)).toBe(false);
+
+    const reexted = makeSeed([{ ...HERO, ext: '.webp' }, FOREST, BODY_WALK]);
+    expect(await registry.isSeeded(reexted)).toBe(false);
+  });
+
+  test('a core-only seed stores the COMPLETE manifest fingerprint it was given', async () => {
+    // Regression: lazy core seeding fingerprints the subset it writes while
+    // `isSeeded` is asked about the complete manifest, so the stored value
+    // never matched and every boot re-seeded unconditionally. The caller now
+    // passes the complete document as `fingerprintSeed`.
+    const full = makeSeed();
+    await registry.seedFromCompactSeed({
+      seed: { ...full, rows: [HERO] },
+      fingerprintSeed: full,
+      r2BaseUrl: R2_BASE,
+    });
+
+    // The complete manifest reads as seeded...
+    expect(await registry.isSeeded(full)).toBe(true);
+    // ...and the subset that was actually written does not.
+    expect(await registry.isSeeded({ ...full, rows: [HERO] })).toBe(false);
   });
 
   test('isSeeded rejects a bare generatedAt written by an older derivation', async () => {
     // A pre-fix client stored the raw timestamp. The fingerprint now carries a
-    // derivation revision, so that client's registry must re-seed once.
+    // derivation revision plus a content digest, so that client's registry
+    // must re-seed once — which also clears the stale rows the old guard left.
     await registry.setMeta('asset_registry_seeded', '2026-08-23T00:00:00.000Z');
-    expect(await registry.isSeeded('2026-08-23T00:00:00.000Z')).toBe(false);
+    expect(await registry.isSeeded(makeSeed())).toBe(false);
   });
 
   test('seeding spans chunk boundaries and reports progress', async () => {
@@ -396,5 +465,405 @@ describe('AssetRegistryRepository', () => {
     expect(await registry.resetInterruptedDownloads()).toBe(1);
     expect((await registry.getInstallState(FOREST.tag))?.status).toBe('not_downloaded');
     expect(await registry.listInstallStates()).toHaveLength(2);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// C-510 AC-8: local-generated assets are compatible with existing data
+// ---------------------------------------------------------------------------
+
+const GENERATED_TAG = 'props:rusty-iron-gate';
+const GENERATED_HASH = 'e'.repeat(64);
+
+/** Registers one generated asset through the C-510 write seam. */
+const registerGeneratedAsset = (registry: AssetRegistryRepository) =>
+  registry.registerGenerated({
+    tag: GENERATED_TAG,
+    hash: GENERATED_HASH,
+    sizeBytes: 4096,
+    category: 'props',
+    provenanceSource: 'generated:sdcpp',
+  });
+
+describe('AssetRegistryRepository.registerGenerated (C-510)', () => {
+  let db: WasmStorageAdapter;
+  let registry: AssetRegistryRepository;
+
+  beforeEach(async () => {
+    ({ db, registry } = await createRegistry());
+  });
+
+  afterEach(async () => {
+    await db.close();
+  });
+
+  test('writes an assets row plus a local-generated source at priority -1', async () => {
+    const result = await registerGeneratedAsset(registry);
+
+    expect(result.created).toBe(true);
+    expect(result.version).toBe(1);
+
+    const record = await registry.findById(GENERATED_TAG);
+    expect(record?.hash).toBe(GENERATED_HASH);
+    expect(record?.category).toBe('props');
+    expect(record?.sizeBytes).toBe(4096);
+    // The generated pack id is what makes a seed collision detectable.
+    expect(record?.packId).toBe('generated');
+    expect(record?.attribution).toBe('generated:sdcpp');
+
+    const sources = await registry.listSources(GENERATED_TAG);
+    expect(sources).toHaveLength(1);
+    expect(sources[0]?.backend).toBe('local-generated');
+    expect(sources[0]?.priority).toBe(-1);
+    expect(sources[0]?.url).toBe(`local-generated:${GENERATED_HASH}`);
+  });
+
+  test('the local-generated source outranks a seed r2 row for the same tag', async () => {
+    // Seed a catalog row, then register a generated asset under a *different*
+    // tag whose seed counterpart also exists — the priority ordering is what
+    // makes local content win without relying on the backend tiebreak.
+    await registry.seedFromCompactSeed({ seed: makeSeed(), r2BaseUrl: R2_BASE });
+    await registerGeneratedAsset(registry);
+
+    // Manually add an r2 row for the generated tag to prove ordering.
+    await db.execute({
+      sql: `INSERT OR REPLACE INTO asset_sources (asset_id, backend, url, priority) VALUES (?, 'r2', ?, 0)`,
+      args: [GENERATED_TAG, r2Url(GENERATED_HASH, '.png')],
+    });
+
+    const sources = await registry.listSources(GENERATED_TAG);
+    expect(sources.map((source) => source.backend)).toEqual(['local-generated', 'r2']);
+    expect(sources[0]?.priority).toBe(-1);
+  });
+
+  test('re-registering identical bytes is idempotent', async () => {
+    await registerGeneratedAsset(registry);
+    const second = await registerGeneratedAsset(registry);
+
+    expect(second.unchanged).toBe(true);
+    expect(second.version).toBe(1);
+    expect((await registry.listSources(GENERATED_TAG)).length).toBe(1);
+  });
+
+  test('different bytes for the same tag bump the version rather than overwriting silently', async () => {
+    await registerGeneratedAsset(registry);
+    const second = await registry.registerGenerated({
+      tag: GENERATED_TAG,
+      hash: 'f'.repeat(64),
+      sizeBytes: 8192,
+      category: 'props',
+      provenanceSource: 'generated:sdcpp',
+    });
+
+    expect(second.version).toBe(2);
+    expect((await registry.findById(GENERATED_TAG))?.hash).toBe('f'.repeat(64));
+  });
+
+  test('concurrent registrations for one tag return accurate versions and outcomes', async () => {
+    const nextHash = 'f'.repeat(64);
+    const [created, updated, unchanged] = await Promise.all([
+      registerGeneratedAsset(registry),
+      registry.registerGenerated({
+        tag: GENERATED_TAG,
+        hash: nextHash,
+        sizeBytes: 8192,
+        category: 'props',
+        provenanceSource: 'generated:sdcpp',
+      }),
+      registry.registerGenerated({
+        tag: GENERATED_TAG,
+        hash: nextHash,
+        sizeBytes: 8192,
+        category: 'props',
+        provenanceSource: 'generated:sdcpp',
+      }),
+    ]);
+
+    expect(created).toEqual({ version: 1, created: true, unchanged: false });
+    expect(updated).toEqual({ version: 2, created: false, unchanged: false });
+    expect(unchanged).toEqual({ version: 2, created: false, unchanged: true });
+    expect((await registry.findById(GENERATED_TAG))?.hash).toBe(nextHash);
+    expect((await registry.findById(GENERATED_TAG))?.version).toBe(2);
+  });
+
+  test('a tag owned by the boot seed is rejected with a readable error', async () => {
+    await registry.seedFromCompactSeed({ seed: makeSeed(), r2BaseUrl: R2_BASE });
+
+    await expect(
+      registry.registerGenerated({
+        tag: HERO.tag,
+        hash: GENERATED_HASH,
+        sizeBytes: 1,
+        category: 'sprites',
+        provenanceSource: 'generated:sdcpp',
+      }),
+    ).rejects.toThrow(/already owns that tag/);
+
+    // The seed row is untouched.
+    expect((await registry.findById(HERO.tag))?.hash).toBe(HASH_A);
+    expect((await registry.findById(HERO.tag))?.version).toBe(1);
+  });
+
+  test('isSeedTag distinguishes catalog rows from generated ones', async () => {
+    await registry.seedFromCompactSeed({ seed: makeSeed(), r2BaseUrl: R2_BASE });
+    await registerGeneratedAsset(registry);
+
+    expect(await registry.isSeedTag(HERO.tag)).toBe(true);
+    expect(await registry.isSeedTag(GENERATED_TAG)).toBe(false);
+    expect(await registry.isSeedTag('props:never-registered')).toBe(false);
+  });
+
+  test('a local-generated row survives a full re-seed pass', async () => {
+    await registry.seedFromCompactSeed({ seed: makeSeed(), r2BaseUrl: R2_BASE });
+    await registerGeneratedAsset(registry);
+
+    // Re-seed twice — _pruneStaleSources runs on every pass.
+    await registry.seedFromCompactSeed({ seed: makeSeed(), r2BaseUrl: R2_BASE });
+    await registry.seedFromCompactSeed({ seed: makeSeed(), r2BaseUrl: R2_BASE });
+
+    const record = await registry.findById(GENERATED_TAG);
+    expect(record).toBeDefined();
+    expect(record?.hash).toBe(GENERATED_HASH);
+
+    const sources = await registry.listSources(GENERATED_TAG);
+    expect(sources).toHaveLength(1);
+    expect(sources[0]?.backend).toBe('local-generated');
+    expect(sources[0]?.priority).toBe(-1);
+
+    // Existing seed rows and their hashes are unchanged.
+    expect((await registry.findById(HERO.tag))?.hash).toBe(HASH_A);
+    expect((await registry.findById(FOREST.tag))?.hash).toBe(HASH_B);
+    expect(await registry.list()).toHaveLength(4);
+  });
+
+  test('generated rows do not perturb the seed fingerprint (revision stays r4)', async () => {
+    await registry.seedFromCompactSeed({ seed: makeSeed(), r2BaseUrl: R2_BASE });
+    const seededFingerprint = await registry.getMeta(ASSET_REGISTRY_SEEDED_KEY);
+
+    // A generated row is not a seed row — it must not invalidate the guard.
+    await registerGeneratedAsset(registry);
+    expect(await registry.isSeeded(makeSeed())).toBe(true);
+
+    await registry.seedFromCompactSeed({ seed: makeSeed(), r2BaseUrl: R2_BASE });
+    expect(await registry.getMeta(ASSET_REGISTRY_SEEDED_KEY)).toBe(seededFingerprint);
+    // The revision is the one the contract pins: r4, never bumped for C-510.
+    expect(seededFingerprint).toContain('#r4#');
+  });
+
+  test('an unknown backend value is tolerated by readers, not thrown on', async () => {
+    await registerGeneratedAsset(registry);
+
+    // A reader that does not know `local-generated` must still be able to read
+    // the row — the column is free-text TEXT NOT NULL with no CHECK.
+    const sources = await registry.listSources(GENERATED_TAG);
+    expect(sources[0]?.backend).toBe('local-generated');
+    expect(() => sources.map((source) => source.url)).not.toThrow();
+
+    // And a *future* unknown value is equally readable.
+    await db.execute({
+      sql: `INSERT OR REPLACE INTO asset_sources (asset_id, backend, url, priority) VALUES (?, ?, ?, ?)`,
+      args: [GENERATED_TAG, 'quantum-teleport', 'quantum:abc', 5],
+    });
+    const all = await registry.listSources(GENERATED_TAG);
+    // The union is widened deliberately: the column is free-text, so a value
+    // this build does not know must still read back as a plain string.
+    expect(all.map((source) => String(source.backend))).toContain('quantum-teleport');
+  });
+
+  test('the write is atomic — a failing transaction leaves no asset row', async () => {
+    // A duplicate-tag collision inside the same pass is impossible, so assert
+    // the observable invariant instead: after a rejected registration nothing
+    // was written.
+    await registry.seedFromCompactSeed({ seed: makeSeed(), r2BaseUrl: R2_BASE });
+    const before = await registry.list();
+
+    await expect(
+      registry.registerGenerated({
+        tag: FOREST.tag,
+        hash: GENERATED_HASH,
+        sizeBytes: 1,
+        category: 'music',
+        provenanceSource: 'generated:sdcpp',
+      }),
+    ).rejects.toThrow();
+
+    expect(await registry.list()).toEqual(before);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// C-512 AC-4: studio library listing, rename and delete
+// ---------------------------------------------------------------------------
+
+describe('AssetRegistryRepository generated-row management (C-512)', () => {
+  let db: WasmStorageAdapter;
+  let registry: AssetRegistryRepository;
+
+  beforeEach(async () => {
+    ({ db, registry } = await createRegistry());
+    await registerGeneratedAsset(registry);
+  });
+
+  afterEach(async () => {
+    await db.close();
+  });
+
+  test('listGenerated returns only generated rows, with provenance and source flag', async () => {
+    await registry.seedFromCompactSeed({ seed: makeSeed(), r2BaseUrl: R2_BASE });
+
+    const rows = await registry.listGenerated();
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.tag).toBe(GENERATED_TAG);
+    expect(rows[0]?.sha256).toBe(GENERATED_HASH);
+    expect(rows[0]?.sizeBytes).toBe(4096);
+    expect(rows[0]?.provenanceSource).toBe('generated:sdcpp');
+    expect(rows[0]?.localGenerated).toBe(true);
+    // No install_state row was written, so the projection has no timestamp.
+    expect(rows[0]?.createdAt).toBeUndefined();
+  });
+
+  test('listGenerated projects install_state.downloaded_at as createdAt', async () => {
+    await registry.setInstallState({
+      assetId: GENERATED_TAG,
+      status: 'cached',
+      cachedHash: GENERATED_HASH,
+      downloadedAt: '2026-05-01T12:00:00.000Z',
+    });
+
+    const rows = await registry.listGenerated();
+    expect(rows[0]?.createdAt).toBe('2026-05-01T12:00:00.000Z');
+  });
+
+  test('renameGenerated moves the asset, source and install rows', async () => {
+    await registry.setInstallState({
+      assetId: GENERATED_TAG,
+      status: 'cached',
+      cachedHash: GENERATED_HASH,
+      downloadedAt: '2026-05-01T12:00:00.000Z',
+    });
+
+    const renamed = await registry.renameGenerated({
+      from: GENERATED_TAG,
+      to: 'props:my-gate',
+    });
+
+    expect(renamed.tag).toBe('props:my-gate');
+    expect(await registry.findById(GENERATED_TAG)).toBeUndefined();
+    expect((await registry.findById('props:my-gate'))?.hash).toBe(GENERATED_HASH);
+    expect((await registry.listSources('props:my-gate'))[0]?.backend).toBe('local-generated');
+    expect((await registry.getInstallState('props:my-gate'))?.cachedHash).toBe(GENERATED_HASH);
+  });
+
+  test('renameGenerated refuses a catalog (seed) tag', async () => {
+    await registry.seedFromCompactSeed({ seed: makeSeed(), r2BaseUrl: R2_BASE });
+
+    await expect(
+      registry.renameGenerated({ from: HERO.tag, to: 'sprites:renamed' }),
+    ).rejects.toThrow(/belongs to the catalog/);
+  });
+
+  test('renameGenerated refuses a colliding target tag', async () => {
+    await registerGeneratedAsset(registry);
+    await registry.registerGenerated({
+      tag: 'props:other',
+      hash: 'f'.repeat(64),
+      sizeBytes: 1,
+      category: 'props',
+      provenanceSource: 'generated:sdcpp',
+    });
+
+    await expect(
+      registry.renameGenerated({ from: GENERATED_TAG, to: 'props:other' }),
+    ).rejects.toThrow(/already exists/);
+  });
+
+  test('renameGenerated rejects a tag outside the registry grammar', async () => {
+    await expect(
+      registry.renameGenerated({ from: GENERATED_TAG, to: 'Not A Tag' }),
+    ).rejects.toThrow(/tag grammar/);
+  });
+
+  test('deleteGenerated removes the asset, source and install rows', async () => {
+    await registry.setInstallState({
+      assetId: GENERATED_TAG,
+      status: 'cached',
+      cachedHash: GENERATED_HASH,
+      downloadedAt: '2026-05-01T12:00:00.000Z',
+    });
+
+    const result = await registry.deleteGenerated(GENERATED_TAG);
+
+    expect(result.deleted).toBe(true);
+    expect(result.hash).toBe(GENERATED_HASH);
+    expect(await registry.findById(GENERATED_TAG)).toBeUndefined();
+    expect(await registry.listSources(GENERATED_TAG)).toHaveLength(0);
+    expect(await registry.getInstallState(GENERATED_TAG)).toBeUndefined();
+  });
+
+  test('deleteGenerated refuses seed tags and reports unknown tags', async () => {
+    await registry.seedFromCompactSeed({ seed: makeSeed(), r2BaseUrl: R2_BASE });
+
+    expect(await registry.deleteGenerated(HERO.tag)).toEqual({
+      deleted: false,
+      reason: 'seed_tag',
+    });
+    expect(await registry.deleteGenerated('props:never-existed')).toEqual({
+      deleted: false,
+      reason: 'not_found',
+    });
+    // The catalog row survives the refusal.
+    expect(await registry.findById(HERO.tag)).toBeDefined();
+  });
+
+  test('findSaveReferences reports save payloads that mention the tag', async () => {
+    await db.execute({
+      sql: `INSERT INTO saves (id, slot_id, campaign_id, timestamp, map_name, payload)
+            VALUES (?, ?, ?, ?, ?, ?)`,
+      args: [
+        'save-1',
+        'slot-1',
+        'campaign-1',
+        1,
+        'village',
+        JSON.stringify({ portraitTag: GENERATED_TAG }),
+      ],
+    });
+    await db.execute({
+      sql: `INSERT INTO saves (id, slot_id, campaign_id, timestamp, map_name, payload)
+            VALUES (?, ?, ?, ?, ?, ?)`,
+      args: ['save-2', 'slot-2', 'campaign-1', 2, 'inn', JSON.stringify({ unrelated: true })],
+    });
+
+    expect(await registry.findSaveReferences(GENERATED_TAG)).toEqual(['save-1']);
+    expect(await registry.findSaveReferences('props:never-existed')).toEqual([]);
+
+    const literalWildcardTag = 'props:portrait!_100%';
+    await db.execute({
+      sql: `INSERT INTO saves (id, slot_id, campaign_id, timestamp, map_name, payload)
+            VALUES (?, ?, ?, ?, ?, ?)`,
+      args: [
+        'save-3',
+        'slot-3',
+        'campaign-1',
+        3,
+        'market',
+        JSON.stringify({ portraitTag: literalWildcardTag }),
+      ],
+    });
+    await db.execute({
+      sql: `INSERT INTO saves (id, slot_id, campaign_id, timestamp, map_name, payload)
+            VALUES (?, ?, ?, ?, ?, ?)`,
+      args: [
+        'save-4',
+        'slot-4',
+        'campaign-1',
+        4,
+        'forge',
+        JSON.stringify({ portraitTag: 'props:portrait!X100anything' }),
+      ],
+    });
+
+    expect(await registry.findSaveReferences(literalWildcardTag)).toEqual(['save-3']);
   });
 });

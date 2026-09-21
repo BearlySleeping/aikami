@@ -8,6 +8,7 @@
 
 import { beforeEach, describe, expect, test } from 'bun:test';
 import { STARTER_KIT } from '@aikami/constants';
+import { LEGACY_CATALOG_SNAPSHOT } from '@aikami/lpc';
 import { getItemDefinition } from '$utils/inventory_utils';
 import { equipmentService } from './equipment_service.svelte';
 import { inventoryService } from './inventory_service.svelte';
@@ -82,115 +83,97 @@ describe('STARTER_KIT (C-374)', () => {
     }
   });
 
-  test('seedBaseOutfit fills empty body/feet slots from the base recipe', () => {
+  test('female wearer: chainmail + boots resolve to the female variants', () => {
     equipmentService.reset();
     inventoryService.reset();
-    equipmentService.seedBaseOutfit({
-      body: 'body/bodies_male',
-      hair: 'hair/bangs_adult',
-      torso: 'torso/chainmail_male',
-      legs: 'legs/pants_male',
-      feet: 'feet/boots/basic_male',
-      head: 'head/heads/human_male',
+    equipmentService.configureAppearanceContext({
+      bodyAssetId: 'body/bodies_female',
+      catalogAssetIdsBySlot: LEGACY_CATALOG_SNAPSHOT,
     });
-    // Default character's chainmail + boots appear in the paperdoll
+    inventoryService.addItem({ itemId: 'chainmailArmor' });
+    inventoryService.addItem({ itemId: 'leatherBoots' });
+    inventoryService.addItem({ itemId: 'ironShield' });
+    equipmentService.equipItem({ itemId: 'chainmailArmor' });
+    equipmentService.equipItem({ itemId: 'leatherBoots' });
+    equipmentService.equipItem({ itemId: 'ironShield' });
+
+    const recipes = equipmentService.buildLpcRecipes();
+    expect(recipes.find((r) => r.slot === 'torso')?.assetId).toBe('torso/chainmail_female');
+    expect(recipes.find((r) => r.slot === 'feet')?.assetId).toBe('feet/boots/basic_thin');
+    expect(recipes.find((r) => r.slot === 'shield')?.assetId).toBe('shield/kite_female');
+    // Gameplay item IDs are untouched by visual resolution.
     expect(equipmentService.getEquippedItemId('body')).toBe('chainmailArmor');
     expect(equipmentService.getEquippedItemId('feet')).toBe('leatherBoots');
-    // Equipped items moved out of the bag into their slots
-    expect(inventoryService.inventory.some((e) => e.itemId === 'chainmailArmor')).toBe(false);
-    expect(inventoryService.inventory.some((e) => e.itemId === 'leatherBoots')).toBe(false);
+    expect(equipmentService.getEquippedItemId('leftHand')).toBe('ironShield');
   });
 
-  test('seedBaseOutfit never clobbers saved gear', () => {
+  test('female wearer: starter kit resolves every body-dependent piece compatibly', () => {
     equipmentService.reset();
     inventoryService.reset();
-    inventoryService.addItem({ itemId: 'ironArmor' });
-    equipmentService.equipItem({ itemId: 'ironArmor' });
-    equipmentService.seedBaseOutfit({
-      torso: 'torso/chainmail_male',
-      feet: 'feet/boots/basic_male',
+    equipmentService.configureAppearanceContext({
+      bodyAssetId: 'body/bodies_female',
+      catalogAssetIdsBySlot: LEGACY_CATALOG_SNAPSHOT,
     });
-    expect(equipmentService.getEquippedItemId('body')).toBe('ironArmor');
+    seedStarterKit();
+
+    const recipes = equipmentService.buildLpcRecipes();
+    // Leather armour (torso) → leather_female; leather boots (feet) → basic_thin.
+    expect(recipes.find((r) => r.slot === 'torso')?.assetId).toBe('torso/armour/leather_female');
+    expect(recipes.find((r) => r.slot === 'feet')?.assetId).toBe('feet/boots/basic_thin');
+    // The wooden starter shield is body-agnostic and stays untouched.
+    expect(recipes.find((r) => r.slot === 'shield')?.assetId).toBe(
+      'shield/heater/original/wood_fg',
+    );
+    // Weapons are body-agnostic.
+    expect(recipes.find((r) => r.slot === 'weapon')?.assetId).toBe('weapon/sword/longsword');
   });
 
-  // Regression (C-374/C-417): boot seeds the base outfit during engine
-  // creation, then save hydration restores the service snapshots. An empty
-  // equipment snapshot ({ slots: {} }) must not wipe the seeded chainmail/
-  // boots — the boot pipeline re-seeds AFTER hydration (game_boot_service
-  // _stageHydrateSnapshot), which fills only empty slots, so the base outfit
-  // survives while real saved gear is preserved.
-  test('re-seeding after an empty-slot hydrate restores the base outfit', () => {
+  test('male wearer keeps the catalog default (male) variants', () => {
     equipmentService.reset();
     inventoryService.reset();
-
-    // Engine creation seeds the base outfit.
-    equipmentService.seedBaseOutfit({
-      body: 'body/bodies_male',
-      hair: 'hair/bangs_adult',
-      torso: 'torso/chainmail_male',
-      legs: 'legs/pants_male',
-      feet: 'feet/boots/basic_male',
-      head: 'head/heads/human_male',
+    equipmentService.configureAppearanceContext({
+      bodyAssetId: 'body/bodies_male',
+      catalogAssetIdsBySlot: LEGACY_CATALOG_SNAPSHOT,
     });
-    expect(equipmentService.getEquippedItemId('body')).toBe('chainmailArmor');
+    inventoryService.addItem({ itemId: 'chainmailArmor' });
+    equipmentService.equipItem({ itemId: 'chainmailArmor' });
 
-    // Save hydration restores an empty equipment snapshot.
-    equipmentService.hydrate({ slots: {} });
-    expect(equipmentService.getEquippedItemId('body')).toBeUndefined();
-
-    // Boot re-seeds after hydration — the base outfit returns.
-    equipmentService.seedBaseOutfit({
-      torso: 'torso/chainmail_male',
-      feet: 'feet/boots/basic_male',
-    });
-    expect(equipmentService.getEquippedItemId('body')).toBe('chainmailArmor');
-    expect(equipmentService.getEquippedItemId('feet')).toBe('leatherBoots');
+    expect(equipmentService.buildLpcRecipes().find((r) => r.slot === 'torso')?.assetId).toBe(
+      'torso/chainmail_male',
+    );
   });
 
-  // Re-seeding must not clobber real gear the save actually restored.
-  test('re-seeding after hydrate preserves restored saved gear', () => {
+  test('hydrated saved gear resolves compatibly at runtime (no re-seed required)', () => {
     equipmentService.reset();
     inventoryService.reset();
-
-    // Save hydration restored real gear (iron armor + steel sword).
-    equipmentService.hydrate({
-      slots: { body: 'ironArmor', rightHand: 'steelSword' },
+    equipmentService.configureAppearanceContext({
+      bodyAssetId: 'body/bodies_female',
+      catalogAssetIdsBySlot: LEGACY_CATALOG_SNAPSHOT,
     });
+    // Save hydration restores gameplay item IDs — the same IDs the save stores.
+    equipmentService.hydrate({ slots: { body: 'chainmailArmor', feet: 'leatherBoots' } });
 
-    // Boot re-seeds — must not clobber the restored iron armor.
-    equipmentService.seedBaseOutfit({
-      torso: 'torso/chainmail_male',
-      feet: 'feet/boots/basic_male',
-    });
-    expect(equipmentService.getEquippedItemId('body')).toBe('ironArmor');
-    expect(equipmentService.getEquippedItemId('rightHand')).toBe('steelSword');
-    // Empty feet slot gets filled by the base outfit.
-    expect(equipmentService.getEquippedItemId('feet')).toBe('leatherBoots');
+    const recipes = equipmentService.buildLpcRecipes();
+    expect(recipes.find((r) => r.slot === 'torso')?.assetId).toBe('torso/chainmail_female');
+    expect(recipes.find((r) => r.slot === 'feet')?.assetId).toBe('feet/boots/basic_thin');
   });
 
-  // Regression (C-374/C-417): re-seeding must reuse an owned matching item
-  // when the slot is empty instead of granting a duplicate. Hydration may
-  // restore the chainmail/boots into the bag while leaving the slot empty;
-  // re-seeding should equip the owned item without inflating its quantity.
-  test('re-seeding equips an owned matching item without increasing quantity', () => {
+  test('equip/unequip preserves gameplay item IDs (visual resolution never rewrites saves)', () => {
     equipmentService.reset();
     inventoryService.reset();
-
-    // Hydration restored the matching items into the bag, slots empty.
-    inventoryService.addItem({ itemId: 'chainmailArmor', quantity: 1 });
-    inventoryService.addItem({ itemId: 'leatherBoots', quantity: 1 });
-
-    // Boot re-seeds — should equip the owned items, not grant duplicates.
-    equipmentService.seedBaseOutfit({
-      torso: 'torso/chainmail_male',
-      feet: 'feet/boots/basic_male',
+    equipmentService.configureAppearanceContext({
+      bodyAssetId: 'body/bodies_female',
+      catalogAssetIdsBySlot: LEGACY_CATALOG_SNAPSHOT,
     });
+    inventoryService.addItem({ itemId: 'leatherBoots' });
+    equipmentService.equipItem({ itemId: 'leatherBoots' });
 
-    expect(equipmentService.getEquippedItemId('body')).toBe('chainmailArmor');
-    expect(equipmentService.getEquippedItemId('feet')).toBe('leatherBoots');
-    // The owned items were moved into their slots — no duplicate remains in
-    // the bag (a buggy re-seed would have added a second copy).
-    expect(inventoryService.inventory.some((e) => e.itemId === 'chainmailArmor')).toBe(false);
-    expect(inventoryService.inventory.some((e) => e.itemId === 'leatherBoots')).toBe(false);
+    expect(equipmentService.serialize().slots?.feet).toBe('leatherBoots');
+
+    equipmentService.unequipItem({ slot: 'feet' });
+    expect(equipmentService.getEquippedItemId('feet')).toBeUndefined();
+    // Unequipping reveals the base appearance (persona outfit) — nothing is
+    // silently re-granted or rewritten into the paperdoll.
+    expect(equipmentService.serialize().slots?.feet).toBeUndefined();
   });
 });

@@ -65,3 +65,34 @@ export const createLpcPipeline = (
 
   return { catalog, recipeResolver, assetUrlResolver };
 };
+
+/**
+ * Merges equipment layer recipes on top of base recipes (C-504).
+ *
+ * Keys on `(slot, layerRole)` so behind/front entries for the same slot
+ * coexist (C-431). A missing/undefined `layerRole` on EITHER side is
+ * normalized to 'front' BEFORE the match — equipment recipes built from item
+ * definitions omit `layerRole` (LpcLayerRecipe.layerRole is optional) while the
+ * base resolver always emits an explicit 'front'; without normalization a
+ * torso item never matched the base torso entry and the outfit rendered twice.
+ * The merged entry always carries an explicit layerRole.
+ */
+export const mergeLpcRecipes = (
+  baseRecipes: readonly LpcLayerRecipe[],
+  equipmentRecipes: readonly LpcLayerRecipe[],
+): LpcLayerRecipe[] => {
+  const merged: LpcLayerRecipe[] = [...baseRecipes];
+  for (const equipmentRecipe of equipmentRecipes) {
+    const equipmentRole = equipmentRecipe.layerRole ?? 'front';
+    const overlapIndex = merged.findIndex(
+      (r) => r.slot === equipmentRecipe.slot && (r.layerRole ?? 'front') === equipmentRole,
+    );
+    const normalized: LpcLayerRecipe = { ...equipmentRecipe, layerRole: equipmentRole };
+    if (overlapIndex >= 0) {
+      merged[overlapIndex] = normalized;
+    } else {
+      merged.push(normalized);
+    }
+  }
+  return merged;
+};

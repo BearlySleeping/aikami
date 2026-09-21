@@ -1,0 +1,677 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:aikami:asset-brief:1",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "minLength": 1
+    },
+    "format": {
+      "enum": [
+        "aikami.asset-brief"
+      ]
+    },
+    "formatVersion": {
+      "enum": [
+        1
+      ]
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status": {
+      "enum": [
+        "proposed"
+      ]
+    },
+    "baseline": {
+      "type": "object",
+      "properties": {
+        "repository": {
+          "type": "string",
+          "minLength": 1
+        },
+        "commit": {
+          "type": "string",
+          "minLength": 1
+        },
+        "packId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "packVersion": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reviewedAt": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "repository",
+        "commit",
+        "packId",
+        "packVersion",
+        "reviewedAt"
+      ],
+      "additionalProperties": false
+    },
+    "execution": {
+      "type": "object",
+      "properties": {
+        "defaultMode": {
+          "enum": [
+            "plan"
+          ]
+        },
+        "defaultPhase": {
+          "enum": [
+            "slice"
+          ]
+        },
+        "requiresRunnerContract": {
+          "type": "string",
+          "minLength": 1
+        },
+        "gpuConcurrency": {
+          "enum": [
+            1
+          ]
+        },
+        "candidateLimitPerItem": {
+          "enum": [
+            2
+          ]
+        },
+        "hostedBudgetUsd": {
+          "type": "number",
+          "minimum": 0
+        },
+        "autoAccept": {
+          "enum": [
+            false
+          ]
+        },
+        "autoPublish": {
+          "enum": [
+            false
+          ]
+        },
+        "unresolvedReferencePolicy": {
+          "enum": [
+            "block_required_inputs"
+          ]
+        },
+        "providerFallbackPolicy": {
+          "enum": [
+            "explicit_only"
+          ]
+        }
+      },
+      "required": [
+        "defaultMode",
+        "defaultPhase",
+        "requiresRunnerContract",
+        "gpuConcurrency",
+        "candidateLimitPerItem",
+        "hostedBudgetUsd",
+        "autoAccept",
+        "autoPublish",
+        "unresolvedReferencePolicy",
+        "providerFallbackPolicy"
+      ],
+      "additionalProperties": false
+    },
+    "style": {
+      "type": "object",
+      "properties": {
+        "gridPixels": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "view": {
+          "type": "string",
+          "minLength": 1
+        },
+        "palette": {
+          "type": "string",
+          "minLength": 1
+        },
+        "lighting": {
+          "type": "string",
+          "minLength": 1
+        },
+        "rules": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "required": [
+        "gridPixels",
+        "view",
+        "palette",
+        "lighting",
+        "rules"
+      ],
+      "additionalProperties": false
+    },
+    "audioDirection": {
+      "type": "object",
+      "properties": {
+        "motif": {
+          "type": "string",
+          "minLength": 1
+        },
+        "voices": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mixTargets": {
+          "type": "string",
+          "minLength": 1
+        },
+        "loopReviewRepeats": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "note": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "motif",
+        "voices",
+        "mixTargets",
+        "loopReviewRepeats",
+        "note"
+      ],
+      "additionalProperties": false
+    },
+    "preserve": {
+      "type": "object",
+      "properties": {
+        "mapIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "npcIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "questIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "mapExtents": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "minItems": 2,
+            "maxItems": 2
+          }
+        },
+        "invariants": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "required": [
+        "mapIds",
+        "npcIds",
+        "questIds",
+        "mapExtents",
+        "invariants"
+      ],
+      "additionalProperties": false
+    },
+    "reuseBeforeGenerate": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "providerPreferences": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "experimentalProviders": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "defaultEnabled": {
+            "enum": [
+              false
+            ]
+          },
+          "requires": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "note": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "id",
+          "defaultEnabled",
+          "requires",
+          "note"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "preparationProfiles": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "references": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "kind": {
+            "type": "string",
+            "minLength": 1
+          },
+          "locator": {
+            "type": "string",
+            "minLength": 1
+          },
+          "resolution": {
+            "enum": [
+              "required",
+              "optional"
+            ]
+          },
+          "sha256": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "note": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "locator",
+          "resolution",
+          "sha256",
+          "note"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "jobs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]*$"
+          },
+          "phase": {
+            "enum": [
+              "slice",
+              "expansion"
+            ]
+          },
+          "kind": {
+            "enum": [
+              "prop",
+              "prop_state",
+              "portrait",
+              "expression",
+              "music",
+              "ambient",
+              "sfx"
+            ]
+          },
+          "action": {
+            "enum": [
+              "generate_if_missing",
+              "edit",
+              "import"
+            ]
+          },
+          "subject": {
+            "type": "string",
+            "minLength": 1
+          },
+          "providerPreference": {
+            "type": "string",
+            "minLength": 1
+          },
+          "preparationProfile": {
+            "type": "string",
+            "minLength": 1
+          },
+          "referenceIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "candidateLimit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 2
+          },
+          "dependsOn": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "binding": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "enum": [
+                  "prop",
+                  "ending_prop",
+                  "npc_portrait",
+                  "npc_expression",
+                  "audio_cue"
+                ]
+              },
+              "mapIds": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "targetIds": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "mode": {
+                "enum": [
+                  "proposed_pending_validation"
+                ]
+              },
+              "variant": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "kind",
+              "mapIds",
+              "targetIds",
+              "mode",
+              "variant"
+            ],
+            "additionalProperties": false
+          },
+          "targetCanvas": {
+            "anyOf": [
+              {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "minItems": 2,
+                "maxItems": 2
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "audio": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "durationSeconds": {
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                  },
+                  "loop": {
+                    "type": "boolean"
+                  },
+                  "channels": {
+                    "enum": [
+                      "mono",
+                      "stereo"
+                    ]
+                  },
+                  "instrumental": {
+                    "type": "boolean"
+                  },
+                  "requestedBpm": {
+                    "anyOf": [
+                      {
+                        "type": "number",
+                        "minimum": 0
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "requestedKey": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "measuredBpm": {
+                    "anyOf": [
+                      {
+                        "type": "number",
+                        "minimum": 0
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "measuredKey": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "durationSeconds",
+                  "loop",
+                  "channels",
+                  "instrumental",
+                  "requestedBpm",
+                  "requestedKey",
+                  "measuredBpm",
+                  "measuredKey"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "releaseGates": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "status": {
+            "enum": [
+              "planned"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "phase",
+          "kind",
+          "action",
+          "subject",
+          "providerPreference",
+          "preparationProfile",
+          "referenceIds",
+          "candidateLimit",
+          "dependsOn",
+          "binding",
+          "targetCanvas",
+          "audio",
+          "releaseGates",
+          "status"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "summary": {
+      "type": "object",
+      "properties": {
+        "sliceItems": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "expansionItems": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "totalItems": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "maxCandidates": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "maxRequestedAudioSecondsPerCandidatePass": {
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "sliceItems",
+        "expansionItems",
+        "totalItems",
+        "maxCandidates",
+        "maxRequestedAudioSecondsPerCandidatePass"
+      ],
+      "additionalProperties": false
+    },
+    "releaseGates": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "notes": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  },
+  "required": [
+    "$schema",
+    "format",
+    "formatVersion",
+    "id",
+    "status",
+    "baseline",
+    "execution",
+    "style",
+    "audioDirection",
+    "preserve",
+    "reuseBeforeGenerate",
+    "providerPreferences",
+    "experimentalProviders",
+    "preparationProfiles",
+    "references",
+    "jobs",
+    "summary",
+    "releaseGates",
+    "notes"
+  ],
+  "additionalProperties": false
+}

@@ -4,15 +4,33 @@
 //
 // Contract: C-344 Complete Session Recaps, Checkpoints, and Long-Campaign Lifecycle
 
-import { beforeEach, describe, expect, test } from 'bun:test';
+import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test';
+import { createRealLocalDatabase } from '../__tests__/local_database_fixture.ts';
+
+const fixture = await createRealLocalDatabase();
+
+const realFrontendStorage = await import('@aikami/frontend/storage');
+
+mock.module('@aikami/frontend/storage', () => ({
+  // Spread the real module first: a mock that names only the functions a test
+  // needs breaks the moment a transitively-imported module consumes a new
+  // export (C-518 added the generation-record writers).
+  ...realFrontendStorage,
+  getLocalDatabase: mock(async () => fixture.db),
+}));
 
 describe('PlayerJournalService', () => {
   let service: import('./player_journal_service.svelte').PlayerJournalServiceInterface;
 
   beforeEach(async () => {
+    await fixture.reset();
     const mod = await import('./player_journal_service.svelte');
     service = mod.playerJournalService;
     service.reset();
+  });
+
+  afterAll(async () => {
+    await fixture.close();
   });
 
   test('should export a singleton instance', () => {

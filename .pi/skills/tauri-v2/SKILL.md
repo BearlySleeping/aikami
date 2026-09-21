@@ -262,7 +262,7 @@ Each plugin (fs, dialog, shell) requires explicit permission in capabilities AND
 Tauri serves the frontend from local files. Use `@sveltejs/adapter-static`:
 
 ```ts
-// svelte.config.js
+// vite.config.ts
 import adapter from '@sveltejs/adapter-static';
 
 export default {

@@ -25,30 +25,40 @@ Visual tests live in `suites/*.visual.ts`, not `tests/*.visual.spec.ts`.
 
 Client-side unit tests use Bun's test runner with a required preload script.
 
-### 🔴 Critical: Always Use `--preload`
+### Bun lane setup: `--preload ./src/lib/test_setup.ts`
 
-Every client unit test depends on `src/lib/test_preload.ts` which provides:
+`test_setup.ts` provides **infrastructure only**:
 
 | What | Why |
 |------|-----|
 | Svelte 5 rune polyfills (`$state`, `$derived`, `$effect`) | `.svelte.ts` files won't parse without them |
-| `@aikami/frontend/services` mock | `BaseFrontendClass`, `BaseViewModel`, `dialogService`, etc. |
-| `$services` barrel mock | All ViewModels import from `$services` |
 | `$app/navigation`, `$app/state` mocks | SvelteKit virtual modules required by transitive deps |
 | `indexedDB` polyfill | Required by `DraftStore` in test env |
 | `window`, `AudioContext`, `KeyboardEvent` polyfills | Browser APIs not available in Bun |
 | Vite env vars (`PUBLIC_*`) | Required by `@aikami/frontend/configs/environment.ts` |
 
-**Without `--preload`, tests fail with `Cannot find module` or `undefined is not an object` errors.**
+**No feature names, no service inventory, no business-success defaults.** The
+legacy `$services` barrel mock, the `@aikami/frontend/services` root mock, and
+the global `@aikami/frontend/storage` mock have all been removed. Base classes
+are imported from the narrow `@aikami/frontend/services/base` entrypoint and
+platform singletons from their own subpaths (`/router`, `/dialog`,
+`/preference`, `/backup_client`, `/r2_storage`), so no import evaluates the
+package aggregation.
+
+The shared broad stub, `localServicesMockBase()`, has been deleted along with
+its only consumer. New tests must inject explicit capabilities; a test that
+still needs the `$services` barrel for a `*_composition.ts` integration should
+provide its own narrow mock in that file rather than reviving a central
+inventory.
 
 ### Running Client Unit Tests
 
 ```bash
 # ✅ Correct — always include --preload
-cd apps/frontend/client && bun test --preload ./src/lib/test_preload.ts --tsconfig tsconfig.test.json src/lib
+cd apps/frontend/client && bun test --preload ./src/lib/test_setup.ts --tsconfig-override=tsconfig.test.json src/lib
 
 # ✅ Single file
-cd apps/frontend/client && bun test --preload ./src/lib/test_preload.ts --tsconfig tsconfig.test.json src/lib/services/game/game_composition_root.test.ts
+cd apps/frontend/client && bun test --preload ./src/lib/test_setup.ts --tsconfig-override=tsconfig.test.json src/lib/services/game/game_composition_root.test.ts
 
 # ✅ Via moon (uses the script from package.json)
 bun moon run client:test
@@ -59,12 +69,49 @@ bun test src/lib/services/game/game_composition_root.test.ts
 
 The `client:test` moon task already includes `--preload` — prefer it for running all tests.
 
-### Mock Patterns for Service Tests
+### 🔴 Preferred Pattern (New / Migrated Features): Feature-Owned Fixtures
+
+New ViewModels receive **only the capabilities they need** through typed options.
+Production singletons are wired in a sibling `*_composition.ts` file, and the
+ViewModel module never imports `$services`. Tests construct the ViewModel with
+fresh, typed doubles from a feature-local `testing/` directory — no global
+barrel mock, no shared test-setup coupling.
+
+This is the migration target. `views/settings/account/` is the reference slice:
+
+```
+views/settings/account/
+  account_view.svelte
+  account_view_model.svelte.ts        # class + createAccountViewModel(capabilities)
+  account_composition.ts             # wires authService/gameStateSyncService from $services
+  account_view_model.test.ts         # builds VM from fixtures directly
+  testing/account_fixtures.ts        # fresh typed doubles, explicit defaults
+```
+
+```typescript
+// account_view_model.svelte.ts — no '$services' import
+const viewModel = createAccountViewModel({
+  className: 'AccountViewModel',
+  account: createSignedInAccount({ signOut }),
+  sync: createSyncCapabilities({ listSlots }),
+});
+```
+
+Prefer one narrow capability type per collaborator over a full service
+interface, and move credentialed HTTP calls behind a service operation rather
+than injecting `fetch` into the ViewModel.
+
+The legacy `mock.module()` pattern below remains for a few unmigrated
+service-level tests. **Do not adopt it for new ViewModels**, and do not
+reintroduce a shared `$services` barrel inventory.
+
+### Mock Patterns for Service Tests (legacy preload lane)
 
 When testing a service that extends `BaseFrontendClass`, use `mock.module()` in
-`beforeEach` to stub its dependencies. The global mocks from `test_preload.ts`
-cover the `@aikami/frontend/services` and `$services` barrels — you only need
-to mock the service's own imports:
+`beforeEach` to stub its dependencies. The base hierarchy is imported from
+`@aikami/frontend/services/base`, so a test that replaces `BaseFrontendClass`
+must register the mock for that subpath (the root barrel is not evaluated).
+You only need to mock the service's own direct collaborators:
 
 ```typescript
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
@@ -98,8 +145,8 @@ before the real module is evaluated.
 
 | Issue | Details |
 |-------|---------|
-| `mock.module()` with `.svelte.ts` files | Bun resolves real modules before mocks in some edge cases. The global barrel mocks in `test_preload.ts` mitigate most cases. |
-| `$state` / runes | Polyfills are identity functions (`value => value`) — no reactivity. Pure Bun tests must treat `$state` fields as plain values. For real reactivity tests, use the compiled Playwright lane (see below). |
+| `mock.module()` with `.svelte.ts` files | Bun resolves real modules before mocks in some edge cases. Register the mock against the exact specifier the production module imports (e.g. the `@aikami/frontend/services/base` subpath or a relative collaborator), not the package root. |
+| `$state` / runes | Polyfills are identity functions (`value => value`) — no reactivity. Pure Bun tests must treat `$state` fields as plain values. For real reactivity, use the Vitest Browser Mode lane (preferred for ViewModels/components) or the compiled Playwright lane. |
 | PixiJS / WebGPU | Not available in Bun. Tests that touch the game engine are skipped in CI (handled by E2E). |
 
 ### Compiled Component / Lifecycle Testing (C-477)
@@ -110,7 +157,7 @@ behavior, use the compiled Playwright E2E lane:
 
 | Aspect | Pure Bun (unit) | Compiled Playwright (E2E) |
 |--------|-----------------|---------------------------|
-| Runner | `bun test --preload ./src/lib/test_preload.ts` | `cd apps/e2e && bun run test` (Playwright) |
+| Runner | `bun test --preload ./src/lib/test_setup.ts` | `cd apps/e2e && bun run test` (Playwright) |
 | Runes | Identity polyfills | Real Svelte 5 compiler transform |
 | Reactivity | ❌ — cannot observe reactive updates | ✅ — $state/$derived/$effect work |
 | Lifecycle | ✅ — disposal logic with timers/resources | ✅ — component mount/unmount, real $effect cleanup |
@@ -135,6 +182,88 @@ components through the dev sandbox.
 3. Host the View in a dev sandbox route `(dev)/dev/<feature>/`
 4. Write Playwright E2E tests that navigate to the sandbox and verify DOM updates
 
+### Vitest Browser Mode (real-Svelte unit lane)
+
+The preferred lane for ViewModel/component reactivity: instead of the Bun
+preload's identity runes, Vitest compiles the `.svelte.ts`/`.svelte` with the
+real Svelte plugin and runs it in Chromium via Playwright. No preload, no
+global module mocks, no application boot or dev route.
+
+```bash
+# from apps/frontend/client
+bun run test:browser          # vitest run --config vitest.config.ts
+bun moon run client:test-browser
+```
+
+- Config: `apps/frontend/client/vitest.config.ts` (standalone; only the aliases
+  a component/ViewModel test needs). `src/browser_tests/setup_browser_tests.ts`
+  fails unexpected cross-origin fetches while leaving the same-origin Vite
+  harness alone.
+- Tests: `apps/frontend/client/src/browser_tests/**/*.browser.test.ts` —
+  deliberately outside `src/lib` so `bun test src/lib` never collects them.
+- Reference pilots: `reactive_lifecycle.browser.test.ts` asserts real
+  `$state`/`$derived` updates and `registerEffectRoot` cleanup on `dispose()`;
+  `base_view_model_container.browser.test.ts` mounts the real
+  `BaseViewModelContainer` and proves its ownership contract (mount/unmount,
+  repeated tabs, pending init, rejections, replaced identity, editor lifetime).
+- Use `flushSync()` from `svelte` after mutating state to force effects.
+
+**Status**: enforced. `client:test-browser` is `runInCI: true`, and the PR
+`validate` job installs the matching Chromium with
+`bunx playwright install --with-deps chromium` before `moon ci`. The compiled
+E2E lane above remains the integration-level coverage (full navigation).
+
+### Repository Contract Tests (real adapter)
+
+Assert persistence behavior against a **real in-memory libSQL database**, never
+a handwritten SQL fake — a fake silently replaces duplicate inserts that SQLite
+rejects and may omit transaction rollback. Use the shared fixture
+(`src/lib/services/__tests__/local_database_fixture.ts`):
+
+```typescript
+import {
+  countTableRows,
+  createRealLocalDatabase,
+} from '../__tests__/local_database_fixture.ts';
+
+const fixture = await createRealLocalDatabase();
+
+mock.module('@aikami/frontend/storage', () => ({
+  getLocalDatabase: mock(async () => fixture.db),
+}));
+
+const { myStorage } = await import('./my_storage.svelte.ts');
+
+beforeEach(async () => {
+  await fixture.reset();
+});
+afterAll(async () => {
+  await fixture.close();
+});
+```
+
+`createRealLocalDatabase()` opens `new WasmStorageAdapter({ databasePath: ':memory:' })`,
+applies the production migrations, and exposes `reset()` / `close()`. Import the
+adapter and migrations from their **subpaths** (the fixture does) so the barrel
+mock cannot intercept them.
+
+- Keep arrangements explicit (`countTableRows`, direct `query`).
+- Fault-inject by wrapping `fixture.db` in a `Proxy`, as
+  `chat_storage.test.ts` does to prove transaction rollback.
+- Reference repos: `persona_storage.test.ts`, `game_state_sync.test.ts`.
+- `test_setup.ts` no longer registers `@aikami/frontend/storage`. Every test
+  that touches the database must own a `createRealLocalDatabase()` fixture and
+  register `getLocalDatabase` itself (see `campaign_service.test.ts`). Do not
+  reintroduce a global storage mock.
+
+### Import boundary (enforced)
+
+`guard-test-boundary` (`bun run guard`, `scripts/src/lib/ops/guard_test_boundary.ts`)
+fails CI if production source imports a test helper: `test_setup.ts`,
+`testing/` fixture directories, `__tests__/`, `__fixtures__/`, or `*.test.ts`.
+Inject a production dependency instead. Feature fixtures are only importable
+from test files.
+
 ---
 
 ## AI Visual Testing Framework
@@ -156,7 +285,7 @@ bun run test:visual
 bun run src/visual/runner.ts --suite=map --capture-only
 ```
 
-Requires the Client dev server running on port 5274. For AI evaluation, set `OPENROUTER_API_KEY`.
+Runs the visual runner's own client lane (see the preflight notes above). For AI evaluation, set `OPENROUTER_API_KEY`.
 
 ### Creating a Visual Suite
 
@@ -275,8 +404,41 @@ cd apps/e2e
 
 bun run test              # All Playwright tests
 bun run test:client       # Client-only
-bun run test:game         # Game-only (runs within client dev server)
+bun run test:game         # Game-only
+bun run test:unit         # Preflight/service-map unit tests (no servers)
 ```
+
+**Server lifecycle is self-orchestrating.** The E2E preflight
+(`src/services/preflight.ts`, run from globalSetup) probes the servers the
+requested `--project`(s) use (`src/services/service_map.ts`), reuses whatever is
+already listening (your herdr tabs), gates on env seeds, starts missing servers
+via herdr — or builds via moon and serves built output when no herdr exists —
+and fails with a ", run …" fix-it message. No manual `herdr:start` is required,
+but warm tabs make runs faster.
+
+Local one-liner for the combat lanes + visual runner:
+
+```bash
+cd apps/e2e && \
+  bun run test --project=client combat_v2 && \
+  bun run test --project=client-llm-on combat_v2_llm && \
+  bun run src/visual/runner.ts
+```
+
+The preflight starts only what the selection needs: `game` → client only
+(offline-first boot, hub not needed); `client` (auth setup) → client + hub;
+`client-llm-on` → client + hub + the flag-on :5275 server; `site-*` → site;
+`hub` → hub; `ai-services` → nothing yet.
+
+🔴 In a worktree created with the **raw `herdr worktree create` CLI**, the
+preflight itself fails with the fix: run `bun run worktree:bootstrap -- --cwd
+<checkout>`. Without the seeds the client boots without `.env.emulator`
+(`PUBLIC_MODE` falls back to production, so the `__AIKAMI_TEST__` seam is never
+installed and `/game` E2E fails in `bootIntoGame`), the site build fails
+`validatePublicVariables`, and the visual runner has no `OPENROUTER_API_KEY`.
+Worktrees created by `herdr:task` or the contract pipeline are bootstrapped
+automatically.
+
 
 ### Creating E2E Tests
 

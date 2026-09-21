@@ -4,7 +4,7 @@
 // resumePoint non-empty, <2KB, t=0.45.
 //
 // Run with:
-//   bun test --preload ./src/lib/test_preload.ts --tsconfig tsconfig.test.json
+//   bun test --preload ./src/lib/test_setup.ts --tsconfig tsconfig.test.json
 //     src/lib/services/gm/session_summarization.test.ts
 
 import { describe, expect, mock, test } from 'bun:test';
@@ -13,7 +13,7 @@ mock.module('../game/serializable_service', () => ({
   registerSerializable: mock(() => {}),
 }));
 
-mock.module('$services', () => ({
+mock.module('../ai/text_generation_service.svelte.ts', () => ({
   textGenerationService: {
     streamChat: mock(async () => {}),
     extractStructure: mock(async () => ({
@@ -24,9 +24,6 @@ mock.module('$services', () => ({
       ],
     })),
     cancelAll: mock(() => {}),
-  },
-  gameStateService: {
-    worldGenOutput: { worldName: 'Eldoria' },
   },
 }));
 

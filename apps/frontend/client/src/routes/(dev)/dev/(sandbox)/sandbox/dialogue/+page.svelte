@@ -19,6 +19,7 @@ import {
   recoverIntentAnalysisOutput,
 } from '$lib/services/game/npc_dialogue_service.svelte.ts';
 import DialogueOverlay from '$lib/views/game/ui/overlays/dialogue/dialogue_overlay.svelte';
+import { createDialogueOverlayCapabilities } from '$lib/views/game/ui/overlays/dialogue/dialogue_overlay_composition';
 import {
   type DevInteractionMode,
   type DevNpcPreset,
@@ -26,7 +27,7 @@ import {
   type DialogueDevViewModelInterface,
   type DiceOutcome,
 } from '$lib/views/game/ui/overlays/dialogue/dialogue_overlay_view_model.dev.svelte.ts';
-import { aiGatewayService } from '$services';
+import { aiGatewayService, createPlayerStateService } from '$services';
 
 /** Navigate back to sandbox index on End Chat / combat transition. */
 const goBack = () => {
@@ -41,6 +42,10 @@ const MOCK_NPC_DATA = {
   dialog: 'Ah, a traveler! Welcome to our humble village. How may I be of assistance?',
   personaId: 'sage',
 };
+
+const sandboxPlayerStateService = createPlayerStateService({
+  className: 'DialogueSandboxPlayerStateService',
+});
 
 /** Label for a dice outcome control. */
 const diceOutcomeLabel = (outcome: string): string => {
@@ -134,8 +139,10 @@ const emitChunks = (options: {
 
 const viewModel: DialogueDevViewModelInterface = DialogueDevViewModel.create({
   className: 'DialogueSandboxVM',
+  ...createDialogueOverlayCapabilities(),
   npcData: MOCK_NPC_DATA,
   onEndChat: goBack,
+  playerStateService: sandboxPlayerStateService,
   npcDialogueService: {
     _className: 'DevMockNpcDialogueService',
     dispose: async () => {},
@@ -167,6 +174,7 @@ const viewModel: DialogueDevViewModelInterface = DialogueDevViewModel.create({
       gameStateFacts: [],
       relationshipFacts: [],
       allowedCommands: ['trade', 'offerQuest', 'skillCheck', 'giveItem'],
+      companionWitnessed: [],
     }),
     executeCommand: () => true,
     /** Turn state owned by the dev mock (C-401) — mirrors the real service. */
@@ -431,12 +439,10 @@ let devToolsOpen = $state(true);
           >🎲 Dice Outcome</span
         >
         <div class="join join-vertical">
-          {#each (['random', 'always_succeed', 'always_fail'] as const) as outcome}
+          {#each ['random', 'always_succeed', 'always_fail'] as const as outcome}
             <button
               type="button"
-              class="btn btn-xs join-item {viewModel.diceOutcome === outcome
-                ? 'btn-active btn-success'
-                : 'btn-ghost'}"
+              class="btn btn-xs join-item {viewModel.diceOutcome === outcome ? 'btn-active btn-success' : 'btn-ghost'}"
               onclick={() => viewModel.setDiceOutcome(outcome as DiceOutcome)}
             >
               {diceOutcomeLabel(outcome)}
@@ -483,12 +489,10 @@ let devToolsOpen = $state(true);
           >👤 NPC Persona</span
         >
         <div class="flex flex-wrap gap-1">
-          {#each (['sage', 'guard', 'innkeeper', 'blacksmith', 'bandit', 'merchant'] as const) as preset}
+          {#each ['sage', 'guard', 'innkeeper', 'blacksmith', 'bandit', 'merchant'] as const as preset}
             <button
               type="button"
-              class="btn btn-xs {viewModel.mockNpcPreset === preset
-                ? 'btn-active btn-primary'
-                : 'btn-outline'}"
+              class="btn btn-xs {viewModel.mockNpcPreset === preset ? 'btn-active btn-primary' : 'btn-outline'}"
               onclick={() => viewModel.setMockNpcPreset(preset as DevNpcPreset)}
             >
               {presetLabel(preset)}
@@ -523,7 +527,9 @@ let devToolsOpen = $state(true);
           </button>
         </div>
         <span class="text-xs text-base-content/40 italic">
-          {viewModel.addressMode === 'gm' ? 'Messages go to the Game Master (fourth wall)' : 'Messages go to the scene (NPC dialogue)'}
+          {viewModel.addressMode === 'gm'
+  ? 'Messages go to the Game Master (fourth wall)'
+  : 'Messages go to the scene (NPC dialogue)'}
         </span>
       </div>
 
@@ -586,12 +592,10 @@ let devToolsOpen = $state(true);
               type="button"
               class="btn btn-xs btn-accent btn-outline"
               onclick={() =>
-              viewModel.forceDiceRoll({
-                checkType: 'Persuasion',
-                difficultyClass: 12,
-                statModifier: 'CHA',
-                statModifierValue: 2,
-              })}
+  viewModel.forceDiceRoll({
+    checkType: 'Persuasion',
+    difficultyClass: 12,
+  })}
             >
               🎲 Force Dice Roll (DC 12, CHA +2)
             </button>
@@ -629,11 +633,11 @@ let devToolsOpen = $state(true);
             type="button"
             class="btn btn-xs btn-ghost"
             onclick={() => {
-              viewModel.setMockNpcPreset('sage');
-              viewModel.setDiceOutcome('random');
-              viewModel.setUseMockAi(true);
-              viewModel.setInteractionMode('freeTextFirst' as DevInteractionMode);
-            }}
+  viewModel.setMockNpcPreset('sage');
+  viewModel.setDiceOutcome('random');
+  viewModel.setUseMockAi(true);
+  viewModel.setInteractionMode('freeTextFirst' as DevInteractionMode);
+}}
           >
             🔄 Reset All
           </button>
@@ -649,9 +653,7 @@ let devToolsOpen = $state(true);
           {#each viewModel.availableExpressions as expression}
             <button
               type="button"
-              class="btn btn-xs {viewModel.npcExpression === expression
-                ? 'btn-active btn-accent'
-                : 'btn-outline'}"
+              class="btn btn-xs {viewModel.npcExpression === expression ? 'btn-active btn-accent' : 'btn-outline'}"
               onclick={() => viewModel.setNpcExpression(expression)}
             >
               {expression}

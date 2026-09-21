@@ -17,9 +17,9 @@
 // Rarely-run setup step, same cadence as commands.ts's commands:sync — run
 // it again any time the worker's URL changes (e.g. a new Cloudflare domain).
 
+import { WORKER_URL } from '@aikami/constants';
 import { REST } from '@discordjs/rest';
 import { Routes } from 'discord-api-types/v10';
-import { WORKER_URL } from '../../../../packages/shared/constants/src/index.ts';
 import { initScriptsEnv } from '../env/scripts_env';
 
 export async function syncInteractionsEndpointUrl(mode = 'production'): Promise<void> {

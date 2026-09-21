@@ -3,13 +3,15 @@
 
 import { copyFileSync, existsSync, mkdirSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
+import { contractPortOffset } from '@aikami/constants';
 // C-474: role_profiles.ts lives under .pi/extensions/lib because Pi loads
 // extensions there directly (no path aliases under Pi's Node runtime — see
 // the relative-import note on session.ts). It has no Pi-specific imports, so
 // it loads fine under Bun too; this is the one place the live pipeline
 // resolves a role's actual tool surface instead of loading everything.
-import { resolveEnabledExtensions } from '../../../../../.pi/extensions/lib/role_profiles.ts';
-import { contractPortOffset } from '../../../../../packages/shared/constants/src/index.ts';
+// C-513: resolveEnabledTools (not resolveEnabledExtensions) — the latter
+// returns extension keys, and `--tools` is a literal tool-name allowlist.
+import { resolveEnabledTools } from '../../../../../.pi/extensions/lib/role_profiles.ts';
 import { resolveAikamiMode } from '../../env/mode';
 import { getScriptsEnv } from '../../env/scripts_env';
 import { findBash, posixQuote } from '../../env/which';
@@ -24,7 +26,7 @@ import {
   isIdleShellName,
 } from '../../herdr/session.ts';
 import {
-  bootstrapWorktree,
+  assertCompleteWorktreeBootstrap,
   createWorktree,
   listWorktrees,
   openWorktree,
@@ -36,6 +38,7 @@ import { getContractModelForRole, getContractThinkingForRole } from './models.ts
 import { canSendToReviewPane, readComposer } from './review_pane.ts';
 import type { ContractWorkerRole, WorkerLaunchRequest } from './types.ts';
 import { PIPELINE_BASE_BRANCH } from './types.ts';
+import { type DeliveryRecord, deliverTaskText } from './worker_delivery.ts';
 
 type WorkspaceCreateResult = {
   result: {
@@ -136,7 +139,6 @@ const logTailCommand = async (paneId: string, log: string): Promise<string> => {
 const sleep = async (milliseconds: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, milliseconds));
 
-const AGENT_READY_TIMEOUT_MS = 120_000;
 const MAX_SEND_ATTEMPTS = 5;
 const SHELL_READY_TIMEOUT_MS = 90_000;
 
@@ -289,28 +291,42 @@ const buildSessionId = (options: { contractId: string; runId: string; role: stri
  * enabled per-session/task, not universally.
  *
  * 🔴 Note: if a tool sandboxes by role and returns an error, the worker may
- * stop without calling contract_stage_complete. `resolveEnabledExtensions`
- * always includes the `completion` capability's extensions for every known
- * role, so this filter can never strip the one tool a worker MUST reach.
+ * stop without calling contract_stage_complete. `resolveEnabledTools`
+ * always includes the `completion` capability's tools for every known role,
+ * so this filter can never strip the one tool a worker MUST reach. It also
+ * expands extension keys (`herdr_orchestrator`, `contract_factory`) into
+ * their registered tool names (`herdr_session`, `contract`, …) — passing the
+ * raw keys to `--tools` silently dropped them (C-513).
  * Unknown/unmapped roles get `undefined` (all tools) rather than an empty
  * list — the same fail-open behavior role_profiles.ts uses elsewhere.
  */
 export const toolsForRole = (role: ContractWorkerRole): string[] | undefined => {
-  const extensions = resolveEnabledExtensions(role);
-  return extensions && extensions.length > 0 ? extensions : undefined;
+  const tools = resolveEnabledTools(role);
+  return tools && tools.length > 0 ? tools : undefined;
 };
 
 // ── Adapter interface ───────────────────────────────────────
+
+/**
+ * Outcome of delivering task text to a pane (C-472 AC-3, brief P1).
+ *
+ * Defined in `worker_delivery.ts`; re-exported here because
+ * {@link ReviewStartResult} and the fake adapter both refer to it.
+ */
+export type { DeliveryRecord } from './worker_delivery.ts';
 
 /** Outcome of spawning the review pane. */
 export type ReviewStartResult = {
   paneId: string;
   /**
-   * Whether the initial task text actually reached the captain. False means
-   * the pane exists but is sitting at an empty prompt — the ONLY case where
-   * the orchestrator may type into the review pane on a later resume.
+   * Whether the initial task text was ACKNOWLEDGED by the captain (not merely
+   * attempted). False means the pane exists but has not demonstrably taken the
+   * task — the ONLY case where the orchestrator may type into the review pane
+   * on a later resume.
    */
   taskDelivered: boolean;
+  /** Full delivery record, so a caller can distinguish attempt from ack. */
+  delivery: DeliveryRecord;
 };
 
 export type ContractHerdrAdapterInterface = {
@@ -566,12 +582,12 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
       label,
       repoRoot: this._repoRoot,
     });
+    assertCompleteWorktreeBootstrap(w);
     this._workspaceId = w.workspaceId;
     this._pipelinePaneId = w.rootPaneId;
     this._workspacePath = w.checkoutPath;
     this._worktreeBranch = w.branch;
 
-    await bootstrapWorktree({ checkoutPath: w.checkoutPath, repoRoot: this._repoRoot });
     console.log(
       `🔧 herdr worktree: ${w.checkoutPath} (branch: ${w.branch}, workspace: ${w.workspaceId})`,
     );
@@ -801,7 +817,7 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     this._workspacePath = entry.path;
     this._worktreeBranch = entry.branch;
     console.log(
-      `🔧 herdr worktree recovered: ${entry.path} (branch: ${entry.branch}, workspace: ${this._workspaceId})`,
+      `🔧 herdr worktree recovered: ${entry.path} (branch ${entry.branch}, workspace: ${this._workspaceId})`,
     );
   }
 
@@ -965,60 +981,20 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     return false;
   }
 
-  /**
-   * Send task text to a pane, with retry if the prompt is not acknowledged.
-   * Text is sent ONCE (never re-sent — duplicates would fill the input buffer).
-   * Only Enter is retried with exponential backoff.
-   *
-   * @returns whether the text was actually delivered. A `false` here is what
-   *   lets the caller distinguish "the agent has its task" from "the agent is
-   *   sitting at an empty prompt" — the only situation in which nudging the
-   *   review pane later is legitimate.
-   */
-  private async _sendTaskText(options: { paneId: string; text: string }): Promise<boolean> {
-    // Double-idle check: two consecutive idle observations are much stronger
-    // evidence that pi's input handler is truly ready. If agent_status is
-    // unavailable (pi doesn't report it to herdr), fall back to a fixed delay.
-    for (const delay of [0, 500]) {
-      await sleep(delay);
-      const ready = await this._waitForAgentStatus({
-        paneId: options.paneId,
-        statuses: ['idle', 'blocked'],
-        timeoutMs: AGENT_READY_TIMEOUT_MS,
-      });
-      if (ready) {
-        continue;
-      }
-      // Agent status may not be reported by this pi session.
-      // If pi is running in the pane, proceed after a brief init delay.
-      if (await isCommandRunning(options.paneId).catch(() => false)) {
-        console.warn(
-          `⚠️  Pane ${options.paneId} agent_status unavailable — proceeding with fixed delay.`,
-        );
-        await sleep(5000);
-        break;
-      }
-      console.warn(`⚠️  Pane ${options.paneId} never became receptive — skipping send.`);
-      return false;
-    }
-
-    // 🔴 Herdr bug: pane send-text drops the first character — prepend space.
-    await runHerdr(['pane', 'send-text', options.paneId, ` ${options.text}`]);
-
-    // Dynamic buffer delay: proportional to text length, 500ms min, 2000ms max.
-    const bufferWaitMs = Math.min(Math.max(500, options.text.length * 2), 2000);
-    await sleep(bufferWaitMs);
-
-    // 🔴 PTY reliability: send Enter multiple times with backoff.
-    // herdr pane send-keys Enter is unreliable — the first press may not
-    // register. Multiple presses are harmless (extra newlines in pi's
-    // input are either processed as empty turns or ignored).
-    // No acceptance check — isCommandRunning always true for pi itself.
-    for (const delay of [200, 400, 800, 1600]) {
-      await runHerdr(['pane', 'send-keys', options.paneId, 'Enter']);
-      await sleep(delay);
-    }
-    return true;
+  private async _sendTaskText(options: { paneId: string; text: string }): Promise<DeliveryRecord> {
+    return deliverTaskText(
+      {
+        waitForAgentStatus: (o) => this._waitForAgentStatus(o),
+        getAgentStatus: (paneId) => this._getAgentStatus(paneId).catch(() => undefined),
+        readPaneText: (paneId) => this.readPaneText(paneId),
+        // 🔴 Herdr bug: pane send-text drops the first character — prepend space.
+        sendText: (paneId, text) => runHerdr(['pane', 'send-text', paneId, ` ${text}`]),
+        pressEnter: (paneId) => runHerdr(['pane', 'send-keys', paneId, 'Enter']),
+        isCommandRunning,
+        sleep,
+      },
+      options,
+    );
   }
 
   /** JSON mode (no PTY): headless AND not an interactive writer.
@@ -1082,14 +1058,20 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
       env.push(`GH_TOKEN_FILE=${ghFile}`);
       ghExport = `export GH_TOKEN="$(cat '${ghFile}' 2>/dev/null)"; `;
     }
-    const ta = toolsForRole(request.role) ? ['--tools', toolsForRole(request.role)?.join(',')] : [];
+    const roleTools = toolsForRole(request.role);
+    const ta = roleTools ? ['--tools', roleTools.join(',')] : [];
     const sa = sessionId !== undefined ? ['--session-id', shellQuote(sessionId)] : [];
-    const ma = [
-      '--model',
-      shellQuote(getContractModelForRole(request.role)),
-      '--thinking',
-      getContractThinkingForRole(request.role),
-    ];
+    const contractModel = getContractModelForRole(request.role);
+    const contractThinking = getContractThinkingForRole(request.role);
+    // 🔴 No model configured → omit --model/--thinking entirely and let pi
+    // fall back to the user's default model instead of pinning a hardcoded slug.
+    const ma = contractModel
+      ? [
+          '--model',
+          shellQuote(contractModel),
+          ...(contractThinking ? ['--thinking', contractThinking] : []),
+        ]
+      : [];
     // 🔴 Default: use JSON mode for pipeline workers — PTY keystroke injection
     // (send-text + send-keys Enter) is fundamentally unreliable. The prompt
     // is passed via -p and the task message via $(cat ...).
@@ -1407,14 +1389,14 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     // `2>/dev/null`; sending it raw silently drops GH_TOKEN and prints parse
     // errors). 🔴 Herdr PTY drops the first character via `pane run` — keep
     // the leading newline so the dropped char is never load-bearing.
+    const reviewModel = getContractModelForRole('review');
+    const reviewThinking = getContractThinkingForRole('review');
     const command = [
       ghExport,
       'pi',
       '--approve',
-      '--model',
-      shellQuote(getContractModelForRole('review')),
-      '--thinking',
-      getContractThinkingForRole('review'),
+      ...(reviewModel ? ['--model', shellQuote(reviewModel)] : []),
+      ...(reviewModel && reviewThinking ? ['--thinking', reviewThinking] : []),
       '--session-id',
       shellQuote(sessionId),
       '--append-system-prompt',
@@ -1432,11 +1414,11 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
     } else {
       reviewText = `Review contract run ${this._runId}. Present the verified status from the manifest. Do NOT re-run tests — the verifier already passed them. Wait for the user.`;
     }
-    const taskDelivered = await this._sendTaskText({
+    const delivery = await this._sendTaskText({
       paneId,
       text: reviewText,
     });
-    return { paneId, taskDelivered };
+    return { paneId, taskDelivered: delivery.acknowledged, delivery };
   }
 
   /**

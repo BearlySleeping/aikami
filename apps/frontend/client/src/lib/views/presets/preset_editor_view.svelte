@@ -46,9 +46,7 @@ const currentPresetName = $derived.by(() => {
           {#each viewModel.presets as preset}
             <button
               type="button"
-              class="btn btn-sm justify-start text-left {preset.id === viewModel.selectedPresetId
-                ? 'btn-primary'
-                : 'btn-ghost'}"
+              class="btn btn-sm justify-start text-left {preset.id === viewModel.selectedPresetId ? 'btn-primary' : 'btn-ghost'}"
               onclick={() => viewModel.selectPreset({ id: preset.id })}
             >
               <span class="truncate flex-1">{preset.name}</span>
@@ -123,9 +121,9 @@ const currentPresetName = $derived.by(() => {
                       class="input input-ghost input-xs flex-1 font-semibold"
                       value={section.name}
                       oninput={(e: Event) => {
-                        const target = e.target as HTMLInputElement;
-                        viewModel.updateSectionName({ id: section.id, name: target.value });
-                      }}
+  const target = e.target as HTMLInputElement;
+  viewModel.updateSectionName({ id: section.id, name: target.value });
+}}
                     >
 
                     <!-- Enable toggle -->
@@ -169,11 +167,11 @@ const currentPresetName = $derived.by(() => {
                   <!-- Section content editor -->
                   <textarea
                     class="textarea textarea-bordered w-full min-h-24 font-mono text-sm"
-                    placeholder={"Enter template content with {{macro}} placeholders..."}
+                    placeholder={'Enter template content with {{macro}} placeholders...'}
                     oninput={(e: Event) => {
-                      const target = e.target as HTMLTextAreaElement;
-                      viewModel.updateSectionContent({ id: section.id, content: target.value });
-                    }}
+  const target = e.target as HTMLTextAreaElement;
+  viewModel.updateSectionContent({ id: section.id, content: target.value });
+}}
                   >{section.content}</textarea>
                 </div>
               </div>
@@ -188,10 +186,10 @@ const currentPresetName = $derived.by(() => {
               placeholder="New section name..."
               bind:value={viewModel.newSectionName}
               onkeydown={(e: KeyboardEvent) => {
-                if (e.key === 'Enter') {
-                  viewModel.addSection();
-                }
-              }}
+  if (e.key === 'Enter') {
+    viewModel.addSection();
+  }
+}}
             >
             <button
               type="button"

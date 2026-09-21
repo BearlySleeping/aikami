@@ -17,7 +17,32 @@ import type {
   InstallStateRecord,
 } from '@aikami/types';
 import { logger } from '$logger';
+import {
+  type CommunityAssetImportResult,
+  type CommunityAssetRegistration,
+  registerCommunityAssetRow,
+} from './assets_community.ts';
+import {
+  type DeleteGeneratedAssetResult,
+  deleteGeneratedAssetRow,
+  findSaveReferences,
+  type GeneratedAssetRegistration,
+  type GeneratedAssetRegistrationResult,
+  type GeneratedAssetRow,
+  isSeedTagRow,
+  listGeneratedAssetRows,
+  registerGeneratedAssetRow,
+  renameGeneratedAssetRow,
+} from './assets_generated.ts';
 import type { LocalDatabaseInterface, QueryResultRow } from './storage_adapter.ts';
+
+export {
+  type DeleteGeneratedAssetResult,
+  type GeneratedAssetRegistration,
+  type GeneratedAssetRegistrationResult,
+  type GeneratedAssetRow,
+  GeneratedTagCollisionError,
+} from './assets_generated.ts';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -38,12 +63,70 @@ export const ASSET_REGISTRY_SEEDED_KEY = 'asset_registry_seeded';
  * so the normal upsert alone won't touch a tag no longer present in the
  * current seed — {@link AssetRegistryRepository._pruneStaleSources} catches
  * those).
+ *
+ * r4: the fingerprint is now content-derived. Keying idempotency on
+ * `generatedAt` alone meant a republished asset — same tag, new hash, same
+ * timestamp — was treated as "already seeded": the registry kept the old
+ * hash, `reconcile()` compared against it, found nothing stale, and the
+ * previous revision kept being served from cache by tag even though the new
+ * bytes had been downloaded. Bumping the revision also forces one re-seed on
+ * every existing install, clearing the stale rows that bug already wrote.
  */
-const SEED_DERIVATION_REVISION = 3;
+const SEED_DERIVATION_REVISION = 4;
 
-/** Idempotency fingerprint for a seed document under the current derivation. */
-const seedFingerprint = (generatedAt: string): string =>
-  `${generatedAt}#r${SEED_DERIVATION_REVISION}`;
+/**
+ * Stable digest of the seed's asset identity — every `tag` → `hash` pair.
+ *
+ * These pairs, not `generatedAt`, are what a cache entry has to agree with:
+ * if a tag's hash changed, every cached binary for it is stale regardless of
+ * the seed's timestamp. FNV-1a over the ordered pairs — cheap, synchronous,
+ * and adequate for change detection (this guards cache validity, not
+ * integrity; the hash of each binary is verified separately against the R2
+ * object).
+ *
+ * Covers every persisted seed field — tag, hash, category, sizeBytes and ext —
+ * not just tag→hash. A metadata-only republish (a corrected category or size)
+ * still leaves the registry holding stale rows, so it must re-seed too. `ext`
+ * is included because it is what the R2 object key is built from.
+ */
+const seedContentDigest = (
+  rows: readonly {
+    tag: string;
+    hash: string;
+    category?: string;
+    sizeBytes?: number;
+    ext?: string;
+  }[],
+): string => {
+  let digest = 0x811c9dc5;
+  for (const row of rows) {
+    const record = `${row.tag}\u0000${row.hash}\u0000${row.category ?? ''}\u0000${row.sizeBytes ?? ''}\u0000${row.ext ?? ''}\n`;
+    for (let index = 0; index < record.length; index++) {
+      digest ^= record.charCodeAt(index);
+      // FNV prime, via shifts to stay in 32-bit integer range.
+      digest =
+        (digest +
+          (digest << 1) +
+          (digest << 4) +
+          (digest << 7) +
+          (digest << 8) +
+          (digest << 24)) >>>
+        0;
+    }
+  }
+  return digest.toString(16).padStart(8, '0');
+};
+
+/**
+ * Idempotency fingerprint for a seed document under the current derivation.
+ *
+ * Includes the content digest so a changed row set re-seeds even when
+ * `generatedAt` is unchanged.
+ */
+const seedFingerprint = (seed: {
+  generatedAt: string;
+  rows: readonly { tag: string; hash: string }[];
+}): string => `${seed.generatedAt}#r${SEED_DERIVATION_REVISION}#${seedContentDigest(seed.rows)}`;
 
 /** Rows per seeding transaction — large single transactions stall WASM SQLite. */
 export const SEED_CHUNK_SIZE = 500;
@@ -90,6 +173,18 @@ export class AssetRegistryRepository {
     this._db = db;
   }
 
+  /**
+   * The shared local database connection.
+   *
+   * Exposed because C-518's generation-record writes are transaction-scoped
+   * standalone functions over the *same* connection the registry writes on
+   * (a second connection could not share the transaction). Repository reads
+   * and writes still go through this class's own methods.
+   */
+  get database(): LocalDatabaseInterface {
+    return this._db;
+  }
+
   // ── Registry queries ─────────────────────────────────────────────────
 
   /** Lists every registered asset row. */
@@ -97,6 +192,41 @@ export class AssetRegistryRepository {
     const result = await this._db.query({
       sql: 'SELECT id, pack_id, category, hash, version, size_bytes, license, attribution, tags_json FROM assets ORDER BY id',
       args: [],
+    });
+    return result.rows.map(_rowToAssetRecord);
+  }
+
+  /**
+   * Lists the tags the registry owns in one category, ordered by tag.
+   *
+   * C-513 AC-10: the runtime resolvers read the boot-seed manifest, which is a
+   * build artifact published from R2 and therefore can never contain an asset
+   * the player imported or generated on this device. This is the enumeration
+   * they fall back to for on-device assets.
+   *
+   * @param category - Manifest category, e.g. `music`.
+   */
+  async listTagsByCategory(category: string): Promise<readonly string[]> {
+    const result = await this._db.query({
+      sql: 'SELECT id FROM assets WHERE category = ? ORDER BY id',
+      args: [category],
+    });
+    return result.rows.map((row) => String(row.id));
+  }
+
+  /**
+   * Lists every registry row filed under one pack id, ordered by tag.
+   *
+   * C-513 AC-10: `community` is the pack id imported assets are filed under, so
+   * this is the "what did I import" query the community surface renders. It
+   * reads only the local database and so works with no network.
+   *
+   * @param packId - `assets.pack_id` owner, e.g. `community`.
+   */
+  async listByPack(packId: string): Promise<AssetRecord[]> {
+    const result = await this._db.query({
+      sql: 'SELECT id, pack_id, category, hash, version, size_bytes, license, attribution, tags_json FROM assets WHERE pack_id = ? ORDER BY id',
+      args: [packId],
     });
     return result.rows.map(_rowToAssetRecord);
   }
@@ -261,6 +391,79 @@ export class AssetRegistryRepository {
     return count;
   }
 
+  // ── Generated assets (C-510) ─────────────────────────────────────────
+
+  /**
+   * Registers locally generated bytes as a first-class registry asset.
+   *
+   * Delegates to {@link registerGeneratedAssetRow} — see that module for the
+   * ordering guarantees (pack ownership, priority -1 source, idempotency by
+   * content hash).
+   *
+   * @throws {@link GeneratedTagCollisionError} when the tag is owned by the
+   *         boot seed (a catalog asset), not by a previous generated write.
+   */
+  registerGenerated(asset: GeneratedAssetRegistration): Promise<GeneratedAssetRegistrationResult> {
+    return registerGeneratedAssetRow(this._db, asset);
+  }
+
+  /**
+   * Registers an imported community asset as a first-class registry asset.
+   *
+   * C-513 AC-4/AC-11: writes an `r2` source at the approved asset's
+   * content-addressed URL and returns an explicit collision instead of
+   * silently shadowing a curated tag or a local accepted asset. Delegates to
+   * {@link registerCommunityAssetRow}.
+   */
+  registerCommunity(asset: CommunityAssetRegistration): Promise<CommunityAssetImportResult> {
+    return registerCommunityAssetRow(this._db, asset);
+  }
+
+  /**
+   * Whether a tag is owned by the boot seed (i.e. a catalog asset, not a
+   * locally generated one). Used by the write seam's pre-flight guard.
+   */
+  isSeedTag(tag: string): Promise<boolean> {
+    return isSeedTagRow(this._db, tag);
+  }
+
+  /**
+   * Lists every locally generated row (C-512 studio library).
+   *
+   * Pack-scoped (`pack_id = 'generated'`) — never a full registry scan.
+   */
+  listGenerated(): Promise<GeneratedAssetRow[]> {
+    return listGeneratedAssetRows(this._db);
+  }
+
+  /**
+   * Renames a locally generated row, its source row and its install state.
+   *
+   * @throws Error for a seed tag, a missing row, or a colliding target tag.
+   */
+  renameGenerated(options: { from: string; to: string }): Promise<GeneratedAssetRow> {
+    return renameGeneratedAssetRow(this._db, options);
+  }
+
+  /**
+   * Deletes a locally generated row, its source row and its install state.
+   *
+   * Refuses seed tags. Cache bytes are removed by the caller — the registry is
+   * metadata-only.
+   */
+  deleteGenerated(tag: string): Promise<DeleteGeneratedAssetResult> {
+    return deleteGeneratedAssetRow(this._db, tag);
+  }
+
+  /**
+   * Save ids whose payload mentions `tag` (C-512 AC-4 delete guard).
+   *
+   * Substring scan over `saves.payload` — best-effort, not a reference index.
+   */
+  findSaveReferences(tag: string): Promise<string[]> {
+    return findSaveReferences(this._db, tag);
+  }
+
   // ── Meta guard ───────────────────────────────────────────────────────
 
   /** Reads a value from the `meta` key/value store. */
@@ -288,15 +491,24 @@ export class AssetRegistryRepository {
    * current source derivation*. Idempotency guard keyed off
    * `meta.asset_registry_seeded`.
    *
-   * The fingerprint includes {@link SEED_DERIVATION_REVISION}, so a client that
-   * ships a fix to how `asset_sources` rows are built re-seeds once even though
-   * the seed document itself is unchanged.
+   * The fingerprint covers {@link SEED_DERIVATION_REVISION} *and* the seed's
+   * own tag→hash content, so both a source-derivation fix and a republished
+   * asset re-seed once — even when `generatedAt` is unchanged.
    *
-   * @param generatedAt - `generatedAt` of the seed document about to be applied.
+   * @param seed - The seed document about to be applied.
    */
-  async isSeeded(generatedAt: string): Promise<boolean> {
+  async isSeeded(seed: {
+    generatedAt: string;
+    rows: readonly {
+      tag: string;
+      hash: string;
+      category?: string;
+      sizeBytes?: number;
+      ext?: string;
+    }[];
+  }): Promise<boolean> {
     const seeded = await this.getMeta(ASSET_REGISTRY_SEEDED_KEY);
-    return seeded === seedFingerprint(generatedAt);
+    return seeded === seedFingerprint(seed);
   }
 
   // ── Seeding ──────────────────────────────────────────────────────────
@@ -338,9 +550,19 @@ export class AssetRegistryRepository {
     r2BaseUrl?: string;
     /** Tags that ship inside the client (the offline-core declaration). */
     bundledTags?: readonly string[];
+    /**
+     * Document whose tag→hash content the STORED fingerprint should describe.
+     * Defaults to `seed`.
+     *
+     * Lazy core seeding passes the COMPLETE manifest here while `seed` carries
+     * only the core rows, so the value written agrees with what
+     * `isSeeded(manifest)` later checks. Fingerprinting the subset instead made
+     * `isSeeded` return false on every boot and re-seed unconditionally.
+     */
+    fingerprintSeed?: AssetSeedDocument;
     onProgress?: (progress: { chunk: number; totalChunks: number }) => void;
   }): Promise<AssetSeedStats> {
-    const { seed, r2BaseUrl, bundledTags = [], onProgress } = options;
+    const { seed, r2BaseUrl, bundledTags = [], fingerprintSeed, onProgress } = options;
     const bundled = new Set(bundledTags);
     const r2Base = r2BaseUrl?.replace(/\/$/, '');
 
@@ -378,7 +600,7 @@ export class AssetRegistryRepository {
     const stalePruned = await this._pruneStaleSources();
 
     // Only mark seeded when every chunk committed.
-    await this.setMeta(ASSET_REGISTRY_SEEDED_KEY, seedFingerprint(seed.generatedAt));
+    await this.setMeta(ASSET_REGISTRY_SEEDED_KEY, seedFingerprint(fingerprintSeed ?? seed));
 
     logger.debug('AssetRegistryRepository.seedFromCompactSeed:complete', {
       ...stats,

@@ -15,13 +15,15 @@
 // Contract: C-328 Integrate Bounded AI NPC Dialogue with Authored Fallbacks
 // Contract: C-371 Free-Text-First NPC Interaction — two-call pipeline
 
+import { getPublicMode } from '@aikami/frontend/configs';
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import {
   NpcDialogueAiEnvelopeSchema,
+  NpcDialogueCommandSchema,
   NpcDialogueTurnSchema,
   NpcIntentAnalysisOutputSchema,
   NpcQuestActivationSchema,
@@ -29,7 +31,11 @@ import {
   NpcSuggestionChipSchema,
 } from '@aikami/schemas';
 import type {
+  CommittedNarrativeEvent,
   ContentPackItemEntry,
+  ContentPackManifest,
+  ContentPackNpcEntry,
+  ContentPackNpcPersonality,
   NpcDialogueChoice,
   NpcDialogueCommand,
   NpcDialogueCommandKind,
@@ -41,17 +47,82 @@ import type {
   NpcStateDelta,
   NpcSuggestionChip,
 } from '@aikami/types';
+import { createSeedableRng, resolveCommand } from '@aikami/utils';
 import { Value } from 'typebox/value';
-import { FALLBACK_PERSONA_ID, PERSONA_PROMPTS } from '$lib/data/dialogue_personas';
-import { inventoryService, questStateService } from '$services';
+import type { ConsequenceRejectionReason, ConsequenceRequest, ConsequenceResult } from '$types';
+import { campaignService } from '../campaign/campaign_service.svelte.ts';
+import { npcAwarenessService } from '../npc/npc_awareness_service.svelte.ts';
+import { companionReactionService } from './companion_reaction_service.svelte.ts';
+import { resolveAccounts } from './dramatic_structure_service';
+import { inventoryService } from './inventory_service.svelte.ts';
+import { narrativeEventService } from './narrative_event_service.svelte.ts';
+import { buildNpcPersona } from './npc_dialogue_persona';
+import { partyRosterService } from './party_roster_service.svelte.ts';
+import { questStateService } from './quest_state_service.svelte.ts';
+import { relationshipService } from './relationship_service.svelte.ts';
 
 export type NpcDialogueServiceOptions = BaseFrontendClassOptions;
+
+/** Fixed application order for a batch (Failure Recovery) — never model order. */
+const CONSEQUENCE_KIND_ORDER = [
+  'flag_clear',
+  'flag_set',
+  'inventory_remove',
+  'inventory_grant',
+  'relationship_update',
+  'trust_change',
+] as const satisfies readonly NpcStateDelta['kind'][];
+
+/**
+ * Canonical sort for a consequence batch (Failure Recovery): by kind in the
+ * fixed order, then target (code-point), label (missing first, then code-point),
+ * then numeric value (missing first, then ascending). Exact duplicates are
+ * equivalent — their occurrence number is assigned after this sort.
+ */
+const compareConsequenceDeltas = (a: NpcStateDelta, b: NpcStateDelta): number => {
+  const kindDiff = CONSEQUENCE_KIND_ORDER.indexOf(a.kind) - CONSEQUENCE_KIND_ORDER.indexOf(b.kind);
+  if (kindDiff !== 0) {
+    return kindDiff;
+  }
+  if (a.target < b.target) {
+    return -1;
+  }
+  if (a.target > b.target) {
+    return 1;
+  }
+  const aMissingLabel = a.label === undefined || a.label === null;
+  const bMissingLabel = b.label === undefined || b.label === null;
+  if (aMissingLabel !== bMissingLabel) {
+    return aMissingLabel ? -1 : 1;
+  }
+  if ((a.label ?? '') < (b.label ?? '')) {
+    return -1;
+  }
+  if ((a.label ?? '') > (b.label ?? '')) {
+    return 1;
+  }
+  const aMissingValue = !Number.isFinite(a.value);
+  const bMissingValue = !Number.isFinite(b.value);
+  if (aMissingValue !== bMissingValue) {
+    return aMissingValue ? -1 : 1;
+  }
+  if ((a.value ?? 0) < (b.value ?? 0)) {
+    return -1;
+  }
+  if ((a.value ?? 0) > (b.value ?? 0)) {
+    return 1;
+  }
+  return 0;
+};
+
 // ---------------------------------------------------------------------------
 // Injected interfaces — all external dependencies passed through configure()
 // ---------------------------------------------------------------------------
 
 /** Content-pack data the orchestrator reads from (NPC entries, dialogues). */
 type NpcDialogueContentProvider = {
+  /** Loaded manifest used to project truth-compatible dramatic accounts. */
+  readonly manifest?: ContentPackManifest;
   /** Returns the NPC entry for a given NPC ID, or undefined. */
   getNpc(npcId: string):
     | {
@@ -62,20 +133,37 @@ type NpcDialogueContentProvider = {
         combatStats?: Record<string, unknown>;
         /** Pre-authored suggestion chips for the initial greeting. */
         initialSuggestions?: NpcSuggestionChip[];
+        /** Authored personality (voice + manner) — C-488. */
+        personality?: ContentPackNpcPersonality;
+        /** What the NPC wants, including conflicts with others — C-488. */
+        agenda?: string[];
+        /** Facts the NPC knows and can share — C-488. */
+        knowledge?: string[];
+        /** Facts the NPC knows and will not volunteer — C-488. */
+        secrets?: string[];
+        /** Lines the NPC will not cross — C-488. */
+        boundaries?: string[];
       }
     | undefined;
   /** Returns a piece of authored dialogue by key, or undefined. */
   getDialogue(dialogueKey: string): string | undefined;
   /** Returns a quest entry by ID, or undefined. */
-  getQuest(
-    questId: string,
-  ): { id: string; name: string; offerDialogueKey: string; offeredByNpcId?: string } | undefined;
+  getQuest(questId: string):
+    | {
+        id: string;
+        name: string;
+        offerDialogueKey: string;
+        offeredByNpcId?: string;
+        endings?: Record<string, { worldStateFlag: string }>;
+      }
+    | undefined;
   /** Returns quest entries keyed by ID. */
   getAllQuests(): Array<{
     id: string;
     name: string;
     offerDialogueKey: string;
     offeredByNpcId?: string;
+    endings?: Record<string, { worldStateFlag: string }>;
   }>;
   /** Returns encounter entries keyed by ID. */
   getAllEncounters(): Array<{ id: string; dialogueKey?: string; encounterNpcIds?: string[] }>;
@@ -149,6 +237,7 @@ type NpcDialogueExecutors = {
   giveItem(options: { itemId: string; quantity: number }): boolean;
   startCombat(options: { npcId: string; npcName: string; encounterId?: string }): boolean;
   recruit(options: { npcId: string; npcName: string }): boolean;
+  presentEvidence(options: { npcId: string; evidenceId: string }): boolean;
 };
 
 /** Context facts projected into the AI system prompt. */
@@ -159,6 +248,13 @@ type DialogueContextProjection = {
   gameStateFacts: string[];
   relationshipFacts: string[];
   allowedCommands: NpcDialogueCommandKind[];
+  /**
+   * Companion witness recall (C-494 AC-3). Events this NPC witnessed
+   * (C-491) surfaced in their own voice. Empty for non-companions.
+   */
+  companionWitnessed: string[];
+  /** Pending event selected for this turn; consumed only after generation succeeds. */
+  pendingCompanionWitness?: CommittedNarrativeEvent;
 };
 
 // ---------------------------------------------------------------------------
@@ -410,6 +506,17 @@ export class NpcDialogueService
   /** Per-turn executed-command guard (keyed by turn message id). */
   private _executedCommands = new Map<string, NpcDialogueCommandKind>();
 
+  /**
+   * Idempotency ledger for the consequence authority (C-489). Canonical keys
+   * are `${operationId}:${kind}:${target}:${label}:${value}:${occurrence}` and
+   * record only successfully-applied deltas so a rejected delta is safe to
+   * retry after the world changes. Authority state, never persisted.
+   */
+  private _idempotencyLedger = new Set<string>();
+
+  /** The operation/event identity of the dialogue turn currently being resolved. */
+  private _activeConsequenceEvent: { operationId: string; sourceEventId: string } | null = null;
+
   /** Active generation AbortController — only one live at a time. */
   private _activeAbortController: AbortController | null = null;
 
@@ -522,6 +629,7 @@ export class NpcDialogueService
     const npc = this._contentProvider!.getNpc(options.npcId);
     const allowedCommands = this._deriveAllowedCommands(npc);
     return this._buildContextProjection({
+      npcId: options.npcId,
       npc,
       npcName: options.npcName,
       messages: options.messages,
@@ -571,6 +679,7 @@ export class NpcDialogueService
       };
 
       const contextProjection = this._buildContextProjection({
+        npcId: options.npcId,
         npc,
         npcName: options.npcName,
         messages: options.messages,
@@ -587,6 +696,14 @@ export class NpcDialogueService
           turnCtx,
           onChunk: options.onChunk,
         });
+        const pendingWitness = contextProjection.pendingCompanionWitness;
+        if (pendingWitness) {
+          companionReactionService.fireUnpromptedTurn({
+            npcId: options.npcId,
+            npc: npc as ContentPackNpcEntry,
+            event: pendingWitness,
+          });
+        }
         return aiTurn;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -656,7 +773,27 @@ export class NpcDialogueService
 
     const npc = npcEntry ?? this._contentProvider!.getNpc(npcId);
 
-    switch (kind) {
+    if (!Value.Check(NpcDialogueCommandSchema, command) || kind !== command.kind) {
+      this.warn('executeCommand:invalid-command', { kind });
+      return false;
+    }
+
+    const allowedCommands = this._deriveAllowedCommands(npc);
+    const precondition = this._validateCommandPreconditions({
+      command,
+      allowedCommands,
+      npcId,
+      npcEntry: npc,
+    });
+    if (!precondition.allowed) {
+      this.warn('executeCommand:precondition-denied', {
+        commandKind: command.kind,
+        reason: precondition.reason,
+      });
+      return false;
+    }
+
+    switch (command.kind) {
       case 'trade':
         return this._executors!.trade({
           npcId,
@@ -666,28 +803,33 @@ export class NpcDialogueService
       case 'offerQuest':
         return this._executors!.offerQuest({
           npcId,
-          questId: (command as { questId: string }).questId,
+          questId: command.questId,
         });
       case 'skillCheck':
         return this._executors!.skillCheck({
-          skill: (command as { skill: string }).skill,
-          difficultyClass: (command as { difficultyClass: number }).difficultyClass,
+          skill: command.skill,
+          difficultyClass: command.difficultyClass,
         });
       case 'giveItem':
         return this._executors!.giveItem({
-          itemId: (command as { itemId: string }).itemId,
-          quantity: (command as { quantity: number }).quantity ?? 1,
+          itemId: command.itemId,
+          quantity: command.quantity,
         });
       case 'startCombat':
         return this._executors!.startCombat({
           npcId,
           npcName,
-          encounterId: (command as { encounterId?: string }).encounterId,
+          encounterId: command.encounterId,
         });
       case 'recruit':
         return this._executors!.recruit({
           npcId,
           npcName: npc?.name ?? 'Unknown',
+        });
+      case 'presentEvidence':
+        return this._executors!.presentEvidence({
+          npcId,
+          evidenceId: command.evidenceId,
         });
       default:
         this.warn('executeCommand:unknown-kind', { kind });
@@ -714,6 +856,25 @@ export class NpcDialogueService
   }): Promise<NpcIntentAnalysisOutput> {
     this._assertConfigured();
 
+    // E2E seeding hook (C-487): deterministic intent envelope for the /game
+    // production-path E2E spec. The Playwright harness installs this window
+    // global BEFORE the client bundle loads; absent during normal play, where
+    // the real two-call AI pipeline runs unchanged. The route, overlay and
+    // ViewModel remain the production ones.
+    const e2eSeed =
+      getPublicMode() !== 'production'
+        ? (globalThis as Record<string, unknown>).__AIKAMI_E2E_DIALOGUE_INTENT__
+        : undefined;
+    if (Value.Check(NpcIntentAnalysisOutputSchema, e2eSeed)) {
+      if (this._activeAbortController) {
+        this._activeAbortController.abort();
+        this._activeAbortController = null;
+      }
+      this._startTurnStream();
+      this.turnState = { kind: 'complete', text: e2eSeed.npcResponse };
+      return e2eSeed;
+    }
+
     // Concurrency gate
     if (this._activeAbortController) {
       this._activeAbortController.abort();
@@ -728,6 +889,8 @@ export class NpcDialogueService
 
       try {
         return await this._analyzeIntent({
+          npcId: options.npcId,
+          npc,
           npcName: options.npcName,
           allowedCommands,
           messages: options.messages,
@@ -902,7 +1065,7 @@ export class NpcDialogueService
     contextProjection: DialogueContextProjection;
     messages: Array<{ role: 'player' | 'npc'; content: string }>;
     signal: AbortSignal;
-    turnCtx?: TurnContext;
+    turnCtx: TurnContext;
     onChunk?: (text: string) => void;
   }): Promise<NpcDialogueTurn> {
     const { contextProjection, messages, signal, onChunk } = options;
@@ -987,11 +1150,12 @@ export class NpcDialogueService
 
       // Precondition check on command
       if (command) {
-        const precondResult = this._validateCommandPreconditions(
+        const precondResult = this._validateCommandPreconditions({
           command,
-          contextProjection.allowedCommands,
-          options.turnCtx?.npcEntry,
-        );
+          allowedCommands: contextProjection.allowedCommands,
+          npcId: options.turnCtx.npcId,
+          npcEntry: options.turnCtx.npcEntry,
+        });
         if (!precondResult.allowed) {
           this.warn('_generateAiTurn:command-denied', {
             commandKind: command.kind,
@@ -1268,35 +1432,118 @@ export class NpcDialogueService
 
   /** Builds the full context projection for a dialogue turn. */
   private _buildContextProjection(options: {
+    npcId: string;
     npc: ReturnType<NpcDialogueContentProvider['getNpc']>;
     npcName: string;
     messages: Array<{ role: 'player' | 'npc'; content: string }>;
     gameStateFacts: string[];
     allowedCommands: NpcDialogueCommandKind[];
   }): DialogueContextProjection {
-    const { npc, npcName, messages, gameStateFacts, allowedCommands } = options;
+    const { npcId, npc, npcName, messages, gameStateFacts, allowedCommands } = options;
 
-    // Persona: content-pack NPC name + PERSONA_PROMPTS fallback
-    const personaKey = npc?.name?.toLowerCase().replace(/\s+/g, '_') ?? FALLBACK_PERSONA_ID;
-    const persona = npc?.name
-      ? `You are ${npcName}, a ${npc.name} living in a fantasy world. ${
-          PERSONA_PROMPTS[personaKey] ?? PERSONA_PROMPTS[FALLBACK_PERSONA_ID]
-        }`
-      : PERSONA_PROMPTS[FALLBACK_PERSONA_ID];
+    // Persona: assembled from authored identity with per-field fallback (C-488).
+    const persona = this._buildPersona({ npcId, npcName, npc });
+
+    // Companion witness recall (C-494 AC-3). Only for a recruited companion:
+    // surface the C-491 events they actually witnessed, in their own voice.
+    // Routed through narrativeEventService.witnessedBy (C-492's retrieveForNpc
+    // was reverted on main — see Amendment A-1).
+    const pendingCompanionWitness = this._selectPendingCompanionWitness({ npcId, npc });
+    const companionWitnessed = pendingCompanionWitness
+      ? [`- ${pendingCompanionWitness.summary}`]
+      : [];
 
     // Memory: recent conversation turns (bounded window — last 10 turns)
     const memory = messages
       .slice(-10)
       .map((m) => `${m.role === 'player' ? 'Player' : npcName}: ${m.content}`);
+    const accountFacts = this._resolveAccountFacts(npcId);
 
     return {
       persona,
       npcName,
       memory,
-      gameStateFacts,
+      gameStateFacts: [...gameStateFacts, ...accountFacts],
       relationshipFacts: [],
       allowedCommands,
+      companionWitnessed,
+      ...(pendingCompanionWitness ? { pendingCompanionWitness } : {}),
     };
+  }
+
+  /** Projects only this NPC's account that matches the campaign's sampled truth. */
+  private _resolveAccountFacts(npcId: string): string[] {
+    const manifest = this._contentProvider?.manifest;
+    if (!manifest?.accounts) {
+      return [];
+    }
+    const sampledTruthId = campaignService.activeCampaign?.sampledTruthId;
+    const facts: string[] = [];
+    for (const situationId of Object.keys(manifest.accounts)) {
+      const accounts = resolveAccounts(manifest, situationId, sampledTruthId);
+      for (const account of accounts) {
+        if (account.npcId === npcId) {
+          facts.push(`[NPC ACCOUNT: ${situationId}] ${account.claim}`);
+        }
+      }
+    }
+    return facts;
+  }
+
+  /**
+   * C-494 AC-3: gathers the witness-scoped recall for a recruited companion.
+   * Returns a bounded list of `[COMPANION WITNESSED]` lines (event summaries)
+   * for the C-491 events this NPC witnessed. Empty for non-companions and for
+   * companions that have witnessed nothing. Never references events the NPC
+   * did not witness (security/privacy).
+   */
+  private _selectPendingCompanionWitness(options: {
+    npcId: string;
+    npc: ReturnType<NpcDialogueContentProvider['getNpc']>;
+  }): CommittedNarrativeEvent | undefined {
+    const { npcId, npc } = options;
+    const isCompanion = Boolean((npc as Record<string, unknown> | undefined)?.isCompanion);
+    if (!isCompanion || !partyRosterService.hasMember(npcId)) {
+      return undefined;
+    }
+
+    return narrativeEventService
+      .witnessedBy(npcId)
+      .filter((event) => event.kind === 'PromiseMade' || event.kind === 'ThreatWitnessed')
+      .filter((event) => !companionReactionService.hasFired({ npcId, eventId: event.id }))
+      .at(-1);
+  }
+
+  /**
+   * Assembles the production NPC persona from authored identity and logs
+   * which identity fields fell back to the generic path (C-488 AC-3).
+   */
+  private _buildPersona(options: {
+    npcId: string;
+    npcName: string;
+    npc: ReturnType<NpcDialogueContentProvider['getNpc']>;
+  }): string {
+    const { npcId, npcName, npc } = options;
+    const missing: string[] = [];
+    if (!npc?.personality) {
+      missing.push('personality');
+    }
+    if (!npc?.agenda || npc.agenda.length === 0) {
+      missing.push('agenda');
+    }
+    if (!npc?.knowledge || npc.knowledge.length === 0) {
+      missing.push('knowledge');
+    }
+    if (!npc?.secrets || npc.secrets.length === 0) {
+      missing.push('secrets');
+    }
+    if (!npc?.boundaries || npc.boundaries.length === 0) {
+      missing.push('boundaries');
+    }
+    if (missing.length > 0) {
+      this.info('dialogue:generic-persona', { npcId, npcName, missingFields: missing });
+    }
+    return buildNpcPersona({ npcName, identity: npc });
   }
 
   /**
@@ -1326,6 +1573,18 @@ export class NpcDialogueService
 
     if (projection.memory.length > 0) {
       lines.push('', '[CONVERSATION HISTORY]', ...projection.memory);
+    }
+
+    // C-494 AC-3: witness recall surfaces an event this companion actually
+    // witnessed, in their own voice. Injected as background — the companion
+    // raises it unprompted rather than as a numeric readout.
+    if (projection.companionWitnessed.length > 0) {
+      lines.push(
+        '',
+        '[COMPANION WITNESSED]',
+        ...projection.companionWitnessed,
+        'Bring this up naturally, in your own voice, without being asked.',
+      );
     }
 
     lines.push(
@@ -1394,6 +1653,11 @@ export class NpcDialogueService
       allowed.push('recruit');
     }
 
+    // presentEvidence: any NPC may receive evidence presentation; the command
+    // precondition additionally checks the evidence exists and is consistent
+    // with the sampled truth (C-495 AC-2).
+    allowed.push('presentEvidence');
+
     return allowed;
   }
 
@@ -1407,11 +1671,13 @@ export class NpcDialogueService
    * - skillCheck: difficulty class in [1, 30], skill must be non-empty
    * - trade: NPC must be a vendor
    */
-  private _validateCommandPreconditions(
-    command: NpcDialogueCommand,
-    allowedCommands: NpcDialogueCommandKind[],
-    npcEntry?: ReturnType<NpcDialogueContentProvider['getNpc']>,
-  ): { allowed: boolean; reason?: string } {
+  private _validateCommandPreconditions(options: {
+    command: NpcDialogueCommand;
+    allowedCommands: NpcDialogueCommandKind[];
+    npcId: string;
+    npcEntry?: ReturnType<NpcDialogueContentProvider['getNpc']>;
+  }): { allowed: boolean; reason?: string } {
+    const { command, allowedCommands, npcId, npcEntry } = options;
     // Kind-level check
     if (!allowedCommands.includes(command.kind)) {
       return { allowed: false, reason: `kind ${command.kind} not in whitelist` };
@@ -1478,6 +1744,37 @@ export class NpcDialogueService
       case 'trade': {
         if (!npcEntry?.isVendor) {
           return { allowed: false, reason: 'NPC is not a vendor' };
+        }
+        return { allowed: true };
+      }
+
+      case 'recruit': {
+        if (!(npcEntry as Record<string, unknown> | undefined)?.isCompanion) {
+          return { allowed: false, reason: 'NPC is not a recruitable companion' };
+        }
+        return { allowed: true };
+      }
+
+      case 'presentEvidence': {
+        const evidenceId = c.evidenceId as string | undefined;
+        if (!evidenceId) {
+          return { allowed: false, reason: 'presentEvidence missing evidenceId' };
+        }
+        // Validate the evidence is discoverable under the sampled truth.
+        const evidence = questStateService
+          .getDiscoverableEvidence(campaignService.activeCampaign?.id)
+          .find((candidate) => candidate.id === evidenceId);
+        if (!evidence) {
+          return {
+            allowed: false,
+            reason: `evidence ${evidenceId} has not been discovered under sampled truth`,
+          };
+        }
+        if (evidence.presentToNpcId !== npcId) {
+          return {
+            allowed: false,
+            reason: `evidence ${evidenceId} must be presented to ${evidence.presentToNpcId}`,
+          };
         }
         return { allowed: true };
       }
@@ -1595,6 +1892,8 @@ export class NpcDialogueService
    * visible before the dice prompt).
    */
   private async _analyzeIntent(options: {
+    npcId: string;
+    npc: ReturnType<NpcDialogueContentProvider['getNpc']>;
     npcName: string;
     allowedCommands: NpcDialogueCommandKind[];
     messages: Array<{ role: 'player' | 'npc'; content: string }>;
@@ -1605,14 +1904,26 @@ export class NpcDialogueService
   }): Promise<NpcIntentAnalysisOutput> {
     this.debug('_analyzeIntent:start');
 
-    const { npcName, allowedCommands, messages, gameStateFacts, playerContext, onChunk } = options;
+    const {
+      npcId,
+      npc,
+      npcName,
+      allowedCommands,
+      messages,
+      gameStateFacts,
+      playerContext,
+      onChunk,
+    } = options;
+
+    const persona = this._buildPersona({ npcId, npcName, npc });
+    const accountFacts = this._resolveAccountFacts(npcId);
 
     // Build the input for the LLM
     const input: NpcIntentAnalysisInput = {
       playerInput: messages.filter((m) => m.role === 'player').pop()?.content ?? '',
       npcContext: {
         name: npcName,
-        persona: `You are ${npcName}, a character in a fantasy world.`,
+        persona,
         allowedCommands,
       },
       playerContext,
@@ -1620,7 +1931,7 @@ export class NpcDialogueService
         role: m.role,
         content: m.content.slice(0, 200),
       })),
-      gameStateFacts,
+      gameStateFacts: [...gameStateFacts, ...accountFacts],
     };
 
     // Call 1 streams prose; call 2 extracts the intent envelope.
@@ -1652,6 +1963,7 @@ export class NpcDialogueService
       // ── Call 2: extract the intent envelope from the narrative ──────
       this.turnState = { kind: 'awaiting_envelope', text: narrative };
       let rawOutput: unknown;
+      let call2Error: unknown;
       try {
         rawOutput = await this._withTimeout(
           this._extractEnvelope({
@@ -1672,8 +1984,13 @@ export class NpcDialogueService
         this.warn('_analyzeIntent:call2-failed', {
           detail: error instanceof Error ? error.message : String(error),
         });
-        // Propagate call-2 failure to public handler so it sets failed turn state
-        throw error;
+        // C-499 AC-1: call-2 failure (e.g. "No JSON object found in response")
+        // is recoverable — fall through to the repair path below, which
+        // salvages the authoritative streamed narrative instead of failing
+        // the whole turn. Abort was already checked above and re-thrown by
+        // `_checkAbort`; only non-cancellation failures reach this fallback.
+        call2Error = error;
+        rawOutput = undefined;
       }
       this._checkAbort(options.signal);
 
@@ -1688,12 +2005,21 @@ export class NpcDialogueService
       }
 
       if (!output) {
-        // Repair attempt: salvage narrative from the streamed text
-        this.warn('_analyzeIntent:invalid-output');
-        const recovered = recoverIntentAnalysisOutput(
-          narrative.trim(),
-          NpcIntentAnalysisOutputSchema,
-        );
+        // Repair attempt: salvage narrative from the streamed text. Reached
+        // both when call 2 returned an invalid envelope and when it threw
+        // (No JSON / provider error) — the streamed narrative is authoritative
+        // and must still surface to the player (C-499 AC-1).
+        let repairReason = 'invalid-envelope';
+        if (call2Error !== undefined) {
+          repairReason = call2Error instanceof Error ? call2Error.message : String(call2Error);
+        }
+        this.warn('_analyzeIntent:invalid-output', { reason: repairReason });
+        let recovered: ReturnType<typeof recoverIntentAnalysisOutput>;
+        try {
+          recovered = recoverIntentAnalysisOutput(narrative.trim(), NpcIntentAnalysisOutputSchema);
+        } catch (repairError) {
+          throw new Error(repairReason, { cause: repairError });
+        }
         output = {
           requiresRoll: false,
           checkType: undefined,
@@ -1746,10 +2072,42 @@ export class NpcDialogueService
       outcome: options.outcome,
     });
 
-    const { npcName, checkType, difficultyClass, rollTotal, outcome, playerInput, onChunk } =
-      options;
+    const {
+      npcId,
+      npcName,
+      messages,
+      gameStateFacts,
+      checkType,
+      difficultyClass,
+      rollTotal,
+      outcome,
+      playerInput,
+      onChunk,
+    } = options;
+    const campaignId = campaignService.activeCampaign?.id;
+    if (!campaignId) {
+      throw new Error('NpcDialogueService: dialogue resolution requires an active campaign');
+    }
 
-    const userPrompt = `${npcName} resolves a ${checkType} check: DC=${difficultyClass}, Roll=${rollTotal}, ${outcome === 'pass' ? 'SUCCESS' : 'FAILURE'}. Player said: "${playerInput}"`;
+    // C-488 AC-3/AC-4: the roll-resolution prompt carries the same authored
+    // persona, conversation history, and game-state facts the intent prompt
+    // receives — assembled once, shared across both paths.
+    const npc = this._contentProvider!.getNpc(npcId);
+    const persona = this._buildPersona({ npcId, npcName, npc });
+    const historyLines = messages
+      .slice(-10)
+      .map((m) => `${m.role === 'player' ? 'Player' : npcName}: ${m.content.slice(0, 200)}`);
+
+    const projectedFacts = [...gameStateFacts, ...this._resolveAccountFacts(npcId)];
+    const factLines = projectedFacts.length > 0 ? ['', '[GAME STATE]', ...projectedFacts] : [];
+    const historyBlock =
+      historyLines.length > 0 ? ['', '[CONVERSATION HISTORY]', ...historyLines] : [];
+
+    const userPrompt = [
+      `${npcName} resolves a ${checkType} check: DC=${difficultyClass}, Roll=${rollTotal}, ${outcome === 'pass' ? 'SUCCESS' : 'FAILURE'}. Player said: "${playerInput}"`,
+      ...factLines,
+      ...historyBlock,
+    ].join('\n');
 
     // C-421: log the authoritative mechanical result so prompt fidelity is
     // verifiable from a session log.
@@ -1763,6 +2121,9 @@ export class NpcDialogueService
 
     // Call 1 streams prose; call 2 extracts the roll-resolution envelope.
     const narrativeSystemPrompt = [
+      '[NPC CONTEXT]',
+      persona,
+      '',
       'You are a game master resolving a dice roll outcome in an RPG dialogue.',
       'Given the skill check result, write a narrative NPC response and propose',
       'any state changes (trust, flags, inventory).',
@@ -1791,6 +2152,18 @@ export class NpcDialogueService
     ];
 
     const turnStart = performance.now();
+
+    // C-489: stable operation + provenance identity created BEFORE the model
+    // call and reused on retries, so the consequence authority can be
+    // idempotent and verify the event being resolved. This also anchors the
+    // AC-3 ordering contract: consequential state commits within
+    // `_applyConsequences` before the resolved narration is returned, so the
+    // caller appends narration to the transcript only after the world changed.
+    const operationId = crypto.randomUUID();
+    const sourceEventId = `dialogue:${operationId}`;
+    this._activeConsequenceEvent = { operationId, sourceEventId };
+    let operationCompleted = false;
+
     this._startTurnStream();
 
     try {
@@ -1855,118 +2228,483 @@ export class NpcDialogueService
       // The streamed narrative is authoritative — the player already read it.
       output.narrativeResult = narrative || output.narrativeResult;
 
-      // Validate and apply state deltas
-      const validatedDeltas = this._validateAndApplyDeltas({
-        deltas: output.stateDeltas,
+      // C-489: route consequential deltas through the single authority. State
+      // commits here (before `output` is returned and the narration appended to
+      // the transcript). Rejections are surfaced as reconciliation text so the
+      // player never sees a narrated success whose effect did not happen.
+      const consequenceResult = this._applyConsequences({
+        operationId,
+        sourceEventId,
         npcId: options.npcId,
+        deltas: output.stateDeltas,
       });
-      output.stateDeltas = validatedDeltas;
+      output.stateDeltas = consequenceResult.applied;
+      if (consequenceResult.rejected.length > 0) {
+        output.narrativeResult = this._reconcileNarrative(
+          output.narrativeResult,
+          consequenceResult,
+        );
+      }
+
+      // C-491 AC-1: exactly one committed event per consequential resolution.
+      // Append immediately after the authority reports the batch applied (and
+      // before the narration is returned) so a retry cannot double-record. A
+      // recording failure throws and fails the turn — the deltas are already
+      // committed, so dropping the event would let the journal/companions lie.
+      this._recordDialogueEvent({
+        npcId: options.npcId,
+        applied: consequenceResult.applied,
+        checkType,
+        outcome: options.outcome,
+        sourceEventId,
+        campaignId,
+      });
 
       this.turnState = { kind: 'complete', text: output.narrativeResult };
       this._logTurnTime({ path: 'roll', ms: performance.now() - turnStart });
+      operationCompleted = true;
       return output;
     } catch (error) {
       this._logCallFailure({ path: 'roll', call: this._currentCallIndex, error });
       throw error;
+    } finally {
+      if (operationCompleted) {
+        this._clearIdempotencyEntries(operationId);
+      }
+      if (this._activeConsequenceEvent?.operationId === operationId) {
+        this._activeConsequenceEvent = null;
+      }
     }
   }
 
   /**
-   * Validates and applies state deltas proposed by the LLM.
-   * Applied: inventory_grant/inventory_remove mutate the player inventory
-   * (grants also advance completeOnItemPickup quest objectives), and
-   * flag_set/flag_clear mutate the quest world-state flags.
-   * Invalid deltas are silently dropped and logged.
+   * The single consequence authority (C-489). Given a `ConsequenceRequest`
+   * bound to a stable operation/event identity, it answers, in order, before
+   * mutating anything:
+   *  1. Provenance  — does `sourceEventId` identify the loaded event being resolved?
+   *  2. Idempotency — has this operation/canonical-delta ledger key already succeeded?
+   *  3. Entitlement — is the acting NPC allowed to grant/change this?
+   * Then it applies each delta to the real stores (relationship/faction state,
+   * quest flags, inventory), records successful ledger keys, and reports the
+   * applied/rejected split so the caller can reconcile narration (AC-4).
    */
-  private _validateAndApplyDeltas(options: {
-    deltas: NpcStateDelta[];
-    npcId: string;
-  }): NpcStateDelta[] {
-    const valid: NpcStateDelta[] = [];
+  private _applyConsequences(request: ConsequenceRequest): ConsequenceResult {
+    const applied: NpcStateDelta[] = [];
+    const rejected: Array<{ delta: NpcStateDelta; reason: ConsequenceRejectionReason }> = [];
 
-    for (const delta of options.deltas) {
-      switch (delta.kind) {
-        case 'trust_change': {
-          if (delta.value !== undefined && delta.value >= -10 && delta.value <= 10) {
-            valid.push(delta);
-          } else {
-            this.warn('_validateAndApplyDeltas:invalid-trust', { delta });
-          }
-          break;
-        }
-        case 'flag_set': {
-          if (delta.label && delta.label.length > 0) {
-            if (questStateService.setWorldStateFlag(delta.label)) {
-              valid.push(delta);
-            } else {
-              this.warn('_validateAndApplyDeltas:invalid-flag-name', { delta });
-            }
-          } else {
-            this.warn('_validateAndApplyDeltas:invalid-flag', { delta });
-          }
-          break;
-        }
-        case 'flag_clear': {
-          if (delta.label && delta.label.length > 0) {
-            if (questStateService.clearWorldStateFlag(delta.label)) {
-              valid.push(delta);
-            } else {
-              this.warn('_validateAndApplyDeltas:invalid-flag-name', { delta });
-            }
-          } else {
-            this.warn('_validateAndApplyDeltas:invalid-flag', { delta });
-          }
-          break;
-        }
-        case 'inventory_grant': {
-          if (delta.target && delta.target.length > 0) {
-            // Bound the authored quantity to the [1, 99] range.
-            const quantity = Math.min(99, Math.max(1, Math.round(delta.value ?? 1)));
-            if (inventoryService.addItem({ itemId: delta.target, quantity })) {
-              // Advance completeOnItemPickup quest objectives (e.g. the Ward Wand).
-              questStateService.evaluateTriggers({
-                type: 'ITEM_PICKED_UP',
-                itemId: delta.target,
-              });
-              valid.push(delta);
-            } else {
-              this.warn('_validateAndApplyDeltas:inventory-grant-failed', { delta });
-            }
-          } else {
-            this.warn('_validateAndApplyDeltas:invalid-inventory', { delta });
-          }
-          break;
-        }
-        case 'inventory_remove': {
-          if (delta.target && delta.target.length > 0) {
-            // Bound the authored quantity to the [1, 99] range.
-            const quantity = Math.min(99, Math.max(1, Math.round(delta.value ?? 1)));
-            if (inventoryService.removeItem({ itemId: delta.target, quantity })) {
-              valid.push(delta);
-            } else {
-              this.warn('_validateAndApplyDeltas:inventory-remove-failed', { delta });
-            }
-          } else {
-            this.warn('_validateAndApplyDeltas:invalid-inventory', { delta });
-          }
-          break;
-        }
-        case 'relationship_update': {
-          if (delta.label && delta.label.length > 0) {
-            valid.push(delta);
-          } else {
-            this.warn('_validateAndApplyDeltas:invalid-relationship', { delta });
-          }
-          break;
-        }
-        default: {
-          this.warn('_validateAndApplyDeltas:unknown-kind', { delta });
-          break;
-        }
+    // Provenance (operation-level): the request must reference the event being
+    // resolved. If not, nothing in the batch is applied.
+    if (request.sourceEventId !== this._activeConsequenceEvent?.sourceEventId) {
+      for (const delta of request.deltas) {
+        rejected.push({ delta, reason: 'no-provenance' });
+        this.warn('_applyConsequences:no-provenance', {
+          kind: delta.kind,
+          target: delta.target,
+          sourceEventId: request.sourceEventId,
+        });
+      }
+      return { operationId: request.operationId, applied, rejected };
+    }
+
+    // Sort the batch in the fixed Failure-Recovery order, never model order.
+    const sorted = [...request.deltas].sort(compareConsequenceDeltas);
+    const occurrenceMap = new Map<string, number>();
+
+    for (const delta of sorted) {
+      const baseKey = this._canonicalDeltaKey(request.operationId, delta);
+      const occurrence = occurrenceMap.get(baseKey) ?? 0;
+      occurrenceMap.set(baseKey, occurrence + 1);
+      const ledgerKey = `${baseKey}:${occurrence}`;
+
+      // Idempotency: an already-succeeded operation/delta key is never reapplied.
+      if (this._idempotencyLedger.has(ledgerKey)) {
+        rejected.push({ delta, reason: 'already-granted' });
+        this.warn('_applyConsequences:already-granted', {
+          kind: delta.kind,
+          target: delta.target,
+          ledgerKey,
+        });
+        continue;
+      }
+
+      const outcome = this._authorizeAndApply(request, delta);
+      if ('reason' in outcome) {
+        rejected.push({ delta, reason: outcome.reason });
+        this.warn(`_applyConsequences:rejected-${outcome.reason}`, {
+          kind: delta.kind,
+          target: delta.target,
+          delta,
+        });
+      } else {
+        applied.push(outcome.applied);
+        this._idempotencyLedger.add(ledgerKey);
       }
     }
 
-    return valid;
+    return { operationId: request.operationId, applied, rejected };
+  }
+
+  /**
+   * C-491 AC-1: records exactly one committed event for a consequential dialogue
+   * resolution. Invoked after `_applyConsequences` reports a non-empty applied
+   * batch, using the deterministic kind-priority rule. A successful Intimidation
+   * roll with no applied delta records `ThreatWitnessed`. Rejected-only
+   * resolutions record nothing.
+   */
+  private _recordDialogueEvent(options: {
+    npcId: string;
+    applied: NpcStateDelta[];
+    checkType: string;
+    outcome: 'pass' | 'fail';
+    sourceEventId: string;
+    campaignId: string;
+  }): void {
+    const { npcId, applied, checkType, outcome, sourceEventId, campaignId } = options;
+
+    let kind: 'ItemTransferred' | 'RelationshipChanged' | 'WorldFlagChanged' | 'ThreatWitnessed';
+    let informationKind: 'world_fact' | 'character_belief';
+    let subjectId: string | undefined;
+
+    if (applied.length > 0) {
+      const itemDelta = applied.find(
+        (delta) => delta.kind === 'inventory_grant' || delta.kind === 'inventory_remove',
+      );
+      if (itemDelta) {
+        kind = 'ItemTransferred';
+        subjectId = itemDelta.target;
+      } else {
+        const relationshipDelta = applied.find(
+          (delta) => delta.kind === 'trust_change' || delta.kind === 'relationship_update',
+        );
+        if (relationshipDelta) {
+          kind = 'RelationshipChanged';
+          subjectId = relationshipDelta.target;
+        } else {
+          const flagDelta = applied.find(
+            (delta) => delta.kind === 'flag_set' || delta.kind === 'flag_clear',
+          );
+          kind = 'WorldFlagChanged';
+          subjectId = flagDelta?.label;
+        }
+      }
+      informationKind = 'world_fact';
+    } else if (outcome === 'pass' && checkType.toLowerCase() === 'intimidation') {
+      // A successful Intimidation with no applied delta — the acting NPC
+      // witnessed a threat, recorded as a character belief.
+      kind = 'ThreatWitnessed';
+      informationKind = 'character_belief';
+      subjectId = npcId;
+    } else {
+      // Rejected-only (or non-Intimidation with nothing applied) — no committed
+      // consequence, so no event.
+      return;
+    }
+
+    const event = narrativeEventService.record({
+      campaignId,
+      kind,
+      informationKind,
+      summary: this._dialogueEventSummary(kind, npcId, subjectId),
+      subjectId,
+      // A witnessed threat is a character belief held by the acting NPC.
+      claimantId: kind === 'ThreatWitnessed' ? npcId : undefined,
+      actorId: npcId,
+      witnesses: npcAwarenessService.nearbyNpcIds,
+      sourceEventId,
+      deltasApplied: applied.length > 0 ? applied : undefined,
+    });
+
+    // C-494 AC-4/AC-5: evaluate every recruited companion who witnessed the
+    // committed event. Witnesses are the commit-time authority; the dialogue
+    // actor is not necessarily the companion who reacts.
+    for (const witnessNpcId of event?.witnesses ?? []) {
+      const witnessNpc = this._contentProvider?.getNpc(witnessNpcId) as
+        | ContentPackNpcEntry
+        | undefined;
+      if (!witnessNpc?.isCompanion || !partyRosterService.hasMember(witnessNpcId)) {
+        continue;
+      }
+      companionReactionService.evaluateEvent({ npcId: witnessNpcId, npc: witnessNpc, event });
+      companionReactionService.fireUnpromptedTurn({
+        npcId: witnessNpcId,
+        npc: witnessNpc,
+        event,
+      });
+    }
+  }
+
+  /** Builds a human-readable summary for a dialogue-sourced event. */
+  private _dialogueEventSummary(
+    kind: 'ItemTransferred' | 'RelationshipChanged' | 'WorldFlagChanged' | 'ThreatWitnessed',
+    npcId: string,
+    subjectId: string | undefined,
+  ): string {
+    switch (kind) {
+      case 'ItemTransferred':
+        return `${npcId} transferred ${subjectId ?? 'an item'}`;
+      case 'RelationshipChanged':
+        return `${npcId} changed a relationship with ${subjectId ?? 'another character'}`;
+      case 'WorldFlagChanged':
+        return `${npcId} changed world flag ${subjectId ?? '(unknown)'}`;
+      case 'ThreatWitnessed':
+        return `${npcId} witnessed a threat`;
+    }
+  }
+
+  /**
+   * Canonical idempotency key for a delta under an operation: the normalized
+   * kind/target/label/value fields plus its duplicate occurrence number.
+   */
+  private _canonicalDeltaKey(operationId: string, delta: NpcStateDelta): string {
+    return [operationId, delta.kind, delta.target, delta.label ?? '', delta.value ?? ''].join(':');
+  }
+
+  /** Releases successful-delta keys once their operation can no longer retry. */
+  private _clearIdempotencyEntries(operationId: string): void {
+    const operationPrefix = `${operationId}:`;
+    for (const ledgerKey of this._idempotencyLedger) {
+      if (ledgerKey.startsWith(operationPrefix)) {
+        this._idempotencyLedger.delete(ledgerKey);
+      }
+    }
+  }
+
+  /**
+   * Authorize a single delta (entitlement, per-delta provenance, validity) and,
+   * when accepted, apply it to the real store. Returns the rejection reason or
+   * undefined on success.
+   */
+  private _authorizeAndApply(
+    request: ConsequenceRequest,
+    delta: NpcStateDelta,
+  ): { applied: NpcStateDelta } | { reason: ConsequenceRejectionReason } {
+    switch (delta.kind) {
+      case 'flag_set': {
+        if (!delta.label || delta.label.length === 0) {
+          return { reason: 'invalid' };
+        }
+        const authorizedLabels = new Set(
+          this._contentProvider
+            ?.getAllQuests()
+            .flatMap((quest) =>
+              Object.values(quest.endings ?? {}).map((ending) => ending.worldStateFlag),
+            ) ?? [],
+        );
+        if (!authorizedLabels.has(delta.label)) {
+          return { reason: 'not-entitled' };
+        }
+        questStateService.setWorldStateFlag(delta.label);
+        return { applied: delta };
+      }
+      case 'flag_clear': {
+        if (!delta.label || delta.label.length === 0) {
+          return { reason: 'invalid' };
+        }
+        // Provenance: you can only clear a flag that is actually set.
+        const flags = questStateService.worldStateFlags as Record<string, unknown> | undefined;
+        if (!flags?.[delta.label]) {
+          return { reason: 'no-provenance' };
+        }
+        questStateService.clearWorldStateFlag(delta.label);
+        return { applied: delta };
+      }
+      case 'inventory_grant': {
+        if (!delta.target || delta.target.length === 0) {
+          return { reason: 'invalid' };
+        }
+        // Entitlement: the pack must define the item — a generic NPC can never
+        // inject an arbitrary item id (security).
+        const itemDef = this._contentProvider?.getItem?.(delta.target);
+        if (!itemDef) {
+          return { reason: 'not-entitled' };
+        }
+        const quantity = Math.min(99, Math.max(1, Math.round(delta.value ?? 1)));
+        if (inventoryService.addItem({ itemId: delta.target, quantity })) {
+          questStateService.evaluateTriggers({ type: 'ITEM_PICKED_UP', itemId: delta.target });
+          return { applied: { ...delta, value: quantity } };
+        }
+        return { reason: 'invalid' };
+      }
+      case 'inventory_remove': {
+        if (!delta.target || delta.target.length === 0) {
+          return { reason: 'invalid' };
+        }
+        // Provenance: the item must actually exist in the player's inventory.
+        const owned =
+          Array.isArray(inventoryService.inventory) &&
+          inventoryService.inventory.some((item) => item.itemId === delta.target);
+        if (!owned) {
+          return { reason: 'no-provenance' };
+        }
+        const quantity = Math.min(99, Math.max(1, Math.round(delta.value ?? 1)));
+        if (inventoryService.removeItem({ itemId: delta.target, quantity })) {
+          return { applied: { ...delta, value: quantity } };
+        }
+        return { reason: 'invalid' };
+      }
+      case 'trust_change': {
+        // A label on trust_change, or a missing/non-finite value, is invalid.
+        if (delta.label !== undefined && delta.label !== null) {
+          return { reason: 'invalid' };
+        }
+        const trustValue = delta.value;
+        if (typeof trustValue !== 'number' || !Number.isFinite(trustValue)) {
+          return { reason: 'invalid' };
+        }
+        if (!this._npcKnown(request.npcId)) {
+          return { reason: 'not-entitled' };
+        }
+        const eventDescription = `Dialogue consequence ${request.operationId} from ${request.sourceEventId}`;
+        const { trustAfter, affinityAfter } = this._resolveRelationshipViaKernel(
+          delta.target,
+          trustValue,
+          0,
+          eventDescription,
+        );
+        const current = relationshipService.getRelationship(delta.target);
+        relationshipService.applyDelta({
+          characterId: delta.target,
+          trustDelta: trustAfter - (current?.trust ?? 0),
+          affinityDelta: affinityAfter - (current?.affinity ?? 0),
+          eventDescription,
+        });
+        return { applied: { ...delta, value: trustAfter - (current?.trust ?? 0) } };
+      }
+      case 'relationship_update': {
+        if (!delta.label) {
+          return { reason: 'invalid' };
+        }
+        if (!this._npcKnown(request.npcId)) {
+          return { reason: 'not-entitled' };
+        }
+        const eventDescription = `Dialogue consequence ${request.operationId} from ${request.sourceEventId}`;
+        if (delta.label === 'faction') {
+          const factionValue = delta.value;
+          if (typeof factionValue !== 'number' || !Number.isFinite(factionValue)) {
+            return { reason: 'invalid' };
+          }
+          const standingBefore = relationshipService.getStanding(delta.target)?.standing ?? 0;
+          const updatedStanding = relationshipService.adjustFactionStanding({
+            factionId: delta.target,
+            delta: factionValue,
+            reason: eventDescription,
+          });
+          return {
+            applied: { ...delta, value: updatedStanding.standing - standingBefore },
+          };
+        }
+        if (delta.label === 'trust') {
+          const trustValue = delta.value;
+          if (typeof trustValue !== 'number' || !Number.isFinite(trustValue)) {
+            return { reason: 'invalid' };
+          }
+          const { trustAfter } = this._resolveRelationshipViaKernel(
+            delta.target,
+            trustValue,
+            0,
+            eventDescription,
+          );
+          const current = relationshipService.getRelationship(delta.target);
+          relationshipService.applyDelta({
+            characterId: delta.target,
+            trustDelta: trustAfter - (current?.trust ?? 0),
+            affinityDelta: 0,
+            eventDescription,
+          });
+          return { applied: { ...delta, value: trustAfter - (current?.trust ?? 0) } };
+        }
+        if (delta.label === 'affinity') {
+          const affinityValue = delta.value;
+          if (typeof affinityValue !== 'number' || !Number.isFinite(affinityValue)) {
+            return { reason: 'invalid' };
+          }
+          const { affinityAfter } = this._resolveRelationshipViaKernel(
+            delta.target,
+            0,
+            affinityValue,
+            eventDescription,
+          );
+          const current = relationshipService.getRelationship(delta.target);
+          relationshipService.applyDelta({
+            characterId: delta.target,
+            trustDelta: 0,
+            affinityDelta: affinityAfter - (current?.affinity ?? 0),
+            eventDescription,
+          });
+          return { applied: { ...delta, value: affinityAfter - (current?.affinity ?? 0) } };
+        }
+        return { reason: 'invalid' };
+      }
+      default:
+        return { reason: 'invalid' };
+    }
+  }
+
+  /**
+   * Entitlement helper: an NPC must exist in the content pack to change world
+   * state (relationships, factions). A generic/unknown NPC is never entitled.
+   */
+  private _npcKnown(npcId: string): boolean {
+    return !!this._contentProvider?.getNpc(npcId);
+  }
+
+  /**
+   * AC-6: route accepted character relationship mechanics through the pure
+   * rules kernel. `resolveCommand` with `applyRelationshipDelta` computes the
+   * clamped mechanical after-state; the returned values drive
+   * `relationshipService.applyDelta` (the persistence boundary).
+   */
+  private _resolveRelationshipViaKernel(
+    characterId: string,
+    trustDelta: number,
+    affinityDelta: number,
+    eventDescription: string,
+  ): { trustAfter: number; affinityAfter: number } {
+    const current = relationshipService.getRelationship(characterId);
+    const currentTrust = current?.trust ?? 0;
+    const currentAffinity = current?.affinity ?? 0;
+    const { newSnapshot } = resolveCommand({
+      snapshot: { currentTrust, currentAffinity },
+      command: {
+        kind: 'applyRelationshipDelta',
+        currentTrust,
+        currentAffinity,
+        trustDelta,
+        affinityDelta,
+        eventDescription,
+      },
+      rng: createSeedableRng(0),
+    });
+    return {
+      trustAfter: newSnapshot.trustAfter as number, // guard-ignore lint/type-safety/casting: kernel snapshot is Record<string, unknown>; resolver contractually writes number
+      affinityAfter: newSnapshot.affinityAfter as number, // guard-ignore lint/type-safety/casting: kernel snapshot is Record<string, unknown>; resolver contractually writes number
+    };
+  }
+
+  /**
+   * AC-4: reconciliation text appended when the model streamed a claim that
+   * could not be honoured. A success is never narrated for a rejected delta;
+   * the world's non-change is acknowledged instead of silently dropped.
+   */
+  private _reconcileNarrative(narrative: string, result: ConsequenceResult): string {
+    const reasons = result.rejected
+      .map((rejection) => this._rejectionProse(rejection.reason))
+      .join('; ');
+    return `${narrative}\n\n*Though some of what was described did not take effect (${reasons}).*`;
+  }
+
+  /** Converts internal rejection codes into authored player-facing prose. */
+  private _rejectionProse(reason: ConsequenceRejectionReason): string {
+    switch (reason) {
+      case 'not-entitled':
+        return 'the offer was beyond what this character could grant';
+      case 'already-granted':
+        return 'the reward had already been received';
+      case 'no-provenance':
+        return 'the required event or possession was not present';
+      case 'invalid':
+        return 'the proposed change could not be carried out';
+    }
   }
 }
 

@@ -6,23 +6,31 @@
 // Contract: C-483 AC-1..AC-6 — regression fixes for the C-481..C-484 audit.
 //
 // Run with:
-//   bun test --preload ./src/lib/test_preload.ts --tsconfig tsconfig.test.json \
+//   bun test --preload ./src/lib/test_setup.ts --tsconfig tsconfig.test.json \
 //     src/lib/views/setup_subflow/
 
 // biome-ignore-all lint/style/useNamingConvention: Mock object properties must mirror PascalCase class names
 
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
-import type { CapabilitySnapshot } from '@aikami/types';
-import { localServicesMockBase } from '../../test_preload.ts';
+import type { CapabilitySnapshot, ConnectionCapability } from '@aikami/types';
+import { createAiConnectionStatus } from '../settings/ai/ai_connection_status.svelte';
+import {
+  type AiSettingsViewModelOptions,
+  createAiSettingsViewModel,
+} from '../settings/ai/ai_settings_view_model.svelte';
+import {
+  createSetupSubflowViewModel,
+  type SetupOrigin,
+  type SetupSubflowViewModelInterface,
+  type SetupSubflowViewModelOptions,
+} from './setup_subflow_view_model.svelte';
 
-// ── Mocks ──────────────────────────────────────────────────────────────
+// ── Explicit capability doubles ──────────────────────────────────────────
 //
-// Spread the shared base and override only what this file needs — see
-// localServicesMockBase's doc comment. Replacing the whole `$services`
-// barrel here (as this file previously did) leaks a partial mock into
-// every other test file that runs in the same `bun test` process,
-// including ai_settings_view_model.test.ts (SetupSubflowViewModel now
-// composes a real AiSettingsViewModel instance for manual configuration).
+// Every dependency is injected, so this suite never mocks the global
+// `$services` barrel. The connection editor is composed from the same doubles
+// through `createEditor`, which keeps the manual-setup assertions a real
+// integration path rather than a stub.
 
 const configServiceMock = {
   state: {
@@ -34,6 +42,16 @@ const configServiceMock = {
   setDefaultConnection: mock(() => {}),
   save: mock(async () => {}),
   getProviders: mock((): Array<Record<string, unknown>> => []),
+  getAiConnections: mock((): Array<Record<string, unknown>> => []),
+  getRoleAssignments: mock((): Record<string, string> => ({})),
+  addProvider: mock(() => 'mock-provider-id'),
+  updateProvider: mock(() => {}),
+  addAiConnection: mock(() => 'mock-ai-connection-id'),
+  updateAiConnection: mock(() => {}),
+  deleteAiConnection: mock(() => {}),
+  setRoleAssignment: mock(() => {}),
+  clearRoleAssignment: mock(() => {}),
+  getPresets: mock((): Array<Record<string, unknown>> => []),
   // The editor reads the v3 aiConnections/providers pair while the setup flow
   // reads the legacy projection of the same rows. config_service derives one
   // from the other and keeps the ids, so the mock projects them the same way
@@ -78,7 +96,11 @@ const createDetectedSnapshot = (): CapabilitySnapshot => ({
   detectedAt: new Date().toISOString(),
 });
 
-const detectMock = mock(async (): Promise<CapabilitySnapshot> => createDetectedSnapshot());
+type DetectOptions = { capabilities: readonly ConnectionCapability[] };
+
+const detectMock = mock(
+  async (_options: DetectOptions): Promise<CapabilitySnapshot> => createDetectedSnapshot(),
+);
 const startNewCampaignMock = mock(async () => ({ id: 'campaign-1' }));
 const goToRouteMock = mock(async () => {});
 const getVoiceTtsUrlMock = mock((): string | undefined => undefined);
@@ -87,32 +109,81 @@ const getVoiceTtsUrlMock = mock((): string | undefined => undefined);
 // to desktop and opt into web explicitly.
 const isTauriMock = mock((): boolean => true);
 
-mock.module('$lib/views/utils/is_tauri', () => ({ isTauri: isTauriMock }));
-
-mock.module('$services', () => ({
-  ...localServicesMockBase(),
-  configService: configServiceMock,
-  capabilityService: { detect: detectMock },
-  runtimeConfigService: {
-    getTextUrl: mock(() => 'http://localhost:11434'),
-    getImageUrl: mock(() => 'http://localhost:8188'),
-    getVoiceTtsUrl: getVoiceTtsUrlMock,
+/** Capabilities for the real connection editor the flow mounts for manual setup. */
+const editorCapabilities = {
+  status: createAiConnectionStatus(),
+  config: configServiceMock,
+  campaign: { activeCampaign: undefined },
+  image: {
+    checkpoints: [] as readonly { id: string }[],
+    loadCheckpoints: mock(async () => {}),
+    generateImage: mock(async () => ({ url: '', isDemo: false })),
   },
-  campaignService: { startNewCampaign: startNewCampaignMock },
-  routerService: { goToRoute: goToRouteMock },
-  inventoryService: { reset: mock(() => {}) },
-  worldStateService: { reset: mock(() => {}) },
-  playerStateService: { reset: mock(() => {}) },
-  equipmentService: { reset: mock(() => {}) },
-  gameModeService: { reset: mock(() => {}) },
-}));
+  styleProfiles: {
+    profiles: [],
+    activeProfileId: '',
+    activeProfile: undefined,
+    setActiveProfile: mock(() => {}),
+  },
+  tts: {
+    status: 'uninitialized',
+    errorMessage: null,
+    isPlaying: false,
+    isSynthesizing: false,
+    speak: mock(async () => {}),
+    stop: mock(() => {}),
+    reset: mock(() => {}),
+    initialize: mock(async () => {}),
+  },
+  voiceModel: {
+    state: { status: 'not-downloaded' },
+    totalBytes: 0,
+    download: mock(async () => ({ status: 'not-downloaded' })),
+    cancel: mock(() => {}),
+    checkStatus: mock(async () => {}),
+  },
+  ai: {
+    providerModelFetch: {},
+    fetchModelsFromProvider: mock(async () => []),
+    fetchWithCredentialPolicy: mock(async () => undefined),
+    hasVerificationStrategy: mock(() => false),
+    resolveChatTestRequest: mock(() => undefined),
+    verifyConnection: mock(async () => ({ ok: true, latencyMs: 0 })),
+  },
+};
 
-// ── Imports (after mocks) ──────────────────────────────────────────────
+const createEditor = () =>
+  createAiSettingsViewModel({
+    className: 'SetupSubflowEditor',
+    ...editorCapabilities,
+  } as unknown as AiSettingsViewModelOptions);
 
-const { getSetupSubflowViewModel } = await import('./setup_subflow_view_model.svelte');
+const createVm = (options: { className?: string; origin?: SetupOrigin } = {}) =>
+  createSetupSubflowViewModel({
+    className: options.className ?? 'SetupSubflowTest',
+    origin: options.origin,
+    config: configServiceMock,
+    detection: { detect: detectMock },
+    runtimeConfig: {
+      getTextUrl: () => 'http://localhost:11434',
+      getImageUrl: () => 'http://localhost:8188',
+      getVoiceTtsUrl: getVoiceTtsUrlMock,
+    },
+    campaign: { startNewCampaign: startNewCampaignMock },
+    router: { goToRoute: goToRouteMock },
+    reset: {
+      inventory: { reset: mock(() => {}) },
+      worldState: { reset: mock(() => {}) },
+      playerState: { reset: mock(() => {}) },
+      equipment: { reset: mock(() => {}) },
+      gameMode: { reset: mock(() => {}) },
+    },
+    isDesktop: () => isTauriMock(),
+    createEditor,
+  } as unknown as SetupSubflowViewModelOptions);
 
 describe('SetupSubflowViewModel', () => {
-  let vm: import('./setup_subflow_view_model.svelte').SetupSubflowViewModelInterface;
+  let vm: SetupSubflowViewModelInterface;
 
   beforeEach(() => {
     configServiceMock.state = { connections: [], defaultByCapability: {} };
@@ -127,7 +198,7 @@ describe('SetupSubflowViewModel', () => {
     isTauriMock.mockReturnValue(true);
     getVoiceTtsUrlMock.mockReset();
     getVoiceTtsUrlMock.mockReturnValue(undefined);
-    vm = getSetupSubflowViewModel({ className: 'SetupSubflowTest' });
+    vm = createVm({ className: 'SetupSubflowTest' });
   });
 
   afterEach(() => {
@@ -202,7 +273,26 @@ describe('SetupSubflowViewModel', () => {
     expect(vm.capabilityToggles.find((t) => t.id === 'voice')?.enabled).toBeFalse();
   });
 
-  test('toggleCapability enables and disables an optional capability', () => {
+  test('toggleCapability cannot enable an optional capability without backing', () => {
+    // No connection and nothing detected → the toggle is disabled and the
+    // enable is refused, so the state stays off.
+    expect(vm.capabilityToggles.find((t) => t.id === 'image')?.enabled).toBeFalse();
+    expect(vm.capabilityRows.find((r) => r.id === 'image')?.disabled).toBeTrue();
+    vm.toggleCapability('image');
+    expect(vm.capabilityToggles.find((t) => t.id === 'image')?.enabled).toBeFalse();
+  });
+
+  test('toggleCapability enables and disables an optional capability that has backing', () => {
+    configServiceMock.state.connections = [
+      {
+        capability: 'image',
+        provider: 'comfyui',
+        apiKey: '',
+        baseUrl: 'http://x',
+        name: 'ComfyUI',
+      },
+    ];
+    expect(vm.capabilityRows.find((r) => r.id === 'image')?.disabled).toBeFalse();
     vm.toggleCapability('image');
     expect(vm.capabilityToggles.find((t) => t.id === 'image')?.enabled).toBeTrue();
     vm.toggleCapability('image');
@@ -214,22 +304,85 @@ describe('SetupSubflowViewModel', () => {
     expect(vm.capabilityToggles.find((t) => t.id === 'text')?.enabled).toBeTrue();
   });
 
-  test('a configured optional capability remains unchecked until enabled', () => {
+  test('entry selection preserves only optional capabilities with usable connections', () => {
     configServiceMock.state.connections = [
       { capability: 'voice', provider: 'kokoro', apiKey: '', name: 'Kokoro' },
     ];
 
-    expect(vm.capabilityRows.find((row) => row.id === 'voice')?.checked).toBeFalse();
-    vm.toggleCapability('voice');
-    expect(vm.capabilityRows.find((row) => row.id === 'voice')?.checked).toBeTrue();
+    vm.selectEntryPath('existing');
+
+    expect(vm.capabilityToggles.find((t) => t.id === 'voice')?.enabled).toBeTrue();
+    expect(vm.capabilityToggles.find((t) => t.id === 'image')?.enabled).toBeFalse();
+  });
+
+  test('a stored optional connection is auto-enabled on load', async () => {
+    configServiceMock.load.mockImplementation(async () => {
+      configServiceMock.state.connections = [
+        { id: 'v1', capability: 'voice', provider: 'kokoro', apiKey: '', name: 'Kokoro' },
+      ];
+    });
+    const fresh = createVm({ className: 'SetupSubflowReloadTest' });
+    await fresh.initialize();
+
+    expect(fresh.capabilityToggles.find((t) => t.id === 'voice')?.enabled).toBeTrue();
+    expect(fresh.capabilityRows.find((r) => r.id === 'voice')?.checked).toBeTrue();
+    expect(fresh.capabilityRows.find((r) => r.id === 'voice')?.disabled).toBeFalse();
+    await fresh.dispose();
+  });
+
+  test('finishManualSetup auto-enables an optional capability once its connection is saved', () => {
+    vm.selectEntryPath('existing');
+    vm.openManualSetup('voice');
+    expect(vm.step).toBe('manual');
+    expect(vm.capabilityToggles.find((t) => t.id === 'voice')?.enabled).toBeFalse();
+
+    configServiceMock.state.connections = [
+      { capability: 'voice', provider: 'kokoro', apiKey: '', name: 'Kokoro' },
+    ];
+    vm.finishManualSetup();
+
+    expect(vm.step).toBe('plan');
+    expect(vm.capabilityToggles.find((t) => t.id === 'voice')?.enabled).toBeTrue();
+  });
+
+  test('removing a connection disables the toggle and prevents re-enabling', async () => {
+    configServiceMock.load.mockImplementation(async () => {
+      configServiceMock.state.connections = [
+        { id: 'v1', capability: 'voice', provider: 'kokoro', apiKey: '', name: 'Kokoro' },
+      ];
+    });
+    const fresh = createVm({ className: 'SetupSubflowReloadTest' });
+    await fresh.initialize();
+    expect(fresh.capabilityToggles.find((t) => t.id === 'voice')?.enabled).toBeTrue();
+
+    // Remove the connection — the checkbox drops to off and is locked.
+    configServiceMock.state.connections = [];
+    const voiceRow = fresh.capabilityRows.find((r) => r.id === 'voice');
+    expect(voiceRow?.checked).toBeFalse();
+    expect(voiceRow?.disabled).toBeTrue();
+    fresh.toggleCapability('voice');
+    expect(fresh.capabilityToggles.find((t) => t.id === 'voice')?.enabled).toBeFalse();
+    await fresh.dispose();
   });
 
   // ── Discovery scoping (Recommended) ─────────────────────────────────────
 
-  test('recommended scans the required capability only, then rescan honours opt-ins', async () => {
+  test('recommended initially probes optional capabilities, then rescan honours opt-ins', async () => {
+    detectMock.mockImplementation(async ({ capabilities }: DetectOptions) => {
+      if (!capabilities.includes('voice')) {
+        // A text-only request explicitly skips both optional capabilities.
+        return createDetectedSnapshot();
+      }
+      return {
+        ...createDetectedSnapshot(),
+        voiceStatus: 'detected',
+        voiceProviderId: 'kokoro',
+      };
+    });
     vm.selectEntryPath('recommended');
     await vm.startDiscovery();
-    expect(detectMock).toHaveBeenCalledWith({ capabilities: ['text'] });
+    expect(detectMock).toHaveBeenCalledWith({ capabilities: ['text', 'image', 'voice'] });
+    expect(vm.discoveredProviders.some((provider) => provider.capability === 'voice')).toBeTrue();
 
     vm.toggleCapability('voice');
     await vm.rescan();
@@ -397,7 +550,7 @@ describe('SetupSubflowViewModel', () => {
   // ── Navigation / leave() ─────────────────────────────────────────────────
 
   test('leave() from a new-adventure origin resumes campaign creation', async () => {
-    const originVm = getSetupSubflowViewModel({
+    const originVm = createVm({
       className: 'SetupSubflowTestOrigin',
       origin: 'new-adventure',
     });
@@ -413,7 +566,7 @@ describe('SetupSubflowViewModel', () => {
   });
 
   test('leave() from a settings origin returns to settings without creating a campaign', async () => {
-    const originVm = getSetupSubflowViewModel({
+    const originVm = createVm({
       className: 'SetupSubflowTestOrigin',
       origin: 'settings',
     });
@@ -589,7 +742,7 @@ describe('SetupSubflowViewModel', () => {
         { id: 'c1', capability: 'text', provider: 'openrouter', apiKey: 'sk-saved', name: 'Saved' },
       ];
     });
-    const fresh = getSetupSubflowViewModel({ className: 'SetupSubflowReloadTest' });
+    const fresh = createVm({ className: 'SetupSubflowReloadTest' });
 
     await fresh.initialize();
 
@@ -605,7 +758,7 @@ describe('SetupSubflowViewModel', () => {
         { id: 'c1', capability: 'text', provider: 'openrouter', apiKey: 'sk-saved', name: 'Saved' },
       ];
     });
-    const fresh = getSetupSubflowViewModel({ className: 'SetupSubflowReloadTest' });
+    const fresh = createVm({ className: 'SetupSubflowReloadTest' });
     await fresh.initialize();
 
     fresh.selectEntryPath('text-only');
@@ -745,6 +898,63 @@ describe('SetupSubflowViewModel', () => {
     expect(vm.editorViewModel.isEditorOpen).toBeFalse();
   });
 
+  test('reviewCapability opens the editor prefilled with the detected image engine', async () => {
+    detectMock.mockResolvedValueOnce({
+      ...createDetectedSnapshot(),
+      textStatus: 'skipped',
+      textProviderId: undefined,
+      textModelName: undefined,
+      imageStatus: 'detected',
+      imageProviderId: 'comfyui',
+      summary: 'ComfyUI reachable',
+    });
+
+    await vm.reviewCapability('image');
+
+    expect(vm.step).toBe('manual');
+    expect(vm.manualCapability).toBe('image');
+    expect(vm.editorViewModel.isEditorOpen).toBeTrue();
+    expect(vm.editorViewModel.draft.capability).toBe('image');
+    expect(vm.editorViewModel.draft.registryId).toBe('comfyui');
+    expect(vm.editorViewModel.draft.baseUrl).toBe('http://localhost:8188');
+    expect(vm.editorViewModel.draft.isEditing).toBeFalse();
+  });
+
+  test('reviewCapability prefills the editor with a detected sd-server', async () => {
+    detectMock.mockResolvedValueOnce({
+      ...createDetectedSnapshot(),
+      textStatus: 'skipped',
+      textProviderId: undefined,
+      textModelName: undefined,
+      imageStatus: 'detected',
+      imageProviderId: 'sdcpp',
+      summary: 'Local image engine reachable (sdcpp)',
+    });
+
+    await vm.reviewCapability('image');
+
+    expect(vm.editorViewModel.draft.registryId).toBe('sdcpp');
+    expect(vm.editorViewModel.draft.baseUrl).toBe('http://localhost:8188');
+    expect(vm.editorViewModel.providerOptions.some((option) => option.id === 'sdcpp')).toBeTrue();
+  });
+
+  test('reviewCapability falls back to the editor when no image engine is found', async () => {
+    detectMock.mockResolvedValueOnce({
+      ...createDetectedSnapshot(),
+      textStatus: 'skipped',
+      textProviderId: undefined,
+      textModelName: undefined,
+      imageStatus: 'not_found',
+      summary: 'No image engine reachable',
+    });
+
+    await vm.reviewCapability('image');
+
+    expect(vm.step).toBe('manual');
+    expect(vm.manualCapability).toBe('image');
+    expect(vm.editorViewModel.isEditorOpen).toBeTrue();
+  });
+
   test('useConnection marks a saved connection as the default for its capability', () => {
     configServiceMock.state.connections = [
       {
@@ -805,7 +1015,7 @@ describe('SetupSubflowViewModel', () => {
   describe('on the web build', () => {
     beforeEach(() => {
       isTauriMock.mockReturnValue(false);
-      vm = getSetupSubflowViewModel({ className: 'SetupSubflowWebTest' });
+      vm = createVm({ className: 'SetupSubflowWebTest' });
     });
 
     test('opens on the review screen instead of the entry choice', async () => {

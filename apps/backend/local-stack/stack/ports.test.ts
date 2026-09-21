@@ -15,6 +15,7 @@ const COMPOSE_PORT_MAP = {
   image: 8188,
   voice: 8089,
   stt: 8087,
+  audio: 8094,
   client: 5274,
 } as const;
 
@@ -60,8 +61,24 @@ describe('AC-11 — local stack ports match development_ports.ts', () => {
 
   it('engine ports stay within the documented backend ranges', () => {
     expect(COMPOSE_PORT_MAP.voice).toBeGreaterThanOrEqual(8087);
-    expect(COMPOSE_PORT_MAP.voice).toBeLessThanOrEqual(8092);
+    expect(COMPOSE_PORT_MAP.voice).toBeLessThanOrEqual(8098);
     expect(COMPOSE_PORT_MAP.stt).toBeGreaterThanOrEqual(8087);
-    expect(COMPOSE_PORT_MAP.stt).toBeLessThanOrEqual(8092);
+    expect(COMPOSE_PORT_MAP.stt).toBeLessThanOrEqual(8098);
+  });
+
+  it('C-511: audio binds the newly added allocation-table constant (8094)', () => {
+    expect(EMULATOR_PORTS.audio).toBe(8094);
+    expect(COMPOSE_PORT_MAP.audio).toBe(EMULATOR_PORTS.audio);
+  });
+
+  it('C-511: audio exists in every environment port table', () => {
+    expect(PORTS.emulator.audio).toBe(8094);
+    expect(PORTS.staging.audio).toBe(8096);
+    expect(PORTS.production.audio).toBe(8098);
+  });
+
+  it('C-511: audio avoids the Nordclaw pubsub reservation (8085)', () => {
+    expect(COMPOSE_PORT_MAP.audio).not.toBe(8085);
+    expect(Object.values(COMPOSE_PORT_MAP)).not.toContain(8085);
   });
 });

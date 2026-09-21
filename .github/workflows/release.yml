@@ -791,8 +791,9 @@ jobs:
 
       - name: Post release announcement to Discord
         shell: bash
-        run: bun scripts/src/lib/deploy/discord_notify.ts --tag="$RELEASE_TAG"
+        run: bun scripts/src/lib/deploy/discord_notify.ts --tag="$RELEASE_TAG" --mode="$MODE"
         env:
+          MODE: ${{ needs.resolve-plan.outputs.mode }}
           RELEASE_TAG: ${{ github.event.release.tag_name }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

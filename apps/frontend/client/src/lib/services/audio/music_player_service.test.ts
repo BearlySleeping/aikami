@@ -4,16 +4,32 @@
 // Covers visibility persistence, derived playback state, and vibe-based
 // similar-track skipping.
 //
-// Note: $services is globally mocked by test_preload.ts with Proxy stubs;
-// this test mutates those stubs (audioService / trackRegistryService) to
-// drive the player through its states.
+// The player receives its audio/track collaborators directly, so this test
+// installs controllable doubles rather than mutating the retired global
+// `$services` stubs.
 
 import { afterEach, describe, expect, mock, test } from 'bun:test';
 import type { MusicSceneContext, Track } from '@aikami/types';
 
-// Imports resolve to the preload's $services mock.
-import { audioService, trackRegistryService } from '$services';
-import { musicPlayerService } from './music_player_service.svelte';
+const audioService = {
+  activeTrackUrl: null as string | null,
+  isBgmPaused: false,
+  transitionToBgm: mock(async (_url: string) => {}),
+  pauseBgm: mock(() => {}),
+  resumeBgm: mock(async () => {}),
+  stopAll: mock(() => {}),
+};
+
+const trackRegistryService = {
+  tracks: [] as Track[],
+  registerVibeTags: mock((_tags: readonly string[]) => {}),
+  discoverLocal: mock(async () => {}),
+};
+
+mock.module('./audio_service.svelte.ts', () => ({ audioService }));
+mock.module('./track_registry_service.svelte.ts', () => ({ trackRegistryService }));
+
+const { musicPlayerService } = await import('./music_player_service.svelte');
 
 // ---------------------------------------------------------------------------
 // Fixtures

@@ -10,13 +10,23 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
-import { agentPipelineService, BUILT_IN_AGENTS } from '$services';
+} from '@aikami/frontend/services/base';
+import type { AgentPipelineServiceInterface } from '$services';
 import type { AgentConfig, AgentHudState, AgentPhase, AgentRunResult, ThoughtBubble } from '$types';
+
+// ── Capability contracts ────────────────────────────────────────────────
+
+/** The agent pipeline operations the ViewModel performs. */
+export type AgentPipelineRunCapabilities = Pick<AgentPipelineServiceInterface, 'runPipeline'>;
 
 // ── Types ────────────────────────────────────────────────────────────────
 
-export type AgentPipelineViewModelOptions = BaseViewModelOptions;
+export type AgentPipelineViewModelOptions = BaseViewModelOptions & {
+  /** Agent pipeline runner capability. */
+  runner: AgentPipelineRunCapabilities;
+  /** Built-in agent catalog (constant, injected). */
+  availableAgents: readonly AgentConfig[];
+};
 
 export type AgentPipelineViewModelInterface = BaseViewModelInterface & {
   /** Current HUD state (reactive). */
@@ -54,6 +64,11 @@ export type AgentPipelineViewModelInterface = BaseViewModelInterface & {
     systemPrompt: string;
     mainGenerator: (enrichedPrompt: string) => Promise<string>;
     npcId?: string;
+    /** Run post-agents off the critical path; results arrive via onPostResults. */
+    background?: boolean;
+    /** Merge batchable post-agents into one combined analysis call. */
+    batchAgents?: boolean;
+    onPostResults?: (results: ReadonlyArray<AgentRunResult>) => void;
   }): Promise<string>;
 };
 
@@ -63,6 +78,17 @@ export class AgentPipelineViewModel
   extends BaseViewModel<AgentPipelineViewModelOptions>
   implements AgentPipelineViewModelInterface
 {
+  private readonly _runner: AgentPipelineRunCapabilities;
+  private readonly _availableAgents: readonly AgentConfig[];
+
+  /**
+   * Monotonic run token. Background post-agent callbacks are ignored once a
+   * newer turn has started, and the previous run's in-flight agents are
+   * aborted so they cannot mutate the HUD or choices of the current turn.
+   */
+  private _runGeneration = 0;
+  private _activeRun: AbortController | undefined;
+
   private _hudState = $state<AgentHudState>({
     isRunning: false,
     currentPhase: null,
@@ -70,8 +96,17 @@ export class AgentPipelineViewModel
     results: [],
     thoughtBubbles: [],
     showDrawer: false,
-    enabledAgents: BUILT_IN_AGENTS.filter((a) => a.enabled).map((a) => a.id),
+    enabledAgents: [],
   });
+
+  constructor(options: AgentPipelineViewModelOptions) {
+    super(options);
+    this._runner = options.runner;
+    this._availableAgents = options.availableAgents;
+    this._hudState.enabledAgents = this._availableAgents
+      .filter((agent) => agent.enabled)
+      .map((agent) => agent.id);
+  }
 
   // ── Getters ──────────────────────────────────────────────────────
 
@@ -100,7 +135,7 @@ export class AgentPipelineViewModel
   }
 
   get availableAgents(): ReadonlyArray<AgentConfig> {
-    return BUILT_IN_AGENTS;
+    return this._availableAgents;
   }
 
   // ── Public methods ───────────────────────────────────────────────
@@ -140,49 +175,91 @@ export class AgentPipelineViewModel
     systemPrompt,
     mainGenerator,
     npcId,
+    background,
+    batchAgents,
+    onPostResults,
   }: {
     chatId: string;
     userMessage: string;
     systemPrompt: string;
     mainGenerator: (enrichedPrompt: string) => Promise<string>;
     npcId?: string;
+    background?: boolean;
+    batchAgents?: boolean;
+    onPostResults?: (results: ReadonlyArray<AgentRunResult>) => void;
   }): Promise<string> {
     if (this._hudState.isRunning) {
       this.warn('runPipeline:already-running');
       return mainGenerator(systemPrompt);
     }
 
+    const generation = ++this._runGeneration;
+    this._activeRun?.abort();
+    const controller = new AbortController();
+    this._activeRun = controller;
+
     this._hudState.isRunning = true;
     this._hudState.results = [];
     this._hudState.thoughtBubbles = [];
 
     try {
-      const result = await agentPipelineService.runPipeline({
+      const result = await this._runner.runPipeline({
         chatId,
         userMessage,
         systemPrompt,
         mainGenerator,
         npcId,
+        background,
+        batchAgents,
+        signal: controller.signal,
         enabledAgents: this._hudState.enabledAgents,
         onPhaseChange: (phase) => {
+          if (generation !== this._runGeneration) {
+            return;
+          }
           this._hudState.currentPhase = phase;
           this._hudState.currentAgent = null;
         },
         onAgentResult: (agentResult) => {
+          if (generation !== this._runGeneration) {
+            return;
+          }
           this._hudState.results = [...this._hudState.results, agentResult];
           this._hudState.currentAgent = agentResult.agentId;
+        },
+        onPostResults: (postResults) => {
+          if (generation !== this._runGeneration) {
+            return;
+          }
+          // Background post-agents have now settled — release the controller
+          // so a later run is not aborting an already-finished one.
+          this._activeRun = undefined;
+          onPostResults?.(postResults);
         },
       });
 
       return result.aiResponse;
     } finally {
-      this._hudState.isRunning = false;
-      this._hudState.currentPhase = null;
-      this._hudState.currentAgent = null;
+      if (generation === this._runGeneration) {
+        this._hudState.isRunning = false;
+        this._hudState.currentPhase = null;
+        this._hudState.currentAgent = null;
+        // Background work outlives this await; its controller is released by
+        // `onPostResults`. Only non-background runs clear it here.
+        if (!background) {
+          this._activeRun = undefined;
+        }
+      }
     }
+  }
+
+  override async dispose(): Promise<void> {
+    this._activeRun?.abort();
+    this._activeRun = undefined;
+    await super.dispose();
   }
 }
 
-export const getAgentPipelineViewModel = (
+export const createAgentPipelineViewModel = (
   options: AgentPipelineViewModelOptions,
 ): AgentPipelineViewModelInterface => AgentPipelineViewModel.create(options);

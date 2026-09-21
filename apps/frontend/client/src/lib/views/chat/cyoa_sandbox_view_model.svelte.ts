@@ -10,13 +10,13 @@ import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
+} from '@aikami/frontend/services/base';
 import type { CyoaChoice, CyoaChoiceHistoryEntry } from '@aikami/types';
-import { choiceHistoryStore } from '$services';
-import {
-  type ChoiceButtonsViewModelInterface,
-  getChoiceButtonsViewModel,
-} from './choice_buttons_view_model.svelte.ts';
+import type {
+  ChoiceButtonsCapabilities,
+  ChoiceHistoryCapabilities,
+} from './chat_view_model.svelte.ts';
+import type { ChoiceButtonsViewModelInterface } from './choice_buttons_view_model.svelte.ts';
 
 // ── Mock data ────────────────────────────────────────────────────────────
 
@@ -55,7 +55,18 @@ const SINGLE_CHOICE: CyoaChoice[] = [{ id: 'sandbox-single', label: 'Press onwar
 
 // ── Types ────────────────────────────────────────────────────────────────
 
-export type CyoaSandboxViewModelOptions = BaseViewModelOptions;
+/** Choice-history operations the sandbox demonstrates (record/read/clear). */
+export type CyoaChoiceHistoryCapabilities = ChoiceHistoryCapabilities & {
+  getHistory(chatId: string): ReadonlyArray<CyoaChoiceHistoryEntry>;
+  clearHistory(chatId: string): void;
+};
+
+export type CyoaSandboxViewModelOptions = BaseViewModelOptions & {
+  /** CYOA choice history recording and reads. */
+  choiceHistory: CyoaChoiceHistoryCapabilities;
+  /** CYOA choice-buttons child factory. */
+  choiceButtons: ChoiceButtonsCapabilities;
+};
 
 export type CyoaSandboxViewModelInterface = BaseViewModelInterface & {
   /** The mock GM narrative shown above the choices. */
@@ -89,9 +100,12 @@ export class CyoaSandboxViewModel
 
   readonly choiceButtonsViewModel: ChoiceButtonsViewModelInterface;
 
+  private readonly _choiceHistory: CyoaChoiceHistoryCapabilities;
+
   constructor(options: CyoaSandboxViewModelOptions) {
     super(options);
-    this.choiceButtonsViewModel = getChoiceButtonsViewModel({
+    this._choiceHistory = options.choiceHistory;
+    this.choiceButtonsViewModel = options.choiceButtons.create({
       className: 'ChoiceButtonsViewModel:sandbox',
       choices: MOCK_CHOICES,
       onSelect: (choice) => this._handleSelect(choice),
@@ -99,7 +113,7 @@ export class CyoaSandboxViewModel
   }
 
   get history(): ReadonlyArray<CyoaChoiceHistoryEntry> {
-    return choiceHistoryStore.getHistory(SANDBOX_CHAT_ID);
+    return this._choiceHistory.getHistory(SANDBOX_CHAT_ID);
   }
 
   /** @inheritdoc */
@@ -124,14 +138,14 @@ export class CyoaSandboxViewModel
 
   /** @inheritdoc */
   clearHistory(): void {
-    choiceHistoryStore.clearHistory(SANDBOX_CHAT_ID);
+    this._choiceHistory.clearHistory(SANDBOX_CHAT_ID);
     this.lastSelectedLabel = '';
   }
 
   /** Records the selection in history and surfaces it in the sandbox UI. */
   private _handleSelect(choice: CyoaChoice): void {
     this.lastSelectedLabel = choice.label;
-    choiceHistoryStore.recordChoice({
+    this._choiceHistory.recordChoice({
       chatId: SANDBOX_CHAT_ID,
       entry: {
         choiceId: choice.id,
@@ -142,6 +156,10 @@ export class CyoaSandboxViewModel
   }
 }
 
-export const getCyoaSandboxViewModel = (
+/**
+ * Builds the CYOA sandbox from explicit capabilities. Production wiring lives
+ * in ./cyoa_sandbox_composition.ts.
+ */
+export const createCyoaSandboxViewModel = (
   options: CyoaSandboxViewModelOptions,
 ): CyoaSandboxViewModelInterface => CyoaSandboxViewModel.create(options);

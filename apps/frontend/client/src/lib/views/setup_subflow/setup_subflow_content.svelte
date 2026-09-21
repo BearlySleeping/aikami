@@ -94,6 +94,7 @@ const { viewModel }: Props = $props();
                 type="checkbox"
                 class="checkbox checkbox-primary checkbox-sm"
                 checked={row.checked}
+                disabled={row.disabled}
                 aria-label={row.label}
                 onchange={() => viewModel.toggleCapability(row.id)}
               >

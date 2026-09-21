@@ -35,16 +35,24 @@ export function apiMethodGuard(
     return undefined;
   }
 
-  const allowed = ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'];
+  // 🔴 `PUT` was missing here, which made every hub PUT route unreachable:
+  // `hooks.server.ts` answers a bare 405 before SvelteKit ever dispatches the
+  // request, so `PUT /api/assets/community/:slug/upload` (C-513),
+  // `PUT /api/assets/themes/:slug/upload` (C-530), `PUT /api/maps/drafts/:id`
+  // (C-508) and `PUT /api/storage/url` all failed with `Method Not Allowed`.
+  // `PATCH` and `DELETE` were already allowed, so excluding `PUT` was an
+  // oversight rather than a policy: the method carries no capability the
+  // allowed set does not.
+  const allowed = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'];
   if (!allowed.includes(method)) {
     return new Response('Method Not Allowed', {
       headers: {
         'Access-Control-Allow-Headers':
           'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version',
-        'Access-Control-Allow-Methods': 'GET,POST,PATCH,DELETE,OPTIONS',
+        'Access-Control-Allow-Methods': 'GET,POST,PUT,PATCH,DELETE,OPTIONS',
         'Access-Control-Allow-Origin': corsOrigin ?? '*',
         // biome-ignore lint/style/useNamingConvention: standard HTTP header name
-        Allow: 'GET, POST, PATCH, DELETE, OPTIONS',
+        Allow: 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
       },
       status: 405,
     });

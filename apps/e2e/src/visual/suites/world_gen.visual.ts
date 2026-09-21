@@ -55,7 +55,7 @@ export default defineConfig({
         '- Dark theme semantic colors (bg-base-100, text-base-content)',
         '- font-sans for body text, font-mono is not present',
         '',
-        'The buttons use btn-sm and are styled as DaisyUI chips with btn-outline for unselected, btn-primary for selected.',
+        'The buttons use btn-sm and are styled as Aikami UI chips with btn-outline for unselected, btn-primary for selected.',
       ].join('\n'),
       schema: WizardStepSchema,
       setupHook: async (page) => {
@@ -75,7 +75,7 @@ export default defineConfig({
         '- Three radio buttons for difficulty: Easy, Medium, Hard (Medium selected by default)',
         '- A "Surprise Me!" button',
         '- A "Next →" button',
-        '- Dark theme using DaisyUI semantic colors',
+        '- Dark theme using Aikami UI semantic colors',
       ].join('\n'),
       schema: WizardStepSchema,
       setupHook: async (page) => {
@@ -99,7 +99,7 @@ export default defineConfig({
         '- A hint text: "Be specific: what must the party achieve?"',
         '- A "Surprise Me!" button',
         '- A "Generate World" button',
-        '- Dark theme using DaisyUI semantic colors',
+        '- Dark theme using Aikami UI semantic colors',
       ].join('\n'),
       schema: WizardStepSchema,
       setupHook: async (page) => {
@@ -127,7 +127,7 @@ export default defineConfig({
         '- Story Arcs section with chapter cards containing objectives',
         '- HUD Widgets section with a table showing label, slot, icon, and default visibility',
         '- "Regenerate" and "Accept World" buttons at the bottom',
-        '- Dark theme using DaisyUI semantic colors',
+        '- Dark theme using Aikami UI semantic colors',
       ].join('\n'),
       schema: PromptTemplateSchema,
       setupHook: async (page) => {

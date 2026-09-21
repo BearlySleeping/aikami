@@ -73,7 +73,9 @@ export const resolveMode = (args: string[]): AikamiMode => {
 };
 
 export const parseServiceArgs = (args: string[]): ServiceArgs => {
-  const serviceArg = args.find((a) => !a.startsWith('--'));
+  const serviceArg = args
+    .filter((argument, index) => !argument.startsWith('-') && args[index - 1] !== '--mode')
+    .join(',');
   if (!serviceArg) {
     console.error(
       'Usage: bun herdr:start <services> [--mode <mode>] [--join] [--force] [--force-ports]\n' +

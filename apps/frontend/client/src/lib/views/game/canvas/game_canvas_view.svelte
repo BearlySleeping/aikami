@@ -3,8 +3,8 @@
 import { BaseViewModelContainer } from '$components';
 import FloatingText from '$lib/components/game/floating_text.svelte';
 import DiegeticHealthBar from '$lib/views/combat/components/diegetic_health_bar.svelte';
+import { getGameBootViewModel } from '../boot/game_boot_composition.ts';
 import GameBootView from '../boot/game_boot_view.svelte';
-import { getGameBootViewModel } from '../boot/game_boot_view_model.svelte';
 import type { GameCanvasViewModelInterface } from './game_canvas_view_model.svelte';
 
 type Props = {
@@ -35,7 +35,7 @@ const bootViewModel = getGameBootViewModel({ className: 'GameBootViewModel' });
     </div>
 
     <!-- Layer 10 (z-10): Svelte UI overlay — positioned on top of canvas -->
-    <div id="game-ui-layer" class="absolute inset-0 z-10 pointer-events-none">
+    <div id="game-canvas-ui-layer" class="absolute inset-0 z-10 pointer-events-none">
       <!-- Player HUD — top-left overlay -->
       {#if viewModel.isGameReady}
         <div

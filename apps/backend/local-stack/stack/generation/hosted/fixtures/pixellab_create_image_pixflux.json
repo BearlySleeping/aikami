@@ -1,0 +1,20 @@
+{
+  "recordedFrom": "PixelLab API v1 - POST /create-image-pixflux (published API documentation; shape recorded 2026-09-13)",
+  "note": "This fixture records the documented RESPONSE SHAPE and a real PNG payload. It is NOT a recorded live provider response: a live smoke (AC-2b) is the only proof of the wire contract, and it is never a merge gate.",
+  "status": 200,
+  "requestId": "pl-req-8f2c1d",
+  "contentType": "application/json",
+  "json": {
+    "image": {
+      "type": "base64",
+      "base64": "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAACkElEQVR4nGNgYGBQVVX18vLKz8+fMmXKzp077927x8zMrKGh4evrW1RUNH369D179jx8+JCNjU1bW5uBm5vbwMAgNDS0qqpq/vz5R44cefnyJR8fn7GxcURERG1t7aJFi44fP/7mzRtBQUEzMzMGMTExa2vrhISE1tbWVatWnT9//suXL5KSknZ2dsnJyR0dHWvXrr106dL3799lZGQcHR0ZFBUV3dzcsrOzJ0yYsHXr1lu3bv3//19FRcXT0zMvL2/y5Mk7duy4e/cuExOTurq6j48Pg46OTmBgYFlZ2ezZsw8cOPD06VMuLi59ff2QkJDKysp58+YdPnz4xYsXvLy8RkZG4eHhDObm5jExMY2NjcuWLTt9+vSHDx9ERUWtrKzi4+NbWlpWrlx57ty5z58/S0hI2NraJiUlMTg5OaWnp/f09GzcuPHatWu/f/9WUFBwdXXNysrq7+/fsmXLzZs3//37p6ys7OHhkZuby4A17AICAkpLS2fNmrV///4nT55wcnLq6ekFBwdXVFQwYA276OjohoaGpUuXnjp16v379yIiIpaWlnFxcc3NzQxYwy4tLa27u3vDhg1Xr1799euXvLy8i4tLZmZmX18fA9awKywsnDZt2u7dux88eMDKyqqlpeXv719SUjJz5kwGrGFXU1OzcOHCY8eOvX79WkBAwNTUNCoqqr6+fsmSJQxYw669vX3NmjUXL1789u2btLS0g4NDampqV1fX+vXrGbCG3aRJk7Zv337nzh1GRkY1NTVvb++CgoKpU6fu2rWLAWvYzZ0799ChQ8+fP+fh4TE0NAwLC6uurl6wYMHRo0cZsIbdihUrzp49++nTJ3FxcRsbm8TExLa2ttWrV1+4cAEAy8p0EJSVHQUAAAAASUVORK5CYII="
+    },
+    "usage": {
+      "type": "usd",
+      "usd": 0.04
+    }
+  },
+  "metadata": {
+    "content-type": "application/json"
+  }
+}

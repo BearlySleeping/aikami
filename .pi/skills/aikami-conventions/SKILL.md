@@ -115,8 +115,7 @@ class UploadService extends BaseClass {   import { logger } from "$logger";
 }
 ```
 
-**Why**: each environment maps `$logger` in its own `tsconfig.json` `paths`
-(or `svelte.config.js`) to a different implementation — browser, SSR, or
+**Why**: each environment maps `$logger` in its own `tsconfig.json` `paths` to a different implementation — browser, SSR, or
 basic. `@aikami/logger` is a package alias and can't know which you're in.
 
 ### 2. Import from Package ROOT, Never `lib/` Sub-Paths
@@ -144,7 +143,7 @@ import { ChatService } from "@aikami/backend-chat";   // ❌
 ```
 
 Same for `@aikami/frontend/<name>`. This applies to `import` statements and to
-the alias maps in `svelte.config.js` and each `tsconfig.json`.
+the alias maps in `vite.config.ts` and each `tsconfig.json`.
 
 ### 2b. Import Types at the Top, Never Inline `import()`
 
@@ -380,6 +379,176 @@ const PATTERNS = { command: /^\/([\w-]+)/s } as const;                     // na
 const CONFIG = { timeout: 5000, endpoint: "/api/v2" } as const
   satisfies Record<string, string | number>;                               // check without widening
 ```
+
+## Guards: what a failure means, and what to do about it
+
+Every structural check in this repository falls into exactly one category, and
+the category decides your response. Treating a maintainability signal like a
+security boundary wastes work; treating a security boundary like a warning
+ships a defect.
+
+| Category | Example | Your response |
+| --- | --- | --- |
+| **Hard architectural invariant** | production importing test helpers, frontend importing backend runtime, raw `<img>`, the server data plane | Fix the code. There is no baseline and no exception. |
+| **Ratcheted architectural debt** | legacy ViewModel dependency violations, legacy service dynamic imports, legacy type-safety escapes | Fix the violation. The baseline may only shrink. |
+| **Maintainability heuristic** | file size (LOC), cognitive complexity | Look at the file and improve it. Advisory unless it is a ratchet, and never an architecture proof. |
+| **Temporary reviewed waiver** | an oversized mutable module with an owner and an expiry | Reduce the file, or ask a human to renew the waiver. |
+
+### 🔴 DO NOT solve a guard failure by raising a baseline or waiver
+
+This is the single most important rule in this section. It applies to every
+ratcheted guard, without exception.
+
+`--update-baseline` is **reduction-only**. It synchronizes improvements and
+removals and refuses to add or raise a single count. A new violation can never
+become legitimate by running it, and neither can an existing allowance be
+raised. CI additionally compares the **effective allowance** — the one ceiling a
+path actually has, whichever file expresses it — against the trusted base
+revision (`BASE_REF`), so converting a baseline entry into a larger waiver, or
+renaming a file to shed its entry, is detected as an increase rather than as a
+representation change.
+
+The sanctioned flow (`bun moon run :validate`, the contract pipeline's pre-push
+gate) runs the reduction-only contraction for you. If a guard reports an
+*improvement not yet locked in*, do nothing special: validation locks it in.
+
+### 🔴 If changing the guard policy is genuinely required, stop
+
+Raising an accepted ceiling, adding a waiver, relaxing a lint severity, or
+editing a guard implementation so it stops failing is a **guard-policy
+expansion**, not a fix. It requires explicit human review: a maintainer applies
+the `guard-policy-approved` label, which is the only channel that sets
+`AIKAMI_GUARD_POLICY_AUTHORIZATION`. You cannot apply a label.
+
+`bun run guard:policy-diff` classifies any diff that touches guard policy and
+prints `GUARD POLICY CHANGE` with a verdict — debt reduction (fine), policy
+refactor (review for a relaxed rule), or policy expansion (blocked without
+authorization). Do not attempt to make it green by editing the classification.
+
+### What each guard actually checks
+
+| Guard | Failure means |
+| --- | --- |
+| `guard-type-safety` | A new `as unknown as X`, `as any`, or `@ts-ignore`. Fix the type: parse `unknown` against its schema, or write a type guard. |
+| `guard-mvvm-conventions` | A View holding logic (`$effect`, `onMount`) or a ViewModel depending on another ViewModel. Move the responsibility. |
+| `guard-service-conventions` | A service importing upward, or a non-allowlisted dynamic import. Inject a typed capability. |
+| `guard-view-model-composition` | A ViewModel reaching into the service graph at runtime. Inject through the sibling `*_composition.ts`. |
+| `guard-orphaned-capability` | An exported **runtime** capability with no production consumer. Test-only use does not count; type-only exports are out of scope. Wire it up or delete it. |
+| `guard-test-boundary` | Production source importing a test helper. Inject a production dependency. |
+| `guard-image-component` / `guard-data-plane` | A hard invariant. Fix the code. |
+| `guard-source-file-size` | A module owns too much, or an allowance is being raised. See below. |
+| `guard-cognitive-complexity` | A function's control flow is too hard to follow. See below. |
+
+## File Size & Cohesion
+
+`guard-source-file-size` (`bun run guard`) stops new oversized,
+multi-responsibility modules — it does not force every file under a number or
+rewrite existing debt. Budgets:
+
+| Source                       | Warning  | Hard limit |
+| ---------------------------- | -------- | ---------- |
+| Handwritten production       | > 500    | > 800      |
+| Tests                        | > 800    | > 1500     |
+| Generated / `.d.ts` / static | excluded | excluded   |
+
+Warnings are **non-failing** signals to look, not build breaks. A **new** file
+over the hard limit fails.
+
+### Grandfathered baseline
+
+Files over the hard limit when the guard was introduced are recorded at their
+exact size in `guard_source_file_size_baseline.json`. They may not grow.
+Shrinking one needs the reduction locked in — the sanctioned validation flow
+does that automatically, so you do not have to run anything by hand. Initial
+bootstrap is a one-time reviewed act
+(`bun run src/lib/ops/guard_source_file_size.ts --bootstrap-baseline`); it
+refuses to run if the baseline already exists.
+
+### Permanent exemption vs temporary waiver — two different things
+
+`guard_source_file_size_exemptions.json` holds **permanent exemptions**:
+cohesive declarative data (a country table, a locale registry, a password
+blocklist), generated-but-tracked artifacts, and inseparable fixtures. No
+expiry — but the classification is **verified**, not trusted: a `declarative`
+exemption may contain no logic at all, and a `generated` one must match a
+generated-file convention or name the source it is derived from.
+
+`guard_source_file_size_waivers.json` holds **temporary waivers**: mutable
+modules above the hard limit — large ViewModels, services, orchestrators,
+workers, engine kernels. Each requires `maxLines`, a `rationale`, an `owner`,
+an `issue`, and a `reviewBy` date. Waivers expire, and an expired waiver fails
+CI with:
+
+```text
+Temporary source-size waiver expired on <date>.
+Either reduce the file below its reviewed ceiling / hard limit,
+or obtain explicit human review for a renewed waiver.
+```
+
+Do **not** extend `reviewBy` yourself. Moving the deadline is a policy change.
+
+### The ceiling is a ratchet
+
+A waiver ceiling may be **lowered**, never raised. `2500 → 2470` is fine.
+`2500 → 2501`, a new waiver, or converting a baseline entry into a larger
+waiver are all policy expansions and need human review. "Too hard to refactor"
+is not a rationale, and there is no blanket exemption for `engine/`,
+`services/`, `tests/`, or `scripts/`.
+
+When an oversized mutable module fails, the correct response is:
+
+1. identify a cohesive responsibility to extract;
+2. preserve ownership and public API boundaries;
+3. rerun full validation.
+
+### File size is not complexity
+
+Before splitting, check: (1) one cohesive responsibility; (2) explicit
+state/resource ownership; (3) narrow dependencies and public API; (4) testable
+without private-state casts; (5) no giant shared context or circular imports;
+(6) a real boundary, not a helper dumping ground. **Prefer cohesion over
+arbitrary splitting** — never delete explanations, minify, or merge statements
+to satisfy a number.
+
+A LOC guard is **not a complexity proof**, and a small file can still be badly
+designed. That is why `guard-cognitive-complexity` exists as an independent
+signal.
+
+## Cognitive Complexity
+
+`guard-cognitive-complexity` ratchets Biome's
+`complexity/noExcessiveCognitiveComplexity` score, per file, on both the number
+of functions above the threshold (15) and the worst score in the file. Both may
+only fall.
+
+The rule is deliberately **not** enabled in `biome.json`: 393 files currently
+contain a function above the threshold, and enabling it as `warn` would make
+`biome check --error-on-warnings` (which several packages' `:fix` scripts run)
+fail on all of them at once. The guard invokes Biome with `--only`, so the
+measurement is Biome's own and `bun run lint` stays quiet.
+
+What to do: flatten the control flow — early returns instead of nesting, a named
+helper for a branch body, a lookup table instead of a branch ladder. Do **not**
+add a `biome-ignore` comment: that removes the measurement, not the complexity,
+and the ignore is itself visible in review. The baseline cannot be raised.
+
+```text
+LOC                  => this module may own too much
+cognitive complexity => this control flow may be too hard to follow
+```
+
+They are different problems with different fixes. Do not conflate them.
+
+## Guard commands
+
+| Command | Purpose |
+| --- | --- |
+| `bun run guard` | every structural guard (`scripts:guard`) |
+| `bun run guard:whole-repo` | the deterministic whole-repo subset, no affected filter |
+| `bun run guard:policy-diff` | classify a diff as debt reduction / policy expansion / refactor |
+| `bun run guard:source-size-report` | measured LOC distribution and the largest files |
+| `bun run guard:show-all` | every guard, ignoring every baseline |
+
 
 ---
 

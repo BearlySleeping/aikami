@@ -5,8 +5,13 @@
 
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 
-// $state, $derived mock is provided by test_preload.ts
-// @aikami/frontend/services mock is provided by test_preload.ts
+const configureNpcPortraitSourceMock = mock(() => {});
+mock.module('$lib/data/npc_avatar_catalog', () => ({
+  configureNpcPortraitSource: configureNpcPortraitSourceMock,
+}));
+
+// $state, $derived mock is provided by test_setup.ts
+// test_setup.ts polyfills runes only
 
 describe('GameCompositionRoot (unit)', () => {
   let GameCompositionRoot: typeof import('./game_composition_root.svelte').GameCompositionRoot;
@@ -62,8 +67,10 @@ describe('GameCompositionRoot (unit)', () => {
   // ── Disposal Safety ──
 
   test('should be safe to dispose when not initialized', async () => {
+    configureNpcPortraitSourceMock.mockClear();
     await root.dispose();
     expect(root.isInitialized).toBe(false);
+    expect(configureNpcPortraitSourceMock).toHaveBeenLastCalledWith(undefined);
     // Double dispose should also be safe
     await root.dispose();
     expect(root.isInitialized).toBe(false);
@@ -210,6 +217,20 @@ describe('GameCompositionRoot (integration — mocked services)', () => {
     // Disposal should clear state
     await root.dispose();
     expect(root.isInitialized).toBe(false);
+  });
+
+  test('clears the portrait source when final initialization fails', async () => {
+    configureNpcPortraitSourceMock.mockClear();
+    const underlying = root as unknown as { debug: (label: string) => void };
+    underlying.debug = mock((label: string) => {
+      if (label === 'initialize:complete') {
+        throw new Error('finalization failed');
+      }
+    });
+
+    await expect(root.initialize()).rejects.toThrow('finalization failed');
+    expect(root.isInitialized).toBe(false);
+    expect(configureNpcPortraitSourceMock).toHaveBeenLastCalledWith(undefined);
   });
 
   // ── Double Init/Dispose Cycle ──

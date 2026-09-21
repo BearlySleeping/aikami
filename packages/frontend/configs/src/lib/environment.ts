@@ -31,7 +31,20 @@ const masterSchema = Type.Object({
   PUBLIC_VOICE_URL: Type.Optional(Type.String()),
   PUBLIC_ASSETS_BASE_URL: Type.Optional(Type.String()),
   PUBLIC_QA_BYPASS_TEXT_AI: Type.Optional(Type.String()),
+  // 'legacy' | 'v2' — selects the combat resolver once at encounter start
+  // (C-516). Unset/invalid resolves to 'legacy' in `featureFlags`.
+  PUBLIC_COMBAT_ENGINE: Type.Optional(Type.String()),
+  // '0' disables the natural-language combat intent input (C-525 kill switch).
+  // Unset means enabled; direct click controls are never affected.
+  PUBLIC_COMBAT_LANGUAGE_INPUT: Type.Optional(Type.String()),
+  PUBLIC_HUD_CUSTOMIZATION: Type.Optional(Type.String()),
+  // '1' enables LLM-driven combat agents + outcome narration (C-526).
+  // Unset/anything else keeps the deterministic AI and template narration.
+  PUBLIC_COMBAT_LLM_AGENTS: Type.Optional(Type.String()),
   PUBLIC_ERUDA_ENABLED: Type.Optional(Type.String()),
+  // 1 = silence all audible output (BGM, SFX, TTS). Test/E2E kill switch; read
+  // by AudioService directly from `import.meta.env` (see client .env.example).
+  PUBLIC_MUTE_AUDIO: Type.Optional(Type.String()),
   APP_VERSION: Type.Optional(Type.String()),
 });
 
@@ -82,7 +95,12 @@ const validateEnv = (): MasterEnv => {
     PUBLIC_VOICE_URL: rawEnv.PUBLIC_VOICE_URL,
     PUBLIC_ASSETS_BASE_URL: rawEnv.PUBLIC_ASSETS_BASE_URL,
     PUBLIC_QA_BYPASS_TEXT_AI: rawEnv.PUBLIC_QA_BYPASS_TEXT_AI,
+    PUBLIC_COMBAT_ENGINE: rawEnv.PUBLIC_COMBAT_ENGINE,
+    PUBLIC_COMBAT_LANGUAGE_INPUT: rawEnv.PUBLIC_COMBAT_LANGUAGE_INPUT,
+    PUBLIC_HUD_CUSTOMIZATION: rawEnv.PUBLIC_HUD_CUSTOMIZATION,
+    PUBLIC_COMBAT_LLM_AGENTS: rawEnv.PUBLIC_COMBAT_LLM_AGENTS,
     PUBLIC_ERUDA_ENABLED: rawEnv.PUBLIC_ERUDA_ENABLED,
+    PUBLIC_MUTE_AUDIO: rawEnv.PUBLIC_MUTE_AUDIO,
     APP_VERSION: rawEnv.APP_VERSION,
   };
 

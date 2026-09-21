@@ -9,8 +9,13 @@
 // Degraded mode: when the static index is unreachable the page returns an
 // explicit error state (never a 500, never a blank list).
 
+import type { CatalogAssetEntry } from '@aikami/schemas';
 import { catalogCategoryLabel } from '$lib/constants/catalog_labels.ts';
-import { CatalogIndexUnavailableError, fetchRootIndex } from '$lib/server/catalog/catalog_index.ts';
+import {
+  CatalogIndexUnavailableError,
+  fetchRootIndex,
+  getCategoryEntries,
+} from '$lib/server/catalog/catalog_index.ts';
 import type { CatalogLandingPageData } from '$types';
 import type { PageServerLoad } from './$types';
 
@@ -33,10 +38,23 @@ export const load: PageServerLoad = async ({ setHeaders, depends }) => {
       .map(([id, count]) => ({ id, label: catalogCategoryLabel(id), count }))
       .sort((a, b) => a.label.localeCompare(b.label));
 
+    // Best-effort maps shard for the Walk Sandbox launcher. A miss leaves the
+    // launcher disabled; it never fails the landing.
+    let mapEntries: readonly CatalogAssetEntry[] = [];
+    try {
+      const mapsData = await getCategoryEntries('maps');
+      if (mapsData) {
+        mapEntries = mapsData.entries;
+      }
+    } catch {
+      // Maps shard optional — the catalog grid still renders.
+    }
+
     return {
       status: 'ready',
       categories,
       publishedAt: root.publishedAt,
+      mapEntries,
     } satisfies CatalogLandingPageData;
   } catch (cause) {
     if (cause instanceof CatalogIndexUnavailableError) {

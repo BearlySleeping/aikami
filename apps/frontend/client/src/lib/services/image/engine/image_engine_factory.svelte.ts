@@ -2,8 +2,8 @@
 //
 // Image engine factory (C-388) — resolves the active engine from
 // PUBLIC_IMAGE_ENGINE (`auto` | `sdcpp` | `comfyui`) with parallel
-// auto-detection as the default. Mirrors `.../ai/clients/ai/factory.ts`:
-// one file per implementation, a factory that selects one.
+// auto-detection as the default: one file per implementation, a factory
+// that selects one.
 //
 // Detection contract (AC-4):
 // - both respond        → sd-server (deterministic preference)
@@ -156,8 +156,15 @@ export const resetImageEngineCache = (): void => {
   _detectionCache = undefined;
 };
 
-const createEngine = (engineId: ResolvedImageEngineId): ImageEngineClient =>
-  engineId === 'comfyui' ? new ComfyUiEngine() : new SdCppEngine();
+const createEngine = (engineId: ResolvedImageEngineId): ImageEngineClient => {
+  if (engineId === 'comfyui') {
+    return new ComfyUiEngine();
+  }
+  if (engineId === 'sdcpp') {
+    return new SdCppEngine();
+  }
+  throw new Error(`"${engineId}" is not an image engine`);
+};
 
 const probeWithTimeout = async (
   engine: ImageEngineClient,

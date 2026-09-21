@@ -90,6 +90,19 @@ export const NpcDialogueRecruitCommandSchema = Type.Object(
 );
 
 /**
+ * Presents a discovered evidence item to the NPC (C-495 AC-2). Records exactly
+ * one `EvidencePresented` event and sets a world-state flag that
+ * world-state-conditioned endings may require.
+ */
+export const NpcDialoguePresentEvidenceCommandSchema = Type.Object(
+  {
+    kind: Type.Literal('presentEvidence'),
+    evidenceId: Type.String({ minLength: 1, description: 'Content-pack evidence item ID' }),
+  },
+  { additionalProperties: false },
+);
+
+/**
  * Discriminated union of every state-changing dialogue command.
  * Unknown `kind` values and extra fields fail validation.
  */
@@ -100,6 +113,7 @@ export const NpcDialogueCommandSchema = Type.Union([
   NpcDialogueGiveItemCommandSchema,
   NpcDialogueStartCombatCommandSchema,
   NpcDialogueRecruitCommandSchema,
+  NpcDialoguePresentEvidenceCommandSchema,
 ]);
 
 export type NpcDialogueCommand = Static<typeof NpcDialogueCommandSchema>;

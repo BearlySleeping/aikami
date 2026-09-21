@@ -1,0 +1,32 @@
+-- C-509: Better Auth 1.7.3 removed the required `account.issuer` column.
+--
+-- 1.7.0 through 1.7.2 added `issuer` (NOT NULL) plus a unique index on
+-- (`issuer`, `account_id`) and collapsed accounts onto that key. 1.7.3
+-- reverted that: an account is recognised by (`provider_id`, `account_id`)
+-- again, as in 1.6, so Better Auth never writes `issuer`. The NOT NULL column
+-- therefore rejects every sign-up and account link, and Better Auth's own
+-- schema check refuses to serve with SCHEMA_MISMATCH ("Required columns
+-- Better Auth never writes: account.issuer").
+--
+-- Upstream guidance is to drop the index before the column, then drop the
+-- column as cleanup:
+-- https://www.better-auth.com/docs/guides/1-7-upgrade-guide
+--
+-- Dropping the index first is not optional. SQLite refuses to drop a column
+-- an index still references, and leaving a unique index behind on a column
+-- that disappears silently narrows it to the remaining columns (a unique
+-- constraint on `account_id` alone, which would reject one user holding the
+-- same provider account id at two different providers).
+--
+-- `issuer` was only ever Better Auth's provider-issuer key for the
+-- 1.7.0–1.7.2 account-collapsing behaviour. Nothing in the hub reads it, and
+-- 1.7.3 no longer writes it, so the column is dropped rather than relaxed to
+-- NULL — that leaves the table matching Better Auth 1.6/1.7.3 exactly.
+--
+-- Hand-written: drizzle-kit cannot express a column drop against the stale
+-- local `meta/` snapshots (gitignored, and missing `_journal.json`), and the
+-- repo already carries 0005 as a hand-written migration for the same reason.
+-- DDL elsewhere stays generated.
+DROP INDEX IF EXISTS `account_issuer_account_id_unique`;
+--> statement-breakpoint
+ALTER TABLE `account` DROP COLUMN `issuer`;

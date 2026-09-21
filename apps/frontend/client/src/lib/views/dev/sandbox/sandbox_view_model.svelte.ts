@@ -1,31 +1,33 @@
 // apps/frontend/client/src/lib/views/dev/sandbox/sandbox_view_model.svelte.ts
 
-import type { EngineBridge, GameWorldOptions } from '@aikami/frontend/engine';
-import {
-  BaseEngineClass,
-  createEngineBridge,
+import type {
+  EngineBridge,
   GameWorld,
+  GameWorldOptions,
   TextureManager,
 } from '@aikami/frontend/engine';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
-} from '@aikami/frontend/services';
-import type { LpcAnimationState } from '@aikami/lpc';
-import { getLpcAssetPath } from '$lib/data/lpc_asset_catalog';
-import { textGenerationService } from '$services';
+} from '@aikami/frontend/services/base';
+import type { TextGenerationServiceInterface } from '$services';
 
-/** Lazily-resolved ECS worker constructor (SSR-safe dynamic import). */
-let _ecsWorkerCtor: (new () => Worker) | undefined;
+// ── Capability contracts ────────────────────────────────────────────────
 
-const _resolveEcsWorker = async (): Promise<new () => Worker> => {
-  if (_ecsWorkerCtor) {
-    return _ecsWorkerCtor;
-  }
-  const mod = await import('@aikami/frontend/engine/worker/ecs_worker.ts?worker&type=module');
-  _ecsWorkerCtor = mod.default as unknown as new () => Worker; // guard-ignore lint/type-safety/casting: worker constructor cast - Vite worker import type is opaque
-  return _ecsWorkerCtor;
+/** Streaming text generation the dialog exercises. */
+export type TextGenerationCapabilities = Pick<TextGenerationServiceInterface, 'streamChat'>;
+
+/** Engine construction and tuning the sandbox drives. */
+export type SandboxEngineCapabilities = {
+  createBridge(): EngineBridge;
+  createWorld(options: GameWorldOptions): GameWorld;
+  createTextureManager(): TextureManager;
+  resolveEcsWorker(): Promise<new () => Worker>;
+  recipeResolver: NonNullable<GameWorldOptions['recipeResolver']>;
+  assetUrlResolver: NonNullable<GameWorldOptions['assetUrlResolver']>;
+  isRenderDebugEnabled(): boolean;
+  setRenderDebug(enabled: boolean): void;
 };
 
 export type SandboxViewModelInterface = BaseViewModelInterface & {
@@ -51,12 +53,20 @@ export type SandboxViewModelInterface = BaseViewModelInterface & {
   destroyEngine: () => void;
 };
 
-export type SandboxViewModelOptions = BaseViewModelOptions & {};
+export type SandboxViewModelOptions = BaseViewModelOptions & {
+  /** Streaming text generation capability. */
+  textGeneration: TextGenerationCapabilities;
+  /** Engine construction capability. */
+  engine: SandboxEngineCapabilities;
+};
 
 class SandboxViewModel
   extends BaseViewModel<SandboxViewModelOptions>
   implements SandboxViewModelInterface
 {
+  private readonly _textGeneration: TextGenerationCapabilities;
+  private readonly _engine: SandboxEngineCapabilities;
+
   showDialog = $state<boolean>(false);
   dialogNpcName = $state<string>('');
   dialogText = $state<string>('');
@@ -70,6 +80,12 @@ class SandboxViewModel
   private _dialogEndCleanup: (() => void) | undefined;
   private _readyCleanup: (() => void) | undefined;
   private _activeStreamAbortController: AbortController | undefined;
+
+  constructor(options: SandboxViewModelOptions) {
+    super(options);
+    this._textGeneration = options.textGeneration;
+    this._engine = options.engine;
+  }
 
   /**
    * Initializes the game engine, creating the Web Worker simulation and
@@ -88,7 +104,7 @@ class SandboxViewModel
     });
 
     try {
-      this._engineBridge = createEngineBridge();
+      this._engineBridge = this._engine.createBridge();
       this.debug('sandbox:initializeEngine:bridge-ready');
 
       // Proximity: show "Press E to interact" hint (no pause)
@@ -136,24 +152,19 @@ class SandboxViewModel
       });
 
       // Resolve ECS worker (SSR-safe dynamic import).
-      const EcsWorker = await _resolveEcsWorker();
+      const EcsWorker = await this._engine.resolveEcsWorker();
 
-      const tm = new TextureManager();
-
-      const _paletteBytes = new Uint8Array(1024);
-
-      const { sandboxRecipeResolver } = await import('./shared/lpc_sandbox_resolver');
+      const tm = this._engine.createTextureManager();
 
       const worldOptions: GameWorldOptions = {
         className: 'GameWorld',
         bridge: this._engineBridge,
         textureManager: tm,
-        recipeResolver: sandboxRecipeResolver,
-        assetUrlResolver: (slot, assetId, state) =>
-          getLpcAssetPath(slot, assetId, state as unknown as LpcAnimationState), // guard-ignore lint/type-safety/casting: worker constructor cast - Vite worker import type is opaque
+        recipeResolver: this._engine.recipeResolver,
+        assetUrlResolver: this._engine.assetUrlResolver,
         workerFactory: () => new EcsWorker(),
       };
-      this._gameWorld = GameWorld.create(worldOptions);
+      this._gameWorld = this._engine.createWorld(worldOptions);
 
       // Key press (E): open full dialog, pause game, stream AI response
       this._gameWorld.onInteractRequest((npc) => {
@@ -251,7 +262,7 @@ class SandboxViewModel
     this.debug('dialog:stream-start', { npcName: npc.npcName });
 
     try {
-      await textGenerationService.streamChat({
+      await this._textGeneration.streamChat({
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: 'Hello!' },
@@ -328,8 +339,8 @@ class SandboxViewModel
     const handler = (event: KeyboardEvent): void => {
       if (event.key === '`') {
         event.preventDefault();
-        const enabled = !BaseEngineClass.renderDebugEnabled;
-        BaseEngineClass.setRenderDebug(enabled);
+        const enabled = !this._engine.isRenderDebugEnabled();
+        this._engine.setRenderDebug(enabled);
         this.debug(`render-debug:${enabled ? 'on' : 'off'}`);
       }
     };
@@ -341,5 +352,12 @@ class SandboxViewModel
   }
 }
 
-export const getSandboxViewModel = (options: SandboxViewModelOptions): SandboxViewModelInterface =>
-  SandboxViewModel.create(options);
+/**
+ * Builds a sandbox ViewModel from explicit capabilities.
+ *
+ * Callers outside production (tests, sandboxes) use this directly; production
+ * code goes through `getSandboxViewModel` in ./sandbox_composition.ts.
+ */
+export const createSandboxViewModel = (
+  options: SandboxViewModelOptions,
+): SandboxViewModelInterface => SandboxViewModel.create(options);

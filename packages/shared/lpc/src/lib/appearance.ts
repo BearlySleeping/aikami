@@ -58,6 +58,8 @@ export type LpcLayerRecipe = {
   hexPalette: Uint8Array;
   /** Which side of the body this layer draws on. Defaults to 'front'. */
   layerRole?: LpcLayerRole;
+  /** Verbatim license metadata for the selected asset. */
+  licenses?: readonly string[];
 };
 
 /** One engine appearance slot, in render order. */
@@ -66,7 +68,10 @@ export type LpcSlotName = 'body' | 'hair' | 'torso' | 'legs' | 'feet' | 'head';
 /** Per-slot catalog: the variants available for one slot. */
 export type LpcSlotCatalog = {
   readonly slot: LpcSlotName;
-  readonly variants: readonly { readonly assetId: string }[];
+  readonly variants: readonly {
+    readonly assetId: string;
+    readonly licenses?: readonly string[];
+  }[];
 };
 
 /** Fallback asset per slot, used when an index does not resolve. */
@@ -91,6 +96,7 @@ export type LpcAppearanceResult = {
     readonly assetId: string;
     readonly hexPalette: Uint8Array;
     readonly layerRole: 'front' | 'behind';
+    readonly licenses?: readonly string[];
   }[];
   readonly resolutions: Readonly<Record<LpcSlotName, LpcSlotResolution>>;
 };
@@ -217,6 +223,7 @@ export const resolveLpcAppearance = (options: ResolveLpcAppearanceOptions): LpcA
         assetId: variant.assetId,
         hexPalette: new Uint8Array(1024),
         layerRole: 'front',
+        licenses: variant.licenses,
       });
       resolutions[slot] = { kind: 'resolved', assetId: variant.assetId };
       continue;
@@ -224,11 +231,15 @@ export const resolveLpcAppearance = (options: ResolveLpcAppearanceOptions): LpcA
 
     // Unresolvable non-zero index → declared fallback + logged warning.
     const fallbackAsset = fallbacks[slot] ?? '';
+    const fallbackVariant = catalog
+      .flatMap((catalogSlot) => catalogSlot.variants)
+      .find((candidate) => candidate.assetId === fallbackAsset);
     mutableRecipes.push({
       slot,
       assetId: fallbackAsset,
       hexPalette: new Uint8Array(1024),
       layerRole: 'front',
+      licenses: fallbackVariant?.licenses,
     });
     resolutions[slot] = {
       kind: 'fallback',
@@ -269,7 +280,10 @@ export const resolveLpcAppearance = (options: ResolveLpcAppearanceOptions): LpcA
 export const projectLpcCatalog = (
   catalog: readonly {
     readonly slot: string;
-    readonly variants: readonly { readonly assetId: string }[];
+    readonly variants: readonly {
+      readonly assetId: string;
+      readonly licenses?: readonly string[];
+    }[];
   }[],
 ): readonly LpcSlotCatalog[] => {
   const projected: LpcSlotCatalog[] = [];
@@ -278,7 +292,10 @@ export const projectLpcCatalog = (
     if (found) {
       projected.push({
         slot,
-        variants: found.variants.map((v) => ({ assetId: v.assetId })),
+        variants: found.variants.map((variant) => ({
+          assetId: variant.assetId,
+          licenses: variant.licenses,
+        })),
       });
     }
   }

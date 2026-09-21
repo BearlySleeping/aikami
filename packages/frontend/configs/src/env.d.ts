@@ -20,6 +20,7 @@ declare global {
     readonly PUBLIC_SITE_URL?: string;
     readonly PUBLIC_APP_CHECK_DEBUG_TOKEN?: string;
     readonly PUBLIC_LOG_PERSIST_LEVEL?: string;
+    readonly PUBLIC_MUTE_AUDIO?: string;
     readonly DEV?: boolean;
   }
 

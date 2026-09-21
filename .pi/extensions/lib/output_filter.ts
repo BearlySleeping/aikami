@@ -67,7 +67,7 @@ export const formatDiscoveryFailure = (outcome: DiscoveryOutcome): string => {
 
 // ── Moon Projects JSON Parser ────────────────────────────────────
 
-const MOON_JSON_MAX_RAW = 512_000; // 512KB hard cap
+const MOON_JSON_MAX_RAW = 4_000_000; // 4MB hard cap — full workspace JSON is ~1.4MB and grows with projects
 const UTF8_ENCODER = new TextEncoder();
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -86,23 +86,42 @@ const parseLightProject = (value: unknown): LightProject | undefined => {
     !isRecord(config) ||
     !isNonEmptyString(config.layer) ||
     !Array.isArray(config.tags) ||
-    !config.tags.every((tag) => typeof tag === 'string') ||
-    !Array.isArray(config.dependsOn)
+    !config.tags.every((tag) => typeof tag === 'string')
   ) {
     return undefined;
   }
 
+  // 🔴 moon ≥2.5 emits dependency info in two shapes: projects that declare
+  // `dependsOn` in their moon.yml get `config.dependsOn`, while projects that
+  // don't only carry the resolved graph in the record-level `dependencies`
+  // field (e.g. a bare `moon.yml` with no `dependsOn` key). Accept either.
   const deps: string[] = [];
-  for (const dependency of config.dependsOn) {
-    if (isNonEmptyString(dependency)) {
-      deps.push(dependency);
-      continue;
+  if (config.dependsOn !== undefined) {
+    if (!Array.isArray(config.dependsOn)) {
+      return undefined;
     }
-    if (isRecord(dependency) && isNonEmptyString(dependency.id)) {
-      deps.push(dependency.id);
-      continue;
+    for (const dependency of config.dependsOn) {
+      if (isNonEmptyString(dependency)) {
+        deps.push(dependency);
+        continue;
+      }
+      if (isRecord(dependency) && isNonEmptyString(dependency.id)) {
+        deps.push(dependency.id);
+        continue;
+      }
+      return undefined;
     }
-    return undefined;
+  } else if (value.dependencies !== undefined) {
+    if (!Array.isArray(value.dependencies)) {
+      return undefined;
+    }
+    for (const dependency of value.dependencies) {
+      if (isRecord(dependency) && isNonEmptyString(dependency.id)) {
+        deps.push(dependency.id);
+        continue;
+      }
+      return undefined;
+    }
   }
 
   const projectMeta = config.project;

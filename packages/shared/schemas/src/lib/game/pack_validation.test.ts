@@ -131,6 +131,106 @@ describe('validatePack — AC-1: provenance', () => {
     });
     expect(result.warnings.filter((w) => w.code === 'asset.share-alike-mismatch')).toHaveLength(0);
   });
+
+  test('requires license and author for non-generated provenance', () => {
+    const result = validatePack({
+      manifest: minimalManifest({
+        props: {
+          well: {
+            name: 'Well',
+            frame: 'well.png',
+            isWalkable: false,
+            provenance: { source: 'https://example.com/well' },
+          },
+        } as unknown as ContentPackManifest['props'],
+      }),
+    });
+    const codes = result.errors.map((e) => e.code);
+    expect(codes).toContain('asset.missing-license');
+    expect(codes).toContain('asset.missing-author');
+  });
+
+  test('accepts generated provenance with source only', () => {
+    const result = validatePack({
+      manifest: minimalManifest({
+        atlas: {
+          textureUrl: 'sprites/atlas.webp',
+          spritesheetUrl: 'sprites/atlas.json',
+          provenance: { source: 'generated:gpt' },
+        } as unknown as ContentPackManifest['atlas'],
+      }),
+    });
+    expect(result.errors.filter((e) => e.path.startsWith('/atlas/provenance'))).toHaveLength(0);
+  });
+
+  test.each(['generated:', ' generated: '])(
+    'requires attribution when generated source has no provider: %p',
+    (source) => {
+      const result = validatePack({
+        manifest: minimalManifest({
+          atlas: {
+            textureUrl: 'sprites/atlas.webp',
+            spritesheetUrl: 'sprites/atlas.json',
+            provenance: { source },
+          } as unknown as ContentPackManifest['atlas'],
+        }),
+      });
+      const codes = result.errors.map((error) => error.code);
+      expect(codes).toContain('asset.missing-license');
+      expect(codes).toContain('asset.missing-author');
+    },
+  );
+
+  test('treats a whitespace-only provenance source as missing', () => {
+    const result = validatePack({
+      manifest: minimalManifest({
+        atlas: {
+          textureUrl: 'sprites/atlas.webp',
+          spritesheetUrl: 'sprites/atlas.json',
+          provenance: { source: '   ' },
+        } as unknown as ContentPackManifest['atlas'],
+      }),
+    });
+    expect(result.errors.map((error) => error.code)).toContain('asset.missing-source');
+  });
+
+  test('accepts a bare generated provider name as source', () => {
+    const result = validatePack({
+      manifest: minimalManifest({
+        props: {
+          ward: {
+            name: 'Ward Tree',
+            frame: 'ward_large.png',
+            isWalkable: false,
+            provenance: { source: 'gpt' },
+          },
+        } as unknown as ContentPackManifest['props'],
+      }),
+    });
+    expect(result.errors.filter((e) => e.path.startsWith('/props/ward/provenance'))).toHaveLength(
+      0,
+    );
+  });
+
+  test('still validates a license supplied on generated work', () => {
+    const result = validatePack({
+      manifest: minimalManifest({
+        props: {
+          bad: {
+            name: 'Bad',
+            frame: 'bad.png',
+            isWalkable: false,
+            provenance: { source: 'generated:gpt', license: 'not-a-license' },
+          },
+        } as unknown as ContentPackManifest['props'],
+      }),
+    });
+    expect(
+      result.errors.some(
+        (e) => e.code === 'asset.invalid-license' && e.path === '/props/bad/provenance/license',
+      ),
+    ).toBe(true);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -328,5 +428,76 @@ describe('validatePack — AC-5: performance', () => {
 
     expect(elapsed).toBeLessThan(100);
     expect(result.errors).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// C-523 — authored audio cue bindings are validated, not silently accepted
+//
+// `ContentPackManifestSchema` is not strict at the top level, so an incoherent
+// `audio` section must fail here rather than being ignored.
+// ---------------------------------------------------------------------------
+
+describe('validatePack — C-523 authored audio cue bindings', () => {
+  const Hash = 'd'.repeat(64);
+
+  const cueBinding = (overrides: Record<string, unknown> = {}) => ({
+    cueId: 'village.music',
+    target: 'music',
+    context: 'village',
+    source: { kind: 'asset', tag: 'music:exploration:village-theme', sha256: Hash },
+    resolution: 'required',
+    fallback: 'silence',
+    ...overrides,
+  });
+
+  const withAudio = (bindings: Record<string, unknown>[]): ContentPackManifest =>
+    minimalManifest({
+      audio: { schemaVersion: 'pack.audio.v1', bindings } as ContentPackManifest['audio'],
+    });
+
+  test('a coherent audio section produces no audio errors', () => {
+    const result = validatePack({
+      manifest: withAudio([cueBinding(), cueBinding({ cueId: 'inn.music', context: 'inn' })]),
+    });
+    expect(result.errors.filter((e) => e.code.startsWith('audio.'))).toEqual([]);
+  });
+
+  test('a manifest with no audio section is unaffected', () => {
+    const result = validatePack({ manifest: minimalManifest() });
+    expect(result.errors.filter((e) => e.code.startsWith('audio.'))).toEqual([]);
+  });
+
+  test('flags a duplicate cueId', () => {
+    const result = validatePack({
+      manifest: withAudio([cueBinding(), cueBinding({ context: 'inn' })]),
+    });
+    const issues = result.errors.filter((e) => e.code === 'audio.duplicate-cue-id');
+    expect(issues).toHaveLength(1);
+    expect(issues[0]?.path).toBe('/audio/bindings/1/cueId');
+    expect(issues[0]?.hint.length).toBeGreaterThan(0);
+  });
+
+  test('flags an ambiguous (target, context) pair', () => {
+    const result = validatePack({
+      manifest: withAudio([cueBinding(), cueBinding({ cueId: 'village.music.alt' })]),
+    });
+    expect(result.errors.some((e) => e.code === 'audio.duplicate-target-context')).toBe(true);
+  });
+
+  test('flags a declared_cue fallback that names an unknown cue', () => {
+    const result = validatePack({
+      manifest: withAudio([cueBinding({ fallback: 'declared_cue', fallbackCueId: 'missing.cue' })]),
+    });
+    expect(result.errors.some((e) => e.code === 'audio.fallback-cue-missing')).toBe(true);
+  });
+
+  test('flags a self-referencing fallback', () => {
+    const result = validatePack({
+      manifest: withAudio([
+        cueBinding({ fallback: 'declared_cue', fallbackCueId: 'village.music' }),
+      ]),
+    });
+    expect(result.errors.some((e) => e.code === 'audio.fallback-self-reference')).toBe(true);
   });
 });

@@ -1,7 +1,7 @@
 import type { DeviceData, LogLevel, UserSessionData } from '@aikami/types';
 import type { RouteName } from '$router';
 
-export type AdminHookData = {
+export type HubHookData = {
   device?: DeviceData;
   userSession?: UserSessionData;
   currentRoute?: RouteName;

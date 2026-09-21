@@ -35,11 +35,47 @@ The manifest is validated against `ContentPackManifestSchema`. Key fields:
 }
 ```
 
+## Authored NPC Identity (C-488)
+
+Each NPC entry accepts five optional identity fields that give a character a
+voice, a want, knowledge they share, secrets they keep, and lines they will not
+cross. All five are optional — a pack authored without them still loads, and
+the game falls back to the generic persona only for the fields that are absent.
+
+```json
+{
+  "npcs": {
+    "village_elder": {
+      "name": "Elder Thalia",
+      "personality": {
+        "voice": "Measured and warm.",
+        "manner": "Patient and authoritative."
+      },
+      "agenda": ["Keep the Ward Wand sealed in Emberwatch's shrine."],
+      "knowledge": ["The Ward Wand is a relic of the Vesperine Order."],
+      "secrets": ["She fears old enemies have breached the valley."],
+      "boundaries": ["She will not risk Emberwatch on a stranger's promise."]
+    }
+  }
+}
+```
+
+`personality` is the only accepted representation of an NPC's voice and manner
+— a plain string is rejected. `agenda` entries are concrete wants, and at least
+one may conflict with another NPC's agenda. Unknown identity keys are rejected
+by the schema.
+
 ## Per-Asset Provenance (C-381)
 
-Every asset in a pack should carry provenance information: licence, author, and
-source. The provenance fields are optional in the schema but the pack validator
-will warn about missing provenance and reject packs with invalid licence values.
+Every asset in a pack carries a `provenance` block. `source` is always required.
+For licensed or third-party assets, `license` and `author` are also required.
+For generated work (`source: "generated:<provider>"`, such as
+`"generated:gpt"`), `license` and `author` may be omitted — there is no licence
+to declare and no human author to credit, and inventing either would be false.
+
+The pack validator rejects a pack whose provenance block is missing `source`,
+missing `license` or `author` on a non-generated asset, or carrying an invalid
+licence value.
 
 ### Adding Provenance to Tiles
 
@@ -99,6 +135,30 @@ The atlas itself can also carry provenance:
   }
 }
 ```
+
+### Generated Assets
+
+AI- and procedurally-generated art declares where it came from in place of a
+licence and author:
+
+```json
+{
+  "props": {
+    "ward_tree": {
+      "name": "Ward Tree",
+      "frame": "ward_large.png",
+      "isWalkable": false,
+      "provenance": { "source": "generated:gpt" }
+    }
+  }
+}
+```
+
+`source` accepts the canonical `generated:<provider>` form (`generated:gpt`,
+`generated:stable-diffusion`, …) or a bare provider name such as `gpt`. Never
+fabricate an author or declare a licence for work that has neither. If a
+generated asset genuinely does carry a licence, set `license` as usual — a
+provided licence is always validated.
 
 ### Valid Licences
 
@@ -167,7 +227,11 @@ if (result.errors.length > 0) {
 
 | Code | Meaning |
 |---|---|
-| `asset.missing-provenance` | Asset missing licence/author/source |
+| `asset.missing-provenance` | Asset has no provenance block |
+| `asset.missing-source` | Provenance has no `source` |
+| `asset.missing-license` | Non-generated asset has no `license` |
+| `asset.invalid-license` | `license` is not a recognised SPDX identifier |
+| `asset.missing-author` | Non-generated asset has no `author` |
 | `asset.absolute-url` | Asset uses an absolute URL |
 | `asset.path-traversal` | Asset path contains `../` |
 | `asset.data-scheme` | Asset uses `data:` URI |
@@ -176,6 +240,75 @@ if (result.errors.length > 0) {
 | `manifest.tile-frame-missing` | Tile frame not found in atlas |
 | `manifest.prop-frame-missing` | Prop frame not found in atlas |
 | `terrain.frame-missing-in-atlas` | Terrain frame not found in atlas |
+| `audio.duplicate-cue-id` | Two audio cue bindings share a `cueId` |
+| `audio.duplicate-target-context` | Two bindings claim the same `(target, context)` pair |
+| `audio.fallback-cue-missing` | A `declared_cue` fallback names no declared cue |
+| `audio.fallback-self-reference` | A `declared_cue` fallback names its own cue — use a different `cueId` |
+| `audio.fallback-target-mismatch` | A `declared_cue` fallback is on a different bus than the original |
+| `audio.fallback-cycle` | Following `declared_cue` fallbacks loops back on itself |
+
+## Authored Audio Cue Bindings (C-523)
+
+By default the game picks music by matching a scene's tags against the asset
+catalog — good enough for generic exploration/combat tracks, but it cannot say
+"the ruined shrine plays *this* cue". A pack can bind a specific accepted
+rendition to a map or context with an optional, versioned `audio` section:
+
+```json
+{
+  "audio": {
+    "schemaVersion": "pack.audio.v1",
+    "bindings": [
+      {
+        "cueId": "ruined_shrine.music",
+        "target": "music",
+        "context": "ruined_shrine",
+        "tag": "music:mysterious:shrine-theme",
+        "sha256": "<64 lowercase hex characters>",
+        "resolution": "required",
+        "fallback": "silence"
+      }
+    ]
+  }
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `cueId` | Stable cue identity, unchanged across repacks. Must be unique. |
+| `target` | Which bus it plays on: `music`, `ambient` or `sfx`. |
+| `context` | A map id, `combat`, or a scripted predicate id. At most one binding per `(target, context)`. |
+| `tag` | The **exact** registry tag of the accepted rendition. |
+| `sha256` | SHA-256 of the installed rendition bytes. |
+| `resolution` | `required` cues must resolve or pack validation fails; `optional` cues degrade. |
+| `fallback` | What to play on a miss: `silence`, or `declared_cue` with a `fallbackCueId`. |
+
+An authored binding wins over tag matching for its `(target, context)`. A cue
+miss — the tag is absent, its installed bytes hash differently from `sha256`, or
+its URL cannot be resolved locally — follows the declared `fallback`: silence or
+the named cue, never unrelated content. A `declared_cue` fallback is verified
+against its own `tag`/`sha256`, must be on the **same target bus**, and must not
+form a cycle. Contexts the pack does not author keep the tag-first behaviour.
+
+Five things worth knowing before you author a section:
+
+- **Exactness matters.** `tag` is matched literally (case-insensitively)
+  against installed registry tags, and the installed bytes must hash to
+  `sha256`. `music:exploration:village-theme` does not match
+  `music:exploration:village-theme-alt`.
+- **A broken section is reported, not ignored.** A structurally or semantically
+  invalid `audio` section fails pack validation and is logged at runtime; it is
+  not silently treated as "this pack authors nothing".
+- **The section is optional and inert without a reader.** A pack with no `audio`
+  key loads exactly as before, which is also the kill switch: remove the
+  section and the game is back on tag matching, with no redeploy.
+- **Audio is hash-pinned separately, and legacy locks still validate.** The
+  installed pack lock's `audioAssets` array (also optional) carries
+  `{ "id": "<cueId>", "renditionHash": "<sha256>" }` pins, so an offline install
+  can verify the audio bytes it plays. A lock written *before* this feature has
+  no `audioAssets` and is treated as legacy; a *new* audio-enabled lock that is
+  missing a required pin fails verification. Lock generation also refuses to pin
+  a published rendition whose hash disagrees with the binding's `sha256`.
 
 ## Attribution Screen (Planned)
 
@@ -183,3 +316,336 @@ Provenance data is stored in the manifest schema for future use in an
 attribution screen. The screen itself is not yet implemented — provenance
 information is available programmatically via the manifest for authors who
 need to verify licence compliance.
+
+## Dramatic Structure (C-495)
+
+Content packs can carry a small dramatic structure: a bounded set of hidden
+"truth variants," conflicting NPC accounts, and discoverable physical evidence.
+All of it is **optional** — a pack without these keys (e.g. a v4.0.0 pack)
+loads and behaves exactly as before.
+
+```json
+{
+  "truthVariants": [
+    {
+      "id": "rollo_owns_the_ledger",
+      "label": "Rollo keeps the true ledger",
+      "startingConditions": [{ "key": "whoOwesWhom", "value": "rollo" }]
+    }
+  ],
+  "accounts": {
+    "the_ward_truth": [
+      { "npcId": "rollo_grasper", "claim": "…", "supportsTruthId": "rollo_owns_the_ledger" }
+    ]
+  },
+  "evidence": [
+    { "id": "the_ledger", "label": "The Merchant's Ledger", "discoverableAt": "merchant_shop:shop_counter_l", "presentToNpcId": "village_elder", "supportsTruthId": "rollo_owns_the_ledger" }
+  ]
+}
+```
+
+### One hidden truth, sampled once
+
+When a new campaign starts, the game draws **one** truth variant id
+(`campaign.sampledTruthId`) deterministically from the campaign seed and
+persists it. Every account and evidence item resolves against that single
+sampled truth — NPC generations never invent their own truth, and a reload
+never re-samples. Campaigns created before this feature degrade to the pack's
+first truth variant.
+
+### Evidence and endings
+
+- **Evidence** (`evidence`) is a physical, world-discoverable thing
+  (`discoverableAt` resolves to a real map/prop) that the player presents to a
+  named NPC, producing exactly one `EvidencePresented` narrative event.
+- **Endings** may declare `requiresWorldStateFlag`. When the quest resolves,
+  the first ending whose required world-state flag is set is chosen (falling
+  back to the first ending). Presenting evidence sets an
+  `evidence.presented.<id>` flag, so evidence can gate which ending is reached.
+- Each ending carries a distinct `worldStateFlag` and a `reactionDialogueKey`,
+  so the village visibly changes per ending.
+
+## Usable battlefield objects (C-531)
+
+A prop becomes something the player can *act on* by adding an `environment`
+block. The prop definition keeps owning its sprite, walkability and collision;
+the `environment` block adds durability, cover and the affordances the object
+exposes. Encounter placements then instantiate it — the object registry extends
+the prop and encounter definitions, it does not replace them.
+
+```json
+{
+  "props": {
+    "emberwatch/brazier": {
+      "name": "Brazier",
+      "frame": "brazier.png",
+      "isWalkable": true,
+      "environment": {
+        "durability": 4,
+        "cover": "none",
+        "affordances": [
+          {
+            "affordanceId": "tip_over",
+            "name": "Tip over",
+            "actionCost": "action",
+            "requirements": [
+              { "kind": "adjacent", "value": true },
+              { "kind": "objectState", "value": "intact" }
+            ],
+            "check": { "category": "athletics", "dc": 12, "modifierSource": "athletics" },
+            "successEffects": [
+              { "kind": "setIgnited", "objectSelector": "source", "ignited": true },
+              {
+                "kind": "createSurface",
+                "surfaceKind": "fire",
+                "cellSelector": "sourceFootprint",
+                "expiresAfterRound": null
+              },
+              { "kind": "setObjectState", "objectSelector": "source", "state": "broken" }
+            ],
+            "failureEffects": []
+          }
+        ]
+      }
+    }
+  },
+  "encounters": {
+    "proof_encounter": {
+      "objects": [
+        { "objectId": "emberwatch/brazier-1", "propId": "emberwatch/brazier", "cell": { "x": 4, "y": 3 } }
+      ]
+    }
+  }
+}
+```
+
+### Affordance fields
+
+| Field             | Meaning                                                                                 |
+| ----------------- | --------------------------------------------------------------------------------------- |
+| `affordanceId`    | Stable id the player's command names.                                                    |
+| `actionCost`      | `action`, `quick`, `reaction` or `free` — spent from the actor's turn budget.            |
+| `requirements`    | Declarative prerequisites. Unmet requirements make the action unavailable *with a reason*. |
+| `check`           | `null`, or `{ category, dc, modifierSource }`. See below.                                |
+| `successEffects`  | Applied in declared order when the check passes (or when there is no check).             |
+| `failureEffects`  | Applied when the check fails. The declared cost is spent either way.                     |
+
+### Requirement kinds
+
+`adjacent`, `lineOfSight`, `range`, `budget`, `objectState`, `surfaceKind`.
+Requirements are validated before play and never execute code.
+
+### Check modifiers
+
+`modifierSource` names a **projected character-sheet field** — an ability key
+such as `strength` or a skill id such as `athletics`. The engine reads that
+field from the combatant snapshot and never substitutes an unrelated bonus. If
+the snapshot projects no value for the named source, the action is refused with
+`checkModifierUnavailable` rather than rolled unmodified.
+
+A check is `d20 + modifier >= dc`. Natural 1 and natural 20 carry no special
+check behaviour. A legal attempt spends its declared cost even when the roll
+fails; an invalid command spends nothing.
+
+### Effect kinds (closed v1 vocabulary)
+
+`damage`, `setObjectState`, `moveObject`, `forcedMovement`, `setIgnited`,
+`createSurface`, `removeSurface`, `dropPayload`, `setCover`.
+
+Each effect addresses its targets through a **registered selector**, never a
+raw id or coordinate:
+
+| Effect domain | Selectors                                                                              |
+| ------------- | -------------------------------------------------------------------------------------- |
+| Objects       | `source`, `target`, `payloads`, `ignitedObjects`, `intactObjects`, `brokenObjects`, `allObjects` |
+| Cells         | `sourceFootprint`, `targetFootprint`, `sourceCell`, `targetCell`, `adjacent`, `actorCell`, `impactZone:<zoneId>` |
+| Surfaces      | `allSurfaces`, `surfaces:oil`, `surfaces:fire`, `sourceSurfaces`                          |
+| Combatants    | `actor`, `sourceCellOccupants`, `targetCellOccupants`, `allCombatants`                    |
+
+An unresolvable selector fails validation before the attempt is spent, so a
+typo in authored content can never half-apply.
+
+### Payloads and impact zones
+
+Give a payload object `attachedToObjectId` in its placement, and declare the
+zone it lands on in the encounter's `impactZones`:
+
+```json
+{
+  "impactZones": {
+    "emberwatch/crate_zone": {
+      "zoneId": "emberwatch/crate_zone",
+      "offsets": [{ "x": 0, "y": 0 }, { "x": 0, "y": 1 }],
+      "diceExpression": "2d6",
+      "damageType": "bludgeoning"
+    }
+  }
+}
+```
+
+`dropPayload` moves every object attached to the named support into the zone's
+cells and applies the zone's dice to the combatants standing there — a
+registered rule, not a physics simulation.
+
+### Bounds
+
+Authoring is bounded: at most 64 objects per encounter, 16 cells per footprint
+or zone, 8 requirements and 8 effects per branch, and 64 applied consequences
+per initiating command. Exceeding the cascade bound rejects the whole command
+rather than applying part of it.
+
+### Surfaces
+
+The v1 surface vocabulary is closed at `oil` and `fire`. Creating fire on a
+cell that already holds oil consumes the oil and leaves fire. Fire is a
+registered hazard family: an actor standing in it takes at most one hit per
+round, and surfaces that declare `expiresAfterRound` are removed when that
+round begins.
+
+## Encounter objectives (C-532)
+
+An encounter can author the conditions that decide it, so a fight stops being
+"reduce every enemy to zero HP". Objectives are **data**: a closed, declarative
+rule vocabulary the kernel evaluates. There is no scripting and no arbitrary
+expression — a new primitive is a schema version bump, not a content trick.
+
+```jsonc
+"encounters": {
+  "proof_encounter": {
+    // …
+    "objectiveRules": {
+      "definitions": [
+        {
+          "objectiveId": "objective.stop_ritual",
+          "kind": "interact_before_deadline",
+          "required": true,
+          "hidden": false,
+          "rule": {
+            "kind": "interact_before_deadline",
+            "objectId": "emberwatch/brazier-1",
+            "affordanceId": "tip_over",
+            "deadlineRound": 3,
+            "requiredActorIds": ["player"]
+          }
+        }
+      ],
+      "protectedActorIds": ["village_guard"]
+    }
+  }
+}
+```
+
+### The four primitives
+
+| `kind` | Completes when |
+| --- | --- |
+| `defeat_or_rout` | every id in `hostileIds` has stopped contesting the encounter — defeated, surrendered or escaped. A low-morale enemy still on the battlefield is still contesting, so it does not count; crossing the morale threshold only *permits* a retreat/surrender response |
+| `survive_rounds` | every `requiredActorIds` entry is still eligible after `rounds` **completed** rounds |
+| `interact_before_deadline` | the named `affordanceId` has been committed on the named `objectId` by `deadlineRound` |
+| `reach_zone` | every `requiredActorIds` entry stands on a cell in `cells` |
+
+The authored definition's `kind` and `rule.kind` must agree; a definition whose
+declared primitive and rule disagree is invalid content, not a runtime fallback.
+`objectiveId` is an independent stable identifier.
+
+### Rules worth knowing
+
+- **Completed rounds count.** Starting round 3 is not the same as surviving two
+  rounds. `survive_rounds: 2` completes when round 3 begins.
+- **Deadlines have one boundary.** `deadlineRound: 3` is still legal while round
+  3 is running; it fails at the boundary that opens round 4.
+- **Completion latches.** An objective that is complete stays complete — except
+  `defeat_or_rout`, which is a *maintained* condition and can un-complete.
+- **Loss beats success.** At one boundary, a lost `protectedActorIds` entry or a
+  failed `required` objective wins over anything that completed.
+- **Elimination cannot bypass a required objective.** Killing everything does
+  not end an encounter whose required ritual or escape objective is unmet.
+- **Hidden objectives are evaluated but never shown.** Set `"hidden": true` for
+  a condition the player discovers rather than reads.
+- **An encounter with no `objectiveRules` keeps the legacy outcome**: victory
+  when every hostile is defeated, defeat when the party is.
+
+## Morale and nonlethal outcomes (C-532)
+
+Morale is one bounded integer, 0–100, per combatant. It is the only mechanical
+morale authority; the qualitative band the AI reads is derived from it.
+
+```jsonc
+"moraleRules": {
+  "startingMorale": 60,
+  "breakThreshold": 30,
+  "triggers": [
+    { "triggerKind": "leader_defeated", "magnitude": 25 },
+    { "triggerKind": "ally_removed", "magnitude": 10 },
+    { "triggerKind": "objective_failed", "magnitude": 20 }
+  ],
+  "responses": [
+    { "responseKind": "retreat", "exitZoneId": "emberwatch/south_gate" },
+    { "responseKind": "surrender", "exitZoneId": null }
+  ],
+  "exitZones": [
+    { "zoneId": "emberwatch/south_gate", "cells": [{ "x": 6, "y": 11 }, { "x": 7, "y": 11 }] }
+  ],
+  "leaderIds": ["ember_warden"]
+}
+```
+
+- **Triggers apply once.** Each source event moves a combatant's morale at most
+  once for the whole encounter. A leader's fall fires *both* `leader_defeated`
+  and `ally_removed`.
+- **Crossing the threshold permits a response; it never declares one.** Morale
+  at or below `breakThreshold` makes the authored responses legal. The outcome
+  still comes from the ordinary settlement pass.
+- **Retreat is real movement.** A retreat must be legal, must not increase the
+  actor's distance to the nearest `exitZones` cell, and marks the actor
+  `retreating` — it still contests the encounter until it reaches the zone
+  (`escaped`) or surrenders.
+- **Surrender preserves HP and identity.** A surrendered actor is not an
+  ordinary attack target and no longer takes turns, but it is never recorded as
+  `hp = 0` or `defeated`. Use a `defeat_or_rout` objective to turn a surrender
+  into a victory.
+- **A blocked retreat falls back.** If the exit is unreachable, the actor takes
+  the other authored response (usually surrender) or keeps its participation and
+  chooses a normal action.
+
+### The pre-existing negotiation path is different
+
+`allowNonCombatResolution` / `nonCombatSkillCheck` is a separate, earlier
+mechanism and is unchanged. It is **not** routed through morale: an encounter
+that declares a persuasion check keeps it exactly as authored, and morale rules
+neither enable nor disable it.
+
+## Registered reactions (C-532)
+
+One reaction ships: an opportunity attack on a hostile actor voluntarily leaving
+a reactor's melee threat range.
+
+```jsonc
+"reactionRegistry": {
+  "definitions": [
+    {
+      "reactionId": "reaction.opportunity_attack",
+      "triggerKind": "opportunity_attack",
+      "abilityId": "opportunity_strike",
+      "threatRangeCells": 1
+    }
+  ]
+}
+```
+
+The reaction is resolved through the ordinary ability and targeting rules named
+by `abilityId` — there is no reaction-specific attack implementation.
+`opportunity_strike` is a universal ability every combatant already has, so an
+encounter only needs to register the reaction.
+
+- The window opens **before** the step that would leave the threat range is
+  committed, and the attack resolves against the mover in the cell it is
+  leaving.
+- Forced movement, teleport-like authored movement and reaction-generated
+  movement never trigger.
+- A reactor is offered at most one opportunity per suspended command; a declined
+  reaction spends no reaction and no dice.
+- An accepted attack consumes one reaction whether it hits or misses, and
+  reactions never open further reactions.
+- Every actor has an **Ask / Auto / Never** policy for the reaction. Ask has no
+  default time limit; any timer is player-enabled and expires to Decline.

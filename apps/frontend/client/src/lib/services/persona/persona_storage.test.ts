@@ -1,194 +1,25 @@
 // apps/frontend/client/src/lib/services/persona/persona_storage.test.ts
 //
-// Unit tests for the local persona repository (C-386b AC-4).
-// Verifies personas are fully local, the one-active invariant holds, and
-// concurrent activation attempts cannot produce two active personas.
+// Contract tests for the local persona repository (C-386b AC-4) against a
+// real in-memory libSQL database with the production migrations applied.
+//
+// The one-active-persona invariant is enforced by the real partial unique
+// index (idx_personas_one_active), so these tests exercise the actual
+// constraint instead of a hand-emulated JS approximation.
 
-// biome-ignore-all lint/style/noNonNullAssertion: regex capture parsing in the in-memory fake DB
+import { afterAll, afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
+import { countTableRows, createRealLocalDatabase } from '../__tests__/local_database_fixture.ts';
 
-import { beforeEach, describe, expect, mock, test } from 'bun:test';
+const fixture = await createRealLocalDatabase();
 
-// ── In-memory fake LocalDatabaseInterface with partial-unique-index emulation ──
-
-type Row = Record<string, unknown>;
-const tables = new Map<string, Row[]>();
-
-const table = (name: string): Row[] => {
-  if (!tables.has(name)) {
-    tables.set(name, []);
-  }
-  return tables.get(name)!;
-};
-
-const _where = (row: Row, cols: string[], args: readonly unknown[]): boolean =>
-  cols.every((c, i) => row[c] === args[i]);
-
-const fakeDb = {
-  async query(options: { sql: string; args: readonly unknown[] }) {
-    const sql = options.sql.trim();
-    if (sql.includes('COUNT(*)')) {
-      const match = sql.match(/FROM\s+(\w+)/i);
-      const name = match?.[1]?.toLowerCase() ?? '';
-      const whereMatch = sql.match(/WHERE\s+(.+?)(?:\s+ORDER BY|\s*$)/i);
-      let rows = table(name);
-      if (whereMatch) {
-        const cols = [...whereMatch[1]!.matchAll(/(\w+)\s*=\s*\?/g)].map((m) =>
-          m[1]!.toLowerCase(),
-        );
-        if (cols.length > 0) {
-          rows = rows.filter((r) => _where(r, cols, options.args));
-        }
-      }
-      return { rows: [{ n: rows.length }] };
-    }
-
-    const fromMatch = sql.match(/FROM\s+(\w+)/i);
-    if (!fromMatch) {
-      return { rows: [] };
-    }
-    const name = fromMatch[1]!.toLowerCase();
-    let rows = table(name);
-
-    const whereMatch = sql.match(/WHERE\s+(.+?)(?:\s+ORDER BY|\s+LIMIT|\s*$)/i);
-    if (whereMatch) {
-      const cols = [...whereMatch[1]!.matchAll(/(\w+)\s*=\s*\?/g)].map((m) => m[1]!.toLowerCase());
-      if (cols.length > 0) {
-        rows = rows.filter((r) => _where(r, cols, options.args));
-      } else {
-        // Literal predicate (e.g. `is_active = 1`) — evaluate directly.
-        const litMatch = whereMatch[1]!.match(/(\w+)\s*=\s*(\d+)/);
-        if (litMatch) {
-          const col = litMatch[1]!.toLowerCase();
-          const val = Number(litMatch[2]);
-          rows = rows.filter((r) => r[col] === val);
-        }
-      }
-    }
-
-    const orderMatch = sql.match(/ORDER BY\s+(\w+)\s*(ASC|DESC)?/i);
-    if (orderMatch) {
-      const col = orderMatch[1]!.toLowerCase();
-      const dir = orderMatch[2]?.toUpperCase();
-      rows = [...rows].sort((a, b) => {
-        const av = String(a[col] ?? '');
-        const bv = String(b[col] ?? '');
-        return dir === 'DESC' ? bv.localeCompare(av) : av.localeCompare(bv);
-      });
-    }
-
-    const limitMatch = sql.match(/LIMIT\s+(\d+)/i);
-    if (limitMatch) {
-      rows = rows.slice(0, Number(limitMatch[1]));
-    }
-    return { rows };
-  },
-
-  async execute(options: { sql: string; args: readonly unknown[] }) {
-    const sql = options.sql.trim();
-
-    const insertMatch = sql.match(
-      /INSERT(?:\s+OR\s+(IGNORE|REPLACE))?\s+INTO\s+(\w+)\s*\(([^)]+)\)\s*VALUES\s*\(([^)]+)\)/i,
-    );
-    if (insertMatch) {
-      const mode = insertMatch[1]?.toUpperCase() as 'IGNORE' | 'REPLACE' | undefined;
-      const name = insertMatch[2]!.toLowerCase();
-      const cols = insertMatch[3]!.split(',').map((c) => c.trim().toLowerCase());
-      const row: Row = {};
-      for (let i = 0; i < cols.length; i++) {
-        row[cols[i]] = options.args[i];
-      }
-      const rows = table(name);
-      const keyIdx = cols.indexOf('id');
-      if (keyIdx >= 0) {
-        const existing = rows.findIndex((r) => r.id === options.args[keyIdx]);
-        if (existing >= 0) {
-          if (mode === 'IGNORE') {
-            return;
-          }
-          rows[existing] = { ...rows[existing], ...row };
-          return;
-        }
-      }
-      // Partial unique index emulation: only one row with is_active = 1.
-      if (row.is_active === 1 && rows.some((r) => r.is_active === 1)) {
-        return;
-      }
-      rows.push(row);
-      return;
-    }
-
-    const deleteMatch = sql.match(/^DELETE\s+FROM\s+(\w+)\s+WHERE\s+(\w+)\s*=\s*\?/i);
-    if (deleteMatch) {
-      const name = deleteMatch[1]!.toLowerCase();
-      const col = deleteMatch[2]!.toLowerCase();
-      tables.set(
-        name,
-        table(name).filter((r) => r[col] !== options.args[0]),
-      );
-      return;
-    }
-
-    const updateMatch = sql.match(/UPDATE\s+(\w+)\s+SET\s+(.+?)(?:\s+WHERE\s+(.+?))?$/i);
-    if (updateMatch) {
-      const name = updateMatch[1]!.toLowerCase();
-      const setPairs = updateMatch[2]!.split(',').map((s) => s.trim());
-      const whereClause = updateMatch[3];
-      let rows = table(name);
-      let argIdx = 0;
-      if (whereClause) {
-        const cols = [...whereClause.matchAll(/(\w+)\s*=\s*\?/g)].map((m) => m[1]!.toLowerCase());
-        if (cols.length > 0) {
-          rows = rows.filter((r) => _where(r, cols, options.args.slice(0, cols.length)));
-          argIdx = cols.length;
-        } else {
-          const litMatch = whereClause.match(/(\w+)\s*=\s*(\d+)/);
-          if (litMatch) {
-            const col = litMatch[1]!.toLowerCase();
-            const val = Number(litMatch[2]);
-            rows = rows.filter((r) => r[col] === val);
-          }
-        }
-      }
-      for (const row of rows) {
-        for (const pair of setPairs) {
-          const eqIdx = pair.indexOf('=');
-          if (eqIdx >= 0 && !pair.includes("datetime('now')")) {
-            const key = pair.slice(0, eqIdx).trim().toLowerCase();
-            const rhs = pair.slice(eqIdx + 1).trim();
-            if (rhs === '?') {
-              row[key] = options.args[argIdx++];
-            } else {
-              row[key] = Number(rhs);
-            }
-          }
-        }
-      }
-      // Partial unique index emulation: activating one row deactivates any
-      // other active row (single-transaction semantics).
-      if (setPairs.some((p) => p.startsWith('is_active') && p.includes('= 1'))) {
-        for (const row of table(name)) {
-          if (row !== rows[0]) {
-            row.is_active = 0;
-          }
-        }
-      }
-      return;
-    }
-  },
-
-  async transaction(queries: readonly { sql: string; args: readonly unknown[] }[]) {
-    // Apply all-or-nothing; the emulated partial unique index is enforced in
-    // execute, so a second activation within the same batch is rejected.
-    for (const q of queries) {
-      await this.execute(q);
-    }
-  },
-  async sync() {},
-  async close() {},
-};
+const realFrontendStorage = await import('@aikami/frontend/storage');
 
 mock.module('@aikami/frontend/storage', () => ({
-  getLocalDatabase: mock(async () => fakeDb),
+  // Spread the real module first: a mock that names only the functions a test
+  // needs breaks the moment a transitively-imported module consumes a new
+  // export (C-518 added the generation-record writers).
+  ...realFrontendStorage,
+  getLocalDatabase: mock(async () => fixture.db),
 }));
 
 // ── Service under test ────────────────────────────────────────────────
@@ -218,12 +49,25 @@ const makePersona = (id: string, name: string, isActive = false): PersonaData =>
     inventory: [],
   }) as PersonaData;
 
+/** Counts active persona rows directly in the database. */
+const countActiveRows = async (): Promise<number> => {
+  const result = await fixture.db.query({
+    sql: 'SELECT COUNT(*) AS n FROM personas WHERE is_active = 1',
+    args: [],
+  });
+  return Number(result.rows[0]?.n ?? 0);
+};
+
 describe('PersonaStorage (local SQLite)', () => {
   let storage: PersonaStorageInterface;
 
-  beforeEach(() => {
-    tables.clear();
+  beforeEach(async () => {
+    await fixture.reset();
     storage = personaStorage;
+  });
+
+  afterAll(async () => {
+    await fixture.close();
   });
 
   test('savePersona then getPersonas returns it', async () => {
@@ -267,8 +111,7 @@ describe('PersonaStorage (local SQLite)', () => {
     expect(activeCount).toBe(1);
 
     // The database table itself must never hold two active rows.
-    const rows = table('personas').filter((r) => r.is_active === 1);
-    expect(rows.length).toBe(1);
+    expect(await countActiveRows()).toBe(1);
   });
 
   test('switching active persona atomically moves the flag', async () => {
@@ -279,7 +122,7 @@ describe('PersonaStorage (local SQLite)', () => {
 
     const active = await storage.getActivePersona();
     expect(active?.id).toBe('p2');
-    expect(table('personas').filter((r) => r.is_active === 1).length).toBe(1);
+    expect(await countActiveRows()).toBe(1);
   });
 
   test('updatePersona upserts when missing (create flow)', async () => {
@@ -300,11 +143,87 @@ describe('PersonaStorage (local SQLite)', () => {
     await storage.savePersona(makePersona('p1', 'Aragorn'));
     await storage.deletePersona('p1');
     expect(await storage.hasPersona()).toBe(false);
-    expect(table('personas').length).toBe(0);
+    expect(await countTableRows(fixture.db, 'personas')).toBe(0);
   });
 
   test('getActivePersona returns undefined when none active', async () => {
     await storage.savePersona(makePersona('p1', 'Aragorn', false));
     expect(await storage.getActivePersona()).toBeUndefined();
+  });
+
+  // ── Legacy `aikami-characters` migration (C-386b) ───────────────────
+
+  /** Installs an in-memory localStorage stub seeded with legacy entries. */
+  const installLegacyStorage = (entries: unknown): void => {
+    const store = new Map<string, string>([['aikami-characters', JSON.stringify(entries)]]);
+    (globalThis as Record<string, unknown>).localStorage = {
+      getItem: (key: string) => store.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        store.set(key, value);
+      },
+      removeItem: (key: string) => {
+        store.delete(key);
+      },
+      clear: () => {
+        store.clear();
+      },
+      key: (index: number) => [...store.keys()][index] ?? null,
+      get length() {
+        return store.size;
+      },
+    };
+  };
+
+  describe('legacy migration', () => {
+    afterEach(() => {
+      delete (globalThis as Record<string, unknown>).localStorage;
+    });
+
+    test('imports missing legacy personas and activates the last entry', async () => {
+      installLegacyStorage([
+        { persona: makePersona('legacy-1', 'Old One'), savedAt: '2025-01-01T00:00:00.000Z' },
+        { persona: makePersona('legacy-2', 'Old Two'), savedAt: '2025-01-02T00:00:00.000Z' },
+      ]);
+
+      await storage.migrateLegacyCharacters();
+
+      const personas = await storage.getPersonas('local');
+      expect(personas.map((p) => p.id).sort()).toEqual(['legacy-1', 'legacy-2']);
+      expect((await storage.getActivePersona())?.id).toBe('legacy-2');
+    });
+
+    test('SQLite wins on id collision (never overwritten)', async () => {
+      await storage.savePersona(makePersona('legacy-1', 'SQLite Wins'));
+      installLegacyStorage([{ persona: makePersona('legacy-1', 'Legacy Loser') }]);
+
+      await storage.migrateLegacyCharacters();
+
+      const persona = (await storage.getPersonas('local')).find((p) => p.id === 'legacy-1');
+      expect(persona?.name).toBe('SQLite Wins');
+    });
+
+    test('preserves the legacy avatar URL', async () => {
+      installLegacyStorage([
+        {
+          persona: makePersona('legacy-1', 'Old One'),
+          avatarUrl: 'data:image/png;base64,AAAA',
+        },
+      ]);
+
+      await storage.migrateLegacyCharacters();
+
+      const persona = (await storage.getPersonas('local')).find((p) => p.id === 'legacy-1');
+      expect(persona?.avatarUrl).toBe('data:image/png;base64,AAAA');
+    });
+
+    test('is idempotent — a deleted migrated persona is not re-imported', async () => {
+      installLegacyStorage([{ persona: makePersona('legacy-1', 'Old One') }]);
+
+      await storage.migrateLegacyCharacters();
+      await storage.deletePersona('legacy-1');
+      await storage.migrateLegacyCharacters();
+
+      expect(await storage.hasPersona()).toBe(false);
+    });
   });
 });

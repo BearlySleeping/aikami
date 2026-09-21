@@ -46,9 +46,9 @@ const { viewModel }: Props = $props();
           rows="3"
           value={viewModel.testMessage}
           oninput={(e: Event) => {
-            const target = e.target as HTMLTextAreaElement;
-            viewModel.testMessage = target.value;
-          }}
+  const target = e.target as HTMLTextAreaElement;
+  viewModel.testMessage = target.value;
+}}
           disabled={viewModel.isRunning}
         ></textarea>
       </div>
@@ -98,7 +98,7 @@ const { viewModel }: Props = $props();
       <div class="card bg-base-200">
         <div class="card-body p-4">
           <h2 class="card-title text-base">Agent Outputs</h2>
-          {#each viewModel.results.filter(r => r.success && r.output) as result (result.agentId)}
+          {#each viewModel.results.filter((r) => r.success && r.output) as result (result.agentId)}
             <div class="mb-3">
               <span class="badge badge-sm badge-ghost font-mono mb-1">{result.agentId}</span>
               <pre

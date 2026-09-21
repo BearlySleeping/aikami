@@ -3,7 +3,7 @@ id: C-473
 title: "Record complete and honest pipeline usage and cost"
 source: direct
 contract_type: full
-status: implemented
+status: approved
 github:
     issue_number: null
     issue_url: null
@@ -18,7 +18,7 @@ created_at: "2026-09-04T00:00:00Z"
 
 | Field                | Value                                                                                             |
 | -------------------- | ------------------------------------------------------------------------------------------------- |
-| **Source**           | Accepted agent-platform audit; PR 07 in [execution plan](../strategy/agent-platform-hardening.md) |
+| **Source**           | Accepted agent-platform audit; PR 07 in [execution plan](../reference/agent-platform-hardening.md) |
 | **Target**           | Worker event collection, pipeline manifest usage and status reports                               |
 | **Type**             | full                                                                                              |
 | **Priority**         | P1 — model/cost optimization currently has no usable run ledger                                   |
@@ -132,6 +132,13 @@ See [split rule](SHARED_SECTIONS.md#contract-size--split-rule). One ledger/repor
 
 **Test Hooks:** C-468 automation tasks and C-472 fake controller; test representative provider usage shapes offline. Three-OS file-write tests; E2E browser/visual N/A. No paid run is required to prove normalization.
 **Watch Points:** inclusive cached-token fields, stream partials, message replay, review sessions persisting across attempts, costs reported in different currencies and unknown/incomplete legacy usage alongside currency totals.
+
+> **Implementation status (2026-09-17):** NOT implemented. All four acceptance
+> criteria above remain `pending implementation`; there is no Execution Report
+> for this contract, so the metadata status is `approved`, not `implemented`.
+> The YAML frontmatter previously claimed `implemented` while the metadata
+> table said `approved`; the frontmatter was corrected to match the
+> authoritative table.
 
 ## Implementation Sequence
 

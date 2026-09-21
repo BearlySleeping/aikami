@@ -1,9 +1,23 @@
 // apps/frontend/client/src/lib/services/game/game_overlay_service.test.ts
 
-import { beforeEach, describe, expect, mock, test } from 'bun:test';
+import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test';
+import type { EngineBridge } from '@aikami/frontend/engine';
 import type { GameOverlayType, OverlayStackEntry } from '$types';
+import { createRealLocalDatabase } from '../__tests__/local_database_fixture.ts';
 
-// $state, $derived, and @aikami/frontend/services mock are provided by test_preload.ts
+// $state, $derived are polyfilled by test_setup.ts
+
+const fixture = await createRealLocalDatabase();
+
+const realFrontendStorage = await import('@aikami/frontend/storage');
+
+mock.module('@aikami/frontend/storage', () => ({
+  // Spread the real module first: a mock that names only the functions a test
+  // needs breaks the moment a transitively-imported module consumes a new
+  // export (C-518 added the generation-record writers).
+  ...realFrontendStorage,
+  getLocalDatabase: mock(async () => fixture.db),
+}));
 
 // The overlay service reads document.activeElement / getElementById when
 // pushing overlays — provide a minimal DOM mock (bun has no jsdom).
@@ -21,6 +35,7 @@ describe('GameOverlayService', () => {
   let service: import('./game_overlay_service.svelte.ts').GameOverlayServiceInterface;
 
   beforeEach(async () => {
+    await fixture.reset();
     const mod = await import('./game_overlay_service.svelte.ts');
     service = mod.gameOverlayService;
 
@@ -51,6 +66,10 @@ describe('GameOverlayService', () => {
       onVendorClose: mock(() => {}),
       onCameraZoomUpdate: mock(() => {}),
     });
+  });
+
+  afterAll(async () => {
+    await fixture.close();
   });
 
   test('should export singleton instance', () => {
@@ -170,6 +189,45 @@ describe('GameOverlayService', () => {
 
     service.closeVendor();
     expect(service.activeOverlay).toBe('NONE');
+  });
+
+  test('does not dispatch an encounter when combat overlay activation is blocked', () => {
+    const send = mock(() => {});
+    service.setBridge({ send } as unknown as EngineBridge);
+    service.openInventory();
+
+    service.startCombat({ enemyName: 'Blocked enemy', encounterId: 'blocked' });
+
+    expect(service.activeOverlay).toBe('INVENTORY');
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  // C-525 R-5: a refused overlay open is reported as a TYPED outcome, never as
+  // a silent return, so the caller cannot believe a fight is running.
+  test('reports a typed rejection when the combat overlay cannot open', () => {
+    const send = mock(() => {});
+    service.setBridge({ send } as unknown as EngineBridge);
+    service.openInventory();
+
+    const outcome = service.startCombat({ enemyName: 'Blocked enemy', encounterId: 'blocked' });
+
+    expect(outcome).toEqual({
+      ok: false,
+      reason: 'overlayUnavailable',
+      messageKey: 'combat.start.overlay_unavailable',
+    });
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  test('reports ok once the combat overlay is open and the encounter is dispatched', () => {
+    const send = mock(() => {});
+    service.setBridge({ send } as unknown as EngineBridge);
+
+    const outcome = service.startCombat({ enemyName: 'Rollo', encounterId: 'inn_wand_encounter' });
+
+    expect(outcome).toEqual({ ok: true });
+    expect(service.activeOverlay).toBe('COMBAT');
+    expect(send).toHaveBeenCalledTimes(1);
   });
 
   // ── Keyboard handler ──
@@ -333,6 +391,35 @@ describe('GameOverlayService', () => {
   test('should block quest log during combat', () => {
     service.pushOverlay('COMBAT');
     expect(service.canOpenOverlay('QUEST_LOG')).toBe(false);
+  });
+
+  test('C-500: repeated closeCombat cleanup resumes the engine exactly once', () => {
+    const resumeEngine = mock(() => {});
+    service.setEngineService({
+      pauseEngine: mock(() => {}),
+      resumeEngine,
+      loadMap: mock(async () => {}),
+    } as unknown as import('./game_engine_service.svelte.ts').GameEngineServiceInterface);
+
+    service.pushOverlay('COMBAT');
+    expect(service.activeOverlay).toBe('COMBAT');
+
+    service.closeCombat();
+    service.closeCombat();
+
+    expect(service.activeOverlay).toBe('NONE');
+    expect(resumeEngine).toHaveBeenCalledTimes(1);
+  });
+
+  test('C-500: Escape during COMBAT dismisses cleanly (overlay clears)', () => {
+    service.pushOverlay('COMBAT');
+    expect(service.activeOverlay).toBe('COMBAT');
+
+    service.handleKeyDown(new KeyboardEvent('keydown', { key: 'Escape' }));
+
+    // Combat is dismissed via closeCombat — the overlay is cleared so the
+    // world is not left paused/input-locked behind a popped-but-frozen UI.
+    expect(service.activeOverlay).toBe('NONE');
   });
 
   test('should allow pause menu over inventory', () => {

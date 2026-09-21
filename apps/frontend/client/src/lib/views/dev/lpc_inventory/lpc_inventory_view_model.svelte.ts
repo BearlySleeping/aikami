@@ -7,26 +7,25 @@
 // Extends InventoryViewModel (all equip/unequip/use actions) and drives an
 // LpcPreviewViewModel whose recipes are rebuilt from the base appearance +
 // current equipment whenever the equipment slots change.
+//
+// Dependencies arrive through typed capability options. This module never
+// imports the `$services` barrel or any production singleton, so its tests can
+// inject fresh feature fixtures. Production wiring lives in
+// ./lpc_inventory_composition.ts.
 
 import { DEFAULT_LPC_RECIPE } from '@aikami/constants';
 
 import type { LpcLayerRecipe } from '@aikami/frontend/engine/sim';
-import type { BaseViewModelOptions } from '@aikami/frontend/services';
-import { equipmentService, inventoryService } from '$services';
-import {
-  getLpcPreviewViewModel,
-  type LpcPreviewViewModelInterface,
-} from '$views/character/lpc_preview/lpc_preview_view_model.svelte';
+import type { EquipmentServiceInterface, InventoryServiceInterface } from '$services';
+import type { LpcPreviewViewModelInterface } from '$views/character/lpc_preview/lpc_preview_view_model.svelte';
 import {
   InventoryViewModel,
   type InventoryViewModelInterface,
+  type InventoryViewModelOptions,
 } from '../../inventory/inventory_view_model.svelte';
 
 /** Empty palette — equipment sprites render with their authored colours. */
 const EMPTY_PALETTE = new Uint8Array(1024);
-
-/** Base appearance slots owned by equipment (rendered via gear, not base). */
-const EQUIPMENT_OWNED_BASE_SLOTS = new Set(['torso', 'feet']);
 
 /** Sample gear granted to the sandbox bag for live equip testing. */
 const SANDBOX_BAG: ReadonlyArray<{ itemId: string; quantity: number }> = [
@@ -48,8 +47,33 @@ const SANDBOX_BAG: ReadonlyArray<{ itemId: string; quantity: number }> = [
   { itemId: 'healthPotion', quantity: 2 },
 ] as const;
 
+// ── Capability contracts ────────────────────────────────────────────────
+
+/** The equipment sandbox operations the LPC preview rebuild depends on. */
+export type LpcEquipmentCapabilities = Pick<
+  EquipmentServiceInterface,
+  'slots' | 'reset' | 'configureAppearanceContext' | 'buildLpcRecipes'
+>;
+
+/** The inventory reset/seed operations the sandbox performs. */
+export type LpcInventoryCapabilities = Pick<InventoryServiceInterface, 'inventory' | 'reset'>;
+
+/** The LPC catalog snapshot (slot → asset IDs) the wearer context is built from. */
+export type LpcCatalogCapabilities = {
+  readonly assetIdsBySlot: Readonly<Record<string, readonly string[]>>;
+};
+
 /** Base configuration used to create the LPC inventory sandbox ViewModel. */
-export type LpcInventoryViewModelOptions = BaseViewModelOptions;
+export type LpcInventoryViewModelOptions = InventoryViewModelOptions & {
+  /** Live LPC preview instance the sandbox drives. */
+  lpcPreview: LpcPreviewViewModelInterface;
+  /** Equipment sandbox operations. */
+  lpcEquipment: LpcEquipmentCapabilities;
+  /** Inventory sandbox reset/seed operations. */
+  lpcInventory: LpcInventoryCapabilities;
+  /** LPC catalog snapshot. */
+  lpcCatalog: LpcCatalogCapabilities;
+};
 
 /** Inventory ViewModel contract extended with LPC sandbox controls. */
 export type LpcInventoryViewModelInterface = InventoryViewModelInterface & {
@@ -63,22 +87,35 @@ export class LpcInventoryViewModel
   /** Live LPC character preview driven by base + equipment recipes. */
   readonly lpcPreview: LpcPreviewViewModelInterface;
 
-  constructor(options: BaseViewModelOptions) {
+  private readonly _lpcEquipment: LpcEquipmentCapabilities;
+  private readonly _lpcInventory: LpcInventoryCapabilities;
+  private readonly _lpcCatalog: LpcCatalogCapabilities;
+
+  constructor(options: InventoryViewModelOptions) {
     super(options);
-    this.lpcPreview = getLpcPreviewViewModel({ className: 'LpcInventoryPreviewViewModel' });
+    const lpcOptions = options as LpcInventoryViewModelOptions;
+    this.lpcPreview = lpcOptions.lpcPreview;
+    this._lpcEquipment = lpcOptions.lpcEquipment;
+    this._lpcInventory = lpcOptions.lpcInventory;
+    this._lpcCatalog = lpcOptions.lpcCatalog;
   }
 
   override async initialize(): Promise<void> {
-    // Seed a fresh bag + the character's base outfit (chainmail + boots).
-    inventoryService.reset();
-    equipmentService.reset();
-    equipmentService.seedBaseOutfit({ ...DEFAULT_LPC_RECIPE });
-    inventoryService.inventory = SANDBOX_BAG.map((entry) => ({ ...entry }));
+    // Fresh bag + wearer context. The base appearance renders the full
+    // DEFAULT_LPC_RECIPE (including torso/feet); equipped gear overlays it,
+    // so unequip reveals the base outfit instead of a bare body.
+    this._lpcInventory.reset();
+    this._lpcEquipment.reset();
+    this._lpcEquipment.configureAppearanceContext({
+      bodyAssetId: DEFAULT_LPC_RECIPE.body,
+      catalogAssetIdsBySlot: this._lpcCatalog.assetIdsBySlot,
+    });
+    this._lpcInventory.inventory = SANDBOX_BAG.map((entry) => ({ ...entry }));
 
     // Rebuild the preview recipes whenever equipment slots change.
     this.registerEffectRoot(() => {
       $effect(() => {
-        void equipmentService.slots;
+        void this._lpcEquipment.slots;
         this._refreshPreview();
       });
     });
@@ -89,23 +126,20 @@ export class LpcInventoryViewModel
   /**
    * Rebuilds the preview character from the base appearance + equipped gear.
    *
-   * Mirrors the in-game merge: base layers (body, hair, legs, head) plus
-   * equipment layers; body/feet equipment replace the base torso/feet
-   * layers, and hat/weapon/shield are appended on top.
+   * Mirrors the in-game merge: the full base recipe renders first, then
+   * equipment layers replace overlapping base slots (torso/feet) and append
+   * the non-base layers (hat/weapon/shield).
    */
   private _refreshPreview(): void {
     const recipes: LpcLayerRecipe[] = [];
 
     for (const [slot, assetId] of Object.entries(DEFAULT_LPC_RECIPE)) {
-      if (EQUIPMENT_OWNED_BASE_SLOTS.has(slot)) {
-        continue; // provided by equipment
-      }
       if (assetId) {
         recipes.push({ slot, assetId, hexPalette: EMPTY_PALETTE });
       }
     }
 
-    for (const equipmentRecipe of equipmentService.buildLpcRecipes()) {
+    for (const equipmentRecipe of this._lpcEquipment.buildLpcRecipes()) {
       const overlapIndex = recipes.findIndex((r) => r.slot === equipmentRecipe.slot);
       if (overlapIndex >= 0) {
         recipes[overlapIndex] = equipmentRecipe;
@@ -128,5 +162,16 @@ export class LpcInventoryViewModel
   }
 }
 
-export const getLpcInventoryViewModel = (options: BaseViewModelOptions): LpcInventoryViewModel =>
-  LpcInventoryViewModel.create(options) as LpcInventoryViewModel;
+/**
+ * Builds the LPC inventory sandbox ViewModel from explicit capabilities.
+ *
+ * Callers outside production (tests, sandboxes) use this directly; production
+ * code goes through `getLpcInventoryViewModel` in
+ * ./lpc_inventory_composition.ts.
+ */
+const asInventoryOptions = (options: LpcInventoryViewModelOptions): InventoryViewModelOptions =>
+  options;
+
+export const createLpcInventoryViewModel = (
+  options: LpcInventoryViewModelOptions,
+): LpcInventoryViewModel => LpcInventoryViewModel.create(asInventoryOptions(options));
