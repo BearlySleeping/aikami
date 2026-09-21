@@ -11,9 +11,11 @@
 // leaf collaborator the facade can call from any scope.
 // ---------------------------------------------------------------------------
 
+import { isDevelopmentModePublic } from '../../../configs/src/lib/public_mode.ts';
 // Type-only: erased at build time, so this module stays runtime-free of the
 // rendering layer while keeping the published shape in lockstep with it.
 import type { WeatherFxDebugSnapshot } from '../rendering/weather/weather_overlay.ts';
+import { AUTHORING_OVERLAY_LAYERS, type AuthoringOverlayLayer } from './authoring_overlay.ts';
 
 /** Keys the engine owns on `window` for E2E/devtools inspection. */
 const DEBUG_GLOBAL_KEY = '__AIKAMI_DEBUG__';
@@ -124,6 +126,36 @@ export const isVisualScreenshotMode = (): boolean => {
 /** Clears the cached screenshot-mode flag (test isolation only). */
 export const resetVisualScreenshotModeCache = (): void => {
   cachedVisualScreenshotMode = undefined;
+};
+
+/**
+ * True when the Emberwatch authoring overlay is enabled (`?authoring=true`).
+ *
+ * Development only: the overlay never renders unless this is explicitly true,
+ * so it cannot reach the production HUD.
+ */
+export const isAuthoringOverlayMode = (): boolean =>
+  isDevelopmentModePublic() && readSearchParam('authoring') === 'true';
+
+/**
+ * The authoring overlay layers to draw.
+ *
+ * `?authoringLayers=walkable,props,npcs` selects a subset; unknown names are
+ * ignored and an absent/empty parameter enables every layer.
+ */
+export const readAuthoringOverlayLayers = (): Set<AuthoringOverlayLayer> => {
+  const raw = readSearchParam('authoringLayers');
+  if (!raw || raw.trim().length === 0) {
+    return new Set(AUTHORING_OVERLAY_LAYERS);
+  }
+  const valid = new Set<string>(AUTHORING_OVERLAY_LAYERS);
+  const selected = raw
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter((entry) => valid.has(entry));
+  return selected.length > 0
+    ? new Set(selected as AuthoringOverlayLayer[])
+    : new Set(AUTHORING_OVERLAY_LAYERS);
 };
 
 /**

@@ -20,6 +20,14 @@
 // objectives keep working.
 
 import {
+  cell,
+  placeLandmark,
+  placeNpc,
+  placeProp,
+  placeSpawn,
+  placeTransition,
+} from './emberwatch_authoring.ts';
+import {
   block,
   blockRect,
   fillRect,
@@ -27,13 +35,8 @@ import {
   type MapObjectLayer,
   makeMap,
   makeRng,
-  npc,
-  OLD_ROAD_ARRIVAL,
-  prop,
   scatter,
   setTile,
-  spawn,
-  transition,
 } from './emberwatch_map_shared.ts';
 import { buildG } from './generate_emberwatch_tables.ts';
 
@@ -213,37 +216,25 @@ export const buildOldRoad = (): { map: MapData; objectLayers: MapObjectLayer[] }
         // the map edges. ZoningSystem tests the player's position inclusively
         // against each transition rect, so a marker placed on the rect's corner
         // re-triggers the exit the instant the map loads (C-138).
-        spawn(
-          1,
-          'old_road_from_village',
-          OLD_ROAD_ARRIVAL.fromVillage.x,
-          OLD_ROAD_ARRIVAL.fromVillage.y,
-        ),
-        spawn(2, 'old_road_to_shrine', OLD_ROAD_ARRIVAL.toShrine.x, OLD_ROAD_ARRIVAL.toShrine.y),
-        npc(3, 'woodcutter_ada', 'Ada the Woodcutter', 'ada_greeting', 12 * 32, 10 * 32),
-        npc(4, 'apprentice_tess', 'Tess the Apprentice', 'tess_greeting', 58 * 32, 12 * 32),
+        placeSpawn(1, 'old_road_from_village', 34, 33),
+        placeSpawn(2, 'old_road_to_shrine', 34, 2),
+        placeNpc(3, 'woodcutter_ada', 'Ada the Woodcutter', 'ada_greeting', 12, 10),
+        placeNpc(4, 'apprentice_tess', 'Tess the Apprentice', 'tess_greeting', 58, 12),
 
         // ── Waystation remains (environmental storytelling) ────────────────
-        prop(5, 'waystation_cart', 'Abandoned Cart', 'prop_cart.png', 61 * 32, 11 * 32),
-        prop(6, 'waystation_barrel', 'Waystation Barrel', 'prop_barrel.png', 55 * 32, 9 * 32),
-        prop(9, 'tess_component', 'Intact Ward Component', 'prop_component.png', 57 * 32, 11 * 32),
-        prop(20, 'waystation_crate', 'Crate', 'crate.png', 56 * 32, 12 * 32),
-        prop(21, 'waystation_crate_2', 'Crate', 'crate.png', 60 * 32, 8 * 32),
-        prop(22, 'waystation_support', 'Rotting Support', 'prop_support.png', 59 * 32, 12 * 32),
-        prop(23, 'road_notice', 'Road Marker', 'prop_notice_board.png', 32 * 32, 20 * 32),
+        placeProp(5, 'waystation_cart', 'Abandoned Cart', 'prop_cart.png', 61, 11),
+        placeProp(6, 'waystation_barrel', 'Waystation Barrel', 'prop_barrel.png', 55, 9),
+        placeProp(9, 'tess_component', 'Intact Ward Component', 'prop_component.png', 57, 11),
+        placeProp(20, 'waystation_crate', 'Crate', 'crate.png', 56, 12),
+        placeProp(21, 'waystation_crate_2', 'Crate', 'crate.png', 60, 8),
+        placeProp(22, 'waystation_support', 'Rotting Support', 'prop_support.png', 59, 12),
+        placeLandmark(23, 'road_notice', 'Road Marker', 'prop_notice_board.png', 32, 20),
 
         // ── Woodland trail tree stands ─────────────────────────────────────
         ...trees.map(([c, r, kind], index) =>
           kind === 'oak'
-            ? prop(100 + index, `road_oak_${index}`, 'Woodland Oak', 'oak.png', c * 32, r * 32)
-            : prop(
-                200 + index,
-                `road_birch_${index}`,
-                'Woodland Birch',
-                'birch.png',
-                c * 32,
-                r * 32,
-              ),
+            ? placeProp(100 + index, `road_oak_${index}`, 'Woodland Oak', 'oak.png', c, r)
+            : placeProp(200 + index, `road_birch_${index}`, 'Woodland Birch', 'birch.png', c, r),
         ),
       ],
     },
@@ -252,28 +243,20 @@ export const buildOldRoad = (): { map: MapData; objectLayers: MapObjectLayer[] }
       type: 'objectgroup',
       visible: true,
       objects: [
-        transition(
-          1007,
-          'village',
-          'from_old_road',
-          32 * 32,
-          3 * 32,
-          34 * 32,
-          (H - 1) * 32,
-          64,
-          32,
-        ),
-        transition(
-          1008,
-          'ruined_shrine',
-          'ruin_from_old_road',
-          19 * 32,
-          34 * 32,
-          34 * 32,
-          0,
-          64,
-          32,
-        ),
+        placeTransition({
+          id: 1007,
+          targetMap: 'village',
+          targetSpawnId: 'from_old_road',
+          target: { x: cell(32), y: cell(3) },
+          at: { c: 34, r: H - 1, width: 2, height: 1 },
+        }),
+        placeTransition({
+          id: 1008,
+          targetMap: 'ruined_shrine',
+          targetSpawnId: 'ruin_from_old_road',
+          target: { x: cell(19), y: cell(34) },
+          at: { c: 34, r: 0, width: 2, height: 1 },
+        }),
       ],
     },
   ];
@@ -398,18 +381,18 @@ export const buildRuinedShrine = (): { map: MapData; objectLayers: MapObjectLaye
       type: 'objectgroup',
       visible: true,
       objects: [
-        spawn(1, 'ruin_from_old_road', 19 * 32, 34 * 32),
+        placeSpawn(1, 'ruin_from_old_road', 19, 34),
         // Nemi stands just inside the entrance, on the safe side of the rubble.
-        npc(2, 'shrine_keeper_nemi', 'Nemi the Shrine Keeper', 'nemi_greeting', 21 * 32, 28 * 32),
+        placeNpc(2, 'shrine_keeper_nemi', 'Nemi the Shrine Keeper', 'nemi_greeting', 21, 28),
         // The focal socket and the arch that frames it.
-        prop(4, 'ward_socket', 'Ward Socket', 'prop_ward_socket.png', 20 * 32, 20 * 32),
-        prop(3, 'shrine_arch', 'Shrine Arch', 'shrine_arch.png', 19 * 32, 18 * 32),
+        placeLandmark(4, 'ward_socket', 'Ward Socket', 'prop_ward_socket.png', 20, 20),
+        placeLandmark(3, 'shrine_arch', 'Shrine Arch', 'shrine_arch.png', 19, 18),
         // Clutter: fallen masonry and the remains of the cloister garden.
-        prop(30, 'shrine_brazier', 'Brazier', 'prop_brazier.png', 17 * 32, 23 * 32),
-        prop(31, 'shrine_barrel', 'Barrel', 'prop_barrel.png', 26 * 32, 22 * 32),
-        prop(32, 'shrine_crate', 'Crate', 'crate.png', 12 * 32, 8 * 32),
-        prop(33, 'shrine_oak', 'Woodland Oak', 'oak.png', 5 * 32, 30 * 32),
-        prop(34, 'shrine_birch', 'Woodland Birch', 'birch.png', 34 * 32, 31 * 32),
+        placeProp(30, 'shrine_brazier', 'Brazier', 'prop_brazier.png', 17, 23),
+        placeProp(31, 'shrine_barrel', 'Barrel', 'prop_barrel.png', 26, 22),
+        placeProp(32, 'shrine_crate', 'Crate', 'crate.png', 12, 8),
+        placeProp(33, 'shrine_oak', 'Woodland Oak', 'oak.png', 5, 30),
+        placeProp(34, 'shrine_birch', 'Woodland Birch', 'birch.png', 34, 31),
       ],
     },
     {
@@ -417,17 +400,13 @@ export const buildRuinedShrine = (): { map: MapData; objectLayers: MapObjectLaye
       type: 'objectgroup',
       visible: true,
       objects: [
-        transition(
-          1005,
-          'old_road',
-          'old_road_to_shrine',
-          OLD_ROAD_ARRIVAL.toShrine.x,
-          OLD_ROAD_ARRIVAL.toShrine.y,
-          19 * 32,
-          (H - 1) * 32,
-          64,
-          32,
-        ),
+        placeTransition({
+          id: 1005,
+          targetMap: 'old_road',
+          targetSpawnId: 'old_road_to_shrine',
+          target: { x: cell(34), y: cell(2) },
+          at: { c: 19, r: H - 1, width: 2, height: 1 },
+        }),
       ],
     },
   ];

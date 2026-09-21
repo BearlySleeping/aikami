@@ -17,18 +17,15 @@
 // quest objectives depend on them); the golden checks live in
 // `generate_emberwatch_maps.test.ts`.
 
+import { cell, placeNpc, placeProp, placeSpawn, placeTransition } from './emberwatch_authoring.ts';
 import {
   border,
   type MapData,
   type MapObjectLayer,
   makeMap,
   makeRng,
-  npc,
-  prop,
   scatter,
   setTile,
-  spawn,
-  transition,
 } from './emberwatch_map_shared.ts';
 import { buildG } from './generate_emberwatch_tables.ts';
 
@@ -101,39 +98,39 @@ export const buildInn = (): { map: MapData; objectLayers: MapObjectLayer[] } => 
       visible: true,
       objects: [
         // ── People ─────────────────────────────────────────────────────────
-        npc(1, 'rollo_grasper', 'Rollo the Grasper', 'rollo_greeting', 22 * 32, 6 * 32),
-        npc(20, 'innkeeper_sella', 'Sella the Innkeeper', 'sella_greeting', 11 * 32, 3 * 32),
+        placeNpc(1, 'rollo_grasper', 'Rollo the Grasper', 'rollo_greeting', 22, 6),
+        placeNpc(20, 'innkeeper_sella', 'Sella the Innkeeper', 'sella_greeting', 11, 3),
 
         // ── Service counter and its evidence ───────────────────────────────
-        prop(30, 'inn_counter', 'Service Counter', 'counter.png', 10 * 32, 4 * 32),
-        prop(31, 'inn_counter_2', 'Service Counter', 'counter.png', 12 * 32, 4 * 32),
-        prop(21, 'sella_receipt', "Sella's Custody Receipt", 'prop_receipt.png', 14 * 32, 5 * 32),
+        placeProp(30, 'inn_counter', 'Service Counter', 'counter.png', 10, 4),
+        placeProp(31, 'inn_counter_2', 'Service Counter', 'counter.png', 12, 4),
+        placeProp(21, 'sella_receipt', "Sella's Custody Receipt", 'prop_receipt.png', 14, 5),
 
         // ── Hearth and storage along the north wall ────────────────────────
-        prop(32, 'inn_hearth', 'Hearth', 'prop_hearth.png', 4 * 32, 2 * 32),
-        prop(33, 'inn_shelf', 'Storage Shelf', 'bookshelf.png', 24 * 32, 3 * 32),
+        placeProp(32, 'inn_hearth', 'Hearth', 'prop_hearth.png', 4, 2),
+        placeProp(33, 'inn_shelf', 'Storage Shelf', 'bookshelf.png', 24, 3),
 
         // ── Tables and chairs (common room, clear of the combat footprint) ──
-        prop(34, 'inn_table', 'Ale Table', 'table.png', 4 * 32, 7 * 32),
-        prop(35, 'inn_chair', 'Chair', 'chair.png', 3 * 32, 8 * 32),
-        prop(36, 'inn_chair_2', 'Chair', 'chair.png', 5 * 32, 8 * 32),
-        prop(37, 'inn_table_2', 'Ale Table', 'table.png', 4 * 32, 12 * 32),
-        prop(38, 'inn_chair_3', 'Chair', 'chair.png', 3 * 32, 13 * 32),
-        prop(39, 'inn_chair_4', 'Chair', 'chair.png', 5 * 32, 13 * 32),
-        prop(40, 'inn_table_3', 'Ale Table', 'table.png', 21 * 32, 12 * 32),
-        prop(41, 'inn_chair_5', 'Chair', 'chair.png', 20 * 32, 13 * 32),
-        prop(42, 'inn_chair_6', 'Chair', 'chair.png', 22 * 32, 13 * 32),
+        placeProp(34, 'inn_table', 'Ale Table', 'table.png', 4, 7),
+        placeProp(35, 'inn_chair', 'Chair', 'chair.png', 3, 8),
+        placeProp(36, 'inn_chair_2', 'Chair', 'chair.png', 5, 8),
+        placeProp(37, 'inn_table_2', 'Ale Table', 'table.png', 4, 12),
+        placeProp(38, 'inn_chair_3', 'Chair', 'chair.png', 3, 13),
+        placeProp(39, 'inn_chair_4', 'Chair', 'chair.png', 5, 13),
+        placeProp(40, 'inn_table_3', 'Ale Table', 'table.png', 21, 12),
+        placeProp(41, 'inn_chair_5', 'Chair', 'chair.png', 20, 13),
+        placeProp(42, 'inn_chair_6', 'Chair', 'chair.png', 22, 13),
 
         // ── Barrels, crates, a bed alcove and the failing roof support ─────
-        prop(2, 'inn_barrel', 'Barrel', 'prop_barrel.png', 24 * 32, 5 * 32),
-        prop(4, 'inn_barrel_2', 'Barrel', 'prop_barrel.png', 24 * 32, 16 * 32),
-        prop(3, 'inn_crate', 'Crate', 'crate.png', 3 * 32, 16 * 32),
-        prop(43, 'inn_bed', 'Guest Bed', 'bed.png', 3 * 32, 15 * 32),
-        prop(44, 'inn_brazier', 'Brazier', 'prop_brazier.png', 16 * 32, 16 * 32),
-        prop(45, 'inn_support', 'Rotting Support', 'prop_support.png', 23 * 32, 9 * 32),
+        placeProp(2, 'inn_barrel', 'Barrel', 'prop_barrel.png', 24, 5),
+        placeProp(4, 'inn_barrel_2', 'Barrel', 'prop_barrel.png', 24, 16),
+        placeProp(3, 'inn_crate', 'Crate', 'crate.png', 3, 16),
+        placeProp(43, 'inn_bed', 'Guest Bed', 'bed.png', 3, 15),
+        placeProp(44, 'inn_brazier', 'Brazier', 'prop_brazier.png', 16, 16),
+        placeProp(45, 'inn_support', 'Rotting Support', 'prop_support.png', 23, 9),
 
         // ── Arrival marker ─────────────────────────────────────────────────
-        spawn(6, 'inn_entrance', 14 * 32, 17 * 32),
+        placeSpawn(6, 'inn_entrance', 14, 17),
       ],
     },
     {
@@ -141,7 +138,13 @@ export const buildInn = (): { map: MapData; objectLayers: MapObjectLayer[] } => 
       type: 'objectgroup',
       visible: true,
       objects: [
-        transition(1005, 'village', 'from_inn', 60 * 32, 24 * 32, 13 * 32, 19 * 32, 64, 32),
+        placeTransition({
+          id: 1005,
+          targetMap: 'village',
+          targetSpawnId: 'from_inn',
+          target: { x: cell(60), y: cell(24) },
+          at: { c: 13, r: 19, width: 2, height: 1 },
+        }),
       ],
     },
   ];
@@ -209,7 +212,7 @@ export const buildShop = (): { map: MapData; objectLayers: MapObjectLayer[] } =>
       type: 'objectgroup',
       visible: true,
       objects: [
-        npc(1, 'merchant', 'Mara the Merchant', 'merchant_mara_greeting', 12 * 32, 9 * 32, [
+        placeNpc(1, 'merchant', 'Mara the Merchant', 'merchant_mara_greeting', 12, 9, [
           { name: 'isVendor', type: 'bool', value: true },
           {
             name: 'vendorInventory',
@@ -219,23 +222,23 @@ export const buildShop = (): { map: MapData; objectLayers: MapObjectLayer[] } =>
         ]),
 
         // Counter run (the ledger's discoverable prop is the left section).
-        prop(2, 'shop_counter_l', 'Counter', 'counter.png', 4 * 32, 11 * 32),
-        prop(3, 'shop_counter_r', 'Counter', 'counter.png', 16 * 32, 11 * 32),
-        prop(50, 'shop_counter_m', 'Counter', 'counter.png', 10 * 32, 11 * 32),
+        placeProp(2, 'shop_counter_l', 'Counter', 'counter.png', 4, 11),
+        placeProp(3, 'shop_counter_r', 'Counter', 'counter.png', 16, 11),
+        placeProp(50, 'shop_counter_m', 'Counter', 'counter.png', 10, 11),
 
         // Rear storage bay.
-        prop(51, 'shop_shelf', 'Storage Shelf', 'bookshelf.png', 3 * 32, 3 * 32),
-        prop(52, 'shop_shelf_2', 'Storage Shelf', 'bookshelf.png', 20 * 32, 3 * 32),
-        prop(4, 'shop_crate', 'Crate', 'crate.png', 5 * 32, 3 * 32),
-        prop(53, 'shop_crate_2', 'Crate', 'crate.png', 8 * 32, 3 * 32),
-        prop(54, 'shop_crate_3', 'Crate', 'crate.png', 18 * 32, 3 * 32),
-        prop(55, 'shop_barrel', 'Barrel', 'prop_barrel.png', 21 * 32, 6 * 32),
+        placeProp(51, 'shop_shelf', 'Storage Shelf', 'bookshelf.png', 3, 3),
+        placeProp(52, 'shop_shelf_2', 'Storage Shelf', 'bookshelf.png', 20, 3),
+        placeProp(4, 'shop_crate', 'Crate', 'crate.png', 5, 3),
+        placeProp(53, 'shop_crate_2', 'Crate', 'crate.png', 8, 3),
+        placeProp(54, 'shop_crate_3', 'Crate', 'crate.png', 18, 3),
+        placeProp(55, 'shop_barrel', 'Barrel', 'prop_barrel.png', 21, 6),
 
         // Public aisle clutter, kept off the walking line.
-        prop(56, 'shop_chair', 'Chair', 'chair.png', 4 * 32, 8 * 32),
-        prop(57, 'shop_barrel_2', 'Barrel', 'prop_barrel.png', 3 * 32, 14 * 32),
+        placeProp(56, 'shop_chair', 'Chair', 'chair.png', 4, 8),
+        placeProp(57, 'shop_barrel_2', 'Barrel', 'prop_barrel.png', 3, 14),
 
-        spawn(6, 'shop_entrance', 12 * 32, 15 * 32),
+        placeSpawn(6, 'shop_entrance', 12, 15),
       ],
     },
     {
@@ -243,7 +246,13 @@ export const buildShop = (): { map: MapData; objectLayers: MapObjectLayer[] } =>
       type: 'objectgroup',
       visible: true,
       objects: [
-        transition(1005, 'village', 'from_merchant', 3 * 32, 24 * 32, 11 * 32, 17 * 32, 64, 32),
+        placeTransition({
+          id: 1005,
+          targetMap: 'village',
+          targetSpawnId: 'from_merchant',
+          target: { x: cell(3), y: cell(24) },
+          at: { c: 11, r: 17, width: 2, height: 1 },
+        }),
       ],
     },
   ];

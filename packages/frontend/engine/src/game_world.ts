@@ -1989,13 +1989,12 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     }
 
     // 5b. Render quiet transition-zone markers so portals stay discoverable;
-    //     the walkability debug grid is E2E/authoring only (C-543 PART F).
+    //     the walkability debug grid and authoring overlay are E2E/authoring
+    //     only and resolved by the overlay composer (C-543 PART F).
     if (this._worldContainer) {
       renderMapSceneOverlays({
         worldContainer: this._worldContainer,
-        zones: scene.transitionZones,
-        map: { width: tilemap.width, height: tilemap.height, tileSize: tilemap.tilewidth },
-        terrainGrid: scene.terrainGrid,
+        scene,
         debugGrid: this._isE2ETestMode(),
       });
     }
