@@ -41,7 +41,7 @@
 // so explicitly (`previous: undefined`) rather than being handed an empty list
 // it might mistake for a verified-empty catalog.
 
-import type { CatalogAssetEntry, ReleaseDocumentReader } from '@aikami/schemas';
+import type { CatalogAssetEntry, ReleaseDocumentReader, ReleasePointer } from '@aikami/schemas';
 import { resolveReleaseGraph } from '@aikami/schemas';
 import type { CatalogEntry } from './catalog_entries.ts';
 import { entryToShardEntry } from './index_generation.ts';
@@ -59,7 +59,18 @@ export class PreviousReleaseError extends Error {
 /** A hash-verified previous release, plus the entries it carries. */
 export type PreviousRelease = {
   releaseId: string;
+  /** The complete validated pointer, retained for exact activation comparisons. */
+  pointer: ReleasePointer;
   rootKey: string;
+  /**
+   * sha256 of the root index DOCUMENT bytes, as pinned by the pointer.
+   *
+   * This is the value a release pointer's `rootHash` names, so it is what a
+   * plan compares against to answer "is this exact root already active?".
+   * Hashing `rootKey` instead would produce a different string that happens to
+   * look like a root hash and can never match the pointer.
+   */
+  rootHash: string;
   /** Every catalog entry the verified release carries. */
   entries: CatalogAssetEntry[];
   /**
@@ -173,7 +184,9 @@ export const resolvePreviousRelease = async (options: {
 
   return {
     releaseId: graph.releaseId,
+    pointer: graph.pointer,
     rootKey: graph.pointer.rootKey,
+    rootHash: graph.pointer.rootHash,
     entries,
     dependencies,
     pinnedKeys: [

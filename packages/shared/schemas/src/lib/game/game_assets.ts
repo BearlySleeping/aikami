@@ -84,6 +84,44 @@ export const AssetHashesFileSchema = Type.Object({
 export type AssetHashesFileValidated = Static<typeof AssetHashesFileSchema>;
 
 // ---------------------------------------------------------------------------
+// Compact boot seed + offline-core declaration (C-435 / C-448)
+// ---------------------------------------------------------------------------
+
+/** One row in the compact boot-seed wire format. */
+export const CompactSeedRowSchema = Type.Object(
+  {
+    t: Type.String(),
+    h: Type.String(),
+    s: Type.Number(),
+    c: Type.String(),
+    e: Type.String(),
+    l: Type.Optional(Type.Array(Type.String())),
+  },
+  { additionalProperties: false },
+);
+
+/** The compact seed document published as `asset_seed.json`. */
+export const CompactSeedDocumentSchema = Type.Object(
+  {
+    sv: Type.Literal(1),
+    g: Type.String(),
+    o: Type.String(),
+    r: Type.Array(CompactSeedRowSchema),
+  },
+  { additionalProperties: false },
+);
+
+/** Tags prefetched and pinned during the first offline-capable install. */
+export const OfflineCoreDeclarationSchema = Type.Object(
+  {
+    schemaVersion: Type.Literal(1),
+    tags: Type.Array(Type.String()),
+    rationale: Type.Record(Type.String(), Type.String()),
+  },
+  { additionalProperties: false },
+);
+
+// ---------------------------------------------------------------------------
 // File Info
 // ---------------------------------------------------------------------------
 

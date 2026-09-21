@@ -35,6 +35,42 @@ describe('hub Cloudflare Worker deploy config (AC-3)', () => {
     expect(wrangler).toContain('"main"');
   });
 
+  test('the generated hub config binds every R2 plane, per mode', () => {
+    // `writeWranglerConfig` REPLACES the whole `r2_buckets` array, so whatever
+    // `cloudflare.r2Buckets(mode)` returns is the complete binding set. It used
+    // to return only SAVES_BUCKET, which silently dropped CATALOG_BUCKET and
+    // UPLOADS_BUCKET from the deployed Worker — and the hub's community-asset
+    // paths require all three (`asset_community_env.ts`).
+    const appRoot = mkdtempSync(join(tmpdir(), 'aikami-hub-r2-'));
+    try {
+      type Generated = { r2_buckets?: Array<{ binding: string; bucket_name: string }> };
+      const generated = (mode: string): Generated =>
+        JSON.parse(
+          readFileSync(writeWranglerConfig(APP_CONFIG.hub, appRoot, mode), 'utf8'),
+        ) as Generated;
+      const bindings = (config: Generated): string[] =>
+        (config.r2_buckets ?? []).map((entry) => entry.binding);
+      const bucketFor = (config: Generated, binding: string): string | undefined =>
+        (config.r2_buckets ?? []).find((entry) => entry.binding === binding)?.bucket_name;
+
+      const staging = generated('staging');
+      const production = generated('production');
+
+      expect(bindings(staging)).toEqual(['SAVES_BUCKET', 'CATALOG_BUCKET', 'UPLOADS_BUCKET']);
+      expect(bindings(production)).toEqual(['SAVES_BUCKET', 'CATALOG_BUCKET', 'UPLOADS_BUCKET']);
+
+      expect(bucketFor(staging, 'CATALOG_BUCKET')).toBe('aikami-staging-catalog');
+      expect(bucketFor(production, 'CATALOG_BUCKET')).toBe('aikami-catalog');
+      expect(bucketFor(staging, 'SAVES_BUCKET')).toBe('aikami-staging-saves');
+      expect(bucketFor(production, 'SAVES_BUCKET')).toBe('aikami-saves');
+      expect(bucketFor(staging, 'CATALOG_BUCKET')).not.toBe(
+        bucketFor(production, 'CATALOG_BUCKET'),
+      );
+    } finally {
+      rmSync(appRoot, { recursive: true, force: true });
+    }
+  });
+
   test('hub vite.config.ts uses @sveltejs/adapter-cloudflare', () => {
     const config = readFileSync(join(repoRoot, 'apps/frontend/hub/vite.config.ts'), 'utf8');
     expect(config).toContain('@sveltejs/adapter-cloudflare');

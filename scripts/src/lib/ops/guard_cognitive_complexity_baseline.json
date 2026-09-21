@@ -2009,12 +2009,6 @@
       "worst": 18
     }
   },
-  "scripts/src/lib/env/scripts_env.ts": {
-    "counts": {
-      "excessive": 1,
-      "worst": 19
-    }
-  },
   "scripts/src/lib/herdr/seed_worktree_deps.ts": {
     "counts": {
       "excessive": 1,

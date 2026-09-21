@@ -154,6 +154,16 @@ export const CandidateLockSchema = Type.Object(
     /** Authored non-LPC world visuals (enemy and otherwise). */
     enemyVisuals: CandidateGroupSchema,
     audio: CandidateGroupSchema,
+    /**
+     * The compact boot seed and offline-core declaration the client ships.
+     *
+     * These are GENERATED, not authored, and they were previously outside the
+     * candidate entirely — so two candidates whose seeds differed (a different
+     * asset set, a different origin stamp) shared one `lockHash`, and a
+     * promotion could not tell them apart. They are deterministic outputs of
+     * the same scan the other groups come from, so they belong here.
+     */
+    seed: CandidateGroupSchema,
 
     // ── Gates ─────────────────────────────────────────────────────────────
     rights: CandidateGateSchema,
@@ -191,6 +201,7 @@ export const CANDIDATE_LOCK_HASH_FIELDS = [
   'portraits',
   'enemyVisuals',
   'audio',
+  'seed',
   'rights',
   'surface',
 ] as const;
@@ -212,6 +223,7 @@ export const CANDIDATE_GROUPS = [
   'portraits',
   'enemyVisuals',
   'audio',
+  'seed',
 ] as const satisfies readonly (keyof CandidateLock)[];
 
 export type CandidateGroupName = (typeof CANDIDATE_GROUPS)[number];

@@ -11,7 +11,27 @@
 import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { ReleaseReceipt } from '@aikami/schemas';
+
+/** Repo root, from this module's directory. */
+const REPOSITORY = join(dirname(fileURLToPath(import.meta.url)), '../../../..');
+
+/**
+ * Overrides where release artifacts are read and written.
+ *
+ * A TEST SEAM, and a deliberately weak one: it moves the candidate lock, the
+ * receipts and the reports, and nothing else. It cannot weaken a gate — the
+ * staging approval still has to resolve against the real staging origin, and
+ * the target still comes from the fail-closed release-target table — so a
+ * forged receipt in an overridden plane fails exactly as a forged receipt in
+ * the real one does.
+ */
+export const RELEASE_PLANE_ENV = 'AIKAMI_RELEASE_PLANE';
+
+/** Where candidate locks, receipts and release reports live. */
+export const releasePlaneDir = (): string =>
+  process.env[RELEASE_PLANE_ENV] ?? join(REPOSITORY, '.local/releases');
 
 /** One executed (or deliberately skipped) orchestrator step. */
 export type StepResult = {
@@ -169,20 +189,14 @@ export const buildReleaseReport = (options: ReleaseReportInput): Record<string, 
 });
 
 /** The release report is a moment-in-time artifact; its name is the timestamp. */
-export const reportPath = (repository: string, mode: string): string =>
-  join(
-    repository,
-    '.local/releases',
-    mode,
-    `${new Date().toISOString().replace(/[:.]/g, '-')}.json`,
-  );
+export const reportPath = (mode: string): string =>
+  join(releasePlaneDir(), mode, `${new Date().toISOString().replace(/[:.]/g, '-')}.json`);
 
 export const writeReleaseReport = (options: {
-  repository: string;
   mode: string;
   report: Record<string, unknown>;
 }): string => {
-  const path = reportPath(options.repository, options.mode);
+  const path = reportPath(options.mode);
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, `${JSON.stringify(options.report, null, 2)}\n`);
   return path;

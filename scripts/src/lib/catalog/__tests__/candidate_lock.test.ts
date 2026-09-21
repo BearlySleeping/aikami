@@ -50,6 +50,7 @@ const baseLock = (overrides: Partial<Omit<CandidateLock, 'lockHash'>> = {}) => (
   portraits: emptyGroup(),
   enemyVisuals: emptyGroup(),
   audio: emptyGroup(),
+  seed: emptyGroup(),
   rights: { passed: true, digest: 'c'.repeat(64), summary: '74 artifacts, 0 blocked' },
   surface: { passed: true, digest: 'd'.repeat(64), summary: '0 error(s)' },
   ...overrides,

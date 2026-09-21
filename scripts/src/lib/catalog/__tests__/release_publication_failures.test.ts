@@ -22,6 +22,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import type { ReleasePointer } from '@aikami/schemas';
 import { publishIndexAndActivate } from '../index_activation.ts';
 import { runCatalogPublish } from '../pipeline.ts';
 import { buildReceipt, resolveBaseRelease, verifyCandidate } from '../release.ts';
@@ -181,7 +182,13 @@ describe('publication failure matrix — after the pointer moves', () => {
    * conforming pack manifest with image pins. Injecting at the activation
    * boundary keeps this about the alias contract instead of about pack fixtures.
    */
-  const activate = (options: { packLockBody: Buffer | undefined; failOnKey?: string }) => {
+  const activate = (options: {
+    packLockBody: Buffer | undefined;
+    failOnKey?: string;
+    alreadyActivePointer?: ReleasePointer;
+    packLockHash?: string;
+    seedObjects?: readonly { key: string; hash: string; carried: boolean }[];
+  }) => {
     client.failOnKey = options.failOnKey;
     return publishIndexAndActivate({
       client,
@@ -196,15 +203,18 @@ describe('publication failure matrix — after the pointer moves', () => {
         { id: 'maps', category: 'maps', key: 'index/v1/maps.json', json: '{"a":1}', gzipBytes: 7 },
       ] as never,
       releaseId: '2026-09-20T00:00:00.000Z',
-      seedReport: { uploaded: 0, carried: 0, failed: 0, objects: [] },
+      seedReport: { uploaded: 0, carried: 0, failed: 0, objects: options.seedObjects ?? [] },
       packLockReport: {
         written: true,
         key: 'index/v1/revisions/aaaa/pack_lock.json',
-        hash: 'a'.repeat(64),
+        hash: options.packLockHash ?? 'a'.repeat(64),
         assetPins: 1,
         audioPins: 0,
       },
       packLockBody: options.packLockBody,
+      ...(options.alreadyActivePointer === undefined
+        ? {}
+        : { alreadyActivePointer: options.alreadyActivePointer }),
     });
   };
 
@@ -232,6 +242,87 @@ describe('publication failure matrix — after the pointer moves', () => {
     const aliasIndex = client.putKeys.indexOf(MUTABLE_ALIAS_KEY);
     expect(pointerIndex).toBeGreaterThanOrEqual(0);
     expect(aliasIndex).toBeGreaterThan(pointerIndex);
+  });
+
+  test('a same-root release with changed dependencies advances the pointer and alias together', async () => {
+    await activate({ packLockBody: Buffer.from('{"lock":"old"}') });
+    const activeObject = client.objects.get(RELEASE_POINTER_KEY);
+    if (!activeObject) {
+      throw new Error('expected the first release pointer');
+    }
+    const activePointer = JSON.parse(new TextDecoder().decode(activeObject.body)) as ReleasePointer;
+
+    const activation = await activate({
+      packLockBody: Buffer.from('{"lock":"new"}'),
+      packLockHash: 'b'.repeat(64),
+      alreadyActivePointer: activePointer,
+    });
+
+    expect(activation.alreadyActive).toBe(false);
+    expect(activation.releaseWritten).toBe(true);
+    expect(activation.legacyAlias.written).toBe(true);
+    const updatedObject = client.objects.get(RELEASE_POINTER_KEY);
+    if (!updatedObject) {
+      throw new Error('expected the updated release pointer');
+    }
+    const updated = JSON.parse(new TextDecoder().decode(updatedObject.body)) as ReleasePointer;
+    expect(updated.rootHash).toBe(activePointer.rootHash);
+    expect(updated.dependencies).not.toEqual(activePointer.dependencies);
+    expect(updated.dependencies.some((dependency) => dependency.hash === 'b'.repeat(64))).toBe(
+      true,
+    );
+  });
+
+  test('a same-root release with a changed SEED dependency advances the pointer', async () => {
+    // The root hash is the same in both runs. Only the pinned seed object
+    // moved, which the pointer's dependency list — not the root — identifies.
+    // `alreadyActive` must therefore be false and the pointer must advance.
+    await activate({
+      packLockBody: Buffer.from('{"lock":"stable"}'),
+      seedObjects: [{ key: 'seed/aaaa/asset_seed.json', hash: 'a'.repeat(64), carried: false }],
+    });
+    const activeObject = client.objects.get(RELEASE_POINTER_KEY);
+    if (!activeObject) {
+      throw new Error('expected the first release pointer');
+    }
+    const activePointer = JSON.parse(new TextDecoder().decode(activeObject.body)) as ReleasePointer;
+
+    const activation = await activate({
+      packLockBody: Buffer.from('{"lock":"stable"}'),
+      seedObjects: [{ key: 'seed/bbbb/asset_seed.json', hash: 'b'.repeat(64), carried: false }],
+      alreadyActivePointer: activePointer,
+    });
+
+    expect(activation.alreadyActive).toBe(false);
+    expect(activation.releaseWritten).toBe(true);
+    const updatedObject = client.objects.get(RELEASE_POINTER_KEY);
+    if (!updatedObject) {
+      throw new Error('expected the updated release pointer');
+    }
+    const updated = JSON.parse(new TextDecoder().decode(updatedObject.body)) as ReleasePointer;
+    expect(updated.rootHash).toBe(activePointer.rootHash);
+    expect(updated.dependencies).not.toEqual(activePointer.dependencies);
+    expect(updated.dependencies.some((dependency) => dependency.hash === 'b'.repeat(64))).toBe(
+      true,
+    );
+  });
+
+  test('an exact release-graph retry remains already active without advancing the pointer', async () => {
+    await activate({ packLockBody: Buffer.from('{"lock":"same"}') });
+    const activeObject = client.objects.get(RELEASE_POINTER_KEY);
+    if (!activeObject) {
+      throw new Error('expected the first release pointer');
+    }
+    const activePointer = JSON.parse(new TextDecoder().decode(activeObject.body)) as ReleasePointer;
+
+    const activation = await activate({
+      packLockBody: Buffer.from('{"lock":"same"}'),
+      alreadyActivePointer: activePointer,
+    });
+
+    expect(activation.alreadyActive).toBe(true);
+    expect(activation.releaseWritten).toBe(false);
+    expect(activation.legacyAlias.written).toBe(true);
   });
 
   test('no pack lock body means no alias write, and the release still activates', async () => {

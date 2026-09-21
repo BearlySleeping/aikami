@@ -18,6 +18,7 @@
 // Neither is candidate content, and neither may mutate the candidate's bytes.
 
 import { type Static, Type } from 'typebox';
+import { CatalogSha256Schema } from './hash.ts';
 
 /** One object the plan will write, under its immutable key. */
 export const PlannedObjectSchema = Type.Object(
@@ -94,8 +95,8 @@ export const ReleasePlanSchema = Type.Object(
     /** Objects that still need uploading. */
     uploadsRequired: Type.Integer({ minimum: 0 }),
 
-    /** Root index hash this plan would activate. */
-    catalogRootHash: Type.String({ minLength: 64, maxLength: 64 }),
+    /** Root index hash this plan would activate. Canonical lowercase SHA-256. */
+    catalogRootHash: CatalogSha256Schema,
     /** Shard key → hash. */
     catalogShards: Type.Record(Type.String(), Type.String()),
     /** The per-pack installed lock, when one was produced. */
@@ -175,6 +176,8 @@ export const ReleaseReceiptSchema = Type.Object(
      * failure — the previous complete release stays authoritative.
      */
     activated: Type.Boolean(),
+    /** The exact release graph was already active, so the pointer was not advanced. */
+    alreadyActive: Type.Boolean(),
     /**
      * The mutable legacy compatibility alias. Reported separately and never
      * conflated with activation: a failed alias write leaves the immutable

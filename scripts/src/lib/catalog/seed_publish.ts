@@ -16,6 +16,12 @@
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import {
+  type CompactSeedDocument,
+  mergeCompactSeeds,
+  parseCompactSeed,
+  serializeCompactSeed,
+} from './compact_seed.ts';
 import { ASSET_CACHE_CONTROL, GAME_DATA_DIR, SEED_KEY_PREFIX } from './config.ts';
 import type { R2ClientLike } from './upload.ts';
 
@@ -97,12 +103,15 @@ const resolveSeedBody = (options: {
   filename: string;
   gameDataDir: string;
   carriedDependencies: ReadonlyMap<string, Uint8Array> | undefined;
-}): { ok: true; body: Uint8Array; carried: boolean } | { ok: false; reason: string } => {
+}):
+  | { ok: true; body: Uint8Array; carried: boolean; mergedFromCarried: number }
+  | { ok: false; reason: string } => {
   try {
     return {
       ok: true,
       body: readFileSync(join(options.gameDataDir, options.filename)),
       carried: false,
+      mergedFromCarried: 0,
     };
   } catch (error) {
     if (errorCodeOf(error) !== 'ENOENT') {
@@ -118,7 +127,73 @@ const resolveSeedBody = (options: {
         'release would be incomplete.',
     };
   }
-  return { ok: true, body: carriedBody, carried: true };
+  return { ok: true, body: carriedBody, carried: true, mergedFromCarried: 0 };
+};
+
+const ASSET_SEED_FILENAME = 'asset_seed.json';
+
+/**
+ * Resolves `asset_seed.json` by UNIONING the candidate's rows with the previous
+ * verified release's, rather than choosing one.
+ *
+ * Absent from both is still a failure — see the module header.
+ */
+const resolveAssetSeedBody = (options: {
+  gameDataDir: string;
+  carriedDependencies: ReadonlyMap<string, Uint8Array> | undefined;
+}):
+  | { ok: true; body: Uint8Array; carried: boolean; mergedFromCarried: number }
+  | { ok: false; reason: string } => {
+  let local: CompactSeedDocument | undefined;
+  try {
+    local = parseCompactSeed(
+      readFileSync(join(options.gameDataDir, ASSET_SEED_FILENAME)),
+      `the candidate's ${ASSET_SEED_FILENAME}`,
+    );
+  } catch (error) {
+    if (errorCodeOf(error) !== 'ENOENT') {
+      return { ok: false, reason: `could not be read — ${messageOf(error)}` };
+    }
+  }
+
+  const carriedBytes = carriedSeedBody(options.carriedDependencies, ASSET_SEED_FILENAME);
+  if (!local && !carriedBytes) {
+    return {
+      ok: false,
+      reason:
+        'is absent from this candidate AND from the previous verified release — the new ' +
+        'release would be incomplete.',
+    };
+  }
+
+  let carried: CompactSeedDocument | undefined;
+  if (carriedBytes) {
+    try {
+      carried = parseCompactSeed(carriedBytes, `the previous release's ${ASSET_SEED_FILENAME}`);
+    } catch (error) {
+      return { ok: false, reason: `carried copy is unusable — ${messageOf(error)}` };
+    }
+  }
+  if (!local) {
+    return { ok: true, body: carriedBytes as Uint8Array, carried: true, mergedFromCarried: 0 };
+  }
+  if (!carried) {
+    return {
+      ok: true,
+      body: serializeCompactSeed(local),
+      carried: false,
+      mergedFromCarried: 0,
+    };
+  }
+
+  const localTags = new Set(local.r.map((row) => row.t));
+  const mergedFromCarried = carried.r.filter((row) => !localTags.has(row.t)).length;
+  return {
+    ok: true,
+    body: serializeCompactSeed(mergeCompactSeeds({ local, carried })),
+    carried: false,
+    mergedFromCarried,
+  };
 };
 
 /** Uploads one seed file under its immutable content-addressed key. */
@@ -155,7 +230,10 @@ export const runSeedPublish = async (options: {
   const objects: SeedObject[] = [];
 
   for (const filename of SEED_FILES) {
-    const resolved = resolveSeedBody({ filename, gameDataDir, carriedDependencies });
+    const resolved =
+      filename === ASSET_SEED_FILENAME
+        ? resolveAssetSeedBody({ gameDataDir, carriedDependencies })
+        : resolveSeedBody({ filename, gameDataDir, carriedDependencies });
     if (!resolved.ok) {
       failed++;
       console.error(`  ❌ seed: ${filename} ${resolved.reason}`);
@@ -173,7 +251,14 @@ export const runSeedPublish = async (options: {
       continue;
     }
     objects.push(stored.object);
-    if (resolved.carried) {
+    const mergedFromCarried = 'mergedFromCarried' in resolved ? resolved.mergedFromCarried : 0;
+    if (mergedFromCarried > 0) {
+      uploaded++;
+      console.log(
+        `  📄 seed: ${filename} (${(resolved.body.length / 1024).toFixed(1)} KB, ` +
+          `${mergedFromCarried} row(s) unioned from the previous release)`,
+      );
+    } else if (resolved.carried) {
       carried++;
       console.log(`  🔗 seed: ${filename} carried forward from the previous release`);
     } else {

@@ -7,7 +7,7 @@
 // to execute it. That coupled a read-only question to a write capability and
 // made the two failure modes indistinguishable:
 //
-//   origin not provisioned   (staging today — genuinely external)
+//   origin not provisioned   (staging until 2026-09-20 — genuinely external)
 //   write credentials absent (an operator or CI limitation)
 //
 // These tests pin the separation. `resolveCatalogTarget` answers the read-only
@@ -38,7 +38,14 @@ let saved: Record<string, string | undefined> = {};
 beforeEach(() => {
   saved = Object.fromEntries(MANAGED_KEYS.map((key) => [key, process.env[key]]));
   for (const key of MANAGED_KEYS) {
-    delete process.env[key];
+    // Set to EMPTY rather than deleting. `initScriptsEnv` injects a value from
+    // scripts/.env.{mode} whenever the key is *unset*, so deleting would let a
+    // developer's decrypted checkout silently supply real credentials and the
+    // "no write credentials" cases below would stop testing anything — they
+    // would pass or fail based on whether that checkout happened to be
+    // decrypted. An empty string is not nullish, so `getScriptsEnv` returns it
+    // and the credential check sees a genuinely absent credential.
+    process.env[key] = '';
   }
 });
 
@@ -99,27 +106,40 @@ describe('release target resolution needs no write credentials', () => {
   });
 });
 
-describe('staging fails closed on its unprovisioned origin, not on credentials', () => {
-  test('staging has no declared public origin in the shipped table', () => {
-    // The premise of the test below. If this ever becomes non-null, staging
-    // has been provisioned and the fail-closed case must be re-derived.
-    expect(CATALOG_ORIGINS.staging.originUrl).toBeNull();
+describe('staging is provisioned, and still fails closed on a mismatched origin', () => {
+  test('the shipped table declares a real staging origin', () => {
+    // This used to assert `null`: staging had no public read origin, so the
+    // gate failed closed on "unprovisioned". `assets.stg.bearlysleeping.com`
+    // is now attached to `aikami-staging-catalog`, so the fail-closed case is
+    // no longer "no origin" but "disagrees with the declaration".
+    expect(CATALOG_ORIGINS.staging.originUrl).toBe('https://assets.stg.bearlysleeping.com');
   });
 
-  test('a staging target is refused even with a plausible origin configured', () => {
+  test('a correctly configured staging target resolves read-only, with no credentials', () => {
+    process.env.CATALOG_ORIGIN_URL = CATALOG_ORIGINS.staging.originUrl as string;
+    process.env.CATALOG_BUCKET = CATALOG_ORIGINS.staging.bucketName;
+    const target = resolveCatalogTarget('staging');
+    expect(target.bucket).toBe(CATALOG_ORIGINS.staging.bucketName);
+    expect(target.originUrl).toBe(CATALOG_ORIGINS.staging.originUrl);
+    expect(target.releaseTarget.mode).toBe('staging');
+    // Read-only resolution still needs no write credentials.
+    expect(() => resolveCatalogConfig('staging')).toThrow(/Catalog publish config missing/);
+  });
+
+  test('a staging target is refused when the origin disagrees with the declaration', () => {
     process.env.CATALOG_ORIGIN_URL = 'https://staging-assets.example.test';
     process.env.CATALOG_BUCKET = CATALOG_ORIGINS.staging.bucketName;
-    expect(() => resolveCatalogTarget('staging')).toThrow(/originUrl is null|not provisioned/i);
+    expect(() => resolveCatalogTarget('staging')).toThrow(/disagrees with the origin declared/);
   });
 
   test('staging cannot be pointed at the production origin', () => {
     process.env.CATALOG_ORIGIN_URL = PRODUCTION_ORIGIN;
     process.env.CATALOG_BUCKET = CATALOG_ORIGINS.staging.bucketName;
-    expect(() => resolveCatalogTarget('staging')).toThrow();
+    expect(() => resolveCatalogTarget('staging')).toThrow(/serves the production catalog/);
   });
 
   test('staging cannot silently adopt the production bucket', () => {
-    process.env.CATALOG_ORIGIN_URL = 'https://staging-assets.example.test';
+    process.env.CATALOG_ORIGIN_URL = CATALOG_ORIGINS.staging.originUrl as string;
     process.env.CATALOG_BUCKET = PRODUCTION_BUCKET;
     expect(() => resolveCatalogTarget('staging')).toThrow(/disagrees with the bucket declared/);
   });

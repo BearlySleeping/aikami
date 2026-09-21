@@ -241,7 +241,13 @@ describe('publisher → consumer release resolution (C-496)', () => {
       dependency.key.endsWith('/asset_seed.json'),
     )?.key;
     expect(seedKey).toMatch(/^seed\/[0-9a-f]{64}\/asset_seed\.json$/);
-    expect(new TextDecoder().decode(graph.seedBytes)).toContain('seed');
+    // The pinned bytes are a compact seed document, not an arbitrary object.
+    const pinnedSeed = JSON.parse(new TextDecoder().decode(graph.seedBytes)) as {
+      sv?: number;
+      r?: unknown[];
+    };
+    expect(pinnedSeed.sv).toBe(1);
+    expect(Array.isArray(pinnedSeed.r)).toBe(true);
 
     // A tampered seed is rejected by the shared resolver — the client would
     // fail closed rather than boot on stale bytes.

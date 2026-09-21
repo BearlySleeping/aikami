@@ -57,17 +57,14 @@
 // therefore declared here, explicitly, with that reasoning.
 
 import { existsSync, readFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 import {
   CATALOG_ORIGINS,
   PRODUCTION_CATALOG_ORIGINS,
   R2_BUCKETS,
   resolveBucketName,
 } from '@aikami/constants';
-
-const _here = fileURLToPath(import.meta.url);
-const REPO_ROOT = resolve(_here, '../../../..');
+import { scriptsEnvRoot } from '../env/scripts_env.ts';
 
 /** Modes that address a real remote catalog. Emulator/testing never do. */
 export const REMOTE_RELEASE_MODES = ['staging', 'production'] as const;
@@ -127,7 +124,7 @@ const declaredRemoteBuckets = (): string[] =>
  * `process.env` (loading would let a sibling file retarget the current run).
  */
 const readSiblingEnvValue = (mode: string, key: string): string | undefined => {
-  const path = join(REPO_ROOT, 'scripts', `.env.${mode}`);
+  const path = join(scriptsEnvRoot(), 'scripts', `.env.${mode}`);
   if (!existsSync(path)) {
     return undefined;
   }

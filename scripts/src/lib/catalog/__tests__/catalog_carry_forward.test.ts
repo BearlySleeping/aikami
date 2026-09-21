@@ -498,7 +498,10 @@ describe('runSeedPublish — completeness, not leniency', () => {
   /** A game-data dir holding only the files a de-bundled checkout still has. */
   const makePartialGameData = (): string => {
     const dir = mkdtempSync(join(tmpdir(), 'carry-forward-seed-'));
-    writeFileSync(join(dir, 'asset_seed.json'), JSON.stringify({ sv: 1, r: [] }));
+    writeFileSync(
+      join(dir, 'asset_seed.json'),
+      JSON.stringify({ sv: 1, g: '2026-01-01T00:00:00.000Z', o: '', r: [] }),
+    );
     writeFileSync(join(dir, 'offline_core.json'), JSON.stringify({ tags: [] }));
     writeFileSync(join(dir, 'asset_credits.json'), JSON.stringify({ credits: {} }));
     writeFileSync(join(dir, 'audio_tracks.json'), JSON.stringify({ tracks: [] }));

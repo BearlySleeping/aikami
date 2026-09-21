@@ -107,6 +107,7 @@
     "encrypt-secrets": "bun run scripts/src/lib/ops/encrypt_secrets.ts",
     "sync-env": "bun run scripts/src/lib/ops/sync_env.ts",
     "infra:report": "bun run scripts/src/lib/ops/infra_report_cli.ts",
+    "emberwatch:legacy-bootstrap": "bun run scripts/src/lib/ops/legacy_catalog_bootstrap.ts",
     "emberwatch:build-candidate": "bun run scripts/src/lib/ops/emberwatch_release.ts --build-candidate",
     "emberwatch:candidate": "bun run scripts/src/lib/ops/emberwatch_candidate.ts"
   },

@@ -30,6 +30,7 @@ import {
   PACK_LOCK_KEY,
 } from '@aikami/schemas';
 import { Value } from 'typebox/value';
+import { resolveCarriedSet } from './carried_set.ts';
 import { type CatalogEntry, loadCatalogEntries } from './catalog_entries.ts';
 import {
   ASSET_CACHE_CONTROL,
@@ -51,7 +52,6 @@ import {
   type CatalogPublishReport,
   type PackLockPublishReport,
 } from './publish_report.ts';
-import { resolvePreviousRelease } from './published_catalog.ts';
 
 export type { CatalogPublishReport, PackLockPublishReport } from './publish_report.ts';
 
@@ -80,6 +80,14 @@ export type CatalogPublishOptions = {
   gameDataDir?: string;
   /** Override content-packs dir (tests). */
   contentPacksDir?: string;
+  /**
+   * The index `publishedAt` stamp.
+   *
+   * Must be the SAME value the plan used, or the publisher writes a root whose
+   * hash differs from the one the plan pinned and verification can never match.
+   * `emberwatch_release.ts` passes the sealed candidate's `sealedAt`.
+   */
+  publishedAt?: string;
 };
 
 /**
@@ -284,6 +292,35 @@ const logPublishSummary = (options: {
 };
 
 /**
+ * The per-pack installed lock phase (C-523 AC-5).
+ *
+ * A contradictory audio pin is a producer defect: it BLOCKS the release rather
+ * than publishing a lock the client is required to refuse. Returned as a result
+ * so the caller owns the abort.
+ */
+const publishPackLockPhase = async (options: {
+  client: R2ClientLike;
+  contentPacksDir: string;
+  entriesForIndex: readonly { tag: string; hash: string }[];
+  releaseId: string;
+}): Promise<
+  | { ok: true; report: PackLockPublishReport; body: Buffer | undefined }
+  | { ok: false; error: string }
+> => {
+  try {
+    const artifact = await publishPackLockRevision({
+      client: options.client,
+      contentPacksDir: options.contentPacksDir,
+      seedRows: options.entriesForIndex.map((entry) => ({ tag: entry.tag, hash: entry.hash })),
+      releaseId: options.releaseId,
+    });
+    return { ok: true, report: artifact.report, body: artifact.body };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+};
+
+/**
  * Run the full catalog publish: preflight → upload → index → index upload.
  */
 export const runCatalogPublish = async (
@@ -386,6 +423,25 @@ export const runCatalogPublish = async (
     });
   }
 
+  // 2.8. Resolve what this release CARRIES — before a single byte is written.
+  //
+  // The verified previous release, or — on a first production release — the
+  // legacy mutable catalog. See `carried_set.ts` for why this is one decision
+  // in one place, and why it runs before the upload.
+  const carried = await resolveCarriedSet({
+    originUrl: config.originUrl,
+    mode: config.releaseTarget?.mode,
+    currentTags: new Set(entries.map((entry) => entry.tag)),
+    ...(options.releaseReader === undefined ? {} : { reader: options.releaseReader }),
+    log: (line) => console.log(line),
+  });
+  if (!carried.ok) {
+    console.error(`❌ first-release migration refused (${carried.code}): ${carried.reason}`);
+    console.error('   No objects were uploaded and no index was written.');
+    return abortedReport({ checkedCount: entries.length, elapsedMs: Date.now() - startedAt });
+  }
+  const { carriedEntries, carriedDependencies } = carried.value;
+
   // 3. Upload assets (idempotent by content-addressed key).
   const uploadReport = await uploadAssets({
     client,
@@ -443,33 +499,6 @@ export const runCatalogPublish = async (
       : entry,
   );
 
-  // 3.6. Resolve the previous VERIFIED release — BEFORE anything is written.
-  //
-  // Two phases depend on it: the seed phase carries forward a required
-  // dependency the checkout no longer holds, and the index phase unions the
-  // entries the live catalog already carries. This repo no longer holds the
-  // complete asset library (C-435 de-bundled it), so rebuilding from the local
-  // scan roots alone would replace the published catalog with the few dozen
-  // tags this checkout carries.
-  //
-  // Resolution is hash-verified through `resolveReleaseGraph` — the same
-  // resolver the production client boot path uses. A corrupt pointer or any
-  // integrity mismatch throws and the publish aborts: treating an unverifiable
-  // previous release as "absent" would turn corruption into silent data loss.
-  const previousRelease = await resolvePreviousRelease({
-    originUrl: config.originUrl,
-    reader: options.releaseReader,
-  });
-  if (!previousRelease) {
-    console.log(
-      '  🔗 previous release: none published at this origin — this index carries only its own entries',
-    );
-  } else {
-    console.log(
-      `  🔗 previous release: ${previousRelease.releaseId} (${previousRelease.entries.length} verified entr(ies))`,
-    );
-  }
-
   // 3.75. Upload seed/metadata files under immutable content-addressed keys.
   // These are published alongside the assets so the client can fetch the
   // compact boot seed, offline-core declaration, credits, and audio metadata
@@ -477,35 +506,21 @@ export const runCatalogPublish = async (
   const seedReport = await runSeedPublish({
     client,
     gameDataDir,
-    carriedDependencies: previousRelease?.dependencies,
+    carriedDependencies,
   });
 
   // 3.8. Publish the per-pack installed lock (C-523 AC-5) under an immutable
   // content-addressed key. The mutable compatibility alias is advanced only
   // after the release pointer succeeds.
   const releaseId = new Date().toISOString();
-  let packLockReport: PackLockPublishReport = {
-    written: false,
-    key: PACK_LOCK_KEY,
-    assetPins: 0,
-    audioPins: 0,
-  };
-  let packLockBody: Buffer | undefined;
-  try {
-    const artifact = await publishPackLockRevision({
-      client,
-      contentPacksDir,
-      seedRows: entriesForIndex.map((entry) => ({ tag: entry.tag, hash: entry.hash })),
-      releaseId,
-    });
-    packLockReport = artifact.report;
-    packLockBody = artifact.body;
-  } catch (error) {
-    // A contradictory audio pin is a producer defect: block the release rather
-    // than publish a lock the client is required to refuse.
-    console.error(
-      `❌ Pack lock generation failed — release NOT advanced: ${error instanceof Error ? error.message : String(error)}`,
-    );
+  const packLockPhase = await publishPackLockPhase({
+    client,
+    contentPacksDir,
+    entriesForIndex,
+    releaseId,
+  });
+  if (!packLockPhase.ok) {
+    console.error(`❌ Pack lock generation failed — release NOT advanced: ${packLockPhase.error}`);
     return {
       ok: false,
       checkedCount: preflight.checkedCount,
@@ -522,19 +537,19 @@ export const runCatalogPublish = async (
       rootKey: ROOT_INDEX_KEY,
       shardKeys: [],
       seed: seedReport,
-      packLock: packLockReport,
+      packLock: { written: false, key: PACK_LOCK_KEY, assetPins: 0, audioPins: 0 },
       legacyAlias: { key: PACK_LOCK_KEY, written: false },
       releaseWritten: false,
       elapsedMs: Date.now() - startedAt,
     };
   }
-  // 4. Generate index — unioned with the previous VERIFIED release resolved in
-  // step 3.6 (see there for why an unverifiable release aborts rather than
-  // being treated as absent).
+  const { report: packLockReport, body: packLockBody } = packLockPhase;
+  // 4. Generate index — unioned with the carried set resolved in step 2.8.
   const { root, shards, merge } = generateCatalogIndex({
     entries: entriesForIndex,
     originUrl: config.originUrl,
-    carriedEntries: previousRelease?.entries ?? [],
+    carriedEntries,
+    ...(options.publishedAt === undefined ? {} : { publishedAt: options.publishedAt }),
   });
   console.log(
     `  🔗 catalog merge: ${merge.carried} carried, ${merge.replaced} replaced, ` +
@@ -584,15 +599,21 @@ export const runCatalogPublish = async (
     seedReport,
     packLockReport,
     packLockBody,
+    ...(carried.value.previousRelease === undefined
+      ? {}
+      : { alreadyActivePointer: carried.value.previousRelease.pointer }),
   });
-  const { rootKey, shardKeys, legacyAlias, releaseWritten, failedIndexKeys } = activation;
+  const { rootKey, shardKeys, legacyAlias, releaseWritten, alreadyActive, failedIndexKeys } =
+    activation;
   const finalPackLock = activation.packLock;
 
+  // `alreadyActive` counts as success: the release the plan pinned is the one
+  // being served, and the pointer was deliberately not rewritten to say so.
   const ok =
     uploadReport.failed === 0 &&
     failedIndexKeys.length === 0 &&
     seedReport.failed === 0 &&
-    releaseWritten;
+    (releaseWritten || alreadyActive);
 
   const elapsedMs = Date.now() - startedAt;
   logPublishSummary({
@@ -628,6 +649,7 @@ export const runCatalogPublish = async (
     packLock: finalPackLock,
     legacyAlias,
     releaseWritten,
+    alreadyActive,
     releaseId,
     elapsedMs,
   };

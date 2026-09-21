@@ -5,6 +5,8 @@
 // separation could be lost.
 
 import { describe, expect, test } from 'bun:test';
+import { existsSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { CATALOG_ORIGINS, R2_BUCKETS } from '@aikami/constants';
 import {
   CATALOG_ORIGIN_FORBIDDEN_HOSTS,
@@ -16,6 +18,16 @@ import {
 
 const STAGING_ORIGIN = 'https://staging-assets.example.test';
 const PRODUCTION_ORIGIN = `https://${CATALOG_ORIGIN_FORBIDDEN_HOSTS[0]}`;
+
+/**
+ * `scripts/` in this checkout — the directory `readSiblingEnvValue` reads from.
+ *
+ * `scripts/src/lib/catalog/__tests__` → up 4 → `scripts`. Deliberately derived
+ * the same way the module under test derives it, so a path fix in one without
+ * the other shows up as a failing test rather than a silently skipped check.
+ */
+const SCRIPTS_DIR = resolve(import.meta.dirname, '../../../..');
+const SIBLING_PRODUCTION_ENV = join(SCRIPTS_DIR, '.env.production');
 
 /**
  * A PROVISIONED origin table.
@@ -178,22 +190,75 @@ describe('release target — the read origin must not be production', () => {
   });
 
   test('a mode with NO provisioned origin fails closed, never falling back', () => {
-    // The committed table records staging's origin as null: there is no public
-    // URL for `aikami-staging-catalog`. That must refuse rather than accept
-    // whatever the environment says, because the only other origin available is
-    // production's — which is the bug this whole gate exists to catch.
+    // A table that records staging as unprovisioned — the shape the committed
+    // one had before `assets.stg.bearlysleeping.com` was attached to
+    // `aikami-staging-catalog`. The gate must refuse rather than accept
+    // whatever the environment says, because the only other origin available
+    // is production's — which is the bug this whole gate exists to catch.
+    const UNPROVISIONED = {
+      production: { bucketName: 'aikami-catalog', originUrl: PRODUCTION_ORIGIN },
+      staging: { bucketName: 'aikami-staging-catalog', originUrl: null },
+    };
     expectRejection(
-      () => resolveReleaseTarget({ mode: 'staging', env: { catalogOriginUrl: STAGING_ORIGIN } }),
+      () =>
+        resolveReleaseTarget({
+          mode: 'staging',
+          env: { catalogOriginUrl: STAGING_ORIGIN },
+          origins: UNPROVISIONED,
+        }),
       'origin-not-provisioned',
     );
   });
 
-  test('the shipped table records staging as unprovisioned and distinct', () => {
-    // Guards the invariant rather than trusting it: if someone fills this in
-    // without provisioning the real origin, staging verification becomes a lie.
-    expect(CATALOG_ORIGINS.staging.originUrl).toBeNull();
-    expect(CATALOG_ORIGINS.production.originUrl).not.toBeNull();
+  test('the shipped table records a real, distinct staging identity', () => {
+    // Guards the invariant rather than trusting it: staging must name its own
+    // bucket and its own PROVISIONED origin, and neither may equal
+    // production's. This is the regression that would otherwise be silent —
+    // staging quietly publishing to, or verifying against, production.
+    expect(CATALOG_ORIGINS.staging.bucketName).toBe('aikami-staging-catalog');
+    expect(CATALOG_ORIGINS.staging.originUrl).toBe('https://assets.stg.bearlysleeping.com');
+    expect(CATALOG_ORIGINS.production.bucketName).toBe('aikami-catalog');
+    expect(CATALOG_ORIGINS.production.originUrl).toBe('https://assets.bearlysleeping.com');
     expect(CATALOG_ORIGINS.staging.bucketName).not.toBe(CATALOG_ORIGINS.production.bucketName);
+    expect(CATALOG_ORIGINS.staging.originUrl).not.toBe(CATALOG_ORIGINS.production.originUrl);
+  });
+
+  test('the staging origin is not on the production denylist', () => {
+    // `CATALOG_ORIGIN_FORBIDDEN_HOSTS` is DERIVED from the production entry, so
+    // this also proves the derivation still points at production and not at
+    // whichever entry happens to be listed last.
+    const stagingHost = new URL(CATALOG_ORIGINS.staging.originUrl as string).hostname;
+    const productionHost = new URL(CATALOG_ORIGINS.production.originUrl as string).hostname;
+    expect(CATALOG_ORIGIN_FORBIDDEN_HOSTS).toContain(productionHost);
+    expect(CATALOG_ORIGIN_FORBIDDEN_HOSTS).not.toContain(stagingHost);
+  });
+
+  test('the committed table resolves staging end to end, with no injected table', () => {
+    // The injected-table tests above exercise the RULES; this one exercises the
+    // SHIPPED identity, so a table that is internally consistent but wrong
+    // (e.g. both modes pointing at production) still fails.
+    const target = resolveReleaseTarget({
+      mode: 'staging',
+      env: {
+        catalogBucket: 'aikami-staging-catalog',
+        catalogOriginUrl: 'https://assets.stg.bearlysleeping.com',
+      },
+    });
+    expect(target.bucket).toBe('aikami-staging-catalog');
+    expect(target.originUrl).toBe('https://assets.stg.bearlysleeping.com');
+    expect(target.viaTestSeam).toBe(false);
+  });
+
+  test('the committed table resolves production end to end, with no injected table', () => {
+    const target = resolveReleaseTarget({
+      mode: 'production',
+      env: {
+        catalogBucket: 'aikami-catalog',
+        catalogOriginUrl: 'https://assets.bearlysleeping.com',
+      },
+    });
+    expect(target.bucket).toBe('aikami-catalog');
+    expect(target.originUrl).toBe('https://assets.bearlysleeping.com');
   });
 
   test('production is allowed to read the production origin', () => {
@@ -230,10 +295,17 @@ describe('release target — the read origin must not be production', () => {
   });
 
   test('an absent sibling env file is reported, not silently ignored', () => {
-    // scripts/.env.production is not committed, so the cross-mode origin
+    // scripts/.env.production is not committed, so in CI the cross-mode origin
     // comparison cannot run. The gate must say so rather than imply a check
-    // that did not happen.
-    const target = staging();
-    expect(target.warnings.join(' ')).toContain('scripts/.env.production');
+    // that did not happen. A developer checkout that HAS decrypted
+    // scripts/.env.production exercises the real comparison instead — so the
+    // assertion is conditional on which of the two situations this is, and
+    // neither branch is allowed to be silent.
+    const warned = staging().warnings.join(' ');
+    if (existsSync(SIBLING_PRODUCTION_ENV)) {
+      expect(warned).not.toContain('is absent');
+    } else {
+      expect(warned).toContain('scripts/.env.production');
+    }
   });
 });
