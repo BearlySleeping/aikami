@@ -406,6 +406,14 @@ export default defineConfig(({ command, mode }) => {
     },
 
     server: {
+      // Bind the IPv4 loopback explicitly (same rationale as the hub's
+      // vite.config.ts): Vite's default `localhost` host resolves to ::1 first
+      // on some machines, so the server listens on IPv6 only. The herdr
+      // readiness probe and the dev-identity check target 127.0.0.1, which
+      // then gets connection-refused and misreports the running client as a
+      // foreign instance — failing `bun herdr:start` even though it is ours.
+      // 127.0.0.1 keeps browser, e2e and probe access on one address family.
+      host: '127.0.0.1',
       fs: {
         allow: [rootDirectory],
       },
