@@ -36,6 +36,7 @@ import {
   auditEmberwatchPropSources,
   LEGACY_GRID_PROP_FRAMES,
 } from './emberwatch_prop_source_guard.ts';
+import { ATLAS_TILE_SIZE } from './generate_emberwatch_tables.ts';
 
 export type PropArtClassification =
   | 'accepted-standalone'
@@ -89,7 +90,6 @@ type ManifestWithProvenance = Manifest & {
 };
 
 const DEFAULT_OUT = join(repository, 'docs/reference/emberwatch-visual-report.json');
-const LEGACY_GRID_FRAME_SIZE = 32;
 
 const generatedAt = (): string =>
   process.env.SOURCE_DATE_EPOCH
@@ -145,7 +145,7 @@ const buildPropRow = (options: {
   const texturePixels =
     sourcePixels ??
     (LEGACY_GRID_PROP_FRAMES.has(frame)
-      ? { width: LEGACY_GRID_FRAME_SIZE, height: LEGACY_GRID_FRAME_SIZE }
+      ? { width: ATLAS_TILE_SIZE, height: ATLAS_TILE_SIZE }
       : { width: 0, height: 0 });
   const renderSize = def?.renderSize;
   const worldSize = computePropRenderSize({

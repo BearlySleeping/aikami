@@ -142,14 +142,17 @@ const normalizeManifest = (manifest: LegacyPropManifest): unknown =>
       .sort((a, b) => a.frame.localeCompare(b.frame)),
   });
 
-/** Validates the committed manifest still covers exactly the legacy frames. */
-export const checkLegacyPropManifest = (): { ok: boolean; reasons: string[] } => {
+/**
+ * Pure comparison of a declared manifest against a freshly generated one.
+ * Normalizes key/array order and compares the COMPLETE document — ids,
+ * propIds, maps, frames, target canvas, preparation profile and acceptance
+ * criteria — so a stale acceptance string or target canvas fails `--check`.
+ */
+export const compareLegacyPropManifests = (
+  declared: LegacyPropManifest,
+  wanted: LegacyPropManifest,
+): string[] => {
   const reasons: string[] = [];
-  if (!existsSync(MANIFEST_PATH)) {
-    return { ok: false, reasons: [`missing ${MANIFEST_PATH}`] };
-  }
-  const declared = JSON.parse(readFileSync(MANIFEST_PATH, 'utf8')) as LegacyPropManifest;
-  const wanted = buildLegacyPropManifest();
   const declaredFrames = declared.items.map((item) => item.frame).sort();
   const wantedFrames = wanted.items.map((item) => item.frame).sort();
   if (declaredFrames.join(',') !== wantedFrames.join(',')) {
@@ -170,6 +173,16 @@ export const checkLegacyPropManifest = (): { ok: boolean; reasons: string[] } =>
       `manifest covers ${declared.items.length} frames but the allowlist has ${LEGACY_GRID_PROP_FRAMES.size}`,
     );
   }
+  return reasons;
+};
+
+/** Validates the committed manifest still covers exactly the legacy frames. */
+export const checkLegacyPropManifest = (): { ok: boolean; reasons: string[] } => {
+  if (!existsSync(MANIFEST_PATH)) {
+    return { ok: false, reasons: [`missing ${MANIFEST_PATH}`] };
+  }
+  const declared = JSON.parse(readFileSync(MANIFEST_PATH, 'utf8')) as LegacyPropManifest;
+  const reasons = compareLegacyPropManifests(declared, buildLegacyPropManifest());
   return { ok: reasons.length === 0, reasons };
 };
 

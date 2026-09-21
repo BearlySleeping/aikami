@@ -109,4 +109,14 @@ describe('emberwatch locked identity', () => {
 
     expect(serializeLockedIdentities(first)).toBe(serializeLockedIdentities(second));
   });
+
+  test('a deliberate identity difference does not serialize equal', () => {
+    const a = fixture();
+    const b = fixture();
+    b.maps.village?.propIds.push('secret_door');
+    if (b.maps.village) {
+      b.maps.village.transitions = [{ id: 1, targetMap: 'inn', targetSpawnId: 'cellar' }];
+    }
+    expect(serializeLockedIdentities(a)).not.toBe(serializeLockedIdentities(b));
+  });
 });

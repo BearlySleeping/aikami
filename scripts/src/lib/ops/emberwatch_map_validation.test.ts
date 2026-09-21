@@ -260,19 +260,13 @@ describe('emberwatch map validation rules', () => {
     ).toHaveLength(2);
   });
 
-  test('route width pathfinds to diagonal centres and reports missing routes', () => {
-    const diagonal = makeContext({
-      id: 'diagonal',
-      blocked: [
-        [0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0],
-      ],
+  test('a named arrival marker on a blocked cell is a blocker', () => {
+    const contextA = makeContext({
+      id: 'a',
+      blocked: [[0]],
       objects: [
         transition({
-          targetMap: 'other',
+          targetMap: 'b',
           targetSpawnId: 'arrival',
           targetX: 0,
           targetY: 0,
@@ -283,16 +277,31 @@ describe('emberwatch map validation rules', () => {
         }),
       ],
     });
-    const blocked = makeContext({
-      id: 'blocked',
-      blocked: [
-        [0, 1, 0],
-        [1, 1, 1],
-        [0, 1, 0],
-      ],
+    const contextB = makeContext({
+      id: 'b',
+      blocked: [[1, 0]],
+      objects: [{ type: 'spawn', x: 0, y: 0, props: { spawnId: 'arrival' } }],
+    });
+    const findings: Parameters<typeof validateTransitions>[1] = [];
+    validateTransitions(
+      new Map([
+        ['a', contextA],
+        ['b', contextB],
+      ]),
+      findings,
+    );
+    expect(findings.some((finding) => finding.rule === 'transition-target-spawn-blocked')).toBe(
+      true,
+    );
+  });
+
+  test('a named arrival marker isolated from the main area is a blocker', () => {
+    const contextA = makeContext({
+      id: 'a',
+      blocked: [[0]],
       objects: [
         transition({
-          targetMap: 'other',
+          targetMap: 'b',
           targetSpawnId: 'arrival',
           targetX: 0,
           targetY: 0,
@@ -303,15 +312,204 @@ describe('emberwatch map validation rules', () => {
         }),
       ],
     });
-    const diagonalFindings: Parameters<typeof validateRouteWidth>[1] = [];
-    const blockedFindings: Parameters<typeof validateRouteWidth>[1] = [];
+    // (0,0) is a walkable one-cell pocket; the main component is the rest.
+    const contextB = makeContext({
+      id: 'b',
+      blocked: [
+        [0, 1, 0],
+        [1, 0, 0],
+        [0, 0, 0],
+      ],
+      objects: [{ type: 'spawn', x: 0, y: 0, props: { spawnId: 'arrival' } }],
+    });
+    const findings: Parameters<typeof validateTransitions>[1] = [];
+    validateTransitions(
+      new Map([
+        ['a', contextA],
+        ['b', contextB],
+      ]),
+      findings,
+    );
+    expect(findings.some((finding) => finding.rule === 'transition-target-spawn-unreachable')).toBe(
+      true,
+    );
+  });
 
-    validateRouteWidth(diagonal, diagonalFindings);
-    validateRouteWidth(blocked, blockedFindings);
+  test('route width passes a straight 3-cell corridor', () => {
+    const context = makeContext({
+      id: 'wide',
+      blocked: [
+        [0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0],
+      ],
+      objects: [
+        transition({
+          targetMap: 'other',
+          targetX: 0,
+          targetY: 0,
+          x: 0,
+          y: 0,
+          width: 32,
+          height: 32,
+        }),
+      ],
+    });
+    const findings: Parameters<typeof validateRouteWidth>[1] = [];
+    validateRouteWidth(context, findings);
+    expect(findings).toEqual([]);
+  });
 
-    expect(diagonalFindings).toEqual([]);
-    expect(blockedFindings.map((finding) => finding.rule)).toContain('route-width-below-minimum');
-    expect(blockedFindings[0]?.detail).toContain('no walkable route');
+  test('route width warns on a straight 1-cell corridor', () => {
+    const context = makeContext({
+      id: 'narrow',
+      blocked: [
+        [1, 1, 1, 1, 1, 1, 1],
+        [0, 0, 0, 0, 0, 0, 0],
+        [1, 1, 1, 1, 1, 1, 1],
+      ],
+      objects: [
+        transition({
+          targetMap: 'other',
+          targetX: 0,
+          targetY: 0,
+          x: 0,
+          y: 32,
+          width: 32,
+          height: 32,
+        }),
+      ],
+    });
+    const findings: Parameters<typeof validateRouteWidth>[1] = [];
+    validateRouteWidth(context, findings);
+    expect(findings.map((entry) => entry.rule)).toContain('route-width-below-minimum');
+    expect(findings[0]?.severity).toBe('warning');
+    expect(findings[0]?.detail).toContain('clearance 1 cells');
+  });
+
+  test('route width checks an L-shaped route whose endpoints differ on both axes', () => {
+    // A 3-wide L: horizontal arm rows 3-5, vertical arm cols 3-5.
+    const blocked = [
+      [1, 1, 1, 0, 0, 0, 1],
+      [1, 1, 1, 0, 0, 0, 1],
+      [1, 1, 1, 0, 0, 0, 1],
+      [0, 0, 0, 0, 0, 0, 0],
+      [0, 0, 0, 0, 0, 0, 0],
+      [0, 0, 0, 0, 0, 0, 0],
+      [1, 1, 1, 0, 0, 0, 1],
+    ];
+    const context = makeContext({
+      id: 'ell',
+      blocked,
+      objects: [
+        transition({
+          targetMap: 'other',
+          targetX: 0,
+          targetY: 0,
+          x: 0,
+          y: 128,
+          width: 32,
+          height: 32,
+        }),
+      ],
+    });
+    const findings: Parameters<typeof validateRouteWidth>[1] = [];
+    validateRouteWidth(context, findings);
+    expect(findings).toEqual([]);
+  });
+
+  test('route width detects a narrow chokepoint in an otherwise broad route', () => {
+    // Column 3 is solid except for a single-cell gap at row 3.
+    const blocked = [
+      [0, 0, 0, 1, 0, 0, 0],
+      [0, 0, 0, 1, 0, 0, 0],
+      [0, 0, 0, 1, 0, 0, 0],
+      [0, 0, 0, 0, 0, 0, 0],
+      [0, 0, 0, 1, 0, 0, 0],
+      [0, 0, 0, 1, 0, 0, 0],
+      [0, 0, 0, 1, 0, 0, 0],
+    ];
+    const context = makeContext({
+      id: 'choke',
+      blocked,
+      objects: [
+        transition({
+          targetMap: 'other',
+          targetX: 0,
+          targetY: 0,
+          x: 0,
+          y: 96,
+          width: 32,
+          height: 32,
+        }),
+      ],
+    });
+    const findings: Parameters<typeof validateRouteWidth>[1] = [];
+    validateRouteWidth(context, findings);
+    expect(findings.map((entry) => entry.rule)).toContain('route-width-below-minimum');
+    expect(findings[0]?.detail).toContain('clearance 1 cells');
+  });
+
+  test('route width is perpendicular to travel, not the long horizontal run', () => {
+    // Two broad rooms joined by a one-cell vertical passage. The horizontal
+    // runs are 7 cells, but the usable width through the passage is 1.
+    const blocked = [
+      [0, 0, 0, 0, 0, 0, 0],
+      [0, 0, 0, 0, 0, 0, 0],
+      [0, 0, 0, 0, 0, 0, 0],
+      [1, 1, 1, 0, 1, 1, 1],
+      [0, 0, 0, 0, 0, 0, 0],
+      [0, 0, 0, 0, 0, 0, 0],
+      [0, 0, 0, 0, 0, 0, 0],
+    ];
+    const context = makeContext({
+      id: 'passage',
+      blocked,
+      objects: [
+        transition({
+          targetMap: 'other',
+          targetX: 0,
+          targetY: 0,
+          x: 0,
+          y: 0,
+          width: 32,
+          height: 32,
+        }),
+      ],
+    });
+    const findings: Parameters<typeof validateRouteWidth>[1] = [];
+    validateRouteWidth(context, findings);
+    expect(findings.map((entry) => entry.rule)).toContain('route-width-below-minimum');
+    expect(findings[0]?.detail).toContain('clearance 1 cells');
+    expect(findings[0]?.detail).not.toContain('clearance 7 cells');
+  });
+
+  test('route width errors when the destination is unreachable', () => {
+    const context = makeContext({
+      id: 'isolated',
+      blocked: [
+        [0, 1, 0, 0, 0],
+        [0, 1, 0, 0, 0],
+        [0, 1, 0, 0, 0],
+        [0, 1, 0, 0, 0],
+        [0, 1, 0, 0, 0],
+      ],
+      objects: [
+        transition({
+          targetMap: 'other',
+          targetX: 0,
+          targetY: 0,
+          x: 0,
+          y: 0,
+          width: 32,
+          height: 32,
+        }),
+      ],
+    });
+    const findings: Parameters<typeof validateRouteWidth>[1] = [];
+    validateRouteWidth(context, findings);
+    expect(findings.map((entry) => entry.rule)).toContain('route-unreachable');
+    expect(findings[0]?.severity).toBe('error');
   });
 
   test('npc on a blocked cell and unreachable npc are detected', () => {

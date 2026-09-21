@@ -69,15 +69,30 @@ describe('diagnostics — mode detection', () => {
     expect(isVisualScreenshotMode()).toBe(true);
   });
 
-  test('authoring mode requires a recognized development mode and an explicit flag', () => {
+  test('authoring mode is enabled only for a development mode plus ?authoring=true', () => {
     setWindow(makeWindow('?authoring=true'));
-    process.env.PUBLIC_MODE = 'production';
-    expect(isAuthoringOverlayMode()).toBe(false);
-    process.env.PUBLIC_MODE = 'unknown';
-    expect(isAuthoringOverlayMode()).toBe(false);
     process.env.PUBLIC_MODE = 'testing';
     expect(isAuthoringOverlayMode()).toBe(true);
+
+    process.env.PUBLIC_MODE = 'production';
+    expect(isAuthoringOverlayMode()).toBe(false);
+
+    process.env.PUBLIC_MODE = 'unknown';
+    expect(isAuthoringOverlayMode()).toBe(false);
+  });
+
+  test('authoring mode fails closed when the mode is unset', () => {
+    setWindow(makeWindow('?authoring=true'));
+    delete process.env.PUBLIC_MODE;
+    expect(isAuthoringOverlayMode()).toBe(false);
+  });
+
+  test('authoring mode is disabled without the query flag', () => {
     setWindow(makeWindow());
+    process.env.PUBLIC_MODE = 'testing';
+    expect(isAuthoringOverlayMode()).toBe(false);
+
+    setWindow(makeWindow('?authoring=false'));
     expect(isAuthoringOverlayMode()).toBe(false);
   });
 });

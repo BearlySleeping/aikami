@@ -94,8 +94,8 @@
       },
       "sourcePixels": null,
       "worldSize": {
-        "width": 1,
-        "height": 1
+        "width": 32,
+        "height": 32
       },
       "worldSizeAuthored": false,
       "anchor": {
@@ -390,8 +390,8 @@
       },
       "sourcePixels": null,
       "worldSize": {
-        "width": 1,
-        "height": 1
+        "width": 32,
+        "height": 32
       },
       "worldSizeAuthored": false,
       "anchor": {
@@ -420,8 +420,8 @@
       },
       "sourcePixels": null,
       "worldSize": {
-        "width": 1,
-        "height": 1
+        "width": 32,
+        "height": 32
       },
       "worldSizeAuthored": false,
       "anchor": {
@@ -450,8 +450,8 @@
       },
       "sourcePixels": null,
       "worldSize": {
-        "width": 1,
-        "height": 1
+        "width": 32,
+        "height": 32
       },
       "worldSizeAuthored": false,
       "anchor": {
@@ -518,8 +518,8 @@
       },
       "sourcePixels": null,
       "worldSize": {
-        "width": 1,
-        "height": 1
+        "width": 32,
+        "height": 32
       },
       "worldSizeAuthored": false,
       "anchor": {
@@ -586,8 +586,8 @@
       },
       "sourcePixels": null,
       "worldSize": {
-        "width": 1,
-        "height": 1
+        "width": 32,
+        "height": 32
       },
       "worldSizeAuthored": false,
       "anchor": {
@@ -616,8 +616,8 @@
       },
       "sourcePixels": null,
       "worldSize": {
-        "width": 1,
-        "height": 1
+        "width": 32,
+        "height": 32
       },
       "worldSizeAuthored": false,
       "anchor": {
@@ -646,8 +646,8 @@
       },
       "sourcePixels": null,
       "worldSize": {
-        "width": 1,
-        "height": 1
+        "width": 32,
+        "height": 32
       },
       "worldSizeAuthored": false,
       "anchor": {
@@ -828,8 +828,8 @@
       },
       "sourcePixels": null,
       "worldSize": {
-        "width": 1,
-        "height": 1
+        "width": 32,
+        "height": 32
       },
       "worldSizeAuthored": false,
       "anchor": {
@@ -858,8 +858,8 @@
       },
       "sourcePixels": null,
       "worldSize": {
-        "width": 1,
-        "height": 1
+        "width": 32,
+        "height": 32
       },
       "worldSizeAuthored": false,
       "anchor": {
@@ -888,8 +888,8 @@
       },
       "sourcePixels": null,
       "worldSize": {
-        "width": 1,
-        "height": 1
+        "width": 32,
+        "height": 32
       },
       "worldSizeAuthored": false,
       "anchor": {
@@ -918,8 +918,8 @@
       },
       "sourcePixels": null,
       "worldSize": {
-        "width": 1,
-        "height": 1
+        "width": 32,
+        "height": 32
       },
       "worldSizeAuthored": false,
       "anchor": {
@@ -948,8 +948,8 @@
       },
       "sourcePixels": null,
       "worldSize": {
-        "width": 1,
-        "height": 1
+        "width": 32,
+        "height": 32
       },
       "worldSizeAuthored": false,
       "anchor": {
@@ -978,8 +978,8 @@
       },
       "sourcePixels": null,
       "worldSize": {
-        "width": 1,
-        "height": 1
+        "width": 32,
+        "height": 32
       },
       "worldSizeAuthored": false,
       "anchor": {
@@ -1008,8 +1008,8 @@
       },
       "sourcePixels": null,
       "worldSize": {
-        "width": 1,
-        "height": 1
+        "width": 32,
+        "height": 32
       },
       "worldSizeAuthored": false,
       "anchor": {
@@ -1038,8 +1038,8 @@
       },
       "sourcePixels": null,
       "worldSize": {
-        "width": 1,
-        "height": 1
+        "width": 32,
+        "height": 32
       },
       "worldSizeAuthored": false,
       "anchor": {
@@ -1815,8 +1815,8 @@
       },
       "sourcePixels": null,
       "worldSize": {
-        "width": 1,
-        "height": 1
+        "width": 32,
+        "height": 32
       },
       "worldSizeAuthored": false,
       "anchor": {
@@ -1845,8 +1845,8 @@
       },
       "sourcePixels": null,
       "worldSize": {
-        "width": 1,
-        "height": 1
+        "width": 32,
+        "height": 32
       },
       "worldSizeAuthored": false,
       "anchor": {
@@ -2055,8 +2055,8 @@
       },
       "sourcePixels": null,
       "worldSize": {
-        "width": 1,
-        "height": 1
+        "width": 32,
+        "height": 32
       },
       "worldSizeAuthored": false,
       "anchor": {
@@ -2234,8 +2234,8 @@
       },
       "sourcePixels": null,
       "worldSize": {
-        "width": 1,
-        "height": 1
+        "width": 32,
+        "height": 32
       },
       "worldSizeAuthored": false,
       "anchor": {
@@ -2302,8 +2302,8 @@
       },
       "sourcePixels": null,
       "worldSize": {
-        "width": 1,
-        "height": 1
+        "width": 32,
+        "height": 32
       },
       "worldSizeAuthored": false,
       "anchor": {
@@ -2751,8 +2751,8 @@
       },
       "sourcePixels": null,
       "worldSize": {
-        "width": 1,
-        "height": 1
+        "width": 32,
+        "height": 32
       },
       "worldSizeAuthored": false,
       "anchor": {
@@ -2819,16 +2819,7 @@
         "crate.png"
       ],
       "landmarkPlacements": [
-        "road_oak_0",
-        "road_oak_10",
-        "road_oak_12",
-        "road_oak_14",
-        "road_oak_16",
-        "road_oak_2",
-        "road_oak_4",
-        "road_oak_6",
-        "road_oak_8",
-        "waystation_cart"
+        "road_notice"
       ]
     },
     {
@@ -2846,7 +2837,7 @@
       ],
       "landmarkPlacements": [
         "shrine_arch",
-        "shrine_oak"
+        "ward_socket"
       ]
     },
     {
@@ -2864,15 +2855,10 @@
         "crate.png"
       ],
       "landmarkPlacements": [
+        "notice_board",
         "village_gate",
-        "ward_grove_a",
-        "ward_grove_b",
-        "ward_grove_c",
-        "ward_tree_landmark",
-        "woodland_oak",
-        "woodland_oak_2",
-        "woodland_oak_3",
-        "woodland_oak_4"
+        "village_well",
+        "ward_tree_landmark"
       ]
     }
   ],

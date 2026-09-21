@@ -1,7 +1,11 @@
 // scripts/src/lib/ops/emberwatch_legacy_props.test.ts
 
 import { describe, expect, test } from 'bun:test';
-import { buildLegacyPropManifest, checkLegacyPropManifest } from './emberwatch_legacy_props.ts';
+import {
+  buildLegacyPropManifest,
+  checkLegacyPropManifest,
+  compareLegacyPropManifests,
+} from './emberwatch_legacy_props.ts';
 import { LEGACY_GRID_PROP_FRAMES } from './emberwatch_prop_source_guard.ts';
 
 describe('emberwatch legacy prop replacements', () => {
@@ -29,6 +33,54 @@ describe('emberwatch legacy prop replacements', () => {
   test('the manifest is deterministic', () => {
     expect(JSON.stringify(buildLegacyPropManifest())).toBe(
       JSON.stringify(buildLegacyPropManifest()),
+    );
+  });
+
+  test('a freshly generated manifest compares clean', () => {
+    const wanted = buildLegacyPropManifest();
+    expect(compareLegacyPropManifests(wanted, buildLegacyPropManifest())).toEqual([]);
+  });
+
+  test('stale acceptance criteria fail the check', () => {
+    const wanted = buildLegacyPropManifest();
+    const declared = structuredClone(wanted);
+    const first = declared.items[0];
+    if (!first) {
+      throw new Error('manifest has no items');
+    }
+    first.acceptance = [...first.acceptance, 'stale extra gate'];
+    const reasons = compareLegacyPropManifests(declared, wanted);
+    expect(reasons).toContain(
+      'manifest contents do not match the current generated replacement manifest',
+    );
+  });
+
+  test('a stale target canvas fails the check', () => {
+    const wanted = buildLegacyPropManifest();
+    const declared = structuredClone(wanted);
+    const first = declared.items[0];
+    if (!first) {
+      throw new Error('manifest has no items');
+    }
+    first.targetCanvas = [9999, 9999];
+    const reasons = compareLegacyPropManifests(declared, wanted);
+    expect(reasons).toContain(
+      'manifest contents do not match the current generated replacement manifest',
+    );
+  });
+
+  test('a stale propId or map fails the check', () => {
+    const wanted = buildLegacyPropManifest();
+    const declared = structuredClone(wanted);
+    const first = declared.items[0];
+    if (!first) {
+      throw new Error('manifest has no items');
+    }
+    first.propIds = [...first.propIds, 'ghost_prop'];
+    first.maps = [...first.maps, 'ghost_map'];
+    const reasons = compareLegacyPropManifests(declared, wanted);
+    expect(reasons).toContain(
+      'manifest contents do not match the current generated replacement manifest',
     );
   });
 });

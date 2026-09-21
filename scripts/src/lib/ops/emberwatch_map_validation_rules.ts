@@ -6,7 +6,6 @@
 
 import {
   cellOfPoint,
-  clearanceAt,
   cloneGrid,
   componentsOf,
   gridIndex,
@@ -28,8 +27,12 @@ import {
 } from './emberwatch_map_validation_context.ts';
 import { LEGACY_GRID_PROP_FRAMES } from './emberwatch_prop_source_guard.ts';
 
-/** Minimum companion-safe corridor width (cells) for a map-to-map route. */
-export const COMPANION_SAFE_ROUTE_WIDTH = 3;
+// Route-width validation pathfinds and lives in its own module (see
+// `emberwatch_map_route_width.ts`); re-exported here for existing callers.
+export {
+  COMPANION_SAFE_ROUTE_WIDTH,
+  validateRouteWidth,
+} from './emberwatch_map_route_width.ts';
 
 const finding = (
   rule: string,
@@ -278,8 +281,11 @@ const bounceBackFindings = (
   transition: MapContext['transitions'][number],
   subject: string,
 ): ValidationFinding[] => {
-  const targetSpawnId = str(transition.props.targetSpawnId);
-  if (targetSpawnId.length === 0) {
+  const rawSpawnId = transition.props.targetSpawnId;
+  // A named arrival is mandatory: an absent/empty id cannot resolve to a
+  // marker, so the runtime silently falls back to the numeric landing. Fail
+  // closed rather than reporting "0 blockers" for an unresolvable target.
+  if (typeof rawSpawnId !== 'string' || rawSpawnId.trim().length === 0) {
     return [
       finding(
         'transition-target-spawn-invalid',
@@ -290,6 +296,7 @@ const bounceBackFindings = (
       ),
     ];
   }
+  const targetSpawnId = rawSpawnId;
   const marker = targetContext.spawns.find((s) => str(s.props.spawnId) === targetSpawnId);
   if (!marker) {
     return [
@@ -302,22 +309,80 @@ const bounceBackFindings = (
       ),
     ];
   }
+
+  // The marker exists — now validate it. Marker-specific checks only run once a
+  // real marker has been resolved.
+  const findings: ValidationFinding[] = [];
   const markerCell = cellOfPoint(marker.x, marker.y);
+  if (!isWalkable(targetContext.grid, markerCell.c, markerCell.r)) {
+    findings.push(
+      finding(
+        'transition-target-spawn-blocked',
+        'error',
+        subject,
+        `spawn ${targetSpawnId}`,
+        `named arrival marker sits on a blocked cell (${markerCell.c},${markerCell.r})`,
+      ),
+    );
+  } else if (!inMainComponent(targetContext, markerCell)) {
+    // A named arrival marker is itself a spawn, so "reachable from the
+    // destination spawns" is circular. The meaningful failure is that the
+    // marker is walled off from the map's main walkable area: the player would
+    // arrive in a pocket they cannot leave.
+    findings.push(
+      finding(
+        'transition-target-spawn-unreachable',
+        'error',
+        subject,
+        `spawn ${targetSpawnId}`,
+        `named arrival marker at (${markerCell.c},${markerCell.r}) is isolated from the destination map's main walkable area`,
+      ),
+    );
+  }
+
   const inZone = targetContext.transitions.some((zone) =>
     rectCells(zone).some((cell) => cell.c === markerCell.c && cell.r === markerCell.r),
   );
-  if (!inZone) {
-    return [];
+  if (inZone) {
+    findings.push(
+      finding(
+        'transition-bounce-back',
+        'error',
+        subject,
+        `spawn ${targetSpawnId}`,
+        'named arrival marker sits inside a transition rectangle on the destination',
+      ),
+    );
   }
-  return [
-    finding(
-      'transition-bounce-back',
-      'error',
-      subject,
-      `spawn ${targetSpawnId}`,
-      'named arrival marker sits inside a transition rectangle on the destination',
-    ),
-  ];
+  return findings;
+};
+
+/**
+ * True when a walkable cell belongs to the map's largest connected walkable
+ * component — the main playable area, as opposed to a decorative pocket.
+ */
+const inMainComponent = (context: MapContext, cell: { c: number; r: number }): boolean => {
+  const labels = componentsOf(context.grid);
+  const label = labels[gridIndex(context.grid, cell.c, cell.r)];
+  if (label === undefined || label < 0) {
+    return false;
+  }
+  const sizes = new Map<number, number>();
+  for (const value of labels) {
+    if (value < 0) {
+      continue;
+    }
+    sizes.set(value, (sizes.get(value) ?? 0) + 1);
+  }
+  let mainLabel = -1;
+  let mainSize = 0;
+  for (const [value, size] of sizes) {
+    if (size > mainSize) {
+      mainSize = size;
+      mainLabel = value;
+    }
+  }
+  return label === mainLabel;
 };
 
 const rectsOverlap = (
@@ -583,103 +648,6 @@ const unreachableAnchorFinding = (options: {
     anchor.label,
     `not reachable from the spawns at (${anchor.c},${anchor.r})`,
   );
-};
-
-// ---------------------------------------------------------------------------
-// Route width (warning)
-// ---------------------------------------------------------------------------
-
-const ROUTE_STEPS = [
-  [1, 0],
-  [-1, 0],
-  [0, 1],
-  [0, -1],
-] as const;
-
-const improveRouteNeighbors = (options: {
-  context: MapContext;
-  best: Uint16Array;
-  queue: number[];
-  index: number;
-}): void => {
-  const { context, best, queue, index } = options;
-  const c = index % context.grid.width;
-  const r = Math.floor(index / context.grid.width);
-  for (const [dc, dr] of ROUTE_STEPS) {
-    const nc = c + dc;
-    const nr = r + dr;
-    if (!isWalkable(context.grid, nc, nr)) {
-      continue;
-    }
-    const step = { dc, dr };
-    const edgeClearance = Math.min(
-      clearanceAt(context.grid, c, r, step),
-      clearanceAt(context.grid, nc, nr, step),
-    );
-    const next = gridIndex(context.grid, nc, nr);
-    const candidate = Math.min(best[index] ?? 0, edgeClearance);
-    if (candidate <= (best[next] ?? 0)) {
-      continue;
-    }
-    best[next] = candidate;
-    queue.push(next);
-  }
-};
-
-const maxRouteClearance = (
-  context: MapContext,
-  from: { c: number; r: number },
-  to: { c: number; r: number },
-): number => {
-  if (!isWalkable(context.grid, from.c, from.r) || !isWalkable(context.grid, to.c, to.r)) {
-    return 0;
-  }
-  if (from.c === to.c && from.r === to.r) {
-    return Math.max(
-      clearanceAt(context.grid, from.c, from.r, { dc: 1, dr: 0 }),
-      clearanceAt(context.grid, from.c, from.r, { dc: 0, dr: 1 }),
-    );
-  }
-  const best = new Uint16Array(context.grid.width * context.grid.height);
-  const queue = [gridIndex(context.grid, from.c, from.r)];
-  best[queue[0] ?? 0] = Math.max(context.grid.width, context.grid.height);
-  let head = 0;
-  while (head < queue.length) {
-    const index = queue[head++];
-    if (index === undefined) {
-      continue;
-    }
-    improveRouteNeighbors({ context, best, queue, index });
-  }
-  return best[gridIndex(context.grid, to.c, to.r)] ?? 0;
-};
-
-export const validateRouteWidth = (context: MapContext, findings: ValidationFinding[]): void => {
-  const centre = {
-    c: Math.floor(context.raw.width / 2),
-    r: Math.floor(context.raw.height / 2),
-  };
-  for (const gate of context.transitions) {
-    const minClearance = rectCells(gate).reduce(
-      (widest, start) => Math.max(widest, maxRouteClearance(context, start, centre)),
-      0,
-    );
-    if (minClearance < COMPANION_SAFE_ROUTE_WIDTH) {
-      const detail =
-        minClearance === 0
-          ? `no walkable route to the map centre supports the companion-safe width ${COMPANION_SAFE_ROUTE_WIDTH}`
-          : `clearance ${minClearance} cells is below the companion-safe minimum ${COMPANION_SAFE_ROUTE_WIDTH}`;
-      findings.push(
-        finding(
-          'route-width-below-minimum',
-          'warning',
-          context.id,
-          `transition:${str(gate.props.targetMap)}`,
-          detail,
-        ),
-      );
-    }
-  }
 };
 
 // ---------------------------------------------------------------------------

@@ -109,6 +109,12 @@ describe('buildAuthoringOverlayShapes', () => {
     expect(new Set(shapes.map((shape) => shape.layer))).toEqual(new Set(['destinations']));
   });
 
+  test('transition bounds can be selected without destination labels', () => {
+    const shapes = buildAuthoringOverlayShapes(input(), new Set(['transitions']));
+    expect(shapes.length).toBeGreaterThan(0);
+    expect(new Set(shapes.map((shape) => shape.layer))).toEqual(new Set(['transitions']));
+  });
+
   test('connectivity marks only walkable unreachable cells', () => {
     const shapes = buildAuthoringOverlayShapes(input(), new Set(['connectivity']));
     const rects = shapes.filter((shape) => shape.kind === 'rect');

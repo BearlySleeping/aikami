@@ -216,9 +216,23 @@ export const buildAuthoringOverlayInput = (
   const height = scene.tilemap.height;
   const tileSize = scene.tilemap.tilewidth || 32;
 
+  // Authoritative walkability, matching the prepared scene the runtime plays:
+  //   1. terrain cells the prepared terrain marks non-traversable (cost 0 —
+  //      this already folds in the explicit collision layer when a pack
+  //      config built the grid);
+  //   2. the explicit collision grid, OR'd in directly so the overlay does not
+  //      silently depend on that terrain-grid invariant;
+  //   3. every placed prop whose definition is not walkable, using the same
+  //      `?? false` default as the runtime spawner.
+  // Out-of-bounds origins are skipped so a stray placement cannot corrupt the
+  // grid. Prop footprint collision is tile-granular at the origin cell, exactly
+  // like `applyPropCollision` / `_spawnProp`.
   const blocked = new Uint8Array(width * height);
+  const collision = scene.collisionGrid?.grid;
   for (let i = 0; i < blocked.length; i++) {
-    blocked[i] = scene.terrainGrid.cost[i] === 0 ? 1 : 0;
+    const terrainBlocked = scene.terrainGrid.cost[i] === 0;
+    const collisionBlocked = collision?.[i] === true;
+    blocked[i] = terrainBlocked || collisionBlocked ? 1 : 0;
   }
 
   const propDefs =

@@ -52,6 +52,62 @@ export const parseStudioPort = (arguments_: readonly string[]): number => {
     : DEFAULT_PORT;
 };
 
+/**
+ * Exact `--port` behavior:
+ *   `--port 4321`  → 4321
+ *   `--port`       (missing value) → `NaN` → DEFAULT_PORT (8788)
+ *   `--port NaN`   → DEFAULT_PORT
+ *   `--port 0`     → out of range → DEFAULT_PORT
+ *   `--port -1`    → out of range → DEFAULT_PORT
+ *   `--port 65536` → out of range → DEFAULT_PORT
+ *   `--port 12.5`  → not an integer → DEFAULT_PORT
+ *   no `--port`    → DEFAULT_PORT
+ * The fallback is the documented local-origin port, so an invalid flag never
+ * launches a service on port 0/NaN.
+ */
+
+export type StudioLaunchPlan = {
+  /** True when Studio should spawn the local candidate origin. */
+  startOrigin: boolean;
+  /** True when Studio should spawn the client dev server. */
+  startClient: boolean;
+  /** The port the local origin (and the client's asset base URL) use. */
+  originPort: number;
+  /** Environment for the client process. */
+  clientEnv: Record<string, string | undefined>;
+  /** True when `PUBLIC_ASSETS_BASE_URL` was pointed at the local origin. */
+  overrideAssetOrigin: boolean;
+};
+
+/**
+ * Pure launch planning: decides which services to start and whether to point
+ * the client at the local origin. `PUBLIC_ASSETS_BASE_URL` is only overridden
+ * when Studio will actually start the local origin; otherwise the caller's
+ * configured/external asset origin is preserved.
+ */
+export const planStudioLaunch = (options: {
+  args: readonly string[];
+  snapshotExists: boolean;
+  env: Readonly<Record<string, string | undefined>>;
+}): StudioLaunchPlan => {
+  const noServe = options.args.includes('--no-serve');
+  const noClient = options.args.includes('--no-client');
+  const originPort = parseStudioPort(options.args);
+  const startOrigin = !noServe && options.snapshotExists;
+  const startClient = !noClient;
+  const clientEnv: Record<string, string | undefined> = { ...options.env };
+  if (startOrigin) {
+    clientEnv.PUBLIC_ASSETS_BASE_URL = `http://localhost:${originPort}`;
+  }
+  return {
+    startOrigin,
+    startClient,
+    originPort,
+    clientEnv,
+    overrideAssetOrigin: startOrigin,
+  };
+};
+
 const port = parseStudioPort(args);
 
 const run = (script: string, extra: string[] = []): void => {
@@ -59,10 +115,17 @@ const run = (script: string, extra: string[] = []): void => {
   execFileSync('bun', [join(ops, script), ...extra], { cwd: repository, stdio: 'inherit' });
 };
 
-/** The authored sources the watch loop rebuilds from. */
+/**
+ * The authored sources the watch loop rebuilds from.
+ *
+ * The generated `content/packs/emberwatch/maps/` directory is deliberately NOT
+ * watched: `generate_emberwatch_maps.ts` rewrites those files on every rebuild,
+ * so watching them makes each rebuild trigger the next one (an endless rebuild
+ * storm). Authored map changes happen in the TypeScript builders below, which
+ * are watched.
+ */
 const WATCH_TARGETS = [
   join(packRoot, 'props'),
-  join(packRoot, 'maps'),
   join(ops, 'emberwatch_authoring.ts'),
   join(ops, 'emberwatch_map_village.ts'),
   join(ops, 'emberwatch_map_retained.ts'),
@@ -133,41 +196,41 @@ const pipe = (): void => {
 };
 
 const launch = (): void => {
+  const plan = planStudioLaunch({
+    args,
+    snapshotExists: existsSync(snapshotRoot),
+    env: process.env,
+  });
   const services: Array<{ name: string; child: ReturnType<typeof Bun.spawn> }> = [];
-  const originReady = existsSync(snapshotRoot);
-  let localOriginStarted = false;
 
-  if (!has('--no-serve')) {
-    if (!originReady) {
-      console.warn(
-        `⚠ no catalog snapshot at ${snapshotRoot} — skipping the local origin.\n` +
-          '  Run a catalog snapshot first, or start the client against another origin.',
-      );
-    } else {
-      console.log(`\n▶ local candidate origin on http://localhost:${port}`);
-      services.push({
-        name: 'local candidate origin',
-        child: Bun.spawn(['bun', join(ops, 'local_asset_origin.ts'), '--port', String(port)], {
+  if (!has('--no-serve') && !plan.startOrigin) {
+    console.warn(
+      `⚠ no catalog snapshot at ${snapshotRoot} — skipping the local origin.\n` +
+        '  Run a catalog snapshot first, or start the client against another origin.',
+    );
+  }
+  if (plan.startOrigin) {
+    console.log(`\n▶ local candidate origin on http://localhost:${plan.originPort}`);
+    services.push({
+      name: 'local candidate origin',
+      child: Bun.spawn(
+        ['bun', join(ops, 'local_asset_origin.ts'), '--port', String(plan.originPort)],
+        {
           cwd: repository,
           stdio: ['inherit', 'inherit', 'inherit'],
-        }),
-      });
-      localOriginStarted = true;
-    }
+        },
+      ),
+    });
   }
 
-  if (!has('--no-client')) {
+  if (plan.startClient) {
     console.log('\n▶ client dev server (vite --mode emulator)');
-    const env = { ...process.env };
-    if (localOriginStarted) {
-      env.PUBLIC_ASSETS_BASE_URL = `http://localhost:${port}`;
-    }
     services.push({
       name: 'client dev server',
       child: Bun.spawn(['bun', 'run', 'dev'], {
         cwd: join(repository, 'apps/frontend/client'),
         stdio: ['inherit', 'inherit', 'inherit'],
-        env,
+        env: plan.clientEnv,
       }),
     });
   }

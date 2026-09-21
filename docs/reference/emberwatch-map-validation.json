@@ -2,7 +2,50 @@
   "schemaVersion": 1,
   "kind": "emberwatch-map-validation",
   "generatedAt": "1980-01-01T00:00:00.000Z",
-  "findings": [],
+  "findings": [
+    {
+      "rule": "route-width-below-minimum",
+      "severity": "warning",
+      "map": "inn",
+      "subject": "transition:village",
+      "detail": "clearance 2 cells is below the companion-safe minimum 3"
+    },
+    {
+      "rule": "route-width-below-minimum",
+      "severity": "warning",
+      "map": "merchant_shop",
+      "subject": "transition:village",
+      "detail": "clearance 2 cells is below the companion-safe minimum 3"
+    },
+    {
+      "rule": "route-width-below-minimum",
+      "severity": "warning",
+      "map": "old_road",
+      "subject": "transition:village",
+      "detail": "clearance 2 cells is below the companion-safe minimum 3"
+    },
+    {
+      "rule": "route-width-below-minimum",
+      "severity": "warning",
+      "map": "old_road",
+      "subject": "transition:ruined_shrine",
+      "detail": "clearance 2 cells is below the companion-safe minimum 3"
+    },
+    {
+      "rule": "route-width-below-minimum",
+      "severity": "warning",
+      "map": "ruined_shrine",
+      "subject": "transition:old_road",
+      "detail": "clearance 2 cells is below the companion-safe minimum 3"
+    },
+    {
+      "rule": "route-width-below-minimum",
+      "severity": "warning",
+      "map": "village",
+      "subject": "transition:old_road",
+      "detail": "clearance 2 cells is below the companion-safe minimum 3"
+    }
+  ],
   "blockers": [],
   "maps": [
     {

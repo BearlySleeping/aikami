@@ -11,10 +11,10 @@
 // leaf collaborator the facade can call from any scope.
 // ---------------------------------------------------------------------------
 
+import { isDevelopmentModePublic } from '../../../configs/src/lib/public_mode.ts';
 // Type-only: erased at build time, so this module stays runtime-free of the
 // rendering layer while keeping the published shape in lockstep with it.
 import type { WeatherFxDebugSnapshot } from '../rendering/weather/weather_overlay.ts';
-import { isDevelopmentModePublic } from '../../../configs/src/lib/public_mode.ts';
 import { AUTHORING_OVERLAY_LAYERS, type AuthoringOverlayLayer } from './authoring_overlay.ts';
 
 /** Keys the engine owns on `window` for E2E/devtools inspection. */
