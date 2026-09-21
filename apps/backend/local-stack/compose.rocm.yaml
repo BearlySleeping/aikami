@@ -18,7 +18,7 @@
 
 services:
   text:
-    image: ghcr.io/ggml-org/llama.cpp:server-rocm@sha256:437a9b8c695b7575f225a8018e96f785b044ccfeef94d409950a04e60969ad05
+    image: ghcr.io/ggml-org/llama.cpp:server-rocm@sha256:bbd069586644bf092882c7950228cb20fab989f9583f7731ddb1ce9802bf5b51
     devices:
       - /dev/kfd:/dev/kfd
       - /dev/dri:/dev/dri
@@ -27,7 +27,7 @@ services:
       - render
 
   image:
-    image: ghcr.io/leejet/stable-diffusion.cpp:master-vulkan@sha256:306a437e2c1ee6c9d0fe3954606f085484edeab4e87b3c531b1169551a59205b
+    image: ghcr.io/leejet/stable-diffusion.cpp:master-vulkan@sha256:fc7d622da861e4a291bfa5211b50cd503c52762460d8104b9b9233b29daa58f2
     devices:
       - /dev/kfd:/dev/kfd
       - /dev/dri:/dev/dri
