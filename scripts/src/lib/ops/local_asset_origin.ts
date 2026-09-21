@@ -46,6 +46,10 @@ import { logger } from '$logger';
 import type { CatalogEntry } from '../catalog/catalog_entries.ts';
 import { generateCatalogIndex } from '../catalog/index_generation.ts';
 import { buildPackLock, PACK_LOCK_KEY } from '../catalog/pack_lock.ts';
+import {
+  collectEmberwatchCandidateOverrides,
+  missingCandidateOverrides,
+} from './emberwatch_candidate_plane.ts';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repository = resolve(here, '../../../..');
@@ -65,67 +69,18 @@ type Override = {
 /** Default listen port; `--port` overrides it. */
 const DEFAULT_PORT = 8788;
 
-/** The Emberwatch artifacts this session changes. */
-const EMBERWATCH_OVERRIDES: Override[] = [
-  {
-    tag: 'sprites:tilesets:props.webp',
-    file: join(repository, 'apps/frontend/client/static/game-data/sprites/tilesets/props.webp'),
-    category: 'tilesets',
-    ext: '.webp',
-  },
-  {
-    tag: 'sprites:tilesets:props.json',
-    file: join(repository, 'apps/frontend/client/static/game-data/sprites/tilesets/props.json'),
-    category: 'tilesets',
-    ext: '.json',
-  },
-  // The terrain atlas is deliberately NOT overridden. Regenerating it locally
-  // produces a different artifact from the published accepted one, which
-  // changes how every map's ground tiles render — a local-origin run must not
-  // silently replace accepted art it is not verifying.
-  //
-  // C-523 AC-2: all five authored maps, not just the village. The published
-  // seed only carries village/inn/merchant_shop, so old_road and
-  // ruined_shrine have no published bytes to proxy to — a five-map traversal
-  // is only possible when every map is served from the worktree.
-  ...(['village', 'inn', 'merchant_shop', 'old_road', 'ruined_shrine'] as const).map(
-    (mapId): Override => ({
-      tag: `emberwatch:maps:${mapId}`,
-      file: join(repository, `content/packs/emberwatch/maps/${mapId}.json`),
-      category: 'contentPacks',
-      ext: '.json',
-    }),
-  ),
-  {
-    tag: 'emberwatch:manifest',
-    file: join(repository, 'content/packs/emberwatch/manifest.json'),
-    category: 'contentPacks',
-    ext: '.json',
-  },
-  // C-523 authored cue renditions: one finished 48 kHz stereo Opus bed per
-  // authored context, replacing the published `bgm_explore`/`Chainsmoker`
-  // bed the four maps previously shared. These are PACK ARTIFACTS — they live
-  // in `content/packs/emberwatch/audio/` and are committed, not scratch, so
-  // the manifest's `required` pins resolve on any checkout. Serving them from
-  // the local origin is what makes a not-yet-published pack reviewable
-  // in-game; publishing them is C-513.
-  ...(
-    [
-      ['music:exploration:village_ward', 'village_ward.webm'],
-      ['music:exploration:inn_hearth', 'inn_hearth.webm'],
-      ['music:exploration:old_road', 'old_road.webm'],
-      ['music:exploration:ruined_shrine', 'ruined_shrine.webm'],
-      ['music:combat:emberwatch_combat', 'emberwatch_combat.webm'],
-    ] as const
-  ).map(
-    ([tag, file]): Override => ({
-      tag,
-      file: join(repository, `content/packs/emberwatch/audio/${file}`),
-      category: 'music',
-      ext: '.webm',
-    }),
-  ),
-];
+/**
+ * The Emberwatch artifacts this session serves from the worktree instead of
+ * the published origin — the COMPLETE candidate plane (C-529). Derived from
+ * `emberwatch_candidate_plane.ts` so portraits, enemy visuals, maps, audio and
+ * the prop atlas cannot silently diverge from what the candidate declares.
+ *
+ * The terrain atlas is deliberately NOT overridden. Regenerating it locally
+ * produces a different artifact from the published accepted one, which changes
+ * how every map's ground tiles render — a local-origin run must not silently
+ * replace accepted art it is not verifying.
+ */
+const EMBERWATCH_OVERRIDES: Override[] = collectEmberwatchCandidateOverrides(repository);
 
 type SeedRow = {
   t: string;
@@ -474,6 +429,23 @@ const main = (): void => {
     );
   }
   const shouldServe = !args.includes('--no-serve');
+
+  // C-529: prove the local origin serves the COMPLETE candidate plane before
+  // booting it. A missing portrait/enemy/map/audio tag would silently fall back
+  // to the stale published origin — exactly the failure the first human gate hit.
+  if (args.includes('--check-plane')) {
+    const missing = missingCandidateOverrides(repository);
+    if (missing.length > 0) {
+      console.error(
+        `local-asset-origin: candidate plane is INCOMPLETE — the human gate would render stale published rows for:\n  ${missing.join('\n  ')}`,
+      );
+      process.exit(1);
+    }
+    console.log(
+      `local-asset-origin: candidate plane complete (${EMBERWATCH_OVERRIDES.length} overrides serve every required Emberwatch tag)`,
+    );
+    return;
+  }
 
   const seedPath = findSnapshotSeed();
   const outDir = join(repository, '.local/catalog/local-origin');

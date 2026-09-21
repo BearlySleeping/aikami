@@ -546,7 +546,7 @@ export const buildVillage = (): { map: MapData; objectLayers: MapObjectLayer[] }
         npc(21, 'cartographer_ivo', 'Ivo the Cartographer', 'ivo_greeting', 21 * 32, 23 * 32),
 
         // ── Landmarks ──────────────────────────────────────────────────────
-        prop(2, 'village_well', 'Old Stone Well', 'well.png', 19 * 32, 24 * 32),
+        prop(2, 'village_well', 'Old Stone Well', 'prop_well.png', 19 * 32, 24 * 32),
         prop(3, 'notice_board', 'Village Notice Board', 'prop_notice_board.png', 45 * 32, 11 * 32),
         prop(4, 'village_gate', 'Emberwatch Village Gate', 'prop_gate.png', 32 * 32, 45 * 32),
         prop(12, 'ward_tree_landmark', 'The Ward Tree', 'ward_large.png', 32 * 32, 23 * 32),

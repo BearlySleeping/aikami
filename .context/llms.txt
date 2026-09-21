@@ -1,8 +1,8 @@
 # Aikami Knowledge Index
 
 > **AI-first entry point.** Read this file first.
-> Generated: 2026-09-18
-> Files: 476 across 10 categories
+> Generated: 2026-09-21
+> Files: 478 across 10 categories
 
 ## Quick Start (Read These First)
 
@@ -457,10 +457,12 @@ Monorepo: SvelteKit Client × Cloudflare Workers backend (D1 + R2 + Better Auth)
 - [Local catalog authoring workspace](guides/catalog_workspace.md)
 - [CI/CD](guides/CI_CD.md)
 - [Coding Standards](guides/CODING_STANDARDS.md)
+- [Combat Debug Workspace](guides/combat_debug_workspace.md)
 - [Contract Pipeline — Primary Development Flow](guides/contract-pipeline.md)
 - [Cross-Origin Isolation & SharedArrayBuffer — Gotchas & Lessons Learned](guides/cross-origin-isolation.md)
 - [Database — The Server Data Plane](guides/database.md)
 - [Developer Workflow](guides/dev-workflow.md)
+- [Emberwatch release runbook](guides/emberwatch-release.md)
 - [Engineering Hygiene & Maintenance](guides/engineering-hygiene.md)
 - [Aikami Feature Specification](guides/FEATURES.md)
 - [Map Studio (Hub)](guides/map_studio.md)

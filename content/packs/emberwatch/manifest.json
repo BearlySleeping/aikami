@@ -214,15 +214,6 @@
         "source": "generated:gpt"
       }
     },
-    "17": {
-      "name": "well",
-      "frame": "well.png",
-      "isWalkable": false,
-      "isWall": false,
-      "provenance": {
-        "source": "generated:gpt"
-      }
-    },
     "18": {
       "name": "notice_board",
       "frame": "notice_board.png",
@@ -534,6 +525,13 @@
         "type": "rect",
         "width": 44,
         "height": 22
+      },
+      "renderSize": {
+        "width": 192,
+        "height": 152
+      },
+      "shadow": {
+        "kind": "none"
       }
     },
     "ward_grove_a": {
@@ -551,6 +549,13 @@
         "type": "rect",
         "width": 28,
         "height": 16
+      },
+      "renderSize": {
+        "width": 96,
+        "height": 96
+      },
+      "shadow": {
+        "kind": "none"
       }
     },
     "ward_grove_b": {
@@ -568,6 +573,13 @@
         "type": "rect",
         "width": 28,
         "height": 16
+      },
+      "renderSize": {
+        "width": 96,
+        "height": 96
+      },
+      "shadow": {
+        "kind": "none"
       }
     },
     "ward_grove_c": {
@@ -585,13 +597,20 @@
         "type": "rect",
         "width": 28,
         "height": 16
+      },
+      "renderSize": {
+        "width": 96,
+        "height": 96
+      },
+      "shadow": {
+        "kind": "none"
       }
     },
     "village_well": {
       "name": "Old Stone Well",
-      "frame": "well.png",
+      "frame": "prop_well.png",
       "provenance": {
-        "source": "generated:gpt"
+        "source": "generated:local-sdcpp-anima"
       },
       "anchor": {
         "x": 0.5,
@@ -602,6 +621,16 @@
         "type": "rect",
         "width": 22,
         "height": 14
+      },
+      "renderSize": {
+        "width": 64,
+        "height": 80
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 46,
+        "height": 18,
+        "opacity": 0.22
       }
     },
     "notice_board": {
@@ -619,6 +648,16 @@
         "type": "rect",
         "width": 20,
         "height": 10
+      },
+      "renderSize": {
+        "width": 64,
+        "height": 53
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 36,
+        "height": 10,
+        "opacity": 0.2
       }
     },
     "road_notice": {
@@ -636,6 +675,16 @@
         "type": "rect",
         "width": 20,
         "height": 10
+      },
+      "renderSize": {
+        "width": 64,
+        "height": 53
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 36,
+        "height": 10,
+        "opacity": 0.2
       }
     },
     "village_gate": {
@@ -648,7 +697,14 @@
         "x": 0.5,
         "y": 1
       },
-      "isWalkable": true
+      "isWalkable": true,
+      "renderSize": {
+        "width": 96,
+        "height": 68
+      },
+      "shadow": {
+        "kind": "none"
+      }
     },
     "woodland_oak": {
       "name": "Woodland Oak",
@@ -665,6 +721,13 @@
         "type": "rect",
         "width": 30,
         "height": 16
+      },
+      "renderSize": {
+        "width": 126,
+        "height": 160
+      },
+      "shadow": {
+        "kind": "none"
       }
     },
     "woodland_oak_2": {
@@ -682,6 +745,13 @@
         "type": "rect",
         "width": 30,
         "height": 16
+      },
+      "renderSize": {
+        "width": 126,
+        "height": 160
+      },
+      "shadow": {
+        "kind": "none"
       }
     },
     "woodland_oak_3": {
@@ -699,6 +769,13 @@
         "type": "rect",
         "width": 30,
         "height": 16
+      },
+      "renderSize": {
+        "width": 126,
+        "height": 160
+      },
+      "shadow": {
+        "kind": "none"
       }
     },
     "woodland_oak_4": {
@@ -716,6 +793,13 @@
         "type": "rect",
         "width": 30,
         "height": 16
+      },
+      "renderSize": {
+        "width": 126,
+        "height": 160
+      },
+      "shadow": {
+        "kind": "none"
       }
     },
     "woodland_birch": {
@@ -733,6 +817,13 @@
         "type": "rect",
         "width": 22,
         "height": 14
+      },
+      "renderSize": {
+        "width": 70,
+        "height": 160
+      },
+      "shadow": {
+        "kind": "none"
       }
     },
     "woodland_birch_2": {
@@ -750,6 +841,13 @@
         "type": "rect",
         "width": 22,
         "height": 14
+      },
+      "renderSize": {
+        "width": 70,
+        "height": 160
+      },
+      "shadow": {
+        "kind": "none"
       }
     },
     "shrine_oak": {
@@ -767,6 +865,13 @@
         "type": "rect",
         "width": 30,
         "height": 16
+      },
+      "renderSize": {
+        "width": 126,
+        "height": 160
+      },
+      "shadow": {
+        "kind": "none"
       }
     },
     "shrine_birch": {
@@ -784,6 +889,13 @@
         "type": "rect",
         "width": 22,
         "height": 14
+      },
+      "renderSize": {
+        "width": 70,
+        "height": 160
+      },
+      "shadow": {
+        "kind": "none"
       }
     },
     "inn_barrel": {
@@ -801,6 +913,16 @@
         "type": "rect",
         "width": 20,
         "height": 20
+      },
+      "renderSize": {
+        "width": 48,
+        "height": 35
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 30,
+        "height": 12,
+        "opacity": 0.22
       }
     },
     "inn_barrel_2": {
@@ -818,6 +940,16 @@
         "type": "rect",
         "width": 20,
         "height": 20
+      },
+      "renderSize": {
+        "width": 48,
+        "height": 35
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 30,
+        "height": 12,
+        "opacity": 0.22
       }
     },
     "waystation_barrel": {
@@ -835,6 +967,16 @@
         "type": "rect",
         "width": 20,
         "height": 20
+      },
+      "renderSize": {
+        "width": 48,
+        "height": 35
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 30,
+        "height": 12,
+        "opacity": 0.22
       }
     },
     "shop_barrel": {
@@ -852,6 +994,16 @@
         "type": "rect",
         "width": 20,
         "height": 20
+      },
+      "renderSize": {
+        "width": 48,
+        "height": 35
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 30,
+        "height": 12,
+        "opacity": 0.22
       }
     },
     "shop_barrel_2": {
@@ -869,6 +1021,16 @@
         "type": "rect",
         "width": 20,
         "height": 20
+      },
+      "renderSize": {
+        "width": 48,
+        "height": 35
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 30,
+        "height": 12,
+        "opacity": 0.22
       }
     },
     "shrine_barrel": {
@@ -886,6 +1048,16 @@
         "type": "rect",
         "width": 20,
         "height": 20
+      },
+      "renderSize": {
+        "width": 48,
+        "height": 35
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 30,
+        "height": 12,
+        "opacity": 0.22
       }
     },
     "inn_crate": {
@@ -1176,6 +1348,16 @@
         "type": "rect",
         "width": 16,
         "height": 10
+      },
+      "renderSize": {
+        "width": 26,
+        "height": 48
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 16,
+        "height": 6,
+        "opacity": 0.2
       }
     },
     "inn_chair_2": {
@@ -1193,6 +1375,16 @@
         "type": "rect",
         "width": 16,
         "height": 10
+      },
+      "renderSize": {
+        "width": 26,
+        "height": 48
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 16,
+        "height": 6,
+        "opacity": 0.2
       }
     },
     "inn_chair_3": {
@@ -1210,6 +1402,16 @@
         "type": "rect",
         "width": 16,
         "height": 10
+      },
+      "renderSize": {
+        "width": 26,
+        "height": 48
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 16,
+        "height": 6,
+        "opacity": 0.2
       }
     },
     "inn_chair_4": {
@@ -1227,6 +1429,16 @@
         "type": "rect",
         "width": 16,
         "height": 10
+      },
+      "renderSize": {
+        "width": 26,
+        "height": 48
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 16,
+        "height": 6,
+        "opacity": 0.2
       }
     },
     "inn_chair_5": {
@@ -1244,6 +1456,16 @@
         "type": "rect",
         "width": 16,
         "height": 10
+      },
+      "renderSize": {
+        "width": 26,
+        "height": 48
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 16,
+        "height": 6,
+        "opacity": 0.2
       }
     },
     "inn_chair_6": {
@@ -1261,6 +1483,16 @@
         "type": "rect",
         "width": 16,
         "height": 10
+      },
+      "renderSize": {
+        "width": 26,
+        "height": 48
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 16,
+        "height": 6,
+        "opacity": 0.2
       }
     },
     "shop_chair": {
@@ -1278,6 +1510,16 @@
         "type": "rect",
         "width": 16,
         "height": 10
+      },
+      "renderSize": {
+        "width": 26,
+        "height": 48
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 16,
+        "height": 6,
+        "opacity": 0.2
       }
     },
     "inn_bed": {
@@ -1312,6 +1554,16 @@
         "type": "rect",
         "width": 44,
         "height": 20
+      },
+      "renderSize": {
+        "width": 78,
+        "height": 80
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 58,
+        "height": 16,
+        "opacity": 0.2
       }
     },
     "inn_shelf": {
@@ -1398,6 +1650,16 @@
         "width": 22,
         "height": 22
       },
+      "renderSize": {
+        "width": 64,
+        "height": 56
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 34,
+        "height": 14,
+        "opacity": 0.22
+      },
       "environment": {
         "durability": 4,
         "blocksMovement": true,
@@ -1474,6 +1736,16 @@
         "width": 22,
         "height": 22
       },
+      "renderSize": {
+        "width": 64,
+        "height": 56
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 34,
+        "height": 14,
+        "opacity": 0.22
+      },
       "environment": {
         "durability": 4,
         "blocksMovement": true,
@@ -1496,6 +1768,13 @@
         "type": "rect",
         "width": 22,
         "height": 22
+      },
+      "renderSize": {
+        "width": 64,
+        "height": 49
+      },
+      "shadow": {
+        "kind": "none"
       },
       "environment": {
         "durability": 1,
@@ -1552,6 +1831,16 @@
         "type": "rect",
         "width": 22,
         "height": 22
+      },
+      "renderSize": {
+        "width": 20,
+        "height": 96
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 18,
+        "height": 9,
+        "opacity": 0.2
       },
       "environment": {
         "durability": 3,
@@ -1613,6 +1902,16 @@
         "width": 22,
         "height": 22
       },
+      "renderSize": {
+        "width": 20,
+        "height": 96
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 18,
+        "height": 9,
+        "opacity": 0.2
+      },
       "environment": {
         "durability": 3,
         "blocksMovement": true,
@@ -1658,6 +1957,16 @@
         "type": "rect",
         "width": 20,
         "height": 10
+      },
+      "renderSize": {
+        "width": 48,
+        "height": 31
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 24,
+        "height": 7,
+        "opacity": 0.18
       }
     },
     "tess_component": {
@@ -1675,6 +1984,16 @@
         "type": "rect",
         "width": 24,
         "height": 14
+      },
+      "renderSize": {
+        "width": 39,
+        "height": 48
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 20,
+        "height": 8,
+        "opacity": 0.18
       }
     },
     "waystation_cart": {
@@ -1692,6 +2011,16 @@
         "type": "rect",
         "width": 40,
         "height": 24
+      },
+      "renderSize": {
+        "width": 96,
+        "height": 57
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 72,
+        "height": 20,
+        "opacity": 0.2
       }
     },
     "shrine_arch": {
@@ -1704,7 +2033,14 @@
         "x": 0.5,
         "y": 1
       },
-      "isWalkable": true
+      "isWalkable": true,
+      "renderSize": {
+        "width": 160,
+        "height": 160
+      },
+      "shadow": {
+        "kind": "none"
+      }
     },
     "ward_socket": {
       "name": "Ward Socket",
@@ -1721,6 +2057,16 @@
         "type": "rect",
         "width": 24,
         "height": 16
+      },
+      "renderSize": {
+        "width": 64,
+        "height": 49
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 40,
+        "height": 14,
+        "opacity": 0.2
       }
     },
     "road_oak_0": {
@@ -1738,6 +2084,13 @@
         "type": "rect",
         "width": 30,
         "height": 16
+      },
+      "renderSize": {
+        "width": 126,
+        "height": 160
+      },
+      "shadow": {
+        "kind": "none"
       }
     },
     "road_birch_0": {
@@ -1755,6 +2108,13 @@
         "type": "rect",
         "width": 22,
         "height": 14
+      },
+      "renderSize": {
+        "width": 70,
+        "height": 160
+      },
+      "shadow": {
+        "kind": "none"
       }
     },
     "road_oak_1": {
@@ -1772,6 +2132,13 @@
         "type": "rect",
         "width": 30,
         "height": 16
+      },
+      "renderSize": {
+        "width": 126,
+        "height": 160
+      },
+      "shadow": {
+        "kind": "none"
       }
     },
     "road_birch_1": {
@@ -1789,6 +2156,13 @@
         "type": "rect",
         "width": 22,
         "height": 14
+      },
+      "renderSize": {
+        "width": 70,
+        "height": 160
+      },
+      "shadow": {
+        "kind": "none"
       }
     },
     "road_oak_2": {
@@ -1806,6 +2180,13 @@
         "type": "rect",
         "width": 30,
         "height": 16
+      },
+      "renderSize": {
+        "width": 126,
+        "height": 160
+      },
+      "shadow": {
+        "kind": "none"
       }
     },
     "road_birch_2": {
@@ -1823,6 +2204,13 @@
         "type": "rect",
         "width": 22,
         "height": 14
+      },
+      "renderSize": {
+        "width": 70,
+        "height": 160
+      },
+      "shadow": {
+        "kind": "none"
       }
     },
     "road_oak_3": {
@@ -1840,6 +2228,13 @@
         "type": "rect",
         "width": 30,
         "height": 16
+      },
+      "renderSize": {
+        "width": 126,
+        "height": 160
+      },
+      "shadow": {
+        "kind": "none"
       }
     },
     "road_birch_3": {
@@ -1857,6 +2252,13 @@
         "type": "rect",
         "width": 22,
         "height": 14
+      },
+      "renderSize": {
+        "width": 70,
+        "height": 160
+      },
+      "shadow": {
+        "kind": "none"
       }
     },
     "road_oak_4": {
@@ -1874,6 +2276,13 @@
         "type": "rect",
         "width": 30,
         "height": 16
+      },
+      "renderSize": {
+        "width": 126,
+        "height": 160
+      },
+      "shadow": {
+        "kind": "none"
       }
     },
     "road_birch_4": {
@@ -1891,6 +2300,13 @@
         "type": "rect",
         "width": 22,
         "height": 14
+      },
+      "renderSize": {
+        "width": 70,
+        "height": 160
+      },
+      "shadow": {
+        "kind": "none"
       }
     },
     "road_oak_5": {
@@ -1908,6 +2324,13 @@
         "type": "rect",
         "width": 30,
         "height": 16
+      },
+      "renderSize": {
+        "width": 126,
+        "height": 160
+      },
+      "shadow": {
+        "kind": "none"
       }
     },
     "road_birch_5": {
@@ -1925,6 +2348,13 @@
         "type": "rect",
         "width": 22,
         "height": 14
+      },
+      "renderSize": {
+        "width": 70,
+        "height": 160
+      },
+      "shadow": {
+        "kind": "none"
       }
     },
     "road_oak_6": {
@@ -1942,6 +2372,13 @@
         "type": "rect",
         "width": 30,
         "height": 16
+      },
+      "renderSize": {
+        "width": 126,
+        "height": 160
+      },
+      "shadow": {
+        "kind": "none"
       }
     },
     "road_birch_6": {
@@ -1959,6 +2396,13 @@
         "type": "rect",
         "width": 22,
         "height": 14
+      },
+      "renderSize": {
+        "width": 70,
+        "height": 160
+      },
+      "shadow": {
+        "kind": "none"
       }
     },
     "road_oak_7": {
@@ -1976,6 +2420,13 @@
         "type": "rect",
         "width": 30,
         "height": 16
+      },
+      "renderSize": {
+        "width": 126,
+        "height": 160
+      },
+      "shadow": {
+        "kind": "none"
       }
     },
     "road_birch_7": {
@@ -1993,6 +2444,13 @@
         "type": "rect",
         "width": 22,
         "height": 14
+      },
+      "renderSize": {
+        "width": 70,
+        "height": 160
+      },
+      "shadow": {
+        "kind": "none"
       }
     },
     "road_oak_8": {
@@ -2010,6 +2468,13 @@
         "type": "rect",
         "width": 30,
         "height": 16
+      },
+      "renderSize": {
+        "width": 126,
+        "height": 160
+      },
+      "shadow": {
+        "kind": "none"
       }
     },
     "road_birch_8": {
@@ -2027,6 +2492,13 @@
         "type": "rect",
         "width": 22,
         "height": 14
+      },
+      "renderSize": {
+        "width": 70,
+        "height": 160
+      },
+      "shadow": {
+        "kind": "none"
       }
     },
     "road_oak_9": {
@@ -2044,6 +2516,13 @@
         "type": "rect",
         "width": 30,
         "height": 16
+      },
+      "renderSize": {
+        "width": 126,
+        "height": 160
+      },
+      "shadow": {
+        "kind": "none"
       }
     },
     "road_birch_9": {
@@ -2061,6 +2540,13 @@
         "type": "rect",
         "width": 22,
         "height": 14
+      },
+      "renderSize": {
+        "width": 70,
+        "height": 160
+      },
+      "shadow": {
+        "kind": "none"
       }
     },
     "road_oak_10": {
@@ -2078,6 +2564,13 @@
         "type": "rect",
         "width": 30,
         "height": 16
+      },
+      "renderSize": {
+        "width": 126,
+        "height": 160
+      },
+      "shadow": {
+        "kind": "none"
       }
     },
     "road_birch_10": {
@@ -2095,6 +2588,13 @@
         "type": "rect",
         "width": 22,
         "height": 14
+      },
+      "renderSize": {
+        "width": 70,
+        "height": 160
+      },
+      "shadow": {
+        "kind": "none"
       }
     },
     "road_oak_11": {
@@ -2112,6 +2612,13 @@
         "type": "rect",
         "width": 30,
         "height": 16
+      },
+      "renderSize": {
+        "width": 126,
+        "height": 160
+      },
+      "shadow": {
+        "kind": "none"
       }
     },
     "road_birch_11": {
@@ -2129,6 +2636,13 @@
         "type": "rect",
         "width": 22,
         "height": 14
+      },
+      "renderSize": {
+        "width": 70,
+        "height": 160
+      },
+      "shadow": {
+        "kind": "none"
       }
     },
     "road_oak_12": {
@@ -2146,6 +2660,13 @@
         "type": "rect",
         "width": 30,
         "height": 16
+      },
+      "renderSize": {
+        "width": 126,
+        "height": 160
+      },
+      "shadow": {
+        "kind": "none"
       }
     },
     "road_birch_12": {
@@ -2163,6 +2684,13 @@
         "type": "rect",
         "width": 22,
         "height": 14
+      },
+      "renderSize": {
+        "width": 70,
+        "height": 160
+      },
+      "shadow": {
+        "kind": "none"
       }
     },
     "road_oak_13": {
@@ -2180,6 +2708,13 @@
         "type": "rect",
         "width": 30,
         "height": 16
+      },
+      "renderSize": {
+        "width": 126,
+        "height": 160
+      },
+      "shadow": {
+        "kind": "none"
       }
     },
     "road_birch_13": {
@@ -2197,6 +2732,13 @@
         "type": "rect",
         "width": 22,
         "height": 14
+      },
+      "renderSize": {
+        "width": 70,
+        "height": 160
+      },
+      "shadow": {
+        "kind": "none"
       }
     },
     "road_oak_14": {
@@ -2214,6 +2756,13 @@
         "type": "rect",
         "width": 30,
         "height": 16
+      },
+      "renderSize": {
+        "width": 126,
+        "height": 160
+      },
+      "shadow": {
+        "kind": "none"
       }
     },
     "road_birch_14": {
@@ -2231,6 +2780,13 @@
         "type": "rect",
         "width": 22,
         "height": 14
+      },
+      "renderSize": {
+        "width": 70,
+        "height": 160
+      },
+      "shadow": {
+        "kind": "none"
       }
     },
     "road_oak_15": {
@@ -2248,6 +2804,13 @@
         "type": "rect",
         "width": 30,
         "height": 16
+      },
+      "renderSize": {
+        "width": 126,
+        "height": 160
+      },
+      "shadow": {
+        "kind": "none"
       }
     },
     "road_birch_15": {
@@ -2265,6 +2828,13 @@
         "type": "rect",
         "width": 22,
         "height": 14
+      },
+      "renderSize": {
+        "width": 70,
+        "height": 160
+      },
+      "shadow": {
+        "kind": "none"
       }
     },
     "road_oak_16": {
@@ -2282,6 +2852,13 @@
         "type": "rect",
         "width": 30,
         "height": 16
+      },
+      "renderSize": {
+        "width": 126,
+        "height": 160
+      },
+      "shadow": {
+        "kind": "none"
       }
     },
     "road_birch_16": {
@@ -2299,6 +2876,13 @@
         "type": "rect",
         "width": 22,
         "height": 14
+      },
+      "renderSize": {
+        "width": 70,
+        "height": 160
+      },
+      "shadow": {
+        "kind": "none"
       }
     }
   },
