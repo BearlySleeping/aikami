@@ -280,7 +280,7 @@ describe('C-504 — atlas alpha', () => {
     const { rgba, width, frames } = packAtlas();
     // Standalone props sit on a transparent base now (no opaque substrate).
     for (const key of [
-      'well.png',
+      'notice_board.png',
       'chest.png',
       'barrel.png',
       'crate.png',
@@ -308,7 +308,7 @@ describe('C-504 — atlas alpha', () => {
 
   test('the 1px border preserves alpha (transparent prop edges stay transparent)', () => {
     const { rgba, width, frames } = packAtlas();
-    const well = frames['well.png'].frame;
+    const well = frames['notice_board.png'].frame;
     const col = (well.x - ATLAS_PADDING) / ATLAS_CELL;
     const row = (well.y - ATLAS_PADDING) / ATLAS_CELL;
     const x0 = col * ATLAS_CELL + ATLAS_PADDING;

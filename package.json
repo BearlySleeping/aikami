@@ -44,6 +44,7 @@
     "guard-workspace-boundary": "bun run scripts/src/lib/ops/guard_workspace_boundary.ts",
     "emberwatch:release": "bun run scripts/src/lib/ops/emberwatch_release.ts",
     "emberwatch:audit": "bun run scripts/src/lib/ops/emberwatch_coverage_audit.ts",
+    "emberwatch:visual-audit": "bun run scripts/src/lib/ops/emberwatch_prop_visual_audit.ts",
     "emberwatch:accept": "bun run scripts/src/lib/ops/emberwatch_accept.ts",
     "emberwatch:brief": "bun run scripts/src/lib/ops/rebase_emberwatch_brief.ts",
     "emberwatch:props": "bun run scripts/src/lib/ops/sync_emberwatch_props.ts",

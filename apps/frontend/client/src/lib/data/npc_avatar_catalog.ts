@@ -90,6 +90,25 @@ const _reportedMissing = new Set<string>();
 const _reportedClamped = new Set<string>();
 
 /**
+ * Pack-authored portrait variants whose URL was
+ * declared by the manifest but could not be resolved through the AssetStore.
+ *
+ * A pack that declares a portrait and renders a legacy stand-in instead is a
+ * RELEASE failure, not a cosmetic fallback: during the human visual gate this
+ * set is surfaced as an error and by {@link getUnresolvedPackPortraitTags},
+ * so "every bust is authored" cannot be quietly false. Production keeps the
+ * backwards-compatible stand-in fallback.
+ */
+const _unresolvedPackPortraits = new Set<string>();
+
+/**
+ * Whether the app is running a release/visual-gate validation pass. When set,
+ * a declared-but-unresolvable pack portrait is logged as an ERROR (loud), not
+ * a warning. Off by default so normal play only sees the stand-in.
+ */
+const _isReleaseGateMode = (): boolean => import.meta.env?.PUBLIC_RELEASE_GATE === '1';
+
+/**
  * Logs a resolution diagnostic at most once per key. This getter re-evaluates
  * on every reactive expression change, so a repeated miss must not spam.
  */
@@ -223,13 +242,41 @@ const _resolvePackPortrait = (options: {
       logger.spam('npcAvatar.resolve:pack', { npcId, emotion, url });
       return resolved;
     }
-    logger.warn('NpcAvatarCatalog: pack portrait is declared but not in the catalog', {
-      npcId,
-      emotion,
-      url,
-    });
+    const missKey = `${npcId}:${emotion}`;
+    _unresolvedPackPortraits.add(missKey);
+    if (_isReleaseGateMode()) {
+      logger.error('NpcAvatarCatalog: DECLARED pack portrait is not in the candidate catalog', {
+        npcId,
+        emotion,
+        url,
+        tag,
+        hint: 'The release candidate must serve every manifest-declared portrait; the legacy stand-in shown here fails the human visual gate.',
+      });
+    } else {
+      logger.warn('NpcAvatarCatalog: pack portrait is declared but not in the catalog', {
+        npcId,
+        emotion,
+        url,
+      });
+    }
   }
   return undefined;
+};
+
+/**
+ * The manifest-declared portrait variants that could not resolve through the
+ * AssetStore this session (e.g. `smith_orra:neutral`).
+ *
+ * Release validation asserts this is empty for the Emberwatch cast; an empty
+ * result means every authored bust was actually served, not that none was
+ * declared. See {@link resolveNpcAvatarUrl}.
+ */
+export const getUnresolvedPackPortraitTags = (): readonly string[] =>
+  [..._unresolvedPackPortraits].sort();
+
+/** Clears the recorded misses (tests / between maps). */
+export const resetPackPortraitDiagnostics = (): void => {
+  _unresolvedPackPortraits.clear();
 };
 
 /**

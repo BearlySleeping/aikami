@@ -118,7 +118,6 @@ const TILE_NAME_ALIASES = {
   WATER: 'water',
   FENCE: 'fence',
   WOOD_FENCE: 'wood_fence',
-  WELL: 'well',
   NOTICE: 'notice_board',
   GATE: 'village_gate',
   CHEST: 'chest',

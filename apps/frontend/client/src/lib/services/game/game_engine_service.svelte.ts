@@ -37,6 +37,7 @@ import { actorVisualResolverFor } from './actor_visual_presentation.ts';
 import { equipmentService } from './equipment_service.svelte.ts';
 import { inputActionService } from './input_action_service.svelte';
 import { onboardingHintService } from './onboarding_hint_service.svelte';
+import { projectPackProps } from './pack_config_projection.ts';
 import { buildPropFrameResolver } from './prop_frame_resolver';
 
 // ---------------------------------------------------------------------------
@@ -570,32 +571,7 @@ class GameEngineService
           },
         ]),
       ),
-      props: Object.fromEntries(
-        Object.entries(manifest.props ?? {}).map(([propId, def]) => {
-          const projected: {
-            name: string;
-            frame: string;
-            isWalkable?: boolean;
-            anchor?: { x: number; y: number };
-            collision?:
-              | { type: 'rect'; width: number; height: number }
-              | { type: 'circle'; radius: number };
-          } = { name: def.name, frame: def.frame };
-          if (def.isWalkable !== undefined) {
-            projected.isWalkable = def.isWalkable;
-          }
-          // C-378 AC-7: the manifest anchor must cross the worker boundary
-          // so the engine can apply custom prop anchors (non-default pivot)
-          // — without it, multi-tile props silently fall back to (0.5, 1).
-          if (def.anchor !== undefined) {
-            projected.anchor = def.anchor;
-          }
-          if (def.collision) {
-            projected.collision = def.collision;
-          }
-          return [propId, projected];
-        }),
-      ),
+      props: projectPackProps(manifest.props),
       // C-378: terrains cross the worker boundary so the autotiler can run
       // inside the world (map load). Carried only when the pack declares
       // them — a terrain-less pack stays legacy (AC-8).

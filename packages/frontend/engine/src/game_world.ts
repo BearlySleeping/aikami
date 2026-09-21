@@ -3,7 +3,7 @@
 import { BASE_WORLD_SCALE } from '@aikami/constants';
 import type { ActorVisual } from '@aikami/schemas';
 import type { Application, Ticker } from 'pixi.js';
-import { Container, Sprite, type UniformGroup } from 'pixi.js';
+import { Container, type UniformGroup } from 'pixi.js';
 import { autotileLayers, type TerrainLayerEmission } from './assets/autotile.ts';
 import type { AssetTagResolver } from './assets/map_loader.ts';
 import { BaseEngineClass, type BaseEngineClassOptions } from './base_engine_class.ts';
@@ -37,6 +37,7 @@ import {
 import {
   type LoadMapOptions,
   type PreparedScene,
+  type PropFrameAnchor,
   prepareScene,
   SceneTransitionRunner,
 } from './game_world/scene_transition.ts';
@@ -57,6 +58,7 @@ import {
 import { sanitizeCanvasDimension } from './pixi_init_options.ts';
 import { WORLD_Z_BANDS } from './rendering/layer_bands.ts';
 import { type LpcSlotCatalog, mergeLpcRecipes } from './rendering/lpc_appearance_resolver.ts';
+import { composePropDisplay } from './rendering/prop_presentation.ts';
 import type { PropTextureResolver } from './rendering/prop_texture_resolver.ts';
 import type { TextureManager } from './rendering/texture_manager.ts';
 import type { TilemapChunk } from './rendering/tilemap_chunk_renderer.ts';
@@ -474,13 +476,16 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
   private readonly _propFrameResolver?: PropTextureResolver;
 
   /**
-   * Frame → { anchor } for C-378 AC-7 prop anchoring. Width/height are NOT
-   * stored — the sprite is rendered at the resolved texture's native size
-   * (0/0 placeholders were unusable zero-sized metadata). Built at loadMap
-   * from the resolved pack config; cleared on map switch. Keyed by frame
-   * name because the worker message carries the frame, not the propId.
+   * Frame → presentation metadata for prop rendering (C-378 AC-7, C-496).
+   *
+   * `anchorX`/`anchorY` are the normalized ground/contact origin; optional
+   * `renderWidth`/`renderHeight` are the authored logical WORLD size
+   * (independent of the texture's packed frame size), and `shadow` is a
+   * renderer-owned contact shadow. Built at loadMap from the resolved pack
+   * config; cleared on map switch. Keyed by frame name because the worker
+   * message carries the frame, not the propId.
    */
-  private _propFrameMeta = new Map<string, { anchorX: number; anchorY: number }>();
+  private _propFrameMeta = new Map<string, PropFrameAnchor>();
 
   /**
    * Latest environment UBO received from the worker via STATE_UPDATE
@@ -1462,28 +1467,24 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         child.destroy();
       }
 
-      // C-378 AC-7: render at the texture's native size with the manifest
-      // anchor instead of forcing 32×32. Existing 32×32 props are
-      // pixel-identical (native width/height are 32 and the default anchor
-      // is (0.5, 1.0) — the same values the forced path used). Multi-tile
-      // props (e.g. a 32×64 gate) now render at their authored size.
-      // Prop COLLISION stays one tile from the foot pixel regardless of art
-      // height — that is correct for top-down and must not change here.
+      // C-378 AC-7 / C-496 / C-529: world footprint and contact shadow come
+      // from the prop's AUTHORED data, never the packed texture frame.
       const propMeta = this._propFrameMeta.get(frame) ?? { anchorX: 0.5, anchorY: 1.0 };
-      const propSprite = new Sprite(resolution.texture);
-      propSprite.width = resolution.texture.width;
-      propSprite.height = resolution.texture.height;
-      // Bottom-center anchor matches the manifest prop anchors (0.5, 1.0)
-      // and the placeholder it replaces. Fallback: manifest default.
-      propSprite.anchor.set(propMeta.anchorX, propMeta.anchorY);
-      container.addChild(propSprite);
+      const display = composePropDisplay({
+        container,
+        texture: resolution.texture,
+        meta: propMeta,
+      });
 
       this.debug('prop-frame-texture-loaded', {
         eid,
         frame,
         source: resolution.source,
-        width: resolution.texture.width,
-        height: resolution.texture.height,
+        textureWidth: resolution.texture.width,
+        textureHeight: resolution.texture.height,
+        renderWidth: display.width,
+        renderHeight: display.height,
+        shadow: display.hasShadow,
       });
     } catch (error) {
       this.error('prop-frame-texture-failed', {

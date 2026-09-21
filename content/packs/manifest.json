@@ -1,6 +1,6 @@
 {
   "scannedAt": "2026-09-20T15:03:36.641Z",
-  "count": 50,
+  "count": 51,
   "assets": {
     "index": {
       "tag": "index",
@@ -120,6 +120,14 @@
       "subcategory": "portraits/woodcutter_ada",
       "name": "neutral",
       "path": "emberwatch/portraits/woodcutter_ada/neutral.png",
+      "ext": ".png"
+    },
+    "emberwatch:props:prop_well": {
+      "tag": "emberwatch:props:prop_well",
+      "category": "contentPacks",
+      "subcategory": "props",
+      "name": "prop_well",
+      "path": "emberwatch/props/prop_well.png",
       "ext": ".png"
     },
     "emberwatch:props:oak": {
@@ -755,6 +763,14 @@
         "subcategory": "props",
         "name": "prop_ward_socket",
         "path": "emberwatch/props/prop_ward_socket.png",
+        "ext": ".png"
+      },
+      {
+        "tag": "emberwatch:props:prop_well",
+        "category": "contentPacks",
+        "subcategory": "props",
+        "name": "prop_well",
+        "path": "emberwatch/props/prop_well.png",
         "ext": ".png"
       },
       {

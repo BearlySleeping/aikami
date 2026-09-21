@@ -7,31 +7,31 @@
   "packUpdatedAt": "2026-09-18T00:00:00.000Z",
   "generatedAt": "1980-01-01T00:00:00.000Z",
   "summary": {
-    "accepted/current": 132,
+    "accepted/current": 135,
     "acceptable-shared": 84,
     "placeholder/wrong-semantic-reuse": 0,
     "missing": 0,
-    "needs-regeneration": 1,
+    "needs-regeneration": 0,
     "needs-map-layout-change": 0,
     "needs-runtime-capability": 0
   },
   "counts": {
     "maps": 5,
     "terrains": 6,
-    "bakedTiles": 48,
+    "bakedTiles": 47,
     "corner16Terrains": 5,
-    "atlasCellsUsed": 128,
+    "atlasCellsUsed": 127,
     "atlasCellsTotal": 128,
-    "atlasCellsFree": 0,
+    "atlasCellsFree": 1,
     "props": 95,
     "npcs": 13,
     "hostileNpcs": 4,
     "evidence": 4,
     "audioCues": 8,
-    "sourceImages": 21,
+    "sourceImages": 22,
     "transitions": 8,
     "catalogTags": 12,
-    "findings": 217
+    "findings": 219
   },
   "findings": [
     {
@@ -103,8 +103,8 @@
     {
       "id": "atlas:headroom",
       "surface": "atlas-frame",
-      "classification": "needs-regeneration",
-      "detail": "128/128 atlas cells used (48 baked tiles + 5×16 corner16) — 0 free; a new corner16 terrain requires an explicit geometry change"
+      "classification": "accepted/current",
+      "detail": "127/128 atlas cells used (47 baked tiles + 5×16 corner16) — 1 free; a new corner16 terrain requires an explicit geometry change"
     },
     {
       "id": "prop:ward_tree_landmark",
@@ -134,7 +134,7 @@
       "id": "prop:village_well",
       "surface": "prop",
       "classification": "accepted/current",
-      "detail": "frame well.png"
+      "detail": "frame prop_well.png"
     },
     {
       "id": "prop:notice_board",
@@ -698,7 +698,7 @@
       "id": "evidence:elders_seal",
       "surface": "evidence-object",
       "classification": "accepted/current",
-      "detail": "The Elder's Broken Seal at village:village_well renders well.png"
+      "detail": "The Elder's Broken Seal at village:village_well renders prop_well.png"
     },
     {
       "id": "npc:village_elder",
@@ -1091,6 +1091,12 @@
       "detail": "standalone authoring source in content/packs/emberwatch/props"
     },
     {
+      "id": "source:prop_well.png",
+      "surface": "source-image",
+      "classification": "accepted/current",
+      "detail": "standalone authoring source in content/packs/emberwatch/props"
+    },
+    {
       "id": "source:shop.png",
       "surface": "source-image",
       "classification": "accepted/current",
@@ -1130,13 +1136,13 @@
       "id": "atlas:frames",
       "surface": "atlas-frame",
       "classification": "accepted/current",
-      "detail": "grid atlas declares 128 frames (expected 128)"
+      "detail": "grid atlas declares 127 frames (expected 127)"
     },
     {
       "id": "props-atlas:frames",
       "surface": "atlas-frame",
       "classification": "accepted/current",
-      "detail": "prop atlas declares 21 frames for 21 source images"
+      "detail": "prop atlas declares 22 frames for 22 source images"
     },
     {
       "id": "prop-frame:prop_support.png",
@@ -1242,6 +1248,12 @@
     },
     {
       "id": "prop-frame:ward_small_c.png",
+      "surface": "prop-frame",
+      "classification": "accepted/current",
+      "detail": "packed prop-atlas frame"
+    },
+    {
+      "id": "prop-frame:prop_well.png",
       "surface": "prop-frame",
       "classification": "accepted/current",
       "detail": "packed prop-atlas frame"
