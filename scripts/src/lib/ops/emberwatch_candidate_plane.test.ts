@@ -10,7 +10,8 @@
 // visual) with no local override fails the suite.
 
 import { describe, expect, test } from 'bun:test';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -45,6 +46,22 @@ describe('emberwatch candidate plane', () => {
     expect(overrides.length).toBeGreaterThan(0);
     const missingFiles = overrides.filter((override) => !existsSync(override.file));
     expect(missingFiles).toEqual([]);
+  });
+
+  test('an override whose file is missing does not count as served', () => {
+    const isolatedRepository = mkdtempSync(join(tmpdir(), 'aikami-candidate-plane-'));
+    try {
+      const packRoot = join(isolatedRepository, 'content/packs/emberwatch');
+      mkdirSync(packRoot, { recursive: true });
+      writeFileSync(join(packRoot, 'manifest.json'), JSON.stringify({ maps: {}, npcs: {} }));
+
+      expect(missingCandidateOverrides(isolatedRepository)).toEqual([
+        'sprites:tilesets:props.json',
+        'sprites:tilesets:props.webp',
+      ]);
+    } finally {
+      rmSync(isolatedRepository, { recursive: true, force: true });
+    }
   });
 
   test('all ten canonical NPCs declare a neutral portrait in the manifest', () => {

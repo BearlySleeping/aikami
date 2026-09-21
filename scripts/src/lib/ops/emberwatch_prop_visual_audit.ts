@@ -28,6 +28,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { computePropRenderSize } from '@aikami/frontend/engine/prop_render_size';
 import sharp from 'sharp';
 import { logger } from '$logger';
 
@@ -153,6 +154,14 @@ const buildRow = async (
   const sourceHeight = meta.height ?? 0;
   const placement = byFrame.get(frame);
   const propDef = defByFrame.get(frame);
+  const worldSize = computePropRenderSize({
+    textureWidth: sourceWidth,
+    textureHeight: sourceHeight,
+    ...(propDef?.renderSize?.width === undefined ? {} : { renderWidth: propDef.renderSize.width }),
+    ...(propDef?.renderSize?.height === undefined
+      ? {}
+      : { renderHeight: propDef.renderSize.height }),
+  });
 
   // World size comes from the manifest renderSize when authored; otherwise it
   // is the source size (legacy behaviour).
@@ -163,8 +172,8 @@ const buildRow = async (
     sourceWidth,
     sourceHeight,
     alphaBounds: await trimmedAlphaBounds(file),
-    worldWidth: propDef?.renderSize?.width ?? sourceWidth,
-    worldHeight: propDef?.renderSize?.height ?? sourceHeight,
+    worldWidth: worldSize.width,
+    worldHeight: worldSize.height,
     worldSizeAuthored: propDef?.renderSize !== undefined,
     anchor: propDef?.anchor ?? { x: 0.5, y: 1 },
     collision: propDef?.collision ?? null,

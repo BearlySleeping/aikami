@@ -1,4 +1,4 @@
-// apps/frontend/client/src/lib/data/npc_avatar_catalog_map_integration.test.ts
+// apps/frontend/client/tests/npc_avatar_catalog_map_integration.test.ts
 //
 // C-529: real map NPC → dialogue portrait resolution.
 //
@@ -20,7 +20,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { ContentPackManifest } from '@aikami/schemas';
 
-const repository = join(dirname(fileURLToPath(import.meta.url)), '../../../../../..');
+const repository = join(dirname(fileURLToPath(import.meta.url)), '../../../..');
 const packRoot = join(repository, 'content/packs/emberwatch');
 
 const resolvable = new Set<string>();
@@ -35,7 +35,7 @@ const {
   getUnresolvedPackPortraitTags,
   resetPackPortraitDiagnostics,
   resolveNpcAvatarUrl,
-} = await import('./npc_avatar_catalog.ts');
+} = await import('../src/lib/data/npc_avatar_catalog.ts');
 
 const manifest = JSON.parse(
   readFileSync(join(packRoot, 'manifest.json'), 'utf8'),
@@ -98,23 +98,18 @@ beforeEach(() => {
 
 describe('real map NPC → dialogue portrait resolution', () => {
   test('the maps place exactly the ten canonical story NPCs', () => {
-    const ids = placedNpcIds();
-    for (const expected of [
-      'village_elder',
-      'rollo_grasper',
-      'merchant',
-      'village_guard',
-      'innkeeper_sella',
-      'smith_orra',
-      'cartographer_ivo',
-      'shrine_keeper_nemi',
+    expect(placedNpcIds()).toEqual([
       'apprentice_tess',
+      'cartographer_ivo',
+      'innkeeper_sella',
+      'merchant',
+      'rollo_grasper',
+      'shrine_keeper_nemi',
+      'smith_orra',
+      'village_elder',
+      'village_guard',
       'woodcutter_ada',
-    ]) {
-      expect(ids, expected).toContain(expected);
-    }
-    // Hostile combat NPCs are not placed as map spawns.
-    expect(ids).not.toContain('ash_hound');
+    ]);
   });
 
   test('a complete candidate catalog resolves every placed NPC to its own bust', () => {

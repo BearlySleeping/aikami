@@ -18,12 +18,10 @@
 
 import type { PropContactShadow } from '@aikami/schemas';
 import { type Container, Graphics, Sprite, type Texture } from 'pixi.js';
+import { computePropRenderSize } from './prop_render_size.ts';
 
-/** Authored logical render size, in world pixels. */
-export type PropRenderSize = {
-  width?: number;
-  height?: number;
-};
+export { computePropRenderSize } from './prop_render_size.ts';
+export type { PropRenderSize } from './prop_render_size.ts';
 
 export type { PropContactShadow };
 
@@ -32,46 +30,6 @@ export const DEFAULT_CONTACT_SHADOW_OPACITY = 0.22;
 
 /** Colour of a contact shadow — near-black, never pure black (reads softer). */
 export const CONTACT_SHADOW_COLOR = 0x0a0d10;
-
-/**
- * Resolves the logical world render size for a prop.
- *
- * Rules (in order):
- *   • both `renderWidth` and `renderHeight` authored → use them verbatim
- *     (an explicit request, even if it changes the source aspect);
- *   • only one authored → the other is derived from the texture's aspect so
- *     scaling preserves the accepted art's proportions;
- *   • none authored → the texture's native pixel size (legacy/back-compat).
- *
- * The result is always at least one world pixel in each axis.
- */
-export const computePropRenderSize = (options: {
-  textureWidth: number;
-  textureHeight: number;
-  renderWidth?: number;
-  renderHeight?: number;
-}): { width: number; height: number } => {
-  const nativeWidth = Math.max(1, options.textureWidth);
-  const nativeHeight = Math.max(1, options.textureHeight);
-  const { renderWidth, renderHeight } = options;
-
-  if (renderWidth !== undefined && renderHeight !== undefined) {
-    return { width: Math.max(1, renderWidth), height: Math.max(1, renderHeight) };
-  }
-  if (renderWidth !== undefined) {
-    return {
-      width: Math.max(1, renderWidth),
-      height: Math.max(1, (renderWidth * nativeHeight) / nativeWidth),
-    };
-  }
-  if (renderHeight !== undefined) {
-    return {
-      width: Math.max(1, (renderHeight * nativeWidth) / nativeHeight),
-      height: Math.max(1, renderHeight),
-    };
-  }
-  return { width: nativeWidth, height: nativeHeight };
-};
 
 /** Contact-point geometry for a shadow, relative to the prop's anchor origin. */
 export type ContactShadowGeometry = {

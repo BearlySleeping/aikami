@@ -548,6 +548,7 @@
       "name": "@aikami/scripts",
       "dependencies": {
         "@aikami/constants": "workspace:*",
+        "@aikami/frontend-engine": "workspace:*",
         "@aikami/schemas": "workspace:*",
         "@aikami/types": "workspace:*",
         "@discordjs/rest": "2.6.3",

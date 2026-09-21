@@ -211,6 +211,10 @@ export const collectRequiredEmberwatchCandidateTags = (repository: string): stri
  * the first time. Empty is the only acceptable result.
  */
 export const missingCandidateOverrides = (repository: string): string[] => {
-  const served = new Set(collectEmberwatchCandidateOverrides(repository).map((o) => o.tag));
+  const served = new Set(
+    collectEmberwatchCandidateOverrides(repository)
+      .filter((override) => existsSync(override.file))
+      .map((override) => override.tag),
+  );
   return collectRequiredEmberwatchCandidateTags(repository).filter((tag) => !served.has(tag));
 };

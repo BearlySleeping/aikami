@@ -10,6 +10,8 @@
 //     engine would render as the pack fallback tile.
 
 import { describe, expect, test } from 'bun:test';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -19,6 +21,43 @@ import {
 } from './emberwatch_prop_source_guard.ts';
 
 const repository = join(dirname(fileURLToPath(import.meta.url)), '../../../..');
+
+const writePlacementMap = (options: {
+  repository: string;
+  mapId: string;
+  propId: string;
+  frame: string;
+}): void => {
+  writeFileSync(
+    join(options.repository, 'content/packs/emberwatch/maps', `${options.mapId}.json`),
+    JSON.stringify({
+      layers: [
+        {
+          objects: [
+            {
+              type: 'prop',
+              properties: [
+                { name: 'propId', value: options.propId },
+                { name: 'frame', value: options.frame },
+              ],
+            },
+          ],
+        },
+      ],
+    }),
+  );
+};
+
+const withPlacementRepository = (run: (isolatedRepository: string) => void): void => {
+  const isolatedRepository = mkdtempSync(join(tmpdir(), 'aikami-prop-source-'));
+  mkdirSync(join(isolatedRepository, 'content/packs/emberwatch/maps'), { recursive: true });
+  mkdirSync(join(isolatedRepository, 'content/packs/emberwatch/props'), { recursive: true });
+  try {
+    run(isolatedRepository);
+  } finally {
+    rmSync(isolatedRepository, { recursive: true, force: true });
+  }
+};
 
 describe('emberwatch prop art source guard', () => {
   test('every placed prop resolves to accepted art or an allowlisted legacy frame', () => {
@@ -64,5 +103,53 @@ describe('emberwatch prop art source guard', () => {
     const accepted = new Set(readAcceptedPropSources(repository));
     const overlap = [...LEGACY_GRID_PROP_FRAMES].filter((frame) => accepted.has(frame));
     expect(overlap).toEqual([]);
+  });
+
+  test('matching frames aggregate every map for the prop id', () => {
+    withPlacementRepository((isolatedRepository) => {
+      writePlacementMap({
+        repository: isolatedRepository,
+        mapId: 'first',
+        propId: 'shared_prop',
+        frame: 'prop_shared.png',
+      });
+      writePlacementMap({
+        repository: isolatedRepository,
+        mapId: 'second',
+        propId: 'shared_prop',
+        frame: 'prop_shared.png',
+      });
+
+      const { rows } = auditEmberwatchPropSources(isolatedRepository);
+      expect(rows).toEqual([
+        {
+          propId: 'shared_prop',
+          frame: 'prop_shared.png',
+          maps: ['first', 'second'],
+          classification: 'unresolved',
+        },
+      ]);
+    });
+  });
+
+  test('conflicting frames for one prop id fail the source audit', () => {
+    withPlacementRepository((isolatedRepository) => {
+      writePlacementMap({
+        repository: isolatedRepository,
+        mapId: 'first',
+        propId: 'conflicted_prop',
+        frame: 'first.png',
+      });
+      writePlacementMap({
+        repository: isolatedRepository,
+        mapId: 'second',
+        propId: 'conflicted_prop',
+        frame: 'second.png',
+      });
+
+      expect(() => auditEmberwatchPropSources(isolatedRepository)).toThrow(
+        'prop "conflicted_prop" uses conflicting frames "first.png" and "second.png"',
+      );
+    });
   });
 });

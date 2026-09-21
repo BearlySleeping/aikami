@@ -105,6 +105,11 @@ const recordLayer = (placements: Map<string, Placement>, layer: MapLayer, mapId:
     }
     const existing = placements.get(ref.propId);
     if (existing) {
+      if (existing.frame !== ref.frame) {
+        throw new Error(
+          `emberwatch_prop_source_guard: prop "${ref.propId}" uses conflicting frames "${existing.frame}" and "${ref.frame}" (map "${mapId}")`,
+        );
+      }
       existing.maps.add(mapId);
     } else {
       placements.set(ref.propId, { frame: ref.frame, maps: new Set([mapId]) });
