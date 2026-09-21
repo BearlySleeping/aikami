@@ -601,7 +601,7 @@ export const runCatalogPublish = async (
     packLockBody,
     ...(carried.value.previousRelease === undefined
       ? {}
-      : { alreadyActiveRootHash: carried.value.previousRelease.rootHash }),
+      : { alreadyActivePointer: carried.value.previousRelease.pointer }),
   });
   const { rootKey, shardKeys, legacyAlias, releaseWritten, alreadyActive, failedIndexKeys } =
     activation;

@@ -175,6 +175,8 @@ export const ReleaseReceiptSchema = Type.Object(
      * failure — the previous complete release stays authoritative.
      */
     activated: Type.Boolean(),
+    /** The exact release graph was already active, so the pointer was not advanced. */
+    alreadyActive: Type.Boolean(),
     /**
      * The mutable legacy compatibility alias. Reported separately and never
      * conflated with activation: a failed alias write leaves the immutable

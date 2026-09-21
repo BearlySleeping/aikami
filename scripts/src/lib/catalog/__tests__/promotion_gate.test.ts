@@ -59,6 +59,7 @@ const receipt = (overrides: Partial<ReleaseReceipt> = {}): ReleaseReceipt =>
     dependencies: [],
     packLockHash: '',
     activated: true,
+    alreadyActive: false,
     legacyAliasWritten: true,
     legacyAliasError: '',
     verified: true,
@@ -143,6 +144,12 @@ describe('a production promotion requires a genuine staging approval', () => {
     }
   });
 
+  test('an already-active receipt approves promotion without claiming pointer advancement', async () => {
+    writeReceipt(receipt({ activated: false, alreadyActive: true }));
+    const result = await run();
+    expect(result.ok).toBe(true);
+  });
+
   test('a candidate-mismatched receipt blocks the promotion', async () => {
     writeReceipt(receipt({ candidateLockHash: sha256('a different candidate') }));
     const result = await run();
@@ -192,6 +199,16 @@ describe('the staging release the receipt names must still be true', () => {
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.code).toBe('staging-release-mismatch');
+    }
+  });
+
+  test('a receipt without a complete root binding is refused as a staging mismatch', async () => {
+    writeReceipt(receipt({ catalogRootHash: '' }));
+    const result = await run();
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.code).toBe('staging-release-mismatch');
+      expect(result.reason).toContain('not bound');
     }
   });
 

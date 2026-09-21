@@ -57,24 +57,14 @@
 // therefore declared here, explicitly, with that reasoning.
 
 import { existsSync, readFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 import {
   CATALOG_ORIGINS,
   PRODUCTION_CATALOG_ORIGINS,
   R2_BUCKETS,
   resolveBucketName,
 } from '@aikami/constants';
-
-/**
- * Repo root, from the DIRECTORY of this module.
- *
- * `import.meta.dirname` — not `fileURLToPath(import.meta.url)`. Resolving
- * `../../../..` from the FILE path is off by one: it lands on `<repo>/scripts`,
- * so `readSiblingEnvValue` looked for `<repo>/scripts/scripts/.env.production`,
- * never found it, and the cross-mode origin comparison silently degraded to a
- * warning. `catalog/config.ts` already used the directory form.
- */
-const REPO_ROOT = resolve(import.meta.dirname, '../../../..');
+import { scriptsEnvRoot } from '../env/scripts_env.ts';
 
 /** Modes that address a real remote catalog. Emulator/testing never do. */
 export const REMOTE_RELEASE_MODES = ['staging', 'production'] as const;
@@ -134,7 +124,7 @@ const declaredRemoteBuckets = (): string[] =>
  * `process.env` (loading would let a sibling file retarget the current run).
  */
 const readSiblingEnvValue = (mode: string, key: string): string | undefined => {
-  const path = join(REPO_ROOT, 'scripts', `.env.${mode}`);
+  const path = join(scriptsEnvRoot(), 'scripts', `.env.${mode}`);
   if (!existsSync(path)) {
     return undefined;
   }

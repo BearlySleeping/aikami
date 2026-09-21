@@ -100,8 +100,7 @@ describe('buildPlanPhases — mandatory phases fail loudly', () => {
       reader: async () => undefined,
     });
 
-    if (!result.ok) {
-      expect(result.phase).not.toBe('resolveBaseRelease');
-    }
+    const phase = result.ok ? 'plan-built' : result.phase;
+    expect(phase).not.toBe('resolveBaseRelease');
   });
 });

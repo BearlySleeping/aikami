@@ -32,8 +32,8 @@ if (args.includes('--help') || args.length === 0) {
 
 const modeIndex = args.indexOf('--mode');
 const mode = modeIndex >= 0 ? args[modeIndex + 1] : undefined;
-if (mode !== 'staging' && mode !== 'production') {
-  console.error('❌ --mode must be staging or production.');
+if (mode !== 'production') {
+  console.error('❌ --mode must be production.');
   console.error(USAGE);
   process.exit(4);
 }

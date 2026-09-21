@@ -109,7 +109,11 @@ describe('legacy bootstrap — reading the mutable catalog', () => {
 
   test('the offline-core declaration and the installed lock are carried when valid', async () => {
     const fixture = legacyFixture({
-      offlineCore: JSON.stringify({ schemaVersion: 1, tags: ['lpc:a'] }),
+      offlineCore: JSON.stringify({
+        schemaVersion: 1,
+        tags: ['lpc:a'],
+        rationale: { 'lpc:a': 'legacy boot asset' },
+      }),
       packLock: JSON.stringify({
         schemaVersion: 'catalog.release.v1',
         releaseId: 'legacy',
@@ -129,7 +133,11 @@ describe('legacy bootstrap — reading the mutable catalog', () => {
 
   test('a legacy object that fails its schema is REJECTED and named, not silently used', async () => {
     const fixture = legacyFixture({
-      offlineCore: JSON.stringify({ schemaVersion: 1, tags: ['lpc:a'] }),
+      offlineCore: JSON.stringify({
+        schemaVersion: 1,
+        tags: ['lpc:a'],
+        rationale: { 'lpc:a': 'legacy boot asset' },
+      }),
       packLock: JSON.stringify({ schemaVersion: 'catalog.release.v1', assets: [] }),
     });
     const outcome = await bootstrapLegacyCatalog({ originUrl: ORIGIN, reader: fixture.reader });
@@ -140,6 +148,22 @@ describe('legacy bootstrap — reading the mutable catalog', () => {
     }
     expect(outcome.plan.rejected.map((r) => r.key)).toEqual(['index/v1/pack_lock.json']);
     expect(outcome.plan.dependencies.has('index/v1/pack_lock.json')).toBe(false);
+  });
+
+  test('invalid offline-core declarations are rejected before becoming dependencies', async () => {
+    for (const offlineCore of ['null', JSON.stringify({ unrelated: true })]) {
+      const fixture = legacyFixture({ offlineCore });
+      const outcome = await bootstrapLegacyCatalog({ originUrl: ORIGIN, reader: fixture.reader });
+
+      expect(outcome.ok).toBe(true);
+      if (!outcome.ok || !outcome.applied) {
+        throw new Error('expected an applied migration');
+      }
+      expect(outcome.plan.rejected.map((rejection) => rejection.key)).toContain(
+        'seed/offline_core.json',
+      );
+      expect(outcome.plan.dependencies.has('seed/offline_core.json')).toBe(false);
+    }
   });
 });
 
@@ -212,6 +236,21 @@ describe('legacy bootstrap — fail closed', () => {
     if (!outcome.ok) {
       expect(outcome.code).toBe('legacy-identity-conflict');
       expect(outcome.reason).toContain('lpc:a');
+    }
+  });
+
+  test('an index tag absent from the seed is an identity conflict', async () => {
+    const fixture = legacyFixture({
+      categories: { lpc: [entry({ tag: 'lpc:index-only', category: 'lpc' })] },
+      seedRows: [seedRow({ tag: 'lpc:another-tag' })],
+    });
+    const outcome = await bootstrapLegacyCatalog({ originUrl: ORIGIN, reader: fixture.reader });
+
+    expect(outcome.ok).toBe(false);
+    if (!outcome.ok) {
+      expect(outcome.code).toBe('legacy-identity-conflict');
+      expect(outcome.reason).toContain('lpc:index-only');
+      expect(outcome.reason).toContain('seed=missing');
     }
   });
 
@@ -395,11 +434,16 @@ describe('legacy bootstrap — the real production shape', () => {
     // The seed is the complete inventory; the index is a truncated browse
     // surface. Neither may be dropped.
     const indexEntries: CatalogAssetEntry[] = Array.from({ length: 108 }, (_, i) =>
-      entry({ tag: `lpc:asset:${String(i).padStart(3, '0')}`, category: 'lpc' }),
+      entry({ tag: `lpc:index:${String(i).padStart(3, '0')}`, category: 'lpc' }),
     );
-    const seedRows = Array.from({ length: 12729 }, (_, i) =>
-      seedRow({ tag: `lpc:asset:${String(i).padStart(5, '0')}`, category: 'lpc' }),
-    );
+    const seedRows = [
+      ...indexEntries.map((item) =>
+        seedRow({ tag: item.tag, hash: item.hash, category: item.category }),
+      ),
+      ...Array.from({ length: 12729 - indexEntries.length }, (_, i) =>
+        seedRow({ tag: `lpc:seed-only:${String(i).padStart(5, '0')}`, category: 'lpc' }),
+      ),
+    ];
     const fixture = buildLegacyCatalog({
       originUrl: ORIGIN,
       categories: { lpc: indexEntries },

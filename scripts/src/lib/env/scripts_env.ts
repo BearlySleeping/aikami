@@ -27,6 +27,12 @@ const _scriptDir = dirname(_filename);
 // scripts/src/lib/env/scripts_env.ts → go up 4 levels to repo root
 const ROOT_DIR = resolve(_scriptDir, '../../../..');
 
+/** Test-only root for mode env files; keeps spawned CLI fixtures out of the checkout. */
+export const SCRIPTS_ENV_ROOT_ENV = 'AIKAMI_SCRIPTS_ENV_ROOT';
+
+/** Root containing `scripts/.env.{mode}` for this process. */
+export const scriptsEnvRoot = (): string => process.env[SCRIPTS_ENV_ROOT_ENV] ?? ROOT_DIR;
+
 let _loadedMode: string | null = null;
 const _envCache = new Map<string, string>();
 /**
@@ -99,7 +105,7 @@ const loadEnvFile = (envPath: string): void => {
  *   this checkout; injected by tests so the mode-switch behaviour can be
  *   exercised without depending on which env files happen to be decrypted.
  */
-export function initScriptsEnv(mode: string, rootDir: string = ROOT_DIR): void {
+export function initScriptsEnv(mode: string, rootDir: string = scriptsEnvRoot()): void {
   if (_loadedMode === mode) {
     return;
   }

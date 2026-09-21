@@ -27,6 +27,7 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { CATALOG_ORIGINS } from '@aikami/constants';
+import { SCRIPTS_ENV_ROOT_ENV } from '../../env/scripts_env.ts';
 import { buildCandidateLock } from '../emberwatch_candidate.ts';
 import { RELEASE_PLANE_ENV } from '../emberwatch_release_io.ts';
 
@@ -36,34 +37,29 @@ const CLI = 'scripts/src/lib/ops/emberwatch_release.ts';
 type CliRun = { status: number | null; output: string };
 
 let plane: string;
-/** Env files this test created, so it can remove exactly what it added. */
-const created: string[] = [];
+let envRoot: string;
 
 beforeEach(() => {
   plane = mkdtempSync(join(tmpdir(), 'aikami-cli-plane-'));
+  envRoot = mkdtempSync(join(tmpdir(), 'aikami-cli-env-'));
 });
 
 afterEach(() => {
   rmSync(plane, { recursive: true, force: true });
-  for (const path of created.splice(0)) {
-    rmSync(path, { force: true });
-  }
+  rmSync(envRoot, { recursive: true, force: true });
 });
 
 /**
- * Ensures `scripts/.env.{mode}` exists with the mode's canonical identity.
+ * Writes the mode's canonical identity beneath the isolated env root.
  *
  * A decrypted checkout has it; CI does not. Without it the release-target gate
  * refuses before the phase under test, which would make these tests pass for
  * the wrong reason.
  */
 const ensureModeEnv = (mode: 'staging' | 'production'): void => {
-  const path = join(REPOSITORY, 'scripts', `.env.${mode}`);
-  if (existsSync(path)) {
-    return;
-  }
+  const path = join(envRoot, 'scripts', `.env.${mode}`);
   const identity = CATALOG_ORIGINS[mode];
-  mkdirSync(join(REPOSITORY, 'scripts'), { recursive: true });
+  mkdirSync(join(envRoot, 'scripts'), { recursive: true });
   writeFileSync(
     path,
     [
@@ -72,7 +68,6 @@ const ensureModeEnv = (mode: 'staging' | 'production'): void => {
       '',
     ].join('\n'),
   );
-  created.push(path);
 };
 
 /** Writes a sealed candidate that re-derives from the CURRENT source tree. */
@@ -83,11 +78,17 @@ const sealCurrentTree = (): string => {
 };
 
 const runCli = (args: string[]): CliRun => {
+  const env = { ...process.env };
+  delete env.CATALOG_BUCKET;
+  delete env.CATALOG_ORIGIN_URL;
+  delete env.AIKAMI_CATALOG_TEST_SEAM;
+  env[SCRIPTS_ENV_ROOT_ENV] = envRoot;
+  env[RELEASE_PLANE_ENV] = plane;
   const result = spawnSync('bun', [CLI, ...args], {
     cwd: REPOSITORY,
     encoding: 'utf8',
     timeout: 180_000,
-    env: { ...process.env, [RELEASE_PLANE_ENV]: plane },
+    env,
   });
   return { status: result.status, output: `${result.stdout ?? ''}${result.stderr ?? ''}` };
 };
@@ -115,6 +116,26 @@ describe('emberwatch:release --plan — usage', () => {
     const run = runCli([]);
     expect(run.status).toBe(4);
     expect(run.output).toContain('Emberwatch release orchestrator');
+  });
+});
+
+describe('emberwatch:legacy-bootstrap — production-only mode gate', () => {
+  test('staging exits as invalid before target resolution', () => {
+    const result = spawnSync(
+      'bun',
+      ['scripts/src/lib/ops/legacy_catalog_bootstrap.ts', '--mode', 'staging'],
+      {
+        cwd: REPOSITORY,
+        encoding: 'utf8',
+        timeout: 180_000,
+        env: { ...process.env, [SCRIPTS_ENV_ROOT_ENV]: envRoot },
+      },
+    );
+    const output = `${result.stdout ?? ''}${result.stderr ?? ''}`;
+
+    expect(result.status).toBe(4);
+    expect(output).toContain('--mode must be production');
+    expect(output).not.toContain('release target refused');
   });
 });
 
@@ -202,6 +223,7 @@ describe('emberwatch:release --plan — production requires a staging approval',
         dependencies: [],
         packLockHash: '',
         activated: true,
+        alreadyActive: false,
         legacyAliasWritten: true,
         legacyAliasError: '',
         verified: true,

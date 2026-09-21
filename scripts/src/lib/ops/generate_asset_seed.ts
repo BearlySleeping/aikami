@@ -86,7 +86,7 @@ export const buildRows = (options: {
       s: hashEntry.sizeBytes,
       c: entry.category,
       e: entry.ext,
-      l: options.credits.credits[tag]?.licenses ?? [],
+      l: [...(options.credits.credits[tag]?.licenses ?? [])],
     });
   }
 
@@ -200,25 +200,35 @@ const buildLocalRows = async (options: {
   }
 
   // Content-pack tags, so offline-core tags (emberwatch:*) resolve.
+  const contentPackManifestPath = join(CONTENT_PACKS_DIR, 'manifest.json');
+  let cpManifest: AssetManifest;
   try {
-    const cpManifest = await readJson<AssetManifest>(join(CONTENT_PACKS_DIR, 'manifest.json'));
-    const cpHashes = await readJson<AssetHashesFile>(join(CONTENT_PACKS_DIR, 'asset_hashes.json'));
-    const cpCredits = await readJson<AssetCreditsFile>(
-      join(CONTENT_PACKS_DIR, 'asset_credits.json'),
-    );
-    const { rows: cpRows, skipped: cpSkipped } = buildRows({
-      manifest: cpManifest,
-      hashes: cpHashes,
-      credits: cpCredits,
-    });
-    rows.push(...cpRows);
-    if (cpSkipped.length > 0) {
-      log.warn(
-        `⚠ Content-packs skipped ${cpSkipped.length} tag(s) with no hash entry, e.g. ${cpSkipped.slice(0, 3).join(', ')}`,
-      );
+    cpManifest = await readJson<AssetManifest>(contentPackManifestPath);
+  } catch (error) {
+    if (
+      error === null ||
+      typeof error !== 'object' ||
+      !('code' in error) ||
+      error.code !== 'ENOENT'
+    ) {
+      throw error;
     }
-  } catch {
     log.warn('⚠ Content-packs manifest not found — skipping content-pack tags in seed');
+    return { rows, manifest };
+  }
+
+  const cpHashes = await readJson<AssetHashesFile>(join(CONTENT_PACKS_DIR, 'asset_hashes.json'));
+  const cpCredits = await readJson<AssetCreditsFile>(join(CONTENT_PACKS_DIR, 'asset_credits.json'));
+  const { rows: cpRows, skipped: cpSkipped } = buildRows({
+    manifest: cpManifest,
+    hashes: cpHashes,
+    credits: cpCredits,
+  });
+  rows.push(...cpRows);
+  if (cpSkipped.length > 0) {
+    log.warn(
+      `⚠ Content-packs skipped ${cpSkipped.length} tag(s) with no hash entry, e.g. ${cpSkipped.slice(0, 3).join(', ')}`,
+    );
   }
 
   return { rows, manifest };

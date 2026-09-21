@@ -23,6 +23,7 @@
 //   3. the mutable compatibility alias only after the pointer moved.
 
 import { createHash } from 'node:crypto';
+import type { ReleasePointer } from '@aikami/schemas';
 import { PACK_LOCK_KEY, ReleasePointerSchema } from '@aikami/schemas';
 import { Value } from 'typebox/value';
 import { ASSET_CACHE_CONTROL, INDEX_CACHE_CONTROL, INDEX_KEY_PREFIX } from './config.ts';
@@ -75,7 +76,7 @@ const buildReleasePointer = (options: {
   shards: readonly { id: string; key: string; hash: string }[];
   seedReport: SeedPublishReport;
   packLockReport: PackLockPublishReport;
-}): Record<string, unknown> => ({
+}): ReleasePointer => ({
   schemaVersion: 'catalog.release.v1',
   releaseId: options.releaseId,
   rootKey: options.rootKey,
@@ -101,6 +102,20 @@ const buildReleasePointer = (options: {
 });
 
 /**
+ * Whether two pointers name the same immutable release graph.
+ *
+ * `releaseId` and `publishedAt` describe the activation event. Everything
+ * else is content identity and must match, including every shard and seed or
+ * pack-lock dependency hash, before a retry may leave the pointer untouched.
+ */
+const sameReleaseGraph = (left: ReleasePointer, right: ReleasePointer): boolean =>
+  left.schemaVersion === right.schemaVersion &&
+  left.rootKey === right.rootKey &&
+  left.rootHash === right.rootHash &&
+  JSON.stringify(left.shards) === JSON.stringify(right.shards) &&
+  JSON.stringify(left.dependencies) === JSON.stringify(right.dependencies);
+
+/**
  * Uploads the immutable index objects and, only once every shard it references
  * is confirmed present, advances the release pointer LAST.
  *
@@ -117,15 +132,14 @@ export const publishIndexAndActivate = async (options: {
   packLockReport: PackLockPublishReport;
   packLockBody: Buffer | undefined;
   /**
-   * Root hash the target already serves, from the verified previous release.
+   * Validated pointer the target already serves, from the verified previous
+   * release.
    *
-   * When it equals this release's root, every byte the pointer would name is
-   * already active. Writing the pointer anyway would advance it to a new
-   * `releaseId` that describes the same release — a pointer change fabricated
-   * to make a retry look like progress. So the pointer write is SKIPPED and
-   * `alreadyActive` is reported instead.
+   * Only an exact graph match is already active. A same-root pointer with a
+   * changed shard, seed object or pack lock must still advance so the pointer
+   * cannot retain stale dependencies or diverge from the legacy lock alias.
    */
-  alreadyActiveRootHash?: string;
+  alreadyActivePointer?: ReleasePointer;
 }): Promise<IndexActivation> => {
   const { client, root, seedReport } = options;
   const rootJson = JSON.stringify(root, null, 2);
@@ -136,7 +150,14 @@ export const publishIndexAndActivate = async (options: {
     return { ...shard, hash, key: immutableIndexKey({ name: shard.id, hash }) };
   });
   const shardKeys = immutableShards.map((shard) => shard.key);
-  const alreadyActive = options.alreadyActiveRootHash === rootHash;
+  const releasePointer = buildReleasePointer({
+    releaseId: options.releaseId,
+    rootKey,
+    rootHash,
+    shards: immutableShards,
+    seedReport,
+    packLockReport: options.packLockReport,
+  });
 
   const failedIndexKeys: string[] = [];
   const putIndexObject = async (object: {
@@ -211,6 +232,15 @@ export const publishIndexAndActivate = async (options: {
     return unsettled(options.packLockReport);
   }
 
+  if (!Value.Check(ReleasePointerSchema, releasePointer)) {
+    console.error('  ⛔ Generated release pointer failed validation — release NOT advanced.');
+    return unsettled(options.packLockReport);
+  }
+
+  const alreadyActive =
+    options.alreadyActivePointer !== undefined &&
+    sameReleaseGraph(options.alreadyActivePointer, releasePointer);
+
   // The release this pointer would name is already the one being served. The
   // immutable objects above were still written (idempotent by content address,
   // and a missing one would be a real gap), but the pointer is left alone.
@@ -232,19 +262,6 @@ export const publishIndexAndActivate = async (options: {
       packLock: { ...options.packLockReport, legacyAliasWritten: legacyAlias.written },
       failedIndexKeys,
     };
-  }
-
-  const releasePointer = buildReleasePointer({
-    releaseId: options.releaseId,
-    rootKey,
-    rootHash,
-    shards: immutableShards,
-    seedReport,
-    packLockReport: options.packLockReport,
-  });
-  if (!Value.Check(ReleasePointerSchema, releasePointer)) {
-    console.error('  ⛔ Generated release pointer failed validation — release NOT advanced.');
-    return unsettled(options.packLockReport);
   }
 
   // Write the versioned release pointer LAST, pinning the exact root, shard

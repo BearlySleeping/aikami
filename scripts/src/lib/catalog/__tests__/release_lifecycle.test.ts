@@ -252,6 +252,7 @@ describe('promotion — production publishes the candidate staging approved', ()
     bucket: CATALOG_ORIGINS.staging.bucketName,
     originUrl: CATALOG_ORIGINS.staging.originUrl as string,
     activated: true,
+    alreadyActive: false,
     verified: true,
     ...overrides,
   });
@@ -288,6 +289,14 @@ describe('promotion — production publishes the candidate staging approved', ()
       expect(result.code).toBe('receipt-not-activated');
       expect(result.reason).toContain('never activated');
     }
+  });
+
+  test('an already-active staging release remains promotable without fabricating activation', () => {
+    const result = checkPromotion({
+      stagingReceipt: stagingReceipt({ activated: false, alreadyActive: true }),
+      candidateLockHash: candidate.lockHash,
+    });
+    expect(result.ok).toBe(true);
   });
 
   test('a staging receipt that activated but never VERIFIED is refused', () => {
@@ -389,6 +398,12 @@ describe('receipts report activation and alias degradation separately', () => {
     expect(receipt({ ok: true, releaseWritten: true }).activated).toBe(true);
     // Everything uploaded, pointer write failed: NOT activated.
     expect(receipt({ ok: false, releaseWritten: false }).activated).toBe(false);
+  });
+
+  test('already-active is persisted separately from pointer activation', () => {
+    const r = receipt({ ok: true, releaseWritten: false, alreadyActive: true });
+    expect(r.activated).toBe(false);
+    expect(r.alreadyActive).toBe(true);
   });
 
   test('a failed pointer write leaves the previous release named', () => {

@@ -385,6 +385,7 @@ export type PublishReportLike = {
   packLock?: { written: boolean; key: string; assetPins: number; audioPins: number };
   legacyAlias?: { key: string; written: boolean; error?: string };
   releaseWritten?: boolean;
+  alreadyActive?: boolean;
   uploaded?: number;
   skipped?: number;
   failed?: number;
@@ -423,6 +424,7 @@ export const buildReceipt = (options: {
   dependencies: [],
   packLockHash: options.report.packLock?.written ? options.report.packLock.key : '',
   activated: options.report.releaseWritten === true,
+  alreadyActive: options.report.alreadyActive === true,
   legacyAliasWritten: options.report.legacyAlias?.written === true,
   legacyAliasError: options.report.legacyAlias?.error ?? '',
   verified: options.verified,
@@ -473,7 +475,13 @@ const normalizeOrigin = (originUrl: string): string => originUrl.replace(/\/+$/,
 export const checkPromotion = (options: {
   stagingReceipt: Pick<
     ReleaseReceipt,
-    'candidateLockHash' | 'mode' | 'bucket' | 'originUrl' | 'activated' | 'verified'
+    | 'candidateLockHash'
+    | 'mode'
+    | 'bucket'
+    | 'originUrl'
+    | 'activated'
+    | 'alreadyActive'
+    | 'verified'
   >;
   /** The candidate production is about to publish. */
   candidateLockHash: string;
@@ -515,7 +523,7 @@ export const checkPromotion = (options: {
         'nothing about staging.',
     };
   }
-  if (!stagingReceipt.activated) {
+  if (!stagingReceipt.activated && !stagingReceipt.alreadyActive) {
     return {
       ok: false,
       code: 'receipt-not-activated',

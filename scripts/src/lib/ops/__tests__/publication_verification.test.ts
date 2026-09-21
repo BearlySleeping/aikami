@@ -175,6 +175,20 @@ describe('verifyPublishedRelease — distinguishable outcomes', () => {
     expect(result.outcome).toBe('remote-verification-failure');
     expect(result.verificationError).toContain('ECONNREFUSED');
   });
+
+  test('remote-verification-failure: non-absence HTTP errors are unreadable pointers', async () => {
+    const result = await verifyPublishedRelease({
+      originUrl: ORIGIN,
+      previous: pointerRead({ status: 404 }),
+      plannedRootHash: 'e'.repeat(64),
+      readPointer: async () => pointerRead({ status: 503 }),
+      reader: async () => undefined,
+    });
+
+    expect(result.verified).toBe(false);
+    expect(result.outcome).toBe('remote-verification-failure');
+    expect(result.verificationError).toContain('HTTP 503');
+  });
 });
 
 describe('repeat publication', () => {

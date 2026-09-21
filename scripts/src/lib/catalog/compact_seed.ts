@@ -20,44 +20,26 @@
 // Shared by the generator (`generate_asset_seed.ts`) and the publisher
 // (`seed_publish.ts`) so the two cannot drift on what a seed row is.
 
-/** One seed row. Short keys: tag, hash, size, category, extension, licenses. */
-export type CompactSeedRow = {
-  t: string;
-  h: string;
-  s: number;
-  c: string;
-  e: string;
-  l?: readonly string[];
-};
+import { CompactSeedDocumentSchema } from '@aikami/schemas';
+import type { CompactSeedDocument, CompactSeedRow } from '@aikami/types';
+import { Value } from 'typebox/value';
 
-/** The compact seed document as it is published. */
-export type CompactSeedDocument = {
-  sv: 1;
-  /** Scan timestamp — metadata, preserved from the committed sidecar. */
-  g: string;
-  /**
-   * Origin stamp. Deliberately NOT the mode's asset base URL: a candidate is
-   * sealed once and promoted unchanged, so a mode-specific value here would
-   * make the same source produce different bytes per environment.
-   */
-  o: string;
-  r: CompactSeedRow[];
-};
+export type { CompactSeedDocument, CompactSeedRow } from '@aikami/types';
 
 /** Parses seed bytes, or throws with a reason naming which document failed. */
 export const parseCompactSeed = (bytes: Uint8Array, label: string): CompactSeedDocument => {
-  let parsed: CompactSeedDocument;
+  let parsed: unknown;
   try {
-    parsed = JSON.parse(new TextDecoder().decode(bytes)) as CompactSeedDocument;
+    parsed = JSON.parse(new TextDecoder().decode(bytes));
   } catch (error) {
     throw new Error(
       `${label} is not valid JSON: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
-  if (!Array.isArray(parsed?.r)) {
+  if (!Value.Check(CompactSeedDocumentSchema, parsed)) {
     throw new Error(`${label} has no \`r\` row array — it is not a compact seed document`);
   }
-  return parsed;
+  return parsed as CompactSeedDocument;
 };
 
 /**

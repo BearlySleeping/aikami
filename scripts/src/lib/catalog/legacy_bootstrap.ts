@@ -49,6 +49,7 @@ import {
   CatalogIndexRootSchema,
   CatalogIndexShardSchema,
   InstalledPackLockSchema,
+  OfflineCoreDeclarationSchema,
 } from '@aikami/schemas';
 import type { TSchema } from 'typebox';
 import { Value } from 'typebox/value';
@@ -221,7 +222,9 @@ const findIdentityConflicts = (
   const conflicts: string[] = [];
   for (const entry of entries) {
     const row = seedByTag.get(entry.tag);
-    if (row && row.h !== entry.hash) {
+    if (!row) {
+      conflicts.push(`${entry.tag}: index=${entry.hash.slice(0, 12)}… seed=missing`);
+    } else if (row.h !== entry.hash) {
       conflicts.push(`${entry.tag}: index=${entry.hash.slice(0, 12)}… seed=${row.h.slice(0, 12)}…`);
     }
   }
@@ -230,7 +233,7 @@ const findIdentityConflicts = (
 
 /** The optional legacy objects, with the schema each must satisfy. */
 const OPTIONAL_LEGACY_OBJECTS = [
-  [LEGACY_OFFLINE_CORE_KEY, undefined, 'offline-core declaration'],
+  [LEGACY_OFFLINE_CORE_KEY, OfflineCoreDeclarationSchema, 'offline-core declaration'],
   [LEGACY_PACK_LOCK_KEY, InstalledPackLockSchema, 'installed pack lock'],
 ] as const;
 

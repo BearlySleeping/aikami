@@ -133,6 +133,22 @@ describe('merging a carried seed preserves inventory', () => {
       /not valid JSON/,
     );
   });
+
+  test('every compact document and row field is runtime-validated', () => {
+    const validRow = row('a', '1'.repeat(64));
+    const valid = seedDoc([validRow]);
+    for (const invalid of [
+      { ...valid, sv: 2 },
+      { ...valid, g: 1 },
+      { ...valid, o: null },
+      { ...valid, r: [{ ...validRow, h: 42 }] },
+      { ...valid, r: [{ ...validRow, l: ['MIT', 42] }] },
+    ]) {
+      expect(() =>
+        parseCompactSeed(new TextEncoder().encode(JSON.stringify(invalid)), 'fixture'),
+      ).toThrow(/not a compact seed document/);
+    }
+  });
 });
 
 describe('runSeedPublish', () => {
@@ -251,6 +267,24 @@ describe('runSeedPublish', () => {
     });
 
     expect(report.failed).toBeGreaterThan(0);
+  });
+
+  test('an invalid carried-only seed is refused before publication', async () => {
+    writeOtherSeedFiles();
+
+    const report = await runSeedPublish({
+      client,
+      gameDataDir,
+      carriedDependencies: new Map([
+        [
+          'seed/abc/asset_seed.json',
+          new TextEncoder().encode(JSON.stringify({ sv: 1, g: 'x', o: '', r: [{}] })),
+        ],
+      ]),
+    });
+
+    expect(report.failed).toBeGreaterThan(0);
+    expect(report.objects.some((entry) => entry.key.endsWith('/asset_seed.json'))).toBe(false);
   });
 
   test('the published seed is compact — no pretty-printing', async () => {

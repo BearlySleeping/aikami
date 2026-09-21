@@ -315,17 +315,17 @@ const readPublishedPointer = async (options: {
 > => {
   const after = await options.readPointer(options.originUrl);
 
-  if (after.status === 0) {
+  if (after.status !== 200 && after.status !== 404 && after.status !== 410) {
     return {
       ok: false,
       after,
       outcome: 'remote-verification-failure',
       reason:
-        `the release pointer at ${options.originUrl} could not be read: ` +
-        `${(after.body as { error?: string } | undefined)?.error ?? 'transport failure'}`,
+        `the release pointer at ${options.originUrl} could not be read (HTTP ${after.status}): ` +
+        `${(after.body as { error?: string } | undefined)?.error ?? 'unreadable pointer'}`,
     };
   }
-  if (after.status !== 200) {
+  if (after.status === 404 || after.status === 410) {
     return {
       ok: false,
       after,

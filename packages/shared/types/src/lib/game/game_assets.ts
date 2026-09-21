@@ -11,6 +11,9 @@ import type {
   AssetHashEntrySchema,
   AssetHashesFileSchema,
   AssetManifestSchema,
+  CompactSeedDocumentSchema,
+  CompactSeedRowSchema,
+  OfflineCoreDeclarationSchema,
 } from '@aikami/schemas';
 import type { Static } from 'typebox';
 
@@ -184,13 +187,7 @@ export type AssetSeedDocument = {
  * prefetch set: fetched once over the network, verified by hash, and pinned
  * in the OPFS / Tauri FS cache so every later run is fully offline.
  */
-export type OfflineCoreDeclaration = {
-  schemaVersion: 1;
-  /** Tags the client prefetches and pins on first run. */
-  tags: readonly string[];
-  /** Why each group is core — starting map, default body, boot UI. */
-  rationale: Readonly<Record<string, string>>;
-};
+export type OfflineCoreDeclaration = Static<typeof OfflineCoreDeclarationSchema>;
 
 // ---------------------------------------------------------------------------
 // Compact JSON format (C-435) — short keys for smaller file size
@@ -201,26 +198,13 @@ export type OfflineCoreDeclaration = {
  * Short keys save ~13% file size vs the full typed format.
  * t=tag, h=hash, s=sizeBytes, c=category, e=ext
  */
-export type CompactSeedRow = {
-  t: string;
-  h: string;
-  s: number;
-  c: string;
-  e: string;
-  /** l=verbatim license records; optional for backward-compatible old seeds. */
-  l?: readonly string[];
-};
+export type CompactSeedRow = Static<typeof CompactSeedRowSchema>;
 
 /**
  * Compact JSON document format used in asset_seed.json.
  * sv=schemaVersion, g=generatedAt, o=originUrl, r=rows
  */
-export type CompactSeedDocument = {
-  sv: 1;
-  g: string;
-  o: string;
-  r: readonly CompactSeedRow[];
-};
+export type CompactSeedDocument = Static<typeof CompactSeedDocumentSchema>;
 
 /**
  * Parses a compact seed document (from asset_seed.json) into the typed format.

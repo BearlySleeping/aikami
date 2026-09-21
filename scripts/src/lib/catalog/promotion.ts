@@ -194,7 +194,16 @@ export const verifyStagingApproval = async (options: {
         `currently serves ${JSON.stringify(previous.releaseId)}. The approval is stale.`,
     };
   }
-  if (receipt.catalogRootHash !== '' && previous.rootHash !== receipt.catalogRootHash) {
+  if (receipt.catalogRootHash.length !== 64) {
+    return {
+      ok: false,
+      code: 'staging-release-mismatch',
+      reason:
+        'the receipt is not bound to a complete 64-character staging root hash, so it ' +
+        'cannot approve the release currently served by staging.',
+    };
+  }
+  if (previous.rootHash !== receipt.catalogRootHash) {
     return {
       ok: false,
       code: 'staging-release-mismatch',

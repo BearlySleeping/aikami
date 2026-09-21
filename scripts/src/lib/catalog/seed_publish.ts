@@ -165,23 +165,25 @@ const resolveAssetSeedBody = (options: {
         'release would be incomplete.',
     };
   }
+
+  let carried: CompactSeedDocument | undefined;
+  if (carriedBytes) {
+    try {
+      carried = parseCompactSeed(carriedBytes, `the previous release's ${ASSET_SEED_FILENAME}`);
+    } catch (error) {
+      return { ok: false, reason: `carried copy is unusable — ${messageOf(error)}` };
+    }
+  }
   if (!local) {
     return { ok: true, body: carriedBytes as Uint8Array, carried: true, mergedFromCarried: 0 };
   }
-  if (!carriedBytes) {
+  if (!carried) {
     return {
       ok: true,
       body: serializeCompactSeed(local),
       carried: false,
       mergedFromCarried: 0,
     };
-  }
-
-  let carried: CompactSeedDocument;
-  try {
-    carried = parseCompactSeed(carriedBytes, `the previous release's ${ASSET_SEED_FILENAME}`);
-  } catch (error) {
-    return { ok: false, reason: `carried copy is unusable — ${messageOf(error)}` };
   }
 
   const localTags = new Set(local.r.map((row) => row.t));
