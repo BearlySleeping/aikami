@@ -1,0 +1,86 @@
+{
+  "schemaVersion": 1,
+  "kind": "emberwatch-map-validation",
+  "generatedAt": "1980-01-01T00:00:00.000Z",
+  "findings": [],
+  "blockers": [],
+  "maps": [
+    {
+      "id": "inn",
+      "width": 28,
+      "height": 20,
+      "npcCount": 2,
+      "propCount": 20,
+      "transitionCount": 1,
+      "walkablePercent": 65.5,
+      "components": 1,
+      "unreachableCells": 0,
+      "legacyFrames": [
+        "bed.png",
+        "bookshelf.png",
+        "counter.png",
+        "crate.png",
+        "table.png"
+      ]
+    },
+    {
+      "id": "merchant_shop",
+      "width": 24,
+      "height": 18,
+      "npcCount": 1,
+      "propCount": 11,
+      "transitionCount": 1,
+      "walkablePercent": 63.2,
+      "components": 1,
+      "unreachableCells": 0,
+      "legacyFrames": [
+        "bookshelf.png",
+        "counter.png",
+        "crate.png"
+      ]
+    },
+    {
+      "id": "old_road",
+      "width": 72,
+      "height": 36,
+      "npcCount": 2,
+      "propCount": 24,
+      "transitionCount": 2,
+      "walkablePercent": 78.1,
+      "components": 1,
+      "unreachableCells": 0,
+      "legacyFrames": [
+        "crate.png"
+      ]
+    },
+    {
+      "id": "ruined_shrine",
+      "width": 40,
+      "height": 36,
+      "npcCount": 1,
+      "propCount": 7,
+      "transitionCount": 1,
+      "walkablePercent": 76.8,
+      "components": 1,
+      "unreachableCells": 0,
+      "legacyFrames": [
+        "crate.png"
+      ]
+    },
+    {
+      "id": "village",
+      "width": 64,
+      "height": 48,
+      "npcCount": 4,
+      "propCount": 18,
+      "transitionCount": 3,
+      "walkablePercent": 77.7,
+      "components": 7,
+      "unreachableCells": 8,
+      "legacyFrames": [
+        "anvil.png",
+        "crate.png"
+      ]
+    }
+  ]
+}

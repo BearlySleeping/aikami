@@ -27,19 +27,23 @@
 //   arrival spawns sit clear of every transition rectangle on this map.
 
 import {
+  cell,
+  OLD_ROAD_ARRIVAL,
+  placeLandmark,
+  placeNpc,
+  placeProp,
+  placeSpawn,
+  placeTransition,
+} from './emberwatch_authoring.ts';
+import {
   block,
   fillRect,
   type MapData,
   type MapObjectLayer,
   makeMap,
   makeRng,
-  npc,
-  OLD_ROAD_ARRIVAL,
-  prop,
   scatter,
   setTile,
-  spawn,
-  transition,
 } from './emberwatch_map_shared.ts';
 import { buildG } from './generate_emberwatch_tables.ts';
 
@@ -540,40 +544,40 @@ export const buildVillage = (): { map: MapData; objectLayers: MapObjectLayer[] }
       visible: true,
       objects: [
         // ── Story NPCs (ids preserved) ─────────────────────────────────────
-        npc(1, 'village_elder', 'Elder Thalia', 'elder_thalia_greeting', 32 * 32, 27 * 32),
-        npc(11, 'village_guard', 'Bram the Guard', 'bram_greeting', 33 * 32, 43 * 32),
-        npc(20, 'smith_orra', 'Orra the Smith', 'orra_greeting', 8 * 32, 29 * 32),
-        npc(21, 'cartographer_ivo', 'Ivo the Cartographer', 'ivo_greeting', 21 * 32, 23 * 32),
+        placeNpc(1, 'village_elder', 'Elder Thalia', 'elder_thalia_greeting', 32, 27),
+        placeNpc(11, 'village_guard', 'Bram the Guard', 'bram_greeting', 33, 43),
+        placeNpc(20, 'smith_orra', 'Orra the Smith', 'orra_greeting', 8, 29),
+        placeNpc(21, 'cartographer_ivo', 'Ivo the Cartographer', 'ivo_greeting', 21, 23),
 
         // ── Landmarks ──────────────────────────────────────────────────────
-        prop(2, 'village_well', 'Old Stone Well', 'prop_well.png', 19 * 32, 24 * 32),
-        prop(3, 'notice_board', 'Village Notice Board', 'prop_notice_board.png', 45 * 32, 11 * 32),
-        prop(4, 'village_gate', 'Emberwatch Village Gate', 'prop_gate.png', 32 * 32, 45 * 32),
-        prop(12, 'ward_tree_landmark', 'The Ward Tree', 'ward_large.png', 32 * 32, 23 * 32),
+        placeLandmark(2, 'village_well', 'Old Stone Well', 'prop_well.png', 19, 24),
+        placeLandmark(3, 'notice_board', 'Village Notice Board', 'prop_notice_board.png', 45, 11),
+        placeLandmark(4, 'village_gate', 'Emberwatch Village Gate', 'prop_gate.png', 32, 45),
+        placeLandmark(12, 'ward_tree_landmark', 'The Ward Tree', 'ward_large.png', 32, 23),
 
         // ── Woodland stands (trunk footprint collides, canopy does not) ────
-        prop(13, 'woodland_oak', 'Woodland Oak', 'oak.png', 27 * 32, 14 * 32),
-        prop(15, 'woodland_oak_2', 'Woodland Oak', 'oak.png', 43 * 32, 15 * 32),
-        prop(16, 'woodland_oak_3', 'Woodland Oak', 'oak.png', 11 * 32, 22 * 32),
-        prop(17, 'woodland_oak_4', 'Woodland Oak', 'oak.png', 57 * 32, 40 * 32),
-        prop(18, 'woodland_birch', 'Woodland Birch', 'birch.png', 23 * 32, 17 * 32),
-        prop(19, 'woodland_birch_2', 'Woodland Birch', 'birch.png', 45 * 32, 28 * 32),
-        prop(22, 'ward_grove_a', 'Ward Grove (unlit)', 'ward_small_a.png', 28 * 32, 29 * 32),
-        prop(14, 'ward_grove_b', 'Ward Grove (lit)', 'ward_small_b.png', 37 * 32, 25 * 32),
-        prop(23, 'ward_grove_c', 'Ward Grove (lit)', 'ward_small_c.png', 30 * 32, 20 * 32),
+        placeProp(13, 'woodland_oak', 'Woodland Oak', 'oak.png', 27, 14),
+        placeProp(15, 'woodland_oak_2', 'Woodland Oak', 'oak.png', 43, 15),
+        placeProp(16, 'woodland_oak_3', 'Woodland Oak', 'oak.png', 11, 22),
+        placeProp(17, 'woodland_oak_4', 'Woodland Oak', 'oak.png', 57, 40),
+        placeProp(18, 'woodland_birch', 'Woodland Birch', 'birch.png', 23, 17),
+        placeProp(19, 'woodland_birch_2', 'Woodland Birch', 'birch.png', 45, 28),
+        placeProp(22, 'ward_grove_a', 'Ward Grove (unlit)', 'ward_small_a.png', 28, 29),
+        placeProp(14, 'ward_grove_b', 'Ward Grove (lit)', 'ward_small_b.png', 37, 25),
+        placeProp(23, 'ward_grove_c', 'Ward Grove (lit)', 'ward_small_c.png', 30, 20),
 
         // ── Building-adjacent clutter (never blocks a route) ───────────────
-        prop(24, 'inn_barrel', 'Barrel', 'prop_barrel.png', 54 * 32, 21 * 32),
-        prop(25, 'inn_crate', 'Crate', 'crate.png', 56 * 32, 21 * 32),
-        prop(26, 'yard_anvil', 'Smith Anvil', 'anvil.png', 5 * 32, 28 * 32),
-        prop(27, 'shop_crate', 'Crate', 'crate.png', 55 * 32, 34 * 32),
-        prop(28, 'inn_chair', 'Chair', 'chair.png', 44 * 32, 11 * 32),
+        placeProp(24, 'inn_barrel', 'Barrel', 'prop_barrel.png', 54, 21),
+        placeProp(25, 'inn_crate', 'Crate', 'crate.png', 56, 21),
+        placeProp(26, 'yard_anvil', 'Smith Anvil', 'anvil.png', 5, 28),
+        placeProp(27, 'shop_crate', 'Crate', 'crate.png', 55, 34),
+        placeProp(28, 'inn_chair', 'Chair', 'chair.png', 44, 11),
 
         // ── Arrival markers ────────────────────────────────────────────────
-        spawn(7, 'from_merchant', 3 * 32, 24 * 32),
-        spawn(8, 'from_inn', 60 * 32, 24 * 32),
-        spawn(9, 'village_gate', 32 * 32, 44 * 32),
-        spawn(60, 'from_old_road', 32 * 32, 3 * 32),
+        placeSpawn(7, 'from_merchant', 3, 24),
+        placeSpawn(8, 'from_inn', 60, 24),
+        placeSpawn(9, 'village_gate', 32, 44),
+        placeSpawn(60, 'from_old_road', 32, 3),
       ],
     },
     {
@@ -581,19 +585,30 @@ export const buildVillage = (): { map: MapData; objectLayers: MapObjectLayer[] }
       type: 'objectgroup',
       visible: true,
       objects: [
-        transition(1005, 'merchant_shop', 'shop_entrance', 12 * 32, 15 * 32, 0, 23 * 32, 32, 96),
-        transition(1006, 'inn', 'inn_entrance', 14 * 32, 17 * 32, 63 * 32, 23 * 32, 32, 96),
-        transition(
-          1007,
-          'old_road',
-          'old_road_from_village',
-          OLD_ROAD_ARRIVAL.fromVillage.x,
-          OLD_ROAD_ARRIVAL.fromVillage.y,
-          31 * 32,
-          0,
-          64,
-          32,
-        ),
+        placeTransition({
+          id: 1005,
+          targetMap: 'merchant_shop',
+          targetSpawnId: 'shop_entrance',
+          target: { x: cell(12), y: cell(15) },
+          at: { c: 0, r: 23, width: 1, height: 3 },
+        }),
+        placeTransition({
+          id: 1006,
+          targetMap: 'inn',
+          targetSpawnId: 'inn_entrance',
+          target: { x: cell(14), y: cell(17) },
+          at: { c: 63, r: 23, width: 1, height: 3 },
+        }),
+        placeTransition({
+          id: 1007,
+          targetMap: 'old_road',
+          targetSpawnId: 'old_road_from_village',
+          target: {
+            x: OLD_ROAD_ARRIVAL.fromVillage.x,
+            y: OLD_ROAD_ARRIVAL.fromVillage.y,
+          },
+          at: { c: 31, r: 0, width: 2, height: 1 },
+        }),
       ],
     },
   ];

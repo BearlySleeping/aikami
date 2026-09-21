@@ -1,0 +1,190 @@
+{
+  "maps": {
+    "inn": {
+      "spawnIds": ["inn_entrance"],
+      "npcIds": ["innkeeper_sella", "rollo_grasper"],
+      "propIds": [
+        "inn_barrel",
+        "inn_barrel_2",
+        "inn_bed",
+        "inn_brazier",
+        "inn_chair",
+        "inn_chair_2",
+        "inn_chair_3",
+        "inn_chair_4",
+        "inn_chair_5",
+        "inn_chair_6",
+        "inn_counter",
+        "inn_counter_2",
+        "inn_crate",
+        "inn_hearth",
+        "inn_shelf",
+        "inn_support",
+        "inn_table",
+        "inn_table_2",
+        "inn_table_3",
+        "sella_receipt"
+      ],
+      "dialogueKeys": ["rollo_greeting", "sella_greeting"],
+      "transitions": [
+        {
+          "id": 1005,
+          "targetMap": "village",
+          "targetSpawnId": "from_inn"
+        }
+      ]
+    },
+    "merchant_shop": {
+      "spawnIds": ["shop_entrance"],
+      "npcIds": ["merchant"],
+      "propIds": [
+        "shop_barrel",
+        "shop_barrel_2",
+        "shop_chair",
+        "shop_counter_l",
+        "shop_counter_m",
+        "shop_counter_r",
+        "shop_crate",
+        "shop_crate_2",
+        "shop_crate_3",
+        "shop_shelf",
+        "shop_shelf_2"
+      ],
+      "dialogueKeys": ["merchant_mara_greeting"],
+      "transitions": [
+        {
+          "id": 1005,
+          "targetMap": "village",
+          "targetSpawnId": "from_merchant"
+        }
+      ]
+    },
+    "old_road": {
+      "spawnIds": ["old_road_from_village", "old_road_to_shrine"],
+      "npcIds": ["apprentice_tess", "woodcutter_ada"],
+      "propIds": [
+        "road_birch_1",
+        "road_birch_11",
+        "road_birch_13",
+        "road_birch_15",
+        "road_birch_3",
+        "road_birch_5",
+        "road_birch_7",
+        "road_birch_9",
+        "road_notice",
+        "road_oak_0",
+        "road_oak_10",
+        "road_oak_12",
+        "road_oak_14",
+        "road_oak_16",
+        "road_oak_2",
+        "road_oak_4",
+        "road_oak_6",
+        "road_oak_8",
+        "tess_component",
+        "waystation_barrel",
+        "waystation_cart",
+        "waystation_crate",
+        "waystation_crate_2",
+        "waystation_support"
+      ],
+      "dialogueKeys": ["ada_greeting", "tess_greeting"],
+      "transitions": [
+        {
+          "id": 1007,
+          "targetMap": "village",
+          "targetSpawnId": "from_old_road"
+        },
+        {
+          "id": 1008,
+          "targetMap": "ruined_shrine",
+          "targetSpawnId": "ruin_from_old_road"
+        }
+      ]
+    },
+    "ruined_shrine": {
+      "spawnIds": ["ruin_from_old_road"],
+      "npcIds": ["shrine_keeper_nemi"],
+      "propIds": [
+        "shrine_arch",
+        "shrine_barrel",
+        "shrine_birch",
+        "shrine_brazier",
+        "shrine_crate",
+        "shrine_oak",
+        "ward_socket"
+      ],
+      "dialogueKeys": ["nemi_greeting"],
+      "transitions": [
+        {
+          "id": 1005,
+          "targetMap": "old_road",
+          "targetSpawnId": "old_road_to_shrine"
+        }
+      ]
+    },
+    "village": {
+      "spawnIds": ["from_inn", "from_merchant", "from_old_road", "village_gate"],
+      "npcIds": ["cartographer_ivo", "smith_orra", "village_elder", "village_guard"],
+      "propIds": [
+        "inn_barrel",
+        "inn_chair",
+        "inn_crate",
+        "notice_board",
+        "shop_crate",
+        "village_gate",
+        "village_well",
+        "ward_grove_a",
+        "ward_grove_b",
+        "ward_grove_c",
+        "ward_tree_landmark",
+        "woodland_birch",
+        "woodland_birch_2",
+        "woodland_oak",
+        "woodland_oak_2",
+        "woodland_oak_3",
+        "woodland_oak_4",
+        "yard_anvil"
+      ],
+      "dialogueKeys": ["bram_greeting", "elder_thalia_greeting", "ivo_greeting", "orra_greeting"],
+      "transitions": [
+        {
+          "id": 1005,
+          "targetMap": "merchant_shop",
+          "targetSpawnId": "shop_entrance"
+        },
+        {
+          "id": 1006,
+          "targetMap": "inn",
+          "targetSpawnId": "inn_entrance"
+        },
+        {
+          "id": 1007,
+          "targetMap": "old_road",
+          "targetSpawnId": "old_road_from_village"
+        }
+      ]
+    }
+  },
+  "manifest": {
+    "mapIds": ["inn", "merchant_shop", "old_road", "ruined_shrine", "village"],
+    "npcIds": [
+      "apprentice_tess",
+      "ash_hound",
+      "cartographer_ivo",
+      "cinder_thrall",
+      "ember_warden",
+      "innkeeper_sella",
+      "merchant",
+      "rollo_grasper",
+      "shrine_keeper_nemi",
+      "smith_orra",
+      "village_elder",
+      "village_guard",
+      "woodcutter_ada"
+    ],
+    "questIds": ["a_room_kept_warm", "fading_ward", "mark_the_safe_trail", "tools_for_tomorrow"],
+    "evidenceIds": ["elders_seal", "sella_receipt", "tess_component", "the_ledger"],
+    "affordanceIds": ["cut_support", "ignite_oil", "tip_over"]
+  }
+}

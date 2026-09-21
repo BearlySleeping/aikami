@@ -13,7 +13,7 @@
 // Run: bun scripts/src/lib/ops/generate_emberwatch_maps.ts
 
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildInn, buildShop, buildVillage } from './emberwatch_map_retained.ts';
 import { idx, type MapData, type MapObjectLayer } from './emberwatch_map_shared.ts';
@@ -64,13 +64,21 @@ const TILESET_BLOCK = {
 };
 
 // ---------------------------------------------------------------------------
-// Emit map JSON
+// Build map JSON
 // ---------------------------------------------------------------------------
 
-const emit = (
-  mapName: string,
-  { map: m, objectLayers }: { map: MapData; objectLayers: MapObjectLayer[] },
-): void => {
+/**
+ * Builds the runtime Tiled JSON for one map, deterministically. Exported (and
+ * pure) so the map-compile-stability test can compare the builder output to the
+ * committed maps without writing to the repository.
+ */
+export const buildMapJson = ({
+  map: m,
+  objectLayers,
+}: {
+  map: MapData;
+  objectLayers: MapObjectLayer[];
+}): { json: unknown; width: number; height: number } => {
   // C-378: derive the semantic terrain channel from the ground layer by
   // inverting `tiles[gid].name` → terrain id. Cells whose GID is not a
   // declared terrain (walls, roofs, furniture) stay hand-placed GIDs.
@@ -189,25 +197,49 @@ const emit = (
     ],
   };
 
-  const outPath = join(
-    dirname(fileURLToPath(import.meta.url)),
-    `../../../../content/packs/emberwatch/maps/${mapName}.json`,
-  );
-  mkdirSync(dirname(outPath), { recursive: true });
-  writeFileSync(outPath, `${JSON.stringify(mapJson, null, 2)}\n`);
-  console.log(`Wrote ${mapName}.json (${m.width}x${m.height})`);
+  return { json: mapJson, width: m.width, height: m.height };
 };
 
 // ---------------------------------------------------------------------------
-// Main
+// Emit
 // ---------------------------------------------------------------------------
+
+/** The five map builders, keyed by map id. */
+export const EMBERWATCH_MAP_BUILDERS: Record<
+  string,
+  () => { map: MapData; objectLayers: MapObjectLayer[] }
+> = {
+  village: buildVillage,
+  inn: buildInn,
+  merchant_shop: buildShop,
+  old_road: buildOldRoad,
+  ruined_shrine: buildRuinedShrine,
+};
+
+/** Output directory; `EMBERWATCH_MAP_OUT` lets tests write to a temp dir. */
+const mapOutDir = (): string =>
+  process.env.EMBERWATCH_MAP_OUT
+    ? resolve(process.env.EMBERWATCH_MAP_OUT)
+    : join(dirname(fileURLToPath(import.meta.url)), '../../../../content/packs/emberwatch/maps');
+
+const emit = (mapName: string): void => {
+  const builder = EMBERWATCH_MAP_BUILDERS[mapName];
+  if (!builder) {
+    throw new Error(`generate_emberwatch_maps: no builder for map "${mapName}"`);
+  }
+  const { json, width, height } = buildMapJson(builder());
+  const outPath = join(mapOutDir(), `${mapName}.json`);
+  mkdirSync(dirname(outPath), { recursive: true });
+  writeFileSync(outPath, `${JSON.stringify(json, null, 2)}\n`);
+  console.log(`Wrote ${mapName}.json (${width}x${height})`);
+};
 
 const main = (): void => {
-  emit('village', buildVillage());
-  emit('inn', buildInn());
-  emit('merchant_shop', buildShop());
-  emit('old_road', buildOldRoad());
-  emit('ruined_shrine', buildRuinedShrine());
+  for (const mapName of Object.keys(EMBERWATCH_MAP_BUILDERS)) {
+    emit(mapName);
+  }
 };
 
-main();
+if (import.meta.main) {
+  main();
+}
