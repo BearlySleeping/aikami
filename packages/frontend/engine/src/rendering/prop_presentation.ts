@@ -17,13 +17,14 @@
 // of the prop container, which is itself sorted by its base Y).
 
 import type { PropContactShadow } from '@aikami/schemas';
+import { computePropRenderSize, type PropRenderSize } from '@aikami/utils';
 import { type Container, Graphics, Sprite, type Texture } from 'pixi.js';
-import { computePropRenderSize } from './prop_render_size.ts';
 
-export { computePropRenderSize } from './prop_render_size.ts';
-export type { PropRenderSize } from './prop_render_size.ts';
-
-export type { PropContactShadow };
+export type { PropContactShadow, PropRenderSize };
+// The pure sizing math lives in the shared utility layer so the build/authoring
+// tooling can reuse it without depending on the frontend renderer. Re-exported
+// here so existing engine importers are unaffected (C-496/C-529).
+export { computePropRenderSize };
 
 /** Default shadow opacity — deliberately subtle for a pixel-friendly style. */
 export const DEFAULT_CONTACT_SHADOW_OPACITY = 0.22;

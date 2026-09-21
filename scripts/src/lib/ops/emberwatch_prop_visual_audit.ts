@@ -28,7 +28,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { computePropRenderSize } from '@aikami/frontend/engine/prop_render_size';
+import { computePropRenderSize } from '@aikami/utils';
 import sharp from 'sharp';
 import { logger } from '$logger';
 

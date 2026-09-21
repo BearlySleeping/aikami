@@ -21,9 +21,9 @@
   },
   "dependencies": {
     "@aikami/constants": "workspace:*",
-    "@aikami/frontend-engine": "workspace:*",
     "@aikami/schemas": "workspace:*",
     "@aikami/types": "workspace:*",
+    "@aikami/utils": "workspace:*",
     "@discordjs/rest": "2.6.3",
     "discord-api-types": "0.38.55"
   },

@@ -1,4 +1,14 @@
-// packages/frontend/engine/src/rendering/prop_render_size.ts
+// packages/shared/utils/src/lib/common/prop_render_size.ts
+//
+// Authored logical prop size → world pixels (C-496/C-529).
+//
+// This is PURE presentation math: texture packing and generation-canvas pixels
+// are build details, so a frame packed from a 512×512 preparation canvas must
+// be able to render at 32×48 world pixels. The resolver lives in the shared
+// utility layer — not in the frontend renderer — because BOTH the runtime
+// (`@aikami/frontend-engine`'s prop presentation) and the build/authoring
+// tooling (`@aikami/scripts`'s visual audit) must use the exact same rule. One
+// implementation, no renderer dependency for a geometry helper.
 
 /** Authored logical render size, in world pixels. */
 export type PropRenderSize = {
