@@ -11,6 +11,7 @@ import { describe, expect, test } from 'bun:test';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { CATALOG_ORIGINS } from '@aikami/constants';
 import {
   type CandidateLock,
   CandidateLockSchema,
@@ -44,6 +45,7 @@ const makeCandidate = (overrides: Partial<Omit<CandidateLock, 'lockHash'>> = {})
     portraits: emptyGroup(),
     enemyVisuals: emptyGroup(),
     audio: emptyGroup(),
+    seed: emptyGroup(),
     rights: { passed: true, digest: 'c'.repeat(64), summary: '74 artifacts, 0 blocked' },
     surface: { passed: true, digest: 'd'.repeat(64), summary: '0 error(s)' },
     ...overrides,
@@ -243,14 +245,21 @@ describe('plan identity is independent of the moment it was computed', () => {
 describe('promotion — production publishes the candidate staging approved', () => {
   const candidate = makeCandidate();
 
+  /** A staging receipt that satisfies every promotion requirement. */
+  const stagingReceipt = (overrides: Record<string, unknown> = {}) => ({
+    candidateLockHash: candidate.lockHash,
+    mode: 'staging',
+    bucket: CATALOG_ORIGINS.staging.bucketName,
+    originUrl: CATALOG_ORIGINS.staging.originUrl as string,
+    activated: true,
+    verified: true,
+    ...overrides,
+  });
+
   test('the same candidate is promotable', () => {
     const result = checkPromotion({
-      stagingReceipt: {
-        candidateLockHash: candidate.lockHash,
-        mode: 'staging',
-        activated: true,
-      },
-      productionCandidate: candidate,
+      stagingReceipt: stagingReceipt(),
+      candidateLockHash: candidate.lockHash,
     });
     expect(result.ok).toBe(true);
   });
@@ -258,15 +267,12 @@ describe('promotion — production publishes the candidate staging approved', ()
   test('a DIFFERENT candidate is refused', () => {
     const other = makeCandidate({ packVersion: '6.0.0' });
     const result = checkPromotion({
-      stagingReceipt: {
-        candidateLockHash: candidate.lockHash,
-        mode: 'staging',
-        activated: true,
-      },
-      productionCandidate: other,
+      stagingReceipt: stagingReceipt(),
+      candidateLockHash: other.lockHash,
     });
     expect(result.ok).toBe(false);
     if (!result.ok) {
+      expect(result.code).toBe('receipt-candidate-mismatch');
       expect(result.reason).toContain('differs from the staging-approved');
     }
   });
@@ -274,25 +280,75 @@ describe('promotion — production publishes the candidate staging approved', ()
   test('a staging receipt that never activated is refused', () => {
     // Nothing was approved, so there is nothing to promote.
     const result = checkPromotion({
-      stagingReceipt: { candidateLockHash: candidate.lockHash, mode: 'staging', activated: false },
-      productionCandidate: candidate,
+      stagingReceipt: stagingReceipt({ activated: false }),
+      candidateLockHash: candidate.lockHash,
     });
     expect(result.ok).toBe(false);
     if (!result.ok) {
+      expect(result.code).toBe('receipt-not-activated');
       expect(result.reason).toContain('never activated');
+    }
+  });
+
+  test('a staging receipt that activated but never VERIFIED is refused', () => {
+    // The pointer moved, but the release was never re-read from staging's own
+    // origin. An unverified write is not an approval.
+    const result = checkPromotion({
+      stagingReceipt: stagingReceipt({ verified: false }),
+      candidateLockHash: candidate.lockHash,
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.code).toBe('receipt-not-verified');
     }
   });
 
   test('a production receipt cannot be used as the approval reference', () => {
     const result = checkPromotion({
-      stagingReceipt: {
-        candidateLockHash: candidate.lockHash,
-        mode: 'production',
-        activated: true,
-      },
-      productionCandidate: candidate,
+      stagingReceipt: stagingReceipt({ mode: 'production' }),
+      candidateLockHash: candidate.lockHash,
     });
     expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.code).toBe('receipt-wrong-mode');
+    }
+  });
+
+  test('an unknown or emulator mode is refused, not merely a production one', () => {
+    // The old guard was `mode === 'production'`, so a typo, an emulator run or
+    // an empty string all passed as "not production".
+    for (const mode of ['emulator', 'prod', '', 'STAGING']) {
+      const result = checkPromotion({
+        stagingReceipt: stagingReceipt({ mode }),
+        candidateLockHash: candidate.lockHash,
+      });
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.code).toBe('receipt-wrong-mode');
+      }
+    }
+  });
+
+  test('a receipt that wrote to the production bucket is refused', () => {
+    const result = checkPromotion({
+      stagingReceipt: stagingReceipt({ bucket: CATALOG_ORIGINS.production.bucketName }),
+      candidateLockHash: candidate.lockHash,
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.code).toBe('receipt-wrong-bucket');
+    }
+  });
+
+  test('a receipt verified against the production origin is refused', () => {
+    const result = checkPromotion({
+      stagingReceipt: stagingReceipt({ originUrl: CATALOG_ORIGINS.production.originUrl }),
+      candidateLockHash: candidate.lockHash,
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.code).toBe('receipt-wrong-origin');
+    }
   });
 
   test('promotion does NOT require the whole catalog graph to match', () => {
@@ -300,12 +356,8 @@ describe('promotion — production publishes the candidate staging approved', ()
     // entries, so their roots differ while the candidate is identical. Only the
     // candidate hash is compared.
     const result = checkPromotion({
-      stagingReceipt: {
-        candidateLockHash: candidate.lockHash,
-        mode: 'staging',
-        activated: true,
-      },
-      productionCandidate: candidate,
+      stagingReceipt: stagingReceipt(),
+      candidateLockHash: candidate.lockHash,
     });
     expect(result.ok).toBe(true);
   });

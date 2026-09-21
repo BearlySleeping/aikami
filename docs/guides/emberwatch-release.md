@@ -99,21 +99,31 @@ map, so an NPC the pack has authored art for never renders as a stand-in.
 
 ### 5. Rebuild deterministic artifacts
 
-The atlas, the prop pages and the five maps are **outputs**. Never hand-edit the
-generated JSON — edit the generator and re-run:
+The atlas, the prop pages, the five maps and the compact boot seed are
+**outputs**. Never hand-edit the generated JSON — edit the generator and re-run:
 
 ```bash
 bun scripts/src/lib/ops/generate_emberwatch_atlas.ts
 bun scripts/src/lib/ops/generate_emberwatch_props_atlas.ts
 bun scripts/src/lib/ops/generate_emberwatch_maps.ts
+bun scripts/src/lib/ops/generate_asset_seed.ts --write
 ```
+
+`asset_seed.json` is generated from the manifest and hash sidecar that
+`scan_assets.ts` emits, and it is part of the candidate: the lock has a `seed`
+group, so a candidate whose seed differs is a different candidate. It is
+**deterministic** — the same scan inputs produce the same bytes — and its `o`
+field is an explicit `--origin` argument that defaults to empty, because a
+candidate is sealed once and promoted unchanged and must not embed a
+mode-specific asset base URL.
 
 ### 6. Commit the generated artifacts, then reseal
 
 `bun run emberwatch:build-candidate` runs the whole deterministic build — install
-portraits and audio, regenerate the atlas and maps, rescan the manifest — and
-then seals. It is **idempotent**: on an unchanged tree it rewrites nothing, so a
-second run is a no-op and the seal is reproducible.
+portraits and audio, regenerate the atlas and maps, rescan the manifest,
+generate the boot seed — and then seals. It is **idempotent**: on an unchanged
+tree it rewrites nothing, so a second run is a no-op and the seal is
+reproducible.
 
 When a content change *does* produce new artifacts, the build stops before
 sealing and hands the diff back:
@@ -152,12 +162,69 @@ plan must not require the ability to execute it. `--apply` is the only path that
 loads write credentials, and it re-proves that they target the same bucket and
 origin the plan named — a credential set cannot retarget a publish.
 
+#### `--plan` fails when the plan fails
+
+`--plan` exits **0 only when every mandatory planning phase passed**:
+
+| Phase | What it answers |
+|---|---|
+| coverage audit | are there blockers in the content? |
+| sealed candidate verification | does this checkout still reproduce the sealed candidate? |
+| staging approval (production only) | is there a verified staging release of *this* candidate? |
+| base-release resolution | is the release this target is built on readable and hash-valid? |
+| plan construction + validation | is the plan internally consistent and safe to apply? |
+
+A passing coverage audit alone is **not** a passing plan. Each phase is recorded
+in the release report, and any failure exits `2` with the reasons named. Plan
+mode still performs no remote write and no local artifact mutation.
+
 The two failure modes are reported distinctly, because they mean different
 things:
 
 ```text
-origin not provisioned    the mode has no public read origin (staging today)
+origin not provisioned    the mode has no public read origin
 write credentials absent  the operator or CI cannot write to a valid target
+```
+
+#### Production promotes a staging-approved candidate
+
+A production `--plan` and `--apply` both require a genuine staging approval,
+checked **before the first production write**:
+
+```bash
+bun run emberwatch:release --mode staging --plan
+bun run emberwatch:release --mode staging --apply    # writes .local/releases/receipt-staging.json
+bun run emberwatch:release --mode production --plan  # refuses without that receipt
+bun run emberwatch:release --mode production --apply
+```
+
+The receipt must satisfy `ReleaseReceiptSchema` and name `mode: "staging"`, the
+canonical staging bucket **and** origin, `activated: true`, `verified: true`, and
+the exact candidate being promoted. The staging release it names is then
+re-resolved from staging's own origin through the client's hash-verifying
+resolver, so a stale or superseded receipt is refused too.
+
+Staging and production catalog **roots** are deliberately not compared: the two
+environments legitimately carry different unrelated base inventory, so their
+roots differ even when the Emberwatch candidate is byte-identical. Candidate
+identity (`candidateLockHash`) is what must match.
+
+#### A retry of an active release is a verified no-op
+
+Verification compares the published pointer's **root**, not whether its digest
+changed. If the pointer already names the planned root and the graph behind it
+verifies, the run is a verified success — `already-active` — and the publisher
+does **not** rewrite the pointer to manufacture a change. The distinguishable
+outcomes are:
+
+```text
+newly-activated              the pointer now names the planned root
+already-active               it already did, and the graph verifies
+never-activated              no pointer is published
+wrong-root-active            a pointer exists but names another root
+active-graph-invalid         the pointer names the planned root; the graph does not verify
+alias-degraded               the immutable release is valid; the mutable alias did not move
+remote-verification-failure  the origin could not be read
 ```
 
 ## Guarantees the orchestrator enforces
@@ -376,6 +443,66 @@ Boot the client from the candidate commit and walk all five maps. Confirm:
 
 Record the result in the release report. A programmatic green is NOT a visual
 green, and this section exists so that distinction cannot be quietly lost.
+
+## First production release: migrating the legacy mutable catalog
+
+Production has never published an immutable release — `index/v1/release.json` is
+a legitimate 404. What it serves is the pre-C-496 mutable surface:
+
+| Legacy object | Contents |
+|---|---|
+| `index/v1/catalog.json` | root index, 108 entries across 6 categories |
+| `index/v1/<category>.json` | one mutable shard per category |
+| `seed/asset_seed.json` | the compact boot seed — **12,729 rows** |
+| `seed/offline_core.json` | the prefetch/pin tag set |
+| `index/v1/pack_lock.json` | the mutable installed-lock alias |
+
+The boot seed carries the complete asset inventory; the root index carries only
+the 108 entries the publishing checkout happened to hold. This checkout holds
+fewer still (C-435 de-bundled the raw library).
+
+So the **first** immutable production release is a migration, not an ordinary
+publish. Rebuilding the graph from the local scan alone would replace a
+12,729-row boot seed and a 108-entry index with the local subset — every LPC
+sheet, legacy portrait and audio bed an existing installation resolves would
+vanish, and the publish log would read "74 uploaded, 0 failed".
+
+### Review it before it runs
+
+```bash
+bun run emberwatch:legacy-bootstrap --mode production
+```
+
+Read-only. It prints what would be carried, replaced, dropped or rejected, and
+writes nothing. The target goes through the same fail-closed release-target gate
+the publisher uses.
+
+### What it does
+
+1. Reads the legacy root and **every shard it declares**, validating each against
+   `CatalogIndexRootSchema` / `CatalogIndexShardSchema`. A shard whose entry
+   count disagrees with the root's declaration is a refusal.
+2. Reads the legacy boot seed and validates it as a compact seed document.
+3. **Fails closed on an identity conflict**: if the legacy index and the legacy
+   seed disagree about a tag's hash, the legacy state has no single answer and
+   picking one would be a guess about which bytes an installation resolves.
+4. Converts the legacy entries and seed into the SAME `CatalogAssetEntry[]` and
+   carried-dependency map the ordinary verified-release carry-forward produces.
+   Everything downstream — merge, shard, root, pointer — is the normal pipeline.
+   There is no second catalog architecture.
+5. Unions the legacy seed rows with the candidate's, exactly as the index unions
+   the legacy entries. A local row wins for its own tag.
+
+A legacy object that cannot be read, parsed or schema-validated is a refusal,
+not a skip. Optional objects (`offline_core.json`, `pack_lock.json`) that fail
+validation are reported as `rejected` and named, never silently used.
+
+### It is not permanent
+
+It runs **only** when the target publishes no release pointer. The moment a
+verified immutable release exists, `resolvePreviousRelease` answers and the
+ordinary carry-forward path takes over. A test asserts that a legacy-only tag
+does not appear in a release published over an existing verified release.
 
 ## Staging is blocked on a HUMAN infrastructure action
 

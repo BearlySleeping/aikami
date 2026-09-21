@@ -32,6 +32,7 @@ import {
   gate,
   sealCandidate,
 } from '../catalog/candidate_lock.ts';
+import { releasePlaneDir } from './emberwatch_release_io.ts';
 import { runEmberwatchRightsAudit } from './emberwatch_rights_audit.ts';
 import { runSurfaceAudit } from './emberwatch_surface_audit.ts';
 
@@ -40,7 +41,6 @@ const repository = join(here, '../../../..');
 
 const PACK_ROOT = join(repository, 'content/packs/emberwatch');
 const GAME_DATA = join(repository, 'apps/frontend/client/static/game-data');
-const RELEASE_PLANE = join(repository, '.local/releases');
 
 const IMAGES = ['.png', '.webp'] as const;
 const MEDIA = ['.webm', '.ogg', '.mp3', '.wav'] as const;
@@ -210,6 +210,24 @@ const audioGroup = (manifest: PackManifest): DeclaredGroup => {
 };
 
 /**
+ * The compact boot seed and the offline-core declaration.
+ *
+ * Both are REQUIRED. `asset_seed.json` is a generated artifact (see
+ * `generate_asset_seed.ts`) and `offline_core.json` is committed; a candidate
+ * that cannot produce the seed is not a candidate, because the client cannot
+ * boot from a release whose seed is missing — and `runSeedPublish` refuses to
+ * publish one. Declaring them here is what makes that a SEAL failure rather
+ * than a publish-time surprise.
+ */
+const seedGroup = (): DeclaredGroup => ({
+  name: 'seed',
+  members: [
+    { id: 'asset_seed.json', path: join(GAME_DATA, 'asset_seed.json'), role: 'required' },
+    { id: 'offline_core.json', path: join(GAME_DATA, 'offline_core.json'), role: 'required' },
+  ],
+});
+
+/**
  * Declares every group from the MANIFEST.
  *
  * Membership is what the pack says it ships, not what a directory walk happens
@@ -224,6 +242,7 @@ export const declareGroups = (manifest: PackManifest): DeclaredGroup[] => [
   portraitsGroup(manifest),
   enemyVisualsGroup(),
   audioGroup(manifest),
+  seedGroup(),
 ];
 
 export type SealOutcome =
@@ -258,6 +277,7 @@ export const buildCandidateLock = (): { lock: CandidateLock; missing: readonly s
     portraits: groups.portraits ?? { count: 0, digest: '', artifacts: [] },
     enemyVisuals: groups.enemyVisuals ?? { count: 0, digest: '', artifacts: [] },
     audio: groups.audio ?? { count: 0, digest: '', artifacts: [] },
+    seed: groups.seed ?? { count: 0, digest: '', artifacts: [] },
     rights: gate({
       passed: rights.ok,
       report: {
@@ -296,8 +316,9 @@ const describe = (lock: CandidateLock): string =>
     }),
   ].join('\n');
 
-const lockPath = (lockHash: string): string => join(RELEASE_PLANE, `candidate-${lockHash}.json`);
-const latestPath = (): string => join(RELEASE_PLANE, 'candidate.latest.json');
+const lockPath = (lockHash: string): string =>
+  join(releasePlaneDir(), `candidate-${lockHash}.json`);
+const latestPath = (): string => join(releasePlaneDir(), 'candidate.latest.json');
 
 /**
  * The sealed candidate, or a refusal naming exactly where to look.
@@ -415,7 +436,7 @@ const sealCandidateToDisk = (lock: CandidateLock): void => {
     console.error(describe(lock));
     process.exit(1);
   }
-  mkdirSync(RELEASE_PLANE, { recursive: true });
+  mkdirSync(releasePlaneDir(), { recursive: true });
   writeFileSync(lockPath(lock.lockHash), `${JSON.stringify(lock, null, 2)}\n`);
   writeFileSync(latestPath(), `${JSON.stringify(lock, null, 2)}\n`);
   console.log(`🔒 candidate sealed — ${lock.lockHash}`);

@@ -388,7 +388,12 @@ describe('pipeline integration — thumbnailHash lands in the republished index 
     );
 
     // Seed/metadata files so the seed publish phase reports zero failures.
-    writeFileSync(join(dir, 'asset_seed.json'), JSON.stringify({ seed: true }));
+    // `asset_seed.json` must be a well-formed COMPACT SEED: the publisher
+    // parses it to union the candidate's rows with the previous release's.
+    writeFileSync(
+      join(dir, 'asset_seed.json'),
+      JSON.stringify({ sv: 1, g: '2026-01-01T00:00:00.000Z', o: '', r: [] }),
+    );
     writeFileSync(join(dir, 'offline_core.json'), JSON.stringify({ core: ['lpc'] }));
     writeFileSync(join(dir, 'lpc_credits.json'), JSON.stringify({ credits: [] }));
     writeFileSync(join(dir, 'lpc_credits_supplement.json'), JSON.stringify({ credits: [] }));

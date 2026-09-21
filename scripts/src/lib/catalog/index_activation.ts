@@ -57,6 +57,8 @@ type IndexActivation = {
   rootKey: string;
   shardKeys: string[];
   releaseWritten: boolean;
+  /** The pointer already named this exact root, so it was deliberately not rewritten. */
+  alreadyActive: boolean;
   legacyAlias: { key: string; written: boolean; error?: string };
   packLock: PackLockPublishReport;
   failedIndexKeys: string[];
@@ -114,6 +116,16 @@ export const publishIndexAndActivate = async (options: {
   seedReport: SeedPublishReport;
   packLockReport: PackLockPublishReport;
   packLockBody: Buffer | undefined;
+  /**
+   * Root hash the target already serves, from the verified previous release.
+   *
+   * When it equals this release's root, every byte the pointer would name is
+   * already active. Writing the pointer anyway would advance it to a new
+   * `releaseId` that describes the same release — a pointer change fabricated
+   * to make a retry look like progress. So the pointer write is SKIPPED and
+   * `alreadyActive` is reported instead.
+   */
+  alreadyActiveRootHash?: string;
 }): Promise<IndexActivation> => {
   const { client, root, seedReport } = options;
   const rootJson = JSON.stringify(root, null, 2);
@@ -124,6 +136,7 @@ export const publishIndexAndActivate = async (options: {
     return { ...shard, hash, key: immutableIndexKey({ name: shard.id, hash }) };
   });
   const shardKeys = immutableShards.map((shard) => shard.key);
+  const alreadyActive = options.alreadyActiveRootHash === rootHash;
 
   const failedIndexKeys: string[] = [];
   const putIndexObject = async (object: {
@@ -174,6 +187,7 @@ export const publishIndexAndActivate = async (options: {
     rootKey,
     shardKeys,
     releaseWritten: false,
+    alreadyActive: false,
     legacyAlias,
     packLock,
     failedIndexKeys,
@@ -195,6 +209,29 @@ export const publishIndexAndActivate = async (options: {
   // boot/credits data is incomplete, so the publish must not report ok.
   if (failedIndexKeys.length > 0 || seedReport.failed > 0) {
     return unsettled(options.packLockReport);
+  }
+
+  // The release this pointer would name is already the one being served. The
+  // immutable objects above were still written (idempotent by content address,
+  // and a missing one would be a real gap), but the pointer is left alone.
+  if (alreadyActive) {
+    console.log(
+      `  🔁 release already active at root ${rootHash.slice(0, 12)}… — pointer NOT rewritten`,
+    );
+    if (options.packLockBody !== undefined) {
+      // The alias is mutable and idempotent; rewriting it repairs a previous
+      // run whose alias write degraded, without touching the release pointer.
+      await writeLegacyAlias(options.packLockBody.toString('utf8'));
+    }
+    return {
+      rootKey,
+      shardKeys,
+      releaseWritten: false,
+      alreadyActive: true,
+      legacyAlias,
+      packLock: { ...options.packLockReport, legacyAliasWritten: legacyAlias.written },
+      failedIndexKeys,
+    };
   }
 
   const releasePointer = buildReleasePointer({
@@ -231,6 +268,7 @@ export const publishIndexAndActivate = async (options: {
       rootKey,
       shardKeys,
       releaseWritten,
+      alreadyActive: false,
       legacyAlias,
       packLock: options.packLockReport,
       failedIndexKeys,
@@ -243,6 +281,7 @@ export const publishIndexAndActivate = async (options: {
     rootKey,
     shardKeys,
     releaseWritten,
+    alreadyActive: false,
     legacyAlias,
     packLock: { ...options.packLockReport, legacyAliasWritten: legacyAlias.written },
     failedIndexKeys,

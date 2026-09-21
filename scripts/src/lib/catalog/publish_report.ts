@@ -69,6 +69,12 @@ export type CatalogPublishReport = {
   /** Whether the versioned release pointer was written this run (AC-4). */
   releaseWritten: boolean;
   /**
+   * The pointer already named this exact root, so it was deliberately left
+   * alone. Distinct from `releaseWritten: false` on a failure: this is a
+   * verified no-op, not an incomplete publish.
+   */
+  alreadyActive?: boolean;
+  /**
    * The release id this run pinned into the pointer, when one was produced.
    * Absent for a publish that refused before the activation phase.
    */
@@ -120,5 +126,6 @@ export const abortedReport = (options: {
   packLock: { written: false, key: PACK_LOCK_KEY, assetPins: 0, audioPins: 0 },
   legacyAlias: { key: PACK_LOCK_KEY, written: false },
   releaseWritten: false,
+  alreadyActive: false,
   elapsedMs: options.elapsedMs,
 });

@@ -43,7 +43,7 @@
 //
 // Exit codes: 0 ok · 1 a step failed · 2 refused (dirty/stale/blocked) · 4 usage.
 
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -53,16 +53,28 @@ import {
   resolveCatalogTarget,
 } from '../catalog/config.ts';
 import { runCatalogPublish } from '../catalog/pipeline.ts';
+import { describeStagingApproval, verifyStagingApproval } from '../catalog/promotion.ts';
 import type { PublishReportLike } from '../catalog/release.ts';
-import { buildReceipt } from '../catalog/release.ts';
+import { buildReceipt, receiptPath } from '../catalog/release.ts';
 import type { ReleaseTarget } from '../catalog/release_target.ts';
 import { createR2Client } from '../catalog/upload.ts';
 import { loadSealedCandidate } from './emberwatch_candidate.ts';
+import {
+  assertCleanForApply,
+  assertVersionParity,
+  type Invocation,
+  type PackIdentity,
+  parseInvocation,
+  printHeader,
+  readPackIdentity,
+  USAGE,
+} from './emberwatch_release_cli.ts';
 import {
   buildReleaseReport,
   createStepRecorder,
   type ReleasePointer,
   readReleasePointer,
+  releasePlaneDir,
   type StepRecorder,
   writeReceipt,
   writeReleaseReport,
@@ -80,37 +92,7 @@ import {
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repository = join(here, '../../../..');
-const releasePlane = join(repository, '.local/releases');
-
-const USAGE = `Emberwatch release orchestrator
-
-  bun run emberwatch:release --mode staging|production [--plan|--apply] [options]
-
-Options:
-  --mode <staging|production>   Required. The release target.
-  --build-candidate             Run the deterministic content build (install
-                              portraits/audio, regenerate atlas + maps, rescan)
-                              and SEAL a candidate. Mutates local artifacts and
-                              performs no remote write. Run this BEFORE --plan.
---plan                        Read-only: checks + the intended step list. Default.
-  --apply                       Execute every step, including the remote publish.
-  --accept-run <runId>          Install the machine-passing candidates of a
-                                generate:batch run before rebuilding artifacts.
-  --skip-tests                  Skip the validation step (not recommended).
-  --allow-dirty                 Allow a dirty worktree (recorded in the report).
-  --help                        Print this message.
-`;
-
-type Invocation = {
-  mode: 'staging' | 'production';
-  apply: boolean;
-  skipTests: boolean;
-  allowDirty: boolean;
-  buildCandidate: boolean;
-  acceptRun?: string;
-};
-
-type PackIdentity = { manifestVersion: string; indexVersion: string | undefined };
+const releasePlane = releasePlaneDir();
 
 type TargetContext = {
   /**
@@ -133,97 +115,11 @@ const plannedSteps = (mode: string): string[] => [
   'regenerate canonical maps',
   'coverage audit',
   'scan manifest + hashes + credits',
+  'generate asset seed (deterministic, from the scan outputs)',
   'validate (tests + typecheck + lint + guards)',
   `publish catalog (${mode})`,
   'verify published release',
 ];
-
-const flagValue = (args: string[], name: string): string | undefined => {
-  const index = args.indexOf(name);
-  return index >= 0 ? args[index + 1] : undefined;
-};
-
-const parseInvocation = (args: string[]): Invocation => {
-  const buildCandidate = args.includes('--build-candidate');
-  const acceptRun = flagValue(args, '--accept-run');
-  const mode = flagValue(args, '--mode');
-  if (mode !== 'staging' && mode !== 'production') {
-    // A candidate build is LOCAL and mode-independent: it performs no remote
-    // write, so requiring a target mode would be a fiction. `staging` is used
-    // only for the "review it, then run …" hint it prints.
-    if (buildCandidate) {
-      return {
-        mode: 'staging',
-        apply: false,
-        skipTests: false,
-        allowDirty: false,
-        buildCandidate: true,
-        ...(acceptRun === undefined ? {} : { acceptRun }),
-      };
-    }
-    console.error('❌ --mode must be staging or production.');
-    console.error(USAGE);
-    process.exit(4);
-  }
-  return {
-    mode,
-    apply: args.includes('--apply'),
-    skipTests: args.includes('--skip-tests'),
-    allowDirty: args.includes('--allow-dirty'),
-    buildCandidate,
-    ...(acceptRun === undefined ? {} : { acceptRun }),
-  };
-};
-
-const readPackIdentity = (): PackIdentity => {
-  const manifest = JSON.parse(
-    readFileSync(join(repository, 'content/packs/emberwatch/manifest.json'), 'utf8'),
-  ) as { version: string };
-  const index = JSON.parse(readFileSync(join(repository, 'content/packs/index.json'), 'utf8')) as {
-    packs: { id: string; version: string }[];
-  };
-  return {
-    manifestVersion: manifest.version,
-    indexVersion: index.packs.find((pack) => pack.id === 'emberwatch')?.version,
-  };
-};
-
-const printHeader = (options: {
-  mode: string;
-  apply: boolean;
-  sourceCommit: string;
-  pack: PackIdentity;
-  dirty: boolean;
-}): void => {
-  console.log(`Emberwatch release — mode ${options.mode} — ${options.apply ? 'APPLY' : 'PLAN'}`);
-  console.log(`  source commit: ${options.sourceCommit}`);
-  console.log(
-    `  pack version:  ${options.pack.manifestVersion} (index: ${options.pack.indexVersion ?? 'absent'})`,
-  );
-  console.log(`  worktree:      ${options.dirty ? 'dirty' : 'clean'}`);
-  console.log('');
-};
-
-/** Refuses a publish whose manifest and index disagree about the pack version. */
-const assertVersionParity = (pack: PackIdentity): void => {
-  if (pack.manifestVersion === pack.indexVersion) {
-    return;
-  }
-  console.error('❌ manifest/index version drift — refusing. Fix before releasing.');
-  process.exit(2);
-};
-
-const assertCleanForApply = (options: {
-  dirty: boolean;
-  apply: boolean;
-  allowDirty: boolean;
-}): void => {
-  if (!options.dirty || !options.apply || options.allowDirty) {
-    return;
-  }
-  console.error('❌ worktree is dirty — refusing --apply. Commit, or pass --allow-dirty.');
-  process.exit(2);
-};
 
 /**
  * The release-target preflight: BEFORE any write.
@@ -338,17 +234,28 @@ const maybeAcceptRun = (io: StepRecorder, invocation: Invocation): void => {
  * report success.
  */
 const buildAndSealCandidate = (io: StepRecorder, mode: string): void => {
-  const buildSteps: [string, string][] = [
+  const buildSteps: [string, string, string[]?][] = [
     ['install portraits', 'scripts/src/lib/ops/install_emberwatch_portraits.ts'],
     ['install authored audio beds', 'scripts/src/lib/ops/install_emberwatch_audio.ts'],
     ['generate terrain/grid atlas', 'scripts/src/lib/ops/generate_emberwatch_atlas.ts'],
     ['generate prop atlas pages', 'scripts/src/lib/ops/generate_emberwatch_props_atlas.ts'],
     ['regenerate canonical maps', 'scripts/src/lib/ops/generate_emberwatch_maps.ts'],
     ['scan manifest + hashes + credits', 'scripts/src/lib/ops/scan_assets.ts'],
+    // The seed is a DERIVED artifact of the scan above, exactly like the atlas
+    // and the maps, and it must exist before the seal: the candidate lock has a
+    // `seed` group, and `runSeedPublish` refuses to publish a release whose
+    // seed is absent from both the candidate and the previous release. Leaving
+    // it out of this list is what made `asset_seed.json` a file that only
+    // existed in whoever's working tree had run the generator by hand.
+    //
+    // No `--merge-origin`: this step is mode-independent and must be
+    // reproducible from the source tree alone. Carrying the published catalog's
+    // rows in happens at PUBLISH time, against the target's verified release.
+    ['generate asset seed', 'scripts/src/lib/ops/generate_asset_seed.ts', ['--write']],
   ];
   const treeBefore = io.git(['status', '--porcelain']);
-  for (const [label, script] of buildSteps) {
-    if (io.bun(label, script).status === 'failed') {
+  for (const [label, script, args] of buildSteps) {
+    if (io.bun(label, script, args ?? []).status === 'failed') {
       process.exit(1);
     }
   }
@@ -439,6 +346,51 @@ const resolveWriteConfig = (mode: string, planned: CatalogTarget): CatalogConfig
   return config;
 };
 
+/**
+ * The production promotion gate, recorded as a plan/apply step.
+ *
+ * Production publishes the candidate STAGING approved. It belongs in `--plan`
+ * too: an operator reviewing a production plan must be told there is no
+ * approval to promote, not discover it at `--apply`.
+ *
+ * @returns A failure message, or `undefined` when the gate passed or does not
+ *   apply to this mode.
+ */
+const runStagingApprovalGate = async (options: {
+  io: StepRecorder;
+  mode: string;
+  candidateLockHash: string;
+}): Promise<string | undefined> => {
+  if (options.mode !== 'production') {
+    return undefined;
+  }
+  const path = receiptPath(releasePlane, 'staging');
+  const approval = await verifyStagingApproval({
+    receiptPath: path,
+    candidateLockHash: options.candidateLockHash,
+  });
+  if (approval.ok) {
+    options.io.record({
+      name: 'staging approval',
+      command: `read ${path}`,
+      status: 'ok',
+      exitCode: 0,
+      durationMs: 0,
+      detail: describeStagingApproval(approval).replace(/\n/g, ' · '),
+    });
+    return undefined;
+  }
+  options.io.record({
+    name: 'staging approval',
+    command: `read ${path}`,
+    status: 'failed',
+    exitCode: 1,
+    durationMs: 0,
+    detail: `${approval.code}: ${approval.reason}`,
+  });
+  return `staging approval (${approval.code}): ${approval.reason}`;
+};
+
 /** `--plan`: report the intended steps, touching nothing. */
 const runPlanMode = async (options: {
   io: StepRecorder;
@@ -449,22 +401,71 @@ const runPlanMode = async (options: {
   pack: PackIdentity;
   dirty: boolean;
 }): Promise<never> => {
-  for (const name of plannedSteps(options.invocation.mode)) {
-    options.io.skipped(name, '(planned — run with --apply)');
+  const { io, invocation } = options;
+  for (const name of plannedSteps(invocation.mode)) {
+    io.skipped(name, '(planned — run with --apply)');
   }
-  const audit = options.io.bun(
+
+  // ── Every mandatory planning phase, and its outcome ─────────────────────
+  //
+  // A plan is a claim that this release WOULD succeed. It used to be decided
+  // by the coverage audit alone: candidate verification and plan construction
+  // were "best-effort" and their failures were printed as warnings, so a run
+  // whose candidate did not verify — or whose plan could not be built at all —
+  // still exited 0 whenever the audit passed. That is a plan reporting success
+  // for a release that cannot happen.
+  //
+  // Each phase below is now recorded in the step ledger and, on failure, makes
+  // the run exit non-zero. Nothing here writes: the audit is read-only, the
+  // candidate is re-derived locally, and base-release resolution is a GET.
+  const failures: string[] = [];
+
+  const audit = io.bun(
     'coverage audit (read-only)',
     'scripts/src/lib/ops/emberwatch_coverage_audit.ts',
   );
+  if (audit.status === 'failed') {
+    failures.push(`coverage audit reported blockers (exit ${audit.exitCode})`);
+  }
 
-  // Best-effort typed preflight: the plan is more useful when it names the
-  // candidate, the base release and the root hash it would publish. A failure
-  // here is reported, not fatal — plan mode already gates on the audit.
   const candidatePhase = verifySealedCandidatePhase();
+  if (candidatePhase.ok) {
+    io.record({
+      name: 'verify sealed candidate',
+      command: 'verifyCandidate()',
+      status: 'ok',
+      exitCode: 0,
+      durationMs: 0,
+      detail: candidatePhase.value.lockHash,
+    });
+  } else {
+    io.record({
+      name: 'verify sealed candidate',
+      command: 'verifyCandidate()',
+      status: 'failed',
+      exitCode: 1,
+      durationMs: 0,
+      detail: candidatePhase.error,
+    });
+    failures.push(`${candidatePhase.phase}: ${candidatePhase.error}`);
+  }
+
+  // Production promotes a candidate STAGING approved.
+  if (candidatePhase.ok) {
+    const approvalFailure = await runStagingApprovalGate({
+      io,
+      mode: invocation.mode,
+      candidateLockHash: candidatePhase.value.lockHash,
+    });
+    if (approvalFailure !== undefined) {
+      failures.push(approvalFailure);
+    }
+  }
+
   let planFields: { candidateLockHash?: string; releasePlanHash?: string } = {};
   if (candidatePhase.ok) {
     const planPhases = await buildPlanPhases({
-      mode: options.invocation.mode,
+      mode: invocation.mode,
       releaseTarget: options.target.releaseTarget,
       candidatePhase,
     });
@@ -475,34 +476,47 @@ const runPlanMode = async (options: {
         releasePlanHash: planPhases.value.plan.planHash,
       };
     } else {
-      console.warn(`  ⚠ ${planPhases.phase}: ${planPhases.error}`);
+      io.record({
+        name: 'build + validate release plan',
+        command: 'buildReleasePlan() → validateReleasePlan()',
+        status: 'failed',
+        exitCode: 1,
+        durationMs: 0,
+        detail: planPhases.error,
+      });
+      failures.push(`${planPhases.phase}: ${planPhases.error}`);
     }
-  } else {
-    console.warn(`  ⚠ ${candidatePhase.phase}: ${candidatePhase.error}`);
   }
 
   writeReleaseReport({
-    repository,
-    mode: options.invocation.mode,
+    mode: invocation.mode,
     report: buildReleaseReport({
       repository,
       sourceCommit: options.sourceCommit,
       packVersion: options.pack.manifestVersion,
-      mode: options.invocation.mode,
+      mode: invocation.mode,
       apply: false,
       dirtyWorktree: options.dirty,
-      dirtyWorktreeAllowed: options.invocation.allowDirty,
+      dirtyWorktreeAllowed: invocation.allowDirty,
       config: options.target.target,
       previous: options.previous,
-      steps: options.io.steps,
+      steps: io.steps,
       ...planFields,
     }),
   });
+
   console.log('');
-  console.log(
-    `Plan complete. Coverage audit exit ${audit.exitCode}. No remote write was performed.`,
-  );
-  process.exit(audit.exitCode === 0 ? 0 : 2);
+  if (failures.length > 0) {
+    console.error(`❌ plan FAILED — ${failures.length} mandatory phase(s) did not pass:`);
+    for (const failure of failures) {
+      console.error(`     ${failure}`);
+    }
+    console.error('');
+    console.error('   No remote write was performed. Fix the above and re-run --plan.');
+    process.exit(2);
+  }
+  console.log('Plan complete. Coverage audit exit 0. No remote write was performed.');
+  process.exit(0);
 };
 
 /** `--apply`: verify, plan, publish, activate, verify, receipt. */
@@ -547,6 +561,25 @@ const applyRelease = async (options: {
   const { plan, base } = planPhases.value;
   printPlanFacts(planPhases.value);
 
+  // ── Production promotion gate: BEFORE any write ─────────────────────────
+  //
+  // Checked on the apply path, before write credentials are loaded and before
+  // a single byte is uploaded — so a missing, stale, unverified or mismatched
+  // approval cannot leave a partial production release behind.
+  const approvalFailure = await runStagingApprovalGate({
+    io: options.io,
+    mode: options.invocation.mode,
+    candidateLockHash: candidatePhase.value.lockHash,
+  });
+  if (approvalFailure !== undefined) {
+    console.error('');
+    console.error('❌ production promotion refused — nothing was written.');
+    console.error(`   ${approvalFailure}`);
+    console.error('');
+    console.error('   Production promotes a candidate STAGING published and verified.');
+    process.exit(2);
+  }
+
   assertValidationPasses(options.io, options.invocation.skipTests);
 
   // ── Write credentials: loaded only now, on the path that writes ────────
@@ -564,6 +597,10 @@ const applyRelease = async (options: {
     publishReport = (await runCatalogPublish({
       config: writeConfig,
       client: createR2Client(writeConfig),
+      // The SAME stamp the plan used. The root document embeds `publishedAt`,
+      // so a different value here would write a root whose hash differs from
+      // the one the plan pinned — and verification could never match.
+      publishedAt: sealed.sealedAt,
     })) as PublishReportLike;
   } catch (error) {
     console.error(`❌ publish threw before reporting — ${(error as Error).message}`);
@@ -583,6 +620,11 @@ const applyRelease = async (options: {
     originUrl: options.target.target.originUrl,
     previous: options.previous,
     plannedRootHash: plan.catalogRootHash,
+    // Activation and alias maintenance are separate concerns: the immutable
+    // release can be active and valid while the mutable compatibility alias
+    // did not move. Reporting that as a release failure would be wrong, and
+    // reporting it as a clean success would hide a degraded surface.
+    aliasDegraded: publishReport.legacyAlias?.error !== undefined,
   });
   recordVerification(options.io, {
     originUrl: options.target.target.originUrl,
@@ -608,7 +650,6 @@ const applyRelease = async (options: {
   });
 
   const reportFile = writeReleaseReport({
-    repository,
     mode: options.invocation.mode,
     report: buildReleaseReport({
       repository,
@@ -649,7 +690,7 @@ const main = async (): Promise<void> => {
   const io = createStepRecorder(repository);
   const sourceCommit = io.git(['rev-parse', 'HEAD']);
   const dirty = io.git(['status', '--porcelain']).length > 0;
-  const pack = readPackIdentity();
+  const pack = readPackIdentity(repository);
 
   printHeader({ mode: invocation.mode, apply: invocation.apply, sourceCommit, pack, dirty });
   assertVersionParity(pack);

@@ -29,6 +29,7 @@
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { CATALOG_ORIGINS } from '@aikami/constants';
 import type {
   CandidateLock,
   ReleaseBase,
@@ -36,7 +37,7 @@ import type {
   ReleaseReceipt,
   ReleaseTargetIdentity,
 } from '@aikami/schemas';
-import { PACK_LOCK_KEY, ReleasePlanSchema } from '@aikami/schemas';
+import { CANDIDATE_GROUPS, PACK_LOCK_KEY, ReleasePlanSchema } from '@aikami/schemas';
 import { Value } from 'typebox/value';
 import { computeLockHash } from './candidate_lock.ts';
 import { ASSET_KEY_PREFIX, ROOT_INDEX_KEY } from './config.ts';
@@ -110,15 +111,10 @@ export const verifyCandidate = (options: {
   const current = rebuild();
   if (current.lockHash !== sealed.lockHash) {
     const moved: string[] = [];
-    for (const group of [
-      'manifest',
-      'maps',
-      'terrainAtlas',
-      'propAtlas',
-      'portraits',
-      'enemyVisuals',
-      'audio',
-    ] as const) {
+    // Driven by the schema's exported tuple rather than a hand-maintained
+    // list: a group added to the schema is then automatically compared, and
+    // the previous hand-written list silently omitted `seed`.
+    for (const group of CANDIDATE_GROUPS) {
       if (sealed[group].digest !== current[group].digest) {
         moved.push(group);
       }
@@ -175,7 +171,7 @@ export const resolveBaseRelease = async (options: {
       });
     }
     return phaseOk('resolveBaseRelease', {
-      base: { releaseId: previous.releaseId, rootHash: sha256(previous.rootKey) },
+      base: { releaseId: previous.releaseId, rootHash: previous.rootHash },
       carriedEntries: previous.entries,
       carriedDependencies: previous.dependencies,
     });
@@ -217,10 +213,22 @@ export const buildReleasePlan = (options: {
   const { candidate, target, base, entries } = options;
 
   try {
+    // `publishedAt` is the candidate's seal time, NOT the clock.
+    //
+    // The plan's whole purpose is to name the exact bytes apply must produce,
+    // and the root document embeds `publishedAt`. Stamping it with
+    // `new Date()` here and again inside the publisher produced two different
+    // root hashes for one release, so `verifyPublishedRelease` could never
+    // match the plan against what was actually written — every apply failed
+    // verification. Deriving it from the sealed candidate makes the plan and
+    // the publish agree, and makes a retry of the same candidate reproduce the
+    // same root, which is what makes an already-active release a verified
+    // no-op instead of a fabricated pointer change.
     const { root, shards, merge } = generateCatalogIndex({
       entries: entries as never,
       originUrl: target.originUrl,
       carriedEntries: base.carriedEntries as never,
+      publishedAt: candidate.sealedAt,
     });
 
     // Same addressing the publisher uses: the root and every shard are hashed
@@ -428,7 +436,23 @@ export const buildReceipt = (options: {
 // Promotion
 // ---------------------------------------------------------------------------
 
-export type PromotionCheck = { ok: true } | { ok: false; reason: string };
+export type PromotionFailureCode =
+  | 'receipt-wrong-mode'
+  | 'receipt-wrong-bucket'
+  | 'receipt-wrong-origin'
+  | 'receipt-not-activated'
+  | 'receipt-not-verified'
+  | 'receipt-candidate-mismatch';
+
+export type PromotionCheck =
+  | { ok: true }
+  | { ok: false; code: PromotionFailureCode; reason: string };
+
+/** The canonical staging identity a promotion receipt must name. */
+export type StagingIdentity = { bucketName: string; originUrl: string | null };
+
+/** Trailing-slash-insensitive origin comparison, so `/` cannot fail a match. */
+const normalizeOrigin = (originUrl: string): string => originUrl.replace(/\/+$/, '');
 
 /**
  * Production must publish the candidate staging approved.
@@ -438,29 +462,83 @@ export type PromotionCheck = { ok: true } | { ok: false; reason: string };
  * even when the Emberwatch candidate is byte-identical. Requiring root equality
  * would conflate "same candidate" with "same entire global catalog graph",
  * which this infrastructure does not guarantee.
+ *
+ * Every check is a statement the receipt has to be able to make. The earlier
+ * revision only rejected `mode === 'production'` — so a receipt with a typo'd,
+ * emulator or absent mode passed — and checked `activated` without ever
+ * checking `verified`, which is the field that says the staging write was
+ * re-read from staging's own origin and matched. Both are exactly the states a
+ * promotion must refuse.
  */
 export const checkPromotion = (options: {
-  stagingReceipt: { candidateLockHash: string; mode: string; activated: boolean };
-  productionCandidate: CandidateLock;
+  stagingReceipt: Pick<
+    ReleaseReceipt,
+    'candidateLockHash' | 'mode' | 'bucket' | 'originUrl' | 'activated' | 'verified'
+  >;
+  /** The candidate production is about to publish. */
+  candidateLockHash: string;
+  /** Canonical staging identity. Defaults to the committed origin table. */
+  staging?: StagingIdentity;
 }): PromotionCheck => {
-  const { stagingReceipt, productionCandidate } = options;
+  const { stagingReceipt, candidateLockHash } = options;
+  const staging = options.staging ?? CATALOG_ORIGINS.staging;
 
-  if (stagingReceipt.mode === 'production') {
-    return { ok: false, reason: 'the reference receipt is itself a production release' };
+  if (stagingReceipt.mode !== 'staging') {
+    return {
+      ok: false,
+      code: 'receipt-wrong-mode',
+      reason:
+        `the reference receipt is for mode ${JSON.stringify(stagingReceipt.mode)}, not "staging". ` +
+        'Only a staging release approves a production promotion.',
+    };
+  }
+  if (stagingReceipt.bucket !== staging.bucketName) {
+    return {
+      ok: false,
+      code: 'receipt-wrong-bucket',
+      reason:
+        `the receipt names bucket ${JSON.stringify(stagingReceipt.bucket)} but staging is ` +
+        `${JSON.stringify(staging.bucketName)}. A receipt that wrote elsewhere did not ` +
+        'approve this candidate.',
+    };
+  }
+  if (
+    staging.originUrl === null ||
+    normalizeOrigin(stagingReceipt.originUrl) !== normalizeOrigin(staging.originUrl)
+  ) {
+    return {
+      ok: false,
+      code: 'receipt-wrong-origin',
+      reason:
+        `the receipt names origin ${JSON.stringify(stagingReceipt.originUrl)} but staging is ` +
+        `${JSON.stringify(staging.originUrl)}. Verification against another origin proves ` +
+        'nothing about staging.',
+    };
   }
   if (!stagingReceipt.activated) {
     return {
       ok: false,
+      code: 'receipt-not-activated',
       reason: 'staging never activated a release, so there is nothing approved to promote',
     };
   }
-  if (stagingReceipt.candidateLockHash !== productionCandidate.lockHash) {
+  if (!stagingReceipt.verified) {
     return {
       ok: false,
+      code: 'receipt-not-verified',
+      reason:
+        "staging activated a release but never re-read it from staging's own origin, so the " +
+        'release it wrote was never verified',
+    };
+  }
+  if (stagingReceipt.candidateLockHash !== candidateLockHash) {
+    return {
+      ok: false,
+      code: 'receipt-candidate-mismatch',
       reason:
         `the candidate differs from the staging-approved one: staging approved ` +
         `${stagingReceipt.candidateLockHash.slice(0, 12)}… but this candidate is ` +
-        `${productionCandidate.lockHash.slice(0, 12)}…`,
+        `${candidateLockHash.slice(0, 12)}…`,
     };
   }
   return { ok: true };

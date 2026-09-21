@@ -60,6 +60,15 @@ export class PreviousReleaseError extends Error {
 export type PreviousRelease = {
   releaseId: string;
   rootKey: string;
+  /**
+   * sha256 of the root index DOCUMENT bytes, as pinned by the pointer.
+   *
+   * This is the value a release pointer's `rootHash` names, so it is what a
+   * plan compares against to answer "is this exact root already active?".
+   * Hashing `rootKey` instead would produce a different string that happens to
+   * look like a root hash and can never match the pointer.
+   */
+  rootHash: string;
   /** Every catalog entry the verified release carries. */
   entries: CatalogAssetEntry[];
   /**
@@ -174,6 +183,7 @@ export const resolvePreviousRelease = async (options: {
   return {
     releaseId: graph.releaseId,
     rootKey: graph.pointer.rootKey,
+    rootHash: graph.pointer.rootHash,
     entries,
     dependencies,
     pinnedKeys: [
