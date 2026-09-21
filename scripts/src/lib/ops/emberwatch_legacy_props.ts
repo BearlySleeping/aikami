@@ -1,15 +1,18 @@
 // scripts/src/lib/ops/emberwatch_legacy_props.ts
 //
-// The six remaining legacy grid-atlas furniture frames — crate, table, bed,
-// counter, bookshelf, anvil — are known, deliberate debt. No accepted
-// standalone source exists for them yet, so every prop placed with one of these
-// frames still renders from the legacy 32px grid atlas.
+// The legacy grid-atlas furniture frames — crate, table, bed, counter,
+// bookshelf, anvil — were known, deliberate debt: no accepted standalone source
+// existed, so every prop placed with one of these frames rendered from the
+// legacy 32px grid atlas.
 //
-// This tool turns that debt into an actionable, machine-readable replacement
-// manifest: for each missing frame it names the target replacement frame, the
-// prop ids and maps that depend on it, the matching asset-brief generation job
-// (prompt + target canvas + acceptance gates), and the acceptance criteria a
-// replacement must satisfy before it can be wired in.
+// As of the 5.0.0 polish pass that debt is cleared: each frame has accepted
+// standalone art, the allowlist in `emberwatch_prop_source_guard.ts` is empty,
+// and any prop that resolves through the grid atlas is now a hard violation.
+// This tool still turns the debt into an actionable, machine-readable
+// replacement manifest: for each missing frame it names the target replacement
+// frame, the prop ids and maps that depend on it, the matching asset-brief
+// generation job (prompt + target canvas + acceptance gates), and the
+// acceptance criteria a replacement must satisfy before it can be wired in.
 //
 // It does NOT generate art. Generation is a separate, human-gated operation
 // (`generate:batch` → `emberwatch:accept`); this manifest is the input for it.
@@ -110,7 +113,7 @@ export const buildLegacyPropManifest = (): LegacyPropManifest => {
     kind: 'emberwatch-legacy-prop-replacements',
     generatedBy: 'scripts/src/lib/ops/emberwatch_legacy_props.ts',
     policy:
-      'Every frame here renders from the legacy grid atlas because no accepted standalone source exists. Replace by generating the named replacementFrame through the asset brief job, accepting it (emberwatch:accept), updating the prop table frame, regenerating the props atlas, and re-running emberwatch:validate + emberwatch:audit. The target is zero legacy-grid prop dependencies.',
+      'Every frame here renders from the legacy grid atlas because no accepted standalone source exists. Replace by generating the named replacementFrame through the asset brief job, accepting it (emberwatch:accept), updating the prop table frame, regenerating the props atlas, and re-running emberwatch:validate + emberwatch:audit. The target is zero legacy-grid prop dependencies — reached when this list is empty.',
     counts: { legacyFrames: items.length, replacementFrames: items.length, placedProps },
     items,
   };

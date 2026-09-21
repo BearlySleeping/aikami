@@ -66,6 +66,13 @@ export const DEFAULT_WORKFLOW_PROFILE_ID: WorkflowProfileId = WORKFLOW_PROFILE_I
 export const PREPARATION_PROFILE_IDS = {
   propNativeAlpha: 'prop-native-alpha',
   propFullAlphaGround: 'prop-full-alpha-ground',
+  /**
+   * The luminance-matte path for engines that emit RGB only (the local
+   * sd.cpp/Anima pipeline): the prop is rendered on a uniform near-black
+   * ground and alpha is derived from luminance. Restores the pre-5.0.0
+   * extraction path for prop jobs that need it.
+   */
+  propLuminanceAlphaGround: 'prop-luminance-alpha-ground',
   portraitOriginal: 'portrait-original',
   lpcSheetNative: 'lpc-sheet-native',
 } as const;

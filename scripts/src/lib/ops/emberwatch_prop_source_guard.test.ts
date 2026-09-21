@@ -84,15 +84,10 @@ describe('emberwatch prop art source guard', () => {
 
   test('the legacy allowlist cannot silently grow to absorb new props', () => {
     // A guard-of-the-guard: the allowlist is written down here so a change is a
-    // reviewed, deliberate edit rather than an accidental widening.
-    expect([...LEGACY_GRID_PROP_FRAMES].sort()).toEqual([
-      'anvil.png',
-      'bed.png',
-      'bookshelf.png',
-      'counter.png',
-      'crate.png',
-      'table.png',
-    ]);
+    // reviewed, deliberate edit rather than an accidental widening. It is empty
+    // as of the 5.0.0 polish pass — every former legacy-grid furniture frame now
+    // resolves to accepted standalone art.
+    expect([...LEGACY_GRID_PROP_FRAMES].sort()).toEqual([]);
   });
 
   test('no two distinct prop ids bind the same semantic frame under old and new names', () => {

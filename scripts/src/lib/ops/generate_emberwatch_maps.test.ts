@@ -95,7 +95,7 @@ describe('Emberwatch map builders — gate 3 extents', () => {
     const frames = buildG();
     const row = map.height - 2;
     for (let column = 1; column < map.width - 1; column++) {
-      if (column === 13 || column === 14) {
+      if (column === 13 || column === 14 || column === 15) {
         continue;
       }
       expect(map.ground[row * map.width + column]).toBe(frames.WALL_TOP);

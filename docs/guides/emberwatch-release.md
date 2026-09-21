@@ -67,6 +67,12 @@ bun run --cwd apps/backend/image generate:batch \
   be served by one global `--preparation-profile`.
 - Props render with native alpha so `prop-full-alpha-ground` preserves dark object
   pixels. The ground plane must already be detached before preparation.
+- The local sd.cpp/Anima engine emits RGB only, so the six furniture props
+  (crate, table, bed, counter, bookshelf, anvil) use
+  `prop-luminance-alpha-ground`: they render on a uniform near-black ground and
+  alpha is derived deterministically from luminance, with full-width ground rows
+  detached by geometry (never a colour key). Their brief prompts therefore ask
+  for a pure-black backdrop rather than native transparency.
 - Run records are durable. After a failure use `--status <runId>`, then
   `--reconcile <itemId>=no-provider-work`, then `--resume <runId>` — never delete
   job state and regenerate blindly.

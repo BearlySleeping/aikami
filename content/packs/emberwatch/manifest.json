@@ -1062,9 +1062,9 @@
     },
     "inn_crate": {
       "name": "Crate",
-      "frame": "crate.png",
+      "frame": "prop_crate.png",
       "provenance": {
-        "source": "generated:gpt"
+        "source": "generated:local-sdcpp-anima"
       },
       "anchor": {
         "x": 0.5,
@@ -1075,13 +1075,23 @@
         "type": "rect",
         "width": 22,
         "height": 22
+      },
+      "renderSize": {
+        "width": 40,
+        "height": 29
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 28,
+        "height": 10,
+        "opacity": 0.2
       }
     },
     "shop_crate": {
       "name": "Crate",
-      "frame": "crate.png",
+      "frame": "prop_crate.png",
       "provenance": {
-        "source": "generated:gpt"
+        "source": "generated:local-sdcpp-anima"
       },
       "anchor": {
         "x": 0.5,
@@ -1092,13 +1102,23 @@
         "type": "rect",
         "width": 22,
         "height": 22
+      },
+      "renderSize": {
+        "width": 40,
+        "height": 29
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 28,
+        "height": 10,
+        "opacity": 0.2
       }
     },
     "shop_crate_2": {
       "name": "Crate",
-      "frame": "crate.png",
+      "frame": "prop_crate.png",
       "provenance": {
-        "source": "generated:gpt"
+        "source": "generated:local-sdcpp-anima"
       },
       "anchor": {
         "x": 0.5,
@@ -1109,13 +1129,23 @@
         "type": "rect",
         "width": 22,
         "height": 22
+      },
+      "renderSize": {
+        "width": 40,
+        "height": 29
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 28,
+        "height": 10,
+        "opacity": 0.2
       }
     },
     "shop_crate_3": {
       "name": "Crate",
-      "frame": "crate.png",
+      "frame": "prop_crate.png",
       "provenance": {
-        "source": "generated:gpt"
+        "source": "generated:local-sdcpp-anima"
       },
       "anchor": {
         "x": 0.5,
@@ -1126,13 +1156,23 @@
         "type": "rect",
         "width": 22,
         "height": 22
+      },
+      "renderSize": {
+        "width": 40,
+        "height": 29
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 28,
+        "height": 10,
+        "opacity": 0.2
       }
     },
     "waystation_crate": {
       "name": "Crate",
-      "frame": "crate.png",
+      "frame": "prop_crate.png",
       "provenance": {
-        "source": "generated:gpt"
+        "source": "generated:local-sdcpp-anima"
       },
       "anchor": {
         "x": 0.5,
@@ -1143,13 +1183,23 @@
         "type": "rect",
         "width": 22,
         "height": 22
+      },
+      "renderSize": {
+        "width": 40,
+        "height": 29
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 28,
+        "height": 10,
+        "opacity": 0.2
       }
     },
     "waystation_crate_2": {
       "name": "Crate",
-      "frame": "crate.png",
+      "frame": "prop_crate.png",
       "provenance": {
-        "source": "generated:gpt"
+        "source": "generated:local-sdcpp-anima"
       },
       "anchor": {
         "x": 0.5,
@@ -1160,13 +1210,23 @@
         "type": "rect",
         "width": 22,
         "height": 22
+      },
+      "renderSize": {
+        "width": 40,
+        "height": 29
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 28,
+        "height": 10,
+        "opacity": 0.2
       }
     },
     "shrine_crate": {
       "name": "Crate",
-      "frame": "crate.png",
+      "frame": "prop_crate.png",
       "provenance": {
-        "source": "generated:gpt"
+        "source": "generated:local-sdcpp-anima"
       },
       "anchor": {
         "x": 0.5,
@@ -1177,13 +1237,23 @@
         "type": "rect",
         "width": 22,
         "height": 22
+      },
+      "renderSize": {
+        "width": 40,
+        "height": 29
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 28,
+        "height": 10,
+        "opacity": 0.2
       }
     },
     "shop_counter_l": {
       "name": "Counter",
-      "frame": "counter.png",
+      "frame": "prop_counter.png",
       "provenance": {
-        "source": "generated:gpt"
+        "source": "generated:local-sdcpp-anima"
       },
       "anchor": {
         "x": 0.5,
@@ -1194,13 +1264,23 @@
         "type": "rect",
         "width": 28,
         "height": 18
+      },
+      "renderSize": {
+        "width": 64,
+        "height": 36
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 52,
+        "height": 11,
+        "opacity": 0.2
       }
     },
     "shop_counter_r": {
       "name": "Counter",
-      "frame": "counter.png",
+      "frame": "prop_counter.png",
       "provenance": {
-        "source": "generated:gpt"
+        "source": "generated:local-sdcpp-anima"
       },
       "anchor": {
         "x": 0.5,
@@ -1211,13 +1291,23 @@
         "type": "rect",
         "width": 28,
         "height": 18
+      },
+      "renderSize": {
+        "width": 64,
+        "height": 36
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 52,
+        "height": 11,
+        "opacity": 0.2
       }
     },
     "shop_counter_m": {
       "name": "Counter",
-      "frame": "counter.png",
+      "frame": "prop_counter.png",
       "provenance": {
-        "source": "generated:gpt"
+        "source": "generated:local-sdcpp-anima"
       },
       "anchor": {
         "x": 0.5,
@@ -1228,13 +1318,23 @@
         "type": "rect",
         "width": 28,
         "height": 18
+      },
+      "renderSize": {
+        "width": 64,
+        "height": 36
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 52,
+        "height": 11,
+        "opacity": 0.2
       }
     },
     "inn_counter": {
       "name": "Service Counter",
-      "frame": "counter.png",
+      "frame": "prop_counter.png",
       "provenance": {
-        "source": "generated:gpt"
+        "source": "generated:local-sdcpp-anima"
       },
       "anchor": {
         "x": 0.5,
@@ -1245,13 +1345,23 @@
         "type": "rect",
         "width": 28,
         "height": 18
+      },
+      "renderSize": {
+        "width": 64,
+        "height": 36
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 52,
+        "height": 11,
+        "opacity": 0.2
       }
     },
     "inn_counter_2": {
       "name": "Service Counter",
-      "frame": "counter.png",
+      "frame": "prop_counter.png",
       "provenance": {
-        "source": "generated:gpt"
+        "source": "generated:local-sdcpp-anima"
       },
       "anchor": {
         "x": 0.5,
@@ -1262,13 +1372,23 @@
         "type": "rect",
         "width": 28,
         "height": 18
+      },
+      "renderSize": {
+        "width": 64,
+        "height": 36
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 52,
+        "height": 11,
+        "opacity": 0.2
       }
     },
     "inn_table": {
       "name": "Ale Table",
-      "frame": "table.png",
+      "frame": "prop_table.png",
       "provenance": {
-        "source": "generated:gpt"
+        "source": "generated:local-sdcpp-anima"
       },
       "anchor": {
         "x": 0.5,
@@ -1279,6 +1399,16 @@
         "type": "rect",
         "width": 26,
         "height": 22
+      },
+      "renderSize": {
+        "width": 56,
+        "height": 40
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 44,
+        "height": 12,
+        "opacity": 0.2
       },
       "environment": {
         "durability": 6,
@@ -1289,9 +1419,9 @@
     },
     "inn_table_2": {
       "name": "Ale Table",
-      "frame": "table.png",
+      "frame": "prop_table.png",
       "provenance": {
-        "source": "generated:gpt"
+        "source": "generated:local-sdcpp-anima"
       },
       "anchor": {
         "x": 0.5,
@@ -1302,6 +1432,16 @@
         "type": "rect",
         "width": 26,
         "height": 22
+      },
+      "renderSize": {
+        "width": 56,
+        "height": 40
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 44,
+        "height": 12,
+        "opacity": 0.2
       },
       "environment": {
         "durability": 6,
@@ -1312,9 +1452,9 @@
     },
     "inn_table_3": {
       "name": "Ale Table",
-      "frame": "table.png",
+      "frame": "prop_table.png",
       "provenance": {
-        "source": "generated:gpt"
+        "source": "generated:local-sdcpp-anima"
       },
       "anchor": {
         "x": 0.5,
@@ -1325,6 +1465,16 @@
         "type": "rect",
         "width": 26,
         "height": 22
+      },
+      "renderSize": {
+        "width": 56,
+        "height": 40
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 44,
+        "height": 12,
+        "opacity": 0.2
       },
       "environment": {
         "durability": 6,
@@ -1524,9 +1674,9 @@
     },
     "inn_bed": {
       "name": "Guest Bed",
-      "frame": "bed.png",
+      "frame": "prop_bed.png",
       "provenance": {
-        "source": "generated:gpt"
+        "source": "generated:local-sdcpp-anima"
       },
       "anchor": {
         "x": 0.5,
@@ -1537,6 +1687,16 @@
         "type": "rect",
         "width": 30,
         "height": 22
+      },
+      "renderSize": {
+        "width": 56,
+        "height": 54
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 42,
+        "height": 12,
+        "opacity": 0.2
       }
     },
     "inn_hearth": {
@@ -1568,9 +1728,9 @@
     },
     "inn_shelf": {
       "name": "Storage Shelf",
-      "frame": "bookshelf.png",
+      "frame": "prop_bookshelf.png",
       "provenance": {
-        "source": "generated:gpt"
+        "source": "generated:local-sdcpp-anima"
       },
       "anchor": {
         "x": 0.5,
@@ -1581,13 +1741,23 @@
         "type": "rect",
         "width": 24,
         "height": 14
+      },
+      "renderSize": {
+        "width": 34,
+        "height": 58
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 24,
+        "height": 9,
+        "opacity": 0.2
       }
     },
     "shop_shelf": {
       "name": "Storage Shelf",
-      "frame": "bookshelf.png",
+      "frame": "prop_bookshelf.png",
       "provenance": {
-        "source": "generated:gpt"
+        "source": "generated:local-sdcpp-anima"
       },
       "anchor": {
         "x": 0.5,
@@ -1598,13 +1768,23 @@
         "type": "rect",
         "width": 24,
         "height": 14
+      },
+      "renderSize": {
+        "width": 34,
+        "height": 58
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 24,
+        "height": 9,
+        "opacity": 0.2
       }
     },
     "shop_shelf_2": {
       "name": "Storage Shelf",
-      "frame": "bookshelf.png",
+      "frame": "prop_bookshelf.png",
       "provenance": {
-        "source": "generated:gpt"
+        "source": "generated:local-sdcpp-anima"
       },
       "anchor": {
         "x": 0.5,
@@ -1615,13 +1795,23 @@
         "type": "rect",
         "width": 24,
         "height": 14
+      },
+      "renderSize": {
+        "width": 34,
+        "height": 58
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 24,
+        "height": 9,
+        "opacity": 0.2
       }
     },
     "yard_anvil": {
       "name": "Smith Anvil",
-      "frame": "anvil.png",
+      "frame": "prop_anvil.png",
       "provenance": {
-        "source": "generated:gpt"
+        "source": "generated:local-sdcpp-anima"
       },
       "anchor": {
         "x": 0.5,
@@ -1632,6 +1822,16 @@
         "type": "rect",
         "width": 24,
         "height": 16
+      },
+      "renderSize": {
+        "width": 46,
+        "height": 31
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 30,
+        "height": 10,
+        "opacity": 0.2
       }
     },
     "inn_brazier": {
@@ -1921,9 +2121,9 @@
     },
     "inn_hanging_crate": {
       "name": "Hanging Crate",
-      "frame": "crate.png",
+      "frame": "prop_crate.png",
       "provenance": {
-        "source": "generated:gpt"
+        "source": "generated:local-sdcpp-anima"
       },
       "anchor": {
         "x": 0.5,
@@ -1934,6 +2134,16 @@
         "type": "rect",
         "width": 22,
         "height": 22
+      },
+      "renderSize": {
+        "width": 40,
+        "height": 29
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 28,
+        "height": 10,
+        "opacity": 0.2
       },
       "environment": {
         "durability": 5,

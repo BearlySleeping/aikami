@@ -50,6 +50,38 @@
     }
   },
   {
+    "id": "prop-luminance-alpha-ground",
+    "version": "1.0.0",
+    "role": "prop-sprite",
+    "pixelGrid": "native",
+    "notes": "Source is an isolated prop rendered on a uniform near-black ground by an engine that emits RGB only (the local sd.cpp/Anima path). Alpha is derived deterministically from luminance and full-width bottom ground rows are detached by geometry — never by a colour key. The object must be bright against the near-black ground so its dark pixels survive the 16/255 luminance floor.",
+    "operations": [
+      { "op": "decode-orient", "autoOrient": true },
+      {
+        "op": "alpha-extract",
+        "mode": "threshold",
+        "threshold": 16,
+        "despill": "none",
+        "detachGroundPlane": true
+      },
+      {
+        "op": "alpha-cleanup",
+        "fringeThreshold": 24,
+        "matteThreshold": 230,
+        "removeGroundRectangle": true
+      },
+      { "op": "trim", "preserveGroundContact": true, "paddingPx": 1 },
+      { "op": "encode", "format": "png" }
+    ],
+    "qa": {
+      "requireGroundContact": true,
+      "maxAlphaFringeRatio": 0.35,
+      "forbidClippedContent": true,
+      "minNativeScaleFeaturePx": 2,
+      "manualReviewCodes": ["ground-plane-not-detached"]
+    }
+  },
+  {
     "id": "portrait-original",
     "version": "1.0.0",
     "role": "portrait",

@@ -29,11 +29,11 @@
     "note": "Palette is a direction, not a fixed swatch list. Keep terrain tiles and props on the same value range."
   },
   "topology": {
-    "village": { "sizeCells": [64, 48], "role": "hub square + arrival", "walkablePercent": 77.7 },
-    "inn": { "sizeCells": [28, 20], "role": "interior, story", "walkablePercent": 65.5, "interiorLighting": true },
-    "merchant_shop": { "sizeCells": [24, 18], "role": "interior, vendor + evidence", "walkablePercent": 63.2, "interiorLighting": true },
-    "old_road": { "sizeCells": [72, 36], "role": "transitional journey, two routes", "walkablePercent": 78.1 },
-    "ruined_shrine": { "sizeCells": [40, 36], "role": "climax ruin", "walkablePercent": 76.8 }
+    "village": { "sizeCells": [64, 48], "role": "hub square + arrival", "walkablePercent": 75.7 },
+    "inn": { "sizeCells": [28, 20], "role": "interior, story", "walkablePercent": 65.9, "interiorLighting": true },
+    "merchant_shop": { "sizeCells": [24, 18], "role": "interior, vendor + evidence", "walkablePercent": 61.1, "interiorLighting": true },
+    "old_road": { "sizeCells": [72, 36], "role": "transitional journey, two routes", "walkablePercent": 78.2 },
+    "ruined_shrine": { "sizeCells": [40, 36], "role": "climax ruin", "walkablePercent": 76.3 }
   },
   "transitionGraph": [
     { "from": "village", "to": "merchant_shop" },
@@ -88,10 +88,10 @@
     "affordance ids"
   ],
   "legacyArtTodos": {
-    "frames": ["crate.png", "table.png", "bed.png", "counter.png", "bookshelf.png", "anvil.png"],
+    "frames": [],
     "manifest": "docs/plans/emberwatch_legacy_prop_replacements.json",
     "target": "Zero accidental legacy grid-prop dependencies in the final polish.",
-    "note": "Replacement art is generated through the asset brief jobs and accepted via emberwatch:accept; do not regenerate unrelated art."
+    "note": "Met: crate/table/bed/counter/bookshelf/anvil now have accepted standalone art (prop_crate/prop_table/prop_bed/prop_counter/prop_bookshelf/prop_anvil). The legacy allowlist is empty and any future legacy-grid placement is a hard violation."
   },
   "visualAuditLocations": {
     "agentReport": "docs/reference/emberwatch-visual-report.json",

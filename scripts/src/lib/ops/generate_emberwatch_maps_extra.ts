@@ -86,6 +86,117 @@ const borderWithGaps = (m: MapData, gateCols: readonly number[]): void => {
 // old_road — 72×36
 // ---------------------------------------------------------------------------
 
+/** The direct road, the woodland trail and the three-cell shrine corridor. */
+const paintOldRoadRoutes = (m: MapData): void => {
+  fillRect(m, 2, 17, m.width - 3, 19, G.DIRT);
+  fillRect(m, 12, 10, 13, 19, G.DIRT);
+  fillRect(m, 12, 9, 47, 11, G.DIRT);
+  fillRect(m, 46, 11, 47, 19, G.DIRT);
+  fillRect(m, 33, 2, 35, 17, G.DIRT);
+  fillRect(m, 33, 19, 35, m.height - 1, G.DIRT);
+};
+
+/** The stream that cuts the direct route and its single dry crossing. */
+const carveCulvert = (m: MapData): void => {
+  const W = m.width;
+  for (let r = 1; r <= m.height - 2; r++) {
+    for (let c = 20; c <= 23; c++) {
+      setTile(m, c, r, G.WATER);
+      block(m, c, r);
+    }
+  }
+  for (let c = 20; c <= 23; c++) {
+    for (let r = 17; r <= 19; r++) {
+      setTile(m, c, r, G.BRIDGE);
+      m.collision[r * W + c] = 0;
+    }
+  }
+};
+
+/** The broken waystation shell, its collapsed east end and its doorway. */
+const raiseWaystation = (m: MapData): void => {
+  const W = m.width;
+  fillRect(m, 54, 8, 62, 13, G.STONE_FLOOR);
+  for (let c = 53; c <= 62; c++) {
+    setTile(m, c, 7, G.STONE_WALL);
+    block(m, c, 7);
+  }
+  for (let r = 8; r <= 12; r++) {
+    setTile(m, 53, r, G.STONE_WALL);
+    block(m, 53, r);
+  }
+  for (const r of [8, 12]) {
+    setTile(m, 63, r, G.STONE_WALL);
+    block(m, 63, r);
+  }
+  for (const [c, r] of [
+    [63, 9],
+    [63, 10],
+    [63, 11],
+    [62, 13],
+    [61, 13],
+  ] as const) {
+    setTile(m, c, r, G.BRICK);
+    block(m, c, r);
+  }
+  for (const r of [10, 11]) {
+    setTile(m, 53, r, G.STONE_FLOOR);
+    m.collision[r * W + 53] = 0;
+  }
+};
+
+/**
+ * Grass variation and the ash that darkens the road toward the shrine.
+ * `sand` is a baked decor tile, so this is a scatter rather than a terrain
+ * override; a terrain material the published atlas does not carry would render
+ * as fallback grass.
+ */
+const scatterRoadWear = (m: MapData, rng: () => number): void => {
+  const W = m.width;
+  const H = m.height;
+  scatter(m, rng, 2, 2, W - 3, H - 3, G.GRASS, G.GRASS_DARK, 0.12);
+  scatter(m, rng, 2, 2, W - 3, H - 3, G.GRASS, G.GRASS_VARIANT, 0.05);
+  for (let r = 3; r <= 15; r++) {
+    for (let c = 30; c <= 42; c++) {
+      if (m.ground[r * W + c] === G.GRASS && rng() < 0.14) {
+        setTile(m, c, r, G.SAND);
+      }
+    }
+  }
+  for (let r = 4; r <= 14; r++) {
+    for (let c = 31; c <= 39; c++) {
+      if (m.ground[r * W + c] === G.GRASS && rng() < 0.08) {
+        setTile(m, c, r, G.SAND);
+      }
+    }
+  }
+};
+
+/**
+ * Tree stands grouped into a few irregular clusters rather than an even
+ * scatter, leaving open glades between them. Clear of both routes and the
+ * waystation.
+ */
+const OLD_ROAD_TREES: ReadonlyArray<readonly [number, number, 'oak' | 'birch']> = [
+  [8, 5, 'oak'],
+  [10, 7, 'birch'],
+  [13, 4, 'oak'],
+  [26, 4, 'birch'],
+  [29, 6, 'oak'],
+  [43, 4, 'birch'],
+  [39, 5, 'oak'],
+  [55, 6, 'birch'],
+  [51, 4, 'oak'],
+  [65, 4, 'birch'],
+  [67, 8, 'oak'],
+  [7, 26, 'birch'],
+  [11, 29, 'oak'],
+  [28, 30, 'birch'],
+  [24, 27, 'oak'],
+  [49, 29, 'birch'],
+  [45, 26, 'oak'],
+];
+
 /**
  * The Old Road.
  *
@@ -98,113 +209,16 @@ const borderWithGaps = (m: MapData, gateCols: readonly number[]): void => {
  * player is never committed to one route by an invisible wall.
  */
 export const buildOldRoad = (): { map: MapData; objectLayers: MapObjectLayer[] } => {
-  const W = 72;
-  const H = 36;
-  const m = makeMap(W, H);
+  const m = makeMap(72, 36);
   const rng = makeRng(0x0d09);
 
-  borderWithGaps(m, [34, 35]);
+  borderWithGaps(m, [33, 34, 35]);
+  paintOldRoadRoutes(m);
 
-  // ── The exposed direct route ─────────────────────────────────────────────
-  // Dirt road along row 18, three cells wide so companions fit.
-  fillRect(m, 2, 17, W - 3, 19, G.DIRT);
-
-  // ── The woodland trail ───────────────────────────────────────────────────
-  // Leaves the road at cols 12-13, runs north-east through the trees, and
-  // rejoins at cols 46-47.
-  fillRect(m, 12, 10, 13, 19, G.DIRT);
-  fillRect(m, 12, 9, 47, 11, G.DIRT);
-  fillRect(m, 46, 11, 47, 19, G.DIRT);
-
-  // ── Shrine connector ─────────────────────────────────────────────────────
-  // North from the road junction to the shrine gate.
-  fillRect(m, 34, 2, 35, 17, G.DIRT);
-
-  // ── The culvert ──────────────────────────────────────────────────────────
-  // A stream cuts the direct route; the only crossing is the waystation bridge.
-  for (let r = 1; r <= H - 2; r++) {
-    for (let c = 20; c <= 23; c++) {
-      setTile(m, c, r, G.WATER);
-      block(m, c, r);
-    }
-  }
-  for (let c = 20; c <= 23; c++) {
-    for (let r = 17; r <= 19; r++) {
-      setTile(m, c, r, G.BRIDGE);
-      m.collision[r * W + c] = 0;
-    }
-  }
-
-  // ── The broken waystation ────────────────────────────────────────────────
-  // A stone shell with a collapsed east end: the wall run is deliberately
-  // incomplete, and debris spills out of the doorway.
-  fillRect(m, 54, 8, 62, 13, G.STONE_FLOOR);
-  for (let c = 53; c <= 62; c++) {
-    setTile(m, c, 7, G.STONE_WALL);
-    block(m, c, 7);
-  }
-  for (let r = 8; r <= 12; r++) {
-    setTile(m, 53, r, G.STONE_WALL);
-    block(m, 53, r);
-  }
-  // Collapsed east side: only two stubs of wall survive.
-  for (const r of [8, 12]) {
-    setTile(m, 63, r, G.STONE_WALL);
-    block(m, 63, r);
-  }
-  // Rubble across the fallen end.
-  for (const [c, r] of [
-    [63, 9],
-    [63, 10],
-    [63, 11],
-    [62, 13],
-    [61, 13],
-  ] as const) {
-    setTile(m, c, r, G.BRICK);
-    block(m, c, r);
-  }
-  // Doorway on the west wall.
-  for (const r of [10, 11]) {
-    setTile(m, 53, r, G.STONE_FLOOR);
-    m.collision[r * W + 53] = 0;
-  }
-
-  // ── Woodland and wear ────────────────────────────────────────────────────
-  scatter(m, rng, 2, 2, W - 3, H - 3, G.GRASS, G.GRASS_DARK, 0.12);
-  scatter(m, rng, 2, 2, W - 3, H - 3, G.GRASS, G.GRASS_VARIANT, 0.05);
-  // Ash and churned earth where the corruption has reached the road. `earth`
-  // is a terrain-channel material with no baked tile GID, so it is written as
-  // a terrain override rather than through `setTile`.
-  const roadOverrides: Array<[number, number, string]> = [];
-  for (let r = 4; r <= 16; r++) {
-    for (let c = 30; c <= 44; c++) {
-      if (m.ground[r * W + c] === G.GRASS && rng() < 0.25) {
-        roadOverrides.push([c, r, 'earth']);
-      }
-    }
-  }
-  m.terrainOverrides = roadOverrides;
-
-  // Tree stands lining the woodland trail, clear of both routes.
-  const trees: Array<[number, number, 'oak' | 'birch']> = [
-    [9, 6, 'oak'],
-    [16, 5, 'birch'],
-    [26, 6, 'oak'],
-    [28, 5, 'birch'],
-    [33, 6, 'oak'],
-    [40, 5, 'birch'],
-    [52, 5, 'oak'],
-    [60, 4, 'birch'],
-    [66, 9, 'oak'],
-    [8, 14, 'birch'],
-    [17, 22, 'oak'],
-    [26, 24, 'birch'],
-    [40, 23, 'oak'],
-    [55, 24, 'birch'],
-    [64, 26, 'oak'],
-    [30, 30, 'birch'],
-    [45, 30, 'oak'],
-  ];
+  carveCulvert(m);
+  raiseWaystation(m);
+  scatterRoadWear(m, rng);
+  const trees = OLD_ROAD_TREES;
 
   const objectLayers: MapObjectLayer[] = [
     {
@@ -225,8 +239,8 @@ export const buildOldRoad = (): { map: MapData; objectLayers: MapObjectLayer[] }
         placeProp(5, 'waystation_cart', 'Abandoned Cart', 'prop_cart.png', 61, 11),
         placeProp(6, 'waystation_barrel', 'Waystation Barrel', 'prop_barrel.png', 55, 9),
         placeProp(9, 'tess_component', 'Intact Ward Component', 'prop_component.png', 57, 11),
-        placeProp(20, 'waystation_crate', 'Crate', 'crate.png', 56, 12),
-        placeProp(21, 'waystation_crate_2', 'Crate', 'crate.png', 60, 8),
+        placeProp(20, 'waystation_crate', 'Crate', 'prop_crate.png', 56, 12),
+        placeProp(21, 'waystation_crate_2', 'Crate', 'prop_crate.png', 60, 8),
         placeProp(22, 'waystation_support', 'Rotting Support', 'prop_support.png', 59, 12),
         placeLandmark(23, 'road_notice', 'Road Marker', 'prop_notice_board.png', 32, 20),
 
@@ -248,14 +262,14 @@ export const buildOldRoad = (): { map: MapData; objectLayers: MapObjectLayer[] }
           targetMap: 'village',
           targetSpawnId: 'from_old_road',
           target: { x: cell(32), y: cell(3) },
-          at: { c: 34, r: H - 1, width: 2, height: 1 },
+          at: { c: 33, r: m.height - 1, width: 3, height: 1 },
         }),
         placeTransition({
           id: 1008,
           targetMap: 'ruined_shrine',
           targetSpawnId: 'ruin_from_old_road',
           target: { x: cell(19), y: cell(34) },
-          at: { c: 34, r: 0, width: 2, height: 1 },
+          at: { c: 33, r: 0, width: 3, height: 1 },
         }),
       ],
     },
@@ -268,112 +282,158 @@ export const buildOldRoad = (): { map: MapData; objectLayers: MapObjectLayer[] }
 // ruined_shrine — 40×36
 // ---------------------------------------------------------------------------
 
-/**
- * The Ruined Shrine.
- *
- * A gravel forecourt ringed by collapsed cloister fragments, a raised stone
- * ritual apron at the centre with the ward socket as its focal point, and the
- * shrine arch standing over the socket. Two approaches lead in — the main south
- * path and a broken north-west side aisle — and both reach the apron, so the
- * ritual area is readable from more than one direction.
- *
- * Nemi stands just inside the south entrance, on the safe side of the rubble.
- */
-export const buildRuinedShrine = (): { map: MapData; objectLayers: MapObjectLayer[] } => {
-  const W = 40;
-  const H = 36;
-  const m = makeMap(W, H);
-  const rng = makeRng(0x5c11);
+/** Per-row spans for the shrine courtyard (`[row, c0, c1]`), tapering to the gate. */
+const SHRINE_COURTYARD_SPANS: ReadonlyArray<readonly [number, number, number]> = [
+  [10, 11, 28],
+  [11, 10, 29],
+  [12, 10, 29],
+  [13, 9, 30],
+  [14, 9, 30],
+  [15, 9, 30],
+  [16, 9, 30],
+  [17, 9, 30],
+  [18, 9, 30],
+  [19, 9, 30],
+  [20, 9, 30],
+  [21, 9, 30],
+  [22, 10, 29],
+  [23, 10, 29],
+  [24, 11, 28],
+  [25, 12, 27],
+  [26, 13, 26],
+  [27, 14, 25],
+  [28, 15, 24],
+];
 
-  borderWithGaps(m, [19, 20]);
+/** Per-row spans for the octagonal ritual apron (`[row, c0, c1]`). */
+const SHRINE_APRON_SPANS: ReadonlyArray<readonly [number, number, number]> = [
+  [14, 17, 22],
+  [15, 16, 23],
+  [16, 15, 24],
+  [17, 15, 24],
+  [18, 15, 24],
+  [19, 15, 24],
+  [20, 15, 24],
+  [21, 15, 24],
+  [22, 15, 24],
+  [23, 16, 23],
+  [24, 17, 22],
+];
 
-  // ── Gravel forecourt and the scarred ritual apron ────────────────────────
-  const overrides: Array<[number, number, string]> = [];
-  for (let r = 6; r <= 30; r++) {
-    for (let c = 6; c <= 33; c++) {
-      overrides.push([c, r, 'gravel']);
-    }
+/** Broken cloister wall runs (`[c0, r0, c1, r1]`), uneven and gapped. */
+const SHRINE_CLOISTER_FRAGMENTS: ReadonlyArray<readonly [number, number, number, number]> = [
+  [12, 9, 16, 9],
+  [23, 9, 27, 9],
+  [10, 12, 10, 15],
+  [10, 21, 10, 25],
+  [29, 12, 29, 15],
+  [29, 21, 29, 25],
+  [13, 26, 16, 26],
+  [23, 26, 26, 26],
+  [13, 12, 14, 12],
+  [25, 12, 26, 12],
+  [13, 27, 15, 27],
+];
+
+/** Fallen columns and rubble cells around the apron (`[c, r]`, walk-blocking). */
+const SHRINE_RUBBLE: ReadonlyArray<readonly [number, number]> = [
+  [13, 14],
+  [26, 14],
+  [13, 25],
+  [26, 25],
+  [17, 12],
+  [22, 12],
+  [17, 27],
+  [22, 27],
+  [9, 20],
+  [31, 24],
+  [32, 12],
+  [7, 14],
+  [11, 18],
+  [28, 16],
+  [18, 8],
+  [23, 29],
+];
+
+/** The scorched ward-scar cells around the socket (`[c, r]`). */
+const SHRINE_WARD_SCAR: ReadonlyArray<readonly [number, number]> = [
+  [19, 14],
+  [20, 14],
+  [19, 25],
+  [20, 25],
+  [14, 19],
+  [14, 20],
+  [25, 19],
+  [25, 20],
+];
+
+/** Earthen courtyard, tapering toward the gate, one span per row. */
+const paintShrineCourtyard = (m: MapData): void => {
+  for (const [r, c0, c1] of SHRINE_COURTYARD_SPANS) {
+    fillRect(m, c0, r, c1, r, G.DIRT);
   }
-  // Corrupted ground: earth rings the apron where the ward has failed.
-  for (let r = 12; r <= 26; r++) {
-    for (let c = 12; c <= 27; c++) {
-      overrides.push([c, r, 'earth']);
-    }
+};
+
+/** The raised octagonal stone apron and its flagstone wear. */
+const raiseShrineApron = (m: MapData, rng: () => number): void => {
+  for (const [r, c0, c1] of SHRINE_APRON_SPANS) {
+    fillRect(m, c0, r, c1, r, G.STONE_FLOOR);
   }
-  m.terrainOverrides = overrides;
+  scatter(m, rng, 16, 16, 23, 23, G.STONE_FLOOR, G.FLAGSTONE, 0.16);
+};
 
-  // The raised ritual apron.
-  fillRect(m, 15, 15, 24, 24, G.STONE_FLOOR);
-  // Flagstone wear inside it.
-  scatter(m, rng, 16, 16, 23, 23, G.STONE_FLOOR, G.FLAGSTONE, 0.18);
+/** The processional south path, gate threshold and the broken side aisles. */
+const layShrineApproaches = (m: MapData): void => {
+  fillRect(m, 19, 24, 21, m.height - 1, G.STONE_FLOOR);
+  fillRect(m, 18, 32, 22, 33, G.FLAGSTONE);
+  fillRect(m, 8, 9, 9, 15, G.STONE_FLOOR);
+  fillRect(m, 9, 15, 15, 16, G.STONE_FLOOR);
+  fillRect(m, 25, 18, 30, 19, G.STONE_FLOOR);
+  fillRect(m, 29, 8, 30, 18, G.STONE_FLOOR);
+};
 
-  // ── Approaches ───────────────────────────────────────────────────────────
-  // Main south path: a four-cell apron inside the map, narrowing to the two
-  // gate columns through the wall-top rim and the border row.
-  fillRect(m, 18, 25, 21, H - 3, G.STONE_FLOOR);
-  fillRect(m, 19, H - 2, 20, H - 1, G.STONE_FLOOR);
-  // Broken north-west side aisle: enters past the collapsed cloister.
-  fillRect(m, 8, 9, 9, 16, G.STONE_FLOOR);
-  fillRect(m, 9, 16, 16, 17, G.STONE_FLOOR);
-  // East side aisle to the apron's other edge.
-  fillRect(m, 25, 18, 31, 19, G.STONE_FLOOR);
-  fillRect(m, 30, 8, 31, 19, G.STONE_FLOOR);
-
-  // ── Collapsed cloister ───────────────────────────────────────────────────
-  // Wall fragments, each with a stub and a broken end, so the ruin reads as
-  // fallen masonry rather than a tidy corridor.
-  const fragments: Array<[number, number, number, number]> = [
-    [10, 12, 13, 12],
-    [26, 12, 29, 12],
-    [10, 27, 13, 27],
-    [26, 27, 29, 27],
-    [11, 13, 11, 15],
-    [28, 13, 28, 15],
-    [11, 24, 11, 26],
-    [28, 24, 28, 26],
-    [14, 6, 17, 6],
-    [23, 6, 26, 6],
-  ];
-  for (const [c0, r0, c1, r1] of fragments) {
+/** Collapsed cloister walls and the fallen columns around the apron. */
+const layCloister = (m: MapData): void => {
+  for (const [c0, r0, c1, r1] of SHRINE_CLOISTER_FRAGMENTS) {
     fillRect(m, c0, r0, c1, r1, G.STONE_WALL);
     blockRect(m, c0, r0, c1, r1);
   }
-  // Fallen columns and rubble around the apron (walk-blocking, single cells).
-  const rubble: Array<[number, number]> = [
-    [13, 14],
-    [26, 14],
-    [13, 25],
-    [26, 25],
-    [17, 12],
-    [22, 12],
-    [17, 27],
-    [22, 27],
-    [9, 20],
-    [31, 24],
-    [32, 12],
-    [7, 14],
-  ];
-  for (const [c, r] of rubble) {
+  for (const [c, r] of SHRINE_RUBBLE) {
     setTile(m, c, r, G.COLUMN);
     block(m, c, r);
   }
+};
 
-  // ── Ward scar ────────────────────────────────────────────────────────────
-  // A ring of scorched, cracked ground around the socket.
-  // `earth` carries no baked tile GID — it is a terrain-channel material.
-  m.terrainOverrides = [
-    ...(m.terrainOverrides ?? []),
-    [19, 14, 'earth'],
-    [20, 14, 'earth'],
-    [19, 25, 'earth'],
-    [20, 25, 'earth'],
-    [14, 19, 'earth'],
-    [14, 20, 'earth'],
-    [25, 19, 'earth'],
-    [25, 20, 'earth'],
-  ];
+/** The scorched ward scar and the surrounding grass variation. */
+const scarWard = (m: MapData, rng: () => number): void => {
+  for (const [c, r] of SHRINE_WARD_SCAR) {
+    setTile(m, c, r, G.SAND);
+  }
+  scatter(m, rng, 2, 2, m.width - 3, m.height - 3, G.GRASS, G.GRASS_DARK, 0.1);
+};
 
-  scatter(m, rng, 7, 7, W - 8, H - 7, G.GRASS, G.GRASS_DARK, 0.1);
+/**
+ * The Ruined Shrine.
+ *
+ * A walled compound whose cloister has fallen in: a gravel courtyard that
+ * tapers from the south gate toward the ritual apron, corrupted earth ringing
+ * the raised stone platform, and broken wall fragments that read as collapsed
+ * masonry rather than a tidy corridor. The shrine arch frames the ward socket
+ * on the apron; the south path is the processional approach, and a broken
+ * north-west aisle and an east aisle give the ruin more than one way in.
+ *
+ * Nemi stands on the apron, tending the shrine rather than guarding the gate.
+ */
+export const buildRuinedShrine = (): { map: MapData; objectLayers: MapObjectLayer[] } => {
+  const m = makeMap(40, 36);
+  const rng = makeRng(0x5c11);
+
+  borderWithGaps(m, [19, 20, 21]);
+  paintShrineCourtyard(m);
+  raiseShrineApron(m, rng);
+  layShrineApproaches(m);
+  layCloister(m);
+  scarWard(m, rng);
 
   const objectLayers: MapObjectLayer[] = [
     {
@@ -382,17 +442,17 @@ export const buildRuinedShrine = (): { map: MapData; objectLayers: MapObjectLaye
       visible: true,
       objects: [
         placeSpawn(1, 'ruin_from_old_road', 19, 34),
-        // Nemi stands just inside the entrance, on the safe side of the rubble.
-        placeNpc(2, 'shrine_keeper_nemi', 'Nemi the Shrine Keeper', 'nemi_greeting', 21, 28),
+        // Nemi tends the shrine from the apron, west of the socket.
+        placeNpc(2, 'shrine_keeper_nemi', 'Nemi the Shrine Keeper', 'nemi_greeting', 16, 21),
         // The focal socket and the arch that frames it.
         placeLandmark(4, 'ward_socket', 'Ward Socket', 'prop_ward_socket.png', 20, 20),
         placeLandmark(3, 'shrine_arch', 'Shrine Arch', 'shrine_arch.png', 19, 18),
         // Clutter: fallen masonry and the remains of the cloister garden.
         placeProp(30, 'shrine_brazier', 'Brazier', 'prop_brazier.png', 17, 23),
-        placeProp(31, 'shrine_barrel', 'Barrel', 'prop_barrel.png', 26, 22),
-        placeProp(32, 'shrine_crate', 'Crate', 'crate.png', 12, 8),
-        placeProp(33, 'shrine_oak', 'Woodland Oak', 'oak.png', 5, 30),
-        placeProp(34, 'shrine_birch', 'Woodland Birch', 'birch.png', 34, 31),
+        placeProp(31, 'shrine_barrel', 'Barrel', 'prop_barrel.png', 27, 11),
+        placeProp(32, 'shrine_crate', 'Crate', 'prop_crate.png', 12, 10),
+        placeProp(33, 'shrine_oak', 'Woodland Oak', 'oak.png', 4, 29),
+        placeProp(34, 'shrine_birch', 'Woodland Birch', 'birch.png', 35, 30),
       ],
     },
     {
@@ -405,7 +465,7 @@ export const buildRuinedShrine = (): { map: MapData; objectLayers: MapObjectLaye
           targetMap: 'old_road',
           targetSpawnId: 'old_road_to_shrine',
           target: { x: cell(34), y: cell(2) },
-          at: { c: 19, r: H - 1, width: 2, height: 1 },
+          at: { c: 19, r: m.height - 1, width: 3, height: 1 },
         }),
       ],
     },
