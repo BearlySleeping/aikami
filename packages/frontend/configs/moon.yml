@@ -18,13 +18,6 @@ dependsOn:
   - "schemas"
   - "types"
 
-fileGroups:
-  sources:
-    - "src/**/*"
-  configs:
-    - "package.json"
-    - "tsconfig.json"
-
 tasks:
   test:
     command: "bun test"
