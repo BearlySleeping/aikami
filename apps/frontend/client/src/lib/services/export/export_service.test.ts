@@ -9,9 +9,13 @@ const mockListChats = mock(async (_uid: string) => []);
 
 const executedSql: string[] = [];
 const mockFlush = mock(async () => {});
+const transactionStarted = Promise.withResolvers<void>();
+const releaseTransaction = Promise.withResolvers<void>();
 const mockDb = {
   transaction: mock(async (queries: readonly { sql: string }[]) => {
     executedSql.push(...queries.map((query) => query.sql));
+    transactionStarted.resolve();
+    await releaseTransaction.promise;
   }),
   flush: mockFlush,
 };
@@ -44,11 +48,16 @@ test('sign-out blocks bulk backup before prior-account chats are read', async ()
   expect(mockListChats).not.toHaveBeenCalled();
 });
 
-test('deleteAllLocalData clears every table and flushes before resolving', async () => {
+test('deleteAllLocalData clears every table and flushes after the transaction settles', async () => {
   executedSql.length = 0;
   mockFlush.mockClear();
 
-  await exportService.deleteAllLocalData();
+  const deletion = exportService.deleteAllLocalData();
+  await transactionStarted.promise;
+  expect(mockFlush).not.toHaveBeenCalled();
+
+  releaseTransaction.resolve();
+  await deletion;
 
   // The reported regression: campaigns survived a delete + immediate reload
   // because the debounced IndexedDB snapshot was never flushed.
@@ -56,10 +65,4 @@ test('deleteAllLocalData clears every table and flushes before resolving', async
   expect(executedSql).toContain('DELETE FROM game_operations');
   expect(executedSql).toContain('DELETE FROM generation_candidates');
   expect(mockFlush).toHaveBeenCalledTimes(1);
-
-  // The flush must be awaited strictly after the deletes commit, or the
-  // reload races the snapshot write.
-  expect(mockDb.transaction.mock.invocationCallOrder[0]).toBeLessThan(
-    mockFlush.mock.invocationCallOrder[0],
-  );
 });

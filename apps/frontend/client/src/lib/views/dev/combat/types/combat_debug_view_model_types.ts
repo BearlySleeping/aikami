@@ -146,6 +146,7 @@ export type CombatDebugViewModelInterface = BaseViewModelInterface & {
   // Actions
   initialize(): Promise<void>;
   initializeLiveCanvas(canvas: HTMLCanvasElement): Promise<void>;
+  attachLiveCanvas(canvas: HTMLCanvasElement): void;
   setMode(mode: CombatDebugMode): void;
   selectScenario(scenarioId: string): void;
   setSeed(seed: number): void;

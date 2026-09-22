@@ -148,6 +148,29 @@ describe('debug_scene_overlay — actor tokens', () => {
     expect(textOf(withIds).some((text) => text.includes('emberwatch:goblin-1'))).toBe(true);
     expect(textOf(withoutIds)).toEqual(['Goblin']);
   });
+
+  test('defeated is the terminal label when an actor is also downed', () => {
+    const actor = {
+      id: 'goblin',
+      label: 'Goblin',
+      cell: { x: 1, y: 1 },
+      team: 'enemy' as const,
+      hp: 0,
+      maxHp: 5,
+      active: false,
+      selected: false,
+      downed: true,
+      defeated: true,
+    };
+    const defeated = textOf(buildDebugSceneActorShapes(spec({ actors: [actor] })));
+    const downed = textOf(
+      buildDebugSceneActorShapes(spec({ actors: [{ ...actor, defeated: false }] })),
+    );
+
+    expect(defeated).toContain('Goblin (defeated)');
+    expect(defeated).not.toContain('Goblin (downed)');
+    expect(downed).toContain('Goblin (downed)');
+  });
 });
 
 describe('debug_scene_overlay — rendering', () => {

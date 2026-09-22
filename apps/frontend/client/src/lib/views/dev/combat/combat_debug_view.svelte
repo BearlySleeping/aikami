@@ -19,7 +19,6 @@
 //
 // Contract: combat debug workspace (execution plan §3–§8)
 
-import { untrack } from 'svelte';
 import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
 import CombatSidebar from '$views/combat/combat_sidebar.svelte';
 import EnrichedLogEntry from '$views/combat/components/enriched_log_entry.svelte';
@@ -214,9 +213,10 @@ const { viewModel }: Props = $props();
               new element instead of leaving a disposed world behind a dead
               canvas.
 
-              The boot MUST run inside `untrack`. An attachment is evaluated
-              inside a Svelte effect, so any reactive read it performs becomes a
-              dependency: `initializeLiveCanvas` → `_bootLiveSession` reads
+              The ViewModel's attachment method MUST run the boot inside
+              `untrack`. An attachment is evaluated inside a Svelte effect, so
+              any reactive read it performs becomes a dependency:
+              `initializeLiveCanvas` → `_bootLiveSession` reads
               `mode`/`combatViewModel` and then writes `combatViewModel`, so a
               tracked boot re-runs its own effect and loops forever
               booting/disposing the world. The keyed canvas alone decides when a
@@ -226,11 +226,7 @@ const { viewModel }: Props = $props();
               <canvas
                 id="combat-debug-canvas"
                 class="h-full w-full"
-                {@attach (element) => {
-                  untrack(() => {
-                    void viewModel.initializeLiveCanvas(element);
-                  });
-                }}
+                {@attach (element) => viewModel.attachLiveCanvas(element)}
                 aria-label="Combat debug live canvas"
               ></canvas>
             {/key}

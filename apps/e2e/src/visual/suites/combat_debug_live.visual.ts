@@ -11,27 +11,11 @@
 //
 // Contract: combat debug workspace (execution prompt §14, §15)
 
-import { Type } from 'typebox';
+import { BattlefieldSchema } from '@aikami/schemas';
+import type { Page } from 'playwright';
 import { defineConfig } from '$visual/core/config';
 
 // ── Schema ───────────────────────────────────────────────────
-
-const BattlefieldSchema = Type.Object({
-  score: Type.Number({ description: '0-100 score of battlefield presentation correctness' }),
-  boardVisible: Type.Boolean({
-    description: 'Whether a bounded tactical board is visible (not a blank/black pane)',
-  }),
-  tokensVisible: Type.Boolean({
-    description: 'Whether distinct actor tokens are visible on the board',
-  }),
-  blockedCellsVisible: Type.Boolean({
-    description: 'Whether blocked/obstacle cells are visibly marked on the board',
-  }),
-  authoredScene: Type.Boolean({
-    description: 'Whether a real authored map scene (not a synthetic board) is visible',
-  }),
-  issues: Type.Array(Type.String(), { description: 'List of visual issues detected' }),
-});
 
 // ── Prompts ──────────────────────────────────────────────────
 
@@ -88,7 +72,7 @@ const AUTHORED_PROMPT = [
 /** Selects a synthetic scenario and waits for its board projection. */
 const bootSyntheticScenario =
   (scenarioId: string, width: number, height: number) =>
-  async (page: import('playwright').Page): Promise<void> => {
+  async (page: Page): Promise<void> => {
     await page.selectOption('#combat-debug-scenario', scenarioId);
     await page.waitForFunction(
       (expected: string) =>
@@ -110,8 +94,34 @@ const bootSyntheticScenario =
     await page.waitForTimeout(1_000);
   };
 
+/** Polls the authored battlefield until the engine is ready or reports an error. */
+const waitForAuthoredBattlefieldReady = async (page: Page): Promise<void> => {
+  const timeoutAt = Date.now() + 90_000;
+  let status = '';
+  while (Date.now() < timeoutAt) {
+    const snapshot = await page.evaluate(() => ({
+      engineError:
+        document.querySelector('[data-testid="combat-debug-engine-error"]')?.textContent?.trim() ??
+        '',
+      status:
+        document.querySelector('[data-testid="combat-debug-status-label"]')?.textContent?.trim() ??
+        '',
+    }));
+    const engineError = snapshot.engineError;
+    if (engineError) {
+      throw new Error(`Authored combat battlefield failed to initialize: ${engineError}`);
+    }
+    status = snapshot.status;
+    if (status === 'Ready') {
+      return;
+    }
+    await page.waitForTimeout(100);
+  }
+  throw new Error(`Authored combat battlefield did not become Ready (last status: ${status})`);
+};
+
 /** Selects the authored scenario and waits for the real map to load. */
-const bootAuthoredScenario = async (page: import('playwright').Page): Promise<void> => {
+const bootAuthoredScenario = async (page: Page): Promise<void> => {
   await page.selectOption('#combat-debug-scenario', 'emberwatch-proof');
   await page.waitForFunction(
     () =>
@@ -122,7 +132,7 @@ const bootAuthoredScenario = async (page: import('playwright').Page): Promise<vo
     undefined,
     { timeout: 90_000 },
   );
-  await page.waitForTimeout(1_500);
+  await waitForAuthoredBattlefieldReady(page);
 };
 
 // ── Suite ────────────────────────────────────────────────────

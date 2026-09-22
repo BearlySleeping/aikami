@@ -137,11 +137,11 @@ const hpStripColor = (ratio: number): number => {
 
 /** Short state suffix for a token label (never invents a state). */
 const actorStateSuffix = (actor: DebugSceneActor): string => {
-  if (actor.downed) {
-    return ' (downed)';
-  }
   if (actor.defeated) {
     return ' (defeated)';
+  }
+  if (actor.downed) {
+    return ' (downed)';
   }
   return '';
 };

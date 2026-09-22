@@ -123,7 +123,7 @@ export class DebugSceneController {
   getDiagnostics(): GameWorldViewportDiagnostics {
     const canvas = this._accessors.getApp()?.canvas;
     const app = this._accessors.getApp();
-    const camera = this._accessors.getCamera();
+    const camera = this._camera ?? this._accessors.getCamera();
     return {
       renderer: this._accessors.getRenderer(),
       cssWidth: canvas?.clientWidth ?? 0,

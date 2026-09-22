@@ -23,78 +23,6 @@ const { viewModel }: Props = $props();
 
 /** Drop targets, in layout order. */
 const DROP_ANCHORS: readonly HudSlot[] = HUD_ANCHOR_ORDER;
-
-/**
- * Resolves the drop region under a viewport point.
- *
- * Pointer capture routes the `pointerup` to the drag SOURCE, so the browser
- * does not tell us which region the pointer is over. `elementFromPoint` does —
- * which makes the whole region a reliable drop target instead of only the small
- * chip, the difference between "drag works" and "drag only works if you land
- * exactly on the box".
- */
-const anchorAtPoint = (clientX: number, clientY: number): HudSlot | undefined => {
-  const host = document
-    .elementFromPoint(clientX, clientY)
-    ?.closest<HTMLElement>('[data-hud-drop-anchor]');
-  const anchor = host?.dataset.hudDropAnchor;
-  return DROP_ANCHORS.find((candidate) => candidate === anchor);
-};
-
-/**
- * Pointer drag.
- *
- * Deliberately pointer events, not HTML5 drag-and-drop: `draggable` + `drop`
- * needs a `dataTransfer` payload the browser only produces for a native drag,
- * which touch and some embedded webviews never start. Pointer events give the
- * same affordance to mouse, touch and pen, and the keyboard/controller paths
- * already cover the rest.
- *
- * The source captures the pointer so the gesture survives leaving the list, and
- * the drop region is resolved on release from the actual pointer position.
- */
-const onPointerDown = (event: PointerEvent, widgetId: string): void => {
-  if (event.pointerType === 'mouse' && event.button !== 0) {
-    return;
-  }
-  // The row also hosts selects and buttons. Those own their gesture; only the
-  // row body starts a drag.
-  const target = event.target;
-  if (target instanceof Element && target.closest('button, select, input, textarea, a')) {
-    return;
-  }
-  event.preventDefault();
-  const source = event.currentTarget;
-  if (source instanceof HTMLElement) {
-    source.setPointerCapture(event.pointerId);
-  }
-  viewModel.beginDrag(widgetId as Parameters<typeof viewModel.beginDrag>[0]);
-};
-
-/** Ends a drag: drops on the region under the pointer, or cancels cleanly. */
-const onDragPointerUp = (event: PointerEvent, anchor?: HudSlot): void => {
-  if (!viewModel.isDragging) {
-    return;
-  }
-  const target = anchor ?? anchorAtPoint(event.clientX, event.clientY);
-  if (target) {
-    viewModel.dropOnAnchor(target);
-    return;
-  }
-  viewModel.endDrag();
-};
-
-/** Tracks the pointer so the ghost follows it and its target region highlights. */
-const onDragPointerMove = (event: PointerEvent): void => {
-  if (!viewModel.isDragging) {
-    return;
-  }
-  viewModel.updateDrag({
-    x: event.clientX,
-    y: event.clientY,
-    anchor: anchorAtPoint(event.clientX, event.clientY),
-  });
-};
 </script>
 
 <BaseViewModelContainer {viewModel}>
@@ -106,16 +34,7 @@ const onDragPointerMove = (event: PointerEvent): void => {
     tabindex="-1"
     data-testid="hud-editor"
     data-hud-dragging={viewModel.isDragging ? 'true' : 'false'}
-    onkeydown={(event: KeyboardEvent) => {
-  // Let a focused control (select, input, button, link) keep its own keys —
-  // otherwise Tab/arrows would hijack the placement select and the scale
-  // controls instead of operating them.
-  const target = event.target;
-  if (target instanceof Element && target.closest('select, input, textarea, button, a')) {
-    return;
-  }
-  viewModel.handleKeyDown(event);
-}}
+    onkeydown={(event: KeyboardEvent) => viewModel.handleEditorKeyDown(event)}
   >
     <div class="modal-box w-full max-w-4xl max-h-[90vh] overflow-y-auto">
       <div class="flex items-center justify-between mb-3">
@@ -200,7 +119,7 @@ const onDragPointerMove = (event: PointerEvent): void => {
                 data-hud-drop-hover={viewModel.dragPosition?.anchor === anchor ? 'true' : 'false'}
                 title="Drop region {anchor}"
                 role="presentation"
-                onpointerup={(event: PointerEvent) => onDragPointerUp(event, anchor)}
+                onpointerup={(event: PointerEvent) => viewModel.handleDragPointerUp(event)}
               >
                 {#each viewModel.previewLayout.widgets.filter((widget) => widget.anchor === anchor) as widget (widget.widgetId)}
                   <!-- svelte-ignore a11y_no_static_element_interactions a11y_no_noninteractive_element_interactions -->
@@ -212,10 +131,11 @@ const onDragPointerMove = (event: PointerEvent): void => {
                       viewModel.selectedWidgetId === widget.widgetId}
                     data-testid="hud-preview-{widget.widgetId}"
                     data-hud-anchor={widget.anchor}
+                    data-hud-drag-source={widget.widgetId}
                     title="Drag {widget.label} to another region"
-                    onpointerdown={(event: PointerEvent) => onPointerDown(event, widget.widgetId)}
-                    onpointermove={onDragPointerMove}
-                    onpointerup={(event: PointerEvent) => onDragPointerUp(event)}
+                    onpointerdown={(event: PointerEvent) => viewModel.handlePointerDown(event)}
+                    onpointermove={(event: PointerEvent) => viewModel.handleDragPointerMove(event)}
+                    onpointerup={(event: PointerEvent) => viewModel.handleDragPointerUp(event)}
                     onpointercancel={() => viewModel.endDrag()}
                   >
                     {widget.label}
@@ -247,15 +167,11 @@ const onDragPointerMove = (event: PointerEvent): void => {
                   data-testid="hud-editor-row-{row.widgetId}"
                   data-hud-drag-source={row.widgetId}
                   title="Drag {row.label} onto a region"
-                  onpointerdown={(event: PointerEvent) => onPointerDown(event, row.widgetId)}
-                  onpointermove={onDragPointerMove}
-                  onpointerup={(event: PointerEvent) => onDragPointerUp(event)}
+                  onpointerdown={(event: PointerEvent) => viewModel.handlePointerDown(event)}
+                  onpointermove={(event: PointerEvent) => viewModel.handleDragPointerMove(event)}
+                  onpointerup={(event: PointerEvent) => viewModel.handleDragPointerUp(event)}
                   onpointercancel={() => viewModel.endDrag()}
-                  onkeydown={(event: KeyboardEvent) => {
-  if (event.key === 'Enter' || event.key === ' ') {
-    viewModel.selectWidget(row.widgetId);
-  }
-}}
+                  onkeydown={(event: KeyboardEvent) => viewModel.handleWidgetRowKeyDown(event)}
                 >
                   <span
                     class="select-none text-base-content/40"

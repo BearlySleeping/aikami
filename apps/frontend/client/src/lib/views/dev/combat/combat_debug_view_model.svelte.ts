@@ -27,6 +27,7 @@ import type {
 } from '@aikami/frontend/engine';
 import { BaseViewModel } from '@aikami/frontend/services/base';
 import type { CombatReproduction, CombatState } from '@aikami/types';
+import { untrack } from 'svelte';
 import type { CombatViewModelInterface } from '$views/combat/combat_view_model.svelte';
 import {
   buildCombatDebugBattlefieldDiagnostics,
@@ -224,6 +225,13 @@ class CombatDebugViewModel
       return;
     }
     await this._bootLiveSession(canvas);
+  }
+
+  /** Boots an attached canvas without making the attachment effect track ViewModel reads. */
+  attachLiveCanvas(canvas: HTMLCanvasElement): void {
+    untrack(() => {
+      void this.initializeLiveCanvas(canvas);
+    });
   }
 
   setMode(mode: CombatDebugMode): void {

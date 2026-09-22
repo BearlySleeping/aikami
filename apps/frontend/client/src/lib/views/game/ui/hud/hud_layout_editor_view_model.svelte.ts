@@ -31,6 +31,10 @@ import {
   type HudEditorCommand,
 } from '$lib/utils/hud/hud_layout_state.ts';
 import { resolveGameHudLayout } from '../hud_layout_bridge.ts';
+import {
+  createHudLayoutEditorInteractionAdapter,
+  type HudLayoutEditorInteractionAdapter,
+} from './hud_layout_editor_interaction.ts';
 
 /** The fixture contexts the editor can preview. Presentation only. */
 export const HUD_PREVIEW_CONTEXTS = ['explore', 'dialogue', 'combat'] as const;
@@ -93,9 +97,9 @@ export type HudEditorWidgetRow = {
 /**
  * Live pointer state for the drag ghost.
  *
- * `anchor` is the region under the pointer right now (resolved by the view,
- * which owns DOM hit-testing); the ViewModel only holds the value so the ghost
- * and the highlighted region can be rendered without view-local state.
+ * `anchor` is the region under the pointer right now (resolved by the DOM
+ * interaction adapter); the ViewModel only holds the value so the ghost and
+ * the highlighted region can be rendered without view-local state.
  */
 export type HudEditorDragPosition = {
   readonly x: number;
@@ -140,6 +144,11 @@ export type HudLayoutEditorViewModelInterface = BaseViewModelInterface & {
   selectAdjacentWidget(direction: 1 | -1): void;
   setPreviewContext(context: HudPreviewContext): void;
   dispatch(command: HudEditorCommand): void;
+  handleEditorKeyDown(event: KeyboardEvent): void;
+  handleWidgetRowKeyDown(event: KeyboardEvent): void;
+  handlePointerDown(event: PointerEvent): void;
+  handleDragPointerUp(event: PointerEvent): void;
+  handleDragPointerMove(event: PointerEvent): void;
   handleKeyDown(event: KeyboardEvent): void;
   handleGamepadAction(action: HudEditorGamepadAction): void;
   beginDrag(widgetId: HudWidgetId): void;
@@ -194,6 +203,7 @@ class HudLayoutEditorViewModel
   private readonly _onClose: () => void;
   private readonly _view: HudEditorViewportCapabilities;
   private readonly _capabilities: readonly string[];
+  private readonly _interactionAdapter: HudLayoutEditorInteractionAdapter;
   private readonly _pressedGamepadButtons = new Set<number>();
   private _gamepadPollTimer: number | undefined;
 
@@ -221,6 +231,7 @@ class HudLayoutEditorViewModel
     this._onClose = options.onClose;
     this._view = options.view;
     this._capabilities = options.capabilities;
+    this._interactionAdapter = createHudLayoutEditorInteractionAdapter();
     this.dormantWidgetIds = options.dormantWidgetIds;
     // Opening the editor starts an edit session, so the draft always equals the
     // committed snapshot when the surface appears.
@@ -370,6 +381,31 @@ class HudLayoutEditorViewModel
     this._hud.dispatch(command);
     this.revision += 1;
     this.statusMessage = undefined;
+  }
+
+  /** Routes editor-level keys through the DOM focus policy. */
+  handleEditorKeyDown(event: KeyboardEvent): void {
+    this._interactionAdapter.handleEditorKeyDown({ event, target: this });
+  }
+
+  /** Selects a row from its keyboard activation event. */
+  handleWidgetRowKeyDown(event: KeyboardEvent): void {
+    this._interactionAdapter.handleWidgetRowKeyDown({ event, target: this });
+  }
+
+  /** Begins a pointer drag through the DOM interaction adapter. */
+  handlePointerDown(event: PointerEvent): void {
+    this._interactionAdapter.handlePointerDown({ event, target: this });
+  }
+
+  /** Resolves and applies the pointer's current drop target. */
+  handleDragPointerUp(event: PointerEvent): void {
+    this._interactionAdapter.handleDragPointerUp({ event, target: this });
+  }
+
+  /** Updates the drag ghost and hover target from pointer coordinates. */
+  handleDragPointerMove(event: PointerEvent): void {
+    this._interactionAdapter.handleDragPointerMove({ event, target: this });
   }
 
   /**
