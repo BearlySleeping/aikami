@@ -209,3 +209,62 @@ export const buildCombatDebugSceneSpec = (
 /** Counts authoritative combatants for render-parity diagnostics. */
 export const countCombatDebugCombatants = (state: CombatState | undefined): number =>
   state === undefined ? 0 : Object.keys(state.combatants).length;
+
+/**
+ * The scene-application surface a projection is painted through. Structural so
+ * this module never depends on the session layer — the ViewModel's session and
+ * the tests' doubles both satisfy it.
+ */
+export type CombatDebugSceneSink = {
+  applyDebugScene(spec: DebugSceneSpec | undefined): void;
+};
+
+export type ApplyCombatDebugBattlefieldSceneInput = {
+  /** The session to paint; `undefined` leaves the caller's count untouched. */
+  readonly session: CombatDebugSceneSink | undefined;
+  readonly battlefield: CombatDebugBattlefieldSource;
+  readonly state: CombatState | undefined;
+  readonly layers: DebugSceneOverlayLayers;
+  readonly activeCombatantId: string | undefined;
+  readonly selection:
+    | {
+        readonly legalEndpoints: readonly GridPoint[];
+        readonly legalTargetCells: readonly GridPoint[];
+      }
+    | undefined;
+};
+
+/**
+ * Projects the authoritative board and hands it to the session, reporting how
+ * many actors were drawn. Authored scenarios clear the debug scene (their real
+ * map is authoritative); a scenario with no usable board paints nothing.
+ *
+ * Returns `undefined` when there is no session or no board to paint, so the
+ * caller never clears a projection it did not replace.
+ */
+export const applyCombatDebugBattlefieldScene = (
+  input: ApplyCombatDebugBattlefieldSceneInput,
+): number | undefined => {
+  if (input.session === undefined) {
+    return undefined;
+  }
+  if (input.battlefield.kind !== 'synthetic') {
+    input.session.applyDebugScene(undefined);
+    return 0;
+  }
+  const spec = buildCombatDebugSceneSpec({
+    state: input.state,
+    syntheticBattlefield: input.battlefield,
+    layers: input.layers,
+    activeCombatantId: input.activeCombatantId,
+    selectedCombatantId: undefined,
+    targetedCombatantId: undefined,
+    reachableCells: input.selection?.legalEndpoints ?? [],
+    targetCells: input.selection?.legalTargetCells ?? [],
+  });
+  if (spec === undefined) {
+    return undefined;
+  }
+  input.session.applyDebugScene(spec);
+  return spec.actors?.length ?? 0;
+};

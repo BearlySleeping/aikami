@@ -44,6 +44,36 @@ export type CarriedSetOutcome =
   | { ok: false; code: string; reason: string };
 
 /**
+ * Merges the verified previous release with the legacy library a migration
+ * carried. The legacy library is authoritative for the tags it declares; the
+ * previous release only supplies dependency bytes the legacy plan lacks.
+ */
+const mergeCarriedValue = (options: {
+  previousRelease: PreviousRelease | undefined;
+  bootstrap: LegacyBootstrapPlan;
+}): CarriedSet => {
+  const byTag = new Map<string, CatalogAssetEntry>();
+  for (const entry of options.previousRelease?.entries ?? []) {
+    byTag.set(entry.tag, entry);
+  }
+  for (const entry of options.bootstrap.entries) {
+    byTag.set(entry.tag, entry);
+  }
+  const carriedDependencies = new Map<string, Uint8Array>(options.bootstrap.dependencies);
+  for (const [key, bytes] of options.previousRelease?.dependencies ?? []) {
+    if (!carriedDependencies.has(key)) {
+      carriedDependencies.set(key, bytes);
+    }
+  }
+  return {
+    previousRelease: options.previousRelease,
+    carriedEntries: [...byTag.values()],
+    carriedDependencies,
+    legacy: options.bootstrap,
+  };
+};
+
+/**
  * Resolves the carried set for one target.
  *
  * @param options.mode - The target's mode. The legacy migration is
@@ -129,27 +159,8 @@ export const resolveCarriedSet = async (options: {
     log(`     ${line}`);
   }
 
-  // Union by tag; the legacy library is authoritative for the tags it declares.
-  const byTag = new Map<string, CatalogAssetEntry>();
-  for (const entry of previousRelease?.entries ?? []) {
-    byTag.set(entry.tag, entry);
-  }
-  for (const entry of bootstrap.plan.entries) {
-    byTag.set(entry.tag, entry);
-  }
-  const carriedDependencies = new Map<string, Uint8Array>(bootstrap.plan.dependencies);
-  for (const [key, bytes] of previousRelease?.dependencies ?? []) {
-    if (!carriedDependencies.has(key)) {
-      carriedDependencies.set(key, bytes);
-    }
-  }
   return {
     ok: true,
-    value: {
-      previousRelease,
-      carriedEntries: [...byTag.values()],
-      carriedDependencies,
-      legacy: bootstrap.plan,
-    },
+    value: mergeCarriedValue({ previousRelease, bootstrap: bootstrap.plan }),
   };
 };

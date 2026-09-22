@@ -34,7 +34,7 @@ import {
   type CombatDebugBattlefieldDiagnostics,
 } from './battlefield/combat_debug_battlefield_diagnostics.ts';
 import {
-  buildCombatDebugSceneSpec,
+  applyCombatDebugBattlefieldScene,
   countCombatDebugCombatants,
   DEFAULT_COMBAT_DEBUG_OVERLAY_LAYERS,
 } from './battlefield/combat_debug_battlefield_projection.ts';
@@ -670,36 +670,19 @@ class CombatDebugViewModel
     }
   }
 
-  /**
-   * Projects authoritative `CombatState` + scenario battlefield into the
-   * engine's debug scene. Authored scenarios render their real map instead.
-   * This is presentation only — the engine owns the mechanics.
-   */
+  /** Projects authoritative state + scenario battlefield onto the session. */
   private _applyDebugScene(): void {
-    const session = this._session;
-    if (session === undefined) {
-      return;
-    }
-    if (this.scenario.battlefield.kind !== 'synthetic') {
-      session.applyDebugScene(undefined);
-      this.projectedActorCount = 0;
-      return;
-    }
-    const spec = buildCombatDebugSceneSpec({
+    const projectedActors = applyCombatDebugBattlefieldScene({
+      session: this._session,
+      battlefield: this.scenario.battlefield,
       state: this.state,
-      syntheticBattlefield: this.scenario.battlefield,
       layers: this.battlefieldLayers,
       activeCombatantId: this.contextSummary?.activeCombatantId,
-      selectedCombatantId: undefined,
-      targetedCombatantId: undefined,
-      reachableCells: this.selectionProjection?.legalEndpoints ?? [],
-      targetCells: this.selectionProjection?.legalTargetCells ?? [],
+      selection: this.selectionProjection,
     });
-    if (spec === undefined) {
-      return;
+    if (projectedActors !== undefined) {
+      this.projectedActorCount = projectedActors;
     }
-    session.applyDebugScene(spec);
-    this.projectedActorCount = spec.actors?.length ?? 0;
   }
 
   private _applySessionStatus(status: string): void {
