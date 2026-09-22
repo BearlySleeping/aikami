@@ -30,6 +30,7 @@ import {
   verifyCandidate,
 } from '../catalog/release.ts';
 import type { ReleaseTarget } from '../catalog/release_target.ts';
+import { legacyLibraryOriginFor } from '../catalog/release_target.ts';
 import { buildCandidateLock, loadSealedCandidate } from './emberwatch_candidate.ts';
 import type { ReleasePointer, StepRecorder } from './emberwatch_release_io.ts';
 import { readReleasePointer } from './emberwatch_release_io.ts';
@@ -74,14 +75,19 @@ const applyFirstReleaseMigration = async (options: {
   base: BaseReleaseResolution;
   currentTags: ReadonlySet<string>;
   reader?: ReleaseDocumentReader;
+  /** Canonical origin of the de-bundled legacy library when it is not the target (staging). */
+  legacyOriginUrl?: string;
 }): Promise<
   { ok: true; base: BaseReleaseResolution } | { ok: false; phase: string; error: string }
 > => {
-  if (options.base.base !== null || options.mode !== 'production') {
+  const bootstrapLegacy =
+    options.legacyOriginUrl !== undefined ||
+    (options.base.base === null && options.mode === 'production');
+  if (!bootstrapLegacy) {
     return { ok: true, base: options.base };
   }
   const bootstrap = await bootstrapLegacyCatalog({
-    originUrl: options.releaseTarget.originUrl,
+    originUrl: options.legacyOriginUrl ?? options.releaseTarget.originUrl,
     ...(options.reader === undefined ? {} : { reader: options.reader }),
     currentTags: options.currentTags,
   });
@@ -91,7 +97,13 @@ const applyFirstReleaseMigration = async (options: {
   if (!bootstrap.applied) {
     return { ok: true, base: options.base };
   }
-  return { ok: true, base: { ...options.base, carriedEntries: bootstrap.plan.entries } };
+  // Union by tag, legacy authoritative for the tags it declares. Mirrors
+  // `resolveCarriedSet` so the plan's index root equals what apply publishes.
+  const byTag = new Map(options.base.carriedEntries.map((entry) => [entry.tag, entry]));
+  for (const entry of bootstrap.plan.entries) {
+    byTag.set(entry.tag, entry);
+  }
+  return { ok: true, base: { ...options.base, carriedEntries: [...byTag.values()] } };
 };
 
 /**
@@ -140,6 +152,10 @@ export const buildPlanPhases = async (options: {
     base: basePhase.value,
     currentTags: new Set(entries.map((entry) => entry.tag)),
     ...(options.reader === undefined ? {} : { reader: options.reader }),
+    ...(() => {
+      const legacyOriginUrl = legacyLibraryOriginFor(options.mode);
+      return legacyOriginUrl === undefined ? {} : { legacyOriginUrl };
+    })(),
   });
   if (!migrated.ok) {
     return migrated;
