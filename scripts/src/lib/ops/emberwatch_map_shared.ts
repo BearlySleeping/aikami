@@ -310,9 +310,16 @@ export const transition = (
 // Each value therefore sits at least one rectangle-height clear of the edge it
 // arrives through. Sharing the constant is what stops the two from drifting
 // apart again.
+//
+// The north arrival moved from row 2 to row 3 when the north exit rect grew
+// from one row to two (y 0..64) so a player whose feet are clamped to y >= 32
+// could actually reach it. The rect's bottom edge is now y = 64 = row 2's
+// boundary, and ZoningSystem's test is inclusive, so row 2 would re-trigger the
+// exit on load. Row 3 clears it. sharing this constant keeps the marker on
+// old_road and the numeric fallback on ruined_shrine's transition in step.
 export const OLD_ROAD_ARRIVAL = {
   /** Arriving from the village gate — south edge, clear of the y 1120 exit. */
   fromVillage: { x: 34 * 32, y: 33 * 32 },
-  /** Arriving from the shrine gate — north edge, clear of the y 0-32 exit. */
-  toShrine: { x: 34 * 32, y: 2 * 32 },
+  /** Arriving from the shrine gate — north edge, clear of the y 0-64 exit. */
+  toShrine: { x: 34 * 32, y: 3 * 32 },
 } as const;

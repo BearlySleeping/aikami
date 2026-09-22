@@ -215,6 +215,7 @@ const transitionEdgeFindings = (options: {
   }
   return [
     ...sourceFindings(context, transition, subject),
+    ...triggerFootprintFindings(context, transition, subject),
     ...landingFindings(targetContext, transition, subject),
     ...bounceBackFindings(targetContext, transition, subject),
   ];
@@ -238,6 +239,56 @@ const sourceFindings = (
       context.id,
       `${subject} rect@${transition.x},${transition.y}`,
       'no cell inside the trigger rectangle is walkable and reachable — a blocked doorway',
+    ),
+  ];
+};
+
+/**
+ * Mirrors ENTITY_HEIGHT_ABOVE in packages/frontend/engine/src/systems/
+ * actor_footprint.ts. `scripts` has no engine dependency, so the value is
+ * duplicated here; the reachability test at the bottom of
+ * emberwatch_map_validation.test.ts asserts it equals the engine constant.
+ */
+export const FOOT_MARGIN_PX = 32;
+
+/**
+ * A north-edge trigger rectangle must reach below the actor's foot clamp.
+ *
+ * The movement system collides a 32×32 box anchored at the feet with its top at
+ * `feetY − ENTITY_HEIGHT_ABOVE`. The map's north boundary wall reverts any step
+ * whose box top would leave the map (`nextY − ENTITY_HEIGHT_ABOVE < 0`), so the
+ * feet settle just below `y = ENTITY_HEIGHT_ABOVE` (32px) and a step crossing
+ * that line is refused rather than clamped. `ZoningSystem` then tests the feet
+ * INCLUSIVELY against `[rect.y, rect.y + rect.height]`.
+ *
+ * A rect that opens at the map's top edge (`y = 0`) and whose bottom is at or
+ * above `y = 32` therefore sits entirely above the legal feet band and can
+ * never fire, even though its cell is walkable. This is the Emberwatch
+ * north-edge bug that shipped in 5.0.0 (village→old_road,
+ * old_road→ruined_shrine) — see C-138. The fix is to extend the rect one row
+ * inward (`height: 2`, bottom `y = 64`).
+ *
+ * Only top-edge rects are at risk: east/west/south rects are entered from a
+ * side or from below, where the actor box simply overhangs the map edge.
+ */
+const triggerFootprintFindings = (
+  context: MapContext,
+  transition: MapContext['transitions'][number],
+  subject: string,
+): ValidationFinding[] => {
+  const rectTop = transition.y;
+  const rectHeight = Math.max(transition.height, 1);
+  const rectBottom = rectTop + rectHeight;
+  if (rectTop > 0 || rectBottom > FOOT_MARGIN_PX) {
+    return [];
+  }
+  return [
+    finding(
+      'transition-trigger-unreachable-by-footprint',
+      'error',
+      context.id,
+      `${subject} rect@${transition.x},${transition.y}`,
+      `top-edge trigger ends at y=${rectBottom}px, at or above the feet clamp (y=${FOOT_MARGIN_PX}px) — extend it inward by one row`,
     ),
   ];
 };

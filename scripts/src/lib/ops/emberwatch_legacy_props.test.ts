@@ -5,8 +5,36 @@ import {
   buildLegacyPropManifest,
   checkLegacyPropManifest,
   compareLegacyPropManifests,
+  type LegacyPropManifest,
 } from './emberwatch_legacy_props.ts';
 import { LEGACY_GRID_PROP_FRAMES } from './emberwatch_prop_source_guard.ts';
+
+/**
+ * A synthetic non-empty manifest for the comparison-logic tests. The committed
+ * manifest is empty now that every legacy frame is replaced, so the mutation
+ * cases need a fixture to mutate.
+ */
+const fixtureManifest = (): LegacyPropManifest => ({
+  schemaVersion: 1,
+  kind: 'emberwatch-legacy-prop-replacements',
+  generatedBy: 'scripts/src/lib/ops/emberwatch_legacy_props.ts',
+  policy: 'fixture',
+  counts: { legacyFrames: 1, replacementFrames: 1, placedProps: 1 },
+  items: [
+    {
+      frame: 'crate.png',
+      replacementFrame: 'prop_crate.png',
+      briefJobId: 'crate',
+      targetCanvas: [48, 48],
+      preparationProfile: 'prop-luminance-alpha-ground',
+      propIds: ['inn_crate'],
+      maps: ['inn'],
+      acceptance: [
+        'standalone PNG or WebP with native alpha under content/packs/emberwatch/props/',
+      ],
+    },
+  ],
+});
 
 describe('emberwatch legacy prop replacements', () => {
   test('covers exactly the legacy grid-atlas allowlist', () => {
@@ -42,11 +70,11 @@ describe('emberwatch legacy prop replacements', () => {
   });
 
   test('stale acceptance criteria fail the check', () => {
-    const wanted = buildLegacyPropManifest();
+    const wanted = fixtureManifest();
     const declared = structuredClone(wanted);
     const first = declared.items[0];
     if (!first) {
-      throw new Error('manifest has no items');
+      throw new Error('fixture manifest has no items');
     }
     first.acceptance = [...first.acceptance, 'stale extra gate'];
     const reasons = compareLegacyPropManifests(declared, wanted);
@@ -56,11 +84,11 @@ describe('emberwatch legacy prop replacements', () => {
   });
 
   test('a stale target canvas fails the check', () => {
-    const wanted = buildLegacyPropManifest();
+    const wanted = fixtureManifest();
     const declared = structuredClone(wanted);
     const first = declared.items[0];
     if (!first) {
-      throw new Error('manifest has no items');
+      throw new Error('fixture manifest has no items');
     }
     first.targetCanvas = [9999, 9999];
     const reasons = compareLegacyPropManifests(declared, wanted);
@@ -70,11 +98,11 @@ describe('emberwatch legacy prop replacements', () => {
   });
 
   test('a stale propId or map fails the check', () => {
-    const wanted = buildLegacyPropManifest();
+    const wanted = fixtureManifest();
     const declared = structuredClone(wanted);
     const first = declared.items[0];
     if (!first) {
-      throw new Error('manifest has no items');
+      throw new Error('fixture manifest has no items');
     }
     first.propIds = [...first.propIds, 'ghost_prop'];
     first.maps = [...first.maps, 'ghost_map'];

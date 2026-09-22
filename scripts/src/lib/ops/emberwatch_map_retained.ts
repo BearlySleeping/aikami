@@ -55,8 +55,8 @@ export const buildInn = (): { map: MapData; objectLayers: MapObjectLayer[] } => 
   const m = makeMap(W, H);
   const rng = makeRng(0x1a11);
 
-  // South entrance, two tiles wide.
-  border(m, { south: [13, 14] });
+  // South entrance, three tiles wide — the companion-safe corridor width.
+  border(m, { south: [13, 14, 15] });
 
   // Wood floor across the interior.
   for (let r = 2; r < H - 2; r++) {
@@ -74,7 +74,7 @@ export const buildInn = (): { map: MapData; objectLayers: MapObjectLayer[] } => 
       setTile(m, c, r, G.STONE_FLOOR);
     }
   }
-  for (const c of [13, 14]) {
+  for (const c of [13, 14, 15]) {
     setTile(m, c, H - 2, G.STONE_FLOOR);
   }
 
@@ -98,34 +98,36 @@ export const buildInn = (): { map: MapData; objectLayers: MapObjectLayer[] } => 
       visible: true,
       objects: [
         // ── People ─────────────────────────────────────────────────────────
-        placeNpc(1, 'rollo_grasper', 'Rollo the Grasper', 'rollo_greeting', 22, 6),
+        // Rollo sits at the east table cluster, not alone in a corner.
+        placeNpc(1, 'rollo_grasper', 'Rollo the Grasper', 'rollo_greeting', 19, 10),
         placeNpc(20, 'innkeeper_sella', 'Sella the Innkeeper', 'sella_greeting', 11, 3),
 
         // ── Service counter and its evidence ───────────────────────────────
-        placeProp(30, 'inn_counter', 'Service Counter', 'counter.png', 10, 4),
-        placeProp(31, 'inn_counter_2', 'Service Counter', 'counter.png', 12, 4),
+        placeProp(30, 'inn_counter', 'Service Counter', 'prop_counter.png', 10, 4),
+        placeProp(31, 'inn_counter_2', 'Service Counter', 'prop_counter.png', 12, 4),
         placeProp(21, 'sella_receipt', "Sella's Custody Receipt", 'prop_receipt.png', 14, 5),
 
         // ── Hearth and storage along the north wall ────────────────────────
         placeProp(32, 'inn_hearth', 'Hearth', 'prop_hearth.png', 4, 2),
-        placeProp(33, 'inn_shelf', 'Storage Shelf', 'bookshelf.png', 24, 3),
+        placeProp(33, 'inn_shelf', 'Storage Shelf', 'prop_bookshelf.png', 24, 3),
 
         // ── Tables and chairs (common room, clear of the combat footprint) ──
-        placeProp(34, 'inn_table', 'Ale Table', 'table.png', 4, 7),
+        // Two west clusters and one east cluster, deliberately uneven.
+        placeProp(34, 'inn_table', 'Ale Table', 'prop_table.png', 4, 7),
         placeProp(35, 'inn_chair', 'Chair', 'chair.png', 3, 8),
         placeProp(36, 'inn_chair_2', 'Chair', 'chair.png', 5, 8),
-        placeProp(37, 'inn_table_2', 'Ale Table', 'table.png', 4, 12),
-        placeProp(38, 'inn_chair_3', 'Chair', 'chair.png', 3, 13),
-        placeProp(39, 'inn_chair_4', 'Chair', 'chair.png', 5, 13),
-        placeProp(40, 'inn_table_3', 'Ale Table', 'table.png', 21, 12),
-        placeProp(41, 'inn_chair_5', 'Chair', 'chair.png', 20, 13),
-        placeProp(42, 'inn_chair_6', 'Chair', 'chair.png', 22, 13),
+        placeProp(37, 'inn_table_2', 'Ale Table', 'prop_table.png', 4, 13),
+        placeProp(38, 'inn_chair_3', 'Chair', 'chair.png', 3, 14),
+        placeProp(39, 'inn_chair_4', 'Chair', 'chair.png', 5, 14),
+        placeProp(40, 'inn_table_3', 'Ale Table', 'prop_table.png', 21, 9),
+        placeProp(41, 'inn_chair_5', 'Chair', 'chair.png', 20, 10),
+        placeProp(42, 'inn_chair_6', 'Chair', 'chair.png', 22, 10),
 
         // ── Barrels, crates, a bed alcove and the failing roof support ─────
         placeProp(2, 'inn_barrel', 'Barrel', 'prop_barrel.png', 24, 5),
-        placeProp(4, 'inn_barrel_2', 'Barrel', 'prop_barrel.png', 24, 16),
-        placeProp(3, 'inn_crate', 'Crate', 'crate.png', 3, 16),
-        placeProp(43, 'inn_bed', 'Guest Bed', 'bed.png', 3, 15),
+        placeProp(4, 'inn_barrel_2', 'Barrel', 'prop_barrel.png', 5, 16),
+        placeProp(3, 'inn_crate', 'Crate', 'prop_crate.png', 3, 16),
+        placeProp(43, 'inn_bed', 'Guest Bed', 'prop_bed.png', 3, 15),
         placeProp(44, 'inn_brazier', 'Brazier', 'prop_brazier.png', 16, 16),
         placeProp(45, 'inn_support', 'Rotting Support', 'prop_support.png', 23, 9),
 
@@ -143,7 +145,7 @@ export const buildInn = (): { map: MapData; objectLayers: MapObjectLayer[] } => 
           targetMap: 'village',
           targetSpawnId: 'from_inn',
           target: { x: cell(60), y: cell(24) },
-          at: { c: 13, r: 19, width: 2, height: 1 },
+          at: { c: 13, r: 19, width: 3, height: 1 },
         }),
       ],
     },
@@ -170,8 +172,8 @@ export const buildShop = (): { map: MapData; objectLayers: MapObjectLayer[] } =>
   const m = makeMap(W, H);
   const rng = makeRng(0x5b0f);
 
-  // South doorway, two tiles wide.
-  border(m, { south: [11, 12] });
+  // South doorway, three tiles wide — the companion-safe corridor width.
+  border(m, { south: [11, 12, 13] });
 
   // Stone floor across the interior, with flagstone wear.
   for (let r = 2; r < H - 2; r++) {
@@ -179,7 +181,7 @@ export const buildShop = (): { map: MapData; objectLayers: MapObjectLayer[] } =>
       setTile(m, c, r, G.STONE_FLOOR);
     }
   }
-  for (const c of [11, 12]) {
+  for (const c of [11, 12, 13]) {
     setTile(m, c, H - 2, G.STONE_FLOOR);
   }
   scatter(m, rng, 2, 2, W - 3, H - 3, G.STONE_FLOOR, G.FLAGSTONE, 0.2);
@@ -192,18 +194,18 @@ export const buildShop = (): { map: MapData; objectLayers: MapObjectLayer[] } =>
       setTile(m, c, r, G.STONE_FLOOR);
     }
   }
-  for (const c of [11, 12]) {
+  for (const c of [11, 12, 13]) {
     setTile(m, c, H - 2, G.STONE_FLOOR);
   }
 
-  // The lateral counter run at row 11, broken by a walk-through gate at cols
-  // 11-12 so the aisle and the storage bay are both reachable without walking
-  // the long way round. The MAP does not block these cells: the counter PROPS
-  // carry their own collision, and the engine's content audit requires the map
-  // collision layer to match manifest walkability exactly — a walkable floor
-  // GID with collision set is a violation.
-  for (let c = 4; c <= 19; c++) {
-    setTile(m, c, 11, G.STONE_VAR);
+  // The counter run divides the room: a solid `counter` tile along row 11,
+  // broken by a four-cell walk-through at cols 10-13 so the customer aisle
+  // (south) and the storage bay (north) are both reachable. The run carries
+  // matching collision, exactly like the inn's service counter — a solid tile
+  // with collision set is consistent with the content audit.
+  for (const c of [3, 4, 5, 6, 7, 8, 9, 14, 15, 16, 17, 18, 19, 20]) {
+    setTile(m, c, 11, G.COUNTER);
+    m.collision[11 * W + c] = 1;
   }
 
   const objectLayers: MapObjectLayer[] = [
@@ -212,7 +214,8 @@ export const buildShop = (): { map: MapData; objectLayers: MapObjectLayer[] } =>
       type: 'objectgroup',
       visible: true,
       objects: [
-        placeNpc(1, 'merchant', 'Mara the Merchant', 'merchant_mara_greeting', 12, 9, [
+        // Mara stands behind the counter, on the merchant side of the gap.
+        placeNpc(1, 'merchant', 'Mara the Merchant', 'merchant_mara_greeting', 12, 10, [
           { name: 'isVendor', type: 'bool', value: true },
           {
             name: 'vendorInventory',
@@ -222,19 +225,19 @@ export const buildShop = (): { map: MapData; objectLayers: MapObjectLayer[] } =>
         ]),
 
         // Counter run (the ledger's discoverable prop is the left section).
-        placeProp(2, 'shop_counter_l', 'Counter', 'counter.png', 4, 11),
-        placeProp(3, 'shop_counter_r', 'Counter', 'counter.png', 16, 11),
-        placeProp(50, 'shop_counter_m', 'Counter', 'counter.png', 10, 11),
+        placeProp(2, 'shop_counter_l', 'Counter', 'prop_counter.png', 4, 11),
+        placeProp(3, 'shop_counter_r', 'Counter', 'prop_counter.png', 17, 11),
+        placeProp(50, 'shop_counter_m', 'Counter', 'prop_counter.png', 8, 11),
 
-        // Rear storage bay.
-        placeProp(51, 'shop_shelf', 'Storage Shelf', 'bookshelf.png', 3, 3),
-        placeProp(52, 'shop_shelf_2', 'Storage Shelf', 'bookshelf.png', 20, 3),
-        placeProp(4, 'shop_crate', 'Crate', 'crate.png', 5, 3),
-        placeProp(53, 'shop_crate_2', 'Crate', 'crate.png', 8, 3),
-        placeProp(54, 'shop_crate_3', 'Crate', 'crate.png', 18, 3),
+        // Rear storage bay: merchandise clustered where it belongs.
+        placeProp(51, 'shop_shelf', 'Storage Shelf', 'prop_bookshelf.png', 3, 3),
+        placeProp(52, 'shop_shelf_2', 'Storage Shelf', 'prop_bookshelf.png', 20, 3),
+        placeProp(4, 'shop_crate', 'Crate', 'prop_crate.png', 4, 3),
+        placeProp(53, 'shop_crate_2', 'Crate', 'prop_crate.png', 6, 4),
+        placeProp(54, 'shop_crate_3', 'Crate', 'prop_crate.png', 5, 14),
         placeProp(55, 'shop_barrel', 'Barrel', 'prop_barrel.png', 21, 6),
 
-        // Public aisle clutter, kept off the walking line.
+        // Merchant-side stool and a customer-side display barrel.
         placeProp(56, 'shop_chair', 'Chair', 'chair.png', 4, 8),
         placeProp(57, 'shop_barrel_2', 'Barrel', 'prop_barrel.png', 3, 14),
 
@@ -251,7 +254,7 @@ export const buildShop = (): { map: MapData; objectLayers: MapObjectLayer[] } =>
           targetMap: 'village',
           targetSpawnId: 'from_merchant',
           target: { x: cell(3), y: cell(24) },
-          at: { c: 11, r: 17, width: 2, height: 1 },
+          at: { c: 11, r: 17, width: 3, height: 1 },
         }),
       ],
     },

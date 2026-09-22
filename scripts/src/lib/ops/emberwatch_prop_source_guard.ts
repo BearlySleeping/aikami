@@ -24,20 +24,15 @@ import { join } from 'node:path';
 /**
  * Frames still painted by the legacy grid atlas because no accepted standalone
  * source exists for them yet. Each entry is a known, deliberate debt — NOT an
- * excuse to add more. `well.png` is intentionally absent: the well has accepted
- * standalone art and must resolve through the props atlas.
+ * excuse to add more.
  *
- * TODO(C-529 follow-up): author accepted crate/table/bed/counter/bookshelf/anvil
- * standalone props and move these off the grid atlas.
+ * Empty as of the 5.0.0 polish pass: the six former legacy-grid furniture
+ * frames (`crate`, `table`, `bed`, `counter`, `bookshelf`, `anvil`) now have
+ * accepted standalone art under `content/packs/emberwatch/props/`. Any prop
+ * that still resolves through the grid atlas is now a hard `unresolved`
+ * violation instead of an allowlisted debt.
  */
-export const LEGACY_GRID_PROP_FRAMES: ReadonlySet<string> = new Set([
-  'crate.png',
-  'table.png',
-  'bed.png',
-  'counter.png',
-  'bookshelf.png',
-  'anvil.png',
-]);
+export const LEGACY_GRID_PROP_FRAMES: ReadonlySet<string> = new Set([]);
 
 export type PropSourceClassification = 'accepted' | 'legacy-grid' | 'unresolved';
 
