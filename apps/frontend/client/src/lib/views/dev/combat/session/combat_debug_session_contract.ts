@@ -9,8 +9,12 @@
 //
 // Contract: combat debug workspace (execution prompt §2, §6, §7)
 
-import type { EngineBridge } from '@aikami/frontend/engine';
-import type { CombatCommand, CombatEvent, CombatState } from '@aikami/types';
+import type {
+  DebugSceneSpec,
+  EngineBridge,
+  GameWorldViewportDiagnostics,
+} from '@aikami/frontend/engine';
+import type { CombatCommand, CombatEvent, CombatState, GridPoint } from '@aikami/types';
 
 /** A point-in-time authoritative view the workspace renders from. */
 export type CombatDebugSessionSnapshot = {
@@ -19,6 +23,22 @@ export type CombatDebugSessionSnapshot = {
   readonly round: number;
   readonly phase: CombatState['phase'];
   readonly activeCombatantId: string | undefined;
+};
+
+/** Authoritative selection cells the production UI projected to the engine. */
+export type CombatDebugSelectionProjection = {
+  readonly legalEndpoints: readonly GridPoint[];
+  readonly legalTargetCells: readonly GridPoint[];
+};
+
+/** Screen → world → cell projection of the latest canvas pointer position. */
+export type CombatDebugPointerProjection = {
+  readonly screenX: number;
+  readonly screenY: number;
+  readonly worldX: number;
+  readonly worldY: number;
+  readonly cellX: number;
+  readonly cellY: number;
 };
 
 /** Observer callbacks a live session raises; the ViewModel owns all state. */
@@ -47,6 +67,12 @@ export type CombatDebugSessionObserver = {
   }): void;
   onStatus(status: string): void;
   onError(message: string): void;
+  /** Latest authoritative selection the production UI projected (optional). */
+  onSelection?(selection: CombatDebugSelectionProjection): void;
+  /** Latest pointer projection; `undefined` when the pointer left the canvas. */
+  onPointer?(pointer: CombatDebugPointerProjection | undefined): void;
+  /** Latest viewport/renderer diagnostics after boot and after each resize. */
+  onViewport?(diagnostics: GameWorldViewportDiagnostics): void;
 };
 
 /** Structural contract the ViewModel needs from a live session. */
@@ -66,4 +92,13 @@ export type CombatDebugSession = {
   readonly queuedCommandCount: number;
   /** Releases exactly one queued command; false when none was waiting. */
   stepCommandGate(): boolean;
+  /**
+   * Sets (or clears) the synthetic debug-scene projection the engine paints.
+   * Read-only presentation; the session never derives mechanics from it.
+   */
+  applyDebugScene(spec: DebugSceneSpec | undefined): void;
+  /** Re-fits the active synthetic board to the current pane size. */
+  fitDebugCamera(): void;
+  /** Live viewport/renderer diagnostics for the health panel. */
+  getViewportDiagnostics(): GameWorldViewportDiagnostics;
 };

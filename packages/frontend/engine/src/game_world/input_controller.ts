@@ -159,12 +159,19 @@ export class InputController {
 
     if (this._keyToMovementDirection(key)) {
       event.preventDefault();
+      // Ignore OS auto-repeat: a held key fires repeated `keydown` events.
+      // Treating those as a fresh press re-ran `onMovementStart` (which posts
+      // STOP_PLAYER and clears the player's Velocity) without re-posting the
+      // held velocity, so the player froze until the key was released and
+      // pressed again. Only the FIRST keydown for a key cancels the click-path
+      // and (re)posts velocity.
+      if (this._activeKeys.has(key)) {
+        return;
+      }
       // C-380 AC-7: keyboard movement cancels the active click-path.
       this._onMovementStart();
-      if (!this._activeKeys.has(key)) {
-        this._activeKeys.add(key);
-        this._updateVelocity();
-      }
+      this._activeKeys.add(key);
+      this._updateVelocity();
     }
   }
 
@@ -227,15 +234,26 @@ export class InputController {
     this._onVelocity({ x: vx, y: vy });
   }
 
+  /**
+   * Whether the key event originates from a control that owns keyboard
+   * interaction. Game input must not `preventDefault()` on these targets: doing
+   * so swallows Enter/Space activation for a focused button or link (the tab
+   * controls in the combat debug workspace are the concrete case).
+   */
   private _isInputField(target: EventTarget | null): boolean {
     if (!target) {
       return false;
     }
-    const element = target as { tagName?: string; isContentEditable?: boolean };
+    const element = target as {
+      tagName?: string;
+      isContentEditable?: boolean;
+    };
     return (
       element.tagName === 'INPUT' ||
       element.tagName === 'TEXTAREA' ||
       element.tagName === 'SELECT' ||
+      element.tagName === 'BUTTON' ||
+      element.tagName === 'A' ||
       element.isContentEditable === true
     );
   }

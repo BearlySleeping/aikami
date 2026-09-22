@@ -15,6 +15,7 @@ import { unprojectScreenPoint } from './frame_pacing.ts';
 import { loadStaticVisual } from './game_world/actor_visual_transport.ts';
 import { CombatSelectionHighlights } from './game_world/combat_selection_highlights.ts';
 import { setupGameCommandForwarding } from './game_world/command_forwarding.ts';
+import { DebugSceneController } from './game_world/debug_scene_controller.ts';
 import {
   exposeEngineState,
   isE2ETestMode,
@@ -25,6 +26,7 @@ import {
 import { EntityAppearanceLoader } from './game_world/entity_appearance.ts';
 import { createEntityDisplay } from './game_world/entity_display.ts';
 import { FrameRenderer } from './game_world/frame_renderer.ts';
+import { reportHeartbeatEvent } from './game_world/heartbeat_reporter.ts';
 import { InputController } from './game_world/input_controller.ts';
 import { PointerController } from './game_world/pointer_controller.ts';
 import { RenderBufferPool } from './game_world/render_buffer_pool.ts';
@@ -43,18 +45,12 @@ import {
 } from './game_world/scene_transition.ts';
 import { WeatherFxController } from './game_world/weather_fx_controller.ts';
 import {
-  type HeartbeatEvent,
   type WorkerFailure,
   type WorkerOutboundMessage,
   WorkerSession,
 } from './game_world/worker_session.ts';
-import {
-  createPixiApp,
-  DEFAULT_HEIGHT,
-  DEFAULT_WIDTH,
-  type PixiAppInstance,
-  type PixiAppOptions,
-} from './pixi_app.ts';
+import { applyWorldResize } from './game_world/world_resize.ts';
+import { createPixiApp, type PixiAppInstance, type PixiAppOptions } from './pixi_app.ts';
 import { sanitizeCanvasDimension } from './pixi_init_options.ts';
 import { WORLD_Z_BANDS } from './rendering/layer_bands.ts';
 import { type LpcSlotCatalog, mergeLpcRecipes } from './rendering/lpc_appearance_resolver.ts';
@@ -416,6 +412,18 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
   /** Current camera zoom received from the worker (1.0–1.5). */
   private _cameraZoom = 1.0;
 
+  /**
+   * Owns a caller-supplied synthetic debug scene and its fitted camera
+   * (combat debug workspace). Production never sets a scene.
+   */
+  readonly debugScene = new DebugSceneController({
+    getContainer: () => this._worldContainer,
+    getScreen: () => this._app?.screen,
+    getApp: () => this._app,
+    getCamera: () => ({ x: this._cameraX, y: this._cameraY, zoom: this._cameraZoom }),
+    getRenderer: () => this.renderer,
+  });
+
   // -- C-380 AC-6: Cursor feedback — owned by PointerController -----------
 
   /** Tile size for the active map; undefined until terrain is loaded. */
@@ -588,7 +596,8 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       workerFactory: options.workerFactory,
       onMessage: (message) => this._handleWorkerMessage(message),
       onFailure: (failure) => this._handleWorkerFailure(failure),
-      onHeartbeat: (event) => this._handleHeartbeatEvent(event),
+      onHeartbeat: (event) =>
+        reportHeartbeatEvent(event, (message, detail) => this.warn(message, detail)),
       shouldCheckStall: () => !this._inputController.locked,
     });
 
@@ -817,6 +826,15 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         }
       }
 
+      // A caller-supplied debug scene owns the camera so a synthetic board is
+      // always framed; without one the worker's follow-camera is unchanged.
+      const debugCamera = this.debugScene.camera;
+      if (debugCamera !== undefined) {
+        this._cameraX = debugCamera.x;
+        this._cameraY = debugCamera.y;
+        this._cameraZoom = debugCamera.zoom;
+      }
+
       this._frameRenderer.render({
         app: this._app,
         worldContainer: this._worldContainer,
@@ -868,28 +886,20 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    * correct world-to-screen ratio.
    */
   resize(width: number, height: number): void {
-    // Resize callers measure the DOM, which lies on some WebKitGTK hosts
-    // (negative innerWidth, billions-scale clientWidth). Passing that
-    // through wraps to a multi-gigapixel backing store the platform
-    // refuses, blanking a canvas that was rendering fine a frame earlier.
-    const safeWidth = sanitizeCanvasDimension(width, this._app?.renderer.width ?? DEFAULT_WIDTH);
-    const safeHeight = sanitizeCanvasDimension(
+    applyWorldResize({
+      app: this._app,
+      worldContainer: this._worldContainer,
+      width,
       height,
-      this._app?.renderer.height ?? DEFAULT_HEIGHT,
-    );
-
-    if (this._app) {
-      this._app.renderer.resize(safeWidth, safeHeight);
-    }
-
-    // Notify the worker so the camera system updates its screen dimensions
-    // and recalculates clamping with the active world container scale.
-    this._session.post({
-      type: 'SET_SCREEN_SIZE',
-      width: safeWidth,
-      height: safeHeight,
-      scale: this._worldContainer?.scale.x ?? BASE_WORLD_SCALE,
+      postScreenSize: (size) => this._session.post({ type: 'SET_SCREEN_SIZE', ...size }),
     });
+    // A synthetic debug board must re-fit when the pane changes size.
+    this.debugScene.fit();
+  }
+
+  /** Active map/debug tile size in pixels (32 until a scene supplies one). */
+  get tileSize(): number {
+    return this._activeTileSize ?? this.debugScene.tileSize ?? 32;
   }
 
   /**
@@ -915,8 +925,8 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    * leaks and orphaned animation frames.
    */
   destroy(): void {
-    // Diagnostic: trace who calls destroy
-    this.error('[GameWorld] destroy:called', { stack: new Error().stack });
+    // Trace-level: disposal is expected on every teardown, not an error.
+    this.debug('[GameWorld] destroy:called');
     // Flag disposal so in-flight async init paths (worker import) abort
     this._disposed = true;
     // Stop the render loop
@@ -975,6 +985,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     }
 
     this._worldContainer = undefined;
+    this.debugScene.clear();
   }
 
   // -----------------------------------------------------------------------
@@ -1206,25 +1217,6 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     }
     this.error('[GameWorld] Worker transport failure', { kind: failure.kind });
     this._bridge.emit({ type: 'GAME_ERROR', message: failure.message });
-  }
-
-  /** Logs heartbeat observations (control flow stays in WorkerSession). */
-  private _handleHeartbeatEvent(event: HeartbeatEvent): void {
-    if (event.kind === 'stall') {
-      this.warn('[GameWorld] WARN: Simulation stalled — tickCount unchanged for 3 heartbeats', {
-        tickCount: event.tickCount,
-        staleCycles: event.staleCycles,
-        writableBufferCount: event.writableBufferCount,
-        syncWithBuffer: event.syncWithBuffer,
-        syncWithoutBuffer: event.syncWithoutBuffer,
-        recycled: event.recycled,
-      });
-      return;
-    }
-    this.warn('[GameWorld] WARN: Worker engine heartbeat missed!', {
-      elapsedMs: event.elapsedMs,
-      missedCount: event.missedCount,
-    });
   }
 
   /**

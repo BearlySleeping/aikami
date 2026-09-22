@@ -382,6 +382,10 @@
     }
 
     .hud-status__fill {
+      /* 🔴 Must be a block box: `inline-size`/`block-size` are ignored on an
+         inline-level span, so the fill silently rendered zero-area and the bar
+         looked empty at every HP value. */
+      display: block;
       block-size: 100%;
       border-radius: inherit;
       background-color: var(--ui-success);

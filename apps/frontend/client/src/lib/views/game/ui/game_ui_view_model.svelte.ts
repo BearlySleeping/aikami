@@ -58,6 +58,7 @@ import type {
   GameUIHudViewCapabilities,
   GameUIInputActionCapabilities,
   GameUIMotionCapabilities,
+  GameUIMusicCapabilities,
   GameUIOnboardingCapabilities,
   GameUIOverlayCapabilities,
   GameUIPartyCapabilities,
@@ -121,6 +122,8 @@ export type GameUIViewModelOptions = BaseViewModelOptions & {
   time: GameUITimeCapabilities;
   /** C-527 AC-6: the player's persisted motion selection. */
   motion: GameUIMotionCapabilities;
+  /** C-528: live BGM state for the contextual music-player widget. */
+  music?: GameUIMusicCapabilities;
   /** C-528: the HUD preference authority (read-only in this layer). */
   hud: GameUIHudCapabilities;
   /** C-528: measured viewport and text scale for HUD reflow. */
@@ -177,6 +180,7 @@ class GameUIViewModel
   private readonly _session: GameUISessionCapabilities;
   private readonly _time: GameUITimeCapabilities;
   private readonly _motion: GameUIMotionCapabilities;
+  private readonly _music: GameUIMusicCapabilities | undefined;
   private readonly _engine: GameEngineServiceInterface;
 
   private readonly _createCombatViewModel: typeof getCombatViewModel;
@@ -233,6 +237,7 @@ class GameUIViewModel
     this._session = options.session;
     this._time = options.time;
     this._motion = options.motion;
+    this._music = options.music;
     this._engine = options.engine;
 
     this._createCombatViewModel = options.createCombatViewModel;
@@ -274,6 +279,7 @@ class GameUIViewModel
         hasOnboardingHint: this.onboardingHintVisible,
         hasPlayerStatus: this.showHpBar,
         hasHotbar: this.showHotbar,
+        isMusicPlaying: this._music?.isPlaying ?? false,
       }),
     });
   }

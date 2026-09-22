@@ -123,11 +123,43 @@ export const effectiveHudWidgetPreference = (
 };
 
 /**
+ * Whether a widget's effective policy is anything other than `hidden`.
+ *
+ * The one read the legacy per-widget toggles (the audio music-player switch)
+ * need so they stop owning a second visibility source of truth (C-528
+ * Directive 11).
+ */
+export const isHudWidgetPolicyVisible = (
+  preferences: HudUserPreferences,
+  widgetId: HudWidgetId,
+): boolean => {
+  const preference = effectiveHudWidgetPreference(preferences, widgetId);
+  return preference !== undefined && preference.visibility !== 'hidden';
+};
+
+/** Field-wise equality — object key order must never make two equal values differ. */
+const sameHudWidgetPreference = (left: HudWidgetPreference, right: HudWidgetPreference): boolean =>
+  left.widgetId === right.widgetId &&
+  left.visibility === right.visibility &&
+  left.anchor === right.anchor &&
+  left.order === right.order &&
+  left.density === right.density &&
+  left.scale === right.scale;
+
+/**
  * Writes a partial override for one widget.
  *
  * Required widgets can never be hidden: the visibility field is ignored for
  * them so a persisted snapshot cannot strand the player without recovery
  * navigation. Every other field is accepted as long as the widget is known.
+ *
+ * 🔴 Two rules keep the override list duplicate-free and honest:
+ *   1. A patch with nothing applicable left after sanitizing (required
+ *      visibility, a region the widget cannot occupy) is not an edit.
+ *   2. Repeating a patch that already produced an identical override is a
+ *      no-op, so a stray drop cannot append a second row for the same widget.
+ * A first-time explicit choice is always recorded, even when it restates the
+ * preset — migration relies on that to prove the legacy value was honoured.
  */
 export const setHudWidgetOverride = (options: {
   preferences: HudUserPreferences;
@@ -149,7 +181,14 @@ export const setHudWidgetOverride = (options: {
   if (patch.scale !== undefined) {
     patch.scale = clampHudScale(patch.scale);
   }
+  if (Object.keys(patch).length === 0) {
+    return preferences;
+  }
   const next: HudWidgetPreference = { ...base, ...patch, widgetId };
+  const existing = preferences.overrides.find((entry) => entry.widgetId === widgetId);
+  if (existing !== undefined && sameHudWidgetPreference(next, existing)) {
+    return preferences;
+  }
   const overrides = preferences.overrides.filter((entry) => entry.widgetId !== widgetId);
   overrides.push(next);
   return { ...preferences, overrides };

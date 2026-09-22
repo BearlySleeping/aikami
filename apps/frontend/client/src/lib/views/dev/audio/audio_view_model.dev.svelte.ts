@@ -12,8 +12,14 @@ import {
 } from '@aikami/frontend/services/base';
 import type { MusicSceneContext, Track } from '@aikami/types';
 import { playSceneBgm, playSfxByName } from '$lib/services/audio/audio_asset_resolver';
+import { isHudWidgetPolicyVisible } from '$lib/utils/hud/hud_layout_state';
 import { buildMusicSceneContext } from '$lib/utils/music_utils';
-import { audioService, musicPlayerService, trackRegistryService } from '$services';
+import {
+  audioService,
+  hudPreferenceService,
+  musicPlayerService,
+  trackRegistryService,
+} from '$services';
 
 // ---------------------------------------------------------------------------
 // Scene/vibe presets for testing vibe-matched skipping
@@ -173,7 +179,7 @@ class DevAudioViewModel
   private _pollInterval: ReturnType<typeof setInterval> | undefined;
 
   get musicPlayerVisible(): boolean {
-    return musicPlayerService.visible;
+    return isHudWidgetPolicyVisible(hudPreferenceService.preferences, 'music-player');
   }
 
   get currentTrackTitle(): string {
@@ -210,7 +216,7 @@ class DevAudioViewModel
 
   /** @inheritdoc */
   override async initialize(): Promise<void> {
-    // Discover tracks + restore overlay visibility.
+    // Discover tracks. Widget visibility is owned by the HUD authority.
     await musicPlayerService.initialize();
 
     // Poll audioService every ~200ms to keep the display in sync
@@ -267,7 +273,11 @@ class DevAudioViewModel
   // ── Music player controls ──
 
   toggleMusicPlayer(): void {
-    musicPlayerService.toggleVisible();
+    hudPreferenceService.applyNow({
+      kind: 'set-visibility',
+      widgetId: 'music-player',
+      visibility: this.musicPlayerVisible ? 'hidden' : 'always',
+    });
   }
 
   async playTrack(track: Track): Promise<void> {

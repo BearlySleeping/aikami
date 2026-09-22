@@ -131,6 +131,15 @@ export type GameUIMotionCapabilities = Pick<
 >;
 
 /**
+ * C-528 — live BGM playback state the resolver uses to decide whether the
+ * contextual music-player widget is relevant right now. Optional so sandboxes
+ * and tests that never show music do not have to wire an audio service.
+ */
+export type GameUIMusicCapabilities = {
+  readonly isPlaying: boolean;
+};
+
+/**
  * C-528 — the HUD preference authority the game HUD renders from.
  *
  * The game layer reads the committed snapshot and the temporary Hide HUD flag;

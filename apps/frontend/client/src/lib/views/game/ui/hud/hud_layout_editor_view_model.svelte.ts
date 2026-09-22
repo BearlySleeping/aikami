@@ -25,7 +25,11 @@ import {
   type HudViewport,
   mergeHudPreferences,
 } from '$lib/utils/hud/hud_layout_policy.ts';
-import { allowedHudAnchors, type HudEditorCommand } from '$lib/utils/hud/hud_layout_state.ts';
+import {
+  allowedHudAnchors,
+  effectiveHudWidgetPreference,
+  type HudEditorCommand,
+} from '$lib/utils/hud/hud_layout_state.ts';
 import { resolveGameHudLayout } from '../hud_layout_bridge.ts';
 
 /** The fixture contexts the editor can preview. Presentation only. */
@@ -86,6 +90,19 @@ export type HudEditorWidgetRow = {
   readonly allowedAnchors: readonly HudSlot[];
 };
 
+/**
+ * Live pointer state for the drag ghost.
+ *
+ * `anchor` is the region under the pointer right now (resolved by the view,
+ * which owns DOM hit-testing); the ViewModel only holds the value so the ghost
+ * and the highlighted region can be rendered without view-local state.
+ */
+export type HudEditorDragPosition = {
+  readonly x: number;
+  readonly y: number;
+  readonly anchor: HudSlot | undefined;
+};
+
 export type HudLayoutEditorViewModelOptions = BaseViewModelOptions & {
   readonly hud: HudEditorPreferenceCapabilities;
   /** Returns to the pause menu after Save or Cancel. */
@@ -114,6 +131,10 @@ export type HudLayoutEditorViewModelInterface = BaseViewModelInterface & {
   readonly confirmingDiscard: boolean;
   readonly statusMessage: string | undefined;
   readonly isDragging: boolean;
+  /** Label of the widget being dragged, for the floating drag ghost. */
+  readonly draggingLabel: string | undefined;
+  /** Live pointer position + region under the pointer while dragging. */
+  readonly dragPosition: HudEditorDragPosition | undefined;
 
   selectWidget(widgetId: HudWidgetId): void;
   selectAdjacentWidget(direction: 1 | -1): void;
@@ -122,10 +143,14 @@ export type HudLayoutEditorViewModelInterface = BaseViewModelInterface & {
   handleKeyDown(event: KeyboardEvent): void;
   handleGamepadAction(action: HudEditorGamepadAction): void;
   beginDrag(widgetId: HudWidgetId): void;
+  /** Records the pointer position (and region) for the drag ghost. */
+  updateDrag(position: HudEditorDragPosition): void;
   dropOnAnchor(anchor: HudSlot): void;
   endDrag(): void;
   cycleSelectedVisibility(): void;
   nudgeSelectedScale(delta: number): void;
+  /** Pointer parity: cycles one widget's visibility through the shared command. */
+  cycleWidgetVisibility(widgetId: HudWidgetId): void;
   save(): void;
   cancel(): void;
   requestClose(): void;
@@ -187,6 +212,7 @@ class HudLayoutEditorViewModel
   confirmingDiscard = $state(false);
   statusMessage = $state<string | undefined>(undefined);
   isDragging = $state(false);
+  dragPosition = $state<HudEditorDragPosition | undefined>(undefined);
   dormantWidgetIds = $state<readonly string[]>([]);
 
   constructor(options: HudLayoutEditorViewModelOptions) {
@@ -301,6 +327,18 @@ class HudLayoutEditorViewModel
   get canRedo(): boolean {
     void this.revision;
     return this._hud.canRedo;
+  }
+
+  /** @inheritdoc */
+  get draggingLabel(): string | undefined {
+    if (!this.isDragging) {
+      return undefined;
+    }
+    const widgetId = this.selectedWidgetId;
+    if (!widgetId) {
+      return undefined;
+    }
+    return this.widgetRows.find((row) => row.widgetId === widgetId)?.label ?? widgetId;
   }
 
   // ── Actions ──
@@ -444,13 +482,30 @@ class HudLayoutEditorViewModel
   beginDrag(widgetId: HudWidgetId): void {
     this.selectedWidgetId = widgetId;
     this.isDragging = true;
+    this.dragPosition = undefined;
   }
 
-  /** Pointer drop — a drag and a keyboard anchor move reach the same command. */
+  /** @inheritdoc */
+  updateDrag(position: HudEditorDragPosition): void {
+    this.dragPosition = position;
+  }
+
+  /** Pointer drag — a drag and a keyboard anchor move reach the same command. */
   dropOnAnchor(anchor: HudSlot): void {
     const widgetId = this.selectedWidgetId;
     this.isDragging = false;
+    this.dragPosition = undefined;
     if (!widgetId) {
+      return;
+    }
+    if (!allowedHudAnchors(widgetId).includes(anchor)) {
+      this.statusMessage = 'That region is reserved for other HUD surfaces.';
+      return;
+    }
+    const current = effectiveHudWidgetPreference(this._hud.draft, widgetId)?.anchor;
+    if (current === anchor) {
+      // Dropping a widget back onto its own region is not an edit. Returning
+      // early keeps a stray drop from recording a redundant override.
       return;
     }
     this.dispatch({ kind: 'set-anchor', widgetId, anchor });
@@ -459,6 +514,7 @@ class HudLayoutEditorViewModel
   /** Pointer drag cancelled. */
   endDrag(): void {
     this.isDragging = false;
+    this.dragPosition = undefined;
   }
 
   /** @inheritdoc */
@@ -477,6 +533,12 @@ class HudLayoutEditorViewModel
       return;
     }
     this.dispatch({ kind: 'nudge-scale', widgetId, delta });
+  }
+
+  /** @inheritdoc */
+  cycleWidgetVisibility(widgetId: HudWidgetId): void {
+    this.selectWidget(widgetId);
+    this.dispatch({ kind: 'cycle-visibility', widgetId, direction: 1 });
   }
 
   /** @inheritdoc */

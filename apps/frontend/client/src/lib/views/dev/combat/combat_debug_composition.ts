@@ -13,6 +13,7 @@
 
 import { loadContentPack } from '@aikami/frontend/engine/sim';
 import type { BaseViewModelOptions } from '@aikami/frontend/services/base';
+import { replaceState } from '$app/navigation';
 import { assetTagResolver } from '$lib/services/assets/registry_resolver';
 import { buildEncounterRosterFromContentPack } from '$lib/services/game/combat_encounter_roster.ts';
 import { getCombatViewModel } from '$views/combat/combat_composition.ts';
@@ -38,12 +39,15 @@ export const getCombatDebugViewModel = (
   createCombatDebugViewModel({
     ...options,
     readUrlSearch: () => (typeof window === 'undefined' ? '' : window.location.search),
+    // Use SvelteKit's router-aware replaceState. A direct
+    // `window.history.replaceState` conflicts with the SvelteKit router and
+    // warns; this preserves the same no-reload behavior without desyncing it.
     replaceUrl: (query: string) => {
       if (typeof window === 'undefined') {
         return;
       }
-      const next = `${window.location.pathname}${query ? `?${query}` : ''}`;
-      window.history.replaceState(window.history.state, '', next);
+      const next = `${window.location.pathname}${query ? `?${query}` : ''}${window.location.hash}`;
+      void replaceState(next, {});
     },
     readCurrentUrl: () => (typeof window === 'undefined' ? '' : window.location.href),
     writeClipboard: async (text: string) => {

@@ -27,21 +27,72 @@ test.describe('C-528 HUD presets and layout editor', () => {
     await expect(hud.hudWidget('menu')).toBeAttached();
   });
 
+  test('AC-1: the player health fill is actually painted', async () => {
+    await expect(hud.page.getByTestId('player-hud')).toBeAttached({ timeout: 30_000 });
+    // Regression: the fill is a <span>; if it regresses to an inline box its
+    // inline-size is ignored and the bar paints empty at every HP value.
+    const result = await hud.page.evaluate(() => {
+      const root = document.querySelector<HTMLElement>('[data-testid="player-hud"]');
+      const fill = root?.querySelector<HTMLElement>('.hud-status__fill');
+      const track = root?.querySelector<HTMLElement>('.hud-status__track');
+      return {
+        percent: Number(root?.getAttribute('aria-valuenow') ?? '0'),
+        display: fill ? getComputedStyle(fill).display : '',
+        fill: fill?.getBoundingClientRect().width ?? 0,
+        track: track?.getBoundingClientRect().width ?? 0,
+      };
+    });
+    expect(result.track).toBeGreaterThan(0);
+    expect(result.display).not.toBe('inline');
+    if (result.percent > 0) {
+      expect(result.fill).toBeGreaterThan(0);
+      expect(result.fill).toBeLessThanOrEqual(result.track + 1);
+    }
+  });
+
   test('AC-2: pointer and keyboard reach the same valid configuration', async () => {
     await hud.openEditor();
 
     // Pointer: drag the objective onto another allowed region.
     await hud.dragWidgetTo('objective', 'top-start');
-    await expect(hud.editorRow('objective')).toContainText('top-start');
-    await expect(hud.previewWidget('objective')).toBeAttached();
+    await expect(hud.previewWidget('objective')).toHaveAttribute('data-hud-anchor', 'top-start');
+
+    // Drag directly in the preview: its own region visits another allowed one.
+    await hud.dragPreviewWidgetTo('objective', 'bottom-end');
+    await expect(hud.previewWidget('objective')).toHaveAttribute('data-hud-anchor', 'bottom-end');
 
     // Keyboard: select another widget and move it with the arrow keys.
     await hud.selectEditorWidget('hotbar');
     await hud.pressEditorKey('ArrowRight');
-    await expect(hud.editorRow('hotbar')).not.toContainText('bottom-center');
+    await expect(hud.previewWidget('hotbar')).not.toHaveAttribute(
+      'data-hud-anchor',
+      'bottom-center',
+    );
 
     // Both edits are drafts: the committed snapshot is untouched until Save.
     await expect(hud.editorUndo).toBeEnabled();
+  });
+
+  test('AC-2: a hidden widget can be added with the visibility control and survives save', async () => {
+    await hud.openEditor();
+    // The music player ships hidden; add it without relying on a drag.
+    await hud.selectEditorWidget('music-player');
+    const visibility = hud.page.getByTestId('hud-editor-visibility-music-player');
+    await visibility.click();
+    await expect(visibility).toHaveText('always');
+    await hud.saveEditor();
+    await expect(hud.editor).toHaveCount(0);
+
+    const stored = (await hud.readStoredPreferences()) as {
+      overrides: { widgetId: string; visibility: string }[];
+    };
+    expect(stored.overrides.find((widget) => widget.widgetId === 'music-player')?.visibility).toBe(
+      'always',
+    );
+
+    // Resume so the HUD chrome is mounted again, then the widget must paint.
+    await hud.page.keyboard.press('Escape');
+    await expect(hud.hudWidget('music-player')).toBeAttached();
   });
 
   test('AC-2: a reserved action region refuses an unrelated widget', async () => {

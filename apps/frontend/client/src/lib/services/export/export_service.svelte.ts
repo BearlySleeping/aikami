@@ -479,7 +479,19 @@ class ExportService
       { sql: 'DELETE FROM string_registry', args: [] },
       { sql: 'DELETE FROM meta', args: [] },
       { sql: 'DELETE FROM campaigns', args: [] },
+      // Game-operation ledger and generation provenance. Children first so the
+      // delete is valid regardless of whether ON DELETE CASCADE is enforced.
+      { sql: 'DELETE FROM generation_acceptances', args: [] },
+      { sql: 'DELETE FROM generation_artifacts', args: [] },
+      { sql: 'DELETE FROM generation_candidates', args: [] },
+      { sql: 'DELETE FROM game_operations', args: [] },
     ]);
+
+    // The browser adapter batches writes into a debounced IndexedDB snapshot
+    // (see WasmStorageAdapter). The caller reloads immediately after this
+    // resolves, so the pending snapshot MUST be flushed first — otherwise the
+    // reload restores the pre-delete database and the "deleted" data returns.
+    await db.flush?.();
   }
 }
 

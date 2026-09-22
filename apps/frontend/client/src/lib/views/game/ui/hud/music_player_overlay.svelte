@@ -3,9 +3,13 @@
 //
 // Optional in-game music player mini-overlay. Shows the currently playing
 // track, the scene vibe, and play/pause, stop, and vibe-skip controls.
-// Visibility is toggled from Settings > Audio (persisted in localStorage).
 //
-// Contract: C-150 (audio engine), C-249 (music tags)
+// 🔴 Whether it shows is owned by the HUD resolver: the `music-player` widget
+// is placed by the C-528 layout policy, and this component only paints when
+// that policy plus its own Hide control say so. The legacy Audio settings
+// switch is an adapter over the same authority.
+//
+// Contract: C-150 (audio engine), C-249 (music tags), C-528 (HUD authority)
 
 import { BaseViewModelContainer } from '$components';
 import { getMusicPlayerViewModel } from './music_player_composition.ts';
@@ -32,7 +36,7 @@ const playPauseTitle = $derived.by(() => {
 <BaseViewModelContainer {viewModel}>
   {#if viewModel.visible}
     <section
-      class="pointer-events-auto absolute bottom-20 left-3 z-10 flex w-72 flex-col gap-1 rounded-xl border border-base-content/10 bg-base-200/90 p-3 shadow-2xl backdrop-blur-md"
+      class="pointer-events-auto flex w-64 max-w-full flex-col gap-1 rounded-xl border border-base-content/10 bg-base-200/90 p-3 shadow-2xl backdrop-blur-md"
       aria-label="Music player"
       data-testid="music-player-overlay"
     >

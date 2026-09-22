@@ -19,6 +19,7 @@
 //
 // Contract: combat debug workspace (execution plan §3–§8)
 
+import { untrack } from 'svelte';
 import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
 import CombatSidebar from '$views/combat/combat_sidebar.svelte';
 import EnrichedLogEntry from '$views/combat/components/enriched_log_entry.svelte';
@@ -71,6 +72,12 @@ const { viewModel }: Props = $props();
           {viewModel.statusLabel}
         </span>
       </span>
+      <span class="flex items-center gap-1">
+        <span class="font-semibold text-base-content/60">Health</span>
+        <span class="badge badge-sm" data-testid="combat-debug-health-overall">
+          {viewModel.battlefieldDiagnostics.healthOverall}
+        </span>
+      </span>
       <span class="text-base-content/60">
         revision <span class="font-mono text-base-content/80">{viewModel.revision}</span>
       </span>
@@ -103,14 +110,94 @@ const { viewModel }: Props = $props();
     </div>
 
     {#if viewModel.mode === 'live'}
-      <div class="grid min-h-0 flex-1 overflow-hidden" style="grid-template-columns: 35vw 1fr;">
+      <!--
+        Debugging-IDE layout: production combat controls on the left, the
+        battlefield as the dominant centre column, and the inspector + trace
+        timeline stacked on the right. Column widths use minmax() so the two
+        side panels stay usable without starving the battlefield, and every pane
+        is `min-h-0` inside an `h-full` flex chain so scroll areas are
+        intentional rather than accidental.
+      -->
+      <div
+        class="grid min-h-0 flex-1 overflow-hidden"
+        style="grid-template-columns: minmax(17rem, 23rem) minmax(0, 1fr) minmax(19rem, 25rem);"
+      >
         {#if viewModel.combatViewModel}
-          <div class="min-h-0 overflow-hidden">
+          <div class="min-h-0 overflow-hidden border-r border-base-300">
             <CombatSidebar viewModel={viewModel.combatViewModel} />
           </div>
         {/if}
 
-        <div class="flex min-h-0 flex-col overflow-hidden">
+        <div
+          class="relative flex min-h-0 flex-col overflow-hidden bg-black"
+          data-testid="combat-debug-battlefield"
+        >
+          <div
+            class="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-base-300 bg-base-200 px-2 py-1 text-[11px]"
+          >
+            <span class="font-semibold text-base-content/70">Battlefield</span>
+            <span class="text-base-content/60" data-testid="combat-debug-battlefield-summary">
+              {viewModel.battlefieldDiagnostics.battlefield}
+            </span>
+            <span class="text-base-content/60">{viewModel.battlefieldDiagnostics.renderer}</span>
+            <span class="text-base-content/60" data-testid="combat-debug-canvas-summary">
+              {viewModel.battlefieldDiagnostics.canvas}
+            </span>
+            <span class="text-base-content/60" data-testid="combat-debug-camera-summary">
+              {viewModel.battlefieldDiagnostics.camera}
+            </span>
+            <span class="text-base-content/60" data-testid="combat-debug-combat-summary">
+              {viewModel.battlefieldDiagnostics.combat}
+            </span>
+            <span class="text-base-content/60" data-testid="combat-debug-parity-summary">
+              {viewModel.battlefieldDiagnostics.parity}
+            </span>
+            {#if viewModel.battlefieldDiagnostics.pointer}
+              <span
+                class="font-mono text-base-content/50"
+                data-testid="combat-debug-pointer-summary"
+              >
+                {viewModel.battlefieldDiagnostics.pointer}
+              </span>
+            {/if}
+            <button
+              type="button"
+              class="btn btn-ghost btn-xs"
+              data-testid="combat-debug-fit-camera"
+              onclick={() => viewModel.fitBattlefieldCamera()}
+            >
+              Fit board
+            </button>
+            <div
+              class="flex flex-wrap items-center gap-1"
+              data-testid="combat-debug-overlay-toggles"
+            >
+              {#each viewModel.battlefieldDiagnostics.layerOptions as layer (layer.id)}
+                <button
+                  type="button"
+                  class="btn btn-xs"
+                  class:btn-primary={layer.enabled}
+                  aria-pressed={layer.enabled}
+                  onclick={() => viewModel.toggleBattlefieldLayer(layer.id)}
+                >
+                  {layer.label}
+                </button>
+              {/each}
+            </div>
+            <details class="ml-auto" open>
+              <summary class="cursor-pointer text-base-content/60">Health</summary>
+              <ul class="mt-1 space-y-0.5" data-testid="combat-debug-health">
+                {#each viewModel.battlefieldDiagnostics.healthRows as row (row.id)}
+                  <li class="flex items-center gap-1" data-testid="combat-debug-health-{row.id}">
+                    <span class="inline-block h-1.5 w-1.5 rounded-full {row.dotClass}"></span>
+                    <span class="font-semibold">{row.label}</span>
+                    <span class="badge badge-sm {row.badgeClass}">{row.message}</span>
+                  </li>
+                {/each}
+              </ul>
+            </details>
+          </div>
+
           <div class="relative min-h-0 flex-1 overflow-hidden bg-black">
             {#if !viewModel.engineReady && !viewModel.engineError}
               <div
@@ -126,26 +213,49 @@ const { viewModel }: Props = $props();
               attachment boots exactly ONE fresh isolated session against the
               new element instead of leaving a disposed world behind a dead
               canvas.
+
+              The boot MUST run inside `untrack`. An attachment is evaluated
+              inside a Svelte effect, so any reactive read it performs becomes a
+              dependency: `initializeLiveCanvas` → `_bootLiveSession` reads
+              `mode`/`combatViewModel` and then writes `combatViewModel`, so a
+              tracked boot re-runs its own effect and loops forever
+              booting/disposing the world. The keyed canvas alone decides when a
+              session is re-created.
             -->
             {#key viewModel.sessionEpoch}
               <canvas
                 id="combat-debug-canvas"
                 class="h-full w-full"
                 {@attach (element) => {
-                  void viewModel.initializeLiveCanvas(element);
+                  untrack(() => {
+                    void viewModel.initializeLiveCanvas(element);
+                  });
                 }}
                 aria-label="Combat debug live canvas"
               ></canvas>
             {/key}
+            <div
+              class="pointer-events-none absolute bottom-1 left-1 max-w-[90%] rounded bg-black/70 px-2 py-1 font-mono text-[10px] text-white/90"
+              data-testid="combat-debug-diagnostics"
+            >
+              <div>{viewModel.battlefieldDiagnostics.canvas}</div>
+              <div>{viewModel.battlefieldDiagnostics.camera}</div>
+              <div>{viewModel.battlefieldDiagnostics.parity}</div>
+              {#if viewModel.battlefieldDiagnostics.pointer}
+                <div>{viewModel.battlefieldDiagnostics.pointer}</div>
+              {/if}
+            </div>
           </div>
+        </div>
 
-          <div class="grid min-h-0 flex-1 grid-cols-2 overflow-hidden border-t border-base-300">
-            <div class="min-h-0 overflow-hidden">
-              <CombatDebugInspector {viewModel} />
-            </div>
-            <div class="min-h-0 overflow-hidden border-l border-base-300">
-              <CombatDebugTimeline {viewModel} />
-            </div>
+        <div
+          class="grid min-h-0 grid-rows-[minmax(0,1fr)_minmax(8rem,14rem)] overflow-hidden border-l border-base-300"
+        >
+          <div class="min-h-0 overflow-hidden">
+            <CombatDebugInspector {viewModel} />
+          </div>
+          <div class="min-h-0 overflow-hidden border-t border-base-300">
+            <CombatDebugTimeline {viewModel} />
           </div>
         </div>
       </div>
