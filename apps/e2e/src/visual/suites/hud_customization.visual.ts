@@ -167,12 +167,12 @@ export default defineConfig({
     {
       name: 'inventory-detail',
       prompt:
-        'The HUD editor is open with the widget list visible. Expected: each widget row shows a readable widget label plus small badges for visibility, placement and scale percentage, and the selected row is visually distinguished. Flag unreadable labels or a widget row whose badges overlap its label.',
+        'The HUD editor is open with the widget list visible. Expected: each widget row is a single clean line with a drag grip, a readable widget label and a small visibility button, and the selected row is visually distinguished. Flag unreadable labels, overlapping rows, or a row that looks like a cramped form.',
       schema: HudCustomizationSchema,
       screenshotSelector: '[data-testid="hud-editor-widgets"]',
       setupHook: async (page) => {
         await openEditor(page);
-        await page.getByTestId('hud-editor-row-objective').click();
+        await page.getByTestId('hud-editor-select-objective').click();
         await page.waitForTimeout(300);
       },
       requiredFalseFields: ['missingCriticalAction', 'overlappingControls', 'unreadableText'],

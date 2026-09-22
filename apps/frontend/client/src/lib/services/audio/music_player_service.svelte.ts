@@ -3,13 +3,17 @@
 // MusicPlayerService — in-game music player orchestrator.
 //
 // Wraps the AudioService (BGM engine) + TrackRegistryService (tag-based
-// library) to power an optional mini music-player overlay:
+// library) to power the optional mini music-player overlay:
 //   - Shows the currently playing track (title + vibe badge)
 //   - Pause / resume / stop / skip controls
 //   - "Similar vibe" skip: resolves another track whose tags overlap the
 //     current scene context (e.g. exploration forest → another ambient
 //     forest track), crossfading between tracks.
-//   - Persisted visibility toggle (shown/hidden from Settings > Audio).
+//
+// 🔴 This service owns PLAYBACK only. Widget visibility belongs to the HUD
+// preference authority (C-528 Directive 11): the `music-player` widget's
+// visibility is set in the HUD editor / Interface settings, and the legacy
+// Audio-tab switch is an adapter over it. There is no second visibility store.
 //
 // Contract: C-150 (audio engine), C-243 (asset manifest), C-249 (music tags)
 
@@ -24,18 +28,12 @@ import { audioService } from './audio_service.svelte.ts';
 import { sceneToMusicTags } from './scene_to_music_tags';
 import { trackRegistryService } from './track_registry_service.svelte.ts';
 
-/** localStorage key for the music player visibility toggle. */
-const MUSIC_PLAYER_VISIBLE_KEY = 'aikami:music-player:visible';
-
 /** Default crossfade between tracks on skip (ms). */
 const SKIP_CROSSFADE_MS = 1200;
 
 export type MusicPlayerServiceOptions = BaseFrontendClassOptions;
 
 export type MusicPlayerServiceInterface = BaseFrontendClassInterface & {
-  /** Whether the music player overlay is shown (persisted toggle). */
-  readonly visible: boolean;
-
   /** The currently playing track, or null when none. */
   readonly currentTrack: Track | null;
 
@@ -59,12 +57,6 @@ export type MusicPlayerServiceInterface = BaseFrontendClassInterface & {
 
   /** Last user-facing feedback message (e.g. "No other similar track"). */
   readonly feedback: string;
-
-  /** Shows/hides the overlay and persists the choice. */
-  toggleVisible(): void;
-
-  /** Explicitly sets overlay visibility. */
-  setVisible(visible: boolean): void;
 
   /** Discovers tracks, registers vibe tags, and starts scene watching. */
   initialize(): Promise<void>;
@@ -92,7 +84,6 @@ class MusicPlayerService
   extends BaseFrontendClass<MusicPlayerServiceOptions>
   implements MusicPlayerServiceInterface
 {
-  visible = $state<boolean>(false);
   currentScene: MusicSceneContext = $state<MusicSceneContext>({
     locationType: 'wilderness',
     timeOfDay: 'afternoon',
@@ -152,42 +143,16 @@ class MusicPlayerService
     return this._findSimilarTrack() !== null;
   }
 
-  // ── Visibility toggle (persisted) ──
-
-  /** @inheritdoc */
-  toggleVisible(): void {
-    this.setVisible(!this.visible);
-  }
-
-  /** @inheritdoc */
-  setVisible(visible: boolean): void {
-    this.visible = visible;
-    try {
-      localStorage.setItem(MUSIC_PLAYER_VISIBLE_KEY, visible ? '1' : '0');
-    } catch {
-      // localStorage unavailable (SSR/privacy mode) — in-memory only
-    }
-    this.debug('setVisible', { visible });
-  }
-
   // ── Lifecycle ──
 
   /** @inheritdoc */
   async initialize(): Promise<void> {
-    // Restore persisted visibility.
-    try {
-      this.visible = localStorage.getItem(MUSIC_PLAYER_VISIBLE_KEY) === '1';
-    } catch {
-      this.visible = false;
-    }
-
     // Curated vibe tags make scene matching meaningful.
     trackRegistryService.registerVibeTags(MUSIC_VIBE_TAGS);
     await trackRegistryService.discoverLocal();
 
     this.debug('initialize', {
       tracks: this.tracks.length,
-      visible: this.visible,
     });
   }
 

@@ -36,8 +36,27 @@ export * from './content.ts';
 // EngineBridge (OOP contract — the sole UI↔Game boundary)
 export type { EngineBridge } from './engine_bridge.ts';
 export { createEngineBridge, MockEngineBridge } from './engine_bridge.ts';
+export type {
+  DebugSceneCamera,
+  DebugSceneController,
+  DebugSceneScreen,
+  GameWorldViewportDiagnostics,
+} from './game_world/debug_scene_controller.ts';
+// Synthetic debug-scene projection (types only — GameWorld paints it)
+export type {
+  DebugSceneActor,
+  DebugSceneObject,
+  DebugSceneOverlayLayers,
+  DebugSceneShape,
+  DebugSceneSpec,
+  DebugSceneTeam,
+} from './game_world/debug_scene_overlay.ts';
 // GameWorld (lifecycle manager)
-export type { GameWorldInitializeOptions, GameWorldOptions, PlayerInitData } from './game_world.ts';
+export type {
+  GameWorldInitializeOptions,
+  GameWorldOptions,
+  PlayerInitData,
+} from './game_world.ts';
 export { GameWorld } from './game_world.ts';
 export * from './render.ts';
 export * from './sim.ts';

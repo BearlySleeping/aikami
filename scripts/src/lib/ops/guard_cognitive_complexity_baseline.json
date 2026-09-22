@@ -715,8 +715,8 @@
   },
   "apps/frontend/client/src/lib/views/dev/combat/session/combat_debug_live_session.ts": {
     "counts": {
-      "excessive": 2,
-      "worst": 20
+      "excessive": 1,
+      "worst": 16
     }
   },
   "apps/frontend/client/src/lib/views/dev/lpc_ai/lpc_ai_test_view_model.svelte.ts": {

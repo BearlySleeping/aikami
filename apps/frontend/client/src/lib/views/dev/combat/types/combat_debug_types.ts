@@ -6,7 +6,24 @@
 //
 // Contract: combat debug workspace (execution prompt §2, §3, §5)
 
+import type { DebugSceneOverlayLayers } from '@aikami/frontend/engine';
 import type { CombatCommand, CombatReproduction } from '@aikami/types';
+
+/** One health row rendered in the battlefield diagnostics panel. */
+export type CombatDebugHealthRow = {
+  readonly id: string;
+  readonly label: string;
+  readonly message: string;
+  readonly badgeClass: string;
+  readonly dotClass: string;
+};
+
+/** One toggleable overlay layer in the battlefield control group. */
+export type CombatDebugBattlefieldLayerOption = {
+  readonly id: keyof DebugSceneOverlayLayers;
+  readonly label: string;
+  readonly enabled: boolean;
+};
 
 /** The three workspace modes. One ViewModel, one route, three explicit modes. */
 export const COMBAT_DEBUG_MODES = ['live', 'replay', 'fixtures'] as const;

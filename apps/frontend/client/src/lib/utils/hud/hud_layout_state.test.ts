@@ -269,6 +269,56 @@ describe('C-528 snapshot helpers', () => {
     expect(preferences.overrides[0]?.scale).toBe(1.3);
   });
 
+  test('repeating an identical patch does not duplicate the override', () => {
+    const once = setHudWidgetOverride({
+      preferences: committed(),
+      widgetId: 'hotbar',
+      patch: { scale: 1.2 },
+    });
+    expect(once.overrides).toHaveLength(1);
+    const twice = setHudWidgetOverride({
+      preferences: once,
+      widgetId: 'hotbar',
+      patch: { scale: 1.2 },
+    });
+    expect(twice).toBe(once);
+    expect(twice.overrides).toHaveLength(1);
+  });
+
+  test('an explicit choice that restates the preset is still recorded', () => {
+    // Legacy migration relies on this: the objective override matches the
+    // adventure default, but recording it proves the stored value was honoured.
+    const preferences = setHudWidgetOverride({
+      preferences: committed(),
+      widgetId: 'objective',
+      patch: { visibility: 'contextual', density: 'compact' },
+    });
+    expect(preferences.overrides).toHaveLength(1);
+    expect(preferences.overrides[0]?.widgetId).toBe('objective');
+  });
+
+  test('a disallowed anchor never leaves an override behind', () => {
+    const preferences = setHudWidgetOverride({
+      preferences: committed(),
+      widgetId: 'objective',
+      patch: { anchor: 'bottom-center' },
+    });
+    expect(preferences.overrides).toEqual([]);
+    expect(effectiveHudWidgetPreference(preferences, 'objective')?.anchor).toBe('bottom-start');
+  });
+
+  test('a refused command does not dirty the draft or fill the undo stack', () => {
+    const state = createHudEditorState(committed());
+    const next = applyHudEditorCommand(state, {
+      kind: 'set-anchor',
+      widgetId: 'objective',
+      anchor: 'bottom-center',
+    });
+    expect(next).toBe(state);
+    expect(hudEditorIsDirty(next)).toBe(false);
+    expect(hudEditorCanUndo(next)).toBe(false);
+  });
+
   test('out-of-range scales are clamped, not rejected silently', () => {
     const preferences = setHudWidgetOverride({
       preferences: committed(),

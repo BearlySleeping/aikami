@@ -5,17 +5,28 @@
 // receives them as typed capabilities.
 
 import type { BaseViewModelOptions } from '@aikami/frontend/services/base';
+import type { HudWidgetId } from '@aikami/types';
+import { isHudWidgetPolicyVisible } from '$lib/utils/hud/hud_layout_state.ts';
 import { buildMusicSceneContext } from '$lib/utils/music_utils';
 import { gameEngineService, gameOverlayService, musicPlayerService, timeService } from '$services';
+import { configuredHudPreferenceService } from '$views/hud_preference_composition.ts';
 import {
   createMusicPlayerViewModel,
   type MusicPlayerViewModelInterface,
 } from './music_player_view_model.svelte';
 
+/** The registry id of the optional music-player widget. */
+const MUSIC_PLAYER_WIDGET_ID: HudWidgetId = 'music-player';
+
 /**
  * Builds the music-player ViewModel wired to the production audio, engine,
- * time, and overlay singletons. Reactive state is exposed through getters so
- * the ViewModel's effect tracks the live services.
+ * time, and overlay singletons.
+ *
+ * 🔴 The HUD resolver owns whether this widget is shown, not the audio service.
+ * C-528 Directive 11 makes the HUD preference authority the single visibility
+ * owner; the audio service keeps playback (track, pause, skip, stop). The
+ * overlay is only mounted when the resolver placed the widget, and this adapter
+ * keeps the widget's in-overlay Hide control writing to the same authority.
  */
 export const getMusicPlayerViewModel = (
   options: BaseViewModelOptions,
@@ -24,7 +35,10 @@ export const getMusicPlayerViewModel = (
     ...options,
     player: {
       get visible(): boolean {
-        return musicPlayerService.visible;
+        return isHudWidgetPolicyVisible(
+          configuredHudPreferenceService.preferences,
+          MUSIC_PLAYER_WIDGET_ID,
+        );
       },
       get currentTrack() {
         return musicPlayerService.currentTrack;
@@ -44,7 +58,13 @@ export const getMusicPlayerViewModel = (
       get feedback(): string {
         return musicPlayerService.feedback;
       },
-      setVisible: (v) => musicPlayerService.setVisible(v),
+      setVisible: (visible) => {
+        configuredHudPreferenceService.applyNow({
+          kind: 'set-visibility',
+          widgetId: MUSIC_PLAYER_WIDGET_ID,
+          visibility: visible ? 'always' : 'hidden',
+        });
+      },
       resume: () => musicPlayerService.resume(),
       pause: () => musicPlayerService.pause(),
       skip: () => musicPlayerService.skip(),

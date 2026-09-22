@@ -38,6 +38,8 @@ export type GameHudViewContext = {
   readonly hasOnboardingHint: boolean;
   readonly hasPlayerStatus: boolean;
   readonly hasHotbar: boolean;
+  /** Whether BGM is playing — makes the contextual music-player widget relevant. */
+  readonly isMusicPlaying: boolean;
 };
 
 /** The labelled, accessible entry that holds widgets collapsed by reflow. */
@@ -101,7 +103,7 @@ export const createGameHudView = (options: GameHudViewOptions): GameHudViewInter
           isSaving: context.autoSaveStatus === 'saving',
           hasOnboardingHint: context.hasOnboardingHint,
           hasSystemNotice: context.autoSaveStatus === 'error',
-          isMusicPlaying: false,
+          isMusicPlaying: context.isMusicPlaying,
         }),
         pendingWidgetIds: [],
         viewport: options.hudView.viewport,
