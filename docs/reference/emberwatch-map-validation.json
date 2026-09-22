@@ -1,0 +1,69 @@
+{
+  "schemaVersion": 1,
+  "kind": "emberwatch-map-validation",
+  "generatedAt": "1980-01-01T00:00:00.000Z",
+  "findings": [],
+  "blockers": [],
+  "maps": [
+    {
+      "id": "inn",
+      "width": 28,
+      "height": 20,
+      "npcCount": 2,
+      "propCount": 20,
+      "transitionCount": 1,
+      "walkablePercent": 65.9,
+      "components": 1,
+      "unreachableCells": 0,
+      "legacyFrames": []
+    },
+    {
+      "id": "merchant_shop",
+      "width": 24,
+      "height": 18,
+      "npcCount": 1,
+      "propCount": 11,
+      "transitionCount": 1,
+      "walkablePercent": 61.1,
+      "components": 1,
+      "unreachableCells": 0,
+      "legacyFrames": []
+    },
+    {
+      "id": "old_road",
+      "width": 72,
+      "height": 36,
+      "npcCount": 2,
+      "propCount": 24,
+      "transitionCount": 2,
+      "walkablePercent": 78.2,
+      "components": 1,
+      "unreachableCells": 0,
+      "legacyFrames": []
+    },
+    {
+      "id": "ruined_shrine",
+      "width": 40,
+      "height": 36,
+      "npcCount": 1,
+      "propCount": 7,
+      "transitionCount": 1,
+      "walkablePercent": 76.3,
+      "components": 1,
+      "unreachableCells": 0,
+      "legacyFrames": []
+    },
+    {
+      "id": "village",
+      "width": 64,
+      "height": 48,
+      "npcCount": 4,
+      "propCount": 18,
+      "transitionCount": 3,
+      "walkablePercent": 75.7,
+      "components": 9,
+      "unreachableCells": 11,
+      "legacyFrames": []
+    }
+  ]
+}

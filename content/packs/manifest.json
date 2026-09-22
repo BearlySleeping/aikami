@@ -1,6 +1,6 @@
 {
   "scannedAt": "2026-09-20T15:03:36.641Z",
-  "count": 50,
+  "count": 57,
   "assets": {
     "index": {
       "tag": "index",
@@ -122,12 +122,36 @@
       "path": "emberwatch/portraits/woodcutter_ada/neutral.png",
       "ext": ".png"
     },
+    "emberwatch:props:prop_bookshelf": {
+      "tag": "emberwatch:props:prop_bookshelf",
+      "category": "contentPacks",
+      "subcategory": "props",
+      "name": "prop_bookshelf",
+      "path": "emberwatch/props/prop_bookshelf.png",
+      "ext": ".png"
+    },
+    "emberwatch:props:prop_well": {
+      "tag": "emberwatch:props:prop_well",
+      "category": "contentPacks",
+      "subcategory": "props",
+      "name": "prop_well",
+      "path": "emberwatch/props/prop_well.png",
+      "ext": ".png"
+    },
     "emberwatch:props:oak": {
       "tag": "emberwatch:props:oak",
       "category": "contentPacks",
       "subcategory": "props",
       "name": "oak",
       "path": "emberwatch/props/oak.png",
+      "ext": ".png"
+    },
+    "emberwatch:props:prop_counter": {
+      "tag": "emberwatch:props:prop_counter",
+      "category": "contentPacks",
+      "subcategory": "props",
+      "name": "prop_counter",
+      "path": "emberwatch/props/prop_counter.png",
       "ext": ".png"
     },
     "emberwatch:props:prop_support": {
@@ -168,6 +192,14 @@
       "subcategory": "props",
       "name": "prop_cart",
       "path": "emberwatch/props/prop_cart.png",
+      "ext": ".png"
+    },
+    "emberwatch:props:prop_anvil": {
+      "tag": "emberwatch:props:prop_anvil",
+      "category": "contentPacks",
+      "subcategory": "props",
+      "name": "prop_anvil",
+      "path": "emberwatch/props/prop_anvil.png",
       "ext": ".png"
     },
     "emberwatch:props:prop_barrel": {
@@ -218,6 +250,14 @@
       "path": "emberwatch/props/shrine_arch.png",
       "ext": ".png"
     },
+    "emberwatch:props:prop_table": {
+      "tag": "emberwatch:props:prop_table",
+      "category": "contentPacks",
+      "subcategory": "props",
+      "name": "prop_table",
+      "path": "emberwatch/props/prop_table.png",
+      "ext": ".png"
+    },
     "emberwatch:props:prop_oil_pool": {
       "tag": "emberwatch:props:prop_oil_pool",
       "category": "contentPacks",
@@ -240,6 +280,14 @@
       "subcategory": "props",
       "name": "shop",
       "path": "emberwatch/props/shop.png",
+      "ext": ".png"
+    },
+    "emberwatch:props:prop_bed": {
+      "tag": "emberwatch:props:prop_bed",
+      "category": "contentPacks",
+      "subcategory": "props",
+      "name": "prop_bed",
+      "path": "emberwatch/props/prop_bed.png",
       "ext": ".png"
     },
     "emberwatch:props:prop_notice_board": {
@@ -280,6 +328,14 @@
       "subcategory": "props",
       "name": "ward_small_c",
       "path": "emberwatch/props/ward_small_c.png",
+      "ext": ".png"
+    },
+    "emberwatch:props:prop_crate": {
+      "tag": "emberwatch:props:prop_crate",
+      "category": "contentPacks",
+      "subcategory": "props",
+      "name": "prop_crate",
+      "path": "emberwatch/props/prop_crate.png",
       "ext": ".png"
     },
     "emberwatch:props:ward_large": {
@@ -670,11 +726,35 @@
         "ext": ".png"
       },
       {
+        "tag": "emberwatch:props:prop_anvil",
+        "category": "contentPacks",
+        "subcategory": "props",
+        "name": "prop_anvil",
+        "path": "emberwatch/props/prop_anvil.png",
+        "ext": ".png"
+      },
+      {
         "tag": "emberwatch:props:prop_barrel",
         "category": "contentPacks",
         "subcategory": "props",
         "name": "prop_barrel",
         "path": "emberwatch/props/prop_barrel.png",
+        "ext": ".png"
+      },
+      {
+        "tag": "emberwatch:props:prop_bed",
+        "category": "contentPacks",
+        "subcategory": "props",
+        "name": "prop_bed",
+        "path": "emberwatch/props/prop_bed.png",
+        "ext": ".png"
+      },
+      {
+        "tag": "emberwatch:props:prop_bookshelf",
+        "category": "contentPacks",
+        "subcategory": "props",
+        "name": "prop_bookshelf",
+        "path": "emberwatch/props/prop_bookshelf.png",
         "ext": ".png"
       },
       {
@@ -699,6 +779,22 @@
         "subcategory": "props",
         "name": "prop_component",
         "path": "emberwatch/props/prop_component.png",
+        "ext": ".png"
+      },
+      {
+        "tag": "emberwatch:props:prop_counter",
+        "category": "contentPacks",
+        "subcategory": "props",
+        "name": "prop_counter",
+        "path": "emberwatch/props/prop_counter.png",
+        "ext": ".png"
+      },
+      {
+        "tag": "emberwatch:props:prop_crate",
+        "category": "contentPacks",
+        "subcategory": "props",
+        "name": "prop_crate",
+        "path": "emberwatch/props/prop_crate.png",
         "ext": ".png"
       },
       {
@@ -750,11 +846,27 @@
         "ext": ".png"
       },
       {
+        "tag": "emberwatch:props:prop_table",
+        "category": "contentPacks",
+        "subcategory": "props",
+        "name": "prop_table",
+        "path": "emberwatch/props/prop_table.png",
+        "ext": ".png"
+      },
+      {
         "tag": "emberwatch:props:prop_ward_socket",
         "category": "contentPacks",
         "subcategory": "props",
         "name": "prop_ward_socket",
         "path": "emberwatch/props/prop_ward_socket.png",
+        "ext": ".png"
+      },
+      {
+        "tag": "emberwatch:props:prop_well",
+        "category": "contentPacks",
+        "subcategory": "props",
+        "name": "prop_well",
+        "path": "emberwatch/props/prop_well.png",
         "ext": ".png"
       },
       {

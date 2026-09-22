@@ -15,6 +15,7 @@
 // state, never resumes the engine, and never surfaces an error — the newer
 // transition owns engine state.
 
+import type { PropContactShadow } from '@aikami/schemas';
 import type { PackConfig } from '@aikami/types';
 import {
   type AssetTagResolver,
@@ -56,8 +57,24 @@ export type LoadMapOptions = {
   packConfig?: PackConfig;
 };
 
-/** Anchor metadata for a multi-tile prop frame (C-378 AC-7). */
-export type PropFrameAnchor = { anchorX: number; anchorY: number };
+/**
+ * Per-frame presentation metadata for a prop (C-378 AC-7, C-496/C-529).
+ *
+ * `anchorX`/`anchorY` are normalized ground/contact origin (0.5, 1 = bottom
+ * centre). `renderWidth`/`renderHeight` are the authored logical world size in
+ * pixels — deliberately separate from the texture's packed frame size so a
+ * large preparation canvas never dictates the world footprint. `shadow` is the
+ * renderer-owned contact shadow descriptor. All three are optional; absent
+ * values keep the legacy behaviour (native texture size, bottom-centre anchor,
+ * no shadow).
+ */
+export type PropFrameAnchor = {
+  anchorX: number;
+  anchorY: number;
+  renderWidth?: number;
+  renderHeight?: number;
+  shadow?: PropContactShadow;
+};
 
 /**
  * A fully derived scene, ready to install and render. Produced by
@@ -98,6 +115,32 @@ export type SceneTransitionLog = {
   debug: (message: string, detail?: unknown) => void;
   warn: (message: string, detail?: unknown) => void;
   error: (message: string, detail?: unknown) => void;
+};
+
+/**
+ * Builds the per-frame presentation metadata from the pack's prop definitions.
+ *
+ * A frame can be declared by several props (e.g. one oak frame placed many
+ * times). The first declaration that names a field wins, so differing
+ * declarations cannot make the rendered size depend on object iteration order.
+ */
+const buildPropFrameMeta = (packConfig: PackConfig | undefined): Map<string, PropFrameAnchor> => {
+  const meta = new Map<string, PropFrameAnchor>();
+  for (const propDef of Object.values(packConfig?.props ?? {})) {
+    const anchor = propDef.anchor ?? { x: 0.5, y: 1.0 };
+    const existing = meta.get(propDef.frame);
+    const renderWidth = existing?.renderWidth ?? propDef.renderSize?.width;
+    const renderHeight = existing?.renderHeight ?? propDef.renderSize?.height;
+    const shadow = existing?.shadow ?? propDef.shadow;
+    meta.set(propDef.frame, {
+      anchorX: anchor.x,
+      anchorY: anchor.y,
+      ...(renderWidth === undefined ? {} : { renderWidth }),
+      ...(renderHeight === undefined ? {} : { renderHeight }),
+      ...(shadow === undefined ? {} : { shadow }),
+    });
+  }
+  return meta;
 };
 
 /**
@@ -164,11 +207,7 @@ export const prepareScene = async (options: PrepareSceneOptions): Promise<Prepar
   // filename → same id, regardless of pixel dimensions.
   const mapId = (mapUrl.split('/').pop() ?? mapUrl).replace(/\.json$/i, '');
 
-  const propFrameMeta = new Map<string, PropFrameAnchor>();
-  for (const propDef of Object.values(packConfig?.props ?? {})) {
-    const anchor = propDef.anchor ?? { x: 0.5, y: 1.0 };
-    propFrameMeta.set(propDef.frame, { anchorX: anchor.x, anchorY: anchor.y });
-  }
+  const propFrameMeta = buildPropFrameMeta(packConfig);
 
   return {
     packConfig,

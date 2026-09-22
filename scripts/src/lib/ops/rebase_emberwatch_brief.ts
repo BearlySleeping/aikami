@@ -63,6 +63,15 @@ type Job = {
 const TRANSPARENT_ISOLATION =
   'Render the object isolated and centred with native transparency; no background, ground plane, scenery, floor, cast shadow, lettering or border. The object must sit on ONE centred footprint and occupy roughly the middle 55% of the frame, centred, with generous transparent margin on all four sides — the object must never touch or cross the edge of the image, and its lowest point must be directly below its centre of mass so it stands on one centred footprint.';
 
+/**
+ * The isolation clause for jobs served by an RGB-only engine (the local
+ * sd.cpp/Anima path). The prop is rendered on a uniform near-black ground and
+ * `prop-luminance-alpha-ground` derives alpha from luminance, so the backdrop
+ * must be near-black and uncluttered.
+ */
+const LUMINANCE_ISOLATION =
+  'Render the object isolated and centred on a uniform pure-black background so a luminance matte can be extracted (the backdrop must be near-black and uncluttered); no scenery, floor, cast shadow, lettering or border. The object must sit on ONE centred footprint and occupy roughly the middle 55% of the frame, centred, with generous black margin on all four sides — the object must never touch or cross the edge of the image, and its lowest point must be directly below its centre of mass so it stands on one centred footprint.';
+
 const STYLE =
   'Warm muted woodland-fantasy palette, soft upper-left light, crisp readable silhouette at native game scale, hand-painted pixel-friendly rendering.';
 
@@ -76,14 +85,18 @@ const prop = (options: {
   references?: string[];
   bindingKind?: string;
   variant?: string | null;
+  /** Isolation clause override; defaults to the native-transparency clause. */
+  isolation?: string;
+  /** Preparation profile override; defaults to `prop-full-alpha-ground`. */
+  preparationProfile?: string;
 }): Job => ({
   id: options.id,
   phase: options.phase,
   kind: 'prop',
   action: 'generate_if_missing',
-  subject: `${options.subject} ${STYLE} ${TRANSPARENT_ISOLATION}`,
+  subject: `${options.subject} ${STYLE} ${options.isolation ?? TRANSPARENT_ISOLATION}`,
   providerPreference: 'local_image_reference',
-  preparationProfile: 'prop-full-alpha-ground',
+  preparationProfile: options.preparationProfile ?? 'prop-full-alpha-ground',
   referenceIds: options.references ?? ['approved_style'],
   candidateLimit: 2,
   dependsOn: [],
@@ -263,6 +276,8 @@ const main = (): void => {
       'source already carries a real alpha channel; crop/origin preserved, ground rectangle removed, no colour key',
     'prop-full-alpha-ground':
       'native-alpha isolated render; dark object pixels are preserved and any ground plane must already be detached',
+    'prop-luminance-alpha-ground':
+      'RGB-only engine (local sd.cpp/Anima): the prop is rendered on a uniform near-black ground and alpha is derived from luminance, with full-width ground rows detached by geometry',
     'portrait-original':
       'composed dialogue bust; keeps its own coverage and alpha, no ground-contact requirement',
     'lpc-sheet-native': 'LPC sheets only; nearest-neighbour resample at the 13x21 cell grid',
@@ -308,6 +323,8 @@ const main = (): void => {
       mapIds: ['inn'],
       targetIds: ['inn_table'],
       canvas: [64, 48],
+      isolation: LUMINANCE_ISOLATION,
+      preparationProfile: 'prop-luminance-alpha-ground',
     }),
     prop({
       id: 'oil_pool',
@@ -416,15 +433,19 @@ const main = (): void => {
       mapIds: ['inn'],
       targetIds: ['inn_crate'],
       canvas: [48, 48],
+      isolation: LUMINANCE_ISOLATION,
+      preparationProfile: 'prop-luminance-alpha-ground',
     }),
     prop({
       id: 'counter',
       phase: 'expansion',
       subject:
-        'One shop counter section: a heavy worn plank counter with a moulded front lip, a small brass scale and a folded ledger.',
+        'One shop counter section in a straight-on front view (orthographic, no perspective, no rotation): a heavy worn plank counter with a moulded front lip, a small brass scale on top and a folded ledger. The front face is a level rectangle with a perfectly horizontal bottom edge; the left and right ends of the base are at the same height, so the counter stands squarely and symmetrically on one centred footprint.',
       mapIds: ['merchant_shop'],
       targetIds: ['shop_counter_l'],
       canvas: [64, 48],
+      isolation: LUMINANCE_ISOLATION,
+      preparationProfile: 'prop-luminance-alpha-ground',
     }),
     prop({
       id: 'chair',
@@ -442,6 +463,8 @@ const main = (): void => {
       mapIds: ['inn'],
       targetIds: ['inn_bed'],
       canvas: [64, 80],
+      isolation: LUMINANCE_ISOLATION,
+      preparationProfile: 'prop-luminance-alpha-ground',
     }),
     prop({
       id: 'hearth',
@@ -460,6 +483,8 @@ const main = (): void => {
       mapIds: ['inn'],
       targetIds: ['inn_shelf'],
       canvas: [48, 80],
+      isolation: LUMINANCE_ISOLATION,
+      preparationProfile: 'prop-luminance-alpha-ground',
     }),
     prop({
       id: 'anvil',
@@ -469,6 +494,8 @@ const main = (): void => {
       mapIds: ['village'],
       targetIds: ['yard_anvil'],
       canvas: [64, 56],
+      isolation: LUMINANCE_ISOLATION,
+      preparationProfile: 'prop-luminance-alpha-ground',
     }),
     prop({
       id: 'oak_family',
@@ -670,7 +697,7 @@ const main = (): void => {
   brief.notes = [
     `Rebased onto the pack ${manifest.version} baseline by scripts/src/lib/ops/rebase_emberwatch_brief.ts; the exact source revision is recorded in baseline.commit.`,
     'The audio lane is deliberately out of scope for this release: no shipped local SFX/ambience model exists (stable_audio_open_1_0_profile is declared but not installed) and the pack-local Emberwatch music is already accepted.',
-    'Every prop job requests native transparency so prop-full-alpha-ground preserves dark object pixels; the ground plane must already be detached before deterministic preparation.',
+    'Every prop job requests native transparency so prop-full-alpha-ground preserves dark object pixels; the ground plane must already be detached before deterministic preparation. The six furniture props (crate, table, bed, counter, bookshelf, anvil) are served by the RGB-only local sd.cpp engine and use prop-luminance-alpha-ground instead: they render on a uniform near-black ground and alpha is derived from luminance.',
     'Enemy visual jobs prepare authored non-humanoid art for ash_hound, cinder_thrall and ember_warden for future runtime integration; the audited runtime status remains needs-runtime-capability.',
   ];
 

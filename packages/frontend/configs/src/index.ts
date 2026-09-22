@@ -3,3 +3,4 @@
 
 export * from './lib/environment.ts';
 export * from './lib/feature_flags.ts';
+export * from './lib/public_mode.ts';

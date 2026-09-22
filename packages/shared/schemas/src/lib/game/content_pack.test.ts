@@ -1308,3 +1308,81 @@ describe('ContentPackManifestSchema — C-523 authored audio bindings', () => {
     ).toThrow();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Prop renderSize + contact shadow (C-496/C-529)
+// ---------------------------------------------------------------------------
+
+describe('ContentPackProp renderSize and shadow', () => {
+  const withProp = (prop: Record<string, unknown>) => ({
+    ...validManifest,
+    // biome-ignore lint/style/useNamingConvention: manifest prop IDs use snake_case
+    props: { test_prop: prop },
+  });
+
+  test('accepts an authored logical world size', () => {
+    expect(() =>
+      Value.Parse(
+        ContentPackManifestSchema,
+        withProp({
+          name: 'Barrel',
+          frame: 'prop_barrel.png',
+          renderSize: { width: 48, height: 35 },
+        }),
+      ),
+    ).not.toThrow();
+  });
+
+  test('accepts a partially authored size (aspect-preserving)', () => {
+    expect(() =>
+      Value.Parse(
+        ContentPackManifestSchema,
+        withProp({ name: 'Barrel', frame: 'prop_barrel.png', renderSize: { width: 48 } }),
+      ),
+    ).not.toThrow();
+  });
+
+  test('rejects a non-positive render size', () => {
+    expect(() =>
+      Value.Parse(
+        ContentPackManifestSchema,
+        withProp({ name: 'Barrel', frame: 'prop_barrel.png', renderSize: { width: 0 } }),
+      ),
+    ).toThrow();
+  });
+
+  test('accepts an ellipse contact shadow', () => {
+    expect(() =>
+      Value.Parse(
+        ContentPackManifestSchema,
+        withProp({
+          name: 'Barrel',
+          frame: 'prop_barrel.png',
+          shadow: { kind: 'ellipse', width: 30, height: 12, opacity: 0.22 },
+        }),
+      ),
+    ).not.toThrow();
+  });
+
+  test('accepts an explicit no-shadow declaration', () => {
+    expect(() =>
+      Value.Parse(
+        ContentPackManifestSchema,
+        withProp({ name: 'Oak', frame: 'oak.png', shadow: { kind: 'none' } }),
+      ),
+    ).not.toThrow();
+  });
+
+  test('rejects an ellipse shadow without a positive footprint', () => {
+    expect(() =>
+      Value.Parse(
+        ContentPackManifestSchema,
+        withProp({
+          name: 'Barrel',
+          frame: 'prop_barrel.png',
+          shadow: { kind: 'ellipse', width: 0, height: 12 },
+        }),
+      ),
+    ).toThrow();
+  });
+});

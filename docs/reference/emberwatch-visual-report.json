@@ -1,0 +1,3035 @@
+{
+  "schemaVersion": 1,
+  "kind": "emberwatch-visual-report",
+  "generatedAt": "1980-01-01T00:00:00.000Z",
+  "generatedBy": "scripts/src/lib/ops/emberwatch_visual_report.ts",
+  "props": [
+    {
+      "map": "inn",
+      "propId": "inn_barrel",
+      "frame": "prop_barrel.png",
+      "cell": {
+        "c": 24,
+        "r": 5
+      },
+      "world": {
+        "x": 768,
+        "y": 160
+      },
+      "sourcePixels": {
+        "width": 181,
+        "height": 133
+      },
+      "worldSize": {
+        "width": 48,
+        "height": 35
+      },
+      "worldSizeAuthored": true,
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "collision": {
+        "type": "rect",
+        "width": 20,
+        "height": 20
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 30,
+        "height": 12,
+        "opacity": 0.22
+      },
+      "classification": "accepted-generated"
+    },
+    {
+      "map": "inn",
+      "propId": "inn_barrel_2",
+      "frame": "prop_barrel.png",
+      "cell": {
+        "c": 5,
+        "r": 16
+      },
+      "world": {
+        "x": 160,
+        "y": 512
+      },
+      "sourcePixels": {
+        "width": 181,
+        "height": 133
+      },
+      "worldSize": {
+        "width": 48,
+        "height": 35
+      },
+      "worldSizeAuthored": true,
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "collision": {
+        "type": "rect",
+        "width": 20,
+        "height": 20
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 30,
+        "height": 12,
+        "opacity": 0.22
+      },
+      "classification": "accepted-generated"
+    },
+    {
+      "map": "inn",
+      "propId": "inn_bed",
+      "frame": "prop_bed.png",
+      "cell": {
+        "c": 3,
+        "r": 15
+      },
+      "world": {
+        "x": 96,
+        "y": 480
+      },
+      "sourcePixels": {
+        "width": 155,
+        "height": 149
+      },
+      "worldSize": {
+        "width": 56,
+        "height": 54
+      },
+      "worldSizeAuthored": true,
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "collision": {
+        "type": "rect",
+        "width": 30,
+        "height": 22
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 42,
+        "height": 12,
+        "opacity": 0.2
+      },
+      "classification": "accepted-generated"
+    },
+    {
+      "map": "inn",
+      "propId": "inn_brazier",
+      "frame": "prop_brazier.png",
+      "cell": {
+        "c": 16,
+        "r": 16
+      },
+      "world": {
+        "x": 512,
+        "y": 512
+      },
+      "sourcePixels": {
+        "width": 126,
+        "height": 110
+      },
+      "worldSize": {
+        "width": 64,
+        "height": 56
+      },
+      "worldSizeAuthored": true,
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 22
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 34,
+        "height": 14,
+        "opacity": 0.22
+      },
+      "classification": "accepted-generated"
+    },
+    {
+      "map": "inn",
+      "propId": "inn_chair",
+      "frame": "chair.png",
+      "cell": {
+        "c": 3,
+        "r": 8
+      },
+      "world": {
+        "x": 96,
+        "y": 256
+      },
+      "sourcePixels": {
+        "width": 26,
+        "height": 48
+      },
+      "worldSize": {
+        "width": 26,
+        "height": 48
+      },
+      "worldSizeAuthored": true,
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "collision": {
+        "type": "rect",
+        "width": 16,
+        "height": 10
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 16,
+        "height": 6,
+        "opacity": 0.2
+      },
+      "classification": "accepted-generated"
+    },
+    {
+      "map": "inn",
+      "propId": "inn_chair_2",
+      "frame": "chair.png",
+      "cell": {
+        "c": 5,
+        "r": 8
+      },
+      "world": {
+        "x": 160,
+        "y": 256
+      },
+      "sourcePixels": {
+        "width": 26,
+        "height": 48
+      },
+      "worldSize": {
+        "width": 26,
+        "height": 48
+      },
+      "worldSizeAuthored": true,
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "collision": {
+        "type": "rect",
+        "width": 16,
+        "height": 10
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 16,
+        "height": 6,
+        "opacity": 0.2
+      },
+      "classification": "accepted-generated"
+    },
+    {
+      "map": "inn",
+      "propId": "inn_chair_3",
+      "frame": "chair.png",
+      "cell": {
+        "c": 3,
+        "r": 14
+      },
+      "world": {
+        "x": 96,
+        "y": 448
+      },
+      "sourcePixels": {
+        "width": 26,
+        "height": 48
+      },
+      "worldSize": {
+        "width": 26,
+        "height": 48
+      },
+      "worldSizeAuthored": true,
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "collision": {
+        "type": "rect",
+        "width": 16,
+        "height": 10
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 16,
+        "height": 6,
+        "opacity": 0.2
+      },
+      "classification": "accepted-generated"
+    },
+    {
+      "map": "inn",
+      "propId": "inn_chair_4",
+      "frame": "chair.png",
+      "cell": {
+        "c": 5,
+        "r": 14
+      },
+      "world": {
+        "x": 160,
+        "y": 448
+      },
+      "sourcePixels": {
+        "width": 26,
+        "height": 48
+      },
+      "worldSize": {
+        "width": 26,
+        "height": 48
+      },
+      "worldSizeAuthored": true,
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "collision": {
+        "type": "rect",
+        "width": 16,
+        "height": 10
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 16,
+        "height": 6,
+        "opacity": 0.2
+      },
+      "classification": "accepted-generated"
+    },
+    {
+      "map": "inn",
+      "propId": "inn_chair_5",
+      "frame": "chair.png",
+      "cell": {
+        "c": 20,
+        "r": 10
+      },
+      "world": {
+        "x": 640,
+        "y": 320
+      },
+      "sourcePixels": {
+        "width": 26,
+        "height": 48
+      },
+      "worldSize": {
+        "width": 26,
+        "height": 48
+      },
+      "worldSizeAuthored": true,
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "collision": {
+        "type": "rect",
+        "width": 16,
+        "height": 10
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 16,
+        "height": 6,
+        "opacity": 0.2
+      },
+      "classification": "accepted-generated"
+    },
+    {
+      "map": "inn",
+      "propId": "inn_chair_6",
+      "frame": "chair.png",
+      "cell": {
+        "c": 22,
+        "r": 10
+      },
+      "world": {
+        "x": 704,
+        "y": 320
+      },
+      "sourcePixels": {
+        "width": 26,
+        "height": 48
+      },
+      "worldSize": {
+        "width": 26,
+        "height": 48
+      },
+      "worldSizeAuthored": true,
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "collision": {
+        "type": "rect",
+        "width": 16,
+        "height": 10
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 16,
+        "height": 6,
+        "opacity": 0.2
+      },
+      "classification": "accepted-generated"
+    },
+    {
+      "map": "inn",
+      "propId": "inn_counter",
+      "frame": "prop_counter.png",
+      "cell": {
+        "c": 10,
+        "r": 4
+      },
+      "world": {
+        "x": 320,
+        "y": 128
+      },
+      "sourcePixels": {
+        "width": 249,
+        "height": 139
+      },
+      "worldSize": {
+        "width": 64,
+        "height": 36
+      },
+      "worldSizeAuthored": true,
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "collision": {
+        "type": "rect",
+        "width": 28,
+        "height": 18
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 52,
+        "height": 11,
+        "opacity": 0.2
+      },
+      "classification": "accepted-generated"
+    },
+    {
+      "map": "inn",
+      "propId": "inn_counter_2",
+      "frame": "prop_counter.png",
+      "cell": {
+        "c": 12,
+        "r": 4
+      },
+      "world": {
+        "x": 384,
+        "y": 128
+      },
+      "sourcePixels": {
+        "width": 249,
+        "height": 139
+      },
+      "worldSize": {
+        "width": 64,
+        "height": 36
+      },
+      "worldSizeAuthored": true,
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "collision": {
+        "type": "rect",
+        "width": 28,
+        "height": 18
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 52,
+        "height": 11,
+        "opacity": 0.2
+      },
+      "classification": "accepted-generated"
+    },
+    {
+      "map": "inn",
+      "propId": "inn_crate",
+      "frame": "prop_crate.png",
+      "cell": {
+        "c": 3,
+        "r": 16
+      },
+      "world": {
+        "x": 96,
+        "y": 512
+      },
+      "sourcePixels": {
+        "width": 223,
+        "height": 160
+      },
+      "worldSize": {
+        "width": 40,
+        "height": 29
+      },
+      "worldSizeAuthored": true,
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 22
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 28,
+        "height": 10,
+        "opacity": 0.2
+      },
+      "classification": "accepted-generated"
+    },
+    {
+      "map": "inn",
+      "propId": "inn_hearth",
+      "frame": "prop_hearth.png",
+      "cell": {
+        "c": 4,
+        "r": 2
+      },
+      "world": {
+        "x": 128,
+        "y": 64
+      },
+      "sourcePixels": {
+        "width": 130,
+        "height": 134
+      },
+      "worldSize": {
+        "width": 78,
+        "height": 80
+      },
+      "worldSizeAuthored": true,
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "collision": {
+        "type": "rect",
+        "width": 44,
+        "height": 20
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 58,
+        "height": 16,
+        "opacity": 0.2
+      },
+      "classification": "accepted-generated"
+    },
+    {
+      "map": "inn",
+      "propId": "inn_shelf",
+      "frame": "prop_bookshelf.png",
+      "cell": {
+        "c": 24,
+        "r": 3
+      },
+      "world": {
+        "x": 768,
+        "y": 96
+      },
+      "sourcePixels": {
+        "width": 108,
+        "height": 185
+      },
+      "worldSize": {
+        "width": 34,
+        "height": 58
+      },
+      "worldSizeAuthored": true,
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "collision": {
+        "type": "rect",
+        "width": 24,
+        "height": 14
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 24,
+        "height": 9,
+        "opacity": 0.2
+      },
+      "classification": "accepted-generated"
+    },
+    {
+      "map": "inn",
+      "propId": "inn_support",
+      "frame": "prop_support.png",
+      "cell": {
+        "c": 23,
+        "r": 9
+      },
+      "world": {
+        "x": 736,
+        "y": 288
+      },
+      "sourcePixels": {
+        "width": 76,
+        "height": 369
+      },
+      "worldSize": {
+        "width": 20,
+        "height": 96
+      },
+      "worldSizeAuthored": true,
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 22
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 18,
+        "height": 9,
+        "opacity": 0.2
+      },
+      "classification": "accepted-generated"
+    },
+    {
+      "map": "inn",
+      "propId": "inn_table",
+      "frame": "prop_table.png",
+      "cell": {
+        "c": 4,
+        "r": 7
+      },
+      "world": {
+        "x": 128,
+        "y": 224
+      },
+      "sourcePixels": {
+        "width": 313,
+        "height": 226
+      },
+      "worldSize": {
+        "width": 56,
+        "height": 40
+      },
+      "worldSizeAuthored": true,
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "collision": {
+        "type": "rect",
+        "width": 26,
+        "height": 22
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 44,
+        "height": 12,
+        "opacity": 0.2
+      },
+      "classification": "accepted-generated"
+    },
+    {
+      "map": "inn",
+      "propId": "inn_table_2",
+      "frame": "prop_table.png",
+      "cell": {
+        "c": 4,
+        "r": 13
+      },
+      "world": {
+        "x": 128,
+        "y": 416
+      },
+      "sourcePixels": {
+        "width": 313,
+        "height": 226
+      },
+      "worldSize": {
+        "width": 56,
+        "height": 40
+      },
+      "worldSizeAuthored": true,
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "collision": {
+        "type": "rect",
+        "width": 26,
+        "height": 22
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 44,
+        "height": 12,
+        "opacity": 0.2
+      },
+      "classification": "accepted-generated"
+    },
+    {
+      "map": "inn",
+      "propId": "inn_table_3",
+      "frame": "prop_table.png",
+      "cell": {
+        "c": 21,
+        "r": 9
+      },
+      "world": {
+        "x": 672,
+        "y": 288
+      },
+      "sourcePixels": {
+        "width": 313,
+        "height": 226
+      },
+      "worldSize": {
+        "width": 56,
+        "height": 40
+      },
+      "worldSizeAuthored": true,
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "collision": {
+        "type": "rect",
+        "width": 26,
+        "height": 22
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 44,
+        "height": 12,
+        "opacity": 0.2
+      },
+      "classification": "accepted-generated"
+    },
+    {
+      "map": "inn",
+      "propId": "sella_receipt",
+      "frame": "prop_receipt.png",
+      "cell": {
+        "c": 14,
+        "r": 5
+      },
+      "world": {
+        "x": 448,
+        "y": 160
+      },
+      "sourcePixels": {
+        "width": 194,
+        "height": 126
+      },
+      "worldSize": {
+        "width": 48,
+        "height": 31
+      },
+      "worldSizeAuthored": true,
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "collision": {
+        "type": "rect",
+        "width": 20,
+        "height": 10
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 24,
+        "height": 7,
+        "opacity": 0.18
+      },
+      "classification": "accepted-generated"
+    },
+    {
+      "map": "merchant_shop",
+      "propId": "shop_barrel",
+      "frame": "prop_barrel.png",
+      "cell": {
+        "c": 21,
+        "r": 6
+      },
+      "world": {
+        "x": 672,
+        "y": 192
+      },
+      "sourcePixels": {
+        "width": 181,
+        "height": 133
+      },
+      "worldSize": {
+        "width": 48,
+        "height": 35
+      },
+      "worldSizeAuthored": true,
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "collision": {
+        "type": "rect",
+        "width": 20,
+        "height": 20
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 30,
+        "height": 12,
+        "opacity": 0.22
+      },
+      "classification": "accepted-generated"
+    },
+    {
+      "map": "merchant_shop",
+      "propId": "shop_barrel_2",
+      "frame": "prop_barrel.png",
+      "cell": {
+        "c": 3,
+        "r": 14
+      },
+      "world": {
+        "x": 96,
+        "y": 448
+      },
+      "sourcePixels": {
+        "width": 181,
+        "height": 133
+      },
+      "worldSize": {
+        "width": 48,
+        "height": 35
+      },
+      "worldSizeAuthored": true,
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "collision": {
+        "type": "rect",
+        "width": 20,
+        "height": 20
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 30,
+        "height": 12,
+        "opacity": 0.22
+      },
+      "classification": "accepted-generated"
+    },
+    {
+      "map": "merchant_shop",
+      "propId": "shop_chair",
+      "frame": "chair.png",
+      "cell": {
+        "c": 4,
+        "r": 8
+      },
+      "world": {
+        "x": 128,
+        "y": 256
+      },
+      "sourcePixels": {
+        "width": 26,
+        "height": 48
+      },
+      "worldSize": {
+        "width": 26,
+        "height": 48
+      },
+      "worldSizeAuthored": true,
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "collision": {
+        "type": "rect",
+        "width": 16,
+        "height": 10
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 16,
+        "height": 6,
+        "opacity": 0.2
+      },
+      "classification": "accepted-generated"
+    },
+    {
+      "map": "merchant_shop",
+      "propId": "shop_counter_l",
+      "frame": "prop_counter.png",
+      "cell": {
+        "c": 4,
+        "r": 11
+      },
+      "world": {
+        "x": 128,
+        "y": 352
+      },
+      "sourcePixels": {
+        "width": 249,
+        "height": 139
+      },
+      "worldSize": {
+        "width": 64,
+        "height": 36
+      },
+      "worldSizeAuthored": true,
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "collision": {
+        "type": "rect",
+        "width": 28,
+        "height": 18
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 52,
+        "height": 11,
+        "opacity": 0.2
+      },
+      "classification": "accepted-generated"
+    },
+    {
+      "map": "merchant_shop",
+      "propId": "shop_counter_m",
+      "frame": "prop_counter.png",
+      "cell": {
+        "c": 8,
+        "r": 11
+      },
+      "world": {
+        "x": 256,
+        "y": 352
+      },
+      "sourcePixels": {
+        "width": 249,
+        "height": 139
+      },
+      "worldSize": {
+        "width": 64,
+        "height": 36
+      },
+      "worldSizeAuthored": true,
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "collision": {
+        "type": "rect",
+        "width": 28,
+        "height": 18
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 52,
+        "height": 11,
+        "opacity": 0.2
+      },
+      "classification": "accepted-generated"
+    },
+    {
+      "map": "merchant_shop",
+      "propId": "shop_counter_r",
+      "frame": "prop_counter.png",
+      "cell": {
+        "c": 17,
+        "r": 11
+      },
+      "world": {
+        "x": 544,
+        "y": 352
+      },
+      "sourcePixels": {
+        "width": 249,
+        "height": 139
+      },
+      "worldSize": {
+        "width": 64,
+        "height": 36
+      },
+      "worldSizeAuthored": true,
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "collision": {
+        "type": "rect",
+        "width": 28,
+        "height": 18
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 52,
+        "height": 11,
+        "opacity": 0.2
+      },
+      "classification": "accepted-generated"
+    },
+    {
+      "map": "merchant_shop",
+      "propId": "shop_crate",
+      "frame": "prop_crate.png",
+      "cell": {
+        "c": 4,
+        "r": 3
+      },
+      "world": {
+        "x": 128,
+        "y": 96
+      },
+      "sourcePixels": {
+        "width": 223,
+        "height": 160
+      },
+      "worldSize": {
+        "width": 40,
+        "height": 29
+      },
+      "worldSizeAuthored": true,
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 22
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 28,
+        "height": 10,
+        "opacity": 0.2
+      },
+      "classification": "accepted-generated"
+    },
+    {
+      "map": "merchant_shop",
+      "propId": "shop_crate_2",
+      "frame": "prop_crate.png",
+      "cell": {
+        "c": 6,
+        "r": 4
+      },
+      "world": {
+        "x": 192,
+        "y": 128
+      },
+      "sourcePixels": {
+        "width": 223,
+        "height": 160
+      },
+      "worldSize": {
+        "width": 40,
+        "height": 29
+      },
+      "worldSizeAuthored": true,
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 22
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 28,
+        "height": 10,
+        "opacity": 0.2
+      },
+      "classification": "accepted-generated"
+    },
+    {
+      "map": "merchant_shop",
+      "propId": "shop_crate_3",
+      "frame": "prop_crate.png",
+      "cell": {
+        "c": 5,
+        "r": 14
+      },
+      "world": {
+        "x": 160,
+        "y": 448
+      },
+      "sourcePixels": {
+        "width": 223,
+        "height": 160
+      },
+      "worldSize": {
+        "width": 40,
+        "height": 29
+      },
+      "worldSizeAuthored": true,
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 22
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 28,
+        "height": 10,
+        "opacity": 0.2
+      },
+      "classification": "accepted-generated"
+    },
+    {
+      "map": "merchant_shop",
+      "propId": "shop_shelf",
+      "frame": "prop_bookshelf.png",
+      "cell": {
+        "c": 3,
+        "r": 3
+      },
+      "world": {
+        "x": 96,
+        "y": 96
+      },
+      "sourcePixels": {
+        "width": 108,
+        "height": 185
+      },
+      "worldSize": {
+        "width": 34,
+        "height": 58
+      },
+      "worldSizeAuthored": true,
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "collision": {
+        "type": "rect",
+        "width": 24,
+        "height": 14
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 24,
+        "height": 9,
+        "opacity": 0.2
+      },
+      "classification": "accepted-generated"
+    },
+    {
+      "map": "merchant_shop",
+      "propId": "shop_shelf_2",
+      "frame": "prop_bookshelf.png",
+      "cell": {
+        "c": 20,
+        "r": 3
+      },
+      "world": {
+        "x": 640,
+        "y": 96
+      },
+      "sourcePixels": {
+        "width": 108,
+        "height": 185
+      },
+      "worldSize": {
+        "width": 34,
+        "height": 58
+      },
+      "worldSizeAuthored": true,
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "collision": {
+        "type": "rect",
+        "width": 24,
+        "height": 14
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 24,
+        "height": 9,
+        "opacity": 0.2
+      },
+      "classification": "accepted-generated"
+    },
+    {
+      "map": "old_road",
+      "propId": "road_birch_1",
+      "frame": "birch.png",
+      "cell": {
+        "c": 10,
+        "r": 7
+      },
+      "world": {
+        "x": 320,
+        "y": 224
+      },
+      "sourcePixels": {
+        "width": 70,
+        "height": 160
+      },
+      "worldSize": {
+        "width": 70,
+        "height": 160
+      },
+      "worldSizeAuthored": true,
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 14
+      },
+      "shadow": {
+        "kind": "none"
+      },
+      "classification": "accepted-generated"
+    },
+    {
+      "map": "old_road",
+      "propId": "road_birch_11",
+      "frame": "birch.png",
+      "cell": {
+        "c": 7,
+        "r": 26
+      },
+      "world": {
+        "x": 224,
+        "y": 832
+      },
+      "sourcePixels": {
+        "width": 70,
+        "height": 160
+      },
+      "worldSize": {
+        "width": 70,
+        "height": 160
+      },
+      "worldSizeAuthored": true,
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 14
+      },
+      "shadow": {
+        "kind": "none"
+      },
+      "classification": "accepted-generated"
+    },
+    {
+      "map": "old_road",
+      "propId": "road_birch_13",
+      "frame": "birch.png",
+      "cell": {
+        "c": 28,
+        "r": 30
+      },
+      "world": {
+        "x": 896,
+        "y": 960
+      },
+      "sourcePixels": {
+        "width": 70,
+        "height": 160
+      },
+      "worldSize": {
+        "width": 70,
+        "height": 160
+      },
+      "worldSizeAuthored": true,
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 14
+      },
+      "shadow": {
+        "kind": "none"
+      },
+      "classification": "accepted-generated"
+    },
+    {
+      "map": "old_road",
+      "propId": "road_birch_15",
+      "frame": "birch.png",
+      "cell": {
+        "c": 49,
+        "r": 29
+      },
+      "world": {
+        "x": 1568,
+        "y": 928
+      },
+      "sourcePixels": {
+        "width": 70,
+        "height": 160
+      },
+      "worldSize": {
+        "width": 70,
+        "height": 160
+      },
+      "worldSizeAuthored": true,
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 14
+      },
+      "shadow": {
+        "kind": "none"
+      },
+      "classification": "accepted-generated"
+    },
+    {
+      "map": "old_road",
+      "propId": "road_birch_3",
+      "frame": "birch.png",
+      "cell": {
+        "c": 26,
+        "r": 4
+      },
+      "world": {
+        "x": 832,
+        "y": 128
+      },
+      "sourcePixels": {
+        "width": 70,
+        "height": 160
+      },
+      "worldSize": {
+        "width": 70,
+        "height": 160
+      },
+      "worldSizeAuthored": true,
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 14
+      },
+      "shadow": {
+        "kind": "none"
+      },
+      "classification": "accepted-generated"
+    },
+    {
+      "map": "old_road",
+      "propId": "road_birch_5",
+      "frame": "birch.png",
+      "cell": {
+        "c": 43,
+        "r": 4
+      },
+      "world": {
+        "x": 1376,
+        "y": 128
+      },
+      "sourcePixels": {
+        "width": 70,
+        "height": 160
+      },
+      "worldSize": {
+        "width": 70,
+        "height": 160
+      },
+      "worldSizeAuthored": true,
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 14
+      },
+      "shadow": {
+        "kind": "none"
+      },
+      "classification": "accepted-generated"
+    },
+    {
+      "map": "old_road",
+      "propId": "road_birch_7",
+      "frame": "birch.png",
+      "cell": {
+        "c": 55,
+        "r": 6
+      },
+      "world": {
+        "x": 1760,
+        "y": 192
+      },
+      "sourcePixels": {
+        "width": 70,
+        "height": 160
+      },
+      "worldSize": {
+        "width": 70,
+        "height": 160
+      },
+      "worldSizeAuthored": true,
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 14
+      },
+      "shadow": {
+        "kind": "none"
+      },
+      "classification": "accepted-generated"
+    },
+    {
+      "map": "old_road",
+      "propId": "road_birch_9",
+      "frame": "birch.png",
+      "cell": {
+        "c": 65,
+        "r": 4
+      },
+      "world": {
+        "x": 2080,
+        "y": 128
+      },
+      "sourcePixels": {
+        "width": 70,
+        "height": 160
+      },
+      "worldSize": {
+        "width": 70,
+        "height": 160
+      },
+      "worldSizeAuthored": true,
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 14
+      },
+      "shadow": {
+        "kind": "none"
+      },
+      "classification": "accepted-generated"
+    },
+    {
+      "map": "old_road",
+      "propId": "road_notice",
+      "frame": "prop_notice_board.png",
+      "cell": {
+        "c": 32,
+        "r": 20
+      },
+      "world": {
+        "x": 1024,
+        "y": 640
+      },
+      "sourcePixels": {
+        "width": 88,
+        "height": 73
+      },
+      "worldSize": {
+        "width": 64,
+        "height": 53
+      },
+      "worldSizeAuthored": true,
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "collision": {
+        "type": "rect",
+        "width": 20,
+        "height": 10
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 36,
+        "height": 10,
+        "opacity": 0.2
+      },
+      "classification": "accepted-generated"
+    },
+    {
+      "map": "old_road",
+      "propId": "road_oak_0",
+      "frame": "oak.png",
+      "cell": {
+        "c": 8,
+        "r": 5
+      },
+      "world": {
+        "x": 256,
+        "y": 160
+      },
+      "sourcePixels": {
+        "width": 126,
+        "height": 160
+      },
+      "worldSize": {
+        "width": 126,
+        "height": 160
+      },
+      "worldSizeAuthored": true,
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "collision": {
+        "type": "rect",
+        "width": 30,
+        "height": 16
+      },
+      "shadow": {
+        "kind": "none"
+      },
+      "classification": "accepted-generated"
+    },
+    {
+      "map": "old_road",
+      "propId": "road_oak_10",
+      "frame": "oak.png",
+      "cell": {
+        "c": 67,
+        "r": 8
+      },
+      "world": {
+        "x": 2144,
+        "y": 256
+      },
+      "sourcePixels": {
+        "width": 126,
+        "height": 160
+      },
+      "worldSize": {
+        "width": 126,
+        "height": 160
+      },
+      "worldSizeAuthored": true,
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "collision": {
+        "type": "rect",
+        "width": 30,
+        "height": 16
+      },
+      "shadow": {
+        "kind": "none"
+      },
+      "classification": "accepted-generated"
+    },
+    {
+      "map": "old_road",
+      "propId": "road_oak_12",
+      "frame": "oak.png",
+      "cell": {
+        "c": 11,
+        "r": 29
+      },
+      "world": {
+        "x": 352,
+        "y": 928
+      },
+      "sourcePixels": {
+        "width": 126,
+        "height": 160
+      },
+      "worldSize": {
+        "width": 126,
+        "height": 160
+      },
+      "worldSizeAuthored": true,
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "collision": {
+        "type": "rect",
+        "width": 30,
+        "height": 16
+      },
+      "shadow": {
+        "kind": "none"
+      },
+      "classification": "accepted-generated"
+    },
+    {
+      "map": "old_road",
+      "propId": "road_oak_14",
+      "frame": "oak.png",
+      "cell": {
+        "c": 24,
+        "r": 27
+      },
+      "world": {
+        "x": 768,
+        "y": 864
+      },
+      "sourcePixels": {
+        "width": 126,
+        "height": 160
+      },
+      "worldSize": {
+        "width": 126,
+        "height": 160
+      },
+      "worldSizeAuthored": true,
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "collision": {
+        "type": "rect",
+        "width": 30,
+        "height": 16
+      },
+      "shadow": {
+        "kind": "none"
+      },
+      "classification": "accepted-generated"
+    },
+    {
+      "map": "old_road",
+      "propId": "road_oak_16",
+      "frame": "oak.png",
+      "cell": {
+        "c": 45,
+        "r": 26
+      },
+      "world": {
+        "x": 1440,
+        "y": 832
+      },
+      "sourcePixels": {
+        "width": 126,
+        "height": 160
+      },
+      "worldSize": {
+        "width": 126,
+        "height": 160
+      },
+      "worldSizeAuthored": true,
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "collision": {
+        "type": "rect",
+        "width": 30,
+        "height": 16
+      },
+      "shadow": {
+        "kind": "none"
+      },
+      "classification": "accepted-generated"
+    },
+    {
+      "map": "old_road",
+      "propId": "road_oak_2",
+      "frame": "oak.png",
+      "cell": {
+        "c": 13,
+        "r": 4
+      },
+      "world": {
+        "x": 416,
+        "y": 128
+      },
+      "sourcePixels": {
+        "width": 126,
+        "height": 160
+      },
+      "worldSize": {
+        "width": 126,
+        "height": 160
+      },
+      "worldSizeAuthored": true,
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "collision": {
+        "type": "rect",
+        "width": 30,
+        "height": 16
+      },
+      "shadow": {
+        "kind": "none"
+      },
+      "classification": "accepted-generated"
+    },
+    {
+      "map": "old_road",
+      "propId": "road_oak_4",
+      "frame": "oak.png",
+      "cell": {
+        "c": 29,
+        "r": 6
+      },
+      "world": {
+        "x": 928,
+        "y": 192
+      },
+      "sourcePixels": {
+        "width": 126,
+        "height": 160
+      },
+      "worldSize": {
+        "width": 126,
+        "height": 160
+      },
+      "worldSizeAuthored": true,
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "collision": {
+        "type": "rect",
+        "width": 30,
+        "height": 16
+      },
+      "shadow": {
+        "kind": "none"
+      },
+      "classification": "accepted-generated"
+    },
+    {
+      "map": "old_road",
+      "propId": "road_oak_6",
+      "frame": "oak.png",
+      "cell": {
+        "c": 39,
+        "r": 5
+      },
+      "world": {
+        "x": 1248,
+        "y": 160
+      },
+      "sourcePixels": {
+        "width": 126,
+        "height": 160
+      },
+      "worldSize": {
+        "width": 126,
+        "height": 160
+      },
+      "worldSizeAuthored": true,
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "collision": {
+        "type": "rect",
+        "width": 30,
+        "height": 16
+      },
+      "shadow": {
+        "kind": "none"
+      },
+      "classification": "accepted-generated"
+    },
+    {
+      "map": "old_road",
+      "propId": "road_oak_8",
+      "frame": "oak.png",
+      "cell": {
+        "c": 51,
+        "r": 4
+      },
+      "world": {
+        "x": 1632,
+        "y": 128
+      },
+      "sourcePixels": {
+        "width": 126,
+        "height": 160
+      },
+      "worldSize": {
+        "width": 126,
+        "height": 160
+      },
+      "worldSizeAuthored": true,
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "collision": {
+        "type": "rect",
+        "width": 30,
+        "height": 16
+      },
+      "shadow": {
+        "kind": "none"
+      },
+      "classification": "accepted-generated"
+    },
+    {
+      "map": "old_road",
+      "propId": "tess_component",
+      "frame": "prop_component.png",
+      "cell": {
+        "c": 57,
+        "r": 11
+      },
+      "world": {
+        "x": 1824,
+        "y": 352
+      },
+      "sourcePixels": {
+        "width": 109,
+        "height": 134
+      },
+      "worldSize": {
+        "width": 39,
+        "height": 48
+      },
+      "worldSizeAuthored": true,
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "collision": {
+        "type": "rect",
+        "width": 24,
+        "height": 14
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 20,
+        "height": 8,
+        "opacity": 0.18
+      },
+      "classification": "accepted-generated"
+    },
+    {
+      "map": "old_road",
+      "propId": "waystation_barrel",
+      "frame": "prop_barrel.png",
+      "cell": {
+        "c": 55,
+        "r": 9
+      },
+      "world": {
+        "x": 1760,
+        "y": 288
+      },
+      "sourcePixels": {
+        "width": 181,
+        "height": 133
+      },
+      "worldSize": {
+        "width": 48,
+        "height": 35
+      },
+      "worldSizeAuthored": true,
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "collision": {
+        "type": "rect",
+        "width": 20,
+        "height": 20
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 30,
+        "height": 12,
+        "opacity": 0.22
+      },
+      "classification": "accepted-generated"
+    },
+    {
+      "map": "old_road",
+      "propId": "waystation_cart",
+      "frame": "prop_cart.png",
+      "cell": {
+        "c": 61,
+        "r": 11
+      },
+      "world": {
+        "x": 1952,
+        "y": 352
+      },
+      "sourcePixels": {
+        "width": 229,
+        "height": 136
+      },
+      "worldSize": {
+        "width": 96,
+        "height": 57
+      },
+      "worldSizeAuthored": true,
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "collision": {
+        "type": "rect",
+        "width": 40,
+        "height": 24
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 72,
+        "height": 20,
+        "opacity": 0.2
+      },
+      "classification": "accepted-generated"
+    },
+    {
+      "map": "old_road",
+      "propId": "waystation_crate",
+      "frame": "prop_crate.png",
+      "cell": {
+        "c": 56,
+        "r": 12
+      },
+      "world": {
+        "x": 1792,
+        "y": 384
+      },
+      "sourcePixels": {
+        "width": 223,
+        "height": 160
+      },
+      "worldSize": {
+        "width": 40,
+        "height": 29
+      },
+      "worldSizeAuthored": true,
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 22
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 28,
+        "height": 10,
+        "opacity": 0.2
+      },
+      "classification": "accepted-generated"
+    },
+    {
+      "map": "old_road",
+      "propId": "waystation_crate_2",
+      "frame": "prop_crate.png",
+      "cell": {
+        "c": 60,
+        "r": 8
+      },
+      "world": {
+        "x": 1920,
+        "y": 256
+      },
+      "sourcePixels": {
+        "width": 223,
+        "height": 160
+      },
+      "worldSize": {
+        "width": 40,
+        "height": 29
+      },
+      "worldSizeAuthored": true,
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 22
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 28,
+        "height": 10,
+        "opacity": 0.2
+      },
+      "classification": "accepted-generated"
+    },
+    {
+      "map": "old_road",
+      "propId": "waystation_support",
+      "frame": "prop_support.png",
+      "cell": {
+        "c": 59,
+        "r": 12
+      },
+      "world": {
+        "x": 1888,
+        "y": 384
+      },
+      "sourcePixels": {
+        "width": 76,
+        "height": 369
+      },
+      "worldSize": {
+        "width": 20,
+        "height": 96
+      },
+      "worldSizeAuthored": true,
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 22
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 18,
+        "height": 9,
+        "opacity": 0.2
+      },
+      "classification": "accepted-generated"
+    },
+    {
+      "map": "ruined_shrine",
+      "propId": "shrine_arch",
+      "frame": "shrine_arch.png",
+      "cell": {
+        "c": 19,
+        "r": 18
+      },
+      "world": {
+        "x": 608,
+        "y": 576
+      },
+      "sourcePixels": {
+        "width": 160,
+        "height": 160
+      },
+      "worldSize": {
+        "width": 160,
+        "height": 160
+      },
+      "worldSizeAuthored": true,
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "collision": null,
+      "shadow": {
+        "kind": "none"
+      },
+      "classification": "accepted-generated"
+    },
+    {
+      "map": "ruined_shrine",
+      "propId": "shrine_barrel",
+      "frame": "prop_barrel.png",
+      "cell": {
+        "c": 27,
+        "r": 11
+      },
+      "world": {
+        "x": 864,
+        "y": 352
+      },
+      "sourcePixels": {
+        "width": 181,
+        "height": 133
+      },
+      "worldSize": {
+        "width": 48,
+        "height": 35
+      },
+      "worldSizeAuthored": true,
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "collision": {
+        "type": "rect",
+        "width": 20,
+        "height": 20
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 30,
+        "height": 12,
+        "opacity": 0.22
+      },
+      "classification": "accepted-generated"
+    },
+    {
+      "map": "ruined_shrine",
+      "propId": "shrine_birch",
+      "frame": "birch.png",
+      "cell": {
+        "c": 35,
+        "r": 30
+      },
+      "world": {
+        "x": 1120,
+        "y": 960
+      },
+      "sourcePixels": {
+        "width": 70,
+        "height": 160
+      },
+      "worldSize": {
+        "width": 70,
+        "height": 160
+      },
+      "worldSizeAuthored": true,
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 14
+      },
+      "shadow": {
+        "kind": "none"
+      },
+      "classification": "accepted-generated"
+    },
+    {
+      "map": "ruined_shrine",
+      "propId": "shrine_brazier",
+      "frame": "prop_brazier.png",
+      "cell": {
+        "c": 17,
+        "r": 23
+      },
+      "world": {
+        "x": 544,
+        "y": 736
+      },
+      "sourcePixels": {
+        "width": 126,
+        "height": 110
+      },
+      "worldSize": {
+        "width": 64,
+        "height": 56
+      },
+      "worldSizeAuthored": true,
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 22
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 34,
+        "height": 14,
+        "opacity": 0.22
+      },
+      "classification": "accepted-generated"
+    },
+    {
+      "map": "ruined_shrine",
+      "propId": "shrine_crate",
+      "frame": "prop_crate.png",
+      "cell": {
+        "c": 12,
+        "r": 10
+      },
+      "world": {
+        "x": 384,
+        "y": 320
+      },
+      "sourcePixels": {
+        "width": 223,
+        "height": 160
+      },
+      "worldSize": {
+        "width": 40,
+        "height": 29
+      },
+      "worldSizeAuthored": true,
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 22
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 28,
+        "height": 10,
+        "opacity": 0.2
+      },
+      "classification": "accepted-generated"
+    },
+    {
+      "map": "ruined_shrine",
+      "propId": "shrine_oak",
+      "frame": "oak.png",
+      "cell": {
+        "c": 4,
+        "r": 29
+      },
+      "world": {
+        "x": 128,
+        "y": 928
+      },
+      "sourcePixels": {
+        "width": 126,
+        "height": 160
+      },
+      "worldSize": {
+        "width": 126,
+        "height": 160
+      },
+      "worldSizeAuthored": true,
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "collision": {
+        "type": "rect",
+        "width": 30,
+        "height": 16
+      },
+      "shadow": {
+        "kind": "none"
+      },
+      "classification": "accepted-generated"
+    },
+    {
+      "map": "ruined_shrine",
+      "propId": "ward_socket",
+      "frame": "prop_ward_socket.png",
+      "cell": {
+        "c": 20,
+        "r": 20
+      },
+      "world": {
+        "x": 640,
+        "y": 640
+      },
+      "sourcePixels": {
+        "width": 234,
+        "height": 180
+      },
+      "worldSize": {
+        "width": 64,
+        "height": 49
+      },
+      "worldSizeAuthored": true,
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "collision": {
+        "type": "rect",
+        "width": 24,
+        "height": 16
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 40,
+        "height": 14,
+        "opacity": 0.2
+      },
+      "classification": "accepted-generated"
+    },
+    {
+      "map": "village",
+      "propId": "inn_barrel",
+      "frame": "prop_barrel.png",
+      "cell": {
+        "c": 54,
+        "r": 21
+      },
+      "world": {
+        "x": 1728,
+        "y": 672
+      },
+      "sourcePixels": {
+        "width": 181,
+        "height": 133
+      },
+      "worldSize": {
+        "width": 48,
+        "height": 35
+      },
+      "worldSizeAuthored": true,
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "collision": {
+        "type": "rect",
+        "width": 20,
+        "height": 20
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 30,
+        "height": 12,
+        "opacity": 0.22
+      },
+      "classification": "accepted-generated"
+    },
+    {
+      "map": "village",
+      "propId": "inn_chair",
+      "frame": "chair.png",
+      "cell": {
+        "c": 53,
+        "r": 20
+      },
+      "world": {
+        "x": 1696,
+        "y": 640
+      },
+      "sourcePixels": {
+        "width": 26,
+        "height": 48
+      },
+      "worldSize": {
+        "width": 26,
+        "height": 48
+      },
+      "worldSizeAuthored": true,
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "collision": {
+        "type": "rect",
+        "width": 16,
+        "height": 10
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 16,
+        "height": 6,
+        "opacity": 0.2
+      },
+      "classification": "accepted-generated"
+    },
+    {
+      "map": "village",
+      "propId": "inn_crate",
+      "frame": "prop_crate.png",
+      "cell": {
+        "c": 5,
+        "r": 27
+      },
+      "world": {
+        "x": 160,
+        "y": 864
+      },
+      "sourcePixels": {
+        "width": 223,
+        "height": 160
+      },
+      "worldSize": {
+        "width": 40,
+        "height": 29
+      },
+      "worldSizeAuthored": true,
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 22
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 28,
+        "height": 10,
+        "opacity": 0.2
+      },
+      "classification": "accepted-generated"
+    },
+    {
+      "map": "village",
+      "propId": "notice_board",
+      "frame": "prop_notice_board.png",
+      "cell": {
+        "c": 45,
+        "r": 11
+      },
+      "world": {
+        "x": 1440,
+        "y": 352
+      },
+      "sourcePixels": {
+        "width": 88,
+        "height": 73
+      },
+      "worldSize": {
+        "width": 64,
+        "height": 53
+      },
+      "worldSizeAuthored": true,
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "collision": {
+        "type": "rect",
+        "width": 20,
+        "height": 10
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 36,
+        "height": 10,
+        "opacity": 0.2
+      },
+      "classification": "accepted-generated"
+    },
+    {
+      "map": "village",
+      "propId": "shop_crate",
+      "frame": "prop_crate.png",
+      "cell": {
+        "c": 55,
+        "r": 35
+      },
+      "world": {
+        "x": 1760,
+        "y": 1120
+      },
+      "sourcePixels": {
+        "width": 223,
+        "height": 160
+      },
+      "worldSize": {
+        "width": 40,
+        "height": 29
+      },
+      "worldSizeAuthored": true,
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 22
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 28,
+        "height": 10,
+        "opacity": 0.2
+      },
+      "classification": "accepted-generated"
+    },
+    {
+      "map": "village",
+      "propId": "village_gate",
+      "frame": "prop_gate.png",
+      "cell": {
+        "c": 32,
+        "r": 45
+      },
+      "world": {
+        "x": 1024,
+        "y": 1440
+      },
+      "sourcePixels": {
+        "width": 157,
+        "height": 112
+      },
+      "worldSize": {
+        "width": 96,
+        "height": 68
+      },
+      "worldSizeAuthored": true,
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "collision": null,
+      "shadow": {
+        "kind": "none"
+      },
+      "classification": "accepted-generated"
+    },
+    {
+      "map": "village",
+      "propId": "village_well",
+      "frame": "prop_well.png",
+      "cell": {
+        "c": 19,
+        "r": 24
+      },
+      "world": {
+        "x": 608,
+        "y": 768
+      },
+      "sourcePixels": {
+        "width": 64,
+        "height": 80
+      },
+      "worldSize": {
+        "width": 64,
+        "height": 80
+      },
+      "worldSizeAuthored": true,
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 14
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 46,
+        "height": 18,
+        "opacity": 0.22
+      },
+      "classification": "accepted-generated"
+    },
+    {
+      "map": "village",
+      "propId": "ward_grove_a",
+      "frame": "ward_small_a.png",
+      "cell": {
+        "c": 35,
+        "r": 26
+      },
+      "world": {
+        "x": 1120,
+        "y": 832
+      },
+      "sourcePixels": {
+        "width": 96,
+        "height": 96
+      },
+      "worldSize": {
+        "width": 96,
+        "height": 96
+      },
+      "worldSizeAuthored": true,
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "collision": {
+        "type": "rect",
+        "width": 28,
+        "height": 16
+      },
+      "shadow": {
+        "kind": "none"
+      },
+      "classification": "accepted-generated"
+    },
+    {
+      "map": "village",
+      "propId": "ward_grove_b",
+      "frame": "ward_small_b.png",
+      "cell": {
+        "c": 35,
+        "r": 20
+      },
+      "world": {
+        "x": 1120,
+        "y": 640
+      },
+      "sourcePixels": {
+        "width": 96,
+        "height": 96
+      },
+      "worldSize": {
+        "width": 96,
+        "height": 96
+      },
+      "worldSizeAuthored": true,
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "collision": {
+        "type": "rect",
+        "width": 28,
+        "height": 16
+      },
+      "shadow": {
+        "kind": "none"
+      },
+      "classification": "accepted-generated"
+    },
+    {
+      "map": "village",
+      "propId": "ward_grove_c",
+      "frame": "ward_small_c.png",
+      "cell": {
+        "c": 29,
+        "r": 20
+      },
+      "world": {
+        "x": 928,
+        "y": 640
+      },
+      "sourcePixels": {
+        "width": 96,
+        "height": 96
+      },
+      "worldSize": {
+        "width": 96,
+        "height": 96
+      },
+      "worldSizeAuthored": true,
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "collision": {
+        "type": "rect",
+        "width": 28,
+        "height": 16
+      },
+      "shadow": {
+        "kind": "none"
+      },
+      "classification": "accepted-generated"
+    },
+    {
+      "map": "village",
+      "propId": "ward_tree_landmark",
+      "frame": "ward_large.png",
+      "cell": {
+        "c": 32,
+        "r": 23
+      },
+      "world": {
+        "x": 1024,
+        "y": 736
+      },
+      "sourcePixels": {
+        "width": 192,
+        "height": 152
+      },
+      "worldSize": {
+        "width": 192,
+        "height": 152
+      },
+      "worldSizeAuthored": true,
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "collision": {
+        "type": "rect",
+        "width": 44,
+        "height": 22
+      },
+      "shadow": {
+        "kind": "none"
+      },
+      "classification": "accepted-generated"
+    },
+    {
+      "map": "village",
+      "propId": "woodland_birch",
+      "frame": "birch.png",
+      "cell": {
+        "c": 27,
+        "r": 17
+      },
+      "world": {
+        "x": 864,
+        "y": 544
+      },
+      "sourcePixels": {
+        "width": 70,
+        "height": 160
+      },
+      "worldSize": {
+        "width": 70,
+        "height": 160
+      },
+      "worldSizeAuthored": true,
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 14
+      },
+      "shadow": {
+        "kind": "none"
+      },
+      "classification": "accepted-generated"
+    },
+    {
+      "map": "village",
+      "propId": "woodland_birch_2",
+      "frame": "birch.png",
+      "cell": {
+        "c": 45,
+        "r": 29
+      },
+      "world": {
+        "x": 1440,
+        "y": 928
+      },
+      "sourcePixels": {
+        "width": 70,
+        "height": 160
+      },
+      "worldSize": {
+        "width": 70,
+        "height": 160
+      },
+      "worldSizeAuthored": true,
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 14
+      },
+      "shadow": {
+        "kind": "none"
+      },
+      "classification": "accepted-generated"
+    },
+    {
+      "map": "village",
+      "propId": "woodland_oak",
+      "frame": "oak.png",
+      "cell": {
+        "c": 27,
+        "r": 14
+      },
+      "world": {
+        "x": 864,
+        "y": 448
+      },
+      "sourcePixels": {
+        "width": 126,
+        "height": 160
+      },
+      "worldSize": {
+        "width": 126,
+        "height": 160
+      },
+      "worldSizeAuthored": true,
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "collision": {
+        "type": "rect",
+        "width": 30,
+        "height": 16
+      },
+      "shadow": {
+        "kind": "none"
+      },
+      "classification": "accepted-generated"
+    },
+    {
+      "map": "village",
+      "propId": "woodland_oak_2",
+      "frame": "oak.png",
+      "cell": {
+        "c": 44,
+        "r": 16
+      },
+      "world": {
+        "x": 1408,
+        "y": 512
+      },
+      "sourcePixels": {
+        "width": 126,
+        "height": 160
+      },
+      "worldSize": {
+        "width": 126,
+        "height": 160
+      },
+      "worldSizeAuthored": true,
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "collision": {
+        "type": "rect",
+        "width": 30,
+        "height": 16
+      },
+      "shadow": {
+        "kind": "none"
+      },
+      "classification": "accepted-generated"
+    },
+    {
+      "map": "village",
+      "propId": "woodland_oak_3",
+      "frame": "oak.png",
+      "cell": {
+        "c": 12,
+        "r": 20
+      },
+      "world": {
+        "x": 384,
+        "y": 640
+      },
+      "sourcePixels": {
+        "width": 126,
+        "height": 160
+      },
+      "worldSize": {
+        "width": 126,
+        "height": 160
+      },
+      "worldSizeAuthored": true,
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "collision": {
+        "type": "rect",
+        "width": 30,
+        "height": 16
+      },
+      "shadow": {
+        "kind": "none"
+      },
+      "classification": "accepted-generated"
+    },
+    {
+      "map": "village",
+      "propId": "woodland_oak_4",
+      "frame": "oak.png",
+      "cell": {
+        "c": 56,
+        "r": 40
+      },
+      "world": {
+        "x": 1792,
+        "y": 1280
+      },
+      "sourcePixels": {
+        "width": 126,
+        "height": 160
+      },
+      "worldSize": {
+        "width": 126,
+        "height": 160
+      },
+      "worldSizeAuthored": true,
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "collision": {
+        "type": "rect",
+        "width": 30,
+        "height": 16
+      },
+      "shadow": {
+        "kind": "none"
+      },
+      "classification": "accepted-generated"
+    },
+    {
+      "map": "village",
+      "propId": "yard_anvil",
+      "frame": "prop_anvil.png",
+      "cell": {
+        "c": 5,
+        "r": 28
+      },
+      "world": {
+        "x": 160,
+        "y": 896
+      },
+      "sourcePixels": {
+        "width": 205,
+        "height": 138
+      },
+      "worldSize": {
+        "width": 46,
+        "height": 31
+      },
+      "worldSizeAuthored": true,
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "collision": {
+        "type": "rect",
+        "width": 24,
+        "height": 16
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 30,
+        "height": 10,
+        "opacity": 0.2
+      },
+      "classification": "accepted-generated"
+    }
+  ],
+  "maps": [
+    {
+      "id": "inn",
+      "width": 28,
+      "height": 20,
+      "npcCount": 2,
+      "propCount": 20,
+      "transitionCount": 1,
+      "walkablePercent": 65.9,
+      "components": 1,
+      "unreachableCells": 0,
+      "legacyFrames": [],
+      "landmarkPlacements": []
+    },
+    {
+      "id": "merchant_shop",
+      "width": 24,
+      "height": 18,
+      "npcCount": 1,
+      "propCount": 11,
+      "transitionCount": 1,
+      "walkablePercent": 61.1,
+      "components": 1,
+      "unreachableCells": 0,
+      "legacyFrames": [],
+      "landmarkPlacements": []
+    },
+    {
+      "id": "old_road",
+      "width": 72,
+      "height": 36,
+      "npcCount": 2,
+      "propCount": 24,
+      "transitionCount": 2,
+      "walkablePercent": 78.2,
+      "components": 1,
+      "unreachableCells": 0,
+      "legacyFrames": [],
+      "landmarkPlacements": [
+        "road_notice"
+      ]
+    },
+    {
+      "id": "ruined_shrine",
+      "width": 40,
+      "height": 36,
+      "npcCount": 1,
+      "propCount": 7,
+      "transitionCount": 1,
+      "walkablePercent": 76.3,
+      "components": 1,
+      "unreachableCells": 0,
+      "legacyFrames": [],
+      "landmarkPlacements": [
+        "shrine_arch",
+        "ward_socket"
+      ]
+    },
+    {
+      "id": "village",
+      "width": 64,
+      "height": 48,
+      "npcCount": 4,
+      "propCount": 18,
+      "transitionCount": 3,
+      "walkablePercent": 75.7,
+      "components": 9,
+      "unreachableCells": 11,
+      "legacyFrames": [],
+      "landmarkPlacements": [
+        "notice_board",
+        "village_gate",
+        "village_well",
+        "ward_tree_landmark"
+      ]
+    }
+  ],
+  "legacyVisualDependencies": [],
+  "screenshotHooks": {
+    "note": "Screenshots are illustrative, never a correctness gate. Capture via the visual suite or `?screenshot=true`.",
+    "urlPattern": "/?map=<mapId>&screenshot=true&e2e=true",
+    "flags": [
+      "screenshot=true",
+      "e2e=true",
+      "authoring=true"
+    ],
+    "contactSheet": ".local/releases/evidence/emberwatch-visual-audit/contact_sheet.png"
+  }
+}

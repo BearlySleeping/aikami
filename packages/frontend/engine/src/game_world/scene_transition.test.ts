@@ -22,6 +22,13 @@ const makePackConfig = (): PackConfig => ({
       isWalkable: true,
       anchor: { x: 0.25, y: 0.75 },
     },
+    barrel: {
+      name: 'Barrel',
+      frame: 'prop_barrel.png',
+      isWalkable: false,
+      renderSize: { width: 32, height: 48 },
+      shadow: { kind: 'ellipse', width: 30, height: 12, opacity: 0.2 },
+    },
   },
 });
 
@@ -64,6 +71,26 @@ describe('prepareScene', () => {
     // Default anchor is bottom-centre; an explicit anchor is preserved.
     expect(scene.propFrameMeta.get('well.png')).toEqual({ anchorX: 0.5, anchorY: 1.0 });
     expect(scene.propFrameMeta.get('gate.png')).toEqual({ anchorX: 0.25, anchorY: 0.75 });
+  });
+
+  test('carries authored logical size and contact shadow per frame', async () => {
+    const scene = await prepareScene({
+      mapUrl: 'maps:emberwatch/hall.json',
+      packConfig: makePackConfig(),
+      loadMap: makeStaticLoader(),
+    });
+
+    // A prop declaring renderSize + shadow exposes both to the renderer so the
+    // texture's packed frame size can never dictate the world footprint.
+    expect(scene.propFrameMeta.get('prop_barrel.png')).toEqual({
+      anchorX: 0.5,
+      anchorY: 1.0,
+      renderWidth: 32,
+      renderHeight: 48,
+      shadow: { kind: 'ellipse', width: 30, height: 12, opacity: 0.2 },
+    });
+    // A legacy prop (no authored presentation) carries neither field.
+    expect(scene.propFrameMeta.get('well.png')).toEqual({ anchorX: 0.5, anchorY: 1.0 });
   });
 
   test('falls back to the explicit collision layer without a packConfig', async () => {

@@ -805,6 +805,49 @@ export const ContentPackTileSchema = Type.Object({
 
 export type ContentPackTile = Static<typeof ContentPackTileSchema>;
 
+/**
+ * Authored logical render size, in WORLD pixels.
+ *
+ * Texture packing and generation-canvas pixels are build details: a frame
+ * packed from a 512×512 preparation canvas must be able to render at 32×48
+ * world pixels — and changing how the packer lays the frame out must not move
+ * a single sprite. `renderSize` is the one canonical place a prop declares its
+ * intended world footprint. When omitted, the renderer falls back to the
+ * texture's native pixel size (legacy/back-compatible behaviour).
+ *
+ * `width` and `height` are independently optional: an author may pin only the
+ * dominant dimension and let the other preserve the accepted art's aspect
+ * ratio. Authoring BOTH is an explicit request to render at exactly that size
+ * (even when it changes the aspect).
+ */
+export const PropRenderSizeSchema = Type.Object({
+  width: Type.Optional(Type.Number({ exclusiveMinimum: 0 })),
+  height: Type.Optional(Type.Number({ exclusiveMinimum: 0 })),
+});
+
+/**
+ * A renderer-owned contact shadow drawn at the prop's ground/contact point.
+ *
+ * The shadow is metadata, never a baked opaque ground rectangle: the accepted
+ * prop art stays transparent, and the engine composites a soft ellipse under
+ * the prop. `kind: 'none'` is explicit (trees/buildings whose art already has
+ * grounding). Decals and objects with no meaningful contact point should
+ * declare `none` or omit the block.
+ */
+export const PropContactShadowSchema = Type.Union([
+  Type.Object({
+    kind: Type.Literal('ellipse'),
+    width: Type.Number({ exclusiveMinimum: 0 }),
+    height: Type.Number({ exclusiveMinimum: 0 }),
+    offsetX: Type.Optional(Type.Number()),
+    offsetY: Type.Optional(Type.Number()),
+    opacity: Type.Optional(Type.Number({ minimum: 0, maximum: 1 })),
+  }),
+  // Explicit "no shadow" — trees/buildings whose accepted art already reads as
+  // grounded, and flat decals that cannot cast one.
+  Type.Object({ kind: Type.Literal('none') }),
+]);
+
 /** Prop definition — the entity spawner reads walkability/collision from this (C-375 AC-3). */
 export const ContentPackPropSchema = Type.Object({
   name: Type.String({ description: 'Human-readable prop name' }),
@@ -814,6 +857,13 @@ export const ContentPackPropSchema = Type.Object({
     Type.Boolean({ description: 'False (or omitted) = solid prop that blocks movement' }),
   ),
   collision: Type.Optional(PropCollisionSchema),
+  /**
+   * Authored logical size in world pixels (see {@link PropRenderSizeSchema}).
+   * Decouples the sprite's world footprint from its texture frame size.
+   */
+  renderSize: Type.Optional(PropRenderSizeSchema),
+  /** Renderer-owned contact shadow (see {@link PropContactShadowSchema}). */
+  shadow: Type.Optional(PropContactShadowSchema),
   /** Per-asset provenance (C-381 AC-1). */
   provenance: Type.Optional(AssetProvenanceSchema),
   /** C-531: make this prop a usable battlefield object. */
@@ -821,6 +871,8 @@ export const ContentPackPropSchema = Type.Object({
 });
 
 export type ContentPackProp = Static<typeof ContentPackPropSchema>;
+export type PropRenderSize = Static<typeof PropRenderSizeSchema>;
+export type PropContactShadow = Static<typeof PropContactShadowSchema>;
 
 /**
  * A terrain declared by a content pack (C-378). Frames are resolved by name.

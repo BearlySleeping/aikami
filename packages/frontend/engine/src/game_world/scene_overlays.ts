@@ -6,7 +6,7 @@
 // unit-tested against a bare PixiJS Container — no GameWorld, no worker.
 
 import type { GridPoint } from '@aikami/types';
-import { type Container, Graphics } from 'pixi.js';
+import { type Container, Graphics, Text } from 'pixi.js';
 import type { TransitionZone } from '../assets/map_loader.ts';
 import {
   buildCombatHighlightCells,
@@ -17,7 +17,18 @@ import type { PropTextureResolver } from '../rendering/prop_texture_resolver.ts'
 import { buildWalkabilityStyles } from '../rendering/walkability_overlay.ts';
 import type { TerrainGrid } from '../systems/terrain_grid.ts';
 import type { FrameUvResolver } from '../systems/tilemap_render_system.ts';
-import { isE2ETestMode } from './diagnostics.ts';
+import {
+  type AuthoringOverlayInput,
+  type AuthoringOverlayLayer,
+  buildAuthoringOverlayShapes,
+} from './authoring_overlay.ts';
+import { buildAuthoringOverlayInput } from './authoring_overlay_scene.ts';
+import {
+  isAuthoringOverlayMode,
+  isE2ETestMode,
+  readAuthoringOverlayLayers,
+} from './diagnostics.ts';
+import type { PreparedScene } from './scene_transition.ts';
 
 /**
  * Builds a frame-name → UV-rect resolver from the pack's atlas.
@@ -194,29 +205,120 @@ export const renderTransitionZoneOverlays = (options: {
 };
 
 /**
+ * Removes any previous authoring overlay from the world container.
+ */
+const clearAuthoringOverlay = (worldContainer: Container): void => {
+  const stale = worldContainer.children.filter(
+    (child) => typeof child.label === 'string' && child.label.startsWith('authoring-overlay'),
+  );
+  for (const child of stale) {
+    worldContainer.removeChild(child);
+    child.destroy({ children: true });
+  }
+};
+
+/**
+ * Draws the Emberwatch authoring/debug overlay (development only).
+ *
+ * The geometry is produced by the pure `buildAuthoringOverlayShapes`; this
+ * function only turns shapes into PixiJS display objects. It is never called
+ * unless authoring mode is explicitly enabled, so it cannot reach the
+ * production HUD.
+ */
+export const drawAuthoringOverlay = (options: {
+  worldContainer: Container;
+  input: AuthoringOverlayInput;
+  layers: ReadonlySet<AuthoringOverlayLayer>;
+}): void => {
+  const { worldContainer } = options;
+  clearAuthoringOverlay(worldContainer);
+
+  const shapes = buildAuthoringOverlayShapes(options.input, options.layers);
+  if (shapes.length === 0) {
+    return;
+  }
+
+  const graphics = new Graphics();
+  graphics.label = 'authoring-overlay-graphics';
+  graphics.zIndex = WORLD_Z_BANDS.debugGrid + 1;
+  graphics.eventMode = 'none';
+  const labels: Text[] = [];
+
+  for (const shape of shapes) {
+    if (shape.kind === 'rect') {
+      graphics
+        .rect(shape.x, shape.y, shape.width, shape.height)
+        .fill({ color: shape.color, alpha: shape.alpha });
+      if (shape.strokeAlpha !== undefined) {
+        graphics
+          .rect(shape.x, shape.y, shape.width, shape.height)
+          .stroke({ width: 1, color: shape.color, alpha: shape.strokeAlpha });
+      }
+    } else if (shape.kind === 'point') {
+      graphics
+        .circle(shape.x, shape.y, shape.radius)
+        .fill({ color: shape.color, alpha: shape.alpha });
+    } else {
+      const label = new Text({
+        text: shape.text,
+        style: {
+          fontFamily: 'monospace',
+          fontSize: 10,
+          fill: shape.color,
+          stroke: { color: 0x000000, width: 3 },
+        },
+      });
+      label.label = 'authoring-overlay-label';
+      label.x = shape.x;
+      label.y = shape.y;
+      label.zIndex = WORLD_Z_BANDS.debugGrid + 2;
+      label.eventMode = 'none';
+      labels.push(label);
+    }
+  }
+
+  worldContainer.addChild(graphics);
+  for (const label of labels) {
+    worldContainer.addChild(label);
+  }
+};
+
+/**
  * Renders the scene's static overlays after a map load (C-543).
  *
  * Transition-zone markers are a production surface (portals must stay
- * discoverable); the walkability debug grid is not, so it is gated behind
- * `debugGrid`. Keeping the composition here removes the flag branching from the
- * engine facade.
+ * discoverable); the walkability debug grid and the authoring overlay are not,
+ * so they are gated behind explicit flags. The authoring input is derived from
+ * the prepared scene only when `?authoring=true` is set, so the production HUD
+ * is untouched and the derivation costs nothing in normal play.
  */
 export const renderMapSceneOverlays = (options: {
   worldContainer: Container;
-  zones: readonly TransitionZone[];
-  map: { readonly width: number; readonly height: number; readonly tileSize: number };
-  terrainGrid?: TerrainGrid;
+  scene: PreparedScene;
   debugGrid: boolean;
 }): void => {
-  renderTransitionZoneOverlays({ worldContainer: options.worldContainer, zones: options.zones });
+  const { scene } = options;
+  renderTransitionZoneOverlays({
+    worldContainer: options.worldContainer,
+    zones: scene.transitionZones,
+  });
   drawDebugGrid({
     worldContainer: options.worldContainer,
-    width: options.map.width,
-    height: options.map.height,
-    tileSize: options.map.tileSize,
-    terrainGrid: options.terrainGrid,
+    width: scene.tilemap.width,
+    height: scene.tilemap.height,
+    tileSize: scene.tilemap.tilewidth,
+    terrainGrid: scene.terrainGrid,
     enabled: options.debugGrid,
   });
+  if (isAuthoringOverlayMode()) {
+    drawAuthoringOverlay({
+      worldContainer: options.worldContainer,
+      input: buildAuthoringOverlayInput(scene),
+      layers: readAuthoringOverlayLayers(),
+    });
+  } else {
+    clearAuthoringOverlay(options.worldContainer);
+  }
 };
 
 /**

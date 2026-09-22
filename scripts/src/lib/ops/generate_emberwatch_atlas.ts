@@ -419,25 +419,12 @@ const paintFencePost = (col: number, row: number): void => {
 
 // ---- Props ----------------------------------------------------------------
 
-const paintWell = (col: number, row: number): void => {
-  clearCell(col, row); // C-504: transparent unpainted region
-  noiseCell(col, row, col * 19 + row * 41 + 31, 0.3, 18, 20, 12);
-  // stone ring
-  fillRect(col, row, 4, 12, 24, 16, 130, 130, 134);
-  hline(col, row, 4, 27, 12, 160, 160, 164);
-  hline(col, row, 4, 27, 27, 104, 104, 108);
-  // opening
-  fillRect(col, row, 9, 16, 14, 12, 34, 34, 38);
-  // roof posts
-  vline(col, row, 7, 2, 12, 122, 74, 42);
-  vline(col, row, 24, 2, 12, 122, 74, 42);
-  // roof
-  fillRect(col, row, 4, 0, 24, 4, 154, 68, 58);
-  fillRect(col, row, 5, 1, 22, 2, 172, 84, 70);
-  hline(col, row, 4, 27, 4, 120, 52, 44);
-  // bucket hint
-  setPx(col * TILE + 15, row * TILE + 14, 100, 100, 104);
-};
+// NOTE: the legacy procedural `paintWell` was removed with the 5.0.0 well
+// rebind. `village_well` now resolves to the accepted standalone prop art
+// (`content/packs/emberwatch/props/prop_well.png`) through the props atlas, so
+// no grid-atlas `well.png` frame exists or should exist. Do not reintroduce a
+// grid painter for a prop that has accepted standalone art — see the
+// prop-atlas source guard (`emberwatch_prop_source_guard`).
 
 const paintNoticeBoard = (col: number, row: number): void => {
   clearCell(col, row); // C-504: transparent unpainted region
@@ -992,9 +979,6 @@ const paintFrame = (key: string, col: number, row: number): void => {
       break;
     case 'wood_fence.png':
       paintFencePost(col, row);
-      break;
-    case 'well.png':
-      paintWell(col, row);
       break;
     case 'notice_board.png':
       paintNoticeBoard(col, row);

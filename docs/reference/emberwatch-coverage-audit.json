@@ -7,31 +7,31 @@
   "packUpdatedAt": "2026-09-18T00:00:00.000Z",
   "generatedAt": "1980-01-01T00:00:00.000Z",
   "summary": {
-    "accepted/current": 132,
+    "accepted/current": 147,
     "acceptable-shared": 84,
     "placeholder/wrong-semantic-reuse": 0,
     "missing": 0,
-    "needs-regeneration": 1,
+    "needs-regeneration": 0,
     "needs-map-layout-change": 0,
     "needs-runtime-capability": 0
   },
   "counts": {
     "maps": 5,
     "terrains": 6,
-    "bakedTiles": 48,
+    "bakedTiles": 47,
     "corner16Terrains": 5,
-    "atlasCellsUsed": 128,
+    "atlasCellsUsed": 127,
     "atlasCellsTotal": 128,
-    "atlasCellsFree": 0,
+    "atlasCellsFree": 1,
     "props": 95,
     "npcs": 13,
     "hostileNpcs": 4,
     "evidence": 4,
     "audioCues": 8,
-    "sourceImages": 21,
+    "sourceImages": 28,
     "transitions": 8,
     "catalogTags": 12,
-    "findings": 217
+    "findings": 231
   },
   "findings": [
     {
@@ -103,8 +103,8 @@
     {
       "id": "atlas:headroom",
       "surface": "atlas-frame",
-      "classification": "needs-regeneration",
-      "detail": "128/128 atlas cells used (48 baked tiles + 5×16 corner16) — 0 free; a new corner16 terrain requires an explicit geometry change"
+      "classification": "accepted/current",
+      "detail": "127/128 atlas cells used (47 baked tiles + 5×16 corner16) — 1 free; a new corner16 terrain requires an explicit geometry change"
     },
     {
       "id": "prop:ward_tree_landmark",
@@ -134,7 +134,7 @@
       "id": "prop:village_well",
       "surface": "prop",
       "classification": "accepted/current",
-      "detail": "frame well.png"
+      "detail": "frame prop_well.png"
     },
     {
       "id": "prop:notice_board",
@@ -242,91 +242,91 @@
       "id": "prop:inn_crate",
       "surface": "prop",
       "classification": "acceptable-shared",
-      "detail": "frame crate.png shared with shop_crate, shop_crate_2, shop_crate_3, waystation_crate, waystation_crate_2, shrine_crate, inn_hanging_crate"
+      "detail": "frame prop_crate.png shared with shop_crate, shop_crate_2, shop_crate_3, waystation_crate, waystation_crate_2, shrine_crate, inn_hanging_crate"
     },
     {
       "id": "prop:shop_crate",
       "surface": "prop",
       "classification": "acceptable-shared",
-      "detail": "frame crate.png shared with inn_crate, shop_crate_2, shop_crate_3, waystation_crate, waystation_crate_2, shrine_crate, inn_hanging_crate"
+      "detail": "frame prop_crate.png shared with inn_crate, shop_crate_2, shop_crate_3, waystation_crate, waystation_crate_2, shrine_crate, inn_hanging_crate"
     },
     {
       "id": "prop:shop_crate_2",
       "surface": "prop",
       "classification": "acceptable-shared",
-      "detail": "frame crate.png shared with inn_crate, shop_crate, shop_crate_3, waystation_crate, waystation_crate_2, shrine_crate, inn_hanging_crate"
+      "detail": "frame prop_crate.png shared with inn_crate, shop_crate, shop_crate_3, waystation_crate, waystation_crate_2, shrine_crate, inn_hanging_crate"
     },
     {
       "id": "prop:shop_crate_3",
       "surface": "prop",
       "classification": "acceptable-shared",
-      "detail": "frame crate.png shared with inn_crate, shop_crate, shop_crate_2, waystation_crate, waystation_crate_2, shrine_crate, inn_hanging_crate"
+      "detail": "frame prop_crate.png shared with inn_crate, shop_crate, shop_crate_2, waystation_crate, waystation_crate_2, shrine_crate, inn_hanging_crate"
     },
     {
       "id": "prop:waystation_crate",
       "surface": "prop",
       "classification": "acceptable-shared",
-      "detail": "frame crate.png shared with inn_crate, shop_crate, shop_crate_2, shop_crate_3, waystation_crate_2, shrine_crate, inn_hanging_crate"
+      "detail": "frame prop_crate.png shared with inn_crate, shop_crate, shop_crate_2, shop_crate_3, waystation_crate_2, shrine_crate, inn_hanging_crate"
     },
     {
       "id": "prop:waystation_crate_2",
       "surface": "prop",
       "classification": "acceptable-shared",
-      "detail": "frame crate.png shared with inn_crate, shop_crate, shop_crate_2, shop_crate_3, waystation_crate, shrine_crate, inn_hanging_crate"
+      "detail": "frame prop_crate.png shared with inn_crate, shop_crate, shop_crate_2, shop_crate_3, waystation_crate, shrine_crate, inn_hanging_crate"
     },
     {
       "id": "prop:shrine_crate",
       "surface": "prop",
       "classification": "acceptable-shared",
-      "detail": "frame crate.png shared with inn_crate, shop_crate, shop_crate_2, shop_crate_3, waystation_crate, waystation_crate_2, inn_hanging_crate"
+      "detail": "frame prop_crate.png shared with inn_crate, shop_crate, shop_crate_2, shop_crate_3, waystation_crate, waystation_crate_2, inn_hanging_crate"
     },
     {
       "id": "prop:shop_counter_l",
       "surface": "prop",
       "classification": "acceptable-shared",
-      "detail": "frame counter.png shared with shop_counter_r, shop_counter_m, inn_counter, inn_counter_2"
+      "detail": "frame prop_counter.png shared with shop_counter_r, shop_counter_m, inn_counter, inn_counter_2"
     },
     {
       "id": "prop:shop_counter_r",
       "surface": "prop",
       "classification": "acceptable-shared",
-      "detail": "frame counter.png shared with shop_counter_l, shop_counter_m, inn_counter, inn_counter_2"
+      "detail": "frame prop_counter.png shared with shop_counter_l, shop_counter_m, inn_counter, inn_counter_2"
     },
     {
       "id": "prop:shop_counter_m",
       "surface": "prop",
       "classification": "acceptable-shared",
-      "detail": "frame counter.png shared with shop_counter_l, shop_counter_r, inn_counter, inn_counter_2"
+      "detail": "frame prop_counter.png shared with shop_counter_l, shop_counter_r, inn_counter, inn_counter_2"
     },
     {
       "id": "prop:inn_counter",
       "surface": "prop",
       "classification": "acceptable-shared",
-      "detail": "frame counter.png shared with shop_counter_l, shop_counter_r, shop_counter_m, inn_counter_2"
+      "detail": "frame prop_counter.png shared with shop_counter_l, shop_counter_r, shop_counter_m, inn_counter_2"
     },
     {
       "id": "prop:inn_counter_2",
       "surface": "prop",
       "classification": "acceptable-shared",
-      "detail": "frame counter.png shared with shop_counter_l, shop_counter_r, shop_counter_m, inn_counter"
+      "detail": "frame prop_counter.png shared with shop_counter_l, shop_counter_r, shop_counter_m, inn_counter"
     },
     {
       "id": "prop:inn_table",
       "surface": "prop",
       "classification": "acceptable-shared",
-      "detail": "frame table.png shared with inn_table_2, inn_table_3"
+      "detail": "frame prop_table.png shared with inn_table_2, inn_table_3"
     },
     {
       "id": "prop:inn_table_2",
       "surface": "prop",
       "classification": "acceptable-shared",
-      "detail": "frame table.png shared with inn_table, inn_table_3"
+      "detail": "frame prop_table.png shared with inn_table, inn_table_3"
     },
     {
       "id": "prop:inn_table_3",
       "surface": "prop",
       "classification": "acceptable-shared",
-      "detail": "frame table.png shared with inn_table, inn_table_2"
+      "detail": "frame prop_table.png shared with inn_table, inn_table_2"
     },
     {
       "id": "prop:inn_chair",
@@ -374,7 +374,7 @@
       "id": "prop:inn_bed",
       "surface": "prop",
       "classification": "accepted/current",
-      "detail": "frame bed.png"
+      "detail": "frame prop_bed.png"
     },
     {
       "id": "prop:inn_hearth",
@@ -386,25 +386,25 @@
       "id": "prop:inn_shelf",
       "surface": "prop",
       "classification": "acceptable-shared",
-      "detail": "frame bookshelf.png shared with shop_shelf, shop_shelf_2"
+      "detail": "frame prop_bookshelf.png shared with shop_shelf, shop_shelf_2"
     },
     {
       "id": "prop:shop_shelf",
       "surface": "prop",
       "classification": "acceptable-shared",
-      "detail": "frame bookshelf.png shared with inn_shelf, shop_shelf_2"
+      "detail": "frame prop_bookshelf.png shared with inn_shelf, shop_shelf_2"
     },
     {
       "id": "prop:shop_shelf_2",
       "surface": "prop",
       "classification": "acceptable-shared",
-      "detail": "frame bookshelf.png shared with inn_shelf, shop_shelf"
+      "detail": "frame prop_bookshelf.png shared with inn_shelf, shop_shelf"
     },
     {
       "id": "prop:yard_anvil",
       "surface": "prop",
       "classification": "accepted/current",
-      "detail": "frame anvil.png"
+      "detail": "frame prop_anvil.png"
     },
     {
       "id": "prop:inn_brazier",
@@ -440,7 +440,7 @@
       "id": "prop:inn_hanging_crate",
       "surface": "prop",
       "classification": "acceptable-shared",
-      "detail": "frame crate.png shared with inn_crate, shop_crate, shop_crate_2, shop_crate_3, waystation_crate, waystation_crate_2, shrine_crate (not placed by any map — encounter-only or unused)"
+      "detail": "frame prop_crate.png shared with inn_crate, shop_crate, shop_crate_2, shop_crate_3, waystation_crate, waystation_crate_2, shrine_crate (not placed by any map — encounter-only or unused)"
     },
     {
       "id": "prop:sella_receipt",
@@ -680,7 +680,7 @@
       "id": "evidence:the_ledger",
       "surface": "evidence-object",
       "classification": "accepted/current",
-      "detail": "The Merchant's Repair Ledger at merchant_shop:shop_counter_l renders counter.png"
+      "detail": "The Merchant's Repair Ledger at merchant_shop:shop_counter_l renders prop_counter.png"
     },
     {
       "id": "evidence:sella_receipt",
@@ -698,7 +698,7 @@
       "id": "evidence:elders_seal",
       "surface": "evidence-object",
       "classification": "accepted/current",
-      "detail": "The Elder's Broken Seal at village:village_well renders well.png"
+      "detail": "The Elder's Broken Seal at village:village_well renders prop_well.png"
     },
     {
       "id": "npc:village_elder",
@@ -1025,7 +1025,25 @@
       "detail": "standalone authoring source in content/packs/emberwatch/props"
     },
     {
+      "id": "source:prop_anvil.png",
+      "surface": "source-image",
+      "classification": "accepted/current",
+      "detail": "standalone authoring source in content/packs/emberwatch/props"
+    },
+    {
       "id": "source:prop_barrel.png",
+      "surface": "source-image",
+      "classification": "accepted/current",
+      "detail": "standalone authoring source in content/packs/emberwatch/props"
+    },
+    {
+      "id": "source:prop_bed.png",
+      "surface": "source-image",
+      "classification": "accepted/current",
+      "detail": "standalone authoring source in content/packs/emberwatch/props"
+    },
+    {
+      "id": "source:prop_bookshelf.png",
       "surface": "source-image",
       "classification": "accepted/current",
       "detail": "standalone authoring source in content/packs/emberwatch/props"
@@ -1044,6 +1062,18 @@
     },
     {
       "id": "source:prop_component.png",
+      "surface": "source-image",
+      "classification": "accepted/current",
+      "detail": "standalone authoring source in content/packs/emberwatch/props"
+    },
+    {
+      "id": "source:prop_counter.png",
+      "surface": "source-image",
+      "classification": "accepted/current",
+      "detail": "standalone authoring source in content/packs/emberwatch/props"
+    },
+    {
+      "id": "source:prop_crate.png",
       "surface": "source-image",
       "classification": "accepted/current",
       "detail": "standalone authoring source in content/packs/emberwatch/props"
@@ -1085,7 +1115,19 @@
       "detail": "standalone authoring source in content/packs/emberwatch/props"
     },
     {
+      "id": "source:prop_table.png",
+      "surface": "source-image",
+      "classification": "accepted/current",
+      "detail": "standalone authoring source in content/packs/emberwatch/props"
+    },
+    {
       "id": "source:prop_ward_socket.png",
+      "surface": "source-image",
+      "classification": "accepted/current",
+      "detail": "standalone authoring source in content/packs/emberwatch/props"
+    },
+    {
+      "id": "source:prop_well.png",
       "surface": "source-image",
       "classification": "accepted/current",
       "detail": "standalone authoring source in content/packs/emberwatch/props"
@@ -1130,16 +1172,22 @@
       "id": "atlas:frames",
       "surface": "atlas-frame",
       "classification": "accepted/current",
-      "detail": "grid atlas declares 128 frames (expected 128)"
+      "detail": "grid atlas declares 127 frames (expected 127)"
     },
     {
       "id": "props-atlas:frames",
       "surface": "atlas-frame",
       "classification": "accepted/current",
-      "detail": "prop atlas declares 21 frames for 21 source images"
+      "detail": "prop atlas declares 28 frames for 28 source images"
     },
     {
       "id": "prop-frame:prop_support.png",
+      "surface": "prop-frame",
+      "classification": "accepted/current",
+      "detail": "packed prop-atlas frame"
+    },
+    {
+      "id": "prop-frame:prop_table.png",
       "surface": "prop-frame",
       "classification": "accepted/current",
       "detail": "packed prop-atlas frame"
@@ -1157,7 +1205,19 @@
       "detail": "packed prop-atlas frame"
     },
     {
+      "id": "prop-frame:prop_bookshelf.png",
+      "surface": "prop-frame",
+      "classification": "accepted/current",
+      "detail": "packed prop-atlas frame"
+    },
+    {
       "id": "prop-frame:prop_ward_socket.png",
+      "surface": "prop-frame",
+      "classification": "accepted/current",
+      "detail": "packed prop-atlas frame"
+    },
+    {
+      "id": "prop-frame:prop_crate.png",
       "surface": "prop-frame",
       "classification": "accepted/current",
       "detail": "packed prop-atlas frame"
@@ -1182,6 +1242,24 @@
     },
     {
       "id": "prop-frame:ward_large.png",
+      "surface": "prop-frame",
+      "classification": "accepted/current",
+      "detail": "packed prop-atlas frame"
+    },
+    {
+      "id": "prop-frame:prop_bed.png",
+      "surface": "prop-frame",
+      "classification": "accepted/current",
+      "detail": "packed prop-atlas frame"
+    },
+    {
+      "id": "prop-frame:prop_counter.png",
+      "surface": "prop-frame",
+      "classification": "accepted/current",
+      "detail": "packed prop-atlas frame"
+    },
+    {
+      "id": "prop-frame:prop_anvil.png",
       "surface": "prop-frame",
       "classification": "accepted/current",
       "detail": "packed prop-atlas frame"
@@ -1242,6 +1320,12 @@
     },
     {
       "id": "prop-frame:ward_small_c.png",
+      "surface": "prop-frame",
+      "classification": "accepted/current",
+      "detail": "packed prop-atlas frame"
+    },
+    {
+      "id": "prop-frame:prop_well.png",
       "surface": "prop-frame",
       "classification": "accepted/current",
       "detail": "packed prop-atlas frame"

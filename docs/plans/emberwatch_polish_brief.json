@@ -1,0 +1,122 @@
+{
+  "schemaVersion": 1,
+  "kind": "emberwatch-polish-brief",
+  "pack": { "id": "emberwatch", "version": "5.0.0" },
+  "purpose": "Give GPT-6 Astra creative ownership of the final five-map visual polish using the semantic authoring + studio tooling. This brief sets direction and constraints, NOT the final layout.",
+  "creativeFreedom": "Composition, silhouette, palette weighting, prop density and path shape are yours to improve. Do not change locked identities (see lockedIdentities) and keep every required clear path navigable.",
+  "grid": { "groundTilePx": 32, "axes": "+x right, +y down", "cellUnitsInAuthoring": true },
+  "playerScale": {
+    "actorFootprintPx": "32x32 anchored bottom-centre",
+    "actorBodyAboveFeetPx": 32,
+    "lpcStandingBlockPx": "48x64",
+    "companionSafeRouteWidthCells": 3
+  },
+  "style": {
+    "direction": "Warm muted woodland-fantasy border village; the ward tree is the emotional centre and must read as visually dominant without changing its gameplay identity.",
+    "materials": "Obsidian Chronicle material language written in the pack prose: timber, soot, moss, damp stone, ember light.",
+    "lighting": "Soft upper-left key light, grounded contact shadows, crisp readable silhouettes at native game scale.",
+    "doNot": [
+      "no baked ground plane or cast shadow inside prop art",
+      "no neon debug colors in shipped art",
+      "no background or border in isolated prop sheets"
+    ]
+  },
+  "palette": {
+    "ground": ["moss green", "trodden earth", "cold stone grey"],
+    "wood": ["dark oak", "warm birch"],
+    "accent": ["ember orange", "ward teal"],
+    "metal": ["soot iron", "dull brass"],
+    "note": "Palette is a direction, not a fixed swatch list. Keep terrain tiles and props on the same value range."
+  },
+  "topology": {
+    "village": { "sizeCells": [64, 48], "role": "hub square + arrival", "walkablePercent": 75.7 },
+    "inn": { "sizeCells": [28, 20], "role": "interior, story", "walkablePercent": 65.9, "interiorLighting": true },
+    "merchant_shop": { "sizeCells": [24, 18], "role": "interior, vendor + evidence", "walkablePercent": 61.1, "interiorLighting": true },
+    "old_road": { "sizeCells": [72, 36], "role": "transitional journey, two routes", "walkablePercent": 78.2 },
+    "ruined_shrine": { "sizeCells": [40, 36], "role": "climax ruin", "walkablePercent": 76.3 }
+  },
+  "transitionGraph": [
+    { "from": "village", "to": "merchant_shop" },
+    { "from": "village", "to": "inn" },
+    { "from": "village", "to": "old_road" },
+    { "from": "old_road", "to": "village" },
+    { "from": "old_road", "to": "ruined_shrine" },
+    { "from": "ruined_shrine", "to": "old_road" },
+    { "from": "inn", "to": "village" },
+    { "from": "merchant_shop", "to": "village" }
+  ],
+  "landmarkPriorities": [
+    { "priority": 1, "propId": "ward_tree_landmark", "map": "village", "note": "primary visual focus; gameplay identity locked" },
+    { "priority": 2, "map": "ruined_shrine", "propIds": ["shrine_arch", "ward_socket"], "note": "the ritual focal point" },
+    { "priority": 3, "map": "village", "propIds": ["village_gate", "village_well", "notice_board"], "note": "wayfinding anchors" },
+    { "priority": 4, "map": "old_road", "propIds": ["waystation_cart", "road_notice"], "note": "journey beats" }
+  ],
+  "requiredClearPaths": [
+    { "map": "village", "route": "north gate to south gate", "minWidthCells": 3 },
+    { "map": "village", "route": "west gate to east gate", "minWidthCells": 3 },
+    { "map": "village", "route": "every building door to the nearest primary route", "minWidthCells": 2 },
+    { "map": "old_road", "route": "road junction to shrine gate", "minWidthCells": 3 },
+    { "map": "ruined_shrine", "route": "south gate to the ritual apron", "minWidthCells": 2 }
+  ],
+  "npcLocations": [
+    { "npcId": "village_elder", "map": "village", "cell": [32, 27] },
+    { "npcId": "village_guard", "map": "village", "cell": [33, 43] },
+    { "npcId": "smith_orra", "map": "village", "cell": [8, 29] },
+    { "npcId": "cartographer_ivo", "map": "village", "cell": [21, 23] },
+    { "npcId": "innkeeper_sella", "map": "inn", "cell": [11, 3] },
+    { "npcId": "rollo_grasper", "map": "inn", "cell": [22, 6] },
+    { "npcId": "merchant", "map": "merchant_shop", "cell": [12, 9] },
+    { "npcId": "woodcutter_ada", "map": "old_road", "cell": [12, 10] },
+    { "npcId": "apprentice_tess", "map": "old_road", "cell": [58, 12] },
+    { "npcId": "shrine_keeper_nemi", "map": "ruined_shrine", "cell": [21, 28] }
+  ],
+  "storyObjects": [
+    { "evidenceId": "the_ledger", "map": "merchant_shop", "propId": "shop_counter_l" },
+    { "evidenceId": "sella_receipt", "map": "inn", "propId": "sella_receipt" },
+    { "evidenceId": "tess_component", "map": "old_road", "propId": "tess_component" },
+    { "evidenceId": "elders_seal", "map": "village", "propId": "village_well" }
+  ],
+  "lockedIdentities": [
+    "map ids",
+    "transition ids, targetMap, targetSpawnId",
+    "spawn ids",
+    "npc ids",
+    "prop ids",
+    "dialogue keys",
+    "quest ids",
+    "evidence ids",
+    "affordance ids"
+  ],
+  "legacyArtTodos": {
+    "frames": [],
+    "manifest": "docs/plans/emberwatch_legacy_prop_replacements.json",
+    "target": "Zero accidental legacy grid-prop dependencies in the final polish.",
+    "note": "Met: crate/table/bed/counter/bookshelf/anvil now have accepted standalone art (prop_crate/prop_table/prop_bed/prop_counter/prop_bookshelf/prop_anvil). The legacy allowlist is empty and any future legacy-grid placement is a hard violation."
+  },
+  "visualAuditLocations": {
+    "agentReport": "docs/reference/emberwatch-visual-report.json",
+    "validationReport": "docs/reference/emberwatch-map-validation.json",
+    "coverageAudit": "docs/reference/emberwatch-coverage-audit.json",
+    "contactSheet": ".local/releases/evidence/emberwatch-visual-audit/contact_sheet.png",
+    "screenshotHook": "/?map=<mapId>&screenshot=true&e2e=true"
+  },
+  "commands": [
+    "bun run emberwatch:studio",
+    "bun run emberwatch:studio --watch",
+    "bun run emberwatch:validate",
+    "bun run emberwatch:visual-report",
+    "bun run emberwatch:visual-audit",
+    "bun run emberwatch:locked-ids",
+    "bun run emberwatch:legacy-props",
+    "bun run emberwatch:props",
+    "bun run emberwatch:audit"
+  ],
+  "definitionOfDone": [
+    "all five maps pass emberwatch:validate with 0 blockers",
+    "emberwatch:audit reports 0 blockers",
+    "each polish commit is deterministic (regenerate twice, empty diff)",
+    "locked identities unchanged unless explicitly requested and re-sealed",
+    "required clear paths remain navigable (companion-safe width where applicable)",
+    "zero remaining legacy grid-prop dependencies"
+  ]
+}

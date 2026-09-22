@@ -6,10 +6,10 @@
   "status": "proposed",
   "baseline": {
     "repository": "BearlySleeping/aikami",
-    "commit": "f6f21e3a82ef90597328c1c46d4b541d343fbd1f",
+    "commit": "d4a3a984362cddd0e3afb245c83f87301cc039be",
     "packId": "emberwatch",
     "packVersion": "5.0.0",
-    "reviewedAt": "2026-09-19"
+    "reviewedAt": "2026-09-21"
   },
   "execution": {
     "defaultMode": "plan",
@@ -150,6 +150,7 @@
   "preparationProfiles": {
     "prop-native-alpha": "source already carries a real alpha channel; crop/origin preserved, ground rectangle removed, no colour key",
     "prop-full-alpha-ground": "native-alpha isolated render; dark object pixels are preserved and any ground plane must already be detached",
+    "prop-luminance-alpha-ground": "RGB-only engine (local sd.cpp/Anima): the prop is rendered on a uniform near-black ground and alpha is derived from luminance, with full-width ground rows detached by geometry",
     "portrait-original": "composed dialogue bust; keeps its own coverage and alpha, no ground-contact requirement",
     "lpc-sheet-native": "LPC sheets only; nearest-neighbour resample at the 13x21 cell grid"
   },
@@ -379,9 +380,9 @@
       "phase": "expansion",
       "kind": "prop",
       "action": "generate_if_missing",
-      "subject": "One inn ale table: a thick plank top on trestle legs, a few ring stains and a clay cup left behind. Warm muted woodland-fantasy palette, soft upper-left light, crisp readable silhouette at native game scale, hand-painted pixel-friendly rendering. Render the object isolated and centred with native transparency; no background, ground plane, scenery, floor, cast shadow, lettering or border. The object must sit on ONE centred footprint and occupy roughly the middle 55% of the frame, centred, with generous transparent margin on all four sides — the object must never touch or cross the edge of the image, and its lowest point must be directly below its centre of mass so it stands on one centred footprint.",
+      "subject": "One inn ale table: a thick plank top on trestle legs, a few ring stains and a clay cup left behind. Warm muted woodland-fantasy palette, soft upper-left light, crisp readable silhouette at native game scale, hand-painted pixel-friendly rendering. Render the object isolated and centred on a uniform pure-black background so a luminance matte can be extracted (the backdrop must be near-black and uncluttered); no scenery, floor, cast shadow, lettering or border. The object must sit on ONE centred footprint and occupy roughly the middle 55% of the frame, centred, with generous black margin on all four sides — the object must never touch or cross the edge of the image, and its lowest point must be directly below its centre of mass so it stands on one centred footprint.",
       "providerPreference": "local_image_reference",
-      "preparationProfile": "prop-full-alpha-ground",
+      "preparationProfile": "prop-luminance-alpha-ground",
       "referenceIds": [
         "approved_style"
       ],
@@ -799,9 +800,9 @@
       "phase": "expansion",
       "kind": "prop",
       "action": "generate_if_missing",
-      "subject": "One inn crate: a nailed plank crate with a stencilled but illegible mark and a rope handle. Warm muted woodland-fantasy palette, soft upper-left light, crisp readable silhouette at native game scale, hand-painted pixel-friendly rendering. Render the object isolated and centred with native transparency; no background, ground plane, scenery, floor, cast shadow, lettering or border. The object must sit on ONE centred footprint and occupy roughly the middle 55% of the frame, centred, with generous transparent margin on all four sides — the object must never touch or cross the edge of the image, and its lowest point must be directly below its centre of mass so it stands on one centred footprint.",
+      "subject": "One inn crate: a nailed plank crate with a stencilled but illegible mark and a rope handle. Warm muted woodland-fantasy palette, soft upper-left light, crisp readable silhouette at native game scale, hand-painted pixel-friendly rendering. Render the object isolated and centred on a uniform pure-black background so a luminance matte can be extracted (the backdrop must be near-black and uncluttered); no scenery, floor, cast shadow, lettering or border. The object must sit on ONE centred footprint and occupy roughly the middle 55% of the frame, centred, with generous black margin on all four sides — the object must never touch or cross the edge of the image, and its lowest point must be directly below its centre of mass so it stands on one centred footprint.",
       "providerPreference": "local_image_reference",
-      "preparationProfile": "prop-full-alpha-ground",
+      "preparationProfile": "prop-luminance-alpha-ground",
       "referenceIds": [
         "approved_style"
       ],
@@ -834,9 +835,9 @@
       "phase": "expansion",
       "kind": "prop",
       "action": "generate_if_missing",
-      "subject": "One shop counter section: a heavy worn plank counter with a moulded front lip, a small brass scale and a folded ledger. Warm muted woodland-fantasy palette, soft upper-left light, crisp readable silhouette at native game scale, hand-painted pixel-friendly rendering. Render the object isolated and centred with native transparency; no background, ground plane, scenery, floor, cast shadow, lettering or border. The object must sit on ONE centred footprint and occupy roughly the middle 55% of the frame, centred, with generous transparent margin on all four sides — the object must never touch or cross the edge of the image, and its lowest point must be directly below its centre of mass so it stands on one centred footprint.",
+      "subject": "One shop counter section in a straight-on front view (orthographic, no perspective, no rotation): a heavy worn plank counter with a moulded front lip, a small brass scale on top and a folded ledger. The front face is a level rectangle with a perfectly horizontal bottom edge; the left and right ends of the base are at the same height, so the counter stands squarely and symmetrically on one centred footprint. Warm muted woodland-fantasy palette, soft upper-left light, crisp readable silhouette at native game scale, hand-painted pixel-friendly rendering. Render the object isolated and centred on a uniform pure-black background so a luminance matte can be extracted (the backdrop must be near-black and uncluttered); no scenery, floor, cast shadow, lettering or border. The object must sit on ONE centred footprint and occupy roughly the middle 55% of the frame, centred, with generous black margin on all four sides — the object must never touch or cross the edge of the image, and its lowest point must be directly below its centre of mass so it stands on one centred footprint.",
       "providerPreference": "local_image_reference",
-      "preparationProfile": "prop-full-alpha-ground",
+      "preparationProfile": "prop-luminance-alpha-ground",
       "referenceIds": [
         "approved_style"
       ],
@@ -904,9 +905,9 @@
       "phase": "expansion",
       "kind": "prop",
       "action": "generate_if_missing",
-      "subject": "One inn bed seen from above and behind: a timber frame with a straw mattress, a folded wool blanket and a rolled pillow. Warm muted woodland-fantasy palette, soft upper-left light, crisp readable silhouette at native game scale, hand-painted pixel-friendly rendering. Render the object isolated and centred with native transparency; no background, ground plane, scenery, floor, cast shadow, lettering or border. The object must sit on ONE centred footprint and occupy roughly the middle 55% of the frame, centred, with generous transparent margin on all four sides — the object must never touch or cross the edge of the image, and its lowest point must be directly below its centre of mass so it stands on one centred footprint.",
+      "subject": "One inn bed seen from above and behind: a timber frame with a straw mattress, a folded wool blanket and a rolled pillow. Warm muted woodland-fantasy palette, soft upper-left light, crisp readable silhouette at native game scale, hand-painted pixel-friendly rendering. Render the object isolated and centred on a uniform pure-black background so a luminance matte can be extracted (the backdrop must be near-black and uncluttered); no scenery, floor, cast shadow, lettering or border. The object must sit on ONE centred footprint and occupy roughly the middle 55% of the frame, centred, with generous black margin on all four sides — the object must never touch or cross the edge of the image, and its lowest point must be directly below its centre of mass so it stands on one centred footprint.",
       "providerPreference": "local_image_reference",
-      "preparationProfile": "prop-full-alpha-ground",
+      "preparationProfile": "prop-luminance-alpha-ground",
       "referenceIds": [
         "approved_style"
       ],
@@ -974,9 +975,9 @@
       "phase": "expansion",
       "kind": "prop",
       "action": "generate_if_missing",
-      "subject": "One tall inn storage shelf: plank shelving holding stacked crocks, folded cloth and a few bound ledgers. Warm muted woodland-fantasy palette, soft upper-left light, crisp readable silhouette at native game scale, hand-painted pixel-friendly rendering. Render the object isolated and centred with native transparency; no background, ground plane, scenery, floor, cast shadow, lettering or border. The object must sit on ONE centred footprint and occupy roughly the middle 55% of the frame, centred, with generous transparent margin on all four sides — the object must never touch or cross the edge of the image, and its lowest point must be directly below its centre of mass so it stands on one centred footprint.",
+      "subject": "One tall inn storage shelf: plank shelving holding stacked crocks, folded cloth and a few bound ledgers. Warm muted woodland-fantasy palette, soft upper-left light, crisp readable silhouette at native game scale, hand-painted pixel-friendly rendering. Render the object isolated and centred on a uniform pure-black background so a luminance matte can be extracted (the backdrop must be near-black and uncluttered); no scenery, floor, cast shadow, lettering or border. The object must sit on ONE centred footprint and occupy roughly the middle 55% of the frame, centred, with generous black margin on all four sides — the object must never touch or cross the edge of the image, and its lowest point must be directly below its centre of mass so it stands on one centred footprint.",
       "providerPreference": "local_image_reference",
-      "preparationProfile": "prop-full-alpha-ground",
+      "preparationProfile": "prop-luminance-alpha-ground",
       "referenceIds": [
         "approved_style"
       ],
@@ -1009,9 +1010,9 @@
       "phase": "expansion",
       "kind": "prop",
       "action": "generate_if_missing",
-      "subject": "One smith anvil on a stump: a horned iron anvil, hammer marks, a pair of tongs leaning against the stump. Warm muted woodland-fantasy palette, soft upper-left light, crisp readable silhouette at native game scale, hand-painted pixel-friendly rendering. Render the object isolated and centred with native transparency; no background, ground plane, scenery, floor, cast shadow, lettering or border. The object must sit on ONE centred footprint and occupy roughly the middle 55% of the frame, centred, with generous transparent margin on all four sides — the object must never touch or cross the edge of the image, and its lowest point must be directly below its centre of mass so it stands on one centred footprint.",
+      "subject": "One smith anvil on a stump: a horned iron anvil, hammer marks, a pair of tongs leaning against the stump. Warm muted woodland-fantasy palette, soft upper-left light, crisp readable silhouette at native game scale, hand-painted pixel-friendly rendering. Render the object isolated and centred on a uniform pure-black background so a luminance matte can be extracted (the backdrop must be near-black and uncluttered); no scenery, floor, cast shadow, lettering or border. The object must sit on ONE centred footprint and occupy roughly the middle 55% of the frame, centred, with generous black margin on all four sides — the object must never touch or cross the edge of the image, and its lowest point must be directly below its centre of mass so it stands on one centred footprint.",
       "providerPreference": "local_image_reference",
-      "preparationProfile": "prop-full-alpha-ground",
+      "preparationProfile": "prop-luminance-alpha-ground",
       "referenceIds": [
         "approved_style"
       ],
@@ -1742,7 +1743,7 @@
   "notes": [
     "Rebased onto the pack 5.0.0 baseline by scripts/src/lib/ops/rebase_emberwatch_brief.ts; the exact source revision is recorded in baseline.commit.",
     "The audio lane is deliberately out of scope for this release: no shipped local SFX/ambience model exists (stable_audio_open_1_0_profile is declared but not installed) and the pack-local Emberwatch music is already accepted.",
-    "Every prop job requests native transparency so prop-full-alpha-ground preserves dark object pixels; the ground plane must already be detached before deterministic preparation.",
+    "Every prop job requests native transparency so prop-full-alpha-ground preserves dark object pixels; the ground plane must already be detached before deterministic preparation. The six furniture props (crate, table, bed, counter, bookshelf, anvil) are served by the RGB-only local sd.cpp engine and use prop-luminance-alpha-ground instead: they render on a uniform near-black ground and alpha is derived from luminance.",
     "Enemy visual jobs prepare authored non-humanoid art for ash_hound, cinder_thrall and ember_warden for future runtime integration; the audited runtime status remains needs-runtime-capability."
   ]
 }

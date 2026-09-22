@@ -46,8 +46,9 @@ bun run emberwatch:brief          # rewrites baseline + jobs from the pack
 
 The brief's `baseline.commit` must name the commit the pack actually ships
 from, and its `preparationProfiles` keys must be **shipped profile ids**
-(`prop-native-alpha`, `prop-full-alpha-ground`, `portrait-original`,
-`lpc-sheet-native`) — not symbolic aliases, which resolve to nothing.
+(`prop-native-alpha`, `prop-full-alpha-ground`, `prop-luminance-alpha-ground`,
+`portrait-original`, `lpc-sheet-native`) — not symbolic aliases, which resolve
+to nothing.
 
 ### 2. Generate candidates
 
@@ -67,6 +68,12 @@ bun run --cwd apps/backend/image generate:batch \
   be served by one global `--preparation-profile`.
 - Props render with native alpha so `prop-full-alpha-ground` preserves dark object
   pixels. The ground plane must already be detached before preparation.
+- The local sd.cpp/Anima engine emits RGB only, so the six furniture props
+  (crate, table, bed, counter, bookshelf, anvil) use
+  `prop-luminance-alpha-ground`: they render on a uniform near-black ground and
+  alpha is derived deterministically from luminance, with full-width ground rows
+  detached by geometry (never a colour key). Their brief prompts therefore ask
+  for a pure-black backdrop rather than native transparency.
 - Run records are durable. After a failure use `--status <runId>`, then
   `--reconcile <itemId>=no-provider-work`, then `--resume <runId>` — never delete
   job state and regenerate blindly.
@@ -263,10 +270,14 @@ letting the painter overflow. Reuse or re-art an existing semantic terrain first
 ## Known follow-ups
 
 - The three authored hostile creatures (`ash_hound`, `cinder_thrall`,
-  `ember_warden`) ship accepted source art in
-  `content/packs/emberwatch/enemies/`, but the world-sprite runtime binding for a
-  non-humanoid enemy is not implemented; they still render through the LPC
-  humanoid path. See the release report for the exact seam.
+  `ember_warden`) ship accepted source art in `content/packs/emberwatch/enemies/`
+  **and render it**: the pack manifest binds each one to a `visual: { kind:
+  'static', … }` entry, `actor_visual_presentation.ts` resolves it from the
+  authored `npcId`, and `game_world/actor_visual_transport.ts` loads it as the
+  actor's whole world sprite through the same registry resolver every other
+  asset uses. The static-visual transport is test-covered
+  (`actor_visual_transport.integration.test.ts`); this is shipped behaviour, not
+  a pending engine feature.
 - Ambience and SFX are a separate lane. No shipped local model serves them
   (`stable_audio_open_1_0_profile` is declared but not installed), so those jobs
   are out of scope until a provider exists.
@@ -419,6 +430,42 @@ flags is not a productive use of a release pass. So the visual gate is level C
 of the three options (existing CI lane / explicit GPU Playwright lane /
 documented human acceptance): **documented human acceptance**.
 
+### Prop logical sizing and ground contact (5.0.0)
+
+A prop's **world footprint is authored, not inferred from its texture**. The
+pack manifest declares `renderSize: { width, height }` (world px) and
+`shadow: { kind: 'ellipse' | 'none', … }` per prop; the engine's
+`rendering/prop_presentation.ts` applies them at load. Texture packing — a
+512px preparation canvas, a re-packed atlas page — can never move a sprite,
+change its size, or shift its ground point.
+
+Rules the code enforces:
+
+- both `renderSize` axes authored → used verbatim (an explicit choice);
+- one axis authored → the other preserves the accepted art's aspect ratio;
+- none authored → native texture pixels (legacy/back-compatible);
+- the anchor stays the normalized ground/contact origin, and y-depth sorting
+  still uses the object's base origin (the container), never the sprite's top.
+
+Emberwatch's authored sizes are derived from the accepted source dimensions and
+the asset brief's native canvas (`docs/plans/emberwatch_asset_brief.json`
+`targetCanvas`); `bun run emberwatch:visual-audit` emits a contact sheet + JSON
+(`.local/releases/evidence/emberwatch-visual-audit/`) showing every prop at its
+world size next to a 32px tile and a 48×64 character, so a scale/style error is
+visible before a candidate is sealed.
+
+Contact shadows are renderer-owned metadata (`kind: 'ellipse'`), drawn beneath
+the prop at its contact point — never a baked opaque ground rectangle in the
+art. Trees, buildings/arches and flat decals declare `kind: 'none'`.
+
+### The local rehearsal origin must serve the COMPLETE candidate
+
+`bun scripts/src/lib/ops/local_asset_origin.ts --check-plane` fails when a
+manifest-declared surface (portrait, enemy visual, map, authored music, prop
+atlas page) has no local override. Run it before a human gate: a missing
+override silently proxies the STALE published origin, which is exactly how the
+first gate judged a candidate while its portraits were unserved.
+
 ### The human checklist (run before `--apply` on any remote mode)
 
 Boot the client from the candidate commit and walk all five maps. Confirm:
@@ -433,13 +480,27 @@ Boot the client from the candidate commit and walk all five maps. Confirm:
   bridge is the only dry crossing.
 - **NPC appearance** — every story NPC renders as an authored LPC composition,
   not a generic humanoid stand-in.
-- **Portraits** — every dialogue bust resolves, with `neutral` as the fallback
-  for an unavailable expression.
+- **Portraits** — every dialogue bust for the ten canonical story NPCs
+  (`village_elder`, `rollo_grasper`, `merchant`, `village_guard`,
+  `innkeeper_sella`, `smith_orra`, `cartographer_ivo`, `shrine_keeper_nemi`,
+  `apprentice_tess`, `woodcutter_ada`) resolves to the Emberwatch bust, with
+  `neutral` as the fallback for an unavailable expression. A `gandalf`/`orc`/
+  `aragon` bust is a FAIL, not an acceptable stand-in.
+- **Prop scale and contact** — the barrel, brazier, cart, well and notice board
+  read at human scale next to the character (roughly 1–2 tiles), not hundreds of
+  pixels; standing props sit on a subtle contact shadow and do not float.
+- **Legacy art is gone** — the village well is the accepted stone well, not the
+  old green-backed procedural tile.
 - **No missing frames** — no magenta/blank placeholder tiles or sprites.
 - **Static hostile visuals** — `ash_hound`, `cinder_thrall` and `ember_warden`
   render as their authored art, not as LPC humanoids.
 - **All eight transitions** — walk each of the eight edges; each lands on a
   walkable cell, does not re-trigger, and does not bounce back.
+
+The rehearsal origin is part of the gate: run
+`bun scripts/src/lib/ops/local_asset_origin.ts --check-plane` first — it must
+report the candidate plane complete, or portraits/enemy visuals would be proxied
+from the stale published catalog and the gate would judge the wrong bytes.
 
 Record the result in the release report. A programmatic green is NOT a visual
 green, and this section exists so that distinction cannot be quietly lost.

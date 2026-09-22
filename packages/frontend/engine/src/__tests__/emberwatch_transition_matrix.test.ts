@@ -26,6 +26,7 @@
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { ENTITY_HEIGHT_ABOVE } from '../systems/actor_footprint.ts';
 
 const MAPS_DIR = join(import.meta.dir, '../../../../../content/packs/emberwatch/maps');
 
@@ -235,6 +236,46 @@ describe('Emberwatch transition matrix — all eight edges', () => {
       expect(landing.y).toBeGreaterThanOrEqual(0);
       expect(landing.x).toBeLessThan(map.width * map.tilewidth);
       expect(landing.y).toBeLessThan(map.height * map.tileheight);
+    }
+  });
+});
+
+describe('Emberwatch transition matrix — north-edge foot-space', () => {
+  // The movement system collides a 32px-tall box anchored at the feet and the
+  // map's north boundary reverts any step whose box top would leave the map, so
+  // the feet settle just below ENTITY_HEIGHT_ABOVE. ZoningSystem then tests the
+  // feet position INCLUSIVELY against the rect. A rect touching the map's top
+  // edge (y = 0) whose bottom is at or above the clamp can therefore never
+  // fire — the 5.0.0 village→old_road / old_road→ruined_shrine bug.
+
+  test('every top-edge trigger reaches below the actor foot clamp', () => {
+    const offenders = edges
+      .filter((edge) => edge.rect.y === 0)
+      .filter((edge) => edge.rect.y + edge.rect.h <= ENTITY_HEIGHT_ABOVE)
+      .map((edge) => `${edge.from}->${edge.to}`);
+    expect(offenders).toEqual([]);
+  });
+
+  test('the two repaired north edges each span past the foot clamp into row 1', () => {
+    for (const [from, to] of [
+      ['village', 'old_road'],
+      ['old_road', 'ruined_shrine'],
+    ] as const) {
+      const edge = edges.find((candidate) => candidate.from === from && candidate.to === to);
+      expect(edge).toBeDefined();
+      if (edge === undefined) {
+        throw new Error('unreachable: asserted above');
+      }
+      expect(edge.rect.y + edge.rect.h).toBeGreaterThan(ENTITY_HEIGHT_ABOVE);
+    }
+  });
+
+  test('south, east and west triggers are unaffected by the top-edge clamp', () => {
+    // Only y = 0 rects are at risk. The remaining six edges must still be
+    // non-degenerate and each cover their own footprint row.
+    for (const edge of edges.filter((candidate) => candidate.rect.y > 0)) {
+      expect(edge.rect.h).toBeGreaterThan(0);
+      expect(edge.rect.y + edge.rect.h).toBeGreaterThan(ENTITY_HEIGHT_ABOVE);
     }
   });
 });
