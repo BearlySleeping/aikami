@@ -409,7 +409,12 @@ describe('first production publication preserves the legacy inventory', () => {
     expect(tags).not.toContain('legacy:only');
   });
 
-  test('staging never runs the production migration', async () => {
+  test('staging carries the legacy library from its canonical origin', async () => {
+    // Staging has no legacy surface of its own, so a staging release carries
+    // the de-bundled library (C-435) from the canonical origin it lives at —
+    // production. This is a READ source: the publish still writes only to
+    // staging's bucket. Without this, a staging release has no LPC registry and
+    // every character renders as its fallback.
     const legacy = legacyFixture();
     const report = await runCatalogPublish({
       config: {
@@ -424,7 +429,7 @@ describe('first production publication preserves the legacy inventory', () => {
 
     expect(report.ok).toBe(true);
     const tags = publishedSeed().r.map((row) => row.t);
-    expect(tags).not.toContain('lpc:hat:magic:celestial:thrust');
+    expect(tags).toContain('lpc:hat:magic:celestial:thrust');
   });
 });
 

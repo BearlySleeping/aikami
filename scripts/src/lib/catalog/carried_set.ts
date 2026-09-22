@@ -60,6 +60,14 @@ export const resolveCarriedSet = async (options: {
   currentTags: ReadonlySet<string>;
   reader?: ReleaseDocumentReader;
   log?: (line: string) => void;
+  /**
+   * Origin that hosts the de-bundled LEGACY library when it is NOT the release
+   * target (staging points at production). When set, that library is carried
+   * into EVERY release of the mode and UNIONed with any previous release: the
+   * LPC library is repo-external (C-435), and a client that renders characters
+   * needs it present, not only on the target's very first release.
+   */
+  legacyOriginUrl?: string;
 }): Promise<CarriedSetOutcome> => {
   const log = options.log ?? (() => {});
   const readerOption = options.reader === undefined ? {} : { reader: options.reader };
@@ -72,40 +80,39 @@ export const resolveCarriedSet = async (options: {
     log(
       `  🔗 previous release: ${previousRelease.releaseId} (${previousRelease.entries.length} verified entr(ies))`,
     );
-    return {
-      ok: true,
-      value: {
-        previousRelease,
-        carriedEntries: previousRelease.entries,
-        carriedDependencies: previousRelease.dependencies,
-        legacy: undefined,
-      },
-    };
+  } else {
+    log('  🔗 previous release: none published at this origin');
   }
 
-  log('  🔗 previous release: none published at this origin');
+  const carryForward = (): { ok: true; value: CarriedSet } => ({
+    ok: true,
+    value: previousRelease
+      ? {
+          previousRelease,
+          carriedEntries: previousRelease.entries,
+          carriedDependencies: previousRelease.dependencies,
+          legacy: undefined,
+        }
+      : {
+          previousRelease: undefined,
+          carriedEntries: [],
+          carriedDependencies: undefined,
+          legacy: undefined,
+        },
+  });
 
-  // No release pointer means this origin has never published an immutable
-  // release. For production that is not the same as "nothing to carry": the
-  // legacy mutable catalog and its 12,729-row boot seed are live and are what
-  // existing installations resolve.
-  //
-  // Once a verified release exists, the branch above answers and this is never
-  // reached — the ordinary carry-forward path takes over.
-  if (options.mode !== 'production') {
-    return {
-      ok: true,
-      value: {
-        previousRelease: undefined,
-        carriedEntries: [],
-        carriedDependencies: undefined,
-        legacy: undefined,
-      },
-    };
+  // Carry the legacy library when the target hosts no legacy surface of its own
+  // (`legacyOriginUrl`, i.e. staging) OR on a first production release (the
+  // mutable legacy catalog is live at the target origin).
+  const bootstrapLegacy =
+    options.legacyOriginUrl !== undefined ||
+    (previousRelease === undefined && options.mode === 'production');
+  if (!bootstrapLegacy) {
+    return carryForward();
   }
 
   const bootstrap = await bootstrapLegacyCatalog({
-    originUrl: options.originUrl,
+    originUrl: options.legacyOriginUrl ?? options.originUrl,
     currentTags: options.currentTags,
     ...readerOption,
   });
@@ -113,28 +120,35 @@ export const resolveCarriedSet = async (options: {
     return { ok: false, code: bootstrap.code, reason: bootstrap.reason };
   }
   if (!bootstrap.applied) {
-    log(`  🧳 first-release migration: ${bootstrap.reason}`);
-    return {
-      ok: true,
-      value: {
-        previousRelease: undefined,
-        carriedEntries: [],
-        carriedDependencies: undefined,
-        legacy: undefined,
-      },
-    };
+    log(`  🧳 legacy library carry: ${bootstrap.reason}`);
+    return carryForward();
   }
 
-  log('  🧳 first-release migration from the legacy mutable catalog:');
+  log('  🧳 carrying the de-bundled legacy library:');
   for (const line of describeLegacyBootstrap(bootstrap.plan).split('\n')) {
     log(`     ${line}`);
+  }
+
+  // Union by tag; the legacy library is authoritative for the tags it declares.
+  const byTag = new Map<string, CatalogAssetEntry>();
+  for (const entry of previousRelease?.entries ?? []) {
+    byTag.set(entry.tag, entry);
+  }
+  for (const entry of bootstrap.plan.entries) {
+    byTag.set(entry.tag, entry);
+  }
+  const carriedDependencies = new Map<string, Uint8Array>(bootstrap.plan.dependencies);
+  for (const [key, bytes] of previousRelease?.dependencies ?? []) {
+    if (!carriedDependencies.has(key)) {
+      carriedDependencies.set(key, bytes);
+    }
   }
   return {
     ok: true,
     value: {
-      previousRelease: undefined,
-      carriedEntries: bootstrap.plan.entries,
-      carriedDependencies: bootstrap.plan.dependencies,
+      previousRelease,
+      carriedEntries: [...byTag.values()],
+      carriedDependencies,
       legacy: bootstrap.plan,
     },
   };
