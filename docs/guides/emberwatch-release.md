@@ -46,8 +46,9 @@ bun run emberwatch:brief          # rewrites baseline + jobs from the pack
 
 The brief's `baseline.commit` must name the commit the pack actually ships
 from, and its `preparationProfiles` keys must be **shipped profile ids**
-(`prop-native-alpha`, `prop-full-alpha-ground`, `portrait-original`,
-`lpc-sheet-native`) — not symbolic aliases, which resolve to nothing.
+(`prop-native-alpha`, `prop-full-alpha-ground`, `prop-luminance-alpha-ground`,
+`portrait-original`, `lpc-sheet-native`) — not symbolic aliases, which resolve
+to nothing.
 
 ### 2. Generate candidates
 
