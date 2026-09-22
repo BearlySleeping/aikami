@@ -2087,12 +2087,6 @@
       "worst": 22
     }
   },
-  "scripts/src/lib/ops/generate_emberwatch_maps_extra.ts": {
-    "counts": {
-      "excessive": 1,
-      "worst": 18
-    }
-  },
   "scripts/src/lib/ops/generate_emberwatch_maps.ts": {
     "counts": {
       "excessive": 1,

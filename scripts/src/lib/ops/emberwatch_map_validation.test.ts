@@ -5,6 +5,8 @@
 // single rule can fail in isolation.
 
 import { describe, expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import {
   applyPropCollision,
   buildWalkabilityGrid,
@@ -15,8 +17,19 @@ import {
   reachableFrom,
 } from './emberwatch_map_navigation.ts';
 import { validateEmberwatchMaps } from './emberwatch_map_validation.ts';
-import type { MapContext, PlacedObject } from './emberwatch_map_validation_context.ts';
 import {
+  buildContexts,
+  type Manifest,
+  type MapContext,
+  type PlacedObject,
+  packRoot,
+  readJson,
+  repository,
+  str,
+  type ValidationFinding,
+} from './emberwatch_map_validation_context.ts';
+import {
+  FOOT_MARGIN_PX,
   validateConnectivity,
   validateNpcAndEvidence,
   validateProps,
@@ -560,6 +573,104 @@ describe('emberwatch map validation rules', () => {
   });
 });
 
+describe('transition trigger footprint', () => {
+  /**
+   * A north map: row 0 is a walkable gate across the transition's columns and
+   * rows 1+ are open interior. The rect height is varied; the geometry alone
+   * decides whether legal feet can enter it.
+   */
+  const northPair = (options: { id: string; rectHeight: number }): Map<string, MapContext> => {
+    const row0 = [0, 0, 0, 0, 0, 0];
+    const rowFill = [0, 0, 0, 0, 0, 0];
+    const north = makeContext({
+      id: options.id,
+      blocked: [row0, rowFill, rowFill, rowFill],
+      objects: [
+        { type: 'spawn', x: 32, y: 96, props: { spawnId: 'interior' } },
+        transition({
+          targetMap: 'south',
+          targetSpawnId: 'arrival',
+          targetX: 0,
+          targetY: 0,
+          x: 32,
+          y: 0,
+          width: 3 * 32,
+          height: options.rectHeight,
+        }),
+      ],
+    });
+    const south = makeContext({
+      id: 'south',
+      blocked: [
+        [0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0],
+      ],
+      objects: [{ type: 'spawn', x: 0, y: 0, props: { spawnId: 'arrival' } }],
+    });
+    return new Map([
+      [options.id, north],
+      ['south', south],
+    ]);
+  };
+
+  const footprintFindings = (map: Map<string, MapContext>): ValidationFinding[] => {
+    const findings: Parameters<typeof validateTransitions>[1] = [];
+    validateTransitions(map, findings);
+    return findings.filter((f) => f.rule === 'transition-trigger-unreachable-by-footprint');
+  };
+
+  test('a one-row top-edge rect is flagged even when its cell is walkable', () => {
+    // This is precisely the 5.0.0 shape: y 0..32, a walkable gate cell, and a
+    // player whose feet cannot settle at or above y=32. The source rule passes;
+    // the footprint rule must not.
+    const flagged = footprintFindings(northPair({ id: 'short', rectHeight: 32 }));
+    expect(flagged).toHaveLength(1);
+    expect(flagged[0]?.severity).toBe('error');
+    expect(flagged[0]?.detail).toContain('extend it inward by one row');
+  });
+
+  test('a two-row top-edge rect is accepted', () => {
+    expect(footprintFindings(northPair({ id: 'tall', rectHeight: 64 }))).toEqual([]);
+  });
+
+  test('a non-top-edge rect of any height is accepted', () => {
+    const context = makeContext({
+      id: 'south',
+      blocked: [
+        [0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0],
+      ],
+      objects: [
+        { type: 'spawn', x: 32, y: 0, props: { spawnId: 'interior' } },
+        transition({
+          targetMap: 'other',
+          targetSpawnId: 'arrival',
+          targetX: 0,
+          targetY: 0,
+          x: 32,
+          y: 2 * 32,
+          width: 32,
+          height: 32,
+        }),
+      ],
+    });
+    expect(footprintFindings(new Map([['south', context]]))).toEqual([]);
+  });
+
+  test('the mirrored foot margin matches the engine footprint constant', () => {
+    // scripts has no engine dependency, so the value is duplicated; the engine
+    // is the authority. Read it from the source so drift fails loudly here.
+    const source = readFileSync(
+      join(repository, 'packages/frontend/engine/src/systems/actor_footprint.ts'),
+      'utf8',
+    );
+    const match = source.match(/export const ENTITY_HEIGHT_ABOVE = (\d+);/);
+    expect(match).not.toBeNull();
+    expect(Number(match?.[1])).toBe(FOOT_MARGIN_PX);
+  });
+});
+
 describe('emberwatch real pack validation', () => {
   test('the committed five-map pack has zero blockers', () => {
     const validation = validateEmberwatchMaps();
@@ -571,6 +682,30 @@ describe('emberwatch real pack validation', () => {
       'village',
     ]);
     expect(validation.blockers).toEqual([]);
+  });
+
+  test('every edge transition has a trigger reachable by player foot-space', () => {
+    // The 5.0.0 north-edge bug: village→old_road and old_road→ruined_shrine sat
+    // on one-row rects (y 0..32) entirely above the feet clamp (y >= 32), so a
+    // real keyboard walkthrough never triggered them. This asserts the rule
+    // against the committed JSON rather than trusting rectangle metadata.
+    const contexts = buildContexts(readJson<Manifest>(join(packRoot, 'manifest.json')));
+    const findings: ValidationFinding[] = [];
+    validateTransitions(contexts, findings);
+    expect(
+      findings.filter((f) => f.rule === 'transition-trigger-unreachable-by-footprint'),
+    ).toEqual([]);
+
+    // Direct evidence for the two repaired edges: each now reaches row 1.
+    for (const [map, target] of [
+      ['village', 'old_road'],
+      ['old_road', 'ruined_shrine'],
+    ] as const) {
+      const edge = contexts
+        .get(map)
+        ?.transitions.find((entry) => str(entry.props.targetMap) === target);
+      expect(edge?.height).toBeGreaterThanOrEqual(64);
+    }
   });
 
   test('every map summary reports its footprint and object counts', () => {

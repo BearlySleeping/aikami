@@ -51,6 +51,14 @@ const LOCAL_PIPELINE_FRAMES = new Set([
   'prop_support.png',
   'prop_ward_socket.png',
   'prop_well.png',
+  // C-529 follow-up: the six former legacy-grid furniture frames, replaced by
+  // standalone local-pipeline art in the polish pass.
+  'prop_anvil.png',
+  'prop_bed.png',
+  'prop_bookshelf.png',
+  'prop_counter.png',
+  'prop_crate.png',
+  'prop_table.png',
 ]);
 
 type PropRenderSize = { width?: number; height?: number };
@@ -114,11 +122,33 @@ const PROP_PRESENTATION: Record<string, PropPresentation> = {
     renderSize: { width: 48, height: 35 },
     shadow: { kind: 'ellipse', width: 30, height: 12, opacity: 0.22 },
   },
-  // `crate.png`, `table.png`, `bed.png`, `counter.png`, `bookshelf.png` and
-  // `anvil.png` still resolve through the legacy grid atlas (no accepted
-  // standalone source exists yet). They keep native 32px size; the prop-atlas
-  // guard allowlists them explicitly and `village_well` is the enforced
-  // non-legacy case.
+  // C-529 follow-up: the six former legacy-grid furniture frames now have
+  // accepted standalone art. Sizes preserve each prepared source's aspect
+  // ratio (the trim bbox), so no prop is stretched.
+  'prop_crate.png': {
+    renderSize: { width: 40, height: 29 },
+    shadow: { kind: 'ellipse', width: 28, height: 10, opacity: 0.2 },
+  },
+  'prop_table.png': {
+    renderSize: { width: 56, height: 40 },
+    shadow: { kind: 'ellipse', width: 44, height: 12, opacity: 0.2 },
+  },
+  'prop_bed.png': {
+    renderSize: { width: 56, height: 54 },
+    shadow: { kind: 'ellipse', width: 42, height: 12, opacity: 0.2 },
+  },
+  'prop_bookshelf.png': {
+    renderSize: { width: 34, height: 58 },
+    shadow: { kind: 'ellipse', width: 24, height: 9, opacity: 0.2 },
+  },
+  'prop_counter.png': {
+    renderSize: { width: 64, height: 36 },
+    shadow: { kind: 'ellipse', width: 52, height: 11, opacity: 0.2 },
+  },
+  'prop_anvil.png': {
+    renderSize: { width: 46, height: 31 },
+    shadow: { kind: 'ellipse', width: 30, height: 10, opacity: 0.2 },
+  },
   'chair.png': {
     renderSize: { width: 26, height: 48 },
     shadow: { kind: 'ellipse', width: 16, height: 6, opacity: 0.2 },
@@ -323,28 +353,28 @@ export const EMBERWATCH_PROPS: Record<string, PropDef> = {
   shop_barrel_2: anchored('Barrel', 'prop_barrel.png', 20, 20),
   shrine_barrel: anchored('Barrel', 'prop_barrel.png', 20, 20),
 
-  inn_crate: anchored('Crate', 'crate.png', 22, 22),
-  shop_crate: anchored('Crate', 'crate.png', 22, 22),
-  shop_crate_2: anchored('Crate', 'crate.png', 22, 22),
-  shop_crate_3: anchored('Crate', 'crate.png', 22, 22),
-  waystation_crate: anchored('Crate', 'crate.png', 22, 22),
-  waystation_crate_2: anchored('Crate', 'crate.png', 22, 22),
-  shrine_crate: anchored('Crate', 'crate.png', 22, 22),
+  inn_crate: anchored('Crate', 'prop_crate.png', 22, 22),
+  shop_crate: anchored('Crate', 'prop_crate.png', 22, 22),
+  shop_crate_2: anchored('Crate', 'prop_crate.png', 22, 22),
+  shop_crate_3: anchored('Crate', 'prop_crate.png', 22, 22),
+  waystation_crate: anchored('Crate', 'prop_crate.png', 22, 22),
+  waystation_crate_2: anchored('Crate', 'prop_crate.png', 22, 22),
+  shrine_crate: anchored('Crate', 'prop_crate.png', 22, 22),
 
   // ── Counters and furniture ───────────────────────────────────────────────
-  shop_counter_l: anchored('Counter', 'counter.png', 28, 18),
-  shop_counter_r: anchored('Counter', 'counter.png', 28, 18),
-  shop_counter_m: anchored('Counter', 'counter.png', 28, 18),
-  inn_counter: anchored('Service Counter', 'counter.png', 28, 18),
-  inn_counter_2: anchored('Service Counter', 'counter.png', 28, 18),
+  shop_counter_l: anchored('Counter', 'prop_counter.png', 28, 18),
+  shop_counter_r: anchored('Counter', 'prop_counter.png', 28, 18),
+  shop_counter_m: anchored('Counter', 'prop_counter.png', 28, 18),
+  inn_counter: anchored('Service Counter', 'prop_counter.png', 28, 18),
+  inn_counter_2: anchored('Service Counter', 'prop_counter.png', 28, 18),
 
-  inn_table: anchored('Ale Table', 'table.png', 26, 22, {
+  inn_table: anchored('Ale Table', 'prop_table.png', 26, 22, {
     environment: combatEnv(6, true, 'half'),
   }),
-  inn_table_2: anchored('Ale Table', 'table.png', 26, 22, {
+  inn_table_2: anchored('Ale Table', 'prop_table.png', 26, 22, {
     environment: combatEnv(6, true, 'half'),
   }),
-  inn_table_3: anchored('Ale Table', 'table.png', 26, 22, {
+  inn_table_3: anchored('Ale Table', 'prop_table.png', 26, 22, {
     environment: combatEnv(6, true, 'half'),
   }),
 
@@ -356,12 +386,12 @@ export const EMBERWATCH_PROPS: Record<string, PropDef> = {
   inn_chair_6: anchored('Chair', 'chair.png', 16, 10),
   shop_chair: anchored('Chair', 'chair.png', 16, 10),
 
-  inn_bed: anchored('Guest Bed', 'bed.png', 30, 22),
+  inn_bed: anchored('Guest Bed', 'prop_bed.png', 30, 22),
   inn_hearth: anchored('Hearth', 'prop_hearth.png', 44, 20),
-  inn_shelf: anchored('Storage Shelf', 'bookshelf.png', 24, 14),
-  shop_shelf: anchored('Storage Shelf', 'bookshelf.png', 24, 14),
-  shop_shelf_2: anchored('Storage Shelf', 'bookshelf.png', 24, 14),
-  yard_anvil: anchored('Smith Anvil', 'anvil.png', 24, 16),
+  inn_shelf: anchored('Storage Shelf', 'prop_bookshelf.png', 24, 14),
+  shop_shelf: anchored('Storage Shelf', 'prop_bookshelf.png', 24, 14),
+  shop_shelf_2: anchored('Storage Shelf', 'prop_bookshelf.png', 24, 14),
+  yard_anvil: anchored('Smith Anvil', 'prop_anvil.png', 24, 16),
 
   // ── Combat environment objects (affordances preserved) ───────────────────
   inn_brazier: anchored('Brazier', 'prop_brazier.png', 22, 22, {
@@ -384,7 +414,7 @@ export const EMBERWATCH_PROPS: Record<string, PropDef> = {
     // refuse to compile with "duplicate affordance id".
     environment: combatEnv(3, true, 'half'),
   }),
-  inn_hanging_crate: anchored('Hanging Crate', 'crate.png', 22, 22, {
+  inn_hanging_crate: anchored('Hanging Crate', 'prop_crate.png', 22, 22, {
     environment: combatEnv(5, false, 'none'),
   }),
 

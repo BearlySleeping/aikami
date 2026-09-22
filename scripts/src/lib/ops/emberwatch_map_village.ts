@@ -22,7 +22,7 @@
 // quest objectives resolve them by name.
 //
 // Geometry contract (enforced by generate_emberwatch_maps.test.ts):
-//   gates  north cols 31-32 (row 0) · south cols 31-32 (row 47)
+//   gates  north cols 31-33 (row 0) · south cols 31-33 (row 47)
 //          west rows 23-25 (col 0)  · east rows 23-25 (col 63)
 //   arrival spawns sit clear of every transition rectangle on this map.
 
@@ -52,10 +52,17 @@ const G = buildG();
 const W = 64;
 const H = 48;
 
-/** The four perimeter gates, kept walkable all the way through the rim. */
+/**
+ * The four perimeter gates, kept walkable all the way through the rim.
+ *
+ * The north/south gates are three cells wide so the village's primary
+ * north–south route keeps its companion-safe width (3 cells) through the
+ * woodland rim instead of pinching to two at the gate mouth. West/east are
+ * already three rows tall.
+ */
 const GATES = {
-  north: [31, 32],
-  south: [31, 32],
+  north: [31, 32, 33],
+  south: [31, 32, 33],
   west: [23, 24, 25],
   east: [23, 24, 25],
 } as const;
@@ -201,17 +208,17 @@ const layChannel = (m: MapData, channel: Array<[number, number]>): void => {
 /**
  * Pass 2: bank the channel. Done after the whole channel is laid, so a cell
  * that is a neighbour of an EARLIER channel cell but becomes water itself is
- * never banked — banking in the same pass left the terrain channel saying
- * "gravel" on a cell whose tile is water.
+ * never banked. The bank is a dry `sand` shore (a baked decor tile) — the
+ * gravel terrain material is not carried by the published atlas, so using it
+ * would render as fallback grass.
  */
 const bankChannel = (m: MapData, channel: Array<[number, number]>): void => {
+  // Only the inner (south/east) shore is banked, so the stream keeps a single
+  // dry edge rather than a wide beach on both sides.
   const neighbours = [
-    [1, 0],
-    [-1, 0],
     [0, 1],
-    [0, -1],
+    [1, 0],
   ] as const;
-  m.terrainOverrides = m.terrainOverrides ?? [];
   for (const [c, r] of channel) {
     if (!inBounds(c, r)) {
       continue;
@@ -225,10 +232,7 @@ const bankChannel = (m: MapData, channel: Array<[number, number]>): void => {
       if (m.ground[nr * W + nc] === G.WATER || m.collision[nr * W + nc] === 1) {
         continue;
       }
-      // `gravel` is a TERRAIN-CHANNEL material: it declares no baked tile GID,
-      // so writing it through `setTile` would put `undefined` into the ground
-      // layer (serialized as `null`). It goes through `terrainOverrides`.
-      m.terrainOverrides.push([nc, nr, 'gravel']);
+      setTile(m, nc, nr, G.SAND);
     }
   }
 };
@@ -369,23 +373,30 @@ const paintPrimaryRoutes = (m: MapData): void => {
 /**
  * ── Secondary routes (≥2 cells) ────────────────────────────────────────────
  *
- * Order matters against the paved square: smith's approach overlaps the square
- * paving, and the road is painted FIRST so the paving is what a walker sees.
+ * These are trodden earth (the autotiled `dirt` terrain), not cobblestone:
+ * the village's cobbled roads are the two primary routes, and every side path
+ * is worn dirt, so the hierarchy reads at a glance.
+ *
+ * Order matters against the square: the side paths are painted after the
+ * gravel square, and the square's paving is what a walker sees where they
+ * overlap.
  */
 const paintSecondaryRoutes = (m: MapData): void => {
   // Smith's approach: east–west link, then north to the yard.
-  fillRect(m, 3, 28, 30, 29, G.PATH);
-  fillRect(m, 7, 26, 8, 28, G.PATH);
+  fillRect(m, 3, 28, 30, 29, G.DIRT);
+  fillRect(m, 7, 26, 8, 28, G.DIRT);
   // Inn forecourt: from the east–west road up to the inn door.
-  fillRect(m, 49, 20, 52, 22, G.PATH);
+  fillRect(m, 49, 20, 52, 22, G.DIRT);
   // Shop approach: south from the north–south road to the shop landing.
-  fillRect(m, 39, 33, 53, 34, G.PATH);
+  fillRect(m, 39, 33, 53, 34, G.DIRT);
   fillRect(m, 50, 33, 51, 34, G.STONE_FLOOR);
   // Notice-board approach: north from the road, over the bridge.
-  fillRect(m, 39, 9, 40, 22, G.PATH);
-  fillRect(m, 41, 10, 46, 11, G.PATH);
+  fillRect(m, 39, 9, 40, 22, G.DIRT);
+  fillRect(m, 41, 10, 46, 11, G.DIRT);
   // Well approach: west from the square.
-  fillRect(m, 23, 22, 26, 23, G.PATH);
+  fillRect(m, 23, 22, 26, 23, G.DIRT);
+  // A worn spur down to the south shed, so the south-west is not dead grass.
+  fillRect(m, 26, 29, 27, 35, G.DIRT);
 };
 
 /** ── Pads ─────────────────────────────────────────────────────────────────── */
@@ -395,7 +406,6 @@ const paintPads = (m: MapData): void => {
   fillRect(m, 4, 27, 14, 30, G.STONE_FLOOR); // smith's yard
   fillRect(m, 47, 20, 56, 22, G.STONE_FLOOR); // inn forecourt
   fillRect(m, 47, 33, 56, 34, G.STONE_FLOOR); // shop landing
-  fillRect(m, 30, 21, 34, 24, G.STONE_FLOOR); // ward tree apron
 };
 
 /** The five building shells, in placement order. */
@@ -404,30 +414,54 @@ const placeBuildings = (m: MapData): void => {
   building(m, 47, 26, 9, 7, G.WOOD_WALL, 'south'); // the shop (south-east)
   building(m, 4, 30, 9, 7, G.STONE_WALL, 'north'); // the smithy (west)
   building(m, 5, 15, 8, 6, G.WOOD_WALL, 'south'); // cottage (north-west)
-  building(m, 16, 15, 7, 6, G.WOOD_WALL, 'south'); // cottage (north)
+  // The second cottage is offset from the first — two doors on the same row
+  // read as a level-editor row, not a village.
+  building(m, 18, 13, 7, 6, G.WOOD_WALL, 'south'); // cottage (north)
+  building(m, 24, 36, 7, 6, G.WOOD_WALL, 'north'); // shed (south-west)
+  building(m, 51, 5, 6, 5, G.WOOD_WALL, 'south'); // hut (north-east)
 };
 
 /**
- * The gravel plaza and the earth apron, as terrain overrides.
- *
- * The gravel plaza is a terrain-channel material with no baked tile GID, so it
- * is written as a terrain override; the stone paving over it is a tile.
+ * The village square as an irregular lozenge rather than a rectangle, one
+ * `[row, c0, c1]` span per row. Authored in warm trodden earth (the autotiled
+ * `dirt` terrain) so the edge blends into the surrounding grass instead of
+ * ending on a hard rectangular seam.
  */
-const squareOverrides = (): Array<[number, number, string]> => {
-  const overrides: Array<[number, number, string]> = [];
-  for (let r = 18; r <= 30; r++) {
-    for (let c = 26; c <= 39; c++) {
-      overrides.push([c, r, 'gravel']);
-    }
-  }
-  // Earth apron under the ward tree.
-  for (let r = 21; r <= 26; r++) {
-    for (let c = 29; c <= 35; c++) {
-      overrides.push([c, r, 'earth']);
-    }
-  }
-  return overrides;
-};
+const SQUARE_SPANS: ReadonlyArray<readonly [number, number, number]> = [
+  [19, 31, 34],
+  [20, 29, 36],
+  [21, 28, 37],
+  [22, 27, 38],
+  [23, 26, 39],
+  [24, 26, 39],
+  [25, 27, 38],
+  [26, 28, 37],
+  [27, 29, 36],
+  [28, 31, 34],
+];
+
+/**
+ * The ward circle: a rounded ring of trodden stone around the tree, so the
+ * landmark has a deliberate surrounding path shape and its own negative space.
+ */
+const WARD_RING: ReadonlyArray<readonly [number, number]> = [
+  [31, 20],
+  [32, 20],
+  [33, 20],
+  [30, 21],
+  [34, 21],
+  [29, 22],
+  [35, 22],
+  [29, 23],
+  [35, 23],
+  [29, 24],
+  [35, 24],
+  [30, 25],
+  [34, 25],
+  [31, 26],
+  [32, 26],
+  [33, 26],
+];
 
 /** The rim stays solid except at the gates, whatever the pads and paths painted. */
 const sealRimExceptGates = (m: MapData): void => {
@@ -455,24 +489,30 @@ const sealRimExceptGates = (m: MapData): void => {
 
 /**
  * The gate mouths are cleared across the FULL primary-road corridor (three
- * cells), not just the two gate columns: the road fill runs after the rim
+ * cells), not just the gate columns: the road fill runs after the rim
  * thinning, so a corridor cell painted back to a walkable path must not keep
  * the rim's collision — the engine's content audit requires collision to
  * match manifest walkability exactly.
  */
 const clearGateCorridors = (m: MapData): void => {
-  for (const c of [31, 32]) {
+  const north = GATES.north as readonly number[];
+  const south = GATES.south as readonly number[];
+  for (const c of north) {
     for (let r = 0; r <= 2; r++) {
       m.collision[r * W + c] = 0;
     }
+  }
+  for (const c of south) {
     for (let r = H - 3; r <= H - 1; r++) {
       m.collision[r * W + c] = 0;
     }
   }
-  // The road is three wide INSIDE the village; at the rim only the two gate
-  // columns are open, so the third column stays rim woodland.
-  for (let r = 1; r <= H - 2; r++) {
-    m.collision[r * W + 33] = 0;
+  // The road is three wide through the whole village; every gate column stays
+  // open between the gate mouths so the rim never re-narrows it.
+  for (const c of [...north, ...south]) {
+    for (let r = 1; r <= H - 2; r++) {
+      m.collision[r * W + c] = 0;
+    }
   }
 };
 
@@ -504,25 +544,21 @@ const reassertContainment = (m: MapData): void => {
   reopenBridge(m);
 };
 
-/** The ward tree's overhead canopy. Canopies may overlap actors. */
-const wardTreeCanopy = (): Array<[number, number, number]> => [
-  [30, 20, G.ROOF],
-  [31, 20, G.ROOF],
-  [32, 20, G.ROOF],
-  [33, 20, G.ROOF],
-  [34, 20, G.ROOF],
-];
-
 export const buildVillage = (): { map: MapData; objectLayers: MapObjectLayer[] } => {
   const m = makeMap(W, H);
   const rng = makeRng(0xe6b1);
 
   woodlandRim(m, rng);
+  // The square is warm trodden earth (autotiled `dirt`); the cobbled roads and
+  // the paved ward circle paint over it, so the square reads as ground between
+  // the roads rather than a slab the roads cut through.
+  for (const [r, c0, c1] of SQUARE_SPANS) {
+    fillRect(m, c0, r, c1, r, G.DIRT);
+  }
+  for (const [c, r] of WARD_RING) {
+    setTile(m, c, r, G.STONE_FLOOR);
+  }
   paintPrimaryRoutes(m);
-  // The square is paved between the two override passes; the paving overlaps
-  // smith's approach, and must be written AFTER it to win.
-  const overrides = squareOverrides();
-  fillRect(m, 28, 20, 37, 28, G.STONE_FLOOR);
   paintSecondaryRoutes(m);
   paintPads(m);
   placeBuildings(m);
@@ -531,11 +567,10 @@ export const buildVillage = (): { map: MapData; objectLayers: MapObjectLayer[] }
   // ── Ground variation and woodland stands ─────────────────────────────────
   scatter(m, rng, 2, 2, W - 3, H - 3, G.GRASS, G.GRASS_DARK, 0.14);
   scatter(m, rng, 2, 2, W - 3, H - 3, G.GRASS, G.GRASS_VARIANT, 0.06);
-
-  m.terrainOverrides = [...(m.terrainOverrides ?? []), ...overrides];
+  // Paving wear through the earthen square.
+  scatter(m, rng, 26, 19, 39, 28, G.DIRT, G.FLAGSTONE, 0.14);
 
   reassertContainment(m);
-  m.overheadExtra = wardTreeCanopy();
 
   const objectLayers: MapObjectLayer[] = [
     {
@@ -556,22 +591,25 @@ export const buildVillage = (): { map: MapData; objectLayers: MapObjectLayer[] }
         placeLandmark(12, 'ward_tree_landmark', 'The Ward Tree', 'ward_large.png', 32, 23),
 
         // ── Woodland stands (trunk footprint collides, canopy does not) ────
+        // Ordinary trees sit on the village edge and leave the square's air
+        // to the ward tree; the ward groves frame the landmark at three sides
+        // and the south-east stays open toward the services.
         placeProp(13, 'woodland_oak', 'Woodland Oak', 'oak.png', 27, 14),
-        placeProp(15, 'woodland_oak_2', 'Woodland Oak', 'oak.png', 43, 15),
-        placeProp(16, 'woodland_oak_3', 'Woodland Oak', 'oak.png', 11, 22),
-        placeProp(17, 'woodland_oak_4', 'Woodland Oak', 'oak.png', 57, 40),
-        placeProp(18, 'woodland_birch', 'Woodland Birch', 'birch.png', 23, 17),
-        placeProp(19, 'woodland_birch_2', 'Woodland Birch', 'birch.png', 45, 28),
-        placeProp(22, 'ward_grove_a', 'Ward Grove (unlit)', 'ward_small_a.png', 28, 29),
-        placeProp(14, 'ward_grove_b', 'Ward Grove (lit)', 'ward_small_b.png', 37, 25),
-        placeProp(23, 'ward_grove_c', 'Ward Grove (lit)', 'ward_small_c.png', 30, 20),
+        placeProp(15, 'woodland_oak_2', 'Woodland Oak', 'oak.png', 44, 16),
+        placeProp(16, 'woodland_oak_3', 'Woodland Oak', 'oak.png', 12, 20),
+        placeProp(17, 'woodland_oak_4', 'Woodland Oak', 'oak.png', 56, 40),
+        placeProp(18, 'woodland_birch', 'Woodland Birch', 'birch.png', 27, 17),
+        placeProp(19, 'woodland_birch_2', 'Woodland Birch', 'birch.png', 45, 29),
+        placeProp(22, 'ward_grove_a', 'Ward Grove (unlit)', 'ward_small_a.png', 35, 26),
+        placeProp(14, 'ward_grove_b', 'Ward Grove (lit)', 'ward_small_b.png', 35, 20),
+        placeProp(23, 'ward_grove_c', 'Ward Grove (lit)', 'ward_small_c.png', 29, 20),
 
         // ── Building-adjacent clutter (never blocks a route) ───────────────
         placeProp(24, 'inn_barrel', 'Barrel', 'prop_barrel.png', 54, 21),
-        placeProp(25, 'inn_crate', 'Crate', 'crate.png', 56, 21),
-        placeProp(26, 'yard_anvil', 'Smith Anvil', 'anvil.png', 5, 28),
-        placeProp(27, 'shop_crate', 'Crate', 'crate.png', 55, 34),
-        placeProp(28, 'inn_chair', 'Chair', 'chair.png', 44, 11),
+        placeProp(25, 'inn_crate', 'Crate', 'prop_crate.png', 5, 27),
+        placeProp(26, 'yard_anvil', 'Smith Anvil', 'prop_anvil.png', 5, 28),
+        placeProp(27, 'shop_crate', 'Crate', 'prop_crate.png', 55, 35),
+        placeProp(28, 'inn_chair', 'Chair', 'chair.png', 53, 20),
 
         // ── Arrival markers ────────────────────────────────────────────────
         placeSpawn(7, 'from_merchant', 3, 24),
@@ -607,7 +645,11 @@ export const buildVillage = (): { map: MapData; objectLayers: MapObjectLayer[] }
             x: OLD_ROAD_ARRIVAL.fromVillage.x,
             y: OLD_ROAD_ARRIVAL.fromVillage.y,
           },
-          at: { c: 31, r: 0, width: 2, height: 1 },
+          // Two rows tall: the actor's feet are clamped to y >= ENTITY_HEIGHT_ABOVE
+          // (32px), so a one-row rect (y 0..32) sits entirely above legal
+          // foot-space and never fires. The trigger reaches inward over row 1 so
+          // it overlaps the strip the player can actually stand in.
+          at: { c: 31, r: 0, width: 3, height: 2 },
         }),
       ],
     },

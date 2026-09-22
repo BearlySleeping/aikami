@@ -12,11 +12,11 @@ Pipeline audit: [`docs/architecture/emberwatch-map-authoring.md`](../architectur
 
 | Map | Cells | Role | Walkable |
 |---|---|---|---|
-| `village` | 64×48 | hub square + arrival | 77.7% |
-| `inn` | 28×20 | interior, story | 65.5% |
-| `merchant_shop` | 24×18 | interior, vendor + evidence | 63.2% |
-| `old_road` | 72×36 | transitional journey, two routes | 78.1% |
-| `ruined_shrine` | 40×36 | climax ruin | 76.8% |
+| `village` | 64×48 | hub square + arrival | 75.7% |
+| `inn` | 28×20 | interior, story | 65.9% |
+| `merchant_shop` | 24×18 | interior, vendor + evidence | 61.1% |
+| `old_road` | 72×36 | transitional journey, two routes | 78.2% |
+| `ruined_shrine` | 40×36 | climax ruin | 76.3% |
 
 Transitions form a reciprocal graph: village ⇄ inn / merchant_shop / old_road,
 old_road ⇄ ruined_shrine.
@@ -59,11 +59,14 @@ locked**; moving them is a polish edit, renaming them is a gameplay change.
 
 ## Legacy-art TODOs
 
-Six frames still render from the legacy grid atlas: `crate.png`, `table.png`,
-`bed.png`, `counter.png`, `bookshelf.png`, `anvil.png`. The actionable
-manifest is
+**Met.** The six former legacy grid-atlas furniture frames (`crate.png`,
+`table.png`, `bed.png`, `counter.png`, `bookshelf.png`, `anvil.png`) now have
+accepted standalone art (`prop_crate.png`, `prop_table.png`, `prop_bed.png`,
+`prop_counter.png`, `prop_bookshelf.png`, `prop_anvil.png`), generated through
+the asset-brief jobs and installed via `emberwatch:accept`. The legacy
+allowlist is empty, so the polish target of **zero accidental legacy grid-prop
+dependencies** is enforced rather than aspired to. The manifest is
 [`emberwatch_legacy_prop_replacements.json`](./emberwatch_legacy_prop_replacements.json).
-The polish target is **zero accidental legacy grid-prop dependencies**.
 
 ## Audit locations
 
