@@ -153,12 +153,12 @@ export const buildPlanPhases = async (options: {
       originUrl: options.releaseTarget.originUrl,
     },
     base: migrated.base,
-    entries: entries.map((entry) => ({
-      tag: entry.tag,
-      hash: entry.hash,
-      sizeBytes: entry.sizeBytes,
-      category: entry.category,
-    })),
+    // Pass the FULL catalog entries: `generateCatalogIndex` projects every
+    // entry through `entryToShardEntry`, which spreads `licenses`, `authors`
+    // and `sourceUrls` and reads `ext`/`subcategory`. Stripping the entries to
+    // the four merge fields made `--plan` throw before it could build, so no
+    // release could ever be planned.
+    entries,
   });
   if (!planPhase.ok) {
     return planPhase;
