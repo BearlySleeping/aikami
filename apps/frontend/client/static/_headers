@@ -7,6 +7,19 @@
   Cross-Origin-Opener-Policy: same-origin-allow-popups
   Permissions-Policy: camera=(), microphone=(), geolocation=()
 
+# Mutable, non-content-hashed files. SvelteKit rewrites these on every deploy
+# (`env.js` carries the build's public env; `version.json` the build id), but
+# their URLs are stable. The blanket `/*.js` immutable rule further down would
+# otherwise pin them at the edge and in browsers for a year, so a corrected
+# deploy would never reach a client that had cached the previous copy.
+/_app/env.js
+  ! Cache-Control
+  Cache-Control: public, max-age=0, must-revalidate
+
+/_app/version.json
+  ! Cache-Control
+  Cache-Control: public, max-age=0, must-revalidate
+
 /_app/immutable/*
   ! Cache-Control
   Cache-Control: public, max-age=31536000, immutable
