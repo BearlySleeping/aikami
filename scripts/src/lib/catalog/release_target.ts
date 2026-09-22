@@ -81,6 +81,18 @@ export type RemoteReleaseMode = (typeof REMOTE_RELEASE_MODES)[number];
 export const CATALOG_ORIGIN_FORBIDDEN_HOSTS: readonly string[] = PRODUCTION_CATALOG_ORIGINS;
 
 /**
+ * Origin that hosts the de-bundled LEGACY asset library (C-435) for a mode.
+ *
+ * Production hosts it at its own origin, so the ordinary first-release legacy
+ * bootstrap reads the target directly and this returns `undefined`. Staging has
+ * no legacy surface of its own, so its releases carry the same repo-external
+ * library from production — the only place it lives. This is a READ source: the
+ * publish still writes only to the mode's own bucket.
+ */
+export const legacyLibraryOriginFor = (mode: string): string | undefined =>
+  mode === 'staging' ? (CATALOG_ORIGINS.production.originUrl ?? undefined) : undefined;
+
+/**
  * The ONLY way to point a local run at a non-declared bucket.
  *
  * Set `AIKAMI_CATALOG_TEST_SEAM=1` and `CATALOG_BUCKET=<name>`. The seam is

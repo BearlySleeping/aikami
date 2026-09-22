@@ -52,6 +52,7 @@ import {
   type CatalogPublishReport,
   type PackLockPublishReport,
 } from './publish_report.ts';
+import { legacyLibraryOriginFor } from './release_target.ts';
 
 export type { CatalogPublishReport, PackLockPublishReport } from './publish_report.ts';
 
@@ -433,6 +434,10 @@ export const runCatalogPublish = async (
     mode: config.releaseTarget?.mode,
     currentTags: new Set(entries.map((entry) => entry.tag)),
     ...(options.releaseReader === undefined ? {} : { reader: options.releaseReader }),
+    ...(() => {
+      const legacyOriginUrl = legacyLibraryOriginFor(config.releaseTarget?.mode ?? '');
+      return legacyOriginUrl === undefined ? {} : { legacyOriginUrl };
+    })(),
     log: (line) => console.log(line),
   });
   if (!carried.ok) {
