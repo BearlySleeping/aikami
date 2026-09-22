@@ -21,6 +21,7 @@
 
 import {
   cell,
+  OLD_ROAD_ARRIVAL,
   placeLandmark,
   placeNpc,
   placeProp,
@@ -231,7 +232,11 @@ export const buildOldRoad = (): { map: MapData; objectLayers: MapObjectLayer[] }
         // against each transition rect, so a marker placed on the rect's corner
         // re-triggers the exit the instant the map loads (C-138).
         placeSpawn(1, 'old_road_from_village', 34, 33),
-        placeSpawn(2, 'old_road_to_shrine', 34, 2),
+        // Row 3, not row 2: the north exit rect now spans y 0..64 (two rows) so
+        // it overlaps legal foot-space, and ZoningSystem tests position
+        // inclusively — a marker on row 2 (y=64) would sit exactly on the rect's
+        // bottom edge and re-trigger the exit the instant the map loads.
+        placeSpawn(2, 'old_road_to_shrine', 34, 3),
         placeNpc(3, 'woodcutter_ada', 'Ada the Woodcutter', 'ada_greeting', 12, 10),
         placeNpc(4, 'apprentice_tess', 'Tess the Apprentice', 'tess_greeting', 58, 12),
 
@@ -269,7 +274,11 @@ export const buildOldRoad = (): { map: MapData; objectLayers: MapObjectLayer[] }
           targetMap: 'ruined_shrine',
           targetSpawnId: 'ruin_from_old_road',
           target: { x: cell(19), y: cell(34) },
-          at: { c: 33, r: 0, width: 3, height: 1 },
+          // Two rows tall: the actor's feet are clamped to y >= ENTITY_HEIGHT_ABOVE
+          // (32px), so a one-row rect (y 0..32) sits entirely above legal
+          // foot-space and never fires. The trigger reaches inward over row 1 so
+          // it overlaps the strip the player can actually stand in.
+          at: { c: 33, r: 0, width: 3, height: 2 },
         }),
       ],
     },
@@ -464,7 +473,10 @@ export const buildRuinedShrine = (): { map: MapData; objectLayers: MapObjectLaye
           id: 1005,
           targetMap: 'old_road',
           targetSpawnId: 'old_road_to_shrine',
-          target: { x: cell(34), y: cell(2) },
+          target: {
+            x: OLD_ROAD_ARRIVAL.toShrine.x,
+            y: OLD_ROAD_ARRIVAL.toShrine.y,
+          },
           at: { c: 19, r: m.height - 1, width: 3, height: 1 },
         }),
       ],

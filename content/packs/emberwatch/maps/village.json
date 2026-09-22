@@ -19227,7 +19227,7 @@
           "x": 992,
           "y": 0,
           "width": 96,
-          "height": 32,
+          "height": 64,
           "properties": [
             {
               "name": "targetMap",

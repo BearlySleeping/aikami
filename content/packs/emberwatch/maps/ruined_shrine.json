@@ -8980,7 +8980,7 @@
             {
               "name": "targetY",
               "type": "int",
-              "value": 64
+              "value": 96
             },
             {
               "name": "targetSpawnId",

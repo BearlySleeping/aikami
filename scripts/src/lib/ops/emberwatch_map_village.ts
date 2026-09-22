@@ -645,7 +645,11 @@ export const buildVillage = (): { map: MapData; objectLayers: MapObjectLayer[] }
             x: OLD_ROAD_ARRIVAL.fromVillage.x,
             y: OLD_ROAD_ARRIVAL.fromVillage.y,
           },
-          at: { c: 31, r: 0, width: 3, height: 1 },
+          // Two rows tall: the actor's feet are clamped to y >= ENTITY_HEIGHT_ABOVE
+          // (32px), so a one-row rect (y 0..32) sits entirely above legal
+          // foot-space and never fires. The trigger reaches inward over row 1 so
+          // it overlaps the strip the player can actually stand in.
+          at: { c: 31, r: 0, width: 3, height: 2 },
         }),
       ],
     },

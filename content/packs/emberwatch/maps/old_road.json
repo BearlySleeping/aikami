@@ -15663,7 +15663,7 @@
           "id": 2,
           "type": "spawn",
           "x": 1088,
-          "y": 64,
+          "y": 96,
           "width": 0,
           "height": 0,
           "properties": [
@@ -16377,7 +16377,7 @@
           "x": 1056,
           "y": 0,
           "width": 96,
-          "height": 32,
+          "height": 64,
           "properties": [
             {
               "name": "targetMap",
