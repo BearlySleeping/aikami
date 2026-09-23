@@ -2,7 +2,7 @@
 //
 // Generates the Emberwatch coherent tileset atlas (C-375 AC-4).
 //
-// Replaces the 128×128 9-frame placeholder with a 512×256 (16×8 grid)
+// Replaces the 128×128 9-frame placeholder with a 512×320 (16×10 grid)
 // procedurally-drawn 32px tileset: grass/dirt/path/floor/wall/roof/water
 // tiles plus furniture + prop cells (well, notice board, gate, barrels,
 // crates, counters, tables, beds, rugs...).
@@ -21,6 +21,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { deflateSync } from 'node:zlib';
+import { BRIDGE_FRAME_PAINT, paintBridgeFrame } from './generate_emberwatch_bridge_frames.ts';
 import {
   buf,
   clearCell,
@@ -41,6 +42,7 @@ import {
   ATLAS_HEIGHT,
   ATLAS_PADDING,
   ATLAS_ROWS,
+  ATLAS_TERRAIN_BLOCK_START,
   ATLAS_WIDTH,
   buildFrames,
   CORNER16_FRAMES,
@@ -55,7 +57,7 @@ import {
 //
 // C-378 AC-5: frames are packed with 1px edge extrusion. The painters draw
 // the 32×32 CONTENT at the old content pitch (W=512, H=256) into a scratch
-// buffer; a post-pass extrudes each frame into the final 544×272 atlas with
+// buffer; a post-pass extrudes each frame into the final 544×340 atlas with
 // a 1px border duplicated from the frame's edge pixels. The border makes
 // adjacent-atlas sampling safe — the chunk renderer's half-texel inset is
 // deleted (AC-5).
@@ -76,15 +78,13 @@ const CH = ATLAS_HEIGHT; // 272 — final atlas height
  */
 const registerTerrainFrames = (frames: Record<string, [number, number]>): void => {
   const terrains = readManifestTerrains();
-  // Derive the first free cell from the OCCUPIED [col,row] coordinates —
-  // never Object.keys(frames).length: a sparse baked-frames table (a tile
-  // without a frame leaves a gap) would start terrain allocation on a cell
-  // that may already be occupied by a higher-GID baked frame, silently
-  // overwriting it in the atlas. Start after the highest occupied index.
-  let nextCell = 0;
-  for (const [col, row] of Object.values(frames)) {
-    nextCell = Math.max(nextCell, row * ATLAS_COLS + col + 1);
-  }
+  // C-546: terrain frames start at a FIXED cell, not after the highest baked
+  // frame. Appended frames (the bridge assembly) are declared at higher GIDs so
+  // they must not move the terrain block — an existing terrain frame's GID is
+  // pinned by the committed atlas.json. A baked frame inside the reserved block
+  // collides below and throws, so a bad GID fails loudly instead of silently
+  // overwriting a terrain frame.
+  let nextCell = ATLAS_TERRAIN_BLOCK_START;
   for (const terrain of terrains) {
     if (terrain.wang !== 'corner16') {
       continue;
@@ -676,20 +676,6 @@ const paintWaterEdge = (col: number, row: number): void => {
   hline(col, row, 0, TILE - 1, 4, 180, 160, 110);
 };
 
-const paintBridge = (col: number, row: number): void => {
-  paintWater(col, row);
-  // wooden planks
-  fillRect(col, row, 0, 8, TILE, 16, 155, 106, 63);
-  for (let x = 2; x < TILE; x += 6) {
-    vline(col, row, x, 8, 23, 122, 78, 46);
-  }
-  hline(col, row, 0, TILE - 1, 8, 185, 132, 84);
-  hline(col, row, 0, TILE - 1, 23, 110, 68, 38);
-  // side rails
-  hline(col, row, 0, TILE - 1, 6, 140, 92, 56);
-  hline(col, row, 0, TILE - 1, 26, 140, 92, 56);
-};
-
 const paintSteps = (col: number, row: number): void => {
   fillCell(col, row, 143, 143, 146);
   // descending steps
@@ -906,6 +892,13 @@ const CORNER_TERRAIN_PAINTERS: Record<
 };
 
 const paintFrame = (key: string, col: number, row: number): void => {
+  // C-546 bridge assembly frames are table-driven (they compose boards + an
+  // optional rail/abutment per span position) rather than one case each.
+  const bridge = BRIDGE_FRAME_PAINT[key];
+  if (bridge) {
+    paintBridgeFrame({ col, row, ...bridge });
+    return;
+  }
   // C-378 corner-16 terrain frames: `<terrain>_<mask>.png`. Only ids with a
   // registered painter pair are corner frames; an unknown id falls through to
   // the default below rather than being silently mis-painted.
@@ -1030,9 +1023,6 @@ const paintFrame = (key: string, col: number, row: number): void => {
       break;
     case 'sand.png':
       paintSand(col, row);
-      break;
-    case 'bridge.png':
-      paintBridge(col, row);
       break;
     case 'steps.png':
       paintSteps(col, row);
@@ -1191,7 +1181,7 @@ export type PackedAtlasFrame = {
  * The pure result of packing the emberwatch atlas.
  */
 export type PackedAtlas = {
-  /** Extruded RGBA pixels, CW×CH×4 (544×272). */
+  /** Extruded RGBA pixels, CW×CH×4 (544×340). */
   rgba: Uint8Array;
   width: number;
   height: number;
@@ -1201,8 +1191,8 @@ export type PackedAtlas = {
 
 /**
  * Packs the emberwatch atlas: builds the frame registry (baked tiles +
- * corner-16 terrain frames), paints every frame into the 512×256 content
- * scratch, extrudes each frame 1px into the final 544×272 atlas, and
+ * corner-16 terrain frames), paints every frame into the 512×320 content
+ * scratch, extrudes each frame 1px into the final 544×340 atlas, and
  * returns the RGBA pixels + frame rects.
  *
  * Pure and deterministic — no file I/O, no `cwebp`. A test can call it
@@ -1219,8 +1209,8 @@ export const packAtlas = (): PackedAtlas => {
   drawAll(frames);
 
   // ── C-378 AC-5: 1px edge extrusion ──
-  // The content scratch is 512×256 at 32px pitch. The final atlas is
-  // CW×CH (544×272) at 34px pitch: every frame gets a 1px border that
+  // The content scratch is 512×320 at 32px pitch. The final atlas is
+  // CW×CH (544×340) at 34px pitch: every frame gets a 1px border that
   // duplicates its own edge pixels, so adjacent-atlas sampling never bleeds
   // and the chunk renderer can use exact UV rects (no half-texel inset).
   // Deterministic for identical inputs (pure copy pass).

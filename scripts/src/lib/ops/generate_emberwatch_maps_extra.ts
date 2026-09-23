@@ -22,6 +22,7 @@
 import {
   cell,
   OLD_ROAD_ARRIVAL,
+  placeBridge,
   placeLandmark,
   placeNpc,
   placeProp,
@@ -99,19 +100,17 @@ const paintOldRoadRoutes = (m: MapData): void => {
 
 /** The stream that cuts the direct route and its single dry crossing. */
 const carveCulvert = (m: MapData): void => {
-  const W = m.width;
   for (let r = 1; r <= m.height - 2; r++) {
     for (let c = 20; c <= 23; c++) {
       setTile(m, c, r, G.WATER);
       block(m, c, r);
     }
   }
-  for (let c = 20; c <= 23; c++) {
-    for (let r = 17; r <= 19; r++) {
-      setTile(m, c, r, G.BRIDGE);
-      m.collision[r * W + c] = 0;
-    }
-  }
+  placeBridge(m, {
+    region: { c0: 20, r0: 17, c1: 23, r1: 19 },
+    axis: 'ew',
+    mapId: 'old_road',
+  });
 };
 
 /** The broken waystation shell, its collapsed east end and its doorway. */

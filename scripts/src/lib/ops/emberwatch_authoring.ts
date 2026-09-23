@@ -37,7 +37,7 @@ import {
   spawn,
   transition,
 } from './emberwatch_map_shared.ts';
-import { buildG } from './generate_emberwatch_tables.ts';
+import { buildG, readManifestTiles } from './generate_emberwatch_tables.ts';
 
 export type { MapData, MapObjectLayer, SpawnObject } from './emberwatch_map_shared.ts';
 
@@ -161,6 +161,276 @@ export const path = (options: {
   }
   // Degenerate: a single cell.
   fillRect(map, from.c - before, from.r - before, from.c + after, from.r + after, gid);
+};
+
+// ---------------------------------------------------------------------------
+// Bridge assembly (C-546)
+// ---------------------------------------------------------------------------
+
+/** Which way a crossing is travelled. */
+export type BridgeAxis = 'ns' | 'ew';
+
+/**
+ * Bridge frame name per assembly role. The legacy `bridge.png` (GID 42) is the
+ * north–south deck interior — kept, not renumbered; the rest are appended
+ * frames. GIDs are resolved from `manifest.tiles` below, so the manifest stays
+ * the single GID↔frame source of truth.
+ */
+const BRIDGE_FRAME_NAMES = {
+  deckNs: 'bridge.png',
+  deckEw: 'bridge_deck_ew.png',
+  railW: 'bridge_rail_w.png',
+  railE: 'bridge_rail_e.png',
+  railN: 'bridge_rail_n.png',
+  railS: 'bridge_rail_s.png',
+  endN: 'bridge_end_n.png',
+  endS: 'bridge_end_s.png',
+  endW: 'bridge_end_w.png',
+  endE: 'bridge_end_e.png',
+  cornerNwNs: 'bridge_corner_nw_ns.png',
+  cornerNeNs: 'bridge_corner_ne_ns.png',
+  cornerSwNs: 'bridge_corner_sw_ns.png',
+  cornerSeNs: 'bridge_corner_se_ns.png',
+  cornerNwEw: 'bridge_corner_nw_ew.png',
+  cornerNeEw: 'bridge_corner_ne_ew.png',
+  cornerSwEw: 'bridge_corner_sw_ew.png',
+  cornerSeEw: 'bridge_corner_se_ew.png',
+} as const;
+
+/** A bridge assembly role. */
+export type BridgeFrameRole = keyof typeof BRIDGE_FRAME_NAMES;
+
+/** role → GID, resolved from the manifest. Throws if a frame is undeclared. */
+export const BRIDGE_FRAMES: Record<BridgeFrameRole, number> = (() => {
+  const gidByFrame = new Map<string, number>();
+  for (const [gid, def] of Object.entries(readManifestTiles())) {
+    if (def.frame) {
+      gidByFrame.set(def.frame, Number(gid));
+    }
+  }
+  const result = {} as Record<BridgeFrameRole, number>;
+  for (const [role, frame] of Object.entries(BRIDGE_FRAME_NAMES)) {
+    const gid = gidByFrame.get(frame);
+    if (gid === undefined) {
+      throw new Error(
+        `emberwatch_authoring: manifest.tiles has no bridge frame "${frame}" (for ${role})`,
+      );
+    }
+    result[role as BridgeFrameRole] = gid;
+  }
+  return result;
+})();
+
+/** Every bridge-assembly GID (legacy + appended frames). */
+export const BRIDGE_GIDS: ReadonlySet<number> = new Set(Object.values(BRIDGE_FRAMES));
+
+/**
+ * True when a ground GID belongs to the bridge assembly. Every reader that used
+ * to compare against the single `G.BRIDGE` must use this instead — a span now
+ * draws end/rail/corner frames as well as the deck interior.
+ */
+export const isBridgeGid = (gid: number): boolean => BRIDGE_GIDS.has(gid);
+
+/**
+ * Corner role lookup, indexed by `(west ? 1 : 0) | (north ? 2 : 0)` so the
+ * four quadrants read as data instead of a branch ladder.
+ */
+const BRIDGE_CORNER_ROLES: Record<
+  BridgeAxis,
+  readonly [BridgeFrameRole, BridgeFrameRole, BridgeFrameRole, BridgeFrameRole]
+> = {
+  ns: ['cornerSeNs', 'cornerSwNs', 'cornerNeNs', 'cornerNwNs'],
+  ew: ['cornerSeEw', 'cornerSwEw', 'cornerNeEw', 'cornerNwEw'],
+};
+
+/** Corner role for a cell on both the travel end and a long side. */
+const bridgeCornerRole = (axis: BridgeAxis, west: boolean, north: boolean): BridgeFrameRole =>
+  BRIDGE_CORNER_ROLES[axis][(west ? 1 : 0) | (north ? 2 : 0)];
+
+/** End role for a cell on the travel edge only. */
+const bridgeEndRole = (
+  axis: BridgeAxis,
+  c: number,
+  r: number,
+  c0: number,
+  r0: number,
+): BridgeFrameRole => {
+  if (axis === 'ns') {
+    return r === r0 ? 'endN' : 'endS';
+  }
+  return c === c0 ? 'endW' : 'endE';
+};
+
+/** Rail role for a cell on a long side only. */
+const bridgeRailRole = (
+  axis: BridgeAxis,
+  c: number,
+  r: number,
+  c0: number,
+  r0: number,
+): BridgeFrameRole => {
+  if (axis === 'ns') {
+    return c === c0 ? 'railW' : 'railE';
+  }
+  return r === r0 ? 'railN' : 'railS';
+};
+
+/** Picks the bridge role for a span cell from its position and travel axis. */
+const bridgeRoleForCell = (options: {
+  axis: BridgeAxis;
+  c: number;
+  r: number;
+  c0: number;
+  r0: number;
+  c1: number;
+  r1: number;
+}): BridgeFrameRole => {
+  const { axis, c, r, c0, r0, c1, r1 } = options;
+  const onEnd = axis === 'ns' ? r === r0 || r === r1 : c === c0 || c === c1;
+  const onSide = axis === 'ns' ? c === c0 || c === c1 : r === r0 || r === r1;
+  if (onEnd && onSide) {
+    return bridgeCornerRole(axis, c === c0, r === r0);
+  }
+  if (onEnd) {
+    return bridgeEndRole(axis, c, r, c0, r0);
+  }
+  if (onSide) {
+    return bridgeRailRole(axis, c, r, c0, r0);
+  }
+  return axis === 'ns' ? 'deckNs' : 'deckEw';
+};
+
+/** Ground GID + collision for a span cell. */
+const applyBridgeCell = (options: {
+  map: MapData;
+  axis: BridgeAxis;
+  c: number;
+  r: number;
+  c0: number;
+  r0: number;
+  c1: number;
+  r1: number;
+}): void => {
+  const { map, axis, c, r, c0, r0, c1, r1 } = options;
+  setTile(map, c, r, BRIDGE_FRAMES[bridgeRoleForCell({ axis, c, r, c0, r0, c1, r1 })]);
+  const index = r * map.width + c;
+  if (index >= 0 && index < map.collision.length) {
+    map.collision[index] = 0;
+  }
+};
+
+const isWaterGround = (map: MapData, c: number, r: number): boolean =>
+  map.ground[r * map.width + c] === G.WATER;
+
+const isWalkableLand = (map: MapData, c: number, r: number): boolean => {
+  const index = r * map.width + c;
+  return map.collision[index] === 0 && map.ground[index] !== G.WATER;
+};
+
+const formatCells = (cells: ReadonlyArray<[number, number]>): string =>
+  cells.map(([c, r]) => `(${c},${r})`).join(', ');
+
+/** Collects the approach-end and long-side cells just outside a span. */
+const bridgeBankCells = (options: {
+  axis: BridgeAxis;
+  c0: number;
+  r0: number;
+  c1: number;
+  r1: number;
+}): { ends: Array<[number, number]>; sides: Array<[number, number]> } => {
+  const { axis, c0, r0, c1, r1 } = options;
+  const ends: Array<[number, number]> = [];
+  const sides: Array<[number, number]> = [];
+  if (axis === 'ns') {
+    for (let c = c0; c <= c1; c++) {
+      ends.push([c, r0 - 1], [c, r1 + 1]);
+    }
+    for (let r = r0; r <= r1; r++) {
+      sides.push([c0 - 1, r], [c1 + 1, r]);
+    }
+    return { ends, sides };
+  }
+  for (let r = r0; r <= r1; r++) {
+    ends.push([c0 - 1, r], [c1 + 1, r]);
+  }
+  for (let c = c0; c <= c1; c++) {
+    sides.push([c, r0 - 1], [c, r1 + 1]);
+  }
+  return { ends, sides };
+};
+
+/**
+ * Strict bank check: both approach ends must be walkable land and every cell
+ * beside a long side must be water. Throws with the map id and the offending
+ * cells so an author can fix the crossing at author time.
+ */
+const assertBridgeBanks = (options: {
+  map: MapData;
+  axis: BridgeAxis;
+  c0: number;
+  r0: number;
+  c1: number;
+  r1: number;
+  mapId?: string;
+}): void => {
+  const { map, axis, c0, r0, c1, r1, mapId } = options;
+  const name = mapId ?? 'map';
+  const { ends, sides } = bridgeBankCells({ axis, c0, r0, c1, r1 });
+  const badEnds = ends.filter(([c, r]) => !isWalkableLand(map, c, r));
+  if (badEnds.length > 0) {
+    throw new Error(
+      `emberwatch_authoring.placeBridge: ${name} bridge end(s) at ${formatCells(badEnds)} ` +
+        'are not walkable land — a crossing must meet land at both travel ends',
+    );
+  }
+  const badSides = sides.filter(([c, r]) => !isWaterGround(map, c, r));
+  if (badSides.length > 0) {
+    throw new Error(
+      `emberwatch_authoring.placeBridge: ${name} bridge side(s) at ${formatCells(badSides)} ` +
+        'are not water — rails belong over the channel',
+    );
+  }
+};
+
+/**
+ * Authors a crossing as ONE structure. Every span cell gets a frame chosen by
+ * its position (deck interior / long side rail / travel end abutment / corner)
+ * and the span's travel axis; collision is cleared on exactly those cells and
+ * water outside the span stays blocked. The footprint is identical to the
+ * per-cell stamp it replaces, so saves and navigation are unaffected.
+ *
+ * `assertBanks` (default true) throws at author time when an approach end is
+ * not walkable land or a long side is not water. Pass `false` only for a
+ * crossing that intentionally sits at a channel corner (the village stream's
+ * L-bend), where the perpendicular-crossing assumption does not hold.
+ */
+export const placeBridge = (
+  map: MapData,
+  options: {
+    region: Region;
+    axis: BridgeAxis;
+    /** Name used in validation errors (`MapData` carries no id). */
+    mapId?: string;
+    assertBanks?: boolean;
+  },
+): void => {
+  const c0 = Math.min(options.region.c0, options.region.c1);
+  const c1 = Math.max(options.region.c0, options.region.c1);
+  const r0 = Math.min(options.region.r0, options.region.r1);
+  const r1 = Math.max(options.region.r0, options.region.r1);
+  if (c1 - c0 < 1 || r1 - r0 < 1) {
+    throw new Error(
+      `emberwatch_authoring.placeBridge: a span must be at least 2×2 (got ${c1 - c0 + 1}×${r1 - r0 + 1})`,
+    );
+  }
+  for (let r = r0; r <= r1; r++) {
+    for (let c = c0; c <= c1; c++) {
+      applyBridgeCell({ map, axis: options.axis, c, r, c0, r0, c1, r1 });
+    }
+  }
+  if (options.assertBanks ?? true) {
+    assertBridgeBanks({ map, axis: options.axis, c0, r0, c1, r1, mapId: options.mapId });
+  }
 };
 
 // ---------------------------------------------------------------------------

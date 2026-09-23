@@ -26,7 +26,12 @@ import { fileURLToPath } from 'node:url';
  * C-376).
  */
 export const ATLAS_COLS = 16;
-export const ATLAS_ROWS = 8;
+// C-546: rows grew from 8 to 10 to append the bridge assembly frames. The
+// original 128 cells were full — 48 baked tiles (GIDs 1..48) + five corner16
+// terrains × 16 masks = 128 — so an append needs new rows. All existing GIDs
+// keep their cells: the terrain block stays at its original start (below) and
+// the appended frames occupy the cells AFTER it.
+export const ATLAS_ROWS = 10;
 export const ATLAS_TILE_SIZE = 32;
 
 /** 1px edge extrusion around every frame (C-378 AC-5). */
@@ -37,8 +42,20 @@ export const ATLAS_CELL = ATLAS_TILE_SIZE + ATLAS_PADDING * 2;
 
 export const ATLAS_WIDTH = ATLAS_COLS * ATLAS_CELL; // 544
 
-export const ATLAS_HEIGHT = ATLAS_ROWS * ATLAS_CELL; // 272
-export const ATLAS_TILE_COUNT = ATLAS_COLS * ATLAS_ROWS; // 128
+export const ATLAS_HEIGHT = ATLAS_ROWS * ATLAS_CELL; // 340
+export const ATLAS_TILE_COUNT = ATLAS_COLS * ATLAS_ROWS; // 160
+
+/**
+ * First atlas cell (0-based) reserved for the corner16 terrain block.
+ *
+ * The baked manifest tiles occupy cells 0..47 (GIDs 1..48). Terrain frames are
+ * allocated from cell 48 regardless of any frames appended at higher GIDs:
+ * growing `ATLAS_ROWS` to append a frame must never shift an existing terrain
+ * frame's GID (the committed atlas.json and the derivation test pin them). A
+ * baked frame placed inside this block is caught by the collision check in
+ * `registerTerrainFrames`; appended frames belong after the block.
+ */
+export const ATLAS_TERRAIN_BLOCK_START = 48;
 
 /** Corner-16 mask count per terrain (C-378). */
 export const CORNER16_FRAMES = 16;

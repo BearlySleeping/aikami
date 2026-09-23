@@ -18,15 +18,16 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { ATLAS_COLS, ATLAS_ROWS } from './generate_emberwatch_tables.ts';
 
 const here = dirname(fileURLToPath(import.meta.url));
 export const repository = join(here, '../../../..');
 const packRoot = join(repository, 'content/packs/emberwatch');
 const tilesetRoot = join(repository, 'apps/frontend/client/static/game-data/sprites/tilesets');
 
-/** Tileset atlas geometry — a change here is an explicit geometry change. */
-export const ATLAS_COLS = 16;
-export const ATLAS_ROWS = 8;
+// Tileset atlas geometry comes from the shared tables module (C-546) — the
+// audit must not carry its own copy, or growing the atlas reads as a
+// regression instead of the intentional geometry change it is.
 
 export type Classification =
   | 'accepted/current'

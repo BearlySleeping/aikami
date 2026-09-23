@@ -492,6 +492,159 @@
       "provenance": {
         "source": "generated:gpt"
       }
+    },
+    "129": {
+      "name": "bridge_deck_ew",
+      "frame": "bridge_deck_ew.png",
+      "isWalkable": true,
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
+    },
+    "130": {
+      "name": "bridge_rail_w",
+      "frame": "bridge_rail_w.png",
+      "isWalkable": true,
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
+    },
+    "131": {
+      "name": "bridge_rail_e",
+      "frame": "bridge_rail_e.png",
+      "isWalkable": true,
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
+    },
+    "132": {
+      "name": "bridge_rail_n",
+      "frame": "bridge_rail_n.png",
+      "isWalkable": true,
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
+    },
+    "133": {
+      "name": "bridge_rail_s",
+      "frame": "bridge_rail_s.png",
+      "isWalkable": true,
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
+    },
+    "134": {
+      "name": "bridge_end_n",
+      "frame": "bridge_end_n.png",
+      "isWalkable": true,
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
+    },
+    "135": {
+      "name": "bridge_end_s",
+      "frame": "bridge_end_s.png",
+      "isWalkable": true,
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
+    },
+    "136": {
+      "name": "bridge_end_w",
+      "frame": "bridge_end_w.png",
+      "isWalkable": true,
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
+    },
+    "137": {
+      "name": "bridge_end_e",
+      "frame": "bridge_end_e.png",
+      "isWalkable": true,
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
+    },
+    "138": {
+      "name": "bridge_corner_nw_ns",
+      "frame": "bridge_corner_nw_ns.png",
+      "isWalkable": true,
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
+    },
+    "139": {
+      "name": "bridge_corner_ne_ns",
+      "frame": "bridge_corner_ne_ns.png",
+      "isWalkable": true,
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
+    },
+    "140": {
+      "name": "bridge_corner_sw_ns",
+      "frame": "bridge_corner_sw_ns.png",
+      "isWalkable": true,
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
+    },
+    "141": {
+      "name": "bridge_corner_se_ns",
+      "frame": "bridge_corner_se_ns.png",
+      "isWalkable": true,
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
+    },
+    "142": {
+      "name": "bridge_corner_nw_ew",
+      "frame": "bridge_corner_nw_ew.png",
+      "isWalkable": true,
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
+    },
+    "143": {
+      "name": "bridge_corner_ne_ew",
+      "frame": "bridge_corner_ne_ew.png",
+      "isWalkable": true,
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
+    },
+    "144": {
+      "name": "bridge_corner_sw_ew",
+      "frame": "bridge_corner_sw_ew.png",
+      "isWalkable": true,
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
+    },
+    "145": {
+      "name": "bridge_corner_se_ew",
+      "frame": "bridge_corner_se_ew.png",
+      "isWalkable": true,
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     }
   },
   "entities": {
