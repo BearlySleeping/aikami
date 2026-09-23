@@ -11,7 +11,7 @@ import { join } from 'node:path';
 import { runStream } from '../cli_utils.ts';
 import { isLinkedWorktree } from './git_worktree_detect.ts';
 import { isOutsideAgentWorkspace } from './guard_workspace_boundary.ts';
-import { formatGuardFailures, runGuards } from './run_guards.ts';
+import { formatGuardFailures, guardOutputNamesPath, runGuards } from './run_guards.ts';
 import { isSopsEncrypted } from './secrets_backend.ts';
 import { syncContracts } from './sync_contracts.ts';
 
@@ -184,7 +184,7 @@ await sh('bun moon run :fix --affected --status=staged --concurrency 8');
     console.error('\n❌ PRE-COMMIT BLOCKED: structural guard(s) failed\n');
     console.error(formatGuardFailures(guardResults));
     const namesStagedFile = failedGuards.some((result) =>
-      stagedAtStart.some((file) => result.output.includes(file)),
+      stagedAtStart.some((file) => guardOutputNamesPath({ output: result.output, path: file })),
     );
     if (!namesStagedFile) {
       console.error(

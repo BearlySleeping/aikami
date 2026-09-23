@@ -590,5 +590,7 @@ After `validate()`, present a summary and ask: "Commit? Commit+push? Continue?"
 ### Pre-Commit Checks
 
 The pre-commit hook (`scripts/src/lib/ops/pre_commit.ts`) runs: bun-version
-check → `:fix` (staged) → structural guards → `:typecheck` (staged). Bypass with
-`git commit --no-verify` only when the failure is already red on the base.
+check → `:fix` (staged) → structural guards → `:typecheck` (staged). Use
+`git commit --no-verify` only when `validate`'s sole failure is an inherited
+structural-guard failure already red on the base, and only after
+`bun run scripts/src/lib/ops/verify_bun_version.ts` passes.

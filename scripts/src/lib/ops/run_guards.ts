@@ -87,6 +87,10 @@ export const formatGuardFailures = (results: readonly GuardRunResult[]): string 
     )
     .join('\n\n');
 
+/** Match a repository-relative path after normalizing Windows guard output. */
+export const guardOutputNamesPath = (options: { output: string; path: string }): boolean =>
+  options.output.replaceAll('\\', '/').includes(options.path);
+
 if (import.meta.main) {
   const results = await runGuards();
   const failed = results.filter((result) => result.code !== 0);

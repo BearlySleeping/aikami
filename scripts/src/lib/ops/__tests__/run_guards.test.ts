@@ -14,7 +14,12 @@
 
 import { describe, expect, it } from 'bun:test';
 import type { GuardMeta } from '../guards/registry.ts';
-import { formatGuardFailures, type GuardRunResult, runGuards } from '../run_guards.ts';
+import {
+  formatGuardFailures,
+  type GuardRunResult,
+  guardOutputNamesPath,
+  runGuards,
+} from '../run_guards.ts';
 
 const result = (overrides: Partial<GuardRunResult> = {}): GuardRunResult => ({
   id: 'source-file-size',
@@ -65,6 +70,15 @@ describe('formatGuardFailures', () => {
 
     expect(formatted).not.toContain('source file size');
     expect(formatted.split('### ❌')).toHaveLength(3);
+  });
+});
+
+describe('guardOutputNamesPath', () => {
+  it('normalizes separators while preserving full-path matching', () => {
+    const output = 'Failure in apps\\frontend\\client\\src\\shared.ts';
+
+    expect(guardOutputNamesPath({ output, path: 'apps/frontend/client/src/shared.ts' })).toBe(true);
+    expect(guardOutputNamesPath({ output, path: 'packages/shared/src/shared.ts' })).toBe(false);
   });
 });
 

@@ -68,8 +68,9 @@ Read `docs/guides/STRUCTURE.md` (accurate package layout) and
 
 - Lint/format: `bun run lint` / `bun run fix` (Biome only)
 - Structural guards (~1.5s, whole repo): `bun run scripts/src/lib/ops/run_guards.ts`
-- Before committing: pi's `validate` tool (fix + typecheck + guards) — the same
-  checks the pre-commit hook runs. Full sweep: `bun moon run :validate`.
+- Before committing: pi's `validate` tool runs fix, typecheck, and structural
+  guards. The pre-commit hook separately runs `verify_bun_version.ts`. Full
+  sweep: `bun moon run :validate`.
 - Never commit/push without explicit user instruction
 
 🔴 **Guards are red → fix the code, never the policy.** Do not raise a
