@@ -15,6 +15,7 @@ import { EMULATOR_PORTS } from '@aikami/constants';
 import { DEFAULT_LANCZOS_SIZE, optimizePng, resizeLanczos, toBase64DataUri } from '@scripts/ai';
 import { chromium, type Locator, type Page } from 'playwright';
 import type { TSchema } from 'typebox';
+import { assertGpuRendererName } from './gpu_renderer_guard.ts';
 
 // ── Types ─────────────────────────────────────────────────────
 
@@ -204,6 +205,27 @@ const _waitForPixiLoaded = async (page: Page, timeout = 15_000): Promise<void> =
 
   await page.evaluate(() => new Promise((r) => requestAnimationFrame(r)));
 };
+
+/** Reads the live PixiJS renderer name and applies {@link assertGpuRendererName}. */
+const _assertGpuRenderer = async (page: Page, mode: 'pixi' | 'dom'): Promise<void> => {
+  const renderer = await page.evaluate(() => {
+    const app = (window as any).__PIXI_APP__ as { renderer?: { name?: string } } | undefined; // guard-ignore lint/type-safety/casting: custom window property for e2e hooks
+    return app?.renderer?.name ?? null;
+  });
+  assertGpuRendererName(renderer, mode);
+};
+
+const _captureRendererMode = async (
+  page: Page,
+  waitCondition: VisualTestSuite['waitCondition'],
+  canvasSelector?: string,
+  screenshotSelector?: string,
+): Promise<'pixi' | 'dom'> =>
+  waitCondition === 'pixi_loaded' ||
+  screenshotSelector === (canvasSelector ?? 'canvas') ||
+  (await page.locator(canvasSelector ?? 'canvas').count()) > 0
+    ? 'pixi'
+    : 'dom';
 
 /**
  * Waits for the game engine to be ready by polling the DOM.
@@ -517,6 +539,16 @@ export const captureSuite = async (suite: VisualTestSuite): Promise<CaptureResul
               await _waitForGameReady(page);
             }
           }
+
+          // C-548: never capture a Canvas2D fallback — the tilemap is invisible
+          // on it and the screenshot would masquerade as valid evidence.
+          const mode = await _captureRendererMode(
+            page,
+            suite.waitCondition,
+            testCase.canvasSelector,
+            testCase.screenshotSelector,
+          );
+          await _assertGpuRenderer(page, mode);
 
           const sanitizedName = testCase.name.replace(/[^a-z0-9_-]/gi, '_').toLowerCase();
           const filename = `${suite.id}_${sanitizedName}.png`;

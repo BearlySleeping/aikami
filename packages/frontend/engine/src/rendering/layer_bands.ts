@@ -25,8 +25,15 @@ export const MIN_ENTITY_Y = -512;
 
 /** Declarative z-bands for world-container siblings (C-376 AC-4, C-378 AC-1). */
 export const WORLD_Z_BANDS = {
-  /** Debug grid overlay — below the tilemap (Pixi sorts ascending). */
-  debugGrid: -2000,
+  /**
+   * Debug grid overlay — above the ground/decor tilemap, below entities.
+   *
+   * C-548: it used to sit BELOW the tilemap, which made it invisible on any
+   * map with an opaque ground (i.e. every Emberwatch map) — the E2E walkability
+   * /collision overlay could never be seen. It now draws over the ground and
+   * decor bands but still under MIN_ENTITY_Y, so entities stay readable.
+   */
+  debugGrid: -899,
   /** Ground tilemap chunks — bottom of the world (was addChildAt 0). */
   tilemapGround: -1000,
   /** Decor tilemap chunks — below entities, above ground (C-378 AC-1). */
