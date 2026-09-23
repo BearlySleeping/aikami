@@ -37,6 +37,11 @@ import {
   W,
 } from './generate_emberwatch_canvas.ts';
 import {
+  paintGrass,
+  paintGrassDark,
+  paintGrassFlowers,
+} from './generate_emberwatch_grass_frames.ts';
+import {
   ATLAS_CELL,
   ATLAS_HEIGHT,
   ATLAS_PADDING,
@@ -65,51 +70,11 @@ const CH = ATLAS_HEIGHT; // 272 — final atlas height
 
 // ---------------------------------------------------------------------------
 // Tile painters
+//
+// The grass material + its variants live in their own module (C-549): they share
+// one base value by construction, which is what keeps a variant cell from
+// reading as a square.
 // ---------------------------------------------------------------------------
-
-const paintGrass = (
-  col: number,
-  row: number,
-  base: readonly [number, number, number] = [74, 143, 60],
-): void => {
-  fillCell(col, row, base[0], base[1], base[2]);
-  noiseCell(col, row, col * 31 + row * 17 + 1, 0.55, 26, 30, 20);
-  // Speckle highlights / shadows
-  const rng = makeRng(col * 131 + row * 73 + 7);
-  for (let i = 0; i < 24; i++) {
-    const x = Math.floor(rng() * TILE);
-    const y = Math.floor(rng() * TILE);
-    const v = rng();
-    if (v < 0.4) {
-      setPx(col * TILE + x, row * TILE + y, 89, 158, 73);
-    } else if (v < 0.7) {
-      setPx(col * TILE + x, row * TILE + y, 53, 107, 43);
-    }
-  }
-};
-
-const paintGrassFlowers = (col: number, row: number): void => {
-  paintGrass(col, row);
-  const rng = makeRng(col * 211 + row * 97 + 13);
-  const colors = [
-    [232, 184, 74],
-    [201, 91, 210],
-    [240, 240, 240],
-  ];
-  for (let i = 0; i < 7; i++) {
-    const x = 2 + Math.floor(rng() * (TILE - 4));
-    const y = 2 + Math.floor(rng() * (TILE - 4));
-    const c = colors[Math.floor(rng() * colors.length)];
-    setPx(col * TILE + x, row * TILE + y, c[0], c[1], c[2]);
-    if (rng() < 0.5) {
-      setPx(col * TILE + x + 1, row * TILE + y, c[0], c[1], c[2]);
-    }
-  }
-};
-
-const paintGrassDark = (col: number, row: number): void => {
-  paintGrass(col, row, [58, 116, 50] as const);
-};
 
 const paintDirt = (col: number, row: number): void => {
   fillCell(col, row, 138, 90, 51);
