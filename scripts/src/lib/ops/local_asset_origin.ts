@@ -47,24 +47,15 @@ import type { CatalogEntry } from '../catalog/catalog_entries.ts';
 import { generateCatalogIndex } from '../catalog/index_generation.ts';
 import { buildPackLock, PACK_LOCK_KEY } from '../catalog/pack_lock.ts';
 import {
+  type CandidateOverride,
   collectEmberwatchCandidateOverrides,
+  findPublishedSeedPath,
   missingCandidateOverrides,
+  readPublishedSeedHashes,
 } from './emberwatch_candidate_plane.ts';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repository = resolve(here, '../../../..');
-
-/** One artifact served locally instead of from the published origin. */
-type Override = {
-  /** Published registry tag the client resolves (e.g. `sprites:tilesets:props.webp`). */
-  tag: string;
-  /** Absolute path to the local file that should win. */
-  file: string;
-  /** Category recorded in the seed row. */
-  category: string;
-  /** File extension including the dot. */
-  ext: string;
-};
 
 /** Default listen port; `--port` overrides it. */
 const DEFAULT_PORT = 8788;
@@ -75,12 +66,15 @@ const DEFAULT_PORT = 8788;
  * `emberwatch_candidate_plane.ts` so portraits, enemy visuals, maps, audio and
  * the prop atlas cannot silently diverge from what the candidate declares.
  *
- * The terrain atlas is deliberately NOT overridden. Regenerating it locally
- * produces a different artifact from the published accepted one, which changes
- * how every map's ground tiles render — a local-origin run must not silently
- * replace accepted art it is not verifying.
+ * The terrain atlas is included only when its local bytes differ from the
+ * published ones (C-548): an unchanged atlas stays proxied, so a local-origin
+ * run does not silently swap accepted art, but a candidate whose maps depend on
+ * the regenerated atlas (C-546's bridge frames) serves its own build.
+ *
+ * `publishedHashes` comes from the snapshot seed, so it is resolved per run.
  */
-const EMBERWATCH_OVERRIDES: Override[] = collectEmberwatchCandidateOverrides(repository);
+const emberwatchOverrides = (publishedHashes: ReadonlyMap<string, string>): CandidateOverride[] =>
+  collectEmberwatchCandidateOverrides(repository, publishedHashes);
 
 type SeedRow = {
   t: string;
@@ -167,6 +161,13 @@ const buildOrigin = (options: {
   const seed = JSON.parse(readFileSync(options.seedPath, 'utf8')) as Seed;
   seed.o = options.originUrl;
 
+  // The published rows in the snapshot seed are the authority for "what the
+  // origin would proxy", so the terrain-atlas rule (C-548) is decided here.
+  const publishedHashes = new Map<string, string>(
+    seed.r.filter((row) => row.t && row.h).map((row) => [row.t, row.h]),
+  );
+  const overrides = emberwatchOverrides(publishedHashes);
+
   // The registry is (re)seeded only when the seed's fingerprint changes. That
   // fingerprint is now content-derived (`generatedAt` + derivation revision +
   // a digest of every tag→hash pair), so changed rows alone would be enough.
@@ -176,7 +177,7 @@ const buildOrigin = (options: {
 
   const applied: { tag: string; hash: string; bytes: number }[] = [];
 
-  for (const override of EMBERWATCH_OVERRIDES) {
+  for (const override of overrides) {
     if (!existsSync(override.file)) {
       throw new Error(`Override file missing: ${override.file}`);
     }
@@ -430,11 +431,17 @@ const main = (): void => {
   }
   const shouldServe = !args.includes('--no-serve');
 
+  // The published rows drive the terrain-atlas rule (C-548): a candidate whose
+  // atlas matches published is legitimately complete without an atlas override.
+  // `findPublishedSeedPath` returns undefined (rather than throwing) when no
+  // snapshot exists, so `--check-plane` still reports the plane instead of dying.
+  const publishedHashes = readPublishedSeedHashes(findPublishedSeedPath(repository) ?? '');
+
   // C-529: prove the local origin serves the COMPLETE candidate plane before
   // booting it. A missing portrait/enemy/map/audio tag would silently fall back
   // to the stale published origin — exactly the failure the first human gate hit.
   if (args.includes('--check-plane')) {
-    const missing = missingCandidateOverrides(repository);
+    const missing = missingCandidateOverrides(repository, publishedHashes);
     if (missing.length > 0) {
       console.error(
         `local-asset-origin: candidate plane is INCOMPLETE — the human gate would render stale published rows for:\n  ${missing.join('\n  ')}`,
@@ -442,7 +449,7 @@ const main = (): void => {
       process.exit(1);
     }
     console.log(
-      `local-asset-origin: candidate plane complete (${EMBERWATCH_OVERRIDES.length} overrides serve every required Emberwatch tag)`,
+      `local-asset-origin: candidate plane complete (${emberwatchOverrides(publishedHashes).length} overrides serve every required Emberwatch tag)`,
     );
     return;
   }

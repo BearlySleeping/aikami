@@ -52,7 +52,7 @@ export type ManifestPropDef = ManifestProp & {
 
 export type Manifest = {
   maps?: Record<string, unknown>;
-  tiles?: Record<string, ManifestTile>;
+  tiles?: Record<string, ManifestTile & { frame?: string }>;
   props?: Record<string, ManifestPropDef>;
   evidence?: Array<{ id?: string; discoverableAt?: string }>;
 };
