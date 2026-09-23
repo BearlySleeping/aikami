@@ -51,29 +51,29 @@ The goal: restart with $0 spending while preserving all essential context.
 User: "handoff"
 AI:
 ```
-## Continuing: Refactor .pi extensions to use relative imports
+## Continuing: Harden the pre-commit guard integration
 
 ### What's been done
-- [x] Refactored firebase-tools.ts — added --only support + mode fix
-- [x] Added blackbox_test tool
-- [x] Fixed emulator stop bug (kill-session → kill-window)
+- [x] Added `run_guards.ts` — parallel structural guards (~1.5s vs ~34s via Moon)
+- [x] Wired it into `pre_commit.ts` after `:fix`, before `:typecheck`
+- [x] Wired it into pi's `validate` tool
 
 ### In progress
-- [ ] Sync firestack skill with upstream
-- [ ] Fix firebase-functions skill (deprecated patterns)
+- [ ] Extract the combat encounter cases out of `ecs_worker.ts` (size waiver)
 
 ### Files modified
-- `.pi/extensions/firebase-tools.ts` — --only support, mode fix
-- `.pi/skills/firebase-functions/SKILL.md` — needs fix (current version has deprecated index.ts pattern)
+- `scripts/src/lib/ops/run_guards.ts` — new guard runner
+- `scripts/src/lib/ops/pre_commit.ts` — guard step
+- `.pi/extensions/moon_integration.ts` — validate runs guards
 
 ### Key decisions
-- Use firestack.config.ts (not firestack.json, not global index.ts)
-- All HTTP/callable/firestore functions MUST use Zod wrappers
-- Extensions use relative imports from ../../packages/... to avoid constant duplication
+- Run guards directly, not via `moon run scripts:guard` (Moon hashes the whole repo)
+- Never raise a baseline/waiver to clear a guard — fix the code
 
 ### Current blockers
 None
 
 ### Next action
-Read `.pi/skills/firebase-functions/SKILL.md` and fix deprecated patterns: remove global index.ts config, replace firestack.json with firestack.config.ts, add Zod-first mandate.
+Run `bun run scripts/src/lib/ops/run_guards.ts`, then extract the combat cases
+from `packages/frontend/engine/src/worker/ecs_worker.ts` into a combat module.
 ```

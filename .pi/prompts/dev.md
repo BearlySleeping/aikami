@@ -13,10 +13,11 @@ bypass a convention. Re-read the 🔴 CRITICAL VIOLATIONS section in
 
 ### Skill Loading Order
 
-1. Load `aikami-conventions` (always first — now includes Svelte + Backend patterns)
-2. If game code: also load `pixijs-v8`
-3. If Cloud Functions: also load `firestack`
-4. If Tauri desktop: also load `tauri-v2`
+1. Load `aikami-conventions` (always first — universal rules only)
+2. If frontend/Svelte: also load `svelte-conventions`
+3. If backend/API: also load `backend-conventions`
+4. If game code: also load `pixijs-v8`
+5. If Tauri desktop: also load `tauri-v2`
 
 ---
 
@@ -132,23 +133,24 @@ The project uses direnv to provision the entire development environment. These e
 - `AIKAMI_PROJECT_ID` — resolved GCP project id
 - `AIKAMI_IS_EMULATOR` — "1" when running locally
 
-Use `direnv_status` to check the current environment. Use `direnv_switch_mode emulator` to switch to local development.
+Use the `direnv` tool (actions `status` / `switch_mode`) to check or change the current environment.
 
 ---
 
 ## Service Management
 
-Start the Firebase emulator before coding for local backend support.
+Local dev services (hub, client, AI engines) are started through herdr, not an
+emulator suite.
 
-- `firebase_emulator start` — start the local Firebase emulator suite
-- `firebase_emulator stop` — stop the emulator
-- `firebase_emulator status` — check if emulator is running
+- `bun run herdr:start all` — full stack (client + hub + AI engines)
+- `bun run herdr:start hub` — hub SSR dev server only
+- `herdr_session` tool — read logs, inspect panes, run/stop services
 
 ## Flow
 
-1. Start emulator if needed: `firebase_emulator start`
+1. Start the services you need: `bun run herdr:start hub` (or `all`)
 2. Write code — no lint/typecheck during dev
-3. Call `validate()` — fix+typecheck on affected projects
+3. Call `validate()` — fix+typecheck+guards on affected projects
 4. If fails → fix, re-run
 5. If passes → present summary, ask user: commit, commit+push, or change
 
@@ -191,7 +193,7 @@ If user is already on the recommended mode, say nothing about it.
 - No asking about style mid-task
 - Summary after validate: what changed + results + suggested commit msg
 - Terse — 3-4 lines unless errors
-- **NEVER** execute long-lived server commands (e.g., `vite dev`, `vite preview`, `bun run dev`, `moon run dev`) in the main execution thread. These will freeze the agent loop. If you absolutely must start a server, use the `firebase_emulator` or `herdr_session` tool to run it in the background.
+- **NEVER** execute long-lived server commands (e.g., `vite dev`, `vite preview`, `bun run dev`, `moon run dev`) in the main execution thread. These will freeze the agent loop. If you absolutely must start a server, use the `herdr_session` or `bg` tool to run it in the background.
 
 ## Debugging Protocol (CRITICAL)
 
@@ -212,8 +214,8 @@ When ANY approach has been tried twice and failed:
 
 ### Always prefer local testing over production
 
-- Cloud Functions webhook not working? → Test with emulator + curl first
-- Telegram not receiving? → Send test webhook payload directly with bun, verify flow end-to-end locally
+- Hub API not working? → Hit the local dev server with `curl` / a script first
+- Discord bot not receiving? → Send a test payload directly with bun, verify the flow end-to-end locally
 
 ### Create diagnostic scripts — DON'T ask the user to run commands
 
@@ -221,41 +223,24 @@ When debugging, write a small script that gathers all the information needed.
 Put it in a temp file, run it, capture output, then delete it.
 
 ```typescript
-// Example: When debugging telegram webhook, create this script
-// instead of asking user to "try /start again":
+// Example: health-check the local hub API instead of asking the user to
+// "try again".
 
-// Save to /tmp/debug_webhook.ts
-const response = await fetch("http://localhost:5001/.../webhook_telegram", {
-	method: "POST",
-	headers: {
-		"Content-Type": "application/json",
-		"x-telegram-bot-api-secret-token": TOKEN,
-	},
-	body: JSON.stringify({
-		update_id: 1,
-		message: {
-			message_id: 1,
-			chat: { id: 123, type: "private" },
-			date: 0,
-			text: "/start",
-		},
-	}),
-});
+// Save to /tmp/debug_health.ts
+const response = await fetch("http://localhost:5173/api/health");
 console.log("Status:", response.status);
-const logs = await response.text();
-console.log("Body:", logs);
-// ... check downstream logs too
+console.log("Body:", await response.text());
 ```
 
-Run with: `bun /tmp/debug_webhook.ts`
+Run with: `bun /tmp/debug_health.ts`
 
 ### Use ALL available diagnostic tools before guessing
 
 Before concluding what's wrong, exhaust these in order:
 
-1. `service_logs` — View logs for the relevant service
-2. `firestore_query` — Check if data was written
-3. `firebase_emulator status` — Verify emulator is running
+1. `herdr_session` — read live logs for the relevant service
+2. `browser` (console / network) — a JS error or a failing XHR in the client
+3. `service_logs` — unified logs for a deployed service
 4. Write a custom diagnostic script — Gather structured evidence
 5. **LAST RESORT** — Ask user to try something manually
 
@@ -270,7 +255,7 @@ Before concluding what's wrong, exhaust these in order:
 
 | Attempt | Action |
 |---------|--------|
-| 1st failure | Check `service_logs`, `firestore_query`, `firebase_emulator status` |
+| 1st failure | Check `herdr_session` logs and `service_logs` |
 | 2nd failure | Write diagnostic script, test locally, capture structured output |
 | 3rd+ | NEVER happens — the 2-strikes rule already kicked in |
 

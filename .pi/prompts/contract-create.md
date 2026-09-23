@@ -54,7 +54,7 @@ For every section of the template, find evidence in the repository. Sections mar
      - Constants → `packages/shared/constants/`
      - Engine → `packages/frontend/engine/`
      - Frontend → `apps/frontend/client/src/`
-     - Backend → `apps/backend/firebase/src/`
+     - Backend → `apps/frontend/hub/src/lib/server/` (D1/Drizzle) or `apps/backend/*`
    - Be specific about which files/packages are affected.
 
 3. **State & Data Models** (skip for thin):

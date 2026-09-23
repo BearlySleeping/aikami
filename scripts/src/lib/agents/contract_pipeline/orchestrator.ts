@@ -18,6 +18,7 @@ import {
 } from '../../ops/infra_report.ts';
 import { commitAll, pushBranch, remoteBranchExists, runGit } from '../git_worktree.ts';
 import { playError } from './alarm.ts';
+import { checkBaseHealth } from './base_health.ts';
 import { parseContractStatus, readContractStatus, withUpdatedStatus } from './contract_status.ts';
 import {
   commitContractContent,
@@ -1066,6 +1067,10 @@ export const runContractPipeline = async (options: {
           });
           if (!isolated.ok) {
             console.warn(`⚠️  ${isolated.message}`);
+          }
+          // Worktree is still at the base: surface an inherited red guard now.
+          if (stage === 'implement' && attempt === 1) {
+            checkBaseHealth({ cwd: wPath, runId: manifest.runId });
           }
         }
 

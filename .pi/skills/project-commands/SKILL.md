@@ -544,8 +544,8 @@ Use `--force` with `herdr:start` to kill and recreate an existing workspace.
 # Start services (mode from $AIKAMI_MODE, defaults to emulator)
 bun run herdr:start hub               # Hub SSR dev server only
 bun run herdr:start client            # Client dev server
-bun run herdr:start image             # Image generation (ComfyUI Docker)
-bun run herdr:start text              # Text generation (Ollama Docker)
+bun run herdr:start image             # Image generation (sd-server Docker)
+bun run herdr:start text              # Text generation (llama.cpp Docker)
 bun run herdr:start voice             # Voice synthesis (Kokoro TTS Docker)
 bun run herdr:start all               # Full stack (client + hub + image + text + voice)
 

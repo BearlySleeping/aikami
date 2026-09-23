@@ -7,6 +7,11 @@ description: Aikami testing conventions — Playwright E2E, AI Visual Testing Fr
 
 Complete guide to testing in the Aikami monorepo. Covers the two testing systems (AI Visual Runner + Playwright), debugging workflow, and test creation patterns.
 
+**Structural guard**: `guard-test-boundary` fails CI when production source
+imports a test helper (`test_setup.ts`, `testing/`, `__tests__/`, `*.test.ts`).
+Run every guard fast with `bun run scripts/src/lib/ops/run_guards.ts`. 🔴 On a
+failure, fix the code — never raise a baseline, waiver or ceiling.
+
 ## Architecture: Two Systems
 
 **Do NOT mix these.** They serve different purposes and use different runtimes:
@@ -584,4 +589,6 @@ After `validate()`, present a summary and ask: "Commit? Commit+push? Continue?"
 
 ### Pre-Commit Checks
 
-Lefthook runs `moon run :fix:affected --status=staged` + `moon run :typecheck:affected --status=staged` on staged files.
+The pre-commit hook (`scripts/src/lib/ops/pre_commit.ts`) runs: bun-version
+check → `:fix` (staged) → structural guards → `:typecheck` (staged). Bypass with
+`git commit --no-verify` only when the failure is already red on the base.
