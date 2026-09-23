@@ -59,7 +59,7 @@ precise error naming what was expected — the same feedback a standalone tool w
 `lib/gating.ts` reads two env lists. An explicit ON beats an explicit OFF.
 
 ```sh
-PI_TOOLS_OFF=browser,firebase pi   # drop surface this session will not need
+PI_TOOLS_OFF=browser pi   # opt out of an extension this session will not need
 PI_TOOLS_ON=contract_stage pi      # force on something gated off by default
 ```
 

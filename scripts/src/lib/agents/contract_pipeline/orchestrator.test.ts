@@ -10,6 +10,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { FakeHerdrAdapter } from './fake_adapter.ts';
+import { currentCommit } from './git_state.ts';
 import { writeManifest } from './manifest_store.ts';
 import {
   isImplementerGateFailure,
@@ -302,6 +303,33 @@ describe('runContractPipeline with FakeHerdrAdapter', () => {
 
   afterEach(() => {
     rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('persists the commit where a newly provisioned worktree starts', async () => {
+    const runId = 'run-test-worktree-start';
+    const contractPath = join(tmpDir, 'docs', 'contracts', 'C-999-test.md');
+    writeManifest({
+      cwd: tmpDir,
+      manifest: baseManifest({
+        runId,
+        contractPath,
+        currentStage: 'implement',
+        blockedEscalationRounds: 3,
+        skipAuthoring: true,
+        rootMode: false,
+      }),
+    });
+    const startingCommit = currentCommit(tmpDir);
+
+    const result = await runContractPipeline({
+      repoRoot: tmpDir,
+      resumeRunId: runId,
+      skipAuthoring: true,
+      rootMode: false,
+      adapterFactory: () => adapter,
+    });
+
+    expect(result.worktreeStartCommit).toBe(startingCommit);
   });
 
   it('runs the pipeline through adapterFactory and applies the stage transition', async () => {

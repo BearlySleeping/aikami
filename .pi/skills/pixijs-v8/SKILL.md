@@ -18,6 +18,10 @@ API reference (Application, Container, Sprite, Graphics, Text, Assets, Ticker,
 Events, Filters, etc.), use the official skills installed in
 `.pi/generated-skills/pixijs/` — they are loaded alongside this one.
 
+**No structural guard** enforces this skill's boundary (no `pixi.js` /
+`Application` / `app.ticker.add` outside `packages/frontend/engine/`) — it is
+prompt-enforced and reviewed by hand.
+
 ---
 
 ## 1. Display Object Hierarchy

@@ -14,6 +14,11 @@ tags: ["aikami", "ui", "tailwind", "components", "frontend"]
 These rules prevent AI hallucination of arbitrary fonts, hex colors, and
 reinvented UI primitives.
 
+**Structural guard**: `guard-image-component` fails CI on a raw `<img>` — use
+the shared `<Image>` component. Run every guard fast with
+`bun run scripts/src/lib/ops/run_guards.ts`. 🔴 On a failure, fix the code —
+never raise a baseline, waiver or ceiling.
+
 **The client and hub use plain Tailwind v4 — there is no daisyUI plugin.**
 The design system is owned by `@aikami/frontend/theme`:
 

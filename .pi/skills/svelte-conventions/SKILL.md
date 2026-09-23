@@ -23,6 +23,11 @@ architecture:
 | 4      | `routes/(dev)/` sandboxes use the `DevViewModel` override pattern —  |
 |        | extend the production VM, override fetch methods with mock data      |
 
+**Structural guards**: `guard-mvvm-conventions` (M8/M9/M10) and
+`guard-view-model-composition` (C1/C2/C3) enforce the boundaries below. Run
+every guard fast with `bun run scripts/src/lib/ops/run_guards.ts`. 🔴 On a
+failure, fix the code — never raise a baseline, waiver or ceiling.
+
 ---
 
 ## Svelte 5 Core: Runes ONLY

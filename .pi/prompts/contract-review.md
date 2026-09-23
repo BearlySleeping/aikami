@@ -48,14 +48,14 @@ Load `aikami-conventions`. Check every staged file for:
 ### Svelte-specific (if staged files include `apps/frontend/client/`)
 Load `svelte-conventions`. Check:
 - No `+server.ts`, `+page.server.ts`, `+layout.server.ts`
-- ViewModels: thin bridges, factory export, no repository/Firestore/ticker imports
+- ViewModels: thin bridges, factory export, no repository/data-plane/ticker imports
 - No `pixi.js` / `@pixi/` imports in ViewModels or `.svelte` files
 - No `app.ticker.add` outside `packages/frontend/engine/`
 
-### Backend-specific (if staged files include `apps/backend/`)
+### Backend-specific (if staged files include `apps/backend/` or `apps/frontend/hub/src/lib/server/`)
 Load `backend-conventions`. Check:
-- Controller → Service → Repository layering
-- Repository constructor injection
+- Route handlers call Drizzle directly — no controller/service/repository layer
+- Drizzle schema is the type source of truth; no hand-written row types
 - TypeBox schemas in `packages/shared/schemas/`, not in service files
 
 ### General
@@ -92,7 +92,7 @@ If the diff shows:
 - Schema changes (new/modified TypeBox schemas in `packages/shared/schemas/`)
 - Route changes (new/modified `+page.svelte`, `+layout.svelte`)
 - Provider/config changes (new/modified constants in `packages/shared/constants/`)
-- Firestore index or rule changes
+- D1 schema or migration changes
 
 Then:
 - Does the contract's Migration & Rollback section address them?

@@ -29,14 +29,17 @@ client lives at `apps/frontend/client/` — **not** `apps/client/`.
 | **Server** | Cloudflare D1 | Identity (Better Auth), community packs, save-backup metadata. |
 | **Blobs** | Cloudflare R2 | Catalog assets, save backups. |
 
-The game must boot, play, and save with **no network and no sign-in**. Never
-make a cloud call a boot dependency.
+The game must boot, play, and save with **no sign-in**. The first run needs
+network once to download starter content (C-448); every later run is fully
+offline from the OPFS / Tauri FS cache. Never make a cloud call a boot
+dependency.
 
-> Firebase, Firestore, Data Connect, Cloud Run, and Neon Postgres have all been
-> removed or are being decommissioned. You will still find references in
-> `docs/contracts/` and older code comments — those are history, not the target.
-> The Postgres path in `packages/backend/database` survives only for the C-426
-> rollback window and is deleted in C-436.
+> Firebase, Firestore, Data Connect, Cloud Run, Neon and Postgres are removed
+> (C-426/C-436). References in `docs/contracts/` and old comments are history.
+
+**Boundaries (C-455):** `scripts/` may import `apps/backend/cloudflare/src/lib/`
+(the deploy operations library); no other app is importable from anywhere.
+Apps get `dev`/`build`/`deploy`; packages get `build`/`test`.
 
 ## 🧠 Skills — Load Before Coding
 
@@ -51,21 +54,32 @@ Skills live in `.pi/skills/` (project rules) and `.pi/generated-skills/`
 |---|---|
 | Any code | `aikami-conventions` (logger, imports, TS rules) |
 | Frontend / Svelte | `svelte-conventions` (runes, MVVM) |
-| Backend / API | `backend-conventions` (controller → service) |
+| Backend / API | `backend-conventions` (Drizzle directly — no controller/service/repository layer) |
 | UI styling | `aikami-ui` |
 | Game engine | `pixijs-v8` |
 | Testing | `testing` |
 
 ## 🛑 Before Structural Changes
 
-Read `.context/CONTEXT.md` (stack versions, structure) and `.context/index.md`
-(module map, boundary rules).
+Read `docs/guides/STRUCTURE.md` (accurate package layout) and
+`docs/architecture/architecture.md`. `.context/llms.txt` indexes all docs.
 
 ## ✅ Verification
 
 - Lint/format: `bun run lint` / `bun run fix` (Biome only)
-- Full validation: `bun moon run :validate` (or pi's `validate()` tool)
+- Structural guards (~1.5s, whole repo): `bun run scripts/src/lib/ops/run_guards.ts`
+- Before committing: pi's `validate` tool runs fix, typecheck, and structural
+  guards. The pre-commit hook separately runs `verify_bun_version.ts`. Full
+  sweep: `bun moon run :validate`.
 - Never commit/push without explicit user instruction
+
+🔴 **Guards are red → fix the code, never the policy.** Do not raise a
+baseline, waiver or ceiling in `scripts/src/lib/ops/guard_*_{baseline,waivers}.json`
+to make a guard pass; that is a human-reviewed policy change. If a failure
+names none of your files, the base is already red — say so, don't fold a fix in.
+
+The pre-commit hook (`scripts/src/lib/ops/pre_commit.ts`) runs: bun-version
+check → `:fix` (staged) → structural guards → `:typecheck` (staged).
 
 ### Validate through Moon, never with a bare tool
 

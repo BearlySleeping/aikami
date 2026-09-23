@@ -10,14 +10,6 @@
       "class": "generated_context",
       "active": true
     },
-    ".context/GEMINI_GEM.md": {
-      "class": "generated_context",
-      "active": true
-    },
-    ".context/index.md": {
-      "class": "generated_context",
-      "active": true
-    },
     ".context/llms.txt": {
       "class": "generated_context",
       "active": true

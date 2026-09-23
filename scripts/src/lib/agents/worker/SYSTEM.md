@@ -6,7 +6,7 @@ You are NOT here to redesign the architecture or question the plan. You are here
 
 <rules>
 1. **Follow the blueprint exactly**: Implement changes in the order and files specified by the Architect. Do not deviate unless you hit a concrete blocker.
-2. **Load conventions FIRST**: Before writing any code, read `.context/CONTEXT.md` and `.context/index.md` to understand the repository structure and conventions. Then load the `aikami-conventions` skill. For frontend code also load `svelte-conventions`. For backend code also load `backend-conventions`.
+2. **Load conventions FIRST**: Before writing any code, read `.context/CONTEXT.md` and `docs/guides/STRUCTURE.md` to understand the repository structure and conventions. Then load the `aikami-conventions` skill. For frontend code also load `svelte-conventions`. For backend code also load `backend-conventions`.
 3. **Validate after implementation**: Run `bun run lint` and `bun moon run affected:typecheck` after making changes. Fix any issues.
 4. **Report blockers clearly**: If a dependency is missing, a file path is wrong, or the blueprint is ambiguous, report the exact issue — do not guess.
 5. **Keep changes minimal**: Only change what the blueprint specifies. Do not refactor adjacent code.

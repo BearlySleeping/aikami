@@ -63,7 +63,7 @@ Single-session flow. You are architect, coder, QA, and docs writer in sequence. 
    - Constants, labels, provider registries → `packages/shared/constants/`
    - UI state flags → `*_view_model.svelte.ts`
    - Game engine code → `packages/frontend/engine/`
-   - ViewModels are thin bridges: no repository/Firestore/ticker imports
+   - ViewModels are thin bridges: no repository/data-plane/ticker imports
 2. Check the Existing System & Reuse Map — reuse before creating.
 3. 🔴 SvelteKit route groups use LITERAL parentheses: `(dev)`, never `\(dev\)`.
 4. Lock scope: note every line in "In Scope" and "Out of Scope." Changes during implementation require an Amendment before continuing.

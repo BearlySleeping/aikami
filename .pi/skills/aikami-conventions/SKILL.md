@@ -270,6 +270,12 @@ them.
 | Abbreviations              | Full words — `options` not `opts`            |
 | Nested ternaries           | `if`/`else` or a helper                      |
 
+**Enforced by Biome**: `any`, `!`, `interface`, `null` in some contexts, and
+file/identifier naming fail `biome check` directly (`noExplicitAny`,
+`noNonNullAssertion`, `useConsistentTypeDefinitions`,
+`useNamingConvention`/`useFilenamingConvention`). The remaining rows are prose
+rules a reviewer checks — do not rely on the linter to catch them.
+
 ### 🔴 Type Assertions Are Guarded
 
 `as unknown as X`, `as any`, and `@ts-ignore` are blocked by
@@ -543,7 +549,8 @@ They are different problems with different fixes. Do not conflate them.
 
 | Command | Purpose |
 | --- | --- |
-| `bun run guard` | every structural guard (`scripts:guard`) |
+| `bun run scripts/src/lib/ops/run_guards.ts` | every structural guard, direct and parallel (~1.5s; what pre-commit and pi's `validate` run) |
+| `bun run guard` | every structural guard via Moon (`scripts:guard`) |
 | `bun run guard:whole-repo` | the deterministic whole-repo subset, no affected filter |
 | `bun run guard:policy-diff` | classify a diff as debt reduction / policy expansion / refactor |
 | `bun run guard:source-size-report` | measured LOC distribution and the largest files |

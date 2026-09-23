@@ -3,7 +3,7 @@
 //
 // Centralized pre-commit hook. Run from .moon/workspace.yml via `bun run pre-commit`.
 // In a linked git worktree (contract pipeline), skips knowledge:sync.
-// Formatting and typechecking always run, everywhere.
+// Formatting, structural guards and typechecking always run, everywhere.
 
 import { execFileSync, execSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
@@ -11,6 +11,7 @@ import { join } from 'node:path';
 import { runStream } from '../cli_utils.ts';
 import { isLinkedWorktree } from './git_worktree_detect.ts';
 import { isOutsideAgentWorkspace } from './guard_workspace_boundary.ts';
+import { formatGuardFailures, guardOutputNamesPath, runGuards } from './run_guards.ts';
 import { isSopsEncrypted } from './secrets_backend.ts';
 import { syncContracts } from './sync_contracts.ts';
 
@@ -168,7 +169,35 @@ await sh('bun run scripts/src/lib/ops/verify_bun_version.ts');
 // 2. Fix formatting + lint on affected staged files
 await sh('bun moon run :fix --affected --status=staged --concurrency 8');
 
-// 3. Typecheck affected projects
+// 3. Structural guards — the same aggregate CI's "Structural guards" step
+//    enforces. Runs AFTER :fix (a Biome reformat changes line counts) and
+//    BEFORE typecheck (~1.5s vs minutes, so it fails fast).
+//
+//    🔴 Whole-repo, not staged-only: without this, a direct commit to main
+//    grew ecs_worker.ts past its size waiver (71678c0b8) and every PR branched
+//    from it went red in CI (#386). Called directly, not via `moon run
+//    scripts:guard` — see run_guards.ts for why that is ~20× slower.
+{
+  const guardResults = await runGuards();
+  const failedGuards = guardResults.filter((result) => result.code !== 0);
+  if (failedGuards.length > 0) {
+    console.error('\n❌ PRE-COMMIT BLOCKED: structural guard(s) failed\n');
+    console.error(formatGuardFailures(guardResults));
+    const namesStagedFile = failedGuards.some((result) =>
+      stagedAtStart.some((file) => guardOutputNamesPath({ output: result.output, path: file })),
+    );
+    if (!namesStagedFile) {
+      console.error(
+        '\n⚠️  None of your staged files are named above — this is likely already red on the\n' +
+          '   base branch. Fix it in its own commit rather than folding it into this one.',
+      );
+    }
+    console.error('\n   Re-check: bun run scripts/src/lib/ops/run_guards.ts');
+    process.exit(1);
+  }
+}
+
+// 4. Typecheck affected projects
 await sh('bun moon run :typecheck --affected --status=staged --concurrency 8');
 
 // Both generators walk all of docs/ and rewrite their outputs regardless of
@@ -178,21 +207,21 @@ await sh('bun moon run :typecheck --affected --status=staged --concurrency 8');
 const stagedDocsFiles = stagedAtStart.filter((f) => f.startsWith('docs/'));
 
 if (!isWorktree && stagedDocsFiles.length > 0) {
-  // 4. Sync contract dashboard files (PROGRESS.md, PROMOTION.md) — reads
+  // 5. Sync contract dashboard files (PROGRESS.md, PROMOTION.md) — reads
   //    docs/contracts/*.md and cross-references docs/TODO.md (parse_backlog.ts).
   if (stagedDocsFiles.some((f) => f.startsWith('docs/contracts/') || f === 'docs/TODO.md')) {
     syncContracts();
   }
 
-  // 5. Generate .context/llms.txt — reflects docs/, so any docs/ change
+  // 6. Generate .context/llms.txt — reflects docs/, so any docs/ change
   //    can affect it.
   await sh('bun run scripts/src/lib/ops/generate_llms_txt.ts');
 
-  // 6. Stage files modified by sync
+  // 7. Stage files modified by sync
   stage(['.context/llms.txt', 'docs/contracts/']);
 }
 
-// 7. Re-stage files that formatters may have modified in place.
+// 8. Re-stage files that formatters may have modified in place.
 // 🔴 Read the staged list into the process and re-add it here rather than
 // piping `git diff | xargs git add` through `sh -c`: there is no `sh` on a
 // stock Windows machine, so that spelling failed silently and left Biome's
