@@ -1,24 +1,43 @@
 <script lang="ts">
 // apps/frontend/client/src/lib/views/game/ui/overlays/dialogue/dialogue_overlay.svelte
 //
-// NPC dialogue overlay — Marinara-inspired modern chat UX.
+// NPC dialogue overlay — compact bottom stage (C-547).
+//
+// One stage anchored above an always-visible composer: the speaker identity is
+// attached to the stage header, the transcript is a single scroll region that
+// sizes to its content and is capped relative to the viewport, and the composer
+// never leaves the screen. Full view stays reachable from the same toggle.
+//
+// The View is logicless (svelte-conventions Pillar 3): the RichMessage
+// projection, chip class/icon mapping, row-action dispatch and the stage's
+// fullscreen flag all live in ./dialogue_stage_presentation.svelte.ts.
+//
 // - Free-text-first input (C-371): always-visible textarea + send
 // - Marinara-style texting bubbles with role-colored tails
 // - Animated suggestion chips with intent icons
 // - Skill check dice overlay (C-162)
 // - Message actions, branches, editing, TTS (C-343)
 //
-// C-424: the message list and composer are now the shared RichMessageList /
+// C-424: the message list and composer are the shared RichMessageList /
 // GuidedComposer components. Surface-specific concerns (skill-check dice,
-// portrait row, spatial speech bubble, suggestion chips, combat escalation)
-// are preserved here via snippets.
+// speaker identity, spatial speech bubble, suggestion chips, combat
+// escalation) are preserved here via snippets.
 import { CapabilityErrorBanner, Image, SlashAutocomplete } from '@aikami/frontend/components';
 import GameDice from '$lib/components/game/game_dice.svelte';
 import GuidedComposer from '$lib/components/messaging/guided_composer.svelte';
 import RichMessageList from '$lib/components/messaging/rich_message_list.svelte';
 import RichMessageRow from '$lib/components/messaging/rich_message_row.svelte';
-import type { MessageAction } from '$types';
 import type { DialogueOverlayViewModelInterface } from './dialogue_overlay_view_model.svelte';
+import {
+  chipClassFor,
+  chipIconFor,
+  createDialogueStageState,
+  createStageEscapeHandler,
+  dispatchDialogueRowAction,
+  findDialogueMessage,
+  isPartyMateMessage,
+  toRichMessages,
+} from './dialogue_stage_presentation.svelte';
 import PendingMessageBanner from './pending_message_banner.svelte';
 
 type Props = {
@@ -27,193 +46,86 @@ type Props = {
 
 const { viewModel }: Props = $props();
 
-/** Whether the dialogue is expanded to full-view (hides avatars, maxes chat area). */
-let isFullscreen = $state(false);
-
-const toggleFullscreen = (): void => {
-  isFullscreen = !isFullscreen;
-};
-
-/** Map dialogue messages to the shared RichMessage row shape (C-424). */
-const richMessages = $derived(
-  viewModel.messages.map((m) => ({
-    id: m.id,
-    text: m.content,
-    sender: m.role === 'player' ? ('user' as const) : ('ai' as const),
-    timestamp: new Date(0),
-  })),
-);
-
-/** Bubble intent chip class for a suggestion chip. */
-const chipClassFor = (intentType: string): string => {
-  if (intentType === 'combat') {
-    return 'btn-outline btn-error';
-  }
-  if (intentType === 'skill_check') {
-    return 'btn-outline btn-accent';
-  }
-  if (intentType === 'trade') {
-    return 'btn-outline btn-warning';
-  }
-  if (intentType === 'quest') {
-    return 'btn-outline btn-info';
-  }
-  return 'btn-outline';
-};
-
-/** Dispatches a shared MessageAction to the dialogue ViewModel. */
-const handleRowAction = (messageId: string, action: MessageAction): void => {
-  const msg = viewModel.messages.find((m) => m.id === messageId);
-  if (!msg) {
-    return;
-  }
-  switch (action) {
-    case 'copy':
-      void viewModel.copyMessage(msg.content);
-      break;
-    case 'retry':
-      // C-490: campaign retry is presentation-only "Rephrase" — never
-      // re-runs NpcStateDelta / quest / command mutations.
-      viewModel.rephraseResponse(messageId);
-      break;
-    case 'speak':
-      viewModel.speakMessage(msg.content);
-      break;
-    case 'branch':
-    case 'edit':
-    case 'delete':
-      // C-490: transcript-rewinding is gated out in campaign play — the
-      // controls are hidden, and this guard is defense-in-depth.
-      if (viewModel.isCampaignPlay) {
-        return;
-      }
-      if (action === 'branch') {
-        viewModel.createBranch({ parentMessageId: messageId });
-      } else if (action === 'edit') {
-        viewModel.startEdit(messageId);
-      } else {
-        viewModel.deleteMessage(messageId);
-      }
-      break;
-  }
-};
+/** Stage presentation state (fullscreen) — moved out of the View. */
+const stage = createDialogueStageState();
 </script>
 
 <div
-  class="pointer-events-auto absolute inset-0 z-10 flex flex-col justify-end bg-gradient-to-t from-base-300/60 to-transparent"
+  class="game-scrim pointer-events-auto absolute inset-0 z-10 flex flex-col justify-end"
   role="dialog"
   aria-modal="true"
   aria-label="Dialogue with {viewModel.npcName}"
   data-testid="dialogue-overlay"
+  data-aikami-theme-scope
+  tabindex="-1"
+  onkeydown={(event) => createStageEscapeHandler(viewModel)(event)}
 >
-  <!-- Spatial speech bubble — positioned over the NPC's rendered sprite (C-161) -->
-  {#if viewModel.hasNpcScreenPosition && !isFullscreen}
-    {@const clampedX = Math.max(
-  16,
-  Math.min(viewModel.npcScreenX, typeof window !== 'undefined' ? window.innerWidth - 16 : 400),
-)}
-    {@const clampedY = Math.max(
-  16,
-  Math.min(viewModel.npcScreenY, typeof window !== 'undefined' ? window.innerHeight - 16 : 300),
-)}
+  <!-- Spatial speech bubble — positioned over the NPC's rendered sprite (C-161).
+       The viewport clamp is expressed in CSS so no per-frame JS is needed. -->
+  {#if viewModel.hasNpcScreenPosition && !stage.isFullscreen}
     <div
-      class="speech-bubble pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-full rounded-lg bg-base-100/90 px-3 py-1.5 text-xs font-semibold text-primary shadow-lg backdrop-blur-sm"
-      style="left: {clampedX}px; top: {clampedY - 48}px;"
+      class="speech-bubble game-surface--raised pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-full rounded-lg px-3 py-1.5 text-xs font-semibold text-base-content shadow-lg backdrop-blur-sm"
+      style="left: clamp(1rem, {viewModel.npcScreenX}px, calc(100vw - 1rem)); top: clamp(1rem, calc({viewModel.npcScreenY}px - 3rem), calc(100dvh - 1rem));"
     >
       {viewModel.npcName}
     </div>
   {/if}
 
-  <!-- Avatar row — NPC left, Player + Party right -->
-  {#if !isFullscreen}
-    <div class="mx-auto mb-3 flex w-full max-w-2xl items-end justify-between px-2">
-      <!-- NPC Avatar -->
-      <div
-        class="{viewModel.highlightSpeaker === 'npc' ? 'scale-110' : ''} transition-transform duration-200"
-      >
-        <div
-          class="h-28 w-28 overflow-hidden border-2 shadow-lg {viewModel.highlightSpeaker === 'npc' ? 'border-warning shadow-warning/30' : 'border-base-content/10'}"
-        >
-          <Image
-            src={viewModel.npcAvatarUrl}
-            alt={viewModel.npcName}
-            class="h-full w-full object-contain"
-            loading="lazy"
-          />
-        </div>
-      </div>
-
-      <!-- Right side: Player + Party members -->
-      <div class="flex items-end gap-2">
-        {#if viewModel.showPartyUi}
-          <div class="h-20 w-20 overflow-hidden border-2 border-info/30 shadow-lg">
-            <Image
-              src="/assets/npc/gandalf/neutral.webp"
-              alt="Companion"
-              class="h-full w-full object-contain opacity-70"
-              loading="lazy"
-            />
-          </div>
-        {/if}
-        <div
-          class="{viewModel.highlightSpeaker === 'player' ? 'scale-110' : ''} transition-transform duration-200"
-        >
-          <div
-            class="h-28 w-28 overflow-hidden border-2 shadow-lg {viewModel.highlightSpeaker === 'player'
-  ? 'border-primary shadow-primary/30'
-  : 'border-base-content/10'}"
-          >
-            <Image
-              src={viewModel.playerAvatarUrl}
-              alt="You"
-              class="h-full w-full object-contain"
-              loading="lazy"
-            />
-          </div>
-        </div>
-      </div>
+  <!-- Toast notification (overlay-scoped so the stage's overflow cannot clip it) -->
+  {#if viewModel.toastMessage}
+    <div class="absolute top-2 right-2 z-50">
+      <div class="alert alert-success text-sm">{viewModel.toastMessage}</div>
     </div>
   {/if}
 
-  <!-- Dialogue Box — glass card at bottom 45% of screen -->
-  <div
-    class="mx-auto mb-6 flex w-full flex-col rounded-2xl border border-base-content/10 bg-base-200/90 shadow-2xl backdrop-blur-md"
-    class:max-w-2xl={!isFullscreen}
-    class:max-w-4xl={isFullscreen}
-    class:h-[45vh]={!isFullscreen}
-    class:h-[calc(100dvh-2rem)]={isFullscreen}
-    class:mx-2={isFullscreen}
+  <!-- Compact bottom stage: speaker identity + transcript + composer. -->
+  <section
+    class="game-stage"
+    class:game-stage--full={stage.isFullscreen}
+    aria-label="Dialogue transcript and composer"
   >
-    <!-- Header: NPC name + address mode + End Chat -->
-    <div
-      class="flex shrink-0 items-center justify-between border-b border-base-content/10 px-4 py-2.5"
-    >
-      <div class="flex items-center gap-2">
-        <h3 class="text-sm font-bold text-primary">{viewModel.npcName}</h3>
+    <!-- Header: speaker identity attached to the transcript, plus controls. -->
+    <header class="game-stage__header">
+      <div
+        class="game-stage__portrait"
+        class:game-stage__portrait--speaking={viewModel.highlightSpeaker === 'npc'}
+      >
+        <Image
+          src={viewModel.npcAvatarUrl}
+          alt={viewModel.npcName}
+          class="h-full w-full object-cover"
+          loading="lazy"
+        />
+      </div>
+      <div class="game-stage__identity">
+        <h3 class="game-section-title">{viewModel.npcName}</h3>
+        <span class="game-metadata">
+          {viewModel.highlightSpeaker === 'player' ? 'Listening…' : 'Speaking'}
+        </span>
+      </div>
+      <div class="game-stage__controls">
         {#if viewModel.isTtsSpeaking}
           <span class="text-xs animate-pulse" title="TTS speaking">🔊</span>
         {/if}
-      </div>
-      <div class="flex items-center gap-2">
         <button
           type="button"
           class="btn btn-ghost btn-xs"
-          onclick={toggleFullscreen}
-          title={isFullscreen ? 'Exit full view' : 'Full view'}
-          aria-label={isFullscreen ? 'Exit full view' : 'Enter full view'}
-          aria-pressed={isFullscreen}
+          onclick={() => stage.toggleFullscreen()}
+          title={stage.isFullscreen ? 'Exit full view' : 'Full view'}
+          aria-label={stage.isFullscreen ? 'Exit full view' : 'Enter full view'}
+          aria-pressed={stage.isFullscreen}
         >
-          {isFullscreen ? '⊡' : '⛶'}
+          {stage.isFullscreen ? '⊡' : '⛶'}
         </button>
         <button
           type="button"
-          class="btn btn-ghost btn-xs text-error"
+          class="btn btn-xs game-control--neutral"
           onclick={() => viewModel.endChat()}
         >
           End Chat
         </button>
       </div>
-    </div>
+    </header>
 
     {#snippet imageBlock(image: {
   id: string;
@@ -238,11 +150,11 @@ const handleRowAction = (messageId: string, action: MessageAction): void => {
       </div>
     {/snippet}
 
-    <!-- Scrollable message history (shared RichMessageList, C-424) -->
+    <!-- Scrollable transcript — the one scroll region (shared RichMessageList). -->
     <RichMessageList
-      messages={richMessages}
+      messages={toRichMessages(viewModel.messages)}
       bind:containerElement={viewModel.messageContainerElement}
-      containerClass="flex-1 space-y-3 overflow-y-auto px-4 py-3"
+      containerClass="game-stage__transcript space-y-3"
       isStreaming={viewModel.isStreaming}
     >
       {#snippet before()}
@@ -256,7 +168,7 @@ const handleRowAction = (messageId: string, action: MessageAction): void => {
   message,
   index,
 )}
-        {@const original = viewModel.messages.find((m) => m.id === message.id)}
+        {@const original = findDialogueMessage(viewModel.messages, message.id)}
         <RichMessageRow
           {message}
           variant="dialogue"
@@ -265,7 +177,7 @@ const handleRowAction = (messageId: string, action: MessageAction): void => {
           playerAvatarUrl={viewModel.playerAvatarUrl}
           showPartyUi={viewModel.showPartyUi}
           senderName={original?.senderName}
-          isPartyMate={original?.senderName != null && original?.senderName !== viewModel.npcName}
+          isPartyMate={isPartyMateMessage(original, viewModel.npcName)}
           editing={viewModel.editingMessageId === message.id}
           editText={viewModel.editText}
           disableTranscriptEditing={viewModel.isCampaignPlay}
@@ -282,7 +194,7 @@ const handleRowAction = (messageId: string, action: MessageAction): void => {
           canSwipeRight={original?.canSwipeRight ?? false}
           ttsAvailable={viewModel.streamingTtsEnabled}
           onSwipe={(id, direction) => viewModel.swipeAlternative(id, direction)}
-          onAction={handleRowAction}
+          onAction={(id, action) => dispatchDialogueRowAction(viewModel, id, action)}
         >
           {#snippet renderFooter(
   messageId,
@@ -295,26 +207,24 @@ const handleRowAction = (messageId: string, action: MessageAction): void => {
             <!-- Dice roll result banner — anchored to the message it appeared after -->
             {#if viewModel.rollResultBanner && viewModel.rollResultBanner.afterMessageId === messageId}
               <div class="flex justify-center py-2">
-                <div
-                  class="rounded-xl px-4 py-2 text-center shadow-md {viewModel.rollResultBanner.isSuccess
-  ? 'bg-success/10 border border-success/30'
-  : 'bg-error/10 border border-error/30'}"
-                >
-                  <span class="text-xs text-base-content/50"
+                <div class="game-surface--inset rounded-xl px-4 py-2 text-center shadow-md">
+                  <span class="game-metadata"
                     >{viewModel.rollResultBanner.checkType}
                     Check</span
                   >
-                  <div class="flex items-baseline gap-2">
+                  <div class="flex items-baseline justify-center gap-2">
                     <span
-                      class="text-2xl font-bold {viewModel.rollResultBanner.isSuccess ? 'text-success' : 'text-error'}"
+                      class="game-numeric text-2xl font-bold {viewModel.rollResultBanner.isSuccess
+  ? 'text-success'
+  : 'text-error'}"
                       >{viewModel.rollResultBanner.value}</span
                     >
-                    <span class="text-sm text-base-content/50"
-                      >vs DC {viewModel.rollResultBanner.dc}</span
-                    >
+                    <span class="game-metadata">vs DC {viewModel.rollResultBanner.dc}</span>
                   </div>
                   <span
-                    class="text-sm font-bold {viewModel.rollResultBanner.isSuccess ? 'text-success' : 'text-error'}"
+                    class="text-sm font-bold {viewModel.rollResultBanner.isSuccess
+  ? 'text-success'
+  : 'text-error'}"
                   >
                     {viewModel.rollResultBanner.isSuccess ? '✅ SUCCESS' : '❌ FAILURE'}
                   </span>
@@ -326,14 +236,14 @@ const handleRowAction = (messageId: string, action: MessageAction): void => {
       {/snippet}
 
       {#snippet after()}
-        <!-- Pending skill check — now an inline card in the conversation
+        <!-- Pending skill check — an inline card in the conversation
              rather than a screen-covering overlay (Phase 2 / C-162). -->
         <GameDice dice={viewModel.diceState} />
 
         <!-- Typing indicator — shown while waiting for NPC response -->
         {#if viewModel.isTyping}
           <div class="flex gap-2">
-            <div class="rounded-2xl rounded-bl-md bg-base-100 px-4 py-2.5 shadow-sm">
+            <div class="game-surface--inset rounded-2xl rounded-bl-md px-4 py-2.5 shadow-sm">
               <span class="inline-flex items-center gap-1">
                 <span
                   class="h-1.5 w-1.5 rounded-full bg-base-content/30 animate-bounce"
@@ -386,11 +296,86 @@ const handleRowAction = (messageId: string, action: MessageAction): void => {
           </div>
         {/if}
 
+        <!-- Interrupted skill check recovered from the operation ledger:
+             the roll is preserved, so resolving never rerolls. -->
+        {#if viewModel.interruptedCheck}
+          <div
+            class="game-surface--inset rounded-lg px-3 py-2"
+            data-testid="interrupted-check-banner"
+          >
+            <div class="flex items-center justify-between gap-2">
+              <span class="game-metadata">
+                A {viewModel.interruptedCheck.checkType} check was interrupted — the roll was
+                <span class="font-semibold">{viewModel.interruptedCheck.natural}</span>
+                vs DC {viewModel.interruptedCheck.difficultyClass}.
+              </span>
+              <div class="flex shrink-0 gap-1">
+                <button
+                  type="button"
+                  class="btn btn-warning btn-xs"
+                  data-testid="interrupted-check-resolve"
+                  onclick={() => void viewModel.resumeInterruptedCheck()}
+                >
+                  Resolve
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-xs"
+                  onclick={() => viewModel.dismissInterruptedCheck()}
+                >
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          </div>
+        {/if}
+
+        <!-- Pending queued messages retained after a failed/cancelled stream;
+             require an explicit Send before any is delivered. -->
+        <PendingMessageBanner
+          messages={viewModel.pendingMessages}
+          onRetry={() => viewModel.retryPending()}
+        />
+
+        <!-- Suggestion chips — inline in the transcript, above the composer -->
+        {#if viewModel.suggestedChips.length > 0}
+          {#key viewModel.suggestedChips.map((c) => c.id).join('|')}
+            <div class="flex flex-wrap gap-1.5 px-1 py-1" data-testid="suggestion-chips">
+              {#each viewModel.suggestedChips as chip (chip.id)}
+                <button
+                  type="button"
+                  class="btn btn-xs game-chip gap-1 normal-case {chipClassFor(chip.intentType)}"
+                  disabled={viewModel.isStreaming || viewModel.isResolvingSkillCheck}
+                  onclick={() => viewModel.handleChipTap(chip.id)}
+                  aria-label={chip.label}
+                >
+                  <span>{chipIconFor(chip.intentType)}</span>
+                  {chip.label}
+                </button>
+              {/each}
+            </div>
+          {/key}
+        {/if}
+
+        <!-- Recruitment offer — inline, so the composer stays visible. -->
+        {#if viewModel.recruitAvailable}
+          <div class="flex items-center justify-center gap-3 py-1" data-testid="recruit-offer">
+            <div class="badge badge-success badge-lg gap-1">🤝 Recruitable</div>
+            <button
+              type="button"
+              class="btn btn-success btn-sm"
+              onclick={() => viewModel.recruitCompanion()}
+            >
+              Recruit {viewModel.npcName}
+            </button>
+          </div>
+        {/if}
+
         <!-- Branch selector (C-490: hidden in campaign play — rewinding is gated) -->
         {#if viewModel.showBranchSelector}
           <div class="border-t border-base-content/10 px-3 py-1">
             <div class="flex items-center gap-1 text-xs">
-              <span class="text-base-content/50">Branch:</span>
+              <span class="game-metadata">Branch:</span>
               <button
                 type="button"
                 class="btn btn-xs"
@@ -415,19 +400,12 @@ const handleRowAction = (messageId: string, action: MessageAction): void => {
       {/snippet}
     </RichMessageList>
 
-    <!-- Toast notification -->
-    {#if viewModel.toastMessage}
-      <div class="absolute top-2 right-2 z-50">
-        <div class="alert alert-success text-sm">{viewModel.toastMessage}</div>
-      </div>
-    {/if}
-
     <!-- Delete confirmation modal -->
     {#if viewModel.pendingDeleteMessageId}
       <!-- Aikami UI v5: modal-box needs the .modal.modal-open wrapper to be visible -->
-      <div class="modal modal-open bg-base-300/60">
+      <div class="modal modal-open game-scrim">
         <div class="modal-box w-80">
-          <h3 class="text-lg font-bold">Delete Message?</h3>
+          <h3 class="game-section-title">Delete Message?</h3>
           <p class="py-4 text-sm">This will remove the message and all subsequent replies.</p>
           <div class="modal-action">
             <button
@@ -449,144 +427,54 @@ const handleRowAction = (messageId: string, action: MessageAction): void => {
       </div>
     {/if}
 
-    <!-- Input area (shared GuidedComposer, C-424) -->
-    <div class="shrink-0 border-t border-base-content/10 px-4 py-3">
-      {#if viewModel.recruitAvailable}
-        <div class="flex items-center justify-center gap-3">
-          <div class="badge badge-success badge-lg gap-1">🤝 Recruitable</div>
-          <button
-            type="button"
-            class="btn btn-success btn-sm"
-            onclick={() => viewModel.recruitCompanion()}
-          >
-            Recruit {viewModel.npcName}
-          </button>
-        </div>
-      {:else}
-        <SlashAutocomplete
-          show={viewModel.showSlashCompletions}
-          completions={viewModel.slashCompletions}
-          selectedIndex={viewModel.selectedSlashCompletion}
-          onselect={(index) => viewModel.selectAndApplySlashCompletion(index)}
-        />
-        <GuidedComposer
-          value={viewModel.inputText}
-          onInput={(t) => viewModel.setInput(t)}
-          onSend={() => viewModel.sendMessage()}
-          onKeyDown={(e) => viewModel.handleKeyDown(e)}
-          placeholder="Reply to {viewModel.npcName}..."
-          disabled={viewModel.isResolvingSkillCheck}
-          sendDisabled={viewModel.isResolvingSkillCheck}
-          requireText={false}
-          isSending={viewModel.isResolvingSkillCheck}
-          isStreaming={viewModel.isStreaming}
-          onCancel={() => viewModel.cancelStreaming()}
-          sendIcon="↑"
-          square={true}
-          textareaRef={(el) => {
+    <!-- Composer — always visible, including with long streaming replies. -->
+    <div class="game-stage__composer">
+      <SlashAutocomplete
+        show={viewModel.showSlashCompletions}
+        completions={viewModel.slashCompletions}
+        selectedIndex={viewModel.selectedSlashCompletion}
+        onselect={(index) => viewModel.selectAndApplySlashCompletion(index)}
+      />
+      <GuidedComposer
+        value={viewModel.inputText}
+        onInput={(t) => viewModel.setInput(t)}
+        onSend={() => viewModel.sendMessage()}
+        onKeyDown={(e) => viewModel.handleKeyDown(e)}
+        placeholder="Reply to {viewModel.npcName}..."
+        disabled={viewModel.isResolvingSkillCheck}
+        sendDisabled={viewModel.isResolvingSkillCheck}
+        requireText={false}
+        isSending={viewModel.isResolvingSkillCheck}
+        isStreaming={viewModel.isStreaming}
+        onCancel={() => viewModel.cancelStreaming()}
+        sendIcon="↑"
+        square={true}
+        textareaRef={(el) => {
   viewModel.inputElement = el ?? undefined;
 }}
-        >
-          {#snippet above()}
-            <!-- Interrupted skill check recovered from the operation ledger:
-                 the roll is preserved, so resolving never rerolls. -->
-            {#if viewModel.interruptedCheck}
-              <div
-                class="border-t border-warning/30 bg-warning/10 px-4 py-2"
-                data-testid="interrupted-check-banner"
+      >
+        {#snippet extras()}
+          <div class="flex items-center justify-between">
+            <!-- TTS toggle (C-417 AC-5: accessible name + visible label) -->
+            <label class="flex cursor-pointer items-center gap-1.5">
+              <span class="game-metadata">🔊 TTS</span>
+              <input
+                type="checkbox"
+                class="toggle toggle-xs game-toggle"
+                aria-label="Toggle text-to-speech"
+                checked={viewModel.streamingTtsEnabled}
+                onclick={() => viewModel.toggleStreamingTts()}
               >
-                <div class="flex items-center justify-between gap-2">
-                  <span class="text-xs text-base-content/80">
-                    A {viewModel.interruptedCheck.checkType} check was interrupted — the roll was
-                    <span class="font-semibold">{viewModel.interruptedCheck.natural}</span>
-                    vs DC {viewModel.interruptedCheck.difficultyClass}.
-                  </span>
-                  <div class="flex shrink-0 gap-1">
-                    <button
-                      type="button"
-                      class="btn btn-warning btn-xs"
-                      data-testid="interrupted-check-resolve"
-                      onclick={() => void viewModel.resumeInterruptedCheck()}
-                    >
-                      Resolve
-                    </button>
-                    <button
-                      type="button"
-                      class="btn btn-ghost btn-xs"
-                      onclick={() => viewModel.dismissInterruptedCheck()}
-                    >
-                      Dismiss
-                    </button>
-                  </div>
-                </div>
-              </div>
+            </label>
+            <!-- Draft recovery badge -->
+            {#if viewModel.showDraftRecovery}
+              <span class="badge badge-info badge-sm gap-1" aria-live="polite">
+                📝 Draft restored
+              </span>
             {/if}
-
-            <!-- Pending queued messages retained after a failed/cancelled stream;
-                 require an explicit Send before any is delivered. -->
-            <PendingMessageBanner
-              messages={viewModel.pendingMessages}
-              onRetry={() => viewModel.retryPending()}
-            />
-            <!-- Suggestion chips — rendered inside the card, above the input -->
-            {#if viewModel.suggestedChips.length > 0}
-              {#key viewModel.suggestedChips.map((c) => c.id).join('|')}
-                <div
-                  class="flex flex-wrap gap-1.5 border-t border-base-content/5 px-4 py-2"
-                  data-testid="suggestion-chips"
-                >
-                  {#each viewModel.suggestedChips as chip (chip.id)}
-                    <button
-                      type="button"
-                      class="btn btn-xs gap-1 normal-case border-base-content/15 {chipClassFor(chip.intentType)}"
-                      disabled={viewModel.isStreaming || viewModel.isResolvingSkillCheck}
-                      onclick={() => viewModel.handleChipTap(chip.id)}
-                      aria-label={chip.label}
-                    >
-                      <span>
-                        {#if chip.intentType === 'skill_check'}
-                          🎲
-                        {:else if chip.intentType === 'combat'}
-                          ⚔️
-                        {:else if chip.intentType === 'trade'}
-                          💰
-                        {:else if chip.intentType === 'quest'}
-                          📋
-                        {:else}
-                          💬
-                        {/if}
-                      </span>
-                      {chip.label}
-                    </button>
-                  {/each}
-                </div>
-              {/key}
-            {/if}
-          {/snippet}
-
-          {#snippet extras()}
-            <div class="flex items-center justify-between">
-              <!-- TTS toggle (C-417 AC-5: accessible name + visible label) -->
-              <label class="flex cursor-pointer items-center gap-1.5">
-                <span class="text-xs font-medium text-base-content/60">🔊 TTS</span>
-                <input
-                  type="checkbox"
-                  class="toggle toggle-xs toggle-primary"
-                  aria-label="Toggle text-to-speech"
-                  checked={viewModel.streamingTtsEnabled}
-                  onclick={() => viewModel.toggleStreamingTts()}
-                >
-              </label>
-              <!-- Draft recovery badge -->
-              {#if viewModel.showDraftRecovery}
-                <span class="badge badge-info badge-sm gap-1" aria-live="polite">
-                  📝 Draft restored
-                </span>
-              {/if}
-            </div>
-          {/snippet}
-        </GuidedComposer>
-      {/if}
+          </div>
+        {/snippet}
+      </GuidedComposer>
     </div>
-  </div>
+  </section>
 </div>

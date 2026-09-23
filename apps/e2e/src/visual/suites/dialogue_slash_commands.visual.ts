@@ -10,6 +10,14 @@
 
 import { DialogueSlashCommandsSchema } from '@aikami/schemas';
 import { defineConfig } from '$visual/core/config';
+import {
+  atViewport,
+  closeDevTools,
+  STAGE_REVIEW_PROMPT,
+  STAGE_SELECTOR,
+  StageReviewSchema,
+  withStageHooks,
+} from './dialogue_stage_fixtures';
 
 // ── Prompt ───────────────────────────────────────────────────
 
@@ -41,14 +49,11 @@ const SLASH_COMMANDS_PROMPT = [
  * `/generate` slash command so the inline image block renders.
  */
 const triggerGenerate = async (page: import('playwright').Page): Promise<void> => {
-  await page.waitForSelector('[data-testid="dialogue-overlay"]', { timeout: 15000 });
+  await page.waitForSelector(STAGE_SELECTOR, { timeout: 15000 });
   await page.waitForTimeout(500);
 
-  const inputSelector =
-    '[data-testid="dialogue-input"] textarea, [data-testid="dialogue-input"] input';
-  const inputElement = page.locator(inputSelector).first();
-  const sendSelector = '[data-testid="dialogue-send"], button:has-text("Send")';
-  const sendButton = page.locator(sendSelector).first();
+  const inputElement = page.locator('textarea').first();
+  const sendButton = page.getByRole('button', { name: 'Send' }).first();
 
   await Promise.all([
     inputElement.waitFor({ state: 'visible', timeout: 15_000 }),
@@ -68,6 +73,7 @@ export default defineConfig({
   id: 'dialogue_slash_commands',
   route: '/dev/sandbox/dialogue',
   waitCondition: 'game_ready',
+  waitSelector: STAGE_SELECTOR,
   cases: [
     {
       name: 'generate_inline_image',
@@ -75,6 +81,15 @@ export default defineConfig({
       prompt: SLASH_COMMANDS_PROMPT,
       schema: DialogueSlashCommandsSchema,
       setupHook: triggerGenerate,
+    },
+    // ── C-547: inline image + stage on a compact viewport ─────
+    {
+      name: 'generate_inline_image_compact_800x600',
+      searchParams: { simulate_stream: 'true' },
+      prompt: STAGE_REVIEW_PROMPT,
+      schema: StageReviewSchema,
+      screenshotSelector: STAGE_SELECTOR,
+      setupHook: withStageHooks(atViewport(800, 600), closeDevTools, triggerGenerate),
     },
   ],
 });

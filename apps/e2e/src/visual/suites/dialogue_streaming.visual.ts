@@ -7,6 +7,11 @@
 // Captures the dialogue sandbox with simulated streaming mutations
 // and evaluates via AI to verify progressive tool state changes.
 //
+// C-547 adds a review matrix for the compact dialogue stage: short line,
+// long streaming reply and full view at 1280×720, 1920×1080, a compact
+// 800×600 viewport, 200% text and an alternate theme. Those cases ask neutral
+// questions (plan §8) and never assert the layout is correct.
+//
 // Contract: C-193 Client Tool Streaming Orchestrator
 //   AC-3: Unidirectional View Synchronization — spatial variables
 //         propagate to the view layer via flat shallow reassignments
@@ -14,6 +19,17 @@
 
 import { Type } from 'typebox';
 import { defineConfig } from '$visual/core/config';
+import {
+  atTextScale,
+  atTheme,
+  atViewport,
+  closeDevTools,
+  enterFullView,
+  STAGE_REVIEW_PROMPT,
+  STAGE_SELECTOR,
+  StageReviewSchema,
+  withStageHooks,
+} from './dialogue_stage_fixtures';
 
 // ── Schema ───────────────────────────────────────────────────
 
@@ -76,25 +92,22 @@ const STREAMING_PROMPT = [
  */
 const simulateStream = async (page: import('playwright').Page): Promise<void> => {
   // Wait for the dialogue overlay to appear
-  await page.waitForSelector('[data-testid="dialogue-overlay"]', {
+  await page.waitForSelector(STAGE_SELECTOR, {
     timeout: 15000,
   });
 
   // Wait a beat for the initial NPC greeting to render
   await page.waitForTimeout(500);
 
-  // Click the input field and type a test message
-  const inputSelector =
-    '[data-testid="dialogue-input"] textarea, [data-testid="dialogue-input"] input';
-  const inputElement = page.locator(inputSelector).first();
+  // Type a message into the composer and send it.
+  const inputElement = page.locator('textarea').first();
   if (await inputElement.isVisible()) {
     await inputElement.click();
     await inputElement.fill('Tell me about the surrounding area.');
   }
 
-  // Click the send button to trigger streaming
-  const sendSelector = '[data-testid="dialogue-send"], button:has-text("Send")';
-  const sendButton = page.locator(sendSelector).first();
+  // The shared composer's send affordance is an icon button labelled "Send".
+  const sendButton = page.getByRole('button', { name: 'Send' }).first();
   if (await sendButton.isVisible()) {
     await sendButton.click();
   }
@@ -103,12 +116,19 @@ const simulateStream = async (page: import('playwright').Page): Promise<void> =>
   await page.waitForTimeout(3000);
 };
 
+/** Waits for the stage to render a settled short greeting line. */
+const waitForStage = async (page: import('playwright').Page): Promise<void> => {
+  await page.waitForSelector(STAGE_SELECTOR, { timeout: 15000 });
+  await page.waitForTimeout(800);
+};
+
 // ── Suite ────────────────────────────────────────────────────
 
 export default defineConfig({
   id: 'dialogue_streaming',
   route: '/dev/sandbox/dialogue',
   waitCondition: 'game_ready',
+  waitSelector: STAGE_SELECTOR,
   cases: [
     {
       name: 'partial_json_avatar_hydration',
@@ -116,6 +136,67 @@ export default defineConfig({
       prompt: STREAMING_PROMPT,
       schema: DialogueStreamingSchema,
       setupHook: simulateStream,
+    },
+    // ── C-547 stage review matrix ────────────────────────────
+    {
+      name: 'short_line_default_1280x720',
+      prompt: STAGE_REVIEW_PROMPT,
+      schema: StageReviewSchema,
+      screenshotSelector: STAGE_SELECTOR,
+      setupHook: withStageHooks(closeDevTools, waitForStage),
+    },
+    {
+      name: 'long_streaming_reply',
+      prompt: STAGE_REVIEW_PROMPT,
+      schema: StageReviewSchema,
+      screenshotSelector: STAGE_SELECTOR,
+      setupHook: withStageHooks(closeDevTools, simulateStream),
+    },
+    {
+      name: 'full_view',
+      prompt: STAGE_REVIEW_PROMPT,
+      schema: StageReviewSchema,
+      screenshotSelector: STAGE_SELECTOR,
+      setupHook: withStageHooks(closeDevTools, waitForStage, enterFullView),
+    },
+    {
+      name: 'compact_800x600',
+      prompt: STAGE_REVIEW_PROMPT,
+      schema: StageReviewSchema,
+      screenshotSelector: STAGE_SELECTOR,
+      setupHook: withStageHooks(atViewport(800, 600), closeDevTools, waitForStage),
+    },
+    {
+      name: 'desktop_1920x1080',
+      prompt: STAGE_REVIEW_PROMPT,
+      schema: StageReviewSchema,
+      screenshotSelector: STAGE_SELECTOR,
+      setupHook: withStageHooks(atViewport(1920, 1080), closeDevTools, waitForStage),
+    },
+    {
+      name: 'text_200pct',
+      prompt: STAGE_REVIEW_PROMPT,
+      schema: StageReviewSchema,
+      screenshotSelector: STAGE_SELECTOR,
+      setupHook: withStageHooks(atTextScale(200), closeDevTools, waitForStage),
+    },
+    {
+      name: 'theme_dark',
+      prompt: STAGE_REVIEW_PROMPT,
+      schema: StageReviewSchema,
+      screenshotSelector: STAGE_SELECTOR,
+      setupHook: withStageHooks(atTheme('dark'), closeDevTools, waitForStage),
+    },
+    {
+      name: 'dice_skill_check',
+      prompt: STAGE_REVIEW_PROMPT,
+      schema: StageReviewSchema,
+      screenshotSelector: STAGE_SELECTOR,
+      setupHook: async (page) => {
+        await page.waitForSelector(STAGE_SELECTOR, { timeout: 15_000 });
+        await page.getByRole('button', { name: /Force Dice Roll/i }).click();
+        await page.waitForTimeout(1200);
+      },
     },
   ],
 });

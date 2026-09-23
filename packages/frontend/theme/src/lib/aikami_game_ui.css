@@ -319,6 +319,156 @@
       font-variant-numeric: tabular-nums;
       font-feature-settings: "tnum" 1;
     }
+
+    /* ── Compact dialogue stage (C-547) ────────────────────────────────── */
+
+    /* One bottom stage anchored above an always-visible composer. It sizes to
+     * its content and is capped relative to the viewport minus the safe-area
+     * insets, so a single short line produces a short stage rather than a tall
+     * empty box. The transcript (not the composer) is the element that
+     * shrinks once the cap is reached. */
+    .game-stage {
+      display: flex;
+      flex-direction: column;
+      inline-size: min(100%, 42rem);
+      max-block-size: calc(
+        100dvh -
+        1.5rem -
+        env(safe-area-inset-top) -
+        env(safe-area-inset-bottom)
+      );
+      margin-inline: auto;
+      margin-block-end: max(0.75rem, env(safe-area-inset-bottom));
+      overflow: hidden;
+      color: var(--ui-base-content);
+      background-color: color-mix(in oklab, var(--ui-panel) 94%, var(--ui-brass) 6%);
+      border: 1px solid var(--game-ornament);
+      border-block-start: 2px solid color-mix(in oklab, var(--ui-brass) 70%, transparent);
+      border-radius: var(--game-radius-panel);
+      box-shadow: 0 30px 70px -34px rgb(0 0 0 / 0.75);
+    }
+
+    .game-stage--full {
+      inline-size: 100%;
+      max-inline-size: none;
+      max-block-size: calc(100dvh - 1rem - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+      margin-inline: 0.5rem;
+    }
+
+    .game-stage__header {
+      display: flex;
+      align-items: center;
+      gap: 0.65rem;
+      flex: 0 0 auto;
+      padding: 0.6rem 0.85rem;
+      border-block-end: 1px solid var(--game-ornament-quiet);
+      background-color: color-mix(in oklab, var(--ui-elevated) 88%, var(--ui-brass) 12%);
+    }
+
+    /* Speaker identity attached to the transcript, 56px at base text scale. */
+    .game-stage__portrait {
+      inline-size: 3.5rem;
+      block-size: 3.5rem;
+      flex: 0 0 auto;
+      overflow: hidden;
+      border: 2px solid var(--game-ornament-quiet);
+      border-radius: var(--game-radius-control);
+      background-color: var(--game-surface-inset);
+    }
+
+    .game-stage__portrait--speaking {
+      border-color: color-mix(in oklab, var(--ui-primary) 70%, transparent);
+    }
+
+    /* Full view reclaims the header space for the transcript. */
+    .game-stage--full .game-stage__portrait {
+      display: none;
+    }
+
+    .game-stage__identity {
+      display: flex;
+      flex-direction: column;
+      gap: 0.1rem;
+      min-inline-size: 0;
+    }
+
+    .game-stage__identity .game-section-title {
+      font-size: var(--game-text-essential);
+      line-height: 1.2;
+    }
+
+    .game-stage__controls {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      margin-inline-start: auto;
+    }
+
+    /* The single scroll owner: sized to content, shrinking once the stage
+     * reaches its cap. */
+    .game-stage__transcript {
+      flex: 0 1 auto;
+      min-block-size: 0;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      padding: 0.75rem 0.9rem;
+    }
+
+    .game-stage__composer {
+      flex: 0 0 auto;
+      border-block-start: 1px solid var(--game-ornament-quiet);
+      background-color: color-mix(in oklab, var(--ui-ink) 92%, var(--ui-brass) 8%);
+      padding: 0.6rem 0.9rem;
+    }
+
+    /* Neutral control role — ending a conversation is not a destructive act. */
+    .game-control--neutral {
+      --btn-color: var(--ui-muted-content);
+      --btn-color-content: var(--ui-base-content);
+    }
+
+    /* Suggestion-chip intent roles — applied with `.btn .btn-outline`. */
+    .game-chip--neutral {
+      --btn-color: var(--ui-muted-content);
+      --btn-color-content: var(--ui-base-content);
+    }
+
+    .game-chip--danger {
+      --btn-color: var(--ui-error);
+      --btn-color-content: var(--ui-error-content);
+    }
+
+    .game-chip--check {
+      --btn-color: var(--ui-accent);
+      --btn-color-content: var(--ui-accent-content);
+    }
+
+    .game-chip--trade {
+      --btn-color: var(--ui-warning);
+      --btn-color-content: var(--ui-warning-content);
+    }
+
+    .game-chip--quest {
+      --btn-color: var(--ui-info);
+      --btn-color-content: var(--ui-info-content);
+    }
+
+    /* TTS toggle uses a game role rather than the legacy `.toggle-primary`. */
+    .game-toggle {
+      --toggle-color: var(--ui-accent);
+    }
+
+    /* Canvas scrim behind the stage — replaces the legacy gradient utility. */
+    .game-scrim {
+      background-image: linear-gradient(
+        to top,
+        color-mix(in oklab, var(--ui-ink) 72%, transparent),
+        color-mix(in oklab, var(--ui-ink) 18%, transparent) 45%,
+        transparent
+      );
+      padding-block-end: env(safe-area-inset-bottom);
+      padding-inline: env(safe-area-inset-left) env(safe-area-inset-right);
+    }
   }
 
   /* Explicit focus ring is a semantic role (C-543 PART J). */

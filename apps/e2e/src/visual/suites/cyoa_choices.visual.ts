@@ -9,6 +9,12 @@
 
 import { Type } from 'typebox';
 import { defineConfig } from '$visual/core/config';
+import {
+  closeDevTools,
+  STAGE_REVIEW_PROMPT,
+  STAGE_SELECTOR,
+  StageReviewSchema,
+} from './dialogue_stage_fixtures';
 
 // ── Schema ───────────────────────────────────────────────────
 
@@ -87,6 +93,9 @@ export default defineConfig({
   id: 'cyoa-choices',
   route: '/dev/cyoa',
   waitCondition: 'game_ready',
+  // The standalone sandbox renders `cyoa-choices`; the dialogue-stage case
+  // navigates to the dialogue overlay, so accept either.
+  waitSelector: '[data-testid="cyoa-choices"], [data-testid="dialogue-overlay"]',
   cases: [
     {
       name: 'CYOA Choices — Initial State',
@@ -103,6 +112,24 @@ export default defineConfig({
         const firstChoice = page.locator('[data-testid="cyoa-choices"] button').first();
         await firstChoice.click();
         await page.waitForTimeout(500);
+      },
+    },
+    // ── C-547: CYOA choices inline in the compact dialogue stage ──
+    {
+      name: 'CYOA Choices — Dialogue Stage',
+      prompt: STAGE_REVIEW_PROMPT,
+      schema: StageReviewSchema,
+      screenshotSelector: STAGE_SELECTOR,
+      setupHook: async (page) => {
+        // The standalone /dev/cyoa sandbox exercises the shared choice
+        // component; this case mounts the production dialogue stage so the
+        // choices are reviewed in their real host (C-547).
+        await page.goto('http://localhost:5274/dev/sandbox/dialogue?forceOffline=1', {
+          waitUntil: 'domcontentloaded',
+        });
+        await page.waitForSelector(STAGE_SELECTOR, { timeout: 15_000 });
+        await closeDevTools(page);
+        await page.waitForTimeout(1000);
       },
     },
   ],
