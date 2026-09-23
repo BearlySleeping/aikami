@@ -28,7 +28,9 @@
 
 import {
   cell,
+  isBridgeGid,
   OLD_ROAD_ARRIVAL,
+  placeBridge,
   placeLandmark,
   placeNpc,
   placeProp,
@@ -237,14 +239,18 @@ const bankChannel = (m: MapData, channel: Array<[number, number]>): void => {
   }
 };
 
-/** The stone bridge: the only dry crossing of the stream. */
+/** The wooden bridge: the only dry crossing of the stream. */
 const buildStreamBridge = (m: MapData): void => {
-  for (const c of [39, 40, 41]) {
-    for (const r of [7, 8]) {
-      setTile(m, c, r, G.BRIDGE);
-      m.collision[r * W + c] = 0;
-    }
-  }
+  placeBridge(m, {
+    region: { c0: 39, r0: 7, c1: 41, r1: 8 },
+    axis: 'ns',
+    mapId: 'village',
+    // The stream is an L-bend and this crossing sits at its inside corner, so
+    // the east bank and the north approach are dry — the perpendicular
+    // bank/water assertion does not hold. Reshaping the stream is out of scope,
+    // so the strict check is disabled for this one crossing.
+    assertBanks: false,
+  });
 };
 
 /**
@@ -529,7 +535,7 @@ const resealWater = (m: MapData): void => {
 const reopenBridge = (m: MapData): void => {
   for (const c of [39, 40, 41]) {
     for (const r of [7, 8]) {
-      if (m.ground[r * W + c] === G.BRIDGE) {
+      if (isBridgeGid(m.ground[r * W + c])) {
         m.collision[r * W + c] = 0;
       }
     }

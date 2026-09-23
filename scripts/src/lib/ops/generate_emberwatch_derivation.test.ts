@@ -18,6 +18,7 @@ import {
   cornerFrameName,
   readManifestTerrains,
   readManifestTiles,
+  registerTerrainFrames,
   resetManifestTilesCache,
   setManifestTilesForTest,
 } from './generate_emberwatch_tables.ts';
@@ -137,12 +138,28 @@ describe('generate_emberwatch G/FRAMES derivation (C-376 AC-6)', () => {
   test('buildFrames throws when a GID is outside the atlas grid', () => {
     try {
       setManifestTilesForTest({
-        '129': { name: 'out_of_bounds', frame: 'oob.png' }, // > ATLAS_COLS*ATLAS_ROWS
+        '161': { name: 'out_of_bounds', frame: 'oob.png' }, // > ATLAS_COLS*ATLAS_ROWS (160)
       });
       expect(() => buildFrames()).toThrow(/outside the atlas grid/);
     } finally {
       resetManifestTilesCache();
     }
+  });
+
+  test('buildFrames rejects baked frames inside the reserved terrain block', () => {
+    try {
+      setManifestTilesForTest({
+        '49': { name: 'terrain_collision', frame: 'collision.png' },
+      });
+      expect(() => buildFrames()).toThrow(/occupies reserved terrain cell 48/);
+    } finally {
+      resetManifestTilesCache();
+    }
+  });
+
+  test('registerTerrainFrames rejects an occupied reserved terrain cell', () => {
+    const frames: Record<string, [number, number]> = { 'baked.png': [0, 3] };
+    expect(() => registerTerrainFrames(frames)).toThrow(/terrain cell 48.*occupied/);
   });
 
   test('buildFrames skips tiles without a declared frame', () => {
@@ -221,10 +238,10 @@ describe.skipIf(!hasCommittedAtlas)('C-378 AC-5 — atlas packer determinism', (
     expect(checked).toBe(32);
   });
 
-  test('the committed atlas is 544×272 (extruded)', () => {
+  test('the committed atlas is 544×340 (extruded)', () => {
     const atlas = JSON.parse(readFileSync(ATLAS_PATH, 'utf-8')) as {
       meta: { size: { w: number; h: number } };
     };
-    expect(atlas.meta.size).toEqual({ w: 544, h: 272 });
+    expect(atlas.meta.size).toEqual({ w: 544, h: 340 });
   });
 });

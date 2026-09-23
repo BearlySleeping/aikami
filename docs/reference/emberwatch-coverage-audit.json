@@ -18,11 +18,11 @@
   "counts": {
     "maps": 5,
     "terrains": 6,
-    "bakedTiles": 47,
+    "bakedTiles": 64,
     "corner16Terrains": 5,
-    "atlasCellsUsed": 127,
-    "atlasCellsTotal": 128,
-    "atlasCellsFree": 1,
+    "atlasCellsUsed": 144,
+    "atlasCellsTotal": 160,
+    "atlasCellsFree": 16,
     "props": 95,
     "npcs": 13,
     "hostileNpcs": 4,
@@ -104,7 +104,7 @@
       "id": "atlas:headroom",
       "surface": "atlas-frame",
       "classification": "accepted/current",
-      "detail": "127/128 atlas cells used (47 baked tiles + 5×16 corner16) — 1 free; a new corner16 terrain requires an explicit geometry change"
+      "detail": "144/160 atlas cells used (64 baked tiles + 5×16 corner16) — 16 free; a new corner16 terrain requires an explicit geometry change"
     },
     {
       "id": "prop:ward_tree_landmark",
@@ -1172,7 +1172,7 @@
       "id": "atlas:frames",
       "surface": "atlas-frame",
       "classification": "accepted/current",
-      "detail": "grid atlas declares 127 frames (expected 127)"
+      "detail": "grid atlas declares 144 frames (expected 144)"
     },
     {
       "id": "props-atlas:frames",
