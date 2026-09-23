@@ -58,6 +58,7 @@ import type { PublishReportLike } from '../catalog/release.ts';
 import { buildReceipt, receiptPath } from '../catalog/release.ts';
 import type { ReleaseTarget } from '../catalog/release_target.ts';
 import { createR2Client } from '../catalog/upload.ts';
+import { EMBERWATCH_BUILD_STEPS } from './emberwatch_build_steps.ts';
 import { loadSealedCandidate } from './emberwatch_candidate.ts';
 import {
   assertCleanForApply,
@@ -234,28 +235,9 @@ const maybeAcceptRun = (io: StepRecorder, invocation: Invocation): void => {
  * report success.
  */
 const buildAndSealCandidate = (io: StepRecorder, mode: string): void => {
-  const buildSteps: [string, string, string[]?][] = [
-    ['install portraits', 'scripts/src/lib/ops/install_emberwatch_portraits.ts'],
-    ['install authored audio beds', 'scripts/src/lib/ops/install_emberwatch_audio.ts'],
-    ['generate terrain/grid atlas', 'scripts/src/lib/ops/generate_emberwatch_atlas.ts'],
-    ['generate prop atlas pages', 'scripts/src/lib/ops/generate_emberwatch_props_atlas.ts'],
-    ['regenerate canonical maps', 'scripts/src/lib/ops/generate_emberwatch_maps.ts'],
-    ['scan manifest + hashes + credits', 'scripts/src/lib/ops/scan_assets.ts'],
-    // The seed is a DERIVED artifact of the scan above, exactly like the atlas
-    // and the maps, and it must exist before the seal: the candidate lock has a
-    // `seed` group, and `runSeedPublish` refuses to publish a release whose
-    // seed is absent from both the candidate and the previous release. Leaving
-    // it out of this list is what made `asset_seed.json` a file that only
-    // existed in whoever's working tree had run the generator by hand.
-    //
-    // No `--merge-origin`: this step is mode-independent and must be
-    // reproducible from the source tree alone. Carrying the published catalog's
-    // rows in happens at PUBLISH time, against the target's verified release.
-    ['generate asset seed', 'scripts/src/lib/ops/generate_asset_seed.ts', ['--write']],
-  ];
   const treeBefore = io.git(['status', '--porcelain']);
-  for (const [label, script, args] of buildSteps) {
-    if (io.bun(label, script, args ?? []).status === 'failed') {
+  for (const step of EMBERWATCH_BUILD_STEPS) {
+    if (io.bun(step.label, step.script, [...(step.args ?? [])]).status === 'failed') {
       process.exit(1);
     }
   }
