@@ -4,6 +4,13 @@
 // ---------------------------------------------------------------------------
 
 export {
+  ambientToHex,
+  applyAmbientToEntity,
+  NEUTRAL_SCENE_AMBIENT,
+  resolveSceneAmbient,
+  type SceneAmbient,
+} from './ambient_policy.ts';
+export {
   COLOR_DAWN,
   COLOR_DUSK,
   COLOR_MIDNIGHT,

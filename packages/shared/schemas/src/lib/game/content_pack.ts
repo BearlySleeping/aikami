@@ -864,12 +864,12 @@ export const ContentPackPropSchema = Type.Object({
   renderSize: Type.Optional(PropRenderSizeSchema),
   /** Renderer-owned contact shadow (see {@link PropContactShadowSchema}). */
   shadow: Type.Optional(PropContactShadowSchema),
+  emissive: Type.Optional(Type.Boolean({ description: 'Light source (C-545)' })),
   /** Per-asset provenance (C-381 AC-1). */
   provenance: Type.Optional(AssetProvenanceSchema),
   /** C-531: make this prop a usable battlefield object. */
   environment: Type.Optional(ContentPackPropEnvironmentSchema),
 });
-
 export type ContentPackProp = Static<typeof ContentPackPropSchema>;
 export type PropRenderSize = Static<typeof PropRenderSizeSchema>;
 export type PropContactShadow = Static<typeof PropContactShadowSchema>;

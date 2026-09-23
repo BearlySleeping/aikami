@@ -1724,7 +1724,8 @@
         "width": 58,
         "height": 16,
         "opacity": 0.2
-      }
+      },
+      "emissive": true
     },
     "inn_shelf": {
       "name": "Storage Shelf",
@@ -1860,6 +1861,7 @@
         "height": 14,
         "opacity": 0.22
       },
+      "emissive": true,
       "environment": {
         "durability": 4,
         "blocksMovement": true,
@@ -1946,6 +1948,7 @@
         "height": 14,
         "opacity": 0.22
       },
+      "emissive": true,
       "environment": {
         "durability": 4,
         "blocksMovement": true,

@@ -1385,4 +1385,23 @@ describe('ContentPackProp renderSize and shadow', () => {
       ),
     ).toThrow();
   });
+
+  // C-545: ambient opt-out for light-source props.
+  test('accepts an emissive light-source prop', () => {
+    expect(() =>
+      Value.Parse(
+        ContentPackManifestSchema,
+        withProp({ name: 'Brazier', frame: 'prop_brazier.png', emissive: true }),
+      ),
+    ).not.toThrow();
+  });
+
+  test('an emissive prop defaults to false when omitted', () => {
+    const parsed = Value.Parse(
+      ContentPackManifestSchema,
+      withProp({ name: 'Barrel', frame: 'prop_barrel.png' }),
+    ) as { props: Record<string, { emissive?: boolean }> };
+    // Omitted entirely — the renderer treats undefined as "not exempt".
+    expect(parsed.props.test_prop?.emissive).toBeUndefined();
+  });
 });

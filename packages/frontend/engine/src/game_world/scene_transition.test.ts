@@ -29,6 +29,7 @@ const makePackConfig = (): PackConfig => ({
       renderSize: { width: 32, height: 48 },
       shadow: { kind: 'ellipse', width: 30, height: 12, opacity: 0.2 },
     },
+    hearth: { name: 'Hearth', frame: 'prop_hearth.png', isWalkable: false, emissive: true },
   },
 });
 
@@ -91,6 +92,19 @@ describe('prepareScene', () => {
     });
     // A legacy prop (no authored presentation) carries neither field.
     expect(scene.propFrameMeta.get('well.png')).toEqual({ anchorX: 0.5, anchorY: 1.0 });
+  });
+
+  test('carries the C-545 emissive opt-out per frame', async () => {
+    const scene = await prepareScene({
+      mapUrl: 'maps:emberwatch/hall.json',
+      packConfig: makePackConfig(),
+      loadMap: makeStaticLoader(),
+    });
+
+    // A light-source prop exposes its ambient opt-out to the renderer.
+    expect(scene.propFrameMeta.get('prop_hearth.png')?.emissive).toBe(true);
+    // An ordinary prop omits the field entirely (defaults to tinted).
+    expect(scene.propFrameMeta.get('well.png')?.emissive).toBeUndefined();
   });
 
   test('falls back to the explicit collision layer without a packConfig', async () => {
