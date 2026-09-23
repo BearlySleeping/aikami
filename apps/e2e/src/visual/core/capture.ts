@@ -15,7 +15,7 @@ import { EMULATOR_PORTS } from '@aikami/constants';
 import { DEFAULT_LANCZOS_SIZE, optimizePng, resizeLanczos, toBase64DataUri } from '@scripts/ai';
 import { chromium, type Locator, type Page } from 'playwright';
 import type { TSchema } from 'typebox';
-import { assertGpuRendererName } from './gpu_renderer_guard.ts';
+import { assertGpuRendererName, resolveCaptureRendererMode } from './gpu_renderer_guard.ts';
 
 // ── Types ─────────────────────────────────────────────────────
 
@@ -220,12 +220,15 @@ const _captureRendererMode = async (
   waitCondition: VisualTestSuite['waitCondition'],
   canvasSelector?: string,
   screenshotSelector?: string,
-): Promise<'pixi' | 'dom'> =>
-  waitCondition === 'pixi_loaded' ||
-  screenshotSelector === (canvasSelector ?? 'canvas') ||
-  (await page.locator(canvasSelector ?? 'canvas').count()) > 0
-    ? 'pixi'
-    : 'dom';
+): Promise<'pixi' | 'dom'> => {
+  const explicit = screenshotSelector !== undefined || canvasSelector !== undefined;
+  return resolveCaptureRendererMode({
+    waitCondition,
+    ...(canvasSelector !== undefined ? { canvasSelector } : {}),
+    ...(screenshotSelector !== undefined ? { screenshotSelector } : {}),
+    canvasCount: explicit ? 0 : await page.locator('canvas').count(),
+  });
+};
 
 /**
  * Waits for the game engine to be ready by polling the DOM.

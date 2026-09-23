@@ -33,3 +33,41 @@ export const assertGpuRendererName = (renderer: string | null, mode: 'pixi' | 'd
       'PLAYWRIGHT_BROWSERS_PATH, e.g. `--use-angle=swiftshader --enable-unsafe-swiftshader`).',
   );
 };
+
+/** The selectors and readiness signal that decide whether a capture is Pixi or DOM. */
+export type CaptureRendererInputs = {
+  /** The suite's `waitCondition`. */
+  waitCondition: 'pixi_loaded' | 'game_ready' | 'hub_ready';
+  /** The case's explicit `canvasSelector`, if any. */
+  canvasSelector?: string;
+  /** The case's explicit `screenshotSelector`, if any. */
+  screenshotSelector?: string;
+  /** How many `canvas` elements the page actually has. Only consulted when no
+   * explicit selector is set (the default canvas clip). */
+  canvasCount?: number;
+};
+
+/**
+ * Decides whether a capture is a Pixi capture (subject to the WebGL guard) or a
+ * DOM capture.
+ *
+ * The previous heuristic ("a `<canvas>` exists somewhere on the page") is too
+ * coarse: the dev-sandbox shell renders its own canvas, so a DOM-only suite
+ * that captures an explicit DOM selector was classified `pixi` and then failed
+ * the guard with "no renderer" even though it never renders the game surface.
+ * Intent is the reliable signal: a case that explicitly targets a non-canvas
+ * selector is a DOM capture, and only a default canvas clip infers `pixi` from
+ * the presence of a canvas.
+ */
+export const resolveCaptureRendererMode = (inputs: CaptureRendererInputs): 'pixi' | 'dom' => {
+  if (inputs.waitCondition === 'pixi_loaded') {
+    return 'pixi';
+  }
+  if (inputs.screenshotSelector !== undefined) {
+    return inputs.screenshotSelector === 'canvas' ? 'pixi' : 'dom';
+  }
+  if (inputs.canvasSelector !== undefined) {
+    return inputs.canvasSelector === 'canvas' ? 'pixi' : 'dom';
+  }
+  return (inputs.canvasCount ?? 0) > 0 ? 'pixi' : 'dom';
+};
