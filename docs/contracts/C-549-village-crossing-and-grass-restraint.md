@@ -424,9 +424,10 @@ a player whose saved cell is now river.
 - `tooling: \`bun moon run scripts:typecheck\`` / `frontend-engine:typecheck` — pass
 - `tooling: \`bun moon run scripts:lint\`` / `frontend-engine:lint` — pass
 - Structural guards (`bun run scripts/src/lib/ops/run_guards.ts`) — **10/10 pass**
-- `tooling: \`bun run emberwatch:validate\`` — **0 blockers**, 1 pre-existing
-  warning (`route-width-below-minimum` village/transition:old_road, also present
-  on the base)
+- `tooling: \`bun run emberwatch:validate\`` — **0 blockers**, 1 newly introduced,
+  accepted warning (`route-width-below-minimum` village/transition:old_road):
+  the C-549 crossing provides 2 cells of clearance, below the companion-safe
+  minimum of 3. The crossing remains 2 cells wide.
 - `tooling: \`bun run emberwatch:locked-ids\`` — unchanged
 - Determinism: `generate_emberwatch_maps.ts` twice → byte-identical
 
@@ -453,8 +454,8 @@ and is green on a clean re-run.
   step), but it is a real gap: a companion can be restored inside a wall and
   then path from an invalid origin. Fixing it properly is not a one-liner with
   the same clamp (a companion needs its own mask/footprint, and the follow
-  system would need a re-path signal), so it is left for a follow-up. A test
-  documents the current behaviour so the gap cannot be forgotten silently.
+  system would need a re-path signal), so it is left for a follow-up with a
+  pending behavioral test for restoring a companion onto water.
 
 ### Nav assertion
 

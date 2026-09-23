@@ -8,8 +8,10 @@
 
 import { describe, expect, test } from 'bun:test';
 import { BRIDGE_FRAMES, G, isBridgeGid } from './emberwatch_authoring.ts';
+import { BRIDGE_ROUTE_ASSERTIONS, validateBridgeRoutes } from './emberwatch_map_bridge_route.ts';
 import { buildVillage } from './emberwatch_map_retained.ts';
 import { validateEmberwatchMaps } from './emberwatch_map_validation.ts';
+import type { MapContext, ValidationFinding } from './emberwatch_map_validation_context.ts';
 
 /** The village builder is re-exported through the retained module. */
 const { map } = buildVillage();
@@ -120,6 +122,30 @@ describe('C-549 — the notice-board approach meets the crossing on both banks',
 });
 
 describe('C-549 — the crossing is on the shortest route from the square to the board', () => {
+  test('the village crossing-route assertion is registered', () => {
+    expect(BRIDGE_ROUTE_ASSERTIONS.village.length).toBeGreaterThan(0);
+  });
+
+  test('reports a crossing bypassed by the shortest route', () => {
+    const grid = { width: 38, height: 24, blocked: new Uint8Array(38 * 24) };
+    const context: MapContext = {
+      id: 'village',
+      raw: { width: grid.width, height: grid.height },
+      objects: [],
+      grid,
+      terrainGrid: grid,
+      reachable: new Uint8Array(grid.blocked.length).fill(1),
+      spawns: [],
+      npcs: [],
+      props: [],
+      transitions: [],
+    };
+    const findings: ValidationFinding[] = [];
+    validateBridgeRoutes(context, findings);
+    expect(findings).toHaveLength(1);
+    expect(findings[0]?.rule).toBe('crossing-not-on-shortest-route');
+  });
+
   test('the real pack has no crossing-route blocker', () => {
     const validation = validateEmberwatchMaps();
     const routeFindings = validation.findings.filter((entry) => entry.rule.startsWith('crossing-'));

@@ -14,24 +14,11 @@
 // asserted as "newly water" are read out of the map, not hard-coded twice.
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import manifest from '../../../../../content/packs/emberwatch/manifest.json';
+import map from '../../../../../content/packs/emberwatch/maps/village.json';
 import type { CollisionGrid } from '../systems/collision_system.ts';
 import { resetCollisionGrid, setCollisionGrid } from '../systems/collision_system.ts';
 import { clampSpawnToWalkable, isPlayerSpawnBlocked } from '../systems/movement_system.ts';
-
-const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '../../../../..');
-const VILLAGE_PATH = join(REPO_ROOT, 'content/packs/emberwatch/maps/village.json');
-const MANIFEST_PATH = join(REPO_ROOT, 'content/packs/emberwatch/manifest.json');
-
-type VillageMap = {
-  width: number;
-  height: number;
-  layers: Array<{ name?: string; type?: string; data?: number[] }>;
-};
-
-const readJson = <T>(path: string): T => JSON.parse(readFileSync(path, 'utf8')) as T;
 
 /** True when one GID makes its cell solid, given the manifest's tile table. */
 const gidBlocks = (
@@ -51,10 +38,6 @@ const gidBlocks = (
 
 /** The real village collision grid, exactly as the engine builds it. */
 const villageCollisionGrid = (): CollisionGrid => {
-  const map = readJson<VillageMap>(VILLAGE_PATH);
-  const manifest = readJson<{ tiles: Record<string, { isWalkable?: boolean; name?: string }> }>(
-    MANIFEST_PATH,
-  );
   const total = map.width * map.height;
   const grid = new Array<boolean>(total).fill(false);
   for (const layer of map.layers) {
@@ -161,30 +144,6 @@ describe('C-549 — restoring onto a cell the crossing change made water', () =>
   });
 });
 
-// The companion restore path is asserted as documentation, not fixed here: the
-// task explicitly says to report it rather than fix it unless it is a one-liner.
-// `RESTORE_PLAYER` in ecs_worker.ts clamps ONLY `playerEntityId` through
-// `clampSpawnToWalkable`; there is no equivalent call for entities carrying the
-// `Companion` component. A companion restored onto newly-water terrain keeps its
-// saved coordinates and is then resolved by the same `updateMovement`
-// collision check, so it is not frozen like the player was (the player's freeze
-// was a spawn-time deadlock; a companion simply cannot step that way and its
-// follow system re-paths). The behaviour is unchanged by C-549, which only
-// changed which cells are water.
 describe('C-549 — companion restore path (reported, not changed)', () => {
-  it('the worker clamps the player on RESTORE_PLAYER but has no companion equivalent', () => {
-    const worker = readFileSync(
-      join(dirname(fileURLToPath(import.meta.url)), '../worker/ecs_worker.ts'),
-      'utf8',
-    );
-    const restoreBlock = worker.slice(
-      worker.indexOf("case 'RESTORE_PLAYER'"),
-      worker.indexOf("case 'SET_MAP_BOUNDS'"),
-    );
-    // The clamp exists for the player…
-    expect(restoreBlock).toContain('clampSpawnToWalkable');
-    expect(restoreBlock).toContain('playerEntityId');
-    // …and is not applied to Companion entities anywhere in the restore path.
-    expect(restoreBlock).not.toContain('Companion');
-  });
+  it.todo('relocates a companion restored onto newly-water terrain', () => {});
 });

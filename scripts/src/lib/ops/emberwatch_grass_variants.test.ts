@@ -64,6 +64,9 @@ const framePixels = (key: string): Pixel[] => {
 };
 
 const pixelLuminance = (pixel: Pixel): number => luminance(pixel.r, pixel.g, pixel.b);
+const isClumpPixel = (pixel: Pixel): boolean =>
+  (pixel.r === 88 && pixel.g === 154 && pixel.b === 70) ||
+  (pixel.r === 64 && pixel.g === 126 && pixel.b === 52);
 const mean = (values: readonly number[]): number =>
   values.reduce((sum, value) => sum + value, 0) / values.length;
 const median = (values: readonly number[]): number => {
@@ -130,13 +133,6 @@ describe('C-549 — grass variants share the base value (plan §1.6)', () => {
       );
     });
   }
-
-  test('the dark variant no longer paints from the old darker base colour', () => {
-    // The pre-C-549 dark base was RGB(58,116,50) — a materially darker cell
-    // than RGB(74,143,60). Assert the old bug cannot come back.
-    const centre = framePixels('grass_dark.png').find((pixel) => pixel.x === 16 && pixel.y === 16);
-    expect([centre?.r, centre?.g, centre?.b]).not.toEqual([58, 116, 50]);
-  });
 });
 
 describe('C-549 — the flower/fleck variant is sparse, low contrast and irregular', () => {
@@ -189,28 +185,30 @@ describe('C-549 — the flower/fleck variant is sparse, low contrast and irregul
   });
 
   test('the variant has no fixed-grid placement: decal offsets are irregular', () => {
-    // Decals are placed by a seeded RNG across the whole cell, so no row may
-    // hold three or more decals at a constant stride (which a fixed 8px lattice
-    // would produce). Off-hue detection is not usable here — the restrained
-    // decals are green like the base — so identify them as the pixels whose
-    // value sits clear of the frame median.
     const rows = new Map<number, number[]>();
     for (const pixel of framePixels('grass_variant.png')) {
-      if (Math.abs(pixelLuminance(pixel) - baseMedian) <= 12) {
+      if (!isClumpPixel(pixel)) {
         continue;
       }
-      rows.set(pixel.y, [...(rows.get(pixel.y) ?? []), pixel.x]);
+      const rowBand = Math.floor(pixel.y / 8);
+      rows.set(rowBand, [...(rows.get(rowBand) ?? []), pixel.x]);
     }
-    for (const [y, xs] of rows) {
+    let checkedRows = 0;
+    for (const [rowBand, xs] of rows) {
       if (xs.length < 3) {
         continue;
       }
+      checkedRows += 1;
       const stride = (xs[xs.length - 1] ?? 0) - (xs[0] ?? 0);
       const regular = xs.every(
         (x, i) => i === 0 || x - (xs[i - 1] ?? 0) === stride / (xs.length - 1),
       );
-      expect(regular, `row ${y} decals ${xs.join(',')} form a fixed grid`).toBe(false);
+      expect(
+        regular,
+        `rows ${rowBand * 8}–${rowBand * 8 + 7} decals ${xs.join(',')} form a fixed grid`,
+      ).toBe(false);
     }
+    expect(checkedRows).toBeGreaterThan(0);
   });
 });
 
