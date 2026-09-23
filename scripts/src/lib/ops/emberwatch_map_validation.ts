@@ -21,6 +21,7 @@ import {
   readPublishedSeedHashes,
 } from './emberwatch_candidate_plane.ts';
 import { checkLockedIdentities } from './emberwatch_locked_identity.ts';
+import { validateBridgeRoutes } from './emberwatch_map_bridge_route.ts';
 import {
   buildContexts,
   type Manifest,
@@ -165,6 +166,9 @@ export const validateEmberwatchMaps = (): EmberwatchMapValidation => {
     validateNpcAndEvidence({ context, manifest, findings });
     validateConnectivity({ context, manifest, findings });
     validateRouteWidth(context, findings);
+    // C-549: a crossing must lie ON the shortest path to the place it serves,
+    // not merely be reachable somewhere.
+    validateBridgeRoutes(context, findings);
   }
   validateTransitions(contexts, findings);
   findings.push(...candidatePlaneFindings());

@@ -406,9 +406,9 @@ const assertBridgeBanks = (options: {
  * per-cell stamp it replaces, so saves and navigation are unaffected.
  *
  * `assertBanks` (default true) throws at author time when an approach end is
- * not walkable land or a long side is not water. Pass `false` only for a
- * crossing that intentionally sits at a channel corner (the village stream's
- * L-bend), where the perpendicular-crossing assumption does not hold.
+ * not walkable land or a long side is not water. C-549 moved the village
+ * crossing off the stream's inside corner onto the straight E–W reach, so both
+ * Emberwatch crossings now satisfy the strict check and no call site opts out.
  */
 export const placeBridge = (
   map: MapData,

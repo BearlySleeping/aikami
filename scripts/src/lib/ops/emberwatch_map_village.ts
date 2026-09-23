@@ -45,6 +45,7 @@ import {
   makeMap,
   makeRng,
   scatter,
+  scatterPatches,
   setTile,
 } from './emberwatch_map_shared.ts';
 import { buildG } from './generate_emberwatch_tables.ts';
@@ -184,8 +185,11 @@ const streamChannel = (): Array<[number, number]> => {
   for (let r = 3; r <= 7; r++) {
     channel.push([40, r]);
   }
-  for (let c = 39; c >= 26; c--) {
-    channel.push([c, 7]);
+  // C-549: the E–W reach is two rows deep (7–8) from its west end to the elbow
+  // at col 40, so the crossing sits on a straight span whose long sides are
+  // water and whose travel ends are dry land.
+  for (let c = 40; c >= 26; c--) {
+    channel.push([c, 7], [c, 8]);
   }
   for (let r = 8; r <= 12; r++) {
     channel.push([26, r]);
@@ -241,15 +245,12 @@ const bankChannel = (m: MapData, channel: Array<[number, number]>): void => {
 
 /** The wooden bridge: the only dry crossing of the stream. */
 const buildStreamBridge = (m: MapData): void => {
+  // C-549: on the straight E–W reach, so the strict bank check holds — both
+  // travel ends are dry land and both long sides are water.
   placeBridge(m, {
-    region: { c0: 39, r0: 7, c1: 41, r1: 8 },
+    region: { c0: 36, r0: 7, c1: 37, r1: 8 },
     axis: 'ns',
     mapId: 'village',
-    // The stream is an L-bend and this crossing sits at its inside corner, so
-    // the east bank and the north approach are dry — the perpendicular
-    // bank/water assertion does not hold. Reshaping the stream is out of scope,
-    // so the strict check is disabled for this one crossing.
-    assertBanks: false,
   });
 };
 
@@ -259,7 +260,7 @@ const buildStreamBridge = (m: MapData): void => {
  * Enters from the north-east treeline, runs west inside the northern rim and
  * drains out through the west rim. It shapes the perimeter instead of sitting in
  * the middle of the map as a decorative pond. Collision stays semantic — water
- * blocks — and the only dry crossing is the stone bridge on the notice-board
+ * blocks — and the only dry crossing is the wooden bridge on the notice-board
  * approach.
  */
 const stream = (m: MapData): void => {
@@ -396,9 +397,10 @@ const paintSecondaryRoutes = (m: MapData): void => {
   // Shop approach: south from the north–south road to the shop landing.
   fillRect(m, 39, 33, 53, 34, G.DIRT);
   fillRect(m, 50, 33, 51, 34, G.STONE_FLOOR);
-  // Notice-board approach: north from the road, over the bridge.
+  // Notice-board approach: north from the road to the crossing's south bank.
+  // The short spurs onto each bank are painted after the stream so the bank
+  // sand cannot overwrite them (see paintNoticeBoardApproach).
   fillRect(m, 39, 9, 40, 22, G.DIRT);
-  fillRect(m, 41, 10, 46, 11, G.DIRT);
   // Well approach: west from the square.
   fillRect(m, 23, 22, 26, 23, G.DIRT);
   // A worn spur down to the south shed, so the south-west is not dead grass.
@@ -408,10 +410,27 @@ const paintSecondaryRoutes = (m: MapData): void => {
 /** ── Pads ─────────────────────────────────────────────────────────────────── */
 const paintPads = (m: MapData): void => {
   fillRect(m, 17, 21, 22, 25, G.STONE_FLOOR); // well
-  fillRect(m, 43, 8, 47, 12, G.STONE_FLOOR); // notice board
   fillRect(m, 4, 27, 14, 30, G.STONE_FLOOR); // smith's yard
   fillRect(m, 47, 20, 56, 22, G.STONE_FLOOR); // inn forecourt
   fillRect(m, 47, 33, 56, 34, G.STONE_FLOOR); // shop landing
+  // C-549: the notice board moved to the crossing's north bank. Its pad is worn
+  // earth, not paving: a board on a woodland edge is trodden ground, and a
+  // paved slab would also put the (out-of-scope) stone floor painter on the
+  // critical path of this contract.
+  fillRect(m, 34, 3, 39, 6, G.DIRT); // notice board
+};
+
+/**
+ * The notice board's worn approach (C-549).
+ *
+ * The existing dirt path at cols 39–40 runs north to the crossing's south bank;
+ * a short spur links it to the span's south end, and on the north bank a short
+ * spur links the span to the board's stone pad. Painted after the stream so the
+ * bank sand does not overwrite the wear.
+ */
+const paintNoticeBoardApproach = (m: MapData): void => {
+  fillRect(m, 36, 9, 40, 9, G.DIRT); // south bank: path → crossing south end
+  fillRect(m, 36, 6, 37, 6, G.DIRT); // north bank: crossing north end → pad
 };
 
 /** The five building shells, in placement order. */
@@ -533,7 +552,7 @@ const resealWater = (m: MapData): void => {
 
 /** …and the bridge stays open after that. */
 const reopenBridge = (m: MapData): void => {
-  for (const c of [39, 40, 41]) {
+  for (const c of [36, 37]) {
     for (const r of [7, 8]) {
       if (isBridgeGid(m.ground[r * W + c])) {
         m.collision[r * W + c] = 0;
@@ -569,10 +588,33 @@ export const buildVillage = (): { map: MapData; objectLayers: MapObjectLayer[] }
   paintPads(m);
   placeBuildings(m);
   stream(m);
+  paintNoticeBoardApproach(m);
 
   // ── Ground variation and woodland stands ─────────────────────────────────
-  scatter(m, rng, 2, 2, W - 3, H - 3, G.GRASS, G.GRASS_DARK, 0.14);
-  scatter(m, rng, 2, 2, W - 3, H - 3, G.GRASS, G.GRASS_VARIANT, 0.06);
+  // C-549: broad, soft grass patches (deterministic value noise), not
+  // independent per-cell flecks that advertise the grid (plan §1.6).
+  scatterPatches({
+    map: m,
+    seed: 0x5a11,
+    c0: 2,
+    r0: 2,
+    c1: W - 3,
+    r1: H - 3,
+    baseGid: G.GRASS,
+    gid: G.GRASS_DARK,
+    threshold: 0.62,
+  });
+  scatterPatches({
+    map: m,
+    seed: 0x5a12,
+    c0: 2,
+    r0: 2,
+    c1: W - 3,
+    r1: H - 3,
+    baseGid: G.GRASS,
+    gid: G.GRASS_VARIANT,
+    threshold: 0.82,
+  });
   // Paving wear through the earthen square.
   scatter(m, rng, 26, 19, 39, 28, G.DIRT, G.FLAGSTONE, 0.14);
 
@@ -592,7 +634,7 @@ export const buildVillage = (): { map: MapData; objectLayers: MapObjectLayer[] }
 
         // ── Landmarks ──────────────────────────────────────────────────────
         placeLandmark(2, 'village_well', 'Old Stone Well', 'prop_well.png', 19, 24),
-        placeLandmark(3, 'notice_board', 'Village Notice Board', 'prop_notice_board.png', 45, 11),
+        placeLandmark(3, 'notice_board', 'Village Notice Board', 'prop_notice_board.png', 37, 4),
         placeLandmark(4, 'village_gate', 'Emberwatch Village Gate', 'prop_gate.png', 32, 45),
         placeLandmark(12, 'ward_tree_landmark', 'The Ward Tree', 'ward_large.png', 32, 23),
 

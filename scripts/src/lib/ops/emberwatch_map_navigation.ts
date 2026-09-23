@@ -245,6 +245,87 @@ export const cloneGrid = (grid: WalkabilityGrid): WalkabilityGrid => ({
   blocked: new Uint8Array(grid.blocked),
 });
 
+/** Breadth-first search state shared by {@link shortestPath}. */
+type BfsState = {
+  previous: Int32Array;
+  visited: Uint8Array;
+  queue: number[];
+  target: number;
+};
+
+/** Walks `NEIGHBORS4` from one cell, recording the parent link of each new cell. */
+const expandBfsCell = (grid: WalkabilityGrid, state: BfsState, index: number): boolean => {
+  const c = index % grid.width;
+  const r = Math.floor(index / grid.width);
+  for (const [dc, dr] of NEIGHBORS4) {
+    const next = gridIndex(grid, c + dc, r + dr);
+    if (!isWalkable(grid, c + dc, r + dr) || state.visited[next] === 1) {
+      continue;
+    }
+    state.visited[next] = 1;
+    state.previous[next] = index;
+    if (next === state.target) {
+      return true;
+    }
+    state.queue.push(next);
+  }
+  return false;
+};
+
+/** Drains the queue breadth-first; `true` once the target has been reached. */
+const runBfs = (grid: WalkabilityGrid, state: BfsState): boolean => {
+  let head = 0;
+  while (head < state.queue.length) {
+    const index = state.queue[head++];
+    if (index === undefined) {
+      continue;
+    }
+    if (expandBfsCell(grid, state, index)) {
+      return true;
+    }
+  }
+  return false;
+};
+
+/** Rebuilds the cell path by walking the recorded parent links back to the start. */
+const tracePath = (grid: WalkabilityGrid, state: BfsState): Array<{ c: number; r: number }> => {
+  const path: Array<{ c: number; r: number }> = [];
+  for (let current = state.target; current !== -1; current = state.previous[current] ?? -1) {
+    path.push({ c: current % grid.width, r: Math.floor(current / grid.width) });
+  }
+  return path.reverse();
+};
+
+/**
+ * Shortest orthogonal path between two cells, or `undefined` when no walkable
+ * route exists. Breadth-first over `NEIGHBORS4`, so the returned path has the
+ * fewest steps (the "shortest path" a route assertion means). Ties are broken
+ * by the neighbour order, which keeps the result deterministic.
+ */
+export const shortestPath = (
+  grid: WalkabilityGrid,
+  from: { c: number; r: number },
+  to: { c: number; r: number },
+): Array<{ c: number; r: number }> | undefined => {
+  if (!isWalkable(grid, from.c, from.r) || !isWalkable(grid, to.c, to.r)) {
+    return undefined;
+  }
+  if (from.c === to.c && from.r === to.r) {
+    return [{ c: from.c, r: from.r }];
+  }
+  const total = grid.width * grid.height;
+  const start = gridIndex(grid, from.c, from.r);
+  const visited = new Uint8Array(total);
+  visited[start] = 1;
+  const state: BfsState = {
+    previous: new Int32Array(total).fill(-1),
+    visited,
+    queue: [start],
+    target: gridIndex(grid, to.c, to.r),
+  };
+  return runBfs(grid, state) ? tracePath(grid, state) : undefined;
+};
+
 /**
  * Usable corridor width at a walkable cell, measured perpendicular to one
  * orthogonal route step. A horizontal route needs vertical room and vice versa.
