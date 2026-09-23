@@ -68,11 +68,74 @@ export const enterFullView: StageHook = async (page) => {
  * subject. Dev-only harness: the panel is not part of the production surface.
  */
 export const closeDevTools: StageHook = async (page) => {
-  const close = page.locator('[data-testid="devtools-close"]');
-  if (await close.isVisible().catch(() => false)) {
-    await close.click({ timeout: 3000 }).catch(() => {});
-    await page.waitForTimeout(200);
+  // Clicked via evaluate: a real click is blocked by the sandbox shell chrome
+  // sitting above the panel, and the panel must not cover the stage.
+  await page
+    .evaluate(() => {
+      document.querySelector<HTMLElement>('[data-testid="devtools-close"]')?.click();
+    })
+    .catch(() => {});
+  await page.waitForTimeout(300);
+};
+
+// ── Production /game host evidence ──────────────────────────────────────
+
+/**
+ * Boots the production `/game` route against the Emberwatch candidate plane and
+ * walks to a real NPC until a real dialogue opens.
+ *
+ * The game's movement bindings are WASD (its own onboarding hint says "Use W to
+ * move"). Driving it with arrow keys leaves the player at spawn, which is why
+ * this case previously timed out waiting for a dialogue overlay.
+ */
+export const walkToEmberwatchNpc: StageHook = async (page) => {
+  await page.goto('http://localhost:5274/game?forceOffline=1', { waitUntil: 'domcontentloaded' });
+  // The overlay layer mounts only once the game view is up.
+  await page.locator('[data-testid="game-ui-overlay-layer"]').waitFor({
+    state: 'attached',
+    timeout: 60_000,
+  });
+  const overlay = page.locator(STAGE_SELECTOR);
+  // World boot (content preload + entity spawn) finishes after the canvas
+  // appears, and input stays locked until then — walking too early burns the
+  // whole walk budget against a locked input.
+  await page.waitForTimeout(30_000);
+
+  const pattern = [
+    'w',
+    'w',
+    'd',
+    'w',
+    'd',
+    's',
+    'd',
+    'w',
+    'a',
+    'w',
+    'a',
+    's',
+    'a',
+    'w',
+    'd',
+    's',
+    'a',
+    'w',
+    'd',
+  ] as const;
+
+  for (let i = 0; i < 150; i++) {
+    if ((await overlay.count()) > 0) {
+      return;
+    }
+    const key = pattern[i % pattern.length] as string;
+    await page.keyboard.down(key);
+    await page.waitForTimeout(140);
+    await page.keyboard.up(key);
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(120);
   }
+
+  await overlay.waitFor({ state: 'visible', timeout: 30_000 });
 };
 
 // ── Neutral evaluation schema + prompt ──────────────────────────────────

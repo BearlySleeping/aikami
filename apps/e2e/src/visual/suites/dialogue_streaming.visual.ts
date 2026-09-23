@@ -135,6 +135,9 @@ export default defineConfig({
       searchParams: { simulate_stream: 'true' },
       prompt: STREAMING_PROMPT,
       schema: DialogueStreamingSchema,
+      // The sandbox is DOM-only (no Pixi canvas); targeting the stage makes
+      // this a DOM capture instead of a meaningless default-canvas crop.
+      screenshotSelector: STAGE_SELECTOR,
       setupHook: simulateStream,
     },
     // ── C-547 stage review matrix ────────────────────────────

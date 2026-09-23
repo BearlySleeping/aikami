@@ -20,6 +20,7 @@ import {
   STAGE_REVIEW_PROMPT,
   STAGE_SELECTOR,
   StageReviewSchema,
+  walkToEmberwatchNpc,
   withStageHooks,
 } from './dialogue_stage_fixtures';
 
@@ -75,6 +76,8 @@ export default defineConfig({
       searchParams: { forceOffline: '1' },
       prompt: FALLBACK_PROMPT,
       schema: DialogueFallbackSchema,
+      // DOM-only sandbox: target the stage rather than the default canvas crop.
+      screenshotSelector: STAGE_SELECTOR,
     },
     // ── Production Route Case (C-335 AC-7) ────────────────
     {
@@ -88,31 +91,7 @@ export default defineConfig({
         'No raw error strings or blank dialogue areas.',
       ].join('\n'),
       schema: DialogueFallbackSchema,
-      setupHook: async (page) => {
-        // Navigate to production route
-        await page.goto('http://localhost:5274/game?forceOffline=1', {
-          waitUntil: 'domcontentloaded',
-        });
-        // Wait for engine and approach NPC
-        await page.waitForSelector('#game-canvas-container canvas', {
-          state: 'attached',
-          timeout: 30_000,
-        });
-
-        // Walk toward NPC spawn
-        for (let i = 0; i < 8; i++) {
-          await page.keyboard.press('ArrowRight');
-          await page.waitForTimeout(100);
-        }
-        for (let i = 0; i < 4; i++) {
-          await page.keyboard.press('ArrowDown');
-          await page.waitForTimeout(100);
-        }
-
-        // Interact
-        await page.keyboard.press('Enter');
-        await page.waitForTimeout(2000);
-      },
+      setupHook: walkToEmberwatchNpc,
     },
     // ── C-547: short authored line on a compact stage ─────────
     {

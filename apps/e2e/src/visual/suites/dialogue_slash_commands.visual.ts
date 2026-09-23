@@ -80,6 +80,8 @@ export default defineConfig({
       searchParams: { simulate_stream: 'true' },
       prompt: SLASH_COMMANDS_PROMPT,
       schema: DialogueSlashCommandsSchema,
+      // DOM-only sandbox: target the stage rather than the default canvas crop.
+      screenshotSelector: STAGE_SELECTOR,
       setupHook: triggerGenerate,
     },
     // ── C-547: inline image + stage on a compact viewport ─────
