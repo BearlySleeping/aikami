@@ -27,6 +27,12 @@ export type RenderEntry = {
   animationController?: AnimationController;
   /** Tint color for the entity. */
   tint: number;
+  /**
+   * C-545: when `true` this entity is a light source and is skipped by the
+   * scene ambient tint (e.g. a lit hearth or brazier). Set from the prop
+   * definition at creation; never mutated afterwards.
+   */
+  ambientExempt?: boolean;
   /** When `true`, spatial culling is enabled for this entity. */
   cullable: boolean;
   /** Layer recipes for multi-layer rendering. */

@@ -202,6 +202,8 @@ type PropDef = {
   environment?: Record<string, unknown>;
   renderSize?: PropRenderSize;
   shadow?: PropShadow;
+  /** C-545: light source exempt from the day/night ambient tint. */
+  emissive?: boolean;
 };
 
 const combatEnv = (
@@ -387,17 +389,22 @@ export const EMBERWATCH_PROPS: Record<string, PropDef> = {
   shop_chair: anchored('Chair', 'chair.png', 16, 10),
 
   inn_bed: anchored('Guest Bed', 'prop_bed.png', 30, 22),
-  inn_hearth: anchored('Hearth', 'prop_hearth.png', 44, 20),
+  // C-545: the hearth and both braziers are lit fire sources — they keep
+  // their authored warmth at night instead of taking the ambient multiplier.
+  inn_hearth: anchored('Hearth', 'prop_hearth.png', 44, 20, { emissive: true }),
   inn_shelf: anchored('Storage Shelf', 'prop_bookshelf.png', 24, 14),
   shop_shelf: anchored('Storage Shelf', 'prop_bookshelf.png', 24, 14),
   shop_shelf_2: anchored('Storage Shelf', 'prop_bookshelf.png', 24, 14),
   yard_anvil: anchored('Smith Anvil', 'prop_anvil.png', 24, 16),
 
   // ── Combat environment objects (affordances preserved) ───────────────────
+  // C-545: braziers are lit fire sources — exempt from the ambient tint.
   inn_brazier: anchored('Brazier', 'prop_brazier.png', 22, 22, {
+    emissive: true,
     environment: combatEnv(4, true, 'none', TIP_OVER),
   }),
   shrine_brazier: anchored('Brazier', 'prop_brazier.png', 22, 22, {
+    emissive: true,
     environment: combatEnv(4, true, 'none'),
   }),
   inn_oil_pool: anchored('Spilled Oil', 'prop_oil_pool.png', 22, 22, {

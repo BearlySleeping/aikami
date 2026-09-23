@@ -74,6 +74,8 @@ export type PropFrameAnchor = {
   renderWidth?: number;
   renderHeight?: number;
   shadow?: PropContactShadow;
+  /** C-545: light source exempt from the day/night ambient tint. */
+  emissive?: boolean;
 };
 
 /**
@@ -132,12 +134,17 @@ const buildPropFrameMeta = (packConfig: PackConfig | undefined): Map<string, Pro
     const renderWidth = existing?.renderWidth ?? propDef.renderSize?.width;
     const renderHeight = existing?.renderHeight ?? propDef.renderSize?.height;
     const shadow = existing?.shadow ?? propDef.shadow;
+    // C-545: a frame is emissive if ANY prop that declares it is a light
+    // source (OR across declarations), so a shared frame can never be tinted
+    // for one placement and not another.
+    const emissive = existing?.emissive ?? propDef.emissive ?? false;
     meta.set(propDef.frame, {
       anchorX: anchor.x,
       anchorY: anchor.y,
       ...(renderWidth === undefined ? {} : { renderWidth }),
       ...(renderHeight === undefined ? {} : { renderHeight }),
       ...(shadow === undefined ? {} : { shadow }),
+      ...(emissive ? { emissive: true } : {}),
     });
   }
   return meta;

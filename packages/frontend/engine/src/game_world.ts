@@ -10,7 +10,6 @@ import { BaseEngineClass, type BaseEngineClassOptions } from './base_engine_clas
 import type { LpcLayerRecipe } from './components/appearance.ts';
 import { COMPONENT_STRIDE } from './config/memory_config.ts';
 import type { EngineBridge } from './engine_bridge.ts';
-import { COLOR_INTERIOR, ENV_UBO_OFFSETS } from './environment/environment_ubo.ts';
 import { unprojectScreenPoint } from './frame_pacing.ts';
 import { loadStaticVisual } from './game_world/actor_visual_transport.ts';
 import { CombatSelectionHighlights } from './game_world/combat_selection_highlights.ts';
@@ -31,6 +30,7 @@ import { InputController } from './game_world/input_controller.ts';
 import { PointerController } from './game_world/pointer_controller.ts';
 import { RenderBufferPool } from './game_world/render_buffer_pool.ts';
 import type { RenderEntry } from './game_world/render_entry.ts';
+import { SceneAmbientController } from './game_world/scene_ambient.ts';
 import {
   buildFrameUvResolver,
   drawDebugGrid,
@@ -515,14 +515,6 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
   private _isInteriorMap = false;
 
   /**
-   * C-378 AC-9: whether the day/night tint has been sampled in screenshot
-   * mode. The first ambient value (once the worker UBO arrives) is retained
-   * for the whole capture instead of refreshing from the advancing worker
-   * UBO, keeping the tint deterministic across runs.
-   */
-  private _screenshotTintSampled = false;
-
-  /**
    * C-378 AC-9: the last game hour reported by the worker. When it
    * changes, a screenshot tint frozen from the previous hour's UBO is
    * stale — the sample latch is reset so the next ticker frame re-samples
@@ -531,6 +523,13 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    * never the boot hour).
    */
   private _lastReportedGameHour: number | undefined;
+
+  /**
+   * C-545: resolves the one scene ambient and applies it to terrain (uTint)
+   * and to every entity container, so props, actors and enemies multiply by
+   * the same factor as the ground.
+   */
+  private readonly _sceneAmbient = new SceneAmbientController();
 
   constructor(options: GameWorldOptions) {
     super(options);
@@ -785,46 +784,24 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       }
 
       // ── C-177: Update uTime for GPU tile animation ──
-      // ── C-378 AC-9: update the day/night tint from the worker's UBO ──
-      if (this._tilemapUniforms) {
-        // C-378 visual determinism: freeze the tile animation clock in
-        // screenshot mode (the visual runner always injects `screenshot=true`).
-        // Animated water tiles made every capture pixel-different, which busted
-        // the VLM cache key and produced independent (flaky) judgements.
-        if (!this._isVisualScreenshotMode()) {
-          this._tilemapUniforms.uniforms.uTime = performance.now() / 1000;
-        }
-        // C-378 AC-9: outside screenshot mode the ambient tint follows the
-        // live worker UBO every frame. In screenshot mode the FIRST sampled
-        // tint is retained for the entire capture — the worker UBO keeps
-        // advancing (game time passes), so refreshing it per frame would
-        // make the tint non-deterministic across runs.
-        const screenshotMode = this._isVisualScreenshotMode();
-        if (!screenshotMode || !this._screenshotTintSampled) {
-          const tintArr = this._tilemapUniforms.uniforms.uTint as Float32Array | undefined;
-          if (tintArr && this._environmentUbo) {
-            // C-417 AC-2: interior maps pin their ambient tint to a fixed
-            // warm colour so they stay readable regardless of the outdoor
-            // clock; outdoor maps follow the worker's diurnal UBO ambient
-            // (same factor the rest of the scene uses). Neutral (1,1,1) when
-            // the worker hasn't sent a UBO yet (boot) → pixel-identical to
-            // an untinted render.
-            if (this._isInteriorMap) {
-              tintArr[0] = COLOR_INTERIOR[0] ?? 0.82;
-              tintArr[1] = COLOR_INTERIOR[1] ?? 0.78;
-              tintArr[2] = COLOR_INTERIOR[2] ?? 0.68;
-            } else {
-              const ambient = this._environmentUbo;
-              tintArr[0] = ambient[ENV_UBO_OFFSETS.ambientColor + 0] ?? 1;
-              tintArr[1] = ambient[ENV_UBO_OFFSETS.ambientColor + 1] ?? 1;
-              tintArr[2] = ambient[ENV_UBO_OFFSETS.ambientColor + 2] ?? 1;
-            }
-            if (screenshotMode) {
-              this._screenshotTintSampled = true;
-            }
-          }
-        }
+      // ── C-378/C-545: resolve the ambient and apply it to the scene ──
+      if (this._tilemapUniforms && !this._isVisualScreenshotMode()) {
+        this._tilemapUniforms.uniforms.uTime = performance.now() / 1000;
       }
+
+      // ONE ambient policy: terrain's uTint and every entity container tint
+      // come from the same resolved factor. Runs every frame, so an hour
+      // change, a map transition, entering/leaving an interior, or a texture
+      // that loads late is picked up without a dedicated re-tint hook. The HUD
+      // is not in this map and terrain is tinted by the shader, so neither is
+      // touched.
+      this._sceneAmbient.update({
+        isInterior: this._isInteriorMap,
+        environmentUbo: this._environmentUbo,
+        tilemapUniforms: this._tilemapUniforms,
+        freeze: this._isVisualScreenshotMode(),
+      });
+      this._sceneAmbient.applyToEntries(this._renderEntries.values());
 
       // A caller-supplied debug scene owns the camera so a synthetic board is
       // always framed; without one the worker's follow-camera is unchanged.
@@ -1326,7 +1303,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       // Outside screenshot mode the latch is never set — no-op.
       const reportedHour = envData.gameHour as number;
       if (this._lastReportedGameHour !== undefined && this._lastReportedGameHour !== reportedHour) {
-        this._screenshotTintSampled = false;
+        this._sceneAmbient.invalidateSample();
       }
       this._lastReportedGameHour = reportedHour;
       // Feed the renderer's weather targets from the worker's UBO.
@@ -1384,6 +1361,12 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       }
     }
 
+    // C-545: an emissive prop (lit hearth/brazier) declares an ambient
+    // opt-out in its definition; the frame→meta map carries it here so the
+    // entity is never tinted by the day/night cycle.
+    const ambientExempt =
+      message.frame !== undefined && this._propFrameMeta.get(message.frame)?.emissive === true;
+
     const display = createEntityDisplay({
       eid,
       tint,
@@ -1392,6 +1375,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       stage: this._app.stage,
       loadPropFrame: (options) => void this._loadPropFrameTexture(options),
       frame: message.frame,
+      ambientExempt,
       onAddedToStage: (info) => this.debug('entity-added-to-stage', info),
     });
     this._renderEntries.set(eid, display.entry);
@@ -1885,6 +1869,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    * flag. Rendering happens after this, so the tint path reads the new map.
    */
   private _installScene(scene: PreparedScene): void {
+    this._sceneAmbient.invalidateSample();
     this._isInteriorMap = scene.packConfig?.interior === true;
     // Interiors have no sky — suppress outdoor weather (same flag as lighting).
     this._weatherFx?.setSceneContext({ interior: this._isInteriorMap });
