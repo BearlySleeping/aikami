@@ -4,7 +4,7 @@ title: "Compact dialogue stage on game UI roles"
 source: direct
 contract_type: thin
 status: implemented
-github: { issue_number: null, issue_url: null, project_item_id: null, pr_url: null }
+github: { issue_number: null, issue_url: null, project_item_id: null, pr_url: "https://github.com/BearlySleeping/aikami/pull/389" }
 created_at: "2026-09-23T00:00:00Z"
 ---
 
