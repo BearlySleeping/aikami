@@ -87,6 +87,34 @@ const SELECTED_PROMPT = [
   'Return ONLY valid JSON matching the schema.',
 ].join('\n');
 
+// ── Setup hooks ──────────────────────────────────────────────
+
+/**
+ * Navigates to the dialogue sandbox in `?cyoa=<mode>`, closes devtools, sends
+ * a message to trigger the single-call CYOA turn, then waits for the real
+ * `cyoa-choices` block to render INSIDE the stage before capture.
+ */
+const captureCyoaStage =
+  (mode: string) =>
+  async (page: import('playwright').Page): Promise<void> => {
+    await page.goto(`http://localhost:5274/dev/sandbox/dialogue?cyoa=${mode}`, {
+      waitUntil: 'domcontentloaded',
+    });
+    await page.waitForSelector(STAGE_SELECTOR, { timeout: 15_000 });
+    await closeDevTools(page);
+
+    const input = page.locator('textarea').first();
+    const send = page.getByRole('button', { name: 'Send' }).first();
+    await input.waitFor({ state: 'visible', timeout: 15_000 });
+    await input.fill('Tell me about the ward.');
+    await send.click();
+
+    await page
+      .locator(`${STAGE_SELECTOR} [data-testid="cyoa-choices"]`)
+      .waitFor({ state: 'visible', timeout: 15_000 });
+    await page.waitForTimeout(800);
+  };
+
 // ── Suite ────────────────────────────────────────────────────
 
 export default defineConfig({
@@ -114,23 +142,30 @@ export default defineConfig({
         await page.waitForTimeout(500);
       },
     },
-    // ── C-547: CYOA choices inline in the compact dialogue stage ──
+    // ── C-547: real CYOA choices inline in the compact dialogue stage ──
+    // The sandbox `?cyoa=` seam puts it on the single-call `generateTurn`
+    // path so it emits real `activeChoices`; the hook sends a message and
+    // waits for `cyoa-choices` INSIDE the stage before capturing.
     {
-      name: 'CYOA Choices — Dialogue Stage',
+      name: 'CYOA Choices — Dialogue Stage (4 choices)',
       prompt: STAGE_REVIEW_PROMPT,
       schema: StageReviewSchema,
       screenshotSelector: STAGE_SELECTOR,
-      setupHook: async (page) => {
-        // The standalone /dev/cyoa sandbox exercises the shared choice
-        // component; this case mounts the production dialogue stage so the
-        // choices are reviewed in their real host (C-547).
-        await page.goto('http://localhost:5274/dev/sandbox/dialogue?forceOffline=1', {
-          waitUntil: 'domcontentloaded',
-        });
-        await page.waitForSelector(STAGE_SELECTOR, { timeout: 15_000 });
-        await closeDevTools(page);
-        await page.waitForTimeout(1000);
-      },
+      setupHook: captureCyoaStage('4'),
+    },
+    {
+      name: 'CYOA Choices — Dialogue Stage (1 choice)',
+      prompt: STAGE_REVIEW_PROMPT,
+      schema: StageReviewSchema,
+      screenshotSelector: STAGE_SELECTOR,
+      setupHook: captureCyoaStage('1'),
+    },
+    {
+      name: 'CYOA Choices — Dialogue Stage (after a long reply)',
+      prompt: STAGE_REVIEW_PROMPT,
+      schema: StageReviewSchema,
+      screenshotSelector: STAGE_SELECTOR,
+      setupHook: captureCyoaStage('long'),
     },
   ],
 });
