@@ -168,6 +168,7 @@ import { buildTerrainGridFromBoolean } from '../systems/terrain_grid.ts';
 import { emitCombatStateUpdate, initCombat } from '../systems/turn_manager_system.ts';
 import { updateZoningSystem } from '../systems/zoning_system.ts';
 import type { GameCommand, GameEvent, NPCSpawnData } from '../types.ts';
+import { resolveSpawnInStaging } from './spawn_resolution.ts';
 
 // ---------------------------------------------------------------------------
 // Worker: owns the full bitECS world and system ticking
@@ -1532,43 +1533,6 @@ const copyComponentSoA = (
 };
 
 /**
- * Resolves a target spawn hash to pixel coordinates using a temporary
- * staging world.
- *
- * Creates an isolated bitECS world, spawns the provided spawn point
- * entities into it, queries for the matching `spawnHash`, and returns
- * the resolved coordinates. The staging world is destroyed immediately
- * after resolution — no entities are transferred to the main world.
- *
- * @param spawnPointEntities - Spawn point entities from the new map.
- * @param targetSpawnHash - The target spawn hash from the portal.
- * @returns The resolved X/Y pixel coordinates, or undefined if not found.
- */
-const _resolveSpawnInStaging = (
-  spawnPointEntities: SpawnPointEntity[] | undefined,
-  targetSpawnHash: number,
-): { x: number; y: number } | undefined => {
-  if (!spawnPointEntities || spawnPointEntities.length === 0) {
-    return undefined;
-  }
-
-  // Find the matching spawn point entity by spawnHash
-  const match = spawnPointEntities.find((sp) => sp.spawnHash === targetSpawnHash);
-  if (!match) {
-    logger.debug('_resolveSpawnInStaging:no-match', { targetSpawnHash });
-    return undefined;
-  }
-
-  logger.debug('_resolveSpawnInStaging:resolved', {
-    targetSpawnHash,
-    x: match.x,
-    y: match.y,
-  });
-
-  return { x: match.x, y: match.y };
-};
-
-/**
  * Handles incoming messages from the main thread.
  *
  * Message types:
@@ -2123,7 +2087,7 @@ self.onmessage = (event: MessageEvent): void => {
             if (typeof candidate.hash !== 'number' || candidate.hash <= 0) {
               continue;
             }
-            const resolved = _resolveSpawnInStaging(markers, candidate.hash);
+            const resolved = resolveSpawnInStaging(markers, candidate.hash);
             if (resolved) {
               logger.debug(
                 'LOAD_MAP',
