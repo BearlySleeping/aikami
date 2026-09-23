@@ -52,6 +52,7 @@ A player crossing the village stream or the old-road culvert sees ONE continuous
 ## Acceptance Criteria
 
 ### AC-1: Each crossing is one oriented structure
+
 **Given** the village N–S crossing (`cols 39-41 × rows 7-8`) and the old-road E–W culvert (`cols 20-23 × rows 17-19`)
 **When** the maps are built
 **Then** each span cell carries a frame chosen by its position (deck interior / long-side rail / travel-end abutment / corner) and axis; rails appear only on the two long outer sides; ends only on the two short sides.
@@ -59,6 +60,7 @@ A player crossing the village stream or the old-road culvert sees ONE continuous
 **Verification**: `bun moon run scripts:test` — `emberwatch_bridge_assembly.test.ts` "placeBridge frame layout" (NS 3×2 and EW 4×3 exact grids).
 
 ### AC-2: Collision footprint and gameplay semantics are unchanged
+
 **Given** the same crossing cells
 **When** `placeBridge` authors the span
 **Then** collision is `0` on exactly those cells, water outside stays blocked, and every placed GID is recognised by one `isBridgeGid()` helper.
@@ -66,6 +68,7 @@ A player crossing the village stream or the old-road culvert sees ONE continuous
 **Verification**: `emberwatch_bridge_assembly.test.ts` (collision matches span; every GID is a bridge GID); `bun run emberwatch:validate` (0 blockers, traversal unchanged).
 
 ### AC-3: Author-time bank validation
+
 **Given** a crossing whose approach end is water or whose long side is land
 **When** `placeBridge` runs with the default checks
 **Then** it throws, naming the map and the offending cells.
@@ -73,6 +76,7 @@ A player crossing the village stream or the old-road culvert sees ONE continuous
 **Verification**: `emberwatch_bridge_assembly.test.ts` "bank validation" (end-water and side-land throws).
 
 ### AC-4: Atlas frames are correct pixel art
+
 **Given** the packed atlas
 **When** the deck-interior and side/end frames are sampled
 **Then** the deck interior is fully opaque with no water and no rail/sill pixels, and each side/end frame differs from the deck interior only on its own outer edge.
@@ -80,6 +84,7 @@ A player crossing the village stream or the old-road culvert sees ONE continuous
 **Verification**: `emberwatch_bridge_assembly.test.ts` "bridge atlas frames" (uses `packAtlas()` output, not copied constants).
 
 ### AC-5: Existing navigation/walkability validation still passes
+
 **Given** the regenerated maps
 **When** the Emberwatch validators run
 **Then** village + old road stay traversable for the companion width already checked, and locked identities are unchanged.
@@ -227,14 +232,14 @@ The local candidate plane is absent, so the client cannot load the Emberwatch pa
 
 Exact commands and errors:
 
-```
+```text
 $ bun run emberwatch:studio --no-client
 ...
 ⚠ no catalog snapshot at <worktree>/.local/catalog/production/snapshots — skipping the local origin.
   Run a catalog snapshot first, or start the client against another origin.
 ```
 
-```
+```text
 $ bun moon run client:dev            # http://127.0.0.1:5274/ (emulator mode)
 # Playwright (1920×1080, WebGL flags) → /game?gameHour=12&screenshot=true
 [console:error] Failed to load resource: the server responded with a status of 404 (Not Found)

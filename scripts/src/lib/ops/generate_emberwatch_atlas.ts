@@ -38,16 +38,11 @@ import {
 } from './generate_emberwatch_canvas.ts';
 import {
   ATLAS_CELL,
-  ATLAS_COLS,
   ATLAS_HEIGHT,
   ATLAS_PADDING,
-  ATLAS_ROWS,
-  ATLAS_TERRAIN_BLOCK_START,
   ATLAS_WIDTH,
   buildFrames,
-  CORNER16_FRAMES,
-  cornerFrameName,
-  readManifestTerrains,
+  registerTerrainFrames,
 } from './generate_emberwatch_tables.ts';
 
 // ---------------------------------------------------------------------------
@@ -67,47 +62,6 @@ const CELL = ATLAS_CELL; // 34 — cell pitch in the final atlas
 const PAD = ATLAS_PADDING; // 1 — extrusion border width
 const CW = ATLAS_WIDTH; // 544 — final atlas width
 const CH = ATLAS_HEIGHT; // 272 — final atlas height
-
-/**
- * Allocates 16 contiguous cells (a full atlas row) per corner16 terrain
- * and registers the derived mask frame names into the caller's frames map.
- *
- * C-378 AC-5: frames are built into a LOCAL map per packAtlas() call so a
- * test can pack twice without the "collides with an existing atlas frame"
- * throw that a module-level singleton would cause.
- */
-const registerTerrainFrames = (frames: Record<string, [number, number]>): void => {
-  const terrains = readManifestTerrains();
-  // C-546: terrain frames start at a FIXED cell, not after the highest baked
-  // frame. Appended frames (the bridge assembly) are declared at higher GIDs so
-  // they must not move the terrain block — an existing terrain frame's GID is
-  // pinned by the committed atlas.json. A baked frame inside the reserved block
-  // collides below and throws, so a bad GID fails loudly instead of silently
-  // overwriting a terrain frame.
-  let nextCell = ATLAS_TERRAIN_BLOCK_START;
-  for (const terrain of terrains) {
-    if (terrain.wang !== 'corner16') {
-      continue;
-    }
-    for (let mask = 0; mask < CORNER16_FRAMES; mask++) {
-      const name = cornerFrameName(terrain.frameBase, mask);
-      if (frames[name]) {
-        throw new Error(
-          `generate_emberwatch: corner frame "${name}" collides with an existing atlas frame`,
-        );
-      }
-      const col = nextCell % ATLAS_COLS;
-      const row = Math.floor(nextCell / ATLAS_COLS);
-      if (row >= ATLAS_ROWS) {
-        throw new Error(
-          `generate_emberwatch: atlas full — cannot place corner frame "${name}" (row ${row})`,
-        );
-      }
-      frames[name] = [col, row];
-      nextCell += 1;
-    }
-  }
-};
 
 // ---------------------------------------------------------------------------
 // Tile painters

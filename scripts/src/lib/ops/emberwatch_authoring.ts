@@ -319,10 +319,16 @@ const applyBridgeCell = (options: {
   }
 };
 
+const isMapCell = (map: MapData, c: number, r: number): boolean =>
+  Number.isInteger(c) && Number.isInteger(r) && c >= 0 && c < map.width && r >= 0 && r < map.height;
+
 const isWaterGround = (map: MapData, c: number, r: number): boolean =>
-  map.ground[r * map.width + c] === G.WATER;
+  isMapCell(map, c, r) && map.ground[r * map.width + c] === G.WATER;
 
 const isWalkableLand = (map: MapData, c: number, r: number): boolean => {
+  if (!isMapCell(map, c, r)) {
+    return false;
+  }
   const index = r * map.width + c;
   return map.collision[index] === 0 && map.ground[index] !== G.WATER;
 };
@@ -418,6 +424,13 @@ export const placeBridge = (
   const c1 = Math.max(options.region.c0, options.region.c1);
   const r0 = Math.min(options.region.r0, options.region.r1);
   const r1 = Math.max(options.region.r0, options.region.r1);
+  if (!isMapCell(map, c0, r0) || !isMapCell(map, c1, r1)) {
+    const name = options.mapId ?? 'map';
+    throw new Error(
+      `emberwatch_authoring.placeBridge: ${name} span endpoints (${c0},${r0}) and (${c1},${r1}) ` +
+        `must be inside the ${map.width}×${map.height} map`,
+    );
+  }
   if (c1 - c0 < 1 || r1 - r0 < 1) {
     throw new Error(
       `emberwatch_authoring.placeBridge: a span must be at least 2×2 (got ${c1 - c0 + 1}×${r1 - r0 + 1})`,

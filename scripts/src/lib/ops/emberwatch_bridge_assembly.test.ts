@@ -108,6 +108,23 @@ describe('C-546 — placeBridge frame layout', () => {
 });
 
 describe('C-546 — placeBridge bank validation', () => {
+  test('rejects out-of-bounds span endpoints before changing the map', () => {
+    const cases = [
+      { c0: -1, r0: 1, c1: 1, r1: 2 },
+      { c0: 2, r0: 1, c1: 4, r1: 2 },
+    ] as const;
+    for (const region of cases) {
+      const map = makeMap(4, 4);
+      const groundBefore = [...map.ground];
+      const collisionBefore = [...map.collision];
+      expect(() => placeBridge(map, { region, axis: 'ns', assertBanks: false })).toThrow(
+        /must be inside the 4×4 map/,
+      );
+      expect(map.ground).toEqual(groundBefore);
+      expect(map.collision).toEqual(collisionBefore);
+    }
+  });
+
   test('throws when an approach end cell is water', () => {
     const map = makeCrossingMap({ width: 7, height: 6, axis: 'ns', c0: 2, r0: 2, c1: 4, r1: 3 });
     waterRegion(map, { c0: 3, r0: 1, c1: 3, r1: 1 });
@@ -207,14 +224,17 @@ describe('C-546 — bridge atlas frames', () => {
       { key: 'bridge_rail_s.png', predicate: (_x: number, y: number) => y >= 24 },
     ] as const;
     for (const { key, predicate } of cases) {
+      let changed = 0;
       for (let y = 0; y < 32; y++) {
         for (let x = 0; x < 32; x++) {
           if (colorKey(pixel(key, x, y)) === colorKey(pixel(deck, x, y))) {
             continue;
           }
+          changed += 1;
           expect(predicate(x, y), `${key} differs at (${x},${y})`).toBe(true);
         }
       }
+      expect(changed, `${key} paints something`).toBeGreaterThan(0);
     }
   });
 });

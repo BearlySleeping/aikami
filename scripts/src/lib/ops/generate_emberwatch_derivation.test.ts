@@ -18,6 +18,7 @@ import {
   cornerFrameName,
   readManifestTerrains,
   readManifestTiles,
+  registerTerrainFrames,
   resetManifestTilesCache,
   setManifestTilesForTest,
 } from './generate_emberwatch_tables.ts';
@@ -143,6 +144,22 @@ describe('generate_emberwatch G/FRAMES derivation (C-376 AC-6)', () => {
     } finally {
       resetManifestTilesCache();
     }
+  });
+
+  test('buildFrames rejects baked frames inside the reserved terrain block', () => {
+    try {
+      setManifestTilesForTest({
+        '49': { name: 'terrain_collision', frame: 'collision.png' },
+      });
+      expect(() => buildFrames()).toThrow(/occupies reserved terrain cell 48/);
+    } finally {
+      resetManifestTilesCache();
+    }
+  });
+
+  test('registerTerrainFrames rejects an occupied reserved terrain cell', () => {
+    const frames: Record<string, [number, number]> = { 'baked.png': [0, 3] };
+    expect(() => registerTerrainFrames(frames)).toThrow(/terrain cell 48.*occupied/);
   });
 
   test('buildFrames skips tiles without a declared frame', () => {
