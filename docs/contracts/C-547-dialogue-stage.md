@@ -378,11 +378,35 @@ Dev sandbox (`/dev/sandbox/dialogue`):
 
 ### Follow-up test results
 
-- `client:typecheck` — 0 errors, 0 warnings.
+- `client:typecheck` — 0 errors, 0 warnings; `client:test` — 4039 pass, 0 fail
+  (7 skip, 2 todo).
 - `dialogue_stage_presentation.test.ts` — 37/37.
-- `frontend-theme:test` / `:typecheck`, `client:lint`, `e2e lint`, `e2e typecheck` — pass.
-- `e2e` unit (`bun test src/services`) — 32 pass (incl. the new renderer-mode tests).
+- `frontend-theme:test` (99 pass) / `:typecheck` / `:lint`, `client:lint`,
+  `e2e:lint`, `e2e:typecheck` — pass.
+- `e2e` unit (`bun test src/services`) — 32 pass (incl. the new renderer-mode
+  tests).
 - Visual capture: `dialogue_streaming` 9/9, `dialogue_slash_commands` 2/2,
   `cyoa-choices` 5/5, `dialogue_fallback` 4/4 (production `/game` included).
+- `dialogue_tts_toggle` (Playwright, live client) — 4/4, axe clean. This suite
+  caught two serious colour-contrast violations in the new stage roles (the
+  brass-on-inset portrait fallback at 3.53:1 and the muted-content neutral
+  control at 2.7:1); both are fixed in `aikami_game_ui.css`.
 - `run_guards.ts` — 10/10; `bun moon ci --base=origin/main` — pass.
+
+### Pre-existing red, not folded into C-547
+
+Two failure classes in the dialogue Playwright specs are red on `origin/main`
+and name no C-547 file, so they are reported rather than folded in:
+
+- **6 specs** (`dialogue_streaming` ×3, `dialogue_slash_commands` ×3) fail on
+  `locator.click ... waiting for getByTitle('Send')`. The shared
+  `GuidedComposer` renders `aria-label="Send"` and no `title`, while
+  `DialoguePage.sendButton` still locates by title. Identical on `origin/main`.
+- **4 specs** (`dialogue_branching_gating` ×2, `dialogue_skill_check` ×2) time
+  out waiting for the overlay. They drive the NPC walk through
+  `GamePage.approachAndTalkToNpc()`, which presses arrow keys — the same
+  WASD/boot-wait bug fixed in the visual `authored-fallback-production` case.
+  That case now walks the identical journey successfully and passes, which
+  isolates the cause to the spec helper, not the overlay.
+
 
