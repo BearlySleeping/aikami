@@ -128,17 +128,17 @@ Producer: worker `environment_system.ts` writes `ENV_UBO_OFFSETS.ambientColor` e
 
 | Consumer | Receives ambient? | Where | Emissive exception? |
 |---|---|---|---|
-| Terrain (tilemap chunks) | **Yes** — shader `uTint` | `game_world.ts:813-836` writes the uniform; `tilemap_chunk_renderer.ts:69,78` multiplies | No (tiles have no emissive field) |
-| Standalone props (atlas frames) | **Before: No → After: Yes** — container tint | `game_world.ts:1926-1934` `_applySceneAmbientToEntities`, `environment/ambient_policy.ts:112` | **Yes** — prop `emissive: true` |
-| LPC actors (player/NPC) | **Before: No → After: Yes** — container tint over layer sprites | `entity_appearance.ts:427-443` sprites live under `RenderEntry.displayObject`; tinted in `game_world.ts` | No |
-| Static actors / enemies | **Before: No → After: Yes** — container tint | `actor_visual_transport.ts:80-106` → `entity_appearance.ts:162-208` | No |
-| Pre-load placeholder squares | Worker debug tint, **now × ambient** | `game_world/entity_display.ts:49-55` | No |
-| Contact shadows | **After: Yes** (child `Graphics` of the tinted container) | `rendering/prop_presentation.ts:87-106` | No |
+| Terrain (tilemap chunks) | **Yes** — shader `uTint` | `game_world.ts:798-804` calls the controller; `game_world/scene_ambient.ts:42-59` writes the uniform; `tilemap_chunk_renderer.ts:69,78` multiplies | No (tiles have no emissive field) |
+| Standalone props (atlas frames) | **Before: No → After: Yes** — container tint | `game_world.ts:798-804` calls the controller; `game_world/scene_ambient.ts:74-80` tints entries, honouring `ambientExempt` | **Yes** — prop `emissive: true` |
+| LPC actors (player/NPC) | **Before: No → After: Yes** — container tint over layer sprites | `game_world.ts:798-804` calls the controller; `game_world/scene_ambient.ts:74-80` tints the `RenderEntry.displayObject` that owns the layer sprites | No |
+| Static actors / enemies | **Before: No → After: Yes** — container tint | `game_world.ts:798-804` calls the controller; `game_world/scene_ambient.ts:74-80` tints the entry container built by `entity_appearance.ts:162-208` | No |
+| Pre-load placeholder squares | Worker debug tint, **now × ambient** | `game_world.ts:798-804` calls the controller; `game_world/scene_ambient.ts:74-80` tints the entry containing `game_world/entity_display.ts:51-57` | No |
+| Contact shadows | **After: Yes** (child `Graphics` of the tinted container) | `game_world.ts:798-804` calls the controller; `game_world/scene_ambient.ts:74-80` tints the parent entry containing `rendering/prop_presentation.ts:87-106` | No |
 | HUD | **No** (not in `_renderEntries`/world container) | — | N/A |
 | Weather FX | **No** (separate stage controller) | `game_world/weather_fx_controller.ts` | N/A |
 | Scene background fallback | **No** (own tint) | `rendering/scene_background.ts:226` | N/A |
 
-**Interior pinning (`COLOR_INTERIOR`)**: `environment_ubo.ts:74` = `[0.82, 0.78, 0.68, 1.0]`. `_isInteriorMap` is set from `scene.packConfig.interior` (`game_world.ts:1900`) and now feeds the single resolver, so terrain and entities pin together and ignore the clock.
+**Interior pinning (`COLOR_INTERIOR`)**: `environment_ubo.ts:74` = `[0.82, 0.78, 0.68, 1.0]`. `_isInteriorMap` is set from `scene.packConfig.interior` (`game_world.ts:1871-1879`) and passed to the controller (`game_world.ts:798-804`), whose terrain/entity paths share the resolved ambient (`game_world/scene_ambient.ts:50-59,74-80`), so both pin together and ignore the clock.
 
 **Late-loaded textures**: the tint lives on the entity **container**, not the sprite. A prop whose atlas frame resolves after an hour change keeps the container tint; the new sprite inherits it. This is asserted in `ambient_parity.test.ts` (late-load case) using real PixiJS `getGlobalTint()`.
 
@@ -149,14 +149,14 @@ If B shows parity already existed, no code change; B proved it did **not**, so C
 - **New resolver** `packages/frontend/engine/src/environment/ambient_policy.ts`:
   - `resolveSceneAmbient({ isInterior, environmentUbo })` → `{ r, g, b, hex }`; interior pins `COLOR_INTERIOR`, outdoor follows the UBO, neutral `(1,1,1)` before the first UBO.
   - `applyAmbientToEntity({ displayObject, ambient, exempt })` — sets a container tint only when it changes; returns `true` on change.
-- **Terrain** consumes `r/g/b` as `uTint` (`game_world.ts:813-836`). **No double tint**: the world container and stage are never tinted, so terrain is tinted exactly once (shader).
-- **Props / actors / enemies** consume `hex` as the per-entity container tint each frame (`game_world.ts` `_sceneAmbient.update` + `applyToEntries`, implemented in `game_world/scene_ambient.ts`). Runs every frame, so hour change, map transition, interior enter/exit and late texture loads are all covered without a dedicated hook.
-- **`game_world.ts` stays inside its size waiver** (2193 lines vs the 2214 ceiling): the per-frame ambient controller was extracted to `game_world/scene_ambient.ts` and the old screenshot latch moved into it, so the facade shrank rather than grew.
+- **Terrain** consumes `r/g/b` as `uTint`: `game_world.ts:798-804` calls the controller and `game_world/scene_ambient.ts:42-59` writes the uniform. **No double tint**: the world container and stage are never tinted, so terrain is tinted exactly once (shader).
+- **Props / actors / enemies** consume `hex` as the per-entity container tint each frame: `game_world.ts:798-804` calls `update` + `applyToEntries`, and `game_world/scene_ambient.ts:50-59,74-80` resolves and applies the matching factor. Runs every frame, so hour change, map transition, interior enter/exit and late texture loads are all covered without a dedicated re-tint hook.
+- **`game_world.ts` stays inside its size waiver** (2194 lines vs the 2214 ceiling): the per-frame ambient controller was extracted to `game_world/scene_ambient.ts` and the old screenshot latch moved into it, so the facade shrank rather than grew.
 - **No HUD tint** — HUD is outside `_renderEntries` and the world container.
-- **Emissive opt-out** — new optional `emissive?: boolean` on `ContentPackPropSchema` (`packages/shared/schemas/src/lib/game/content_pack.ts`), defaulting to false. Carried through `PropFrameAnchor`/`buildPropFrameMeta` (`scene_transition.ts:71-78,137-148`) and onto `RenderEntry.ambientExempt` (`render_entry.ts:35`, `entity_display.ts:39,82`, `game_world.ts:1399-1414`).
+- **Emissive opt-out** — new optional `emissive?: boolean` on `ContentPackPropSchema` (`packages/shared/schemas/src/lib/game/content_pack.ts`), defaulting to false. Carried through `PropFrameAnchor`/`buildPropFrameMeta` (`scene_transition.ts:71-78,137-148`) and onto `RenderEntry.ambientExempt` (`render_entry.ts:35`, `entity_display.ts:39,82`, `game_world.ts:1364-1381`).
   - **Marked emissive (clear light sources only)**: `inn_hearth` (`prop_hearth.png`), `inn_brazier` and `shrine_brazier` (`prop_brazier.png`). Authored in `scripts/src/lib/ops/sync_emberwatch_props.ts` and synced into `content/packs/emberwatch/manifest.json` (4-line diff). Nothing else marked.
   - `window.png` and `fireplace.png` are **tiles**, not props, and are not marked (see Open Questions).
-- **Screenshot determinism**: the existing C-378 latch now freezes the entity ambient with the terrain tint, so a capture cannot drift between ground and props.
+- **Screenshot determinism**: `game_world/scene_ambient.ts:42-62` waits for the terrain uniform and outdoor UBO before freezing the shared terrain/entity ambient; `game_world.ts:1871-1879` invalidates the sample on every installed scene, so same-hour transitions write the new surface.
 
 ## D. Evidence capture (best effort)
 

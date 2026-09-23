@@ -14,7 +14,8 @@
 // which is exactly the mechanism the engine relies on.
 
 import { describe, expect, test } from 'bun:test';
-import { Container, Sprite, Texture } from 'pixi.js';
+import { Container, Sprite, Texture, UniformGroup } from 'pixi.js';
+import type { EngineBridge } from '../engine_bridge.ts';
 import {
   ambientToHex,
   applyAmbientToEntity,
@@ -28,6 +29,18 @@ import {
   COLOR_NOON,
   ENV_UBO_OFFSETS,
 } from '../environment/environment_ubo.ts';
+import type { GameWorld as GameWorldInstance, GameWorldOptions } from '../game_world.ts';
+import type { PropFrameAnchor } from '../game_world/scene_transition.ts';
+import { SceneAmbientController } from '../game_world/scene_ambient.ts';
+import type { RenderEntry } from '../game_world/render_entry.ts';
+import type { TerrainGrid } from '../systems/terrain_grid.ts';
+import type { EntityCreatedMessage } from '../worker/worker_protocol.ts';
+
+process.env.PUBLIC_APP_ID = 'client';
+process.env.PUBLIC_MODE = 'testing';
+
+const { MockEngineBridge } = await import('../engine_bridge.ts');
+const { GameWorld } = await import('../game_world.ts');
 
 /** Builds a worker-style environment UBO whose ambient is `rgb`. */
 const ambientUbo = (rgb: readonly number[]): Float32Array => {
@@ -39,13 +52,52 @@ const ambientUbo = (rgb: readonly number[]): Float32Array => {
   return ubo;
 };
 
+const tilemapUniforms = (): UniformGroup =>
+  new UniformGroup({
+    uTint: { value: new Float32Array([-1, -1, -1, 1]), type: 'vec4<f32>' },
+  });
+
 /** The exact per-channel factor the tilemap shader receives as `uTint`. */
 const terrainTint = (options: {
   isInterior: boolean;
   environmentUbo: Float32Array | undefined;
 }): number[] => {
-  const ambient = resolveSceneAmbient(options);
-  return [ambient.r, ambient.g, ambient.b];
+  const uniforms = tilemapUniforms();
+  const controller = new SceneAmbientController();
+  controller.update({ ...options, tilemapUniforms: uniforms, freeze: false });
+  const writtenTint = uniforms.uniforms.uTint as Float32Array;
+  return [writtenTint[0] ?? -1, writtenTint[1] ?? -1, writtenTint[2] ?? -1];
+};
+
+type GameWorldAmbientHarness = {
+  _app: { stage: Container };
+  _worldContainer: Container;
+  _propFrameMeta: Map<string, PropFrameAnchor>;
+  _renderEntries: Map<number, RenderEntry>;
+  _sceneAmbient: SceneAmbientController;
+  _handleEntityCreated(message: EntityCreatedMessage): void;
+  _installScene(scene: {
+    packConfig: undefined;
+    terrainGrid: TerrainGrid;
+    activePathGrid: TerrainGrid;
+    propFrameMeta: Map<string, PropFrameAnchor>;
+  }): void;
+};
+
+const createGameWorldAmbientHarness = (): GameWorldAmbientHarness => {
+  const bridge: EngineBridge = new MockEngineBridge();
+  const options: GameWorldOptions = {
+    className: 'GameWorld',
+    bridge,
+    propFrameResolver: (frame) => ({ frame, texture: Texture.WHITE, source: 'hit' }),
+  };
+  const world = GameWorld.create(options) as unknown as GameWorldInstance;
+  const harness = world as unknown as GameWorldAmbientHarness;
+  const stage = new Container();
+  harness._app = { stage };
+  harness._worldContainer = new Container();
+  stage.addChild(harness._worldContainer);
+  return harness;
 };
 
 type LightingState = {
@@ -152,6 +204,113 @@ describe('C-545 — emissive opt-out', () => {
     expect(changed).toBe(false);
     expect(hearth.tint).toBe(0xffffff);
     expect(sprite.getGlobalTint()).toBe(0xffffff);
+  });
+
+  test('GameWorld keeps an entity with emissive frame metadata untinted', () => {
+    const world = createGameWorldAmbientHarness();
+    world._propFrameMeta.set('prop_hearth.png', {
+      anchorX: 0.5,
+      anchorY: 1,
+      emissive: true,
+    });
+
+    world._handleEntityCreated({
+      type: 'ENTITY_CREATED',
+      eid: 42,
+      tint: 0xffffff,
+      frame: 'prop_hearth.png',
+    });
+    world._sceneAmbient.update({
+      isInterior: false,
+      environmentUbo: ambientUbo(COLOR_NIGHT_FLOOR),
+      tilemapUniforms: tilemapUniforms(),
+      freeze: false,
+    });
+    world._sceneAmbient.applyToEntries(world._renderEntries.values());
+
+    const entry = world._renderEntries.get(42);
+    expect(entry).toBeDefined();
+    expect(entry?.displayObject.tint).toBe(0xffffff);
+  });
+});
+
+describe('C-545 — deterministic ambient sampling', () => {
+  test('frozen sampling waits for both terrain uniforms and the outdoor UBO', () => {
+    const controller = new SceneAmbientController();
+    const prop = new Container();
+    const entry: RenderEntry = {
+      displayObject: prop,
+      spawnOrder: 1,
+      tint: 0xffffff,
+      cullable: true,
+    };
+    const nightUbo = ambientUbo(COLOR_NIGHT_FLOOR);
+
+    controller.update({
+      isInterior: false,
+      environmentUbo: nightUbo,
+      tilemapUniforms: undefined,
+      freeze: true,
+    });
+    controller.applyToEntries([entry]);
+    expect(prop.tint).toBe(0xffffff);
+
+    const uniforms = tilemapUniforms();
+    controller.update({
+      isInterior: false,
+      environmentUbo: undefined,
+      tilemapUniforms: uniforms,
+      freeze: true,
+    });
+    controller.applyToEntries([entry]);
+    expect(uniforms.uniforms.uTint).toEqual(new Float32Array([-1, -1, -1, 1]));
+    expect(prop.tint).toBe(0xffffff);
+
+    controller.update({
+      isInterior: false,
+      environmentUbo: nightUbo,
+      tilemapUniforms: uniforms,
+      freeze: true,
+    });
+    controller.applyToEntries([entry]);
+    expect(prop.tint).toBe(
+      ambientToHex(COLOR_NIGHT_FLOOR[0] ?? 1, COLOR_NIGHT_FLOOR[1] ?? 1, COLOR_NIGHT_FLOOR[2] ?? 1),
+    );
+  });
+
+  test('installing a scene invalidates the frozen sample for its new terrain uniform', () => {
+    const world = createGameWorldAmbientHarness();
+    const oldUniforms = tilemapUniforms();
+    world._sceneAmbient.update({
+      isInterior: false,
+      environmentUbo: ambientUbo(COLOR_NOON),
+      tilemapUniforms: oldUniforms,
+      freeze: true,
+    });
+
+    const terrainGrid: TerrainGrid = {
+      width: 1,
+      height: 1,
+      tileSize: 32,
+      cost: new Uint8Array([16]),
+      blocksSight: new Uint8Array([0]),
+    };
+    world._installScene({
+      packConfig: undefined,
+      terrainGrid,
+      activePathGrid: terrainGrid,
+      propFrameMeta: new Map(),
+    });
+
+    const newUniforms = tilemapUniforms();
+    world._sceneAmbient.update({
+      isInterior: false,
+      environmentUbo: ambientUbo(COLOR_NOON),
+      tilemapUniforms: newUniforms,
+      freeze: true,
+    });
+    const tint = newUniforms.uniforms.uTint as Float32Array;
+    expect(tint[0]).toBeCloseTo(COLOR_NOON[0] ?? 1, 3);
   });
 });
 

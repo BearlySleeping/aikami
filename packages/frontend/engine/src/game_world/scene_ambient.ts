@@ -39,15 +39,19 @@ export class SceneAmbientController {
     tilemapUniforms: UniformGroup | undefined;
     freeze: boolean;
   }): void {
-    if (options.freeze && this._sampleLatched) {
-      return;
+    const tintArr = options.tilemapUniforms?.uniforms.uTint as Float32Array | undefined;
+    if (options.freeze) {
+      const inputsReady =
+        tintArr !== undefined && (options.isInterior || options.environmentUbo !== undefined);
+      if (!inputsReady || this._sampleLatched) {
+        return;
+      }
     }
     const ambient = resolveSceneAmbient({
       isInterior: options.isInterior,
       environmentUbo: options.environmentUbo,
     });
     this._ambient = ambient;
-    const tintArr = options.tilemapUniforms?.uniforms.uTint as Float32Array | undefined;
     if (tintArr) {
       tintArr[0] = ambient.r;
       tintArr[1] = ambient.g;

@@ -1869,6 +1869,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    * flag. Rendering happens after this, so the tint path reads the new map.
    */
   private _installScene(scene: PreparedScene): void {
+    this._sceneAmbient.invalidateSample();
     this._isInteriorMap = scene.packConfig?.interior === true;
     // Interiors have no sky — suppress outdoor weather (same flag as lighting).
     this._weatherFx?.setSceneContext({ interior: this._isInteriorMap });
