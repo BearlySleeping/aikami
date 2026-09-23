@@ -29,10 +29,10 @@ import {
   COLOR_NOON,
   ENV_UBO_OFFSETS,
 } from '../environment/environment_ubo.ts';
-import type { GameWorld as GameWorldInstance, GameWorldOptions } from '../game_world.ts';
-import type { PropFrameAnchor } from '../game_world/scene_transition.ts';
-import { SceneAmbientController } from '../game_world/scene_ambient.ts';
 import type { RenderEntry } from '../game_world/render_entry.ts';
+import { SceneAmbientController } from '../game_world/scene_ambient.ts';
+import type { PropFrameAnchor } from '../game_world/scene_transition.ts';
+import type { GameWorld as GameWorldInstance, GameWorldOptions } from '../game_world.ts';
 import type { TerrainGrid } from '../systems/terrain_grid.ts';
 import type { EntityCreatedMessage } from '../worker/worker_protocol.ts';
 
@@ -54,20 +54,8 @@ const ambientUbo = (rgb: readonly number[]): Float32Array => {
 
 const tilemapUniforms = (): UniformGroup =>
   new UniformGroup({
-    uTint: { value: new Float32Array([-1, -1, -1, 1]), type: 'vec4<f32>' },
+    uTint: { value: new Float32Array([0.1, 0.2, 0.3, 1]), type: 'vec4<f32>' },
   });
-
-/** The exact per-channel factor the tilemap shader receives as `uTint`. */
-const terrainTint = (options: {
-  isInterior: boolean;
-  environmentUbo: Float32Array | undefined;
-}): number[] => {
-  const uniforms = tilemapUniforms();
-  const controller = new SceneAmbientController();
-  controller.update({ ...options, tilemapUniforms: uniforms, freeze: false });
-  const writtenTint = uniforms.uniforms.uTint as Float32Array;
-  return [writtenTint[0] ?? -1, writtenTint[1] ?? -1, writtenTint[2] ?? -1];
-};
 
 type GameWorldAmbientHarness = {
   _app: { stage: Container };
@@ -136,29 +124,42 @@ const Epsilon = 0.001;
 describe('C-545 — terrain and entities share one ambient multiplier', () => {
   for (const state of LIGHTING_STATES) {
     test(`${state.name}: a neutral-grey terrain tile and a neutral-grey prop match`, () => {
-      // Terrain: the shader multiplies every texel by uTint.rgb.
-      const [tr, tg, tb] = terrainTint(state.options);
+      // Terrain: drive the controller, then read back what it wrote into the
+      // shader's uTint. The stub starts at a non-matching value so a controller
+      // that failed to write cannot pass by accident.
+      const uniforms = tilemapUniforms();
+      const controller = new SceneAmbientController();
+      controller.update({ ...state.options, tilemapUniforms: uniforms, freeze: false });
+      const written = uniforms.uniforms.uTint as Float32Array;
+      const [tr, tg, tb] = [written[0] ?? -1, written[1] ?? -1, written[2] ?? -1];
+
       expect(tr).toBeCloseTo(state.expected[0] ?? 1, 3);
       expect(tg).toBeCloseTo(state.expected[1] ?? 1, 3);
       expect(tb).toBeCloseTo(state.expected[2] ?? 1, 3);
+      // The stub was actually overwritten (not left at its sentinel).
+      expect(tr).not.toBe(-1);
 
-      // Prop/actor: the container tint is the SAME factor, packed to RGB.
-      const ambient = resolveSceneAmbient(state.options);
+      // Prop/actor: the SAME controller tints the container, packed to RGB.
       const prop = new Container();
       prop.addChild(new Sprite(Texture.WHITE));
-      const changed = applyAmbientToEntity({ displayObject: prop, ambient });
+      const entry: RenderEntry = {
+        displayObject: prop,
+        spawnOrder: 1,
+        tint: 0xffffff,
+        cullable: true,
+      };
+      controller.applyToEntries([entry]);
 
-      expect(changed).toBe(true);
-      expect(prop.tint).toBe(ambientToHex(tr, tg, tb));
       // Channel-for-channel equality between the two consumption paths.
-      expect((ambient.hex >> 16) & 0xff).toBe(Math.round(tr * 255));
-      expect((ambient.hex >> 8) & 0xff).toBe(Math.round(tg * 255));
-      expect(ambient.hex & 0xff).toBe(Math.round(tb * 255));
+      const hex = prop.tint;
+      expect((hex >> 16) & 0xff).toBe(Math.round(tr * 255));
+      expect((hex >> 8) & 0xff).toBe(Math.round(tg * 255));
+      expect(hex & 0xff).toBe(Math.round(tb * 255));
 
       // A 0.5 mid-grey texel and its prop counterpart darken identically.
       const grey = 0.5;
       const terrainGrey = grey * tr;
-      const propGrey = grey * (((ambient.hex >> 16) & 0xff) / 255);
+      const propGrey = grey * (((hex >> 16) & 0xff) / 255);
       expect(Math.abs(terrainGrey - propGrey)).toBeLessThan(Epsilon);
     });
   }
@@ -213,13 +214,16 @@ describe('C-545 — emissive opt-out', () => {
       anchorY: 1,
       emissive: true,
     });
+    // A sibling prop whose frame carries no emissive metadata.
+    world._propFrameMeta.set('prop_barrel.png', { anchorX: 0.5, anchorY: 1 });
 
-    world._handleEntityCreated({
-      type: 'ENTITY_CREATED',
-      eid: 42,
-      tint: 0xffffff,
-      frame: 'prop_hearth.png',
-    });
+    for (const [eid, frame] of [
+      [42, 'prop_hearth.png'],
+      [43, 'prop_barrel.png'],
+    ] as const) {
+      world._handleEntityCreated({ type: 'ENTITY_CREATED', eid, tint: 0xffffff, frame });
+    }
+
     world._sceneAmbient.update({
       isInterior: false,
       environmentUbo: ambientUbo(COLOR_NIGHT_FLOOR),
@@ -228,9 +232,15 @@ describe('C-545 — emissive opt-out', () => {
     });
     world._sceneAmbient.applyToEntries(world._renderEntries.values());
 
-    const entry = world._renderEntries.get(42);
-    expect(entry).toBeDefined();
-    expect(entry?.displayObject.tint).toBe(0xffffff);
+    const nightHex = ambientToHex(
+      COLOR_NIGHT_FLOOR[0] ?? 1,
+      COLOR_NIGHT_FLOOR[1] ?? 1,
+      COLOR_NIGHT_FLOOR[2] ?? 1,
+    );
+    // The emissive prop is untouched…
+    expect(world._renderEntries.get(42)?.displayObject.tint).toBe(0xffffff);
+    // …while its non-emissive sibling receives the SAME ambient as terrain.
+    expect(world._renderEntries.get(43)?.displayObject.tint).toBe(nightHex);
   });
 });
 
@@ -263,7 +273,7 @@ describe('C-545 — deterministic ambient sampling', () => {
       freeze: true,
     });
     controller.applyToEntries([entry]);
-    expect(uniforms.uniforms.uTint).toEqual(new Float32Array([-1, -1, -1, 1]));
+    expect(uniforms.uniforms.uTint).toEqual(new Float32Array([0.1, 0.2, 0.3, 1]));
     expect(prop.tint).toBe(0xffffff);
 
     controller.update({
