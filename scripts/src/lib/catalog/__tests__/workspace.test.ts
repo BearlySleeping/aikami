@@ -24,6 +24,7 @@ import {
 } from '../workspace_files.ts';
 import { inspectWorkspaceImage, optimizeWorkspaceImage } from '../workspace_image.ts';
 import {
+  type AliasCollision,
   fetchWorkspaceSnapshot,
   mergeWorkspaceEntries,
   type WorkspaceEntry,
@@ -193,6 +194,61 @@ describe('safe paths and selection', () => {
     await expect(withWorkspaceLock({ root, run: async () => 'released' })).resolves.toBe(
       'released',
     );
+  });
+});
+
+describe('catalog alias resolution (C-548)', () => {
+  const legacyAlias = (bytes = original): WorkspaceEntry =>
+    entry({
+      tag: 'sprites:tilesets:atlas',
+      category: 'sprites',
+      hash: digestBytes(bytes),
+      sizeBytes: bytes.length,
+    });
+
+  test('an identical alias is coalesced silently', () => {
+    const merged = mergeWorkspaceEntries([entry(), legacyAlias()]);
+    expect(merged.map((item) => item.tag)).toEqual([
+      'sprites:tilesets:atlas',
+      'sprites:tilesets:atlas.webp',
+    ]);
+  });
+
+  test('a divergent alias prefers the release-index-referenced tag', () => {
+    const collisions: AliasCollision[] = [];
+    const merged = mergeWorkspaceEntries([entry(), legacyAlias(replacement)], {
+      releaseIndexTags: new Set(['sprites:tilesets:atlas.webp']),
+      onAliasCollision: (collision) => collisions.push(collision),
+    });
+    expect(merged.map((item) => item.tag)).toEqual(['sprites:tilesets:atlas.webp']);
+    expect(collisions).toHaveLength(1);
+    expect(collisions[0]?.kept.tag).toBe('sprites:tilesets:atlas.webp');
+    expect(collisions[0]?.dropped.tag).toBe('sprites:tilesets:atlas');
+    expect(collisions[0]?.dropped.hash).toBe(digestBytes(replacement));
+    expect(collisions[0]?.path).toBe('game-data/sprites/tilesets/atlas.webp');
+  });
+
+  test('a divergent alias without a release index prefers the extension-qualified tag', () => {
+    const merged = mergeWorkspaceEntries([entry(), legacyAlias(replacement)]);
+    expect(merged.map((item) => item.tag)).toEqual(['sprites:tilesets:atlas.webp']);
+  });
+
+  test('a release index pointing at the legacy alias wins over extension qualification', () => {
+    const merged = mergeWorkspaceEntries([entry(), legacyAlias(replacement)], {
+      releaseIndexTags: new Set(['sprites:tilesets:atlas']),
+    });
+    expect(merged.map((item) => item.tag)).toEqual(['sprites:tilesets:atlas']);
+  });
+
+  test('an alias pair no rule can separate fails loudly', () => {
+    const first = entry({ tag: 'lpc:body:bodies_male:walk', category: 'lpc' });
+    const second = entry({
+      tag: 'lpc:body:bodies_male.walk',
+      category: 'lpc',
+      hash: digestBytes(replacement),
+      sizeBytes: replacement.length,
+    });
+    expect(() => mergeWorkspaceEntries([first, second])).toThrow('no authority');
   });
 });
 

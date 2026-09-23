@@ -84,6 +84,31 @@ export const readPublishedSeedHashes = (seedPath: string): Map<string, string> =
 };
 
 /**
+ * The compact seed inside a snapshot directory, in either layout.
+ *
+ * A legacy snapshot writes `remote/seed/asset_seed.json`; a release snapshot
+ * writes the seed content-addressed as `remote/seed/<hash>/asset_seed.json`
+ * (the key `release.json` pins). Both are the same document shape.
+ */
+const snapshotSeedFile = (snapshotDir: string): string | undefined => {
+  const direct = join(snapshotDir, 'remote/seed/asset_seed.json');
+  if (existsSync(direct)) {
+    return direct;
+  }
+  const seedRoot = join(snapshotDir, 'remote/seed');
+  if (!existsSync(seedRoot)) {
+    return undefined;
+  }
+  for (const name of readdirSync(seedRoot)) {
+    const candidate = join(seedRoot, name, 'asset_seed.json');
+    if (existsSync(candidate)) {
+      return candidate;
+    }
+  }
+  return undefined;
+};
+
+/**
  * The newest catalog snapshot's compact-seed path, or undefined when no
  * snapshot has been taken. Snapshot directories are content-digest named, so
  * recency is by modification time, not lexicographic order.
@@ -103,7 +128,7 @@ export const findPublishedSeedPath = (repository: string): string | undefined =>
     })
     .filter((entry): entry is { name: string; mtimeMs: number } => entry !== undefined)
     .sort((a, b) => b.mtimeMs - a.mtimeMs)[0];
-  return newest ? join(base, newest.name, 'remote/seed/asset_seed.json') : undefined;
+  return newest ? snapshotSeedFile(join(base, newest.name)) : undefined;
 };
 
 /**

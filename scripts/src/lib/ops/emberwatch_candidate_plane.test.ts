@@ -200,6 +200,24 @@ describe('published seed resolution', () => {
     }
   });
 
+  test('findPublishedSeedPath resolves a release snapshot content-addressed seed', () => {
+    const root = mkdtempSync(join(tmpdir(), 'aikami-release-snapshot-'));
+    try {
+      const snapshotDir = join(root, '.local/catalog/production/snapshots/release-digest');
+      const seedHash = 'a'.repeat(64);
+      mkdirSync(join(snapshotDir, 'remote/seed', seedHash), { recursive: true });
+      writeFileSync(
+        join(snapshotDir, 'remote/seed', seedHash, 'asset_seed.json'),
+        JSON.stringify({ r: [] }),
+      );
+      expect(findPublishedSeedPath(root)).toBe(
+        join(snapshotDir, 'remote/seed', seedHash, 'asset_seed.json'),
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test('findPublishedSeedPath is undefined when no snapshot exists', () => {
     const root = mkdtempSync(join(tmpdir(), 'aikami-no-snapshots-'));
     try {

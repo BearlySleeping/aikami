@@ -29,15 +29,7 @@
 // from the published CDN when it is listed here.
 
 import { createHash } from 'node:crypto';
-import {
-  appendFileSync,
-  existsSync,
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  statSync,
-  writeFileSync,
-} from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ContentPackManifestSchema } from '@aikami/schemas';
@@ -115,30 +107,6 @@ const seedRowsToCatalogEntries = (seed: Seed): CatalogEntry[] =>
       sourceUrls: [],
     };
   });
-
-/** Newest catalog snapshot under `.local/catalog/<mode>/snapshots`. */
-const findSnapshotSeed = (): string => {
-  const base = join(repository, '.local/catalog/production/snapshots');
-  if (!existsSync(base)) {
-    throw new Error(`No catalog snapshot found at ${base} — run a catalog snapshot first.`);
-  }
-  // Snapshot directories are named by content digest, so lexicographic order
-  // says nothing about recency — pick by modification time.
-  const newest = readdirSync(base)
-    .map((name) => {
-      try {
-        return { name, mtimeMs: statSync(join(base, name)).mtimeMs };
-      } catch {
-        return undefined;
-      }
-    })
-    .filter((entry): entry is { name: string; mtimeMs: number } => entry !== undefined)
-    .sort((a, b) => b.mtimeMs - a.mtimeMs)[0];
-  if (!newest) {
-    throw new Error(`No catalog snapshots under ${base}`);
-  }
-  return join(base, newest.name, 'remote/seed/asset_seed.json');
-};
 
 const sha256 = (bytes: Buffer): string => createHash('sha256').update(bytes).digest('hex');
 
@@ -454,7 +422,12 @@ const main = (): void => {
     return;
   }
 
-  const seedPath = findSnapshotSeed();
+  const seedPath = findPublishedSeedPath(repository);
+  if (!seedPath) {
+    throw new Error(
+      `No catalog snapshot found under ${join(repository, '.local/catalog/production/snapshots')} — run a catalog snapshot first.`,
+    );
+  }
   const outDir = join(repository, '.local/catalog/local-origin');
   mkdirSync(outDir, { recursive: true });
 
