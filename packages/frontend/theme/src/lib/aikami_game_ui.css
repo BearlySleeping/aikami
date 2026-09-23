@@ -385,7 +385,11 @@
     }
 
     /* Composed fallback when the portrait is missing or fails: initials on the
-     * inset surface — never alt text overflowing the frame. */
+     * inset surface — never alt text overflowing the frame.
+     * Brass is darkened toward the body ink: the raw brass token only reaches
+     * 3.53:1 on the light inset surface, below the 4.5:1 AA threshold for this
+     * 16px bold label. The mix keeps the warm monogram hue at 6.7:1 (light)
+     * and 10.6:1 (dark). */
     .game-stage__portrait-fallback {
       display: flex;
       align-items: center;
@@ -395,7 +399,7 @@
       font-size: var(--game-text-metadata);
       font-weight: 700;
       letter-spacing: 0.02em;
-      color: var(--ui-brass);
+      color: color-mix(in oklab, var(--ui-brass) 60%, var(--ui-base-content));
     }
 
     /* Full view reclaims the header space for the transcript. */
@@ -457,10 +461,15 @@
       --btn-color-content: var(--ui-accent-content);
     }
 
-    /* Neutral control role — ending a conversation is not a destructive act. */
+    /* Neutral control role — ending a conversation is not a destructive act.
+     * The surface is the same quiet raised neutral the chips use, with body ink
+     * as the label. Pairing body ink with the muted-content token as a
+     * background only reaches 2.7:1 (light) / 2.1:1 (dark): muted content is a
+     * text colour, not a fill. */
     .game-control--neutral {
-      --btn-color: var(--ui-muted-content);
+      --btn-color: var(--ui-elevated);
       --btn-color-content: var(--ui-base-content);
+      --btn-border: var(--game-ornament-quiet);
     }
 
     /* ── Suggestion chips ──────────────────────────────────────────────── */
