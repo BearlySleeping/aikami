@@ -153,6 +153,7 @@ import {
 } from '../systems/movement_system.ts';
 import { updatePartyFollow } from '../systems/party_follow_system.ts';
 import {
+  clearActorMovement,
   registerPathFollowHaltObservers,
   updatePathFollow,
 } from '../systems/path_follow_system.ts';
@@ -505,8 +506,7 @@ const clearPlayerMovement = (): void => {
   if (!world || playerEntityId <= 0) {
     return;
   }
-  removeComponent(world, playerEntityId, Velocity);
-  removeComponent(world, playerEntityId, PathFollow);
+  clearActorMovement(world, playerEntityId);
 };
 
 /**
@@ -2157,6 +2157,18 @@ self.onmessage = (event: MessageEvent): void => {
           if (playerEntityId > 0) {
             addComponent(world, playerEntityId, set(Position, { x: resolvedX, y: resolvedY }));
           }
+
+          // 2b. Drop any click-to-move path + velocity carried over from the
+          //     previous map. A click-to-move player that crosses a portal
+          //     still has PathFollow waypoints (and Velocity) expressed in the
+          //     DEPARTING map's coordinates; the path is not part of the
+          //     serialized snapshot, and only non-player entities are torn
+          //     down above. Left in place, the resumed tick loop steers the
+          //     player back toward those stale waypoints on the new map (the
+          //     "player keeps moving after the portal" bug — C-379/C-138).
+          //     clearPlayerMovement removes both producers so updatePathFollow
+          //     and updateMovement leave the player parked on the new spawn.
+          clearPlayerMovement();
 
           // 3. Spawn new NPC and prop entities from the new map.
           //    Pass defeatedEnemies + collectedPickups so previously-defeated

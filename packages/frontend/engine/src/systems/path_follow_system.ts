@@ -151,6 +151,28 @@ export const resetNpcHaltReasons = (): void => {
 };
 
 /**
+ * Removes every locomotion producer from an actor: its PathFollow buffer and
+ * its Velocity.
+ *
+ * This is the scene-discontinuity reset (C-138 map transitions). A
+ * click-to-move player that crosses a portal still carries a PathFollow whose
+ * waypoints are expressed in the DEPARTING map's coordinate space; unless it is
+ * dropped the resumed tick loop steers the player across the new map toward
+ * those stale waypoints. Callers reposition the actor first, then call this so
+ * `updatePathFollow` and `updateMovement` leave it parked.
+ *
+ * @param world - The bitECS world.
+ * @param eid - The entity to park. Non-positive ids are ignored.
+ */
+export const clearActorMovement = (world: World, eid: number): void => {
+  if (eid <= 0) {
+    return;
+  }
+  removeComponent(world, eid, Velocity);
+  removeComponent(world, eid, PathFollow);
+};
+
+/**
  * Returns true when the entity has a PathFollow component with a live path.
  *
  * World-aware: uses bitECS hasComponent so a component removed from THIS

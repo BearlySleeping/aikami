@@ -16,8 +16,14 @@ export type CapabilitySetupError = {
   section: string;
 };
 
-/** One pattern covers every "provider is missing" phrasing the services emit. */
-const SETUP_ERROR_PATTERN = /(not configured|no provider|is not set up|not set up)/i;
+/**
+ * One pattern covers every "provider is missing" phrasing the services emit:
+ * `config_service`'s "No text generation provider configured.", the gateway's
+ * "No <capability> provider configured" (`mode_resolver`), and legacy
+ * "… is not configured" / "… is not set up" variants.
+ */
+const SETUP_ERROR_PATTERN =
+  /(not configured|no [\w -]*provider|provider (?:is )?missing|is not set up|not set up)/i;
 
 /** Whether the error message represents cancellation (AC-3). */
 export const isAbortErrorMessage = (message: string): boolean => /abort/i.test(message);

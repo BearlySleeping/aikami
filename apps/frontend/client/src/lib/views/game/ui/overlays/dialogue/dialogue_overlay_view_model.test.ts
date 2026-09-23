@@ -1153,6 +1153,23 @@ describe('DialogueOverlayViewModel', () => {
     expect(vm.capabilityError?.group).toBe('ai');
   });
 
+  test('capability: config_service "No text generation provider configured." surfaces the Settings deep-link', async () => {
+    analyzeIntentStub = mock(async () => {
+      throw new Error(
+        'No text generation provider configured. ' +
+          'Create a Connection in Settings or add a provider in AI setup.',
+      );
+    });
+    mockNpcDialogueService.analyzeIntent = analyzeIntentStub;
+
+    const vm = createViewModel();
+    await vm.sendMessage('Tell me about the ward.');
+
+    expect(vm.capabilityError?.title).toContain('Text');
+    expect(vm.capabilityError?.section).toBe('story-dialogue');
+    expect(vm.capabilityError?.group).toBe('ai');
+  });
+
   test('capability: a generic not-defined error does not redirect to provider settings', async () => {
     analyzeIntentStub = mock(async () => {
       throw new Error('Encounter script variable is not defined');

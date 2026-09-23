@@ -13,6 +13,7 @@
 // to null — the page still renders completely, with stats absent.
 
 import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from 'bun:test';
+import { createHash } from 'node:crypto';
 import type { CatalogAssetEntry, CatalogIndexRoot, CatalogIndexShard } from '@aikami/schemas';
 
 // ---------------------------------------------------------------------------
@@ -145,9 +146,14 @@ describe('category load — C-396 AC-2 (static index, no Postgres)', () => {
       'lpc:hat:magic:celestial_adult:idle',
       'lpc:hat:magic:celestial_adult:thrust',
     ]);
-    // AC-2 watch point: root (to discover shard ids) + only that category's
-    // shards. Never music.json, never another category, never manifest.json.
-    expect(requestedPaths.sort()).toEqual(['/index/v1/catalog.json', '/index/v1/lpc.json']);
+    // AC-2 watch point: the release pointer (absent here → legacy path), the
+    // root (to discover shard ids) + only that category's shards. Never
+    // music.json, never another category, never manifest.json.
+    expect(requestedPaths.sort()).toEqual([
+      '/index/v1/catalog.json',
+      '/index/v1/lpc.json',
+      '/index/v1/release.json',
+    ]);
     expect(requestedPaths).not.toContain('/index/v1/music.json');
     expect(requestedPaths).not.toContain('/manifest.json');
   });
@@ -218,6 +224,7 @@ describe('category load — C-396 AC-2 (static index, no Postgres)', () => {
         '/index/v1/catalog.json',
         '/index/v1/lpc__body.json',
         '/index/v1/lpc__hat-magic.json',
+        '/index/v1/release.json',
       ]);
       // Negative assertion: the lpcx sibling shard is NEVER fetched when
       // loading lpc — prefix-similar ids must not match `<category>__`.
@@ -261,5 +268,127 @@ describe('category load — C-396 AC-2 (static index, no Postgres)', () => {
     // The stats promise is STREAMED — resolving it must yield null with the
     // database unconfigured, and it must never reject (AC-4 watch point).
     await expect(pageData.stats).resolves.toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Release-pointer resolution (C-496) — the canonical path
+// ---------------------------------------------------------------------------
+
+/** SHA-256 hex of a UTF-8 string, matching the publisher's content address. */
+const sha256 = (value: string): string => createHash('sha256').update(value, 'utf8').digest('hex');
+
+const jsonResponse = (body: string): Response =>
+  new Response(body, { headers: { 'content-type': 'application/json' } });
+
+/**
+ * Fixture origin serving a release pointer plus its immutable root/shard
+ * revisions, with every mutable alias deliberately 404. `corruptRootHash`
+ * flips the pointer's `rootHash` so an integrity failure is observable.
+ */
+const startPointedOrigin = (
+  options: { corruptRootHash?: boolean } = {},
+): {
+  url: string;
+  stop: () => void;
+} => {
+  const server: { port: number | undefined; stop: (hard?: boolean) => void } = Bun.serve({
+    port: 0,
+    fetch(request) {
+      const url = new URL(request.url);
+      requestedPaths.push(url.pathname);
+      const originUrl = `http://127.0.0.1:${server.port}`;
+      const rootJson = JSON.stringify(buildRoot(originUrl));
+      const lpcJson = JSON.stringify(buildLpcShard(originUrl));
+      const rootHash = sha256(rootJson);
+      const lpcHash = sha256(lpcJson);
+      const pointerJson = JSON.stringify({
+        schemaVersion: 'catalog.release.v1',
+        releaseId: '2026-09-22T23:58:14.101Z',
+        rootKey: `index/v1/revisions/${rootHash}/catalog.json`,
+        rootHash: options.corruptRootHash ? sha256('not-the-root') : rootHash,
+        shards: [{ category: 'lpc', key: `index/v1/revisions/${lpcHash}/lpc.json`, hash: lpcHash }],
+        dependencies: [{ key: `seed/${sha256('seed')}/asset_seed.json`, hash: sha256('seed') }],
+        publishedAt: '2026-09-22T23:58:14.101Z',
+      });
+
+      if (url.pathname === '/index/v1/release.json') {
+        return jsonResponse(pointerJson);
+      }
+      if (url.pathname === `/index/v1/revisions/${rootHash}/catalog.json`) {
+        return jsonResponse(rootJson);
+      }
+      if (url.pathname === `/index/v1/revisions/${lpcHash}/lpc.json`) {
+        return jsonResponse(lpcJson);
+      }
+      return new Response('not found', { status: 404 });
+    },
+  });
+  return { url: `http://127.0.0.1:${server.port}`, stop: () => server.stop(true) };
+};
+
+describe('release-pointer resolution — C-496 (canonical, alias-free)', () => {
+  beforeEach(async () => {
+    requestedPaths.length = 0;
+    const { clearCatalogIndexCache } = await import('$lib/server/catalog/catalog_index.ts');
+    clearCatalogIndexCache();
+  });
+
+  test('category load fetches the pinned shard revision and never a mutable alias', async () => {
+    const pointed = startPointedOrigin();
+    try {
+      setEnv({ catalogOrigin: pointed.url });
+      const { getCategoryEntries } = await import('$lib/server/catalog/catalog_index.ts');
+
+      const result = await getCategoryEntries('lpc');
+
+      expect(result?.entries).toHaveLength(2);
+      // The pointer + exactly this category's pinned shard revision. Nothing else.
+      expect(requestedPaths).toHaveLength(2);
+      expect(requestedPaths[0]).toBe('/index/v1/release.json');
+      expect(requestedPaths[1]).toStartWith('/index/v1/revisions/');
+      expect(requestedPaths[1]).toEndWith('/lpc.json');
+      // The mutable aliases MUST NOT be read when a pointer exists.
+      expect(requestedPaths).not.toContain('/index/v1/catalog.json');
+      expect(requestedPaths).not.toContain('/index/v1/lpc.json');
+    } finally {
+      pointed.stop();
+      requestedPaths.length = 0;
+    }
+  });
+
+  test('root load fetches the pinned root revision, never the catalog.json alias', async () => {
+    const pointed = startPointedOrigin();
+    try {
+      setEnv({ catalogOrigin: pointed.url });
+      const { fetchRootIndex } = await import('$lib/server/catalog/catalog_index.ts');
+
+      const root = await fetchRootIndex();
+
+      expect(root.totalCount).toBe(3);
+      expect(requestedPaths).toHaveLength(2);
+      expect(requestedPaths[0]).toBe('/index/v1/release.json');
+      expect(requestedPaths[1]).toStartWith('/index/v1/revisions/');
+      expect(requestedPaths[1]).toEndWith('/catalog.json');
+      expect(requestedPaths).not.toContain('/index/v1/catalog.json');
+    } finally {
+      pointed.stop();
+      requestedPaths.length = 0;
+    }
+  });
+
+  test('a pinned revision whose bytes do not match the pointer hash → typed error', async () => {
+    const pointed = startPointedOrigin({ corruptRootHash: true });
+    try {
+      setEnv({ catalogOrigin: pointed.url });
+      const { CatalogIndexUnavailableError, fetchRootIndex } = await import(
+        '$lib/server/catalog/catalog_index.ts'
+      );
+
+      await expect(fetchRootIndex()).rejects.toBeInstanceOf(CatalogIndexUnavailableError);
+    } finally {
+      pointed.stop();
+      requestedPaths.length = 0;
+    }
   });
 });

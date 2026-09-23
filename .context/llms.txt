@@ -1,8 +1,8 @@
 # Aikami Knowledge Index
 
 > **AI-first entry point.** Read this file first.
-> Generated: 2026-09-22
-> Files: 481 across 10 categories
+> Generated: 2026-09-23
+> Files: 482 across 10 categories
 
 ## Quick Start (Read These First)
 
@@ -504,6 +504,7 @@ Monorepo: SvelteKit Client × Cloudflare Workers backend (D1 + R2 + Better Auth)
 - [Definition of Done](reference/definition-of-done.md)
 - [Design Rationale](reference/design-rationale.md)
 - [Distribution & Onboarding Strategy — 2026-08-19](reference/distribution-and-onboarding-2026-08-19.md)
+- [Emberwatch 5.0 — visual coherence and UX recovery plan](reference/emberwatch-polish-review-and-plan.md)
 - [Emberwatch release-path repair — implementation notes (2026-09-16)](reference/emberwatch-release-repair-2026-09.md)
 - [Game Engine / World Setup — Critical Review](reference/game_engine_architecture_review.md)
 - [Migration recipe: `#`-prefixed subpath imports](reference/kit-alias-migration.md)

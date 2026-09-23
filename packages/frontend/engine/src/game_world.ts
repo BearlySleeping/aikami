@@ -1846,6 +1846,12 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     this._debugNpcAppearance = {};
     this._playerEntityId = 0;
     resetEntityPositions();
+
+    // C-380 AC-6 / C-138: a click-to-move destination is map-local. Drop the
+    // marker on a map switch so a destination clicked on the previous map does
+    // not linger over the new scene (the worker clears the matching PathFollow
+    // when it repositions the player).
+    this._pointerController.clearDestinationMarker();
     this._activeTileSize = undefined;
     this._activeTerrainGrid = undefined;
     this._activePathGrid = undefined;
