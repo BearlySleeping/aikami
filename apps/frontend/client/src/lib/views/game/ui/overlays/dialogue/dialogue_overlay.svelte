@@ -29,13 +29,19 @@ import RichMessageList from '$lib/components/messaging/rich_message_list.svelte'
 import RichMessageRow from '$lib/components/messaging/rich_message_row.svelte';
 import type { DialogueOverlayViewModelInterface } from './dialogue_overlay_view_model.svelte';
 import {
+  cancelDeleteAndRefocus,
   chipClassFor,
   chipIconFor,
+  chipLabelFor,
+  confirmDeleteAndRefocus,
   createDialogueStageState,
-  createStageEscapeHandler,
   dispatchDialogueRowAction,
   findDialogueMessage,
+  focusOnMount,
+  handleDialogueEscape,
+  initialsFor,
   isPartyMateMessage,
+  routeComposerKeyDown,
   toRichMessages,
 } from './dialogue_stage_presentation.svelte';
 import PendingMessageBanner from './pending_message_banner.svelte';
@@ -58,7 +64,7 @@ const stage = createDialogueStageState();
   data-testid="dialogue-overlay"
   data-aikami-theme-scope
   tabindex="-1"
-  onkeydown={(event) => createStageEscapeHandler(viewModel)(event)}
+  onkeydown={(event) => handleDialogueEscape(event, viewModel, stage)}
 >
   <!-- Spatial speech bubble — positioned over the NPC's rendered sprite (C-161).
        The viewport clamp is expressed in CSS so no per-frame JS is needed. -->
@@ -90,12 +96,21 @@ const stage = createDialogueStageState();
         class="game-stage__portrait"
         class:game-stage__portrait--speaking={viewModel.highlightSpeaker === 'npc'}
       >
-        <Image
-          src={viewModel.npcAvatarUrl}
-          alt={viewModel.npcName}
-          class="h-full w-full object-cover"
-          loading="lazy"
-        />
+        {#if stage.portraitFailed}
+          <!-- Composed fallback: initials on the inset surface, never alt text
+               overflowing the frame. `role="img"` keeps the name for a11y. -->
+          <span class="game-stage__portrait-fallback" role="img" aria-label={viewModel.npcName}>
+            {initialsFor(viewModel.npcName)}
+          </span>
+        {:else}
+          <Image
+            src={viewModel.npcAvatarUrl}
+            alt={viewModel.npcName}
+            class="h-full w-full object-cover"
+            loading="lazy"
+            onerror={() => stage.markPortraitFailed()}
+          />
+        {/if}
       </div>
       <div class="game-stage__identity">
         <h3 class="game-section-title">{viewModel.npcName}</h3>
@@ -349,8 +364,10 @@ const stage = createDialogueStageState();
                   onclick={() => viewModel.handleChipTap(chip.id)}
                   aria-label={chip.label}
                 >
-                  <span>{chipIconFor(chip.intentType)}</span>
-                  {chip.label}
+                  <span class="game-chip__icon" aria-hidden="true"
+                    >{chipIconFor(chip.intentType)}</span
+                  >
+                  {chipLabelFor(chip.label)}
                 </button>
               {/each}
             </div>
@@ -411,14 +428,15 @@ const stage = createDialogueStageState();
             <button
               type="button"
               class="btn btn-ghost btn-sm"
-              onclick={() => viewModel.cancelDelete()}
+              use:focusOnMount
+              onclick={() => cancelDeleteAndRefocus(viewModel)}
             >
               Cancel
             </button>
             <button
               type="button"
               class="btn btn-error btn-sm"
-              onclick={() => viewModel.confirmDelete()}
+              onclick={() => confirmDeleteAndRefocus(viewModel)}
             >
               Delete
             </button>
@@ -439,7 +457,7 @@ const stage = createDialogueStageState();
         value={viewModel.inputText}
         onInput={(t) => viewModel.setInput(t)}
         onSend={() => viewModel.sendMessage()}
-        onKeyDown={(e) => viewModel.handleKeyDown(e)}
+        onKeyDown={(e) => routeComposerKeyDown(e, viewModel, stage)}
         placeholder="Reply to {viewModel.npcName}..."
         disabled={viewModel.isResolvingSkillCheck}
         sendDisabled={viewModel.isResolvingSkillCheck}

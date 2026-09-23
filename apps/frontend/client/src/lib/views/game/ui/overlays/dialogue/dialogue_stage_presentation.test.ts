@@ -10,15 +10,22 @@
 
 import { describe, expect, mock, test } from 'bun:test';
 import {
+  cancelDeleteAndRefocus,
   chipClassFor,
   chipIconFor,
+  chipLabelFor,
+  confirmDeleteAndRefocus,
   createDialogueStageState,
-  createStageEscapeHandler,
   type DialogueRowActionTarget,
   type DialogueStageMessage,
   dispatchDialogueRowAction,
   findDialogueMessage,
+  focusOnMount,
+  handleDialogueEscape,
+  initialsFor,
   isPartyMateMessage,
+  resolveDialogueEscapeScope,
+  routeComposerKeyDown,
   toRichMessages,
 } from './dialogue_stage_presentation.svelte';
 
@@ -183,6 +190,23 @@ describe('createDialogueStageState', () => {
     expect(stage.isFullscreen).toBe(false);
   });
 
+  test('exitFullscreen collapses full view without toggling back on', () => {
+    const stage = createDialogueStageState();
+    stage.toggleFullscreen();
+    expect(stage.isFullscreen).toBe(true);
+    stage.exitFullscreen();
+    expect(stage.isFullscreen).toBe(false);
+    stage.exitFullscreen();
+    expect(stage.isFullscreen).toBe(false);
+  });
+
+  test('portraitFailed flips once and stays set', () => {
+    const stage = createDialogueStageState();
+    expect(stage.portraitFailed).toBe(false);
+    stage.markPortraitFailed();
+    expect(stage.portraitFailed).toBe(true);
+  });
+
   test('each instance owns its own state', () => {
     const a = createDialogueStageState();
     const b = createDialogueStageState();
@@ -192,51 +216,224 @@ describe('createDialogueStageState', () => {
   });
 });
 
-describe('createStageEscapeHandler', () => {
-  const createEvent = (
-    key: string,
-  ): { event: KeyboardEvent; preventDefault: ReturnType<typeof mock> } => {
-    const preventDefault = mock(() => {});
-    return { event: { key, preventDefault } as unknown as KeyboardEvent, preventDefault };
+describe('initialsFor', () => {
+  test('uses the first letter of the first and last words', () => {
+    expect(initialsFor('Elder Thrain')).toBe('ET');
+    expect(initialsFor('Guard Captain Voss')).toBe('GV');
+  });
+
+  test('uses a single letter for a one-word name', () => {
+    expect(initialsFor('Rollo')).toBe('R');
+  });
+
+  test('falls back to a neutral mark for an empty name', () => {
+    expect(initialsFor('')).toBe('?');
+    expect(initialsFor('   ')).toBe('?');
+  });
+});
+
+describe('chipLabelFor', () => {
+  test('strips a leading decorative emoji', () => {
+    expect(chipLabelFor('⚔️ Offer your sword')).toBe('Offer your sword');
+    expect(chipLabelFor('📜 Ask about arcane lore')).toBe('Ask about arcane lore');
+    expect(chipLabelFor('🗡️ Quiet work')).toBe('Quiet work');
+  });
+
+  test('leaves a label without a leading emoji untouched', () => {
+    expect(chipLabelFor('Ask about the ward')).toBe('Ask about the ward');
+  });
+
+  test('keeps a leading digit', () => {
+    expect(chipLabelFor('20% off the wares')).toBe('20% off the wares');
+  });
+});
+
+describe('resolveDialogueEscapeScope', () => {
+  test('closes the innermost scope first: delete → slash → full → end', () => {
+    expect(
+      resolveDialogueEscapeScope({
+        hasPendingDelete: true,
+        hasSlashCompletions: true,
+        isFullscreen: true,
+      }),
+    ).toBe('delete-confirm');
+    expect(
+      resolveDialogueEscapeScope({
+        hasPendingDelete: false,
+        hasSlashCompletions: true,
+        isFullscreen: true,
+      }),
+    ).toBe('slash-autocomplete');
+    expect(
+      resolveDialogueEscapeScope({
+        hasPendingDelete: false,
+        hasSlashCompletions: false,
+        isFullscreen: true,
+      }),
+    ).toBe('full-view');
+    expect(
+      resolveDialogueEscapeScope({
+        hasPendingDelete: false,
+        hasSlashCompletions: false,
+        isFullscreen: false,
+      }),
+    ).toBe('end-chat');
+  });
+});
+
+type FakeEscapeVm = {
+  pendingDeleteMessageId: string | null;
+  showSlashCompletions: boolean;
+  inputElement: HTMLTextAreaElement | undefined;
+  calls: string[];
+  cancelDelete(): void;
+  confirmDelete(): void;
+  dismissSlashCompletions(): void;
+  endChat(): void;
+  handleKeyDown(event: KeyboardEvent): void;
+};
+
+const createFakeVm = (overrides?: Partial<FakeEscapeVm>): FakeEscapeVm => {
+  const calls: string[] = [];
+  return {
+    pendingDeleteMessageId: null,
+    showSlashCompletions: false,
+    inputElement: {
+      focus: () => calls.push('focus-input'),
+    } as unknown as HTMLTextAreaElement,
+    calls,
+    cancelDelete: () => calls.push('cancel-delete'),
+    confirmDelete: () => calls.push('confirm-delete'),
+    dismissSlashCompletions: () => calls.push('dismiss-slash'),
+    endChat: () => calls.push('end-chat'),
+    handleKeyDown: () => calls.push('handle-key-down'),
+    ...overrides,
   };
+};
 
-  test('Escape cancels a pending deletion and prevents default', () => {
-    let cancelled = 0;
-    const handler = createStageEscapeHandler({
+const createEvent = (
+  key: string,
+): {
+  event: KeyboardEvent;
+  preventDefault: ReturnType<typeof mock>;
+  stopPropagation: ReturnType<typeof mock>;
+} => {
+  const preventDefault = mock(() => {});
+  const stopPropagation = mock(() => {});
+  return {
+    event: { key, preventDefault, stopPropagation } as unknown as KeyboardEvent,
+    preventDefault,
+    stopPropagation,
+  };
+};
+
+describe('handleDialogueEscape — one scope at a time', () => {
+  test('delete-confirm wins over slash, full view and end chat', () => {
+    const vm = createFakeVm({
       pendingDeleteMessageId: 'msg-1',
-      cancelDelete: () => {
-        cancelled += 1;
-      },
+      showSlashCompletions: true,
     });
-    const { event, preventDefault } = createEvent('Escape');
-    handler(event);
-    expect(cancelled).toBe(1);
+    const stage = createDialogueStageState();
+    stage.toggleFullscreen();
+
+    const { event, preventDefault, stopPropagation } = createEvent('Escape');
+    const handled = handleDialogueEscape(event, vm, stage);
+
+    expect(handled).toBe(true);
+    expect(vm.calls).toEqual(['cancel-delete', 'focus-input']);
+    expect(stage.isFullscreen).toBe(true); // untouched — only one scope closed
     expect(preventDefault).toHaveBeenCalledTimes(1);
+    expect(stopPropagation).toHaveBeenCalledTimes(1);
   });
 
-  test('Escape without a pending deletion is left to the composer handler', () => {
-    let cancelled = 0;
-    const handler = createStageEscapeHandler({
-      pendingDeleteMessageId: null,
-      cancelDelete: () => {
-        cancelled += 1;
-      },
-    });
-    const { event, preventDefault } = createEvent('Escape');
-    handler(event);
-    expect(cancelled).toBe(0);
+  test('slash autocomplete is dismissed next, without ending the chat', () => {
+    const vm = createFakeVm({ showSlashCompletions: true });
+    const stage = createDialogueStageState();
+    stage.toggleFullscreen();
+
+    const { event, stopPropagation } = createEvent('Escape');
+    expect(handleDialogueEscape(event, vm, stage)).toBe(true);
+
+    expect(vm.calls).toEqual(['dismiss-slash']);
+    expect(stage.isFullscreen).toBe(true);
+    expect(stopPropagation).toHaveBeenCalledTimes(1);
+  });
+
+  test('full view collapses before end chat', () => {
+    const vm = createFakeVm();
+    const stage = createDialogueStageState();
+    stage.toggleFullscreen();
+
+    const { event } = createEvent('Escape');
+    expect(handleDialogueEscape(event, vm, stage)).toBe(true);
+
+    expect(vm.calls).toEqual([]);
+    expect(stage.isFullscreen).toBe(false);
+  });
+
+  test('with no inner scope open, Escape ends the chat', () => {
+    const vm = createFakeVm();
+    const stage = createDialogueStageState();
+
+    const { event, stopPropagation } = createEvent('Escape');
+    expect(handleDialogueEscape(event, vm, stage)).toBe(true);
+
+    expect(vm.calls).toEqual(['end-chat']);
+    expect(stopPropagation).toHaveBeenCalledTimes(1);
+  });
+
+  test('non-Escape keys are not consumed', () => {
+    const vm = createFakeVm({ pendingDeleteMessageId: 'msg-1' });
+    const stage = createDialogueStageState();
+
+    const { event, preventDefault, stopPropagation } = createEvent('Enter');
+    expect(handleDialogueEscape(event, vm, stage)).toBe(false);
+
+    expect(vm.calls).toEqual([]);
     expect(preventDefault).not.toHaveBeenCalled();
+    expect(stopPropagation).not.toHaveBeenCalled();
+  });
+});
+
+describe('routeComposerKeyDown', () => {
+  test('Escape goes through the scope ladder and never reaches the ViewModel', () => {
+    const vm = createFakeVm({ showSlashCompletions: true });
+    const stage = createDialogueStageState();
+
+    routeComposerKeyDown(createEvent('Escape').event, vm, stage);
+
+    expect(vm.calls).toEqual(['dismiss-slash']);
+    expect(vm.calls).not.toContain('handle-key-down');
   });
 
-  test('non-Escape keys never cancel', () => {
-    let cancelled = 0;
-    const handler = createStageEscapeHandler({
-      pendingDeleteMessageId: 'msg-1',
-      cancelDelete: () => {
-        cancelled += 1;
-      },
-    });
-    handler(createEvent('Enter').event);
-    expect(cancelled).toBe(0);
+  test('other keys are delegated to the ViewModel', () => {
+    const vm = createFakeVm();
+    const stage = createDialogueStageState();
+
+    routeComposerKeyDown(createEvent('Enter').event, vm, stage);
+
+    expect(vm.calls).toEqual(['handle-key-down']);
+  });
+});
+
+describe('delete modal focus helpers', () => {
+  test('cancelDeleteAndRefocus cancels and returns focus to the composer', () => {
+    const vm = createFakeVm();
+    cancelDeleteAndRefocus(vm);
+    expect(vm.calls).toEqual(['cancel-delete', 'focus-input']);
+  });
+
+  test('confirmDeleteAndRefocus confirms and returns focus to the composer', () => {
+    const vm = createFakeVm();
+    confirmDeleteAndRefocus(vm);
+    expect(vm.calls).toEqual(['confirm-delete', 'focus-input']);
+  });
+
+  test('focusOnMount focuses the node and returns a destroy hook', () => {
+    const focus = mock(() => {});
+    const node = { focus } as unknown as HTMLElement;
+    const action = focusOnMount(node);
+    expect(focus).toHaveBeenCalledTimes(1);
+    expect(typeof action.destroy).toBe('function');
   });
 });
