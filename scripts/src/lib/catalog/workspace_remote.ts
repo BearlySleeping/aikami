@@ -352,7 +352,7 @@ export const fetchWorkspaceSnapshot = async (options: {
   // The shards the release index references are the authoritative inventory; the
   // seed rows below only supplement it. A divergent alias resolves in favour of
   // the referenced tag (C-548 Item 4).
-  const releaseIndexTags = new Set(entries.map((entry) => entry.tag));
+  const releaseIndexTags = release ? new Set(entries.map((entry) => entry.tag)) : undefined;
   const dependencies = release?.dependencies ?? SEED_NAMES.map((name) => ({ key: `seed/${name}` }));
   const seedReferences = dependencies.filter(({ key }) => key.endsWith('/asset_seed.json'));
   if (seedReferences.length !== 1) {

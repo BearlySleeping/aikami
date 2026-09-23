@@ -104,7 +104,7 @@ const atlasCoverageFindings = (manifest: Manifest): ValidationFinding[] => {
     manifest: { tiles: manifest.tiles ?? {} },
   });
   const out: ValidationFinding[] = [];
-  if (!scan.atlasBuilt) {
+  if (!scan.atlasBuilt && scan.findings.length === 0) {
     out.push(
       finding(
         'atlas-not-built',
@@ -115,7 +115,14 @@ const atlasCoverageFindings = (manifest: Manifest): ValidationFinding[] => {
     );
   }
   for (const gap of scan.findings) {
-    out.push(finding('map-gid-frame-missing', gap.mapId, `${gap.layer}/gid${gap.gid}`, gap.detail));
+    out.push(
+      finding(
+        gap.reason === 'maps-not-built' ? 'maps-not-built' : 'map-gid-frame-missing',
+        gap.mapId,
+        gap.reason === 'maps-not-built' ? gap.layer : `${gap.layer}/gid${gap.gid}`,
+        gap.detail,
+      ),
+    );
   }
   return out;
 };

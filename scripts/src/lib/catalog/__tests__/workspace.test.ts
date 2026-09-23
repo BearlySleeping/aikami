@@ -262,6 +262,26 @@ describe('remote inventory snapshots', () => {
     expect(fixture.writes).toHaveLength(0);
     expect(fixture.reads.filter((key) => key === 'seed/asset_seed.json')).toHaveLength(2);
   });
+  test('legacy snapshots prefer an extension-qualified seed alias over a divergent index row', async () => {
+    const fixture = metadataFixture();
+    const bytes = fixture.files.get('index/v1/tilesets.json');
+    if (!bytes) {
+      throw new Error('missing fixture shard');
+    }
+    const shard = JSON.parse(new TextDecoder().decode(bytes)) as {
+      entries: Array<{ tag: string; hash: string; sizeBytes: number }>;
+    };
+    const indexed = shard.entries[0];
+    if (!indexed) {
+      throw new Error('missing fixture entry');
+    }
+    indexed.tag = 'sprites:tilesets:atlas';
+    indexed.hash = digestBytes(replacement);
+    indexed.sizeBytes = replacement.length;
+    fixture.files.set('index/v1/tilesets.json', jsonBytes(shard));
+    const result = await fetchWorkspaceSnapshot({ remote: fixture.remote, ...snapshot() });
+    expect(result.snapshot.entries.filter((item) => item.tag.includes('atlas'))).toEqual([entry()]);
+  });
   test('malformed release pointer never falls back to legacy', async () => {
     const fixture = metadataFixture();
     fixture.files.set('index/v1/release.json', jsonBytes({ invalid: true }));

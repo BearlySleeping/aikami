@@ -2,7 +2,7 @@
 //
 // One local entry point for the Emberwatch authoring loop:
 //
-//   validate → regenerate maps → regenerate prop atlas (when stale) → scan
+//   validate authored tile table → build atlases and maps → validate maps → scan
 //   assets → build/update the boot seed → check the candidate plane → serve the
 //   local candidate origin → launch the client → print the URL and the debug
 //   toggles.
@@ -29,6 +29,7 @@ import {
   readPublishedSeedHashes,
 } from './emberwatch_candidate_plane.ts';
 import { validateEmberwatchMaps } from './emberwatch_map_validation.ts';
+import { buildG } from './generate_emberwatch_tables.ts';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repository = join(here, '../../../..');
@@ -164,7 +165,7 @@ const pipe = (): void => {
   // produces, so it runs the shared step list rather than a hand-maintained
   // subset. A fresh worktree previously failed its first build because the
   // terrain atlas / portraits / audio were never generated here.
-  validateInputs();
+  buildG();
   for (const step of EMBERWATCH_BUILD_STEPS) {
     run(step.script, [...(step.args ?? [])]);
   }

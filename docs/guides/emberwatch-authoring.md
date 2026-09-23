@@ -150,7 +150,7 @@ bun run emberwatch:studio
 ```
 
 Orchestrates the **same ordered build the release seal runs** (one shared list,
-`emberwatch_build_steps.ts`): semantic validation → install portraits →
+`emberwatch_build_steps.ts`): source tile-table validation → install portraits →
 install audio → generate the terrain atlas → generate the prop-atlas pages →
 regenerate the canonical maps → scan assets → `generate_asset_seed.ts --write`
 → re-validate → check the candidate plane → serve the local candidate origin →
@@ -173,6 +173,7 @@ portraits/audio/atlas step before its first run.
 # 0. Isolated worktree (any branch from origin/main).
 git worktree add ~/.herdr/worktrees/aikami/<name> -b <branch> origin/main
 bun run worktree:bootstrap -- --cwd ~/.herdr/worktrees/aikami/<name>
+cd ~/.herdr/worktrees/aikami/<name>
 
 # 1. Read-only production snapshot (needs scripts/.env.production; no writes).
 bun run --cwd scripts catalog:workspace snapshot --mode production

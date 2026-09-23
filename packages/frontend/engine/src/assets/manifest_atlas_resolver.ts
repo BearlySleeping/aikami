@@ -281,12 +281,13 @@ export class ManifestAtlasResolver {
    * @returns The resolved Texture, or `undefined` for empty tiles (GID 0).
    */
   getTileTextureFromGid(rawGid: number, firstGid = 1): Texture | undefined {
-    if (rawGid === 0) {
+    const gid = (rawGid & 0x0fffffff) >>> 0;
+    if (gid === 0) {
       return undefined;
     }
 
     // Convert Global Tile ID to 1-based local ID matching manifest keys
-    const localTileId = rawGid - firstGid + 1;
+    const localTileId = gid - firstGid + 1;
 
     if (localTileId < 1) {
       logger.warn(

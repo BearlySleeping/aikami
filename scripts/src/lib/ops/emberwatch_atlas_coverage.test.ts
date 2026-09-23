@@ -118,6 +118,16 @@ describe('gid → atlas coverage', () => {
     });
     expect(findings).toEqual([]);
   });
+
+  test('masks Tiled flip flags before looking up manifest frames', () => {
+    const findings = checkGidAtlasCoverage({
+      mapId: 'm',
+      layers: [{ name: 'ground', data: [0x8000002a, 0x40000086, 0xe0000000] }],
+      manifest,
+      atlasFrames: new Set(['bridge.png', 'bridge_end_n.png']),
+    });
+    expect(findings).toEqual([]);
+  });
 });
 
 describe('fixture map using a GID beyond the atlas', () => {
@@ -163,6 +173,57 @@ describe('fixture map using a GID beyond the atlas', () => {
       expect(scan.findings[0]?.frame).toBe('bridge_corner_se_ew.png');
     } finally {
       rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('rejects maps with more than one tileset before scanning their GIDs', () => {
+    const root = mkdtempSync(join(tmpdir(), 'aikami-atlas-multi-'));
+    try {
+      const mapsDir = join(root, 'pack/maps');
+      const fixtureGameData = join(root, 'game-data');
+      mkdirSync(mapsDir, { recursive: true });
+      mkdirSync(join(fixtureGameData, 'sprites/tilesets'), { recursive: true });
+      writeFileSync(
+        join(fixtureGameData, 'sprites/tilesets/atlas.json'),
+        JSON.stringify({ frames: {} }),
+      );
+      writeFileSync(
+        join(mapsDir, 'crossing.json'),
+        JSON.stringify({
+          tilesets: [{ firstgid: 1 }, { firstgid: 101 }],
+          layers: [{ name: 'ground', type: 'tilelayer', data: [101] }],
+        }),
+      );
+      expect(() =>
+        scanPackGidAtlasCoverage({
+          packRoot: join(root, 'pack'),
+          gameDataRoot: fixtureGameData,
+          manifest: { tiles: {} },
+        }),
+      ).toThrow(/multiple tilesets/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test('reports a missing map directory even when the atlas is built', () => {
+    const root = mkdtempSync(join(tmpdir(), 'aikami-atlas-no-maps-'));
+    try {
+      const fixtureGameData = join(root, 'game-data');
+      mkdirSync(join(fixtureGameData, 'sprites/tilesets'), { recursive: true });
+      writeFileSync(
+        join(fixtureGameData, 'sprites/tilesets/atlas.json'),
+        JSON.stringify({ frames: {} }),
+      );
+      const scan = scanPackGidAtlasCoverage({
+        packRoot: join(root, 'pack'),
+        gameDataRoot: fixtureGameData,
+        manifest: { tiles: {} },
+      });
+      expect(scan.atlasBuilt).toBe(false);
+      expect(scan.findings[0]?.reason).toBe('maps-not-built');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
     }
   });
 });

@@ -33,8 +33,8 @@ export type AtlasCoverageFinding = {
   gid: number;
   /** The frame name the manifest binds to the GID, when one is declared. */
   frame?: string;
-  /** Why it failed: no manifest tile/frame, or a frame the atlas lacks. */
-  reason: 'undeclared-gid' | 'frame-not-in-atlas';
+  /** Why it failed: no manifest tile/frame, a missing atlas frame, or missing maps. */
+  reason: 'undeclared-gid' | 'frame-not-in-atlas' | 'maps-not-built';
   /** First cell (row-major index) where the offending GID appears. */
   cell: number;
   detail: string;
@@ -146,8 +146,9 @@ const layerFindings = (options: {
     // (ManifestAtlasResolver.getTileTextureFromGid). Manifest tile keys are
     // 1-based local ids, so GID 0 is empty and a raw GID below `firstgid` is
     // invalid.
-    const gid = rawGid - firstgid + 1;
-    if (rawGid === 0 || gid < 1) {
+    const cleanGid = (rawGid & 0x0fffffff) >>> 0;
+    const gid = cleanGid - firstgid + 1;
+    if (cleanGid === 0 || gid < 1) {
       continue;
     }
     const key = `${layer.name}:${gid}`;
@@ -200,6 +201,11 @@ export const checkGidAtlasCoverage = (options: {
 
 /** The tileset `firstgid` a map declares for its primary atlas. */
 const firstgidOf = (tilesets: readonly { firstgid?: number }[] | undefined): number => {
+  if (tilesets && tilesets.length > 1) {
+    throw new Error(
+      'Atlas coverage requires a single tileset per map; multiple tilesets cannot be scanned',
+    );
+  }
   const first = tilesets?.[0]?.firstgid;
   return typeof first === 'number' ? first : 1;
 };
@@ -230,8 +236,8 @@ type MapFile = { layers?: MapLayerFile[]; tilesets?: Array<{ firstgid?: number }
  * Scans every map under a pack directory and reports GIDs that do not resolve
  * to a frame in the built atlas at `gameDataRoot`.
  *
- * `undefined` in the return means the atlas descriptor itself is missing — a
- * single, actionable failure, not one per painted tile.
+ * `atlasBuilt` is false when coverage cannot run because the atlas descriptor
+ * or required map directory is missing; `findings` distinguishes missing maps.
  */
 export const scanPackGidAtlasCoverage = (options: {
   packRoot: string;
@@ -245,7 +251,20 @@ export const scanPackGidAtlasCoverage = (options: {
   const mapsDir = join(options.packRoot, 'maps');
   const findings: AtlasCoverageFinding[] = [];
   if (!existsSync(mapsDir)) {
-    return { atlasBuilt: true, findings };
+    return {
+      atlasBuilt: false,
+      findings: [
+        {
+          id: 'maps-not-built',
+          mapId: '*',
+          layer: 'maps',
+          gid: 0,
+          cell: 0,
+          reason: 'maps-not-built',
+          detail: `Required map directory is missing: ${mapsDir}`,
+        },
+      ],
+    };
   }
   for (const file of readdirSync(mapsDir)
     .filter((name) => name.endsWith('.json'))

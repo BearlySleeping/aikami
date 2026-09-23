@@ -14,13 +14,17 @@
 /**
  * Throws when a PixiJS renderer name is neither WebGL nor WebGPU.
  *
- * `null` means the route has no PixiJS app (DOM-only suites), which is fine.
+ * `null` is only valid for DOM-only captures; a missing PixiJS renderer fails closed.
  *
  * @param renderer - `window.__PIXI_APP__.renderer.name`, or null when absent.
+ * @param mode - Whether the capture expects PixiJS or a DOM-only surface.
  */
-export const assertGpuRendererName = (renderer: string | null): void => {
-  if (renderer === null || renderer === 'webgl' || renderer === 'webgpu') {
+export const assertGpuRendererName = (renderer: string | null, mode: 'pixi' | 'dom'): void => {
+  if ((renderer === null && mode === 'dom') || renderer === 'webgl' || renderer === 'webgpu') {
     return;
+  }
+  if (renderer === null) {
+    throw new Error('C-548: PixiJS capture has no renderer; refusing to capture missing terrain.');
   }
   throw new Error(
     `C-548: PixiJS initialized the "${renderer}" renderer, not WebGL/WebGPU. ` +
