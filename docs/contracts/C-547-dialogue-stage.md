@@ -184,7 +184,7 @@ test or file that covers it; existing tests are marked (existing).
 | Slash commands + autocomplete | ✅ | `SlashAutocomplete` + composer; `chat_modes.spec.ts` (existing) |
 | Address mode (scene/GM) | ✅ | dev sandbox devtools (unchanged) |
 | Full-view toggle | ✅ | `createDialogueStageState`; visual `full_view` |
-| End conversation + Escape | ✅ | header End Chat; `handleKeyDown` (existing) + `createStageEscapeHandler` |
+| End conversation + Escape | ✅ | header End Chat; `handleDialogueEscape` ladder (delete → slash → full → end chat) |
 | Branch / edit / delete (non-campaign) | ✅ | `RichMessageRow` + `dispatchDialogueRowAction`; `dialogue_stage_presentation.test.ts`; `dialogue_branching_gating.spec.ts` (existing) |
 | Suggestion chips | ✅ | `after` chips (`data-testid="suggestion-chips"`); `dialogue_chips.spec.ts` (existing) |
 | Draft recovery | ✅ | `extras` badge; VM tests (existing) |
@@ -279,43 +279,110 @@ production ViewModel was not modified.
 - **200% text / theme**: applied through the product’s real mechanisms
   (`document.documentElement.style.fontSize`, `data-theme`) rather than new
   framework options.
-- **AC-7 delete-modal scope**: implemented without growing the ViewModel
-  (`createStageEscapeHandler`), because the ViewModel is at its source-size
-  baseline.
+- **AC-7 delete-modal scope**: implemented without growing the ViewModel, because
+  the ViewModel is at its source-size baseline.
 - **Dialogue visual suites were already red**: all four used
   `waitCondition: 'game_ready'` on a DOM-only sandbox with no canvas, so every
   case timed out in `_waitForGameReady` before capture. The suites now declare
   `waitSelector: '[data-testid="dialogue-overlay"]'`, which fixes the sandbox
-  cases. `dialogue_fallback`'s pre-existing `authored-fallback-production` case
-  still times out: it navigates to `/game` and walks to an NPC, which does not
-  reliably open the overlay in a headless capture run. It is left as-is (not a
-  C-547 regression) rather than weakened.
+  cases.
 - **`DialoguePage` POM selectors**: the shared `RichMessageRow` bubble classes
   (`.rounded-bl-md.bg-base-100`, `.rounded-br-md.bg-primary`) and the
   `dialogue-overlay` / `suggestion-chips` / `cyoa-choices` /
   `interrupted-check-banner` test ids are preserved unchanged.
 
-### Test results
+## Execution Report — follow-up (PR #389 review + real-host evidence)
+
+### Review findings (CodeRabbit on #389)
+
+| Finding | Verdict | Fix |
+|---|---|---|
+| `dialogue_overlay.svelte`: Escape did not close one scope at a time, and the delete modal never took focus | **valid** | `resolveDialogueEscapeScope` + `handleDialogueEscape` close exactly one scope, innermost first (delete-confirm → slash autocomplete → full view → end chat) and `stopPropagation()` so the game overlay service cannot also end the dialogue. Focus enters the modal (`focusOnMount`) and returns to the composer (`cancelDeleteAndRefocus` / `confirmDeleteAndRefocus`). Composer Escape is routed through the ladder (`routeComposerKeyDown`) so it never reaches the ViewModel's own Escape → `endChat`. |
+| `aikami_game_ui.css`: the stage height cap counted the bottom safe-area inset twice | **valid** | The scrim now carries both block insets as padding and the stage is capped against its flex container (`calc(100% - 1.5rem)`), so the bottom inset is counted once. |
+| `aikami_game_ui.css`: `.game-stage--full` overflowed horizontally and did not grow vertically | **valid** | Full view now uses `inline-size: auto` + `align-self: stretch` (no 1rem overflow) and a real `block-size`, with the transcript set to `flex: 1 1 auto`. |
+
+The Escape order is covered by `dialogue_stage_presentation.test.ts`
+(`resolveDialogueEscapeScope`, `handleDialogueEscape`, `routeComposerKeyDown`).
+
+### Chip and control visual language
+
+The repo has no shared icon set — management and the HUD use emoji, and
+`@aikami/frontend/components` exposes no icon component. Chips therefore keep
+**one** emoji each, derived consistently from the chip's intent, and
+`chipLabelFor` strips the authored leading emoji (e.g. `⚔️ Offer your sword`) so
+a chip no longer renders two icons. Chips are a neutral surface
+(`--ui-elevated`/`--ui-panel`) with the intent carried by a quiet border/icon
+tint; combat keeps a restrained `--ui-warning` accent and no chip is a saturated
+fill. The composer's send button uses the accent role and the TTS toggle
+`game-toggle`, both inside the game scope, instead of the primary violet.
+
+### Portrait fallback
+
+`initialsFor` composes the fallback, `stage.markPortraitFailed()` records the
+failure, and the View renders initials on `game-surface--inset` with
+`role="img"`/`aria-label` instead of overflowing alt text. Verified in the
+sandbox, where the dev sprite 404s.
+
+### 200% text
+
+The portrait is capped at 56px (`min(3.5rem, 56px)`) so it does not double to
+112px, the header is `flex-wrap: nowrap` with truncating identity and
+`flex: 0 0 auto` controls. At 1280×720 @200% the transcript keeps five lines
+above the chips and composer (requirement: ≥2).
+
+### Real-host evidence (C-548 candidate plane)
+
+Prepared per `docs/guides/emberwatch-authoring.md` § Fresh-worktree sequence:
+read-only `catalog:workspace snapshot --mode production` (no `--apply`), then
+`bun run emberwatch:studio --no-client` (origin `:8788`, client dev `:5274`).
+
+**Real reason `authored-fallback-production` failed**: the hook drove the player
+with **arrow keys**, but the game binds movement to **WASD** (its own onboarding
+hint says "Use W to move"), so the player never left spawn. It also walked
+before world boot finished, while input is still locked. WebGL was never the
+problem — the renderer reports `webgl`. The case now waits for the world and
+walks with WASD, and it passes.
+
+**C-548 guard misfire (fixed)**: `resolveCaptureRendererMode` treated any page
+containing a `<canvas>` as a Pixi capture, so DOM-only dialogue suites were
+pushed through the WebGL guard and failed with "no renderer". The mode is now
+derived from the case's explicit target; a case naming a non-canvas selector is
+a DOM capture, and only a default canvas clip infers `pixi`. The Canvas2D guard
+still protects real game captures.
+
+### Evidence (absolute paths)
+
+Production `/game` (real Emberwatch NPC, WebGL, candidate plane):
+
+- `/tmp/opencode/c547-evidence/game_dialogue_1280x720.png`
+- `/tmp/opencode/c547-evidence/game_dialogue_1920x1080.png`
+- `/tmp/opencode/c547-evidence/game_dialogue_2048x1152.png`
+- `/tmp/opencode/c547-evidence/game_dialogue_800x600.png`
+- `/tmp/opencode/c547-evidence/game_dialogue_text200.png`
+- `/tmp/opencode/c547-evidence/pair_light_dialogue.png`
+- `/tmp/opencode/c547-evidence/pair_light_management_inventory.png`
+- `/tmp/opencode/c547-evidence/pair_dark_management_inventory.png`
+- `/tmp/opencode/c547-evidence/pair_dark_dialogue.png`
+
+Dev sandbox (`/dev/sandbox/dialogue`):
+
+- `/tmp/opencode/c547-evidence/sandbox/sandbox_chips_and_send_1280x720.png`
+- `/tmp/opencode/c547-evidence/sandbox/sandbox_text200_header_and_transcript.png`
+- `/tmp/opencode/c547-evidence/sandbox/sandbox_compact_800x600.png`
+- `/tmp/opencode/c547-evidence/sandbox/sandbox_full_view.png`
+- `/tmp/opencode/c547-evidence/sandbox/sandbox_theme_dark.png`
+- `/tmp/opencode/c547-evidence/sandbox/sandbox_dice.png`
+- `/tmp/opencode/c547-evidence/sandbox/sandbox_cyoa_4_choices.png`
+- `/tmp/opencode/c547-evidence/sandbox/sandbox_cyoa_1_choice.png`
+- `/tmp/opencode/c547-evidence/sandbox/sandbox_cyoa_after_long_reply.png`
+
+### Follow-up test results
 
 - `client:typecheck` — 0 errors, 0 warnings.
-- `client:test` — 4,021 pass / 2 fail on the first run (both in the new test file, an
-  event-`defaultPrevented` assertion against the Bun `KeyboardEvent` polyfill),
-  fixed; `dialogue_stage_presentation.test.ts` 21/21 on re-run.
-- `frontend-theme:test` — 99 pass; `frontend-theme:typecheck` — pass.
-- `client:lint`, `e2e lint`, `e2e typecheck` — pass.
-- `run_guards.ts` — 10/10 structural guards pass.
-- `bun moon ci --base=origin/main` — see the PR checks; run after clearing a
-  stale `.moon/cache` left by relocating the worktree.
-
-**Visual capture (capture-only, real client dev server on `127.0.0.1:5274`):**
-
-| Suite | Captured |
-|---|---|
-| `dialogue_streaming` | 9/9 — short line, long streaming reply, full view, 1280×720, 1920×1080, 800×600, 200% text, dark theme, dice |
-| `dialogue_slash_commands` | 2/2 — inline image + compact |
-| `cyoa-choices` | 3/3 — standalone + dialogue-stage choices |
-| `dialogue_fallback` | 3/4 — the pre-existing `authored-fallback-production` case times out navigating `/game` and walking to an NPC (see Deviations) |
-
-Screenshots (gitignored): `apps/e2e/test-results/visual/dialogue_streaming_*.png`,
-`dialogue_slash_commands_*.png`, `cyoa-choices_*.png`, `dialogue_fallback_*.png`.
+- `dialogue_stage_presentation.test.ts` — 37/37.
+- `frontend-theme:test` / `:typecheck`, `client:lint`, `e2e lint`, `e2e typecheck` — pass.
+- `e2e` unit (`bun test src/services`) — 32 pass (incl. the new renderer-mode tests).
+- Visual capture: `dialogue_streaming` 9/9, `dialogue_slash_commands` 2/2,
+  `cyoa-choices` 5/5, `dialogue_fallback` 4/4 (production `/game` included).
+- `run_guards.ts` — 10/10; `bun moon ci --base=origin/main` — pass.
 
