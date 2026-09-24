@@ -1,16 +1,8 @@
 {
   "schemaVersion": 1,
   "kind": "emberwatch-map-validation",
-  "generatedAt": "1980-01-01T00:00:00.000Z",
-  "findings": [
-    {
-      "rule": "route-width-below-minimum",
-      "severity": "warning",
-      "map": "village",
-      "subject": "transition:old_road",
-      "detail": "clearance 2 cells is below the companion-safe minimum 3"
-    }
-  ],
+  "generatedAt": "1970-01-01T00:00:00.000Z",
+  "findings": [],
   "blockers": [],
   "maps": [
     {
@@ -68,7 +60,7 @@
       "npcCount": 4,
       "propCount": 18,
       "transitionCount": 3,
-      "walkablePercent": 75.3,
+      "walkablePercent": 75.4,
       "components": 9,
       "unreachableCells": 11,
       "legacyFrames": []

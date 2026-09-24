@@ -219,8 +219,9 @@ const layChannel = (m: MapData, channel: Array<[number, number]>): void => {
  * would render as fallback grass.
  */
 const bankChannel = (m: MapData, channel: Array<[number, number]>): void => {
-  // Only the inner (south/east) shore is banked, so the stream keeps a single
-  // dry edge rather than a wide beach on both sides.
+  // The generic pass follows the stream's inner (south/east) shore. The
+  // straight E–W reach gets a paired-bank pass below so its two banks use the
+  // same material.
   const neighbours = [
     [0, 1],
     [1, 0],
@@ -243,12 +244,35 @@ const bankChannel = (m: MapData, channel: Array<[number, number]>): void => {
   }
 };
 
+/**
+ * Paints the two dry banks of the straight E–W reach with the same material.
+ * The channel's generic bank pass follows the stream's inner corner, which
+ * leaves only a south-side strip at this reach. Keep the banks paired here;
+ * the short worn approaches are painted after this pass.
+ */
+const bankStraightReach = (m: MapData): void => {
+  for (let c = 26; c <= 40; c++) {
+    for (const r of [6, 9]) {
+      if (!inBounds(c, r)) {
+        continue;
+      }
+      const index = r * W + c;
+      if (m.ground[index] === G.WATER || m.collision[index] === 1) {
+        continue;
+      }
+      setTile(m, c, r, G.SAND);
+    }
+  }
+};
+
 /** The wooden bridge: the only dry crossing of the stream. */
 const buildStreamBridge = (m: MapData): void => {
   // C-549: on the straight E–W reach, so the strict bank check holds — both
-  // travel ends are dry land and both long sides are water.
+  // travel ends are dry land and both long sides are water. Three columns keep
+  // the north-road route companion-safe instead of creating a new two-cell
+  // bottleneck at the widened crossing.
   placeBridge(m, {
-    region: { c0: 36, r0: 7, c1: 37, r1: 8 },
+    region: { c0: 36, r0: 7, c1: 38, r1: 8 },
     axis: 'ns',
     mapId: 'village',
   });
@@ -267,6 +291,7 @@ const stream = (m: MapData): void => {
   const channel = streamChannel();
   layChannel(m, channel);
   bankChannel(m, channel);
+  bankStraightReach(m);
   buildStreamBridge(m);
 };
 
@@ -413,24 +438,22 @@ const paintPads = (m: MapData): void => {
   fillRect(m, 4, 27, 14, 30, G.STONE_FLOOR); // smith's yard
   fillRect(m, 47, 20, 56, 22, G.STONE_FLOOR); // inn forecourt
   fillRect(m, 47, 33, 56, 34, G.STONE_FLOOR); // shop landing
-  // C-549: the notice board moved to the crossing's north bank. Its pad is worn
-  // earth, not paving: a board on a woodland edge is trodden ground, and a
-  // paved slab would also put the (out-of-scope) stone floor painter on the
-  // critical path of this contract.
-  fillRect(m, 34, 3, 39, 6, G.DIRT); // notice board
 };
 
 /**
- * The notice board's worn approach (C-549).
+ * The notice board's compact worn approach (C-549).
  *
  * The existing dirt path at cols 39–40 runs north to the crossing's south bank;
- * a short spur links it to the span's south end, and on the north bank a short
- * spur links the span to the board's stone pad. Painted after the stream so the
- * bank sand does not overwrite the wear.
+ * a short three-cell landing meets the span on each bank. The board keeps a
+ * grass surround; only the narrow approach below it is worn earth, so the
+ * shared corner16 painter never gets a broad slab to turn into a sawtooth.
  */
 const paintNoticeBoardApproach = (m: MapData): void => {
-  fillRect(m, 36, 9, 40, 9, G.DIRT); // south bank: path → crossing south end
-  fillRect(m, 36, 6, 37, 6, G.DIRT); // north bank: crossing north end → pad
+  // Reassert the authored trunk after the symmetric bank pass.
+  fillRect(m, 39, 9, 40, 22, G.DIRT);
+  fillRect(m, 36, 9, 38, 9, G.DIRT); // south landing → crossing
+  fillRect(m, 36, 5, 38, 5, G.DIRT); // short worn landing below the board
+  fillRect(m, 36, 6, 38, 6, G.DIRT); // north landing → board walk
 };
 
 /** The five building shells, in placement order. */
@@ -552,7 +575,7 @@ const resealWater = (m: MapData): void => {
 
 /** …and the bridge stays open after that. */
 const reopenBridge = (m: MapData): void => {
-  for (const c of [36, 37]) {
+  for (const c of [36, 37, 38]) {
     for (const r of [7, 8]) {
       if (isBridgeGid(m.ground[r * W + c])) {
         m.collision[r * W + c] = 0;

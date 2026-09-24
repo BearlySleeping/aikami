@@ -66,8 +66,8 @@ export const BRIDGE_ROUTE_ASSERTIONS: Record<string, readonly RouteAssertion[]> 
       // cell so a prop or a paving change inside them does not silently
       // invalidate the assertion.
       from: { c0: 31, r0: 21, c1: 33, r1: 23 },
-      to: { c0: 35, r0: 5, c1: 36, r1: 5 },
-      via: { c0: 36, r0: 7, c1: 37, r1: 8 },
+      to: { c0: 36, r0: 5, c1: 37, r1: 5 },
+      via: { c0: 36, r0: 7, c1: 38, r1: 8 },
     },
   ],
 };

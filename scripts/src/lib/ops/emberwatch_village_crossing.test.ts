@@ -7,11 +7,19 @@
 // drift from its own test, plus the real pack for the route rule.
 
 import { describe, expect, test } from 'bun:test';
+import { join } from 'node:path';
 import { BRIDGE_FRAMES, G, isBridgeGid } from './emberwatch_authoring.ts';
 import { BRIDGE_ROUTE_ASSERTIONS, validateBridgeRoutes } from './emberwatch_map_bridge_route.ts';
+import { cellOfPoint, cloneGrid, gridIndex, reachableFrom } from './emberwatch_map_navigation.ts';
 import { buildVillage } from './emberwatch_map_retained.ts';
 import { validateEmberwatchMaps } from './emberwatch_map_validation.ts';
-import type { MapContext, ValidationFinding } from './emberwatch_map_validation_context.ts';
+import {
+  buildContexts,
+  type Manifest,
+  packRoot,
+  readJson,
+  type ValidationFinding,
+} from './emberwatch_map_validation_context.ts';
 
 /** The village builder is re-exported through the retained module. */
 const { map } = buildVillage();
@@ -19,12 +27,21 @@ const at = (c: number, r: number): number => r * map.width + c;
 const groundAt = (c: number, r: number): number => map.ground[at(c, r)] ?? -1;
 const blockedAt = (c: number, r: number): boolean => map.collision[at(c, r)] === 1;
 
+const villageContext = buildContexts(readJson<Manifest>(join(packRoot, 'manifest.json'))).get(
+  'village',
+);
+if (villageContext === undefined) {
+  throw new Error('C-549 route test fixture is missing the village map');
+}
+
 describe('C-549 — the crossing sits on the straight E–W reach', () => {
   const SPAN = [
     [36, 7],
     [37, 7],
+    [38, 7],
     [36, 8],
     [37, 8],
+    [38, 8],
   ] as const;
 
   test('every span cell carries a bridge-assembly frame and is walkable', () => {
@@ -34,17 +51,19 @@ describe('C-549 — the crossing sits on the straight E–W reach', () => {
     }
   });
 
-  test('the span is 2×2 at cols 36–37 × rows 7–8 with rails on the long sides', () => {
-    // axis 'ns' → the long sides are the columns, so the rail frames sit on
-    // col 36 (west) and col 37 (east) and the travel ends are rows 7 and 8.
+  test('the span is 3×2 at cols 36–38 × rows 7–8 with rails on the long sides', () => {
+    // axis 'ns' → the long sides are the outer columns, so the rail frames sit
+    // on cols 36 and 38 and the travel ends are rows 7 and 8.
     expect(groundAt(36, 7)).toBe(BRIDGE_FRAMES.cornerNwNs);
-    expect(groundAt(37, 7)).toBe(BRIDGE_FRAMES.cornerNeNs);
+    expect(groundAt(37, 7)).toBe(BRIDGE_FRAMES.endN);
+    expect(groundAt(38, 7)).toBe(BRIDGE_FRAMES.cornerNeNs);
     expect(groundAt(36, 8)).toBe(BRIDGE_FRAMES.cornerSwNs);
-    expect(groundAt(37, 8)).toBe(BRIDGE_FRAMES.cornerSeNs);
+    expect(groundAt(37, 8)).toBe(BRIDGE_FRAMES.endS);
+    expect(groundAt(38, 8)).toBe(BRIDGE_FRAMES.cornerSeNs);
   });
 
   test('both travel ends are dry land and both long sides are water', () => {
-    for (const c of [36, 37]) {
+    for (const c of [36, 37, 38]) {
       expect(groundAt(c, 6), `north end (${c},6) is land`).not.toBe(G.WATER);
       expect(blockedAt(c, 6), `north end (${c},6) is walkable`).toBe(false);
       expect(groundAt(c, 9), `south end (${c},9) is land`).not.toBe(G.WATER);
@@ -52,15 +71,15 @@ describe('C-549 — the crossing sits on the straight E–W reach', () => {
     }
     for (const r of [7, 8]) {
       expect(groundAt(35, r), `west long side (35,${r}) is water`).toBe(G.WATER);
-      expect(groundAt(38, r), `east long side (38,${r}) is water`).toBe(G.WATER);
+      expect(groundAt(39, r), `east long side (39,${r}) is water`).toBe(G.WATER);
     }
   });
 
   test('the E–W reach is two rows deep (7–8) from its west end to the elbow', () => {
     // West end col 26 (where the reach turns south) through the elbow col 40,
-    // minus the two-column crossing span itself.
+    // minus the three-column crossing span itself.
     for (let c = 26; c <= 39; c++) {
-      if (c === 36 || c === 37) {
+      if (c >= 36 && c <= 38) {
         continue;
       }
       expect(groundAt(c, 7), `(${c},7) is water`).toBe(G.WATER);
@@ -90,26 +109,33 @@ describe('C-549 — the crossing sits on the straight E–W reach', () => {
 
 describe('C-549 — the notice-board approach meets the crossing on both banks', () => {
   test('the south approach links the existing path at cols 39–40 to the span', () => {
-    // The existing dirt path runs north at cols 39–40; the approach row 9 ties
-    // it to the span's south end, and the span's south end is walkable dirt.
+    // The existing dirt path runs north at cols 39–40; the three-cell landing
+    // ties it to the span's south end, leaving the sand bank continuous around
+    // the landing.
     expect(groundAt(39, 9), '(39,9) is the existing path').toBe(G.DIRT);
-    expect(groundAt(36, 9), '(36,9) south-bank approach is dirt').toBe(G.DIRT);
-    expect(groundAt(37, 9), '(37,9) south-bank approach is dirt').toBe(G.DIRT);
+    for (const c of [36, 37, 38]) {
+      expect(groundAt(c, 9), `(${c},9) south-bank approach is dirt`).toBe(G.DIRT);
+    }
+    expect(groundAt(35, 9), '(35,9) west bank remains sand').toBe(G.SAND);
+    expect(groundAt(39, 8), '(39,8) east bank remains river').toBe(G.WATER);
   });
 
   test('the north approach links the span to the notice-board walk', () => {
-    for (const c of [36, 37]) {
+    for (const c of [36, 37, 38]) {
       expect(groundAt(c, 6), `(${c},6) north-bank approach is dirt`).toBe(G.DIRT);
       expect(blockedAt(c, 6), `(${c},6) north-bank approach is walkable`).toBe(false);
     }
+    expect(groundAt(35, 6), '(35,6) west bank remains sand').toBe(G.SAND);
+    expect(groundAt(39, 6), '(39,6) east bank remains sand').toBe(G.SAND);
   });
 
-  test('the board sits on the crossing side of the stream and stays walkable around', () => {
-    // Rows 3–6 are north of the widened E–W reach: the board moved there, so
-    // the approach from the square has to use the crossing. The pad is worn
-    // earth, not paving (C-549) — the stone floor painter is out of scope.
-    for (let r = 3; r <= 6; r++) {
-      for (let c = 34; c <= 39; c++) {
+  test('the board has a short worn landing instead of a broad dirt pad', () => {
+    const padSpans: ReadonlyArray<readonly [number, number, number]> = [
+      [5, 36, 38],
+      [6, 36, 38],
+    ];
+    for (const [r, c0, c1] of padSpans) {
+      for (let c = c0; c <= c1; c++) {
         if (c === 37 && r === 4) {
           // The board prop's own origin cell is solid.
           continue;
@@ -117,6 +143,15 @@ describe('C-549 — the notice-board approach meets the crossing on both banks',
         expect(blockedAt(c, r), `board pad (${c},${r}) is walkable`).toBe(false);
         expect(groundAt(c, r), `board pad (${c},${r}) is worn earth`).toBe(G.DIRT);
       }
+    }
+    // The board keeps a grass surround; only the short approach is dirt.
+    for (const [c, r] of [
+      [36, 4],
+      [38, 4],
+      [35, 5],
+      [39, 5],
+    ] as const) {
+      expect(groundAt(c, r), `(${c},${r}) is outside the short landing`).not.toBe(G.DIRT);
     }
   });
 });
@@ -126,37 +161,52 @@ describe('C-549 — the crossing is on the shortest route from the square to the
     expect(BRIDGE_ROUTE_ASSERTIONS.village.length).toBeGreaterThan(0);
   });
 
-  test('reports a crossing bypassed by the shortest route', () => {
-    const grid = { width: 38, height: 24, blocked: new Uint8Array(38 * 24) };
-    const context: MapContext = {
-      id: 'village',
-      raw: { width: grid.width, height: grid.height },
-      objects: [],
-      grid,
-      terrainGrid: grid,
-      reachable: new Uint8Array(grid.blocked.length).fill(1),
-      spawns: [],
-      npcs: [],
-      props: [],
-      transitions: [],
-    };
+  test('accepts the real village route through the authored crossing', () => {
     const findings: ValidationFinding[] = [];
-    validateBridgeRoutes(context, findings);
-    expect(findings).toHaveLength(1);
-    expect(findings[0]?.rule).toBe('crossing-not-on-shortest-route');
+    validateBridgeRoutes(villageContext, findings);
+    expect(findings).toEqual([]);
+  });
+
+  test('reports crossing-not-on-shortest-route when a ford bypasses the span', () => {
+    const fordContext = {
+      ...villageContext,
+      grid: cloneGrid(villageContext.grid),
+      reachable: new Uint8Array(villageContext.grid.blocked.length),
+    };
+    // Close the authored span in this hypothesis, then carve a ford west of
+    // it. Without the close, the real three-column bridge remains the shorter
+    // route and a second dry cell would not prove the rule can fire.
+    for (const c of [36, 37, 38]) {
+      for (const r of [7, 8]) {
+        fordContext.grid.blocked[gridIndex(fordContext.grid, c, r)] = 1;
+      }
+    }
+    for (const c of [32, 33]) {
+      for (const r of [7, 8]) {
+        fordContext.grid.blocked[gridIndex(fordContext.grid, c, r)] = 0;
+      }
+    }
+    const fordReachable = new Uint8Array(new ArrayBuffer(villageContext.grid.blocked.length));
+    fordReachable.set(
+      reachableFrom(
+        fordContext.grid,
+        villageContext.spawns.map((spawn) => cellOfPoint(spawn.x, spawn.y)),
+      ),
+    );
+    fordContext.reachable = fordReachable;
+
+    const findings: ValidationFinding[] = [];
+    validateBridgeRoutes(fordContext, findings);
+    expect(
+      findings.filter((finding) => finding.rule === 'crossing-not-on-shortest-route'),
+    ).toHaveLength(1);
+    expect(findings.map((finding) => finding.rule)).toContain('crossing-not-on-shortest-route');
   });
 
   test('the real pack has no crossing-route blocker', () => {
     const validation = validateEmberwatchMaps();
     const routeFindings = validation.findings.filter((entry) => entry.rule.startsWith('crossing-'));
     expect(routeFindings).toEqual([]);
-  });
-
-  test('the assertion is registered for the village map and passes on it', () => {
-    const validation = validateEmberwatchMaps();
-    const village = validation.maps.find((summary) => summary.id === 'village');
-    expect(village).toBeDefined();
-    expect(validation.blockers.filter((entry) => entry.map === 'village')).toEqual([]);
   });
 });
 
