@@ -2,12 +2,13 @@
 //
 // Generates the Emberwatch coherent tileset atlas (C-375 AC-4).
 //
-// Replaces the 128×128 9-frame placeholder with a 512×320 (16×10 grid)
+// Replaces the 128×128 9-frame placeholder with a 512×352 (16×11 grid)
 // procedurally-drawn 32px tileset: grass/dirt/path/floor/wall/roof/water
 // tiles plus furniture + prop cells (well, notice board, gate, barrels,
 // crates, counters, tables, beds, rugs...).
 //
-// Deterministic (seeded RNG) — every cell is fully opaque pixel art.
+// Deterministic (seeded RNG); terrain is opaque while deliberate house hips and
+// prop/decor shadows carry transparent pixels.
 // Emits `atlas.webp` (via cwebp) + `atlas.json` (frame rects matching the
 // grid layout). The map tileset blocks (imagewidth/imageheight/columns/
 // tilecount) MUST match this layout — see the maps rebuilt in C-375 AC-5.
@@ -67,17 +68,16 @@ import {
 // drift independently (CodeRabbit review, C-376).
 //
 // C-378 AC-5: frames are packed with 1px edge extrusion. The painters draw
-// the 32×32 CONTENT at the old content pitch (W=512, H=256) into a scratch
-// buffer; a post-pass extrudes each frame into the final 544×340 atlas with
+// the 32×32 CONTENT at the old content pitch (W=512, H=352) into a scratch
+// buffer; a post-pass extrudes each frame into the final 544×374 atlas with
 // a 1px border duplicated from the frame's edge pixels. The border makes
 // adjacent-atlas sampling safe — the chunk renderer's half-texel inset is
 // deleted (AC-5).
 // ---------------------------------------------------------------------------
-
 const CELL = ATLAS_CELL; // 34 — cell pitch in the final atlas
 const PAD = ATLAS_PADDING; // 1 — extrusion border width
 const CW = ATLAS_WIDTH; // 544 — final atlas width
-const CH = ATLAS_HEIGHT; // 272 — final atlas height
+const CH = ATLAS_HEIGHT; // 374 — final extruded atlas height
 
 // ---------------------------------------------------------------------------
 // Tile painters
@@ -853,7 +853,7 @@ export type PackedAtlasFrame = {
  * The pure result of packing the emberwatch atlas.
  */
 export type PackedAtlas = {
-  /** Extruded RGBA pixels, CW×CH×4 (544×340). */
+  /** Extruded RGBA pixels, CW×CH×4 (544×374). */
   rgba: Uint8Array;
   width: number;
   height: number;
@@ -863,8 +863,8 @@ export type PackedAtlas = {
 
 /**
  * Packs the emberwatch atlas: builds the frame registry (baked tiles +
- * corner-16 terrain frames), paints every frame into the 512×320 content
- * scratch, extrudes each frame 1px into the final 544×340 atlas, and
+ * corner-16 terrain frames), paints every frame into the 512×352 content
+ * scratch, extrudes each frame 1px into the final 544×374 atlas, and
  * returns the RGBA pixels + frame rects.
  *
  * Pure and deterministic — no file I/O, no `cwebp`. A test can call it
@@ -881,8 +881,8 @@ export const packAtlas = (): PackedAtlas => {
   drawAll(frames);
 
   // ── C-378 AC-5: 1px edge extrusion ──
-  // The content scratch is 512×320 at 32px pitch. The final atlas is
-  // CW×CH (544×340) at 34px pitch: every frame gets a 1px border that
+  // The content scratch is 512×352 at 32px pitch. The final atlas is
+  // CW×CH (544×374) at 34px pitch: every frame gets a 1px border that
   // duplicates its own edge pixels, so adjacent-atlas sampling never bleeds
   // and the chunk renderer can use exact UV rects (no half-texel inset).
   // Deterministic for identical inputs (pure copy pass).

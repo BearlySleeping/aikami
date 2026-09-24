@@ -43,7 +43,7 @@ type EvidenceRecord = {
   requestedCell: string;
   actualPlayerCell: string;
   actualCameraCell: string;
-  cameraSource: 'engine' | 'playerFallback';
+  cameraSource: 'worldTransform' | 'engine' | 'playerFallback';
   renderer: string;
   viewport: EvidenceViewport;
   textScale: number;
@@ -351,7 +351,9 @@ const main = async (): Promise<void> => {
   const page = await context.newPage();
   const pageErrors: string[] = [];
   page.on('pageerror', (error) => pageErrors.push(error.message));
-  const house = new EmberwatchHousePage(page);
+  const house = new EmberwatchHousePage(page, undefined, {
+    allowLegacyPositionlessPlaceholder: true,
+  });
   const stillRecords: EvidenceRecord[] = [];
   const walkRecords: EvidenceRecord[] = [];
 

@@ -4,8 +4,15 @@
 // The generated-artifact fingerprint proves map/atlas bytes, but it cannot prove
 // that asynchronous actor textures resolved before a screenshot.
 
-/** Stable policy identifier recorded in capture metadata and expected artifacts. */
-export const ENTITY_TEXTURE_GUARD_POLICY = 'visible-entity-textures-v1' as const;
+/**
+ * Stable policy identifier recorded in capture metadata and expected artifacts.
+ *
+ * v2 keeps the guard fail-closed for positioned displays that cannot be matched
+ * to an ECS entity. Only explicitly labelled non-actor scene markers may be
+ * excluded by the page probe; the C-550 before lane may separately opt into a
+ * recorded legacy-placeholder compatibility.
+ */
+export const ENTITY_TEXTURE_GUARD_POLICY = 'visible-entity-textures-v2' as const;
 
 /** One visible scene-graph display reduced to texture-resolution evidence. */
 export type EntityTextureObservation = {

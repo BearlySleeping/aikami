@@ -58,9 +58,9 @@
       "width": 64,
       "height": 48,
       "npcCount": 4,
-      "propCount": 18,
+      "propCount": 19,
       "transitionCount": 3,
-      "walkablePercent": 75.7,
+      "walkablePercent": 81.3,
       "components": 9,
       "unreachableCells": 11,
       "legacyFrames": []

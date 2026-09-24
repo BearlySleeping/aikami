@@ -28,8 +28,6 @@
 
 import {
   cell,
-  type DoorSide,
-  doorPlacement,
   isBridgeGid,
   OLD_ROAD_ARRIVAL,
   placeBridge,
@@ -298,70 +296,6 @@ const stream = (m: MapData): void => {
   buildStreamBridge(m);
 };
 
-/** The building's wall ring. */
-const paintShell = (
-  m: MapData,
-  c0: number,
-  r0: number,
-  w: number,
-  h: number,
-  wall: number,
-): void => {
-  for (let c = c0; c <= c0 + w - 1; c++) {
-    setTile(m, c, r0, wall);
-    setTile(m, c, r0 + h - 1, wall);
-    block(m, c, r0);
-    block(m, c, r0 + h - 1);
-  }
-  for (let r = r0 + 1; r <= r0 + h - 2; r++) {
-    setTile(m, c0, r, wall);
-    setTile(m, c0 + w - 1, r, wall);
-    block(m, c0, r);
-    block(m, c0 + w - 1, r);
-  }
-};
-
-/** The roofed interior. */
-const paintInterior = (m: MapData, c0: number, r0: number, w: number, h: number): void => {
-  for (let r = r0 + 1; r <= r0 + h - 2; r++) {
-    for (let c = c0 + 1; c <= c0 + w - 2; c++) {
-      setTile(m, c, r, G.ROOF);
-      block(m, c, r);
-    }
-  }
-};
-
-/** Opens a set of cells to stone floor, leaving out-of-bounds cells untouched. */
-const openCells = (m: MapData, cells: Array<[number, number]>): void => {
-  for (const [c, r] of cells) {
-    if (!inBounds(c, r)) {
-      continue;
-    }
-    setTile(m, c, r, G.STONE_FLOOR);
-    m.collision[r * W + c] = 0;
-  }
-};
-
-/**
- * A walled building shell with a two-tile door on the given side and a
- * two-cell landing in front of it, so no entrance is a dead end.
- */
-const building = (
-  m: MapData,
-  c0: number,
-  r0: number,
-  w: number,
-  h: number,
-  wall: number,
-  doorSide: DoorSide,
-): void => {
-  paintShell(m, c0, r0, w, h, wall);
-  paintInterior(m, c0, r0, w, h);
-  const { doorCells, landingCells } = doorPlacement({ c0, r0, w, h, doorSide });
-  openCells(m, doorCells);
-  openCells(m, landingCells);
-};
-
 /**
  * ── Primary routes ─────────────────────────────────────────────────────────
  * North–south, three cells clear, north gate to south gate; then east–west,
@@ -426,22 +360,57 @@ const paintNoticeBoardApproach = (m: MapData): void => {
   fillRect(m, 36, 6, 38, 6, G.DIRT); // north landing → board walk
 };
 
-/** The five building shells, in placement order. */
+/** All seven village structures share the C-550/C-553 raised-house assembly. */
 const placeBuildings = (m: MapData): void => {
-  building(m, 47, 12, 9, 8, G.STONE_WALL, 'south'); // the inn (east)
-  building(m, 47, 26, 9, 7, G.WOOD_WALL, 'south'); // the shop (south-east)
-  building(m, 4, 30, 9, 7, G.STONE_WALL, 'north'); // the smithy (west)
-  building(m, 5, 15, 8, 6, G.WOOD_WALL, 'south'); // cottage (north-west)
-  // The second cottage is offset from the first — two doors on the same row
-  // read as a level-editor row, not a village.
-  building(m, 18, 13, 7, 6, G.WOOD_WALL, 'south'); // cottage (north)
-  building(m, 24, 36, 7, 6, G.WOOD_WALL, 'north'); // shed (south-west)
+  placeHouse(m, {
+    region: { c0: 47, r0: 12, c1: 55, r1: 19 },
+    door: { c: 51, state: 'open' },
+    facing: 's',
+    roofMaterial: 'slate',
+    mapId: 'village',
+  });
+  placeHouse(m, {
+    region: { c0: 47, r0: 26, c1: 55, r1: 32 },
+    door: { c: 51, state: 'open' },
+    facing: 's',
+    roofMaterial: 'thatch',
+    mapId: 'village',
+  });
+  placeHouse(m, {
+    region: { c0: 4, r0: 30, c1: 12, r1: 36 },
+    door: { c: 8, state: 'closed' },
+    facing: 's',
+    roofMaterial: 'slate',
+    mapId: 'village',
+  });
+  placeHouse(m, {
+    region: { c0: 5, r0: 15, c1: 12, r1: 20 },
+    door: { c: 9, state: 'closed' },
+    facing: 's',
+    roofMaterial: 'cedar',
+    mapId: 'village',
+  });
+  placeHouse(m, {
+    region: { c0: 18, r0: 13, c1: 24, r1: 18 },
+    door: { c: 21, state: 'closed' },
+    facing: 's',
+    roofMaterial: 'cedar',
+    mapId: 'village',
+  });
+  placeHouse(m, {
+    region: { c0: 24, r0: 36, c1: 30, r1: 41 },
+    door: { c: 27, state: 'closed' },
+    facing: 's',
+    roofMaterial: 'thatch',
+    mapId: 'village',
+  });
   placeHouse(m, {
     region: { c0: 51, r0: 5, c1: 56, r1: 9 },
-    door: { c: 54 },
+    door: { c: 54, state: 'closed' },
     facing: 's',
+    roofMaterial: 'cedar',
     mapId: 'village',
-  }); // hut (north-east)
+  });
 };
 
 /**
@@ -655,11 +624,13 @@ export const buildVillage = (): { map: MapData; objectLayers: MapObjectLayer[] }
         placeProp(25, 'inn_crate', 'Crate', 'prop_crate.png', 5, 27),
         placeProp(26, 'yard_anvil', 'Smith Anvil', 'prop_anvil.png', 5, 28),
         placeProp(27, 'shop_crate', 'Crate', 'prop_crate.png', 55, 35),
-        placeProp(28, 'inn_chair', 'Chair', 'chair.png', 53, 20),
+        placeProp(28, 'inn_chair', 'Chair', 'chair.png', 54, 20),
+        // One existing prop definition, used as the inn's warm door light.
+        placeProp(61, 'inn_brazier', 'Inn Door Brazier', 'prop_brazier.png', 53, 20),
 
         // ── Arrival markers ────────────────────────────────────────────────
-        placeSpawn(7, 'from_merchant', 3, 24),
-        placeSpawn(8, 'from_inn', 60, 24),
+        placeSpawn(7, 'from_merchant', 51, 36),
+        placeSpawn(8, 'from_inn', 51, 23),
         placeSpawn(9, 'village_gate', 32, 44),
         placeSpawn(60, 'from_old_road', 32, 3),
       ],
@@ -674,14 +645,14 @@ export const buildVillage = (): { map: MapData; objectLayers: MapObjectLayer[] }
           targetMap: 'merchant_shop',
           targetSpawnId: 'shop_entrance',
           target: { x: cell(12), y: cell(15) },
-          at: { c: 0, r: 23, width: 1, height: 3 },
+          at: { c: 51, r: 33, width: 1, height: 2 },
         }),
         placeTransition({
           id: 1006,
           targetMap: 'inn',
           targetSpawnId: 'inn_entrance',
           target: { x: cell(14), y: cell(17) },
-          at: { c: 63, r: 23, width: 1, height: 3 },
+          at: { c: 51, r: 20, width: 1, height: 2 },
         }),
         placeTransition({
           id: 1007,

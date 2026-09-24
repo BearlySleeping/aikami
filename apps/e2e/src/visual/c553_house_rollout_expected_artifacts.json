@@ -1,0 +1,18 @@
+{
+  "before": {
+    "manifest": "e485f907deef62fdb33beed9169943cc76eade9330a3ecba8639534bccc95d25",
+    "villageMap": "7cb7af8983b6e5f7cdde388239d7e8ebd531c906c98686a18f3742b577fc628a",
+    "innMap": "17b28b1cc78fc46c455e44721155df430b6c4860557ad5b2c62d29c3c342c35f",
+    "atlasWebp": "2d46b96397a6c5fdb1f23f6c95546c41f253d704b8f16d05e023d148706432b5",
+    "atlasJson": "d08f521513e6c2a5f98a0bb69c9a0860eed8a8c04fc261dd5a41673535122864",
+    "entityTextureGuard": "visible-entity-textures-v2"
+  },
+  "after": {
+    "manifest": "0a650ca19b7a460d01213256910379e9357ad476428d96d569430ac1a1a15b7c",
+    "villageMap": "9993ae037115590178030b3038cfdb3e89c106548a2d88cefe0b31b674e83672",
+    "innMap": "1b43964c28e9acc69f5e0271d08a56d075ea94de79dd39d7b8316aedaee9ca3d",
+    "atlasWebp": "db20d44d0c56d1d20efb483c80fdc6b26033460172579de8b69aed56beb55a05",
+    "atlasJson": "6fd89bada97f79dee3a0ac546bd6f09d04955ef4ab8fbaec0b3608f1b2dc85a1",
+    "entityTextureGuard": "visible-entity-textures-v2"
+  }
+}
