@@ -282,6 +282,21 @@ describe('GameUIViewModel — management navigation (C-527)', () => {
     expect(overlay.openInventory).not.toHaveBeenCalled();
   });
 
+  test('legacy QUEST_LOG and canonical JOURNAL reuse one Journal ViewModel', () => {
+    const journal = {
+      ...subStub,
+      setActiveTab: mock(() => {}),
+    } as JournalViewModelInterface;
+    const createJournalViewModel = mock(() => journal);
+    const vm = createVm({ createJournalViewModel });
+
+    vm.management.ensureSection('QUEST_LOG');
+    vm.management.ensureSection('JOURNAL');
+
+    expect(createJournalViewModel).toHaveBeenCalledTimes(1);
+    expect(journal.setActiveTab).toHaveBeenCalledWith('quests');
+  });
+
   test('an unknown subview falls back to the section default instead of throwing', () => {
     const overlay = createOverlay();
     const vm = createVm({}, overlay);
