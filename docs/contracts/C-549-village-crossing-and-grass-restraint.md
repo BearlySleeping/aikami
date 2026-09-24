@@ -539,7 +539,8 @@ Same-camera before/after pairs at 1920×1080 DPR1, default zoom, noon, overlays
 off, plus dawn for the crossing and one collision-overlay shot. WebGL renderer
 asserted (C-548 guard) before every capture; the "before" plane is a clean
 `origin/main` worktree at `997740daf` (C-547), both planes built from the real
-read-only release snapshot. The r2 square captures wait for the first post-load
+read-only release snapshot. The r2 stills were captured from the final C-549
+content (commit `2dc7f7692`); the square captures wait for the first post-load
 state and LPC settle, then pause the worker and record the NPC count/live
 positions in the index.
 
