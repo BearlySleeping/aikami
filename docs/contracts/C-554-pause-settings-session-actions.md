@@ -176,7 +176,7 @@ Implemented the C-554 pause/settings/session UI pass on the production `/game` p
 
 ### End Session vs Quit finding
 
-`End Session` calls `sessionService.endSession({ playtimeMinutes: 30 })` through the END_SESSION overlay. It locks chat, generates a session recap, supports recap editing, and offers Start New Session while campaign/local save state remains available. `Quit to Main Menu` stops autosave, clears the crash/session marker, and navigates to the app landing route; it does not invoke the recap/new-session flow. Both behaviours are meaningful, so both actions remain. The quit confirmation now says existing local saves stay on-device and changes since the last save may not be available, rather than claiming all unsaved progress is deleted.
+`End Session` passes the active session's elapsed duration to `sessionService.endSession({ playtimeMinutes })` through the END_SESSION overlay. It locks chat, generates a session recap, supports recap editing, and offers Start New Session while campaign/local save state remains available. `Quit to Main Menu` stops autosave, clears the crash/session marker, and navigates to the app landing route; it does not invoke the recap/new-session flow. Both behaviours are meaningful, so both actions remain. The quit confirmation now says existing local saves stay on-device and changes since the last save may not be available, rather than claiming all unsaved progress is deleted.
 
 ### Evidence
 

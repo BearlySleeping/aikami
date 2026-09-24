@@ -186,12 +186,14 @@ const _relocateCompanion = (options: {
     return undefined;
   }
   const targetCell =
-    _findAdjacentCell({
-      entityId: options.entityId,
-      mask,
-      playerCell,
-      terrain: options.terrain,
-    }) ??
+    (Companion.recruited[options.entityId] === true
+      ? _findAdjacentCell({
+          entityId: options.entityId,
+          mask,
+          playerCell,
+          terrain: options.terrain,
+        })
+      : undefined) ??
     _findRingCell({
       entityId: options.entityId,
       fromCell,
@@ -239,10 +241,11 @@ const _relocateCompanion = (options: {
  * Relocates restored actors that can no longer occupy their saved cells.
  *
  * The player reuses the production full-box spawn clamp. Companions use their
- * own collision mask and the shared footprint-aware pathfinding grid, prefer a
- * safe cell touching the player, then fall back to the same 20-ring nearest-cell
- * search. Every relocated companion drops its stale movement path so the next
- * party-follow tick requests a fresh route.
+ * own collision mask and the shared footprint-aware pathfinding grid. Recruited
+ * companions prefer a safe cell touching the player, then fall back to the same
+ * 20-ring nearest-cell search. Unrecruited companions use the ring search around
+ * their own saved position. Every relocated companion drops its stale movement
+ * path so the next party-follow tick requests a fresh route.
  *
  * @param options - Restore world, player entity, and originating message path.
  * @returns Player and companion relocations, in entity-query order.

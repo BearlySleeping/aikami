@@ -19,7 +19,7 @@ import manifest from '../../../../../content/packs/emberwatch/manifest.json';
 import map from '../../../../../content/packs/emberwatch/maps/village.json';
 import { registerAppearanceObservers } from '../components/appearance.ts';
 import { registerCollisionDataObservers } from '../components/collision_data.ts';
-import { registerCompanionObservers } from '../components/companion.ts';
+import { Companion, registerCompanionObservers } from '../components/companion.ts';
 import { registerGridPositionObservers } from '../components/grid_position.ts';
 import { registerNPCDialogObservers } from '../components/npc_dialog.ts';
 import { PathFollow, registerPathFollowObservers } from '../components/path_follow.ts';
@@ -202,6 +202,7 @@ describe('C-556 — companion restore clamp', () => {
       isCompanion: true,
     });
     insertIntoSpatialGrid(companionEntityId);
+    Companion.recruited[companionEntityId] = true;
     addComponent(
       world,
       companionEntityId,
@@ -239,6 +240,46 @@ describe('C-556 — companion restore clamp', () => {
     expect(hasComponent(world, companionEntityId, PathFollow)).toBe(false);
     expect(hasComponent(world, companionEntityId, Velocity)).toBe(false);
     expect(PathFollow.repathAtMs[companionEntityId]).toBe(0);
+  });
+
+  it('keeps an unrecruited companion near its saved cell while relocating a recruited companion beside the player', () => {
+    const grid = new Array<boolean>(64).fill(false);
+    grid[1 * 8 + 1] = true;
+    grid[6 * 8 + 6] = true;
+    setCollisionGrid({ width: 8, height: 8, tileSize: 32, grid });
+    const playerEntityId = addEntity(world);
+    addComponent(world, playerEntityId, set(Position, { x: 4 * 32 + 16, y: 4 * 32 + 16 }));
+    const createCompanion = (npcId: string, x: number, y: number): number => {
+      const entityId = createNPC(world, {
+        npcId,
+        npcName: npcId,
+        x,
+        y,
+        textureKey: 'npc',
+        dialog: '',
+        interactionRadius: 32,
+        isCompanion: true,
+      });
+      insertIntoSpatialGrid(entityId);
+      return entityId;
+    };
+    const recruitedEntityId = createCompanion('recruited-companion', 1 * 32 + 16, 1 * 32 + 16);
+    const unrecruitedEntityId = createCompanion('unrecruited-companion', 6 * 32 + 16, 6 * 32 + 16);
+    Companion.recruited[recruitedEntityId] = true;
+
+    relocateRestoredEntities({ world, playerEntityId, source: 'LOAD_GAME' });
+
+    const restoredCell = (entityId: number): { x: number; y: number } => ({
+      x: Math.floor((Position.x[entityId] ?? 0) / 32),
+      y: Math.floor((Position.y[entityId] ?? 0) / 32),
+    });
+    const recruitedCell = restoredCell(recruitedEntityId);
+    const unrecruitedCell = restoredCell(unrecruitedEntityId);
+    expect(Math.max(Math.abs(recruitedCell.x - 4), Math.abs(recruitedCell.y - 4))).toBe(1);
+    expect(
+      Math.max(Math.abs(unrecruitedCell.x - 6), Math.abs(unrecruitedCell.y - 6)),
+    ).toBeLessThanOrEqual(1);
+    expect(unrecruitedCell).not.toEqual({ x: 6, y: 6 });
   });
 
   it('uses the companion mask before falling back to the saved-cell ring search', () => {
