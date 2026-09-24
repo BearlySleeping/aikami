@@ -437,6 +437,19 @@ describe('GameOverlayService', () => {
     expect(service.overlayStack.map((entry) => entry.type)).toEqual(['DIALOGUE', 'INVENTORY']);
   });
 
+  test('C-551: closing Inventory over Dialogue restores explore mode without resuming the world', async () => {
+    const { gameModeService } = await import('./game_mode_service.svelte.ts');
+    gameModeService.setMode('EXPLORE');
+    service.pushOverlay('DIALOGUE');
+    service.openInventory();
+
+    expect(gameModeService.currentMode).toBe('MENU');
+    service.closeInventory();
+
+    expect(service.activeOverlay).toBe('DIALOGUE');
+    expect(gameModeService.currentMode).toBe('EXPLORE');
+  });
+
   test('should clear stack on dialogue close', () => {
     service.activeOverlay = 'DIALOGUE';
     service.dialogueNpc = { npcId: 'npc-1', npcName: 'Test NPC' };

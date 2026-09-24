@@ -298,7 +298,7 @@ const openProductionCharacter = async (
   }
   await page.getByTestId('hud-menu-entry').click();
   await page.getByTestId('section-tab-character').click();
-  await page.waitForTimeout(400);
+  await page.getByTestId('character-summary').waitFor({ state: 'visible', timeout: 10_000 });
   await hideProductionDevTools(page);
 };
 

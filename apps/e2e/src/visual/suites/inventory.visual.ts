@@ -10,6 +10,7 @@
 import { Type } from 'typebox';
 import { defineConfig } from '$visual/core/config';
 import { EMULATOR_PORTS } from '../../config';
+import { PlayShellPage } from '../../pom/play_shell_page';
 
 // ── Schema ───────────────────────────────────────────────────
 
@@ -163,15 +164,12 @@ const openProductionInventory = async (
   }
   await page.getByTestId('hud-menu-entry').click();
   await page.getByTestId('section-tab-inventory').click();
-  await page.evaluate((contentScenario) => {
-    const seam = (window as unknown as Record<string, unknown>).__AIKAMI_TEST__ as
-      | {
-          seedManagementContent(options: { scenario: 'empty' | 'populated' }): unknown;
-        }
-      | undefined;
-    seam?.seedManagementContent({ scenario: contentScenario });
-  }, scenario);
-  await page.waitForTimeout(400);
+  await new PlayShellPage(page).seedManagementContent(scenario);
+  if (scenario === 'empty') {
+    await page.getByTestId('inventory-empty-state').waitFor({ state: 'visible', timeout: 10_000 });
+  } else {
+    await page.getByTestId('inventory-item-list').waitFor({ state: 'visible', timeout: 10_000 });
+  }
   await hideProductionDevTools(page);
 };
 
@@ -216,7 +214,7 @@ export default defineConfig({
       schema: InventorySchema,
       setupHook: async (page) => {
         // Navigate to production route
-        await page.goto('http://localhost:5274/game', {
+        await page.goto(`http://localhost:${EMULATOR_PORTS.client}/game`, {
           waitUntil: 'domcontentloaded',
         });
         // Wait for engine and HUD

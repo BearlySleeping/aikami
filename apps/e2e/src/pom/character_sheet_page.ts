@@ -10,6 +10,12 @@
 
 import type { Page } from '@playwright/test';
 
+const NARRATIVE_LABELS: Readonly<Record<string, string>> = {
+  likes: 'Likes',
+  temptations: 'Temptations',
+  keys: 'Keys',
+};
+
 export class CharacterSheetPage {
   readonly page: Page;
 
@@ -104,9 +110,10 @@ export class CharacterSheetPage {
   // ── Narrative Traits ──────────────────────────
 
   narrativeSection(category: string) {
+    const label = NARRATIVE_LABELS[category] ?? category;
     return this.card
       .locator('div.game-surface--inset')
-      .filter({ has: this.page.getByRole('heading', { name: category, exact: true }) })
+      .filter({ has: this.page.getByRole('heading', { name: label, exact: true }) })
       .last();
   }
 
@@ -115,7 +122,8 @@ export class CharacterSheetPage {
   }
 
   narrativeAddInput(category: string) {
-    return this.narrativeSection(category).getByPlaceholder(`Add a ${category} trait`, {
+    const label = (NARRATIVE_LABELS[category] ?? category).toLowerCase();
+    return this.narrativeSection(category).getByPlaceholder(`Add a ${label} trait`, {
       exact: true,
     });
   }

@@ -159,6 +159,16 @@ describe('GameUIViewModel — HUD visibility', () => {
     expect(vm.showHpBar).toBe(true);
   });
 
+  test('keeps the management entry available during Dialogue', () => {
+    const overlay = createOverlay();
+    const vm = createVm({}, overlay);
+
+    overlay.activeOverlay = 'DIALOGUE';
+    expect(vm.showManagementNav).toBe(true);
+    overlay.isTransitioning = true;
+    expect(vm.showManagementNav).toBe(false);
+  });
+
   test('hides the clock during terminal overlays', () => {
     const overlay = createOverlay();
     const vm = createVm({}, overlay);
@@ -349,6 +359,18 @@ describe('GameUIViewModel — management navigation (C-527)', () => {
 
     expect(overlay.openPartyRoster).toHaveBeenCalledTimes(2);
     expect(vm.menuLocation).toEqual({ section: 'party' });
+  });
+
+  test('the Menu entry opens Inventory as the compatible Dialogue destination', () => {
+    const overlay = createOverlay();
+    const vm = createVm({}, overlay);
+
+    overlay.activeOverlay = 'DIALOGUE';
+    vm.openManagementMenu();
+
+    expect(overlay.openInventory).toHaveBeenCalledTimes(1);
+    expect(overlay.openCharacterDashboard).not.toHaveBeenCalled();
+    expect(vm.menuLocation).toEqual({ section: 'inventory' });
   });
 
   test('managementLocation is derived from the overlay stack, so host and shortcut agree', () => {

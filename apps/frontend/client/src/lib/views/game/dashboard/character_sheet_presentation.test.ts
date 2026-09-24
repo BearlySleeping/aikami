@@ -1,7 +1,7 @@
 // apps/frontend/client/src/lib/views/game/dashboard/character_sheet_presentation.test.ts
 
 import { describe, expect, test } from 'bun:test';
-import { ABILITY_LABELS } from '@aikami/types';
+import { ABILITY_KEYS, ABILITY_LABELS } from '@aikami/types';
 import { createDefaultSheet } from '@aikami/utils';
 import {
   characterModifierTone,
@@ -46,6 +46,25 @@ describe('character sheet projections', () => {
     expect(rows).toHaveLength(6);
     expect(rows.every((row) => row.score >= 3)).toBe(true);
     expect(rows.some((row) => row.isSavingThrowProficient)).toBe(true);
+  });
+
+  test('keeps canonical ability order when authored JSON properties are reordered', () => {
+    const sheet = createDefaultSheet();
+    const reorderedAbilities = {
+      charisma: sheet.abilities.charisma,
+      wisdom: sheet.abilities.wisdom,
+      constitution: sheet.abilities.constitution,
+      dexterity: sheet.abilities.dexterity,
+      intelligence: sheet.abilities.intelligence,
+      strength: sheet.abilities.strength,
+    };
+    const rows = toCharacterAbilityRows({
+      abilities: reorderedAbilities,
+      savingThrows: sheet.savingThrows,
+      abilityLabels: ABILITY_LABELS,
+    });
+
+    expect(rows.map((row) => row.key)).toEqual(ABILITY_KEYS);
   });
 
   test('uses game numeric roles and signed modifiers', () => {

@@ -18,6 +18,7 @@ import type { Page } from 'playwright';
 import { Type } from 'typebox';
 import { defineConfig } from '$visual/core/config';
 import { EMULATOR_PORTS } from '../../config';
+import { PlayShellPage } from '../../pom/play_shell_page';
 
 /** Absolute client origin — the visual runner sets no Playwright `baseURL`. */
 const CLIENT_ORIGIN = `http://localhost:${EMULATOR_PORTS.client}`;
@@ -118,16 +119,7 @@ const seedDarkAppearance = (page: Page): Promise<void> => seedAppearance(page, '
 
 /** Seeds the real management stores after the target section finishes mounting. */
 const seedManagementStores = async (page: Page, scenario: 'empty' | 'populated'): Promise<void> => {
-  await page.evaluate((contentScenario) => {
-    const seam = (window as unknown as Record<string, unknown>).__AIKAMI_TEST__ as
-      | {
-          seedManagementContent(options: {
-            scenario: 'empty' | 'populated';
-          }): Record<string, number>;
-        }
-      | undefined;
-    seam?.seedManagementContent({ scenario: contentScenario });
-  }, scenario);
+  await new PlayShellPage(page).seedManagementContent(scenario);
 };
 
 const EMPTY_CHARACTER_SHEET = {
@@ -254,12 +246,14 @@ const openManagement = async (
     state: 'visible',
     timeout: 15_000,
   });
+  if (options.scenario) {
+    // Seed before opening Journal so its asynchronous production load cannot
+    // overwrite campaign-scoped evidence rows.
+    await seedManagementStores(page, options.scenario);
+  }
   if (section !== undefined) {
     await page.getByTestId(`section-tab-${section}`).click();
     await page.waitForTimeout(300);
-  }
-  if (options.scenario) {
-    await seedManagementStores(page, options.scenario);
   }
   if (options.textScale) {
     await page.evaluate((scale) => {

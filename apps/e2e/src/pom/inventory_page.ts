@@ -69,6 +69,10 @@ export class InventoryPage {
     return this.page.getByTestId('management-close');
   }
 
+  get pauseMenuResumeButton() {
+    return this.page.getByRole('button', { name: 'Resume Game', exact: true });
+  }
+
   get emptyMessage() {
     return this.page.getByText('Your bag is empty', { exact: true });
   }

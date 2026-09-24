@@ -5,6 +5,8 @@ import type { PlayerJournalEntry } from '$types';
 import {
   createJournalPresentationState,
   focusJournalOnMount,
+  type JournalEditorTarget,
+  type JournalMutationTarget,
   type JournalPresentationSource,
 } from './journal_presentation.svelte';
 
@@ -24,6 +26,23 @@ const createSource = (): JournalPresentationSource => ({
   notes: [createNote(), createNote({ id: 'note-2', title: 'Ask the smith' })],
 });
 
+const createEditorTarget = (overrides: Partial<JournalEditorTarget> = {}): JournalEditorTarget => ({
+  startNewNote: mock(() => {}),
+  editNote: mock(() => {}),
+  ...overrides,
+});
+
+const createMutationTarget = (
+  overrides: Partial<JournalMutationTarget> = {},
+): JournalMutationTarget => ({
+  canSaveNote: true,
+  noteError: undefined,
+  saveNote: mock(async () => {}),
+  deleteNote: mock(async () => {}),
+  cancelEdit: mock(() => {}),
+  ...overrides,
+});
+
 describe('journal presentation state', () => {
   test('selects the first note without opening the editor', () => {
     const state = createJournalPresentationState(createSource());
@@ -37,7 +56,7 @@ describe('journal presentation state', () => {
     const editNote = mock(() => {});
     const state = createJournalPresentationState(createSource());
 
-    state.beginEdit('note-2', { editNote });
+    state.beginEdit('note-2', createEditorTarget({ editNote }));
 
     expect(editNote).toHaveBeenCalledWith('note-2');
     expect(state.isEditorOpen).toBe(true);
@@ -48,7 +67,7 @@ describe('journal presentation state', () => {
     const startNewNote = mock(() => {});
     const state = createJournalPresentationState(createSource());
 
-    state.beginNewNote({ startNewNote });
+    state.beginNewNote(createEditorTarget({ startNewNote }));
 
     expect(startNewNote).toHaveBeenCalledTimes(1);
     expect(state.isEditorOpen).toBe(true);
@@ -57,12 +76,8 @@ describe('journal presentation state', () => {
 
   test('keeps the editor open when saving fails', async () => {
     const state = createJournalPresentationState(createSource());
-    state.beginNewNote({ startNewNote: () => {} });
-    const target = {
-      canSaveNote: true,
-      saveNote: mock(async () => {}),
-      noteError: 'No active campaign',
-    };
+    state.beginNewNote(createEditorTarget());
+    const target = createMutationTarget({ noteError: 'No active campaign' });
 
     await state.saveNote(target);
 
@@ -71,14 +86,60 @@ describe('journal presentation state', () => {
 
   test('closes a successful editor and clears a deleted selection', async () => {
     const state = createJournalPresentationState(createSource());
-    state.beginEdit('note-2', { editNote: () => {} });
+    state.beginEdit('note-2', createEditorTarget());
     const deleteNote = mock(async () => {});
 
-    await state.deleteNote('note-2', { deleteNote });
+    await state.deleteNote('note-2', createMutationTarget({ deleteNote }));
 
     expect(deleteNote).toHaveBeenCalledWith('note-2');
     expect(state.isEditorOpen).toBe(false);
     expect(state.selectedNoteId).toBe('note-1');
+  });
+
+  test('does not show a different note when an edited note is filtered out', () => {
+    const notes = [createNote(), createNote({ id: 'note-2', title: 'Ask the smith' })];
+    const source: JournalPresentationSource = {
+      get notes() {
+        return notes;
+      },
+    };
+    const state = createJournalPresentationState(source);
+    state.beginEdit('note-2', createEditorTarget());
+
+    notes.splice(0, notes.length, createNote({ id: 'note-3', title: 'A different clue' }));
+
+    expect(state.selectedNoteId).toBeUndefined();
+    expect(state.selectedNote).toBeUndefined();
+    expect(state.isSelected('note-3')).toBe(false);
+  });
+
+  test('has no selected note when the filtered source is empty', () => {
+    const notes: PlayerJournalEntry[] = [];
+    const source: JournalPresentationSource = {
+      get notes() {
+        return notes;
+      },
+    };
+    const state = createJournalPresentationState(source);
+
+    expect(state.selectedNoteId).toBeUndefined();
+    expect(state.selectedNote).toBeUndefined();
+    expect(state.isSelected('note-1')).toBe(false);
+  });
+
+  test('keeps the selected note when deletion fails', async () => {
+    const state = createJournalPresentationState(createSource());
+    state.beginEdit('note-2', createEditorTarget());
+
+    await state.deleteNote(
+      'note-2',
+      createMutationTarget({
+        noteError: 'delete failed',
+      }),
+    );
+
+    expect(state.isEditorOpen).toBe(true);
+    expect(state.selectedNoteId).toBe('note-2');
   });
 });
 

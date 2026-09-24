@@ -57,7 +57,7 @@ test.describe('Inventory Overlay', () => {
 
   test('should open inventory over the pause menu through the shared management host', async () => {
     await inventory.close();
-    const pauseMenu = inventory.page.getByRole('button', { name: 'Resume Game', exact: true });
+    const pauseMenu = inventory.pauseMenuResumeButton;
     await expect(pauseMenu).toBeVisible();
 
     await inventory.toggle();

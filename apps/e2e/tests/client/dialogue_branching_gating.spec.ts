@@ -149,12 +149,17 @@ test.describe('C-490 dialogue transcript gating', () => {
     // to the composer (click and Escape).
     const deleteAction = overlay.getByRole('button', { name: 'Delete', exact: true });
     await expect(deleteAction).toBeEnabled();
+    const deleteMessage = overlay
+      .getByTestId('dialogue-message-row')
+      .filter({ hasText: 'Tell me about the ward' });
+    await deleteMessage.hover();
     await deleteAction.click();
     const cancel = overlay.getByRole('button', { name: 'Cancel', exact: true });
     await expect(cancel).toBeFocused();
     await cancel.click();
     await expect(composer).toBeFocused();
 
+    await deleteMessage.hover();
     await deleteAction.click();
     await expect(cancel).toBeFocused();
     await page.keyboard.press('Escape');

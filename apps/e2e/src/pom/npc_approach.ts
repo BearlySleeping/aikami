@@ -3,58 +3,111 @@ import type { Locator, Page } from '@playwright/test';
 
 type EngineEntityPosition = { x: number; y: number };
 
-type EngineDebugSnapshot = {
-  playerX: number;
-  playerY: number;
-  playerEid: number;
-  npcCount: number;
-  entityPositions: Record<string, EngineEntityPosition>;
+type NavigationSnapshot = {
+  readonly playerX: number;
+  readonly playerY: number;
+  readonly playerEid: number;
+  readonly npcCount: number;
+  readonly npcEntityIds: readonly number[];
+  readonly npcPositions: Readonly<Record<string, EngineEntityPosition>>;
 };
 
 type NpcTarget = EngineEntityPosition & { entityId: string };
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null;
+
+const isFiniteNumber = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isFinite(value);
+
+const isEntityId = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isInteger(value);
+
+const isFinitePosition = (value: unknown): value is EngineEntityPosition =>
+  isRecord(value) && isFiniteNumber(value.x) && isFiniteNumber(value.y);
+
+/** Parses the dynamic browser diagnostic and rejects incomplete NPC state. */
+const parseNavigationSnapshot = (value: unknown): NavigationSnapshot | undefined => {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  const { playerX, playerY, playerEid, npcCount, npcEntityIds, entityPositions } = value;
+  if (
+    !isFiniteNumber(playerX) ||
+    !isFiniteNumber(playerY) ||
+    !isEntityId(playerEid) ||
+    !isEntityId(npcCount) ||
+    npcCount <= 0 ||
+    !Array.isArray(npcEntityIds) ||
+    npcEntityIds.length === 0 ||
+    npcCount !== npcEntityIds.length ||
+    !isRecord(entityPositions)
+  ) {
+    return undefined;
+  }
+
+  const sanitizedNpcIds: number[] = [];
+  const npcPositions: Record<string, EngineEntityPosition> = {};
+  for (const rawEntityId of npcEntityIds) {
+    if (!isEntityId(rawEntityId)) {
+      return undefined;
+    }
+    const entityId = rawEntityId;
+    const position = entityPositions[String(entityId)];
+    if (!isFinitePosition(position)) {
+      return undefined;
+    }
+    sanitizedNpcIds.push(entityId);
+    npcPositions[String(entityId)] = { x: position.x, y: position.y };
+  }
+
+  return {
+    playerX,
+    playerY,
+    playerEid,
+    npcCount,
+    npcEntityIds: sanitizedNpcIds,
+    npcPositions,
+  };
+};
+
 const DIALOGUE_SELECTOR = '[data-testid="dialogue-overlay"], .dialogue-overlay';
 const INTERACTION_DISTANCE = 64;
 const MAX_APPROACH_STEPS = 90;
+const NAVIGATION_READY_TIMEOUT_MS = 45_000;
+
+const readNavigationSnapshot = async (page: Page): Promise<NavigationSnapshot> => {
+  const rawSnapshot = await page.evaluate(
+    () => (window as unknown as Record<string, unknown>).__AIKAMI_DEBUG__,
+  );
+  const snapshot = parseNavigationSnapshot(rawSnapshot);
+  if (!snapshot) {
+    throw new Error('Engine navigation diagnostics are incomplete');
+  }
+  return snapshot;
+};
+
+const isMapReady = async (page: Page): Promise<boolean> =>
+  await page.evaluate(() => {
+    const seam = (window as unknown as Record<string, unknown>).__AIKAMI_TEST__ as
+      | { isMapReady?: unknown }
+      | undefined;
+    return typeof seam?.isMapReady === 'function' && seam.isMapReady() === true;
+  });
 
 const waitForNavigationReady = async (page: Page): Promise<void> => {
-  await page.waitForFunction(
-    () => {
-      const debug = (window as unknown as Record<string, unknown>).__AIKAMI_DEBUG__ as
-        | {
-            playerX?: unknown;
-            playerY?: unknown;
-            playerEid?: unknown;
-            npcCount?: unknown;
-            entityPositions?: unknown;
-          }
-        | undefined;
-      return (
-        typeof debug?.playerX === 'number' &&
-        Number.isFinite(debug.playerX) &&
-        typeof debug.playerY === 'number' &&
-        Number.isFinite(debug.playerY) &&
-        typeof debug.playerEid === 'number' &&
-        typeof debug.npcCount === 'number' &&
-        debug.npcCount > 0 &&
-        typeof debug.entityPositions === 'object' &&
-        debug.entityPositions !== null
-      );
-    },
-    undefined,
-    { timeout: 45_000 },
-  );
-  await page.waitForFunction(
-    () => {
-      const seam = (window as unknown as Record<string, unknown>).__AIKAMI_TEST__ as
-        | { isMapReady?: unknown }
-        | undefined;
-      return typeof seam?.isMapReady === 'function' && seam.isMapReady() === true;
-    },
-    undefined,
-    { timeout: 45_000 },
-  );
-  await page.waitForTimeout(2_500);
+  const deadline = Date.now() + NAVIGATION_READY_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    const snapshot = await readNavigationSnapshot(page).catch(() => undefined);
+    if (snapshot && (await isMapReady(page))) {
+      // MAP_LOADED is the production readiness boundary. A short settle lets
+      // idle NPCs start a wander route before the first real WASD step.
+      await page.waitForTimeout(300);
+      return;
+    }
+    await page.waitForTimeout(100);
+  }
+  throw new Error('Timed out waiting for finite production navigation diagnostics');
 };
 
 const dismissMovementTutorial = async (page: Page): Promise<void> => {
@@ -65,46 +118,51 @@ const dismissMovementTutorial = async (page: Page): Promise<void> => {
   }
 };
 
-const readNavigationSnapshot = async (page: Page): Promise<EngineDebugSnapshot> => {
-  const snapshot = await page.evaluate(
-    () =>
-      (window as unknown as Record<string, unknown>).__AIKAMI_DEBUG__ as
-        | Partial<EngineDebugSnapshot>
-        | undefined,
-  );
-  if (
-    typeof snapshot?.playerX !== 'number' ||
-    typeof snapshot.playerY !== 'number' ||
-    typeof snapshot.playerEid !== 'number' ||
-    typeof snapshot.npcCount !== 'number' ||
-    typeof snapshot.entityPositions !== 'object' ||
-    snapshot.entityPositions === null
-  ) {
-    throw new Error('Engine navigation diagnostics are incomplete');
+const resetToVillageSpawn = async (page: Page): Promise<void> => {
+  const loaded = await page.evaluate(async () => {
+    const seam = (window as unknown as Record<string, unknown>).__AIKAMI_TEST__ as
+      | {
+          loadPackMap(options: { mapId: string }): Promise<boolean>;
+        }
+      | undefined;
+    if (!seam || typeof seam.loadPackMap !== 'function') {
+      throw new Error('Production map reset test seam is unavailable');
+    }
+    return await seam.loadPackMap({ mapId: 'village' });
+  });
+  if (!loaded) {
+    throw new Error('Production map loader rejected the village reset');
   }
-  return {
-    playerX: snapshot.playerX,
-    playerY: snapshot.playerY,
-    playerEid: snapshot.playerEid,
-    npcCount: snapshot.npcCount,
-    entityPositions: snapshot.entityPositions,
-  };
+  await page.waitForFunction(() => {
+    const seam = (window as unknown as Record<string, unknown>).__AIKAMI_TEST__ as
+      | {
+          isMapReady?: () => boolean;
+          getCurrentMapId?: () => string;
+        }
+      | undefined;
+    return seam?.isMapReady?.() === true && seam.getCurrentMapId?.() === 'village';
+  });
 };
 
-const selectNearestNpc = (snapshot: EngineDebugSnapshot): NpcTarget => {
-  const candidates = Object.entries(snapshot.entityPositions)
-    .filter(([entityId]) => Number(entityId) !== snapshot.playerEid)
-    .sort(([left], [right]) => Number(left) - Number(right))
-    .slice(0, snapshot.npcCount)
-    .map(([entityId, position]) => ({ entityId, ...position }))
-    .sort(
-      (left, right) =>
-        Math.hypot(left.x - snapshot.playerX, left.y - snapshot.playerY) -
-        Math.hypot(right.x - snapshot.playerX, right.y - snapshot.playerY),
-    );
+const selectNearestNpc = (snapshot: NavigationSnapshot): NpcTarget => {
+  const candidates: NpcTarget[] = [];
+  for (const entityId of snapshot.npcEntityIds) {
+    const position = snapshot.npcPositions[String(entityId)];
+    if (!position) {
+      throw new Error(`Production NPC ${entityId} has no finite position`);
+    }
+    candidates.push({ entityId: String(entityId), ...position });
+  }
+  candidates.sort(
+    (left, right) =>
+      Math.hypot(left.x - snapshot.playerX, left.y - snapshot.playerY) -
+      Math.hypot(right.x - snapshot.playerX, right.y - snapshot.playerY),
+  );
   const target = candidates[0];
   if (!target) {
-    throw new Error(`No production NPC position found among ${snapshot.npcCount} candidates`);
+    throw new Error(
+      `No production NPC position found for ${snapshot.npcEntityIds.length} registered NPCs`,
+    );
   }
   return target;
 };
@@ -127,88 +185,42 @@ const directionToTarget = (deltaX: number, deltaY: number): string => {
 };
 
 const recoveryKeysFor = (key: string): readonly string[] =>
-  key === 'w' || key === 's' ? ['d', 'a'] : ['w', 's'];
-
-type RouteState = {
-  readonly point?: EngineEntityPosition;
-  readonly stage?: 'side' | 'flank';
-};
+  ['w', 'a', 's', 'd'].filter((candidate) => candidate !== key);
 
 type InteractionResult = {
   readonly opened: boolean;
-  readonly route: RouteState;
-};
-
-type RouteProgress = {
-  readonly deltaX: number;
-  readonly deltaY: number;
-  readonly route?: RouteState;
 };
 
 const isDialogueVisible = async (overlay: Locator): Promise<boolean> =>
   overlay.isVisible().catch(() => false);
 
-const createSideRoute = (
-  snapshot: EngineDebugSnapshot,
-  targetPosition: EngineEntityPosition,
-): RouteState => {
-  const sideOffset = targetPosition.x >= snapshot.playerX ? 152 : -152;
-  return {
-    point: { x: targetPosition.x + sideOffset, y: snapshot.playerY },
-    stage: 'side',
-  };
-};
-
 const attemptInteraction = async (options: {
   readonly page: Page;
   readonly overlay: Locator;
-  readonly snapshot: EngineDebugSnapshot;
+  readonly snapshot: NavigationSnapshot;
   readonly targetPosition: EngineEntityPosition;
-  readonly route: RouteState;
 }): Promise<InteractionResult> => {
-  const { page, overlay, snapshot, targetPosition, route } = options;
+  const { page, overlay, snapshot, targetPosition } = options;
   const deltaX = targetPosition.x - snapshot.playerX;
   const deltaY = targetPosition.y - snapshot.playerY;
   if (Math.hypot(deltaX, deltaY) > INTERACTION_DISTANCE) {
-    return { opened: false, route };
+    return { opened: false };
   }
 
   await page.keyboard.press('e');
   await page.waitForTimeout(250);
   if (await isDialogueVisible(overlay)) {
-    return { opened: true, route };
+    return { opened: true };
   }
-  return {
-    opened: false,
-    route: route.point === undefined ? createSideRoute(snapshot, targetPosition) : route,
-  };
+  // A failed keypress inside the radius is a mount/timing race, not an
+  // obstacle; the next step retries E while continuing the direct approach.
+  return { opened: false };
 };
 
-const routeProgress = (options: {
-  readonly snapshot: EngineDebugSnapshot;
-  readonly targetPosition: EngineEntityPosition;
-  readonly route: RouteState;
-}): RouteProgress => {
-  const { snapshot, targetPosition, route } = options;
-  const targetDeltaX = targetPosition.x - snapshot.playerX;
-  const targetDeltaY = targetPosition.y - snapshot.playerY;
-  if (route.point === undefined) {
-    return { deltaX: targetDeltaX, deltaY: targetDeltaY };
-  }
-
-  const deltaX = route.point.x - snapshot.playerX;
-  const deltaY = route.point.y - snapshot.playerY;
-  if (Math.hypot(deltaX, deltaY) > 24) {
-    return { deltaX, deltaY };
-  }
-  if (route.stage === 'side') {
-    return {
-      deltaX: 0,
-      deltaY: 0,
-      route: { point: { x: route.point.x, y: targetPosition.y }, stage: 'flank' },
-    };
-  }
-  return { deltaX: 0, deltaY: 0, route: {} };
+type MoveRecoveryResult = {
+  readonly recoveryIndex: number;
+  readonly moved: boolean;
+  readonly movedKey?: string;
 };
 
 const moveWithRecovery = async (options: {
@@ -216,19 +228,67 @@ const moveWithRecovery = async (options: {
   readonly key: string;
   readonly before: EngineEntityPosition;
   readonly recoveryIndex: number;
-}): Promise<number> => {
+}): Promise<MoveRecoveryResult> => {
   const { page, key, before, recoveryIndex } = options;
   await tapKey(page, key);
   const afterMove = await readNavigationSnapshot(page);
   const moved = Math.hypot(afterMove.playerX - before.x, afterMove.playerY - before.y);
   if (moved >= 2) {
-    return 0;
+    return { recoveryIndex: 0, moved: true, movedKey: key };
   }
 
   const recoveryKeys = recoveryKeysFor(key);
-  const recoveryKey = recoveryKeys[recoveryIndex % recoveryKeys.length] ?? 'd';
-  await tapKey(page, recoveryKey);
-  return recoveryIndex + 1;
+  for (let offset = 0; offset < recoveryKeys.length; offset += 1) {
+    const recoveryKey = recoveryKeys[(recoveryIndex + offset) % recoveryKeys.length] ?? 'd';
+    await tapKey(page, recoveryKey);
+    const recovered = await readNavigationSnapshot(page);
+    if (Math.hypot(recovered.playerX - before.x, recovered.playerY - before.y) >= 2) {
+      return {
+        recoveryIndex: recoveryIndex + offset + 1,
+        moved: true,
+        movedKey: recoveryKey,
+      };
+    }
+  }
+  return { recoveryIndex: recoveryIndex + recoveryKeys.length, moved: false };
+};
+
+type ApproachState = {
+  readonly recoveryIndex: number;
+  readonly stuckAttempts: number;
+  readonly detourKey?: string;
+  readonly detourSteps: number;
+};
+
+const advanceApproachState = (options: {
+  readonly state: ApproachState;
+  readonly movement: MoveRecoveryResult;
+  readonly directKey: string;
+  readonly attemptedKey: string;
+}): ApproachState => {
+  const { state, movement, directKey, attemptedKey } = options;
+  const nextState = { ...state, recoveryIndex: movement.recoveryIndex };
+  if (movement.moved) {
+    if (movement.movedKey === directKey) {
+      return { ...nextState, stuckAttempts: 0, detourKey: undefined, detourSteps: 0 };
+    }
+    const detourSteps = state.detourSteps + 1;
+    if (detourSteps >= 6) {
+      return { ...nextState, stuckAttempts: 0, detourKey: undefined, detourSteps: 0 };
+    }
+    return { ...nextState, stuckAttempts: 0, detourKey: movement.movedKey, detourSteps };
+  }
+
+  const stuckAttempts = state.stuckAttempts + 1;
+  if (stuckAttempts < 2) {
+    return { ...nextState, stuckAttempts };
+  }
+  const recoveryKeys = recoveryKeysFor(attemptedKey);
+  return {
+    ...nextState,
+    stuckAttempts: 0,
+    detourKey: recoveryKeys[state.detourSteps % recoveryKeys.length],
+  };
 };
 
 /**
@@ -238,12 +298,19 @@ const moveWithRecovery = async (options: {
 export const approachProductionNpc = async (page: Page): Promise<void> => {
   await waitForNavigationReady(page);
   await dismissMovementTutorial(page);
+  // A fresh production map load removes persisted player coordinates and NPC
+  // wander phase from earlier tests before the real WASD approach begins.
+  await resetToVillageSpawn(page);
+  await waitForNavigationReady(page);
 
   const initial = await readNavigationSnapshot(page);
   const target = selectNearestNpc(initial);
   const dialogueOverlay = page.locator(DIALOGUE_SELECTOR);
-  let recoveryIndex = 0;
-  let route: RouteState = {};
+  let state: ApproachState = {
+    recoveryIndex: 0,
+    stuckAttempts: 0,
+    detourSteps: 0,
+  };
 
   for (let step = 0; step < MAX_APPROACH_STEPS; step += 1) {
     if (await isDialogueVisible(dialogueOverlay)) {
@@ -251,7 +318,7 @@ export const approachProductionNpc = async (page: Page): Promise<void> => {
     }
 
     const snapshot = await readNavigationSnapshot(page);
-    const targetPosition = snapshot.entityPositions[target.entityId];
+    const targetPosition = snapshot.npcPositions[target.entityId];
     if (!targetPosition) {
       throw new Error(`Production NPC ${target.entityId} disappeared during approach`);
     }
@@ -261,25 +328,27 @@ export const approachProductionNpc = async (page: Page): Promise<void> => {
       overlay: dialogueOverlay,
       snapshot,
       targetPosition,
-      route,
     });
     if (interaction.opened) {
       return;
     }
-    route = interaction.route;
 
-    const progress = routeProgress({ snapshot, targetPosition, route });
-    if (progress.route !== undefined) {
-      route = progress.route;
-      continue;
-    }
-
-    const key = directionToTarget(progress.deltaX, progress.deltaY);
-    recoveryIndex = await moveWithRecovery({
+    const directKey = directionToTarget(
+      targetPosition.x - snapshot.playerX,
+      targetPosition.y - snapshot.playerY,
+    );
+    const key = state.detourKey ?? directKey;
+    const movement = await moveWithRecovery({
       page,
       key,
       before: { x: snapshot.playerX, y: snapshot.playerY },
-      recoveryIndex,
+      recoveryIndex: state.recoveryIndex,
+    });
+    state = advanceApproachState({
+      state,
+      movement,
+      directKey,
+      attemptedKey: key,
     });
   }
 
