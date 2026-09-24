@@ -328,6 +328,7 @@ export const CORNER_TERRAIN_SEEDS = {
   gravel: 117,
   earth: 120,
   cobblestone: 128,
+  path: 131,
 } as const;
 
 const isOuterEdge = (x: number, y: number): boolean =>
@@ -400,7 +401,8 @@ const diagonalCornerField = (options: {
     18.5 +
     1.6 * Math.sin(distanceFromMissingCorner * 0.23 + seed * 0.047) +
     1.0 * Math.sin((px - py) * 0.17 - seed * 0.031) +
-    0.6 * Math.sin(distanceFromMissingCorner * 0.61 + seed * 0.019);
+    0.6 * Math.sin(distanceFromMissingCorner * 0.61 + seed * 0.019) +
+    0.45 * Math.sin(distanceFromMissingCorner * 1.13 - seed * 0.023);
   return distanceFromMissingCorner - boundary + 2.4;
 };
 
@@ -427,7 +429,8 @@ const adjacentCornerField = (options: {
     15.5 +
     1.4 * Math.sin(along * 0.29 + seed * 0.071) +
     1.0 * Math.sin(along * 0.17 - seed * 0.113) +
-    0.5 * Math.sin(along * 0.73 + seed * 0.037);
+    0.5 * Math.sin(along * 0.73 + seed * 0.037) +
+    0.45 * Math.sin(along * 1.19 + seed * 0.029);
   if (mask === 3) {
     return boundary - py + 2.4;
   }

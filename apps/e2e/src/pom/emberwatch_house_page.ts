@@ -15,7 +15,12 @@ import { assertGpuRendererName } from '../visual/core/gpu_renderer_guard.ts';
 import { GamePage } from './game_page';
 
 export type EmberwatchHouseCell = { c: number; r: number };
-export type EmberwatchHouseMapId = 'village' | 'inn' | 'merchant_shop';
+export type EmberwatchHouseMapId =
+  | 'village'
+  | 'inn'
+  | 'merchant_shop'
+  | 'old_road'
+  | 'ruined_shrine';
 export type EmberwatchHouseClip = { x: number; y: number; width: number; height: number };
 
 export type EmberwatchHouseWorldSnapshot = {

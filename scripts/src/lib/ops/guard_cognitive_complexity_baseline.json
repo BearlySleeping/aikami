@@ -2090,7 +2090,7 @@
   "scripts/src/lib/ops/generate_emberwatch_maps.ts": {
     "counts": {
       "excessive": 1,
-      "worst": 22
+      "worst": 17
     }
   },
   "scripts/src/lib/ops/guard_data_plane.ts": {

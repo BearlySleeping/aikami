@@ -356,7 +356,9 @@ const paintPads = (m: MapData): void => {
 const paintNoticeBoardApproach = (m: MapData): void => {
   // Reassert the authored trunk after the symmetric bank pass.
   fillRect(m, 39, 9, 40, 22, G.DIRT);
-  fillRect(m, 36, 9, 38, 9, G.DIRT); // south landing → crossing
+  fillRect(m, 36, 9, 38, 9, G.DIRT);
+  setTile(m, 36, 10, G.DIRT);
+  fillRect(m, 38, 10, 40, 10, G.DIRT);
   fillRect(m, 36, 5, 38, 5, G.DIRT); // short worn landing below the board
   fillRect(m, 36, 6, 38, 6, G.DIRT); // north landing → board walk
 };
@@ -421,16 +423,26 @@ const placeBuildings = (m: MapData): void => {
  * ending on a hard rectangular seam.
  */
 const SQUARE_SPANS: ReadonlyArray<readonly [number, number, number]> = [
-  [19, 31, 34],
+  [19, 30, 35],
   [20, 29, 36],
   [21, 28, 37],
   [22, 27, 38],
-  [23, 26, 39],
-  [24, 26, 39],
+  [23, 25, 39],
+  [24, 26, 40],
   [25, 27, 38],
   [26, 28, 37],
   [27, 29, 36],
-  [28, 31, 34],
+  [28, 30, 35],
+];
+
+/** Small asymmetric worn patches keep the lozenge from reading as a stamp. */
+const SQUARE_EDGE_SPURS: ReadonlyArray<readonly [number, number]> = [
+  [31, 18],
+  [34, 18],
+  [25, 22],
+  [40, 24],
+  [30, 29],
+  [35, 29],
 ];
 
 /**
@@ -547,6 +559,9 @@ export const buildVillage = (): { map: MapData; objectLayers: MapObjectLayer[] }
   // the roads rather than a slab the roads cut through.
   for (const [r, c0, c1] of SQUARE_SPANS) {
     fillRect(m, c0, r, c1, r, G.DIRT);
+  }
+  for (const [c, r] of SQUARE_EDGE_SPURS) {
+    setTile(m, c, r, G.DIRT);
   }
   for (const [c, r] of WARD_RING) {
     setTile(m, c, r, G.STONE_FLOOR);

@@ -35,6 +35,29 @@ export type { MapData, MapObjectLayer, SpawnObject } from './emberwatch_map_shar
 
 const G = buildG();
 
+const SEMANTIC_TERRAIN_BY_TILE_NAME: Readonly<Record<string, string>> = {
+  path_tough: 'path',
+  path_tough_variant: 'path',
+  stone_floor: 'earth',
+  stone_floor_variant: 'earth',
+  flagstone: 'earth',
+  sand: 'gravel',
+  bridge: 'earth',
+};
+
+const semanticTerrainForTileName = (tileName: string | undefined): string | undefined => {
+  if (!tileName) {
+    return undefined;
+  }
+  if (tileName.startsWith('bridge_')) {
+    return 'earth';
+  }
+  return SEMANTIC_TERRAIN_BY_TILE_NAME[tileName];
+};
+
+const keepsSemanticTerrainVisual = (tileName: string | undefined): boolean =>
+  tileName === 'bridge' || (tileName?.startsWith('bridge_') ?? false);
+
 /**
  * GID → manifest tile name, derived from the manifest (C-378 terrain
  * channel derivation). Inverse of the `buildG` alias map — GIDs that are
@@ -93,11 +116,11 @@ const applyGroundContributions = (options: {
       continue;
     }
     const index = idx(map, c, r);
-    layers.ground[index] = gid;
-    layers.decor[index] = 0;
+    const tileName = GID_TO_NAME.get(gid);
+    layers.ground[index] = keepsSemanticTerrainVisual(tileName) ? 0 : gid;
+    layers.decor[index] = keepsSemanticTerrainVisual(tileName) ? gid : 0;
     layers.overhead[index] = 0;
     cells.add(cellKey(c, r));
-    const tileName = GID_TO_NAME.get(gid);
     layers.terrainChannel[index] = tileName ? (terrainNameToId.get(tileName) ?? '') : '';
   }
   return cells;
@@ -179,6 +202,37 @@ const applyTerrainOverrides = (options: {
 // Build map JSON
 // ---------------------------------------------------------------------------
 
+type ResolvedGroundCell = {
+  ground: number;
+  decor: number;
+  overhead: number;
+  terrain: string;
+};
+
+const resolveGroundCell = (options: {
+  gid: number;
+  tileName: string | undefined;
+  terrainId: string | undefined;
+  overheadGids: ReadonlySet<number>;
+}): ResolvedGroundCell => {
+  const { gid, tileName, terrainId, overheadGids } = options;
+  if (terrainId) {
+    return {
+      ground: keepsSemanticTerrainVisual(tileName) ? 0 : gid,
+      decor: keepsSemanticTerrainVisual(tileName) ? gid : 0,
+      overhead: 0,
+      terrain: terrainId,
+    };
+  }
+  if (gid === 0) {
+    return { ground: 0, decor: 0, overhead: 0, terrain: '' };
+  }
+  if (overheadGids.has(gid)) {
+    return { ground: 0, decor: 0, overhead: gid, terrain: '' };
+  }
+  return { ground: gid, decor: gid, overhead: 0, terrain: '' };
+};
+
 /**
  * Builds the runtime Tiled JSON for one map, deterministically. Exported (and
  * pure) so the map-compile-stability test can compare the builder output to the
@@ -209,7 +263,13 @@ export const buildMapJson = ({
       }
     }
   }
-  const ground = [...m.ground];
+  for (const tile of Object.values(readManifestTiles())) {
+    const semanticTerrain = semanticTerrainForTileName(tile.name);
+    if (semanticTerrain) {
+      terrainNameToId.set(tile.name, semanticTerrain);
+    }
+  }
+  const ground: number[] = [];
   const decor: number[] = [];
   const overhead: number[] = [];
   const terrainChannel: string[] = [];
@@ -217,20 +277,11 @@ export const buildMapJson = ({
   for (const gid of m.ground) {
     const tileName = gid === 0 ? undefined : GID_TO_NAME.get(gid);
     const terrainId = tileName ? terrainNameToId.get(tileName) : undefined;
-    terrainChannel.push(terrainId ?? '');
-    if (terrainId) {
-      decor.push(0);
-      overhead.push(0);
-    } else if (gid === 0) {
-      decor.push(0);
-      overhead.push(0);
-    } else if (overheadGids.has(gid)) {
-      decor.push(0);
-      overhead.push(gid);
-    } else {
-      decor.push(gid);
-      overhead.push(0);
-    }
+    const resolved = resolveGroundCell({ gid, tileName, terrainId, overheadGids });
+    ground.push(resolved.ground);
+    decor.push(resolved.decor);
+    overhead.push(resolved.overhead);
+    terrainChannel.push(resolved.terrain);
   }
 
   // Explicit contributions are authored after the baked layer split. Ground

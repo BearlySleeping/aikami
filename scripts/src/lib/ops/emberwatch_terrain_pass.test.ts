@@ -15,7 +15,7 @@ import {
 } from '../../../../packages/frontend/engine/src/assets/autotile.ts';
 import { G } from './emberwatch_authoring.ts';
 import { packAtlas } from './generate_emberwatch_atlas.ts';
-import { EMBERWATCH_MAP_BUILDERS } from './generate_emberwatch_maps.ts';
+import { buildMapJson, EMBERWATCH_MAP_BUILDERS } from './generate_emberwatch_maps.ts';
 import {
   ATLAS_CELL,
   ATLAS_COLS,
@@ -34,7 +34,8 @@ const repository = join(dirname(fileURLToPath(import.meta.url)), '../../../..');
 const mapsDirectory = join(repository, 'content/packs/emberwatch/maps');
 const atlas = packAtlas();
 
-const CORNER_TERRAINS = ['dirt', 'water', 'gravel', 'earth', 'cobblestone'] as const;
+const CORNER_TERRAINS = ['dirt', 'water', 'gravel', 'earth', 'cobblestone', 'path'] as const;
+const RESERVED_CORNER_TERRAINS = ['dirt', 'water', 'gravel', 'earth', 'cobblestone'] as const;
 
 /** Endpoint material means used to classify real intermediate pixels. */
 const CLASSIFICATION_FRAMES = {
@@ -43,6 +44,7 @@ const CLASSIFICATION_FRAMES = {
   gravel: { base: 'gravel_0.png', overlay: 'gravel_15.png' },
   earth: { base: 'earth_0.png', overlay: 'earth_15.png' },
   cobblestone: { base: 'cobblestone_0.png', overlay: 'cobblestone_15.png' },
+  path: { base: 'path_0.png', overlay: 'path_15.png' },
 } as const;
 
 // C-552 leaves the four retained-map collision layers unchanged. C-553 then
@@ -369,6 +371,18 @@ const renderActualComposite = (options: {
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
+const readSemanticTerrain = (mapId: string): string[] => {
+  const builder = EMBERWATCH_MAP_BUILDERS[mapId];
+  if (!builder) {
+    throw new Error(`C-559 missing map builder ${mapId}`);
+  }
+  const json = buildMapJson(builder()).json;
+  if (!isRecord(json) || !isRecord(json.aikami) || !Array.isArray(json.aikami.terrain)) {
+    throw new Error(`C-559 ${mapId} has no semantic terrain channel`);
+  }
+  return json.aikami.terrain.map((value) => (typeof value === 'string' ? value : ''));
+};
+
 const readCollisionLayer = (value: unknown): CollisionLayer => {
   if (!isRecord(value) || !Array.isArray(value.layers)) {
     throw new Error('Map JSON has no layers array');
@@ -577,9 +591,8 @@ describe('C-552 AC-1 — all corner16 cases are organic and seamless', () => {
 
   test('the actual 3x3 landing composites have non-periodic boundaries', () => {
     const map = EMBERWATCH_MAP_BUILDERS.village().map;
+    const terrain = readSemanticTerrain('village');
     const terrains = engineTerrains();
-    const namesByGid = terrainNameByGid(terrains);
-    const terrain = map.ground.map((gid) => namesByGid.get(gid) ?? '');
     const base = meanRgb('grass.png');
     const overlay = meanRgb('dirt_15.png');
     for (const origin of [
@@ -628,7 +641,7 @@ describe('C-552 AC-1 — all corner16 cases are organic and seamless', () => {
 
   test('the reserved terrain block keeps every existing GID cell pinned', () => {
     const starts = { dirt: 48, water: 64, gravel: 80, earth: 96, cobblestone: 112 } as const;
-    for (const terrain of CORNER_TERRAINS) {
+    for (const terrain of RESERVED_CORNER_TERRAINS) {
       const start = starts[terrain];
       for (let mask = 0; mask < 16; mask++) {
         const cell = start + mask;
@@ -640,6 +653,87 @@ describe('C-552 AC-1 — all corner16 cases are organic and seamless', () => {
           h: TILE,
         });
       }
+    }
+  });
+});
+
+describe('C-559 semantic terrain edges', () => {
+  test('every baked path, stone, sand, and bridge cell owns a corner16 terrain', () => {
+    const tiles = readManifestTiles();
+    const expectedTerrain = (tileName: string): string | undefined => {
+      if (/^path_tough/.test(tileName)) {
+        return 'path';
+      }
+      if (/^(stone_floor|flagstone)/.test(tileName)) {
+        return 'earth';
+      }
+      if (tileName === 'sand') {
+        return 'gravel';
+      }
+      if (tileName === 'bridge' || tileName.startsWith('bridge_')) {
+        return 'earth';
+      }
+      return undefined;
+    };
+    let checkedCells = 0;
+    for (const [mapId, builder] of Object.entries(EMBERWATCH_MAP_BUILDERS)) {
+      const built = builder();
+      const terrain = readSemanticTerrain(mapId);
+      const visualCells = [
+        ...built.map.ground.map((gid, index) => [index, gid] as const),
+        ...(built.map.groundExtra?.map(([column, row, gid]) => [
+          row * built.map.width + column,
+          gid,
+        ]) ?? []),
+      ];
+      for (const [index, gid] of visualCells) {
+        const tileName = tiles[String(gid)]?.name;
+        const expected = expectedTerrain(tileName ?? '');
+        if (!expected) {
+          continue;
+        }
+        checkedCells++;
+        expect(terrain[index], `${mapId} cell ${index} ${tileName}`).toBe(expected);
+      }
+    }
+    expect(checkedCells).toBeGreaterThan(500);
+  });
+
+  test('placed ward-square composites keep the C-552 perceptual boundary bound', () => {
+    const map = EMBERWATCH_MAP_BUILDERS.village().map;
+    const terrain = readSemanticTerrain('village');
+    const terrains = engineTerrains();
+    const base = meanRgb('grass.png');
+    const overlay = meanRgb('dirt_15.png');
+    for (const origin of [
+      { x: 27, y: 22 },
+      { x: 37, y: 22 },
+    ]) {
+      const classification = renderActualComposite({
+        width: map.width,
+        height: map.height,
+        terrain,
+        terrains,
+        originX: origin.x,
+        originY: origin.y,
+        cells: 3,
+        base,
+        overlay,
+      });
+      const values = transitionProfile({
+        classification,
+        width: TILE * 3,
+        height: TILE * 3,
+        centerY: TILE / 2,
+        rowLimit: TILE,
+      });
+      const profile = measureBoundaryProfile(values);
+      expect(values.length, `square ${origin.x},${origin.y} profile samples`).toBeGreaterThan(16);
+      expect(profile.monotonicRun, `square ${origin.x},${origin.y} fringe`).toBeLessThanOrEqual(8);
+      expect(
+        profile.maxLagCorrelation,
+        `square ${origin.x},${origin.y} short-period correlation`,
+      ).toBeLessThanOrEqual(0.99);
     }
   });
 });

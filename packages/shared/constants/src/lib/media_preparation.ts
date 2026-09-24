@@ -216,7 +216,7 @@ export type AtlasValidationCode =
 /** The explicit terrain-cell capacity of the shipped Emberwatch grid atlas. */
 export const EMBERWATCH_TERRAIN_ATLAS_CAPACITY = {
   columns: 16,
-  rows: 11,
-  /** 176 cells; one frame remains free after the C-553 palette append. */
-  cells: 176,
+  rows: 13,
+  /** 208 cells; 191 frames are occupied after the C-559 path append. */
+  cells: 208,
 } as const;

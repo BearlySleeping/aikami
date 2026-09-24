@@ -66,6 +66,13 @@
       "wang": "corner16",
       "frameBase": "cobblestone_0.png",
       "isWalkable": true
+    },
+    {
+      "name": "path",
+      "precedence": 6,
+      "wang": "corner16",
+      "frameBase": "path_0.png",
+      "isWalkable": true
     }
   ],
   "tiles": {
@@ -921,6 +928,150 @@
       "frame": "house_roof_thatch_eave_edge.png",
       "isWalkable": false,
       "isWall": true,
+      "provenance": {
+        "source": "generated:gpt"
+      }
+    },
+    "177": {
+      "name": "path_0",
+      "frame": "path_0.png",
+      "isWalkable": true,
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
+    },
+    "178": {
+      "name": "path_1",
+      "frame": "path_1.png",
+      "isWalkable": true,
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
+    },
+    "179": {
+      "name": "path_2",
+      "frame": "path_2.png",
+      "isWalkable": true,
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
+    },
+    "180": {
+      "name": "path_3",
+      "frame": "path_3.png",
+      "isWalkable": true,
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
+    },
+    "181": {
+      "name": "path_4",
+      "frame": "path_4.png",
+      "isWalkable": true,
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
+    },
+    "182": {
+      "name": "path_5",
+      "frame": "path_5.png",
+      "isWalkable": true,
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
+    },
+    "183": {
+      "name": "path_6",
+      "frame": "path_6.png",
+      "isWalkable": true,
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
+    },
+    "184": {
+      "name": "path_7",
+      "frame": "path_7.png",
+      "isWalkable": true,
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
+    },
+    "185": {
+      "name": "path_8",
+      "frame": "path_8.png",
+      "isWalkable": true,
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
+    },
+    "186": {
+      "name": "path_9",
+      "frame": "path_9.png",
+      "isWalkable": true,
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
+    },
+    "187": {
+      "name": "path_10",
+      "frame": "path_10.png",
+      "isWalkable": true,
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
+    },
+    "188": {
+      "name": "path_11",
+      "frame": "path_11.png",
+      "isWalkable": true,
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
+    },
+    "189": {
+      "name": "path_12",
+      "frame": "path_12.png",
+      "isWalkable": true,
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
+    },
+    "190": {
+      "name": "path_13",
+      "frame": "path_13.png",
+      "isWalkable": true,
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
+    },
+    "191": {
+      "name": "path_14",
+      "frame": "path_14.png",
+      "isWalkable": true,
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
+    },
+    "192": {
+      "name": "path_15",
+      "frame": "path_15.png",
+      "isWalkable": true,
+      "isWall": false,
       "provenance": {
         "source": "generated:gpt"
       }
