@@ -9,11 +9,20 @@
 // or whose plan could not be built — still exited 0 whenever the audit passed.
 // A plan reporting success for a release that cannot happen.
 //
-// The release plane is redirected to a temp directory so the tests neither read
-// nor disturb a developer's sealed candidate. That seam cannot weaken a gate:
-// the staging approval still resolves against the real staging origin.
+// The release plane and base-release graph are redirected to prepared temp
+// directories, so tests neither read nor disturb a developer's release state.
+// The seams cannot weaken a gate: the target still comes from the fail-closed
+// release table, and staging approval still evaluates the isolated receipt.
 
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  test as bunTest,
+  describe,
+  expect,
+} from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import {
   existsSync,
@@ -25,19 +34,62 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { CATALOG_ORIGINS } from '@aikami/constants';
+import { buildReleaseGraph } from '../../catalog/__tests__/release_graph_fixture.ts';
 import { SCRIPTS_ENV_ROOT_ENV } from '../../env/scripts_env.ts';
 import { buildCandidateLock } from '../emberwatch_candidate.ts';
+import { RELEASE_PLAN_SNAPSHOT_ENV } from '../emberwatch_release_cli.ts';
 import { RELEASE_PLANE_ENV } from '../emberwatch_release_io.ts';
 
 const REPOSITORY = join(import.meta.dir, '../../../../..');
 const CLI = 'scripts/src/lib/ops/emberwatch_release.ts';
 
+// The real CLI was 4.27s in the isolated baseline and crossed Bun's 5s default
+// at 5.01s under the full scripts suite. These are deliberately subprocess
+// tests, so budget for loaded CI while keeping a runaway process bounded.
+const SUBPROCESS_TEST_TIMEOUT_MS = 30_000;
+
 type CliRun = { status: number | null; output: string };
 
 let plane: string;
 let envRoot: string;
+let snapshotRoot: string;
+let currentTreeLock: ReturnType<typeof buildCandidateLock>['lock'];
+
+/** Materializes a valid prior release graph so plan tests never read HTTP. */
+const writeReleaseSnapshot = (mode: 'staging' | 'production'): void => {
+  const originUrl = CATALOG_ORIGINS[mode].originUrl;
+  if (originUrl === undefined) {
+    throw new Error(`missing ${mode} catalog origin`);
+  }
+  const fixture = buildReleaseGraph({ entries: [], originUrl });
+  const root = join(snapshotRoot, mode);
+  for (const [key, document] of fixture.documents) {
+    const path = join(root, key);
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, document);
+  }
+  const pointerPath = join(root, 'index/v1/release.json');
+  mkdirSync(dirname(pointerPath), { recursive: true });
+  writeFileSync(pointerPath, JSON.stringify(fixture.pointer));
+};
+
+beforeAll(() => {
+  currentTreeLock = buildCandidateLock().lock;
+  snapshotRoot = mkdtempSync(join(tmpdir(), 'aikami-cli-release-graph-'));
+  writeReleaseSnapshot('staging');
+  writeReleaseSnapshot('production');
+});
+
+afterAll(() => {
+  rmSync(snapshotRoot, { recursive: true, force: true });
+});
+
+/** Runs every case through the real CLI with its measured subprocess budget. */
+const test = (name: string, run: () => void | Promise<void>): void => {
+  bunTest(name, run, SUBPROCESS_TEST_TIMEOUT_MS);
+};
 
 beforeEach(() => {
   plane = mkdtempSync(join(tmpdir(), 'aikami-cli-plane-'));
@@ -70,11 +122,13 @@ const ensureModeEnv = (mode: 'staging' | 'production'): void => {
   );
 };
 
-/** Writes a sealed candidate that re-derives from the CURRENT source tree. */
+/** Writes the prepared candidate that re-derives from the CURRENT source tree. */
 const sealCurrentTree = (): string => {
-  const { lock } = buildCandidateLock();
-  writeFileSync(join(plane, 'candidate.latest.json'), `${JSON.stringify(lock, null, 2)}\n`);
-  return lock.lockHash;
+  writeFileSync(
+    join(plane, 'candidate.latest.json'),
+    `${JSON.stringify(currentTreeLock, null, 2)}\n`,
+  );
+  return currentTreeLock.lockHash;
 };
 
 const runCli = (args: string[]): CliRun => {
@@ -84,6 +138,9 @@ const runCli = (args: string[]): CliRun => {
   delete env.AIKAMI_CATALOG_TEST_SEAM;
   env[SCRIPTS_ENV_ROOT_ENV] = envRoot;
   env[RELEASE_PLANE_ENV] = plane;
+  const modeIndex = args.indexOf('--mode');
+  const mode = modeIndex < 0 ? 'staging' : (args[modeIndex + 1] ?? 'staging');
+  env[RELEASE_PLAN_SNAPSHOT_ENV] = join(snapshotRoot, mode);
   const result = spawnSync('bun', [CLI, ...args], {
     cwd: REPOSITORY,
     encoding: 'utf8',
@@ -154,8 +211,7 @@ describe('emberwatch:release --plan — a failed plan is not a success', () => {
   test('a candidate that no longer re-derives from the tree makes --plan exit non-zero', () => {
     ensureModeEnv('staging');
     // A schema-valid lock whose content does not match this checkout.
-    const { lock } = buildCandidateLock();
-    const tampered = { ...lock, packVersion: '0.0.1-not-this-tree' };
+    const tampered = { ...currentTreeLock, packVersion: '0.0.1-not-this-tree' };
     writeFileSync(join(plane, 'candidate.latest.json'), JSON.stringify(tampered));
 
     const run = runCli(['--mode', 'staging', '--plan']);
