@@ -6,6 +6,7 @@
 // the legacy direct-overlay entry point without changing domain ownership.
 
 import { BaseViewModelContainer } from '$components';
+import LpcItemIcon from '$lib/components/game/lpc_item_icon.svelte';
 import { createInventoryPresentationState } from './inventory_presentation.svelte';
 import type { InventoryViewModelInterface } from './inventory_view_model.svelte';
 
@@ -156,7 +157,7 @@ const presentation = createInventoryPresentationState({
                       onclick={() => presentation.selectItem(item.itemId)}
                     >
                       <span class="game-inventory__item-icon" aria-hidden="true">
-                        {item.initial}
+                        <LpcItemIcon artUrl={item.artUrl} fallbackEmoji={item.fallbackIcon} />
                       </span>
                       <span class="min-w-0 flex-1 text-start">
                         <span class="game-body-text block truncate font-semibold">
@@ -194,7 +195,10 @@ const presentation = createInventoryPresentationState({
               <div class="flex min-h-0 flex-1 flex-col gap-3">
                 <div class="game-surface--inset flex items-center gap-3 rounded-lg p-3">
                   <span class="game-inventory__detail-icon" aria-hidden="true">
-                    {presentation.selectedItemInitial}
+                    <LpcItemIcon
+                      artUrl={presentation.selectedItemArtUrl}
+                      fallbackEmoji={presentation.selectedItemIcon}
+                    />
                   </span>
                   <div class="min-w-0">
                     <p class="game-section-title truncate">{presentation.selectedItem.label}</p>

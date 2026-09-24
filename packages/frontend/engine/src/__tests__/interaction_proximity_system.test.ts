@@ -4,12 +4,19 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 import type { World } from 'bitecs';
 import { addComponent, addEntity, createWorld, set } from 'bitecs';
+import { CameraFocus } from '../components/camera_focus.ts';
 import { registerInteractableObservers } from '../components/interactable.ts';
 import { NPCDialog, registerNPCDialogObservers } from '../components/npc_dialog.ts';
 import { Position, registerPositionObservers } from '../components/position.ts';
 import { registerVisualObservers } from '../components/visual.ts';
 import type { EngineBridge } from '../engine_bridge.ts';
 import { MockEngineBridge } from '../engine_bridge.ts';
+import {
+  projectWorldPointToScreen,
+  resetCameraTracking,
+  setScreenSize,
+  updateCameraSystem,
+} from '../systems/camera_system.ts';
 import {
   clearInteractionProximityState,
   updateInteractionProximity,
@@ -64,6 +71,7 @@ describe('updateInteractionProximity', () => {
     world = createTestWorld();
     bridge = new MockEngineBridge();
     clearInteractionProximityState();
+    resetCameraTracking();
   });
 
   // ── Entering range ─────────────────────────────────────────────────
@@ -72,7 +80,12 @@ describe('updateInteractionProximity', () => {
     const playerEid = addPlayer(world, 0, 0);
     addNPC(world, 'npc-1', 'Elder', 30, 0, 50);
 
-    const events: Array<{ type: string; targetName?: string }> = [];
+    const events: Array<{
+      type: string;
+      targetName?: string;
+      targetScreenX?: number;
+      targetScreenY?: number;
+    }> = [];
     bridge.on('INTERACTION_TARGET_CHANGED', (e) => events.push(e));
 
     updateInteractionProximity({ world, playerEntityId: playerEid, bridge });
@@ -80,6 +93,8 @@ describe('updateInteractionProximity', () => {
     expect(events).toHaveLength(1);
     expect(events[0].type).toBe('INTERACTION_TARGET_CHANGED');
     expect(events[0].targetName).toBe('Elder');
+    expect(events[0].targetScreenX).toBe(120);
+    expect(events[0].targetScreenY).toBe(0);
   });
 
   it('emits INTERACTION_TARGET_CHANGED with undefined when nothing in range', () => {
@@ -114,6 +129,30 @@ describe('updateInteractionProximity', () => {
     // Tick 3 — still in range
     updateInteractionProximity({ world, playerEntityId: playerEid, bridge });
     expect(events).toHaveLength(1);
+  });
+
+  it('refreshes the retained target position when the camera moves', () => {
+    const playerEid = addPlayer(world, 0, 0);
+    addComponent(world, playerEid, CameraFocus);
+    addNPC(world, 'npc-1', 'Stable', 30, 0, 50);
+    setScreenSize({ width: 800, height: 600 });
+    updateCameraSystem(world, 1000 / 60);
+
+    const targetChanges: Array<{ targetScreenX?: number; targetScreenY?: number }> = [];
+    const positionUpdates: Array<{ targetScreenX?: number; targetScreenY?: number }> = [];
+    bridge.on('INTERACTION_TARGET_CHANGED', (event) => targetChanges.push(event));
+    bridge.on('INTERACTION_TARGET_POSITION_UPDATED', (event) => positionUpdates.push(event));
+
+    updateInteractionProximity({ world, playerEntityId: playerEid, bridge });
+    addComponent(world, playerEid, set(Position, { x: 10, y: 0 }));
+    updateCameraSystem(world, 1000 / 60);
+    updateInteractionProximity({ world, playerEntityId: playerEid, bridge });
+
+    expect(targetChanges).toHaveLength(1);
+    expect(positionUpdates).toHaveLength(1);
+    expect(positionUpdates[0].targetScreenX).toBe(projectWorldPointToScreen(30, 0).x);
+    expect(positionUpdates[0].targetScreenY).toBe(projectWorldPointToScreen(30, 0).y);
+    expect(positionUpdates[0].targetScreenX).not.toBe(targetChanges[0].targetScreenX);
   });
 
   it('emits enter → exit → enter sequence correctly', () => {

@@ -115,6 +115,7 @@ tasks:
       - 'scripts/gate_dev_routes.ts'
       - 'scripts/dev_routes_gate.ts'
       - 'scripts/check_bundle.ts'
+      - 'scripts/check_no_eruda.ts'
       - 'scripts/check_service_worker.ts'
       - 'scripts/service_worker_registration.ts'
       - 'scripts/check_deploy_assets.ts'

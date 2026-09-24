@@ -205,6 +205,9 @@ export const installGameTestSeam = (deps: GameTestSeamOptions): void => {
     Object.assign(window, {
       // biome-ignore lint/style/useNamingConvention: __AIKAMI_TEST__ is the fixed key the release-gate E2E reads back
       __AIKAMI_TEST__: {
+        triggerAutoSave: async (): Promise<void> => {
+          await gameOverlayService.triggerAutoSave();
+        },
         seedManagementContent: async (options: { scenario: 'empty' | 'populated' }) => {
           const campaignId = activeCampaignId();
           if (!campaignId) {

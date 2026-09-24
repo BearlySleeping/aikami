@@ -93,6 +93,10 @@ run('vite build', 'bunx', ['vite', 'build', ...modeArgs, ...passthrough], { env:
 //    breaks module evaluation order and only surfaces at runtime.
 run('check bundle', 'bun', ['scripts/check_bundle.ts']);
 
+// 3a. Debug consoles are development-build affordances. `PUBLIC_MODE=emulator`
+//     may target a production preview, so the bundle itself is the authority.
+run('check debug console excluded', 'bun', ['scripts/check_no_eruda.ts']);
+
 // 3b. Guard the service worker: SvelteKit emits it as an ES module, so the
 //     manual registration in src/app.html must use { type: 'module' }.
 run('check service worker', 'bun', ['scripts/check_service_worker.ts', 'build']);
