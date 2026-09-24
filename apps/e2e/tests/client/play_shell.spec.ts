@@ -22,6 +22,24 @@ type AikamiTestSeam = {
 
 const playShell = (page: Page): PlayShellPage => new PlayShellPage(page);
 
+/** Local origin serving the on-device content catalog and generated assets. */
+const ASSET_ORIGIN = new URL(process.env.PUBLIC_ASSETS_BASE_URL ?? 'http://localhost:8788').origin;
+
+/** Parses a request origin without letting malformed URLs fail the route gate. */
+const requestOrigin = (url: string): string | undefined => {
+  try {
+    return new URL(url).origin;
+  } catch {
+    return undefined;
+  }
+};
+
+/** Identifies font and stylesheet requests, including extensionless URLs. */
+const isFontResource = (resourceType: string, url: string): boolean =>
+  resourceType === 'font' ||
+  resourceType === 'stylesheet' ||
+  /\.(?:woff2?|ttf|otf|css)(?:[?#]|$)/i.test(url);
+
 /**
  * C-527 AC-1/AC-5 — the deterministic half of the "no overlapping HUD" claim.
  *
@@ -188,11 +206,11 @@ test.describe('C-527 play shell', () => {
     await page.getByTestId('journal-search').fill('emberwatch draft');
     await page
       .getByTestId('journal-tabs')
-      .getByRole('button', { name: /Recaps/ })
+      .getByRole('tab', { name: /Recaps/ })
       .click();
     await expect(
-      page.getByTestId('journal-tabs').getByRole('button', { name: /Recaps/ }),
-    ).toHaveAttribute('aria-pressed', 'true');
+      page.getByTestId('journal-tabs').getByRole('tab', { name: /Recaps/ }),
+    ).toHaveAttribute('aria-selected', 'true');
 
     // World: pick a non-default tab.
     await page.getByTestId('section-tab-world').click();
@@ -213,8 +231,8 @@ test.describe('C-527 play shell', () => {
     await expect(page.getByTestId('management-panel-journal')).toBeVisible();
     await expect(page.getByTestId('journal-search')).toHaveValue('emberwatch draft');
     await expect(
-      page.getByTestId('journal-tabs').getByRole('button', { name: /Recaps/ }),
-    ).toHaveAttribute('aria-pressed', 'true');
+      page.getByTestId('journal-tabs').getByRole('tab', { name: /Recaps/ }),
+    ).toHaveAttribute('aria-selected', 'true');
 
     await page.getByTestId('section-tab-world').click();
     await expect(
@@ -300,7 +318,7 @@ test.describe('C-527 play shell', () => {
     await expect(page.getByTestId('management-panel-inventory')).toBeHidden();
 
     // ── Inside Journal ──
-    const journalButton = page.getByTestId('management-panel-journal').getByRole('button').first();
+    const journalButton = page.getByTestId('management-panel-journal').getByRole('tab').first();
     await journalButton.focus();
     for (let i = 0; i < 25; i += 1) {
       await page.keyboard.press('Tab');
@@ -342,6 +360,7 @@ test.describe('C-527 play shell', () => {
     await expect(page.locator('[data-testid="management-host"]')).toHaveCount(0);
     // The overlay transition flushed the engine input; nothing resumes.
     await expectPlayerStill(page);
+    await playShell(page).focusGameplaySurface();
 
     // ── Case B: the key is STILL HELD when the host closes ──
     await page.keyboard.down(startDirection);
@@ -353,6 +372,13 @@ test.describe('C-527 play shell', () => {
     await expectPlayerStill(page);
     await page.keyboard.up(startDirection);
     await expectPlayerStill(page);
+    await playShell(page).focusGameplaySurface();
+
+    // Return to a deterministic walkable spawn before proving fresh input. The
+    // reset itself must not reveal a leaked held key; only a new key may move.
+    await playShell(page).resetToVillageSpawn();
+    await expectPlayerStill(page);
+    await playShell(page).focusGameplaySurface();
 
     // Fresh gameplay input is the ONLY thing that may move the player again.
     const resumed = await firstDirectionThatMoves(page, await readPlayerPosition(page));
@@ -490,6 +516,7 @@ test.describe('C-527 play shell', () => {
     page,
   }) => {
     const externalRequests: string[] = [];
+    const forbiddenAssetFontRequests: string[] = [];
 
     // Resolve the configured server origin from the project baseURL rather than
     // inferring it from `page.url()` — before navigation that is `about:blank`,
@@ -498,21 +525,24 @@ test.describe('C-527 play shell', () => {
     const configuredBaseUrl = test.info().project.use.baseURL;
     const serverOrigin = new URL(configuredBaseUrl ?? 'http://localhost:5274').origin;
 
-    // Abort anything that is not the configured local server. A CDN font, an
-    // icon service or a Google Fonts stylesheet would show up here.
+    // Abort anything outside the configured app and local asset origins. The
+    // asset origin is an expected on-device dependency (catalog, map, and
+    // generated-asset bytes), but font/stylesheet requests from that origin are
+    // still forbidden so a configured proxy cannot hide a remote font oracle.
     await page.route('**/*', async (route) => {
       const url = route.request().url();
       if (url.startsWith('data:') || url.startsWith('blob:')) {
         await route.continue();
         return;
       }
-      let sameOrigin = false;
-      try {
-        sameOrigin = new URL(url).origin === serverOrigin;
-      } catch {
-        sameOrigin = false;
+      const origin = requestOrigin(url);
+      const fontResource = isFontResource(route.request().resourceType(), url);
+      if (origin === ASSET_ORIGIN && fontResource) {
+        forbiddenAssetFontRequests.push(url);
+        await route.abort();
+        return;
       }
-      if (!sameOrigin) {
+      if (origin !== serverOrigin && origin !== ASSET_ORIGIN) {
         externalRequests.push(url);
         await route.abort();
         return;
@@ -530,6 +560,7 @@ test.describe('C-527 play shell', () => {
     // Every denied external dependency is a failure, including extensionless
     // font stylesheets that cannot be identified reliably from their URL.
     expect(externalRequests).toEqual([]);
+    expect(forbiddenAssetFontRequests).toEqual([]);
 
     // The declared stack resolves to Inter, and the face is genuinely LOADED
     // (not merely named in CSS): `document.fonts.check` is false when the
@@ -716,16 +747,24 @@ test.describe('C-527 play shell', () => {
 });
 
 /**
- * The player's world position, read from the render loop's own debug snapshot
- * (`window.__AIKAMI_DEBUG__`), which the engine publishes every frame. This is
- * the authoritative position the movement system actually integrates.
+ * The player's current engine-buffer world position, read through the
+ * production engine service. The window debug publication can lag one map
+ * transition, so it is only a diagnostic fallback when the seam is unavailable.
  */
 const readPlayerPosition = async (page: Page): Promise<{ x: number; y: number }> =>
   page.evaluate(() => {
-    const debug = (
-      window as unknown as { __AIKAMI_DEBUG__?: { playerX?: number; playerY?: number } }
-    ).__AIKAMI_DEBUG__;
-    return { x: debug?.playerX ?? Number.NaN, y: debug?.playerY ?? Number.NaN };
+    const globals = window as unknown as {
+      __AIKAMI_DEBUG__?: { playerX?: number; playerY?: number };
+      __AIKAMI_TEST__?: { getPlayerPosition?: () => { x: number; y: number } | undefined };
+    };
+    const position = globals.__AIKAMI_TEST__?.getPlayerPosition?.();
+    if (position !== undefined) {
+      return position;
+    }
+    return {
+      x: globals.__AIKAMI_DEBUG__?.playerX ?? Number.NaN,
+      y: globals.__AIKAMI_DEBUG__?.playerY ?? Number.NaN,
+    };
   });
 
 /** Movement keys tried when proving fresh input reaches the engine. */
@@ -779,10 +818,20 @@ const expectPlayerStill = async (page: Page): Promise<void> => {
 const waitForEngineRunning = async (page: Page): Promise<void> => {
   await page.waitForFunction(
     () => {
-      const debug = (
-        window as unknown as { __AIKAMI_DEBUG__?: { playerX?: number; playerY?: number } }
-      ).__AIKAMI_DEBUG__;
-      return Number.isFinite(debug?.playerX) && Number.isFinite(debug?.playerY);
+      const globals = window as unknown as {
+        __AIKAMI_DEBUG__?: { playerX?: number; playerY?: number };
+        __AIKAMI_TEST__?: {
+          isMapReady?: () => boolean;
+          getCurrentMapId?: () => string;
+        };
+      };
+      const debug = globals.__AIKAMI_DEBUG__;
+      return (
+        Number.isFinite(debug?.playerX) &&
+        Number.isFinite(debug?.playerY) &&
+        globals.__AIKAMI_TEST__?.isMapReady?.() === true &&
+        globals.__AIKAMI_TEST__?.getCurrentMapId?.() === 'village'
+      );
     },
     undefined,
     { timeout: 45_000 },

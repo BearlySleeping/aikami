@@ -6,7 +6,7 @@
     "largestJsChunkGzipBytes": 916318,
     "largestJsChunk": "_app/immutable/workers/chunks/DLWF5_Qs.js",
     "totalJsBytes": 9687688,
-    "totalCssBytes": 169670,
+    "totalCssBytes": 187758,
     "totalWasmBytes": 1719608,
     "workerBundles": [
       {

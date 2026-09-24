@@ -29,13 +29,19 @@ import {
   buildEncounterRosterFromContentPack,
   checkModifiersFromCharacterSheet,
 } from './combat_encounter_roster.ts';
+import { equipmentService } from './equipment_service.svelte.ts';
 import type { GameEngineServiceInterface } from './game_engine_service.svelte';
 import type { GameModeServiceInterface } from './game_mode_service.svelte';
 import type { GameOverlayServiceInterface } from './game_overlay_service.svelte';
+import { inventoryService } from './inventory_service.svelte.ts';
 import type { NpcDialogueServiceInterface } from './npc_dialogue_service.svelte';
 import { partyRosterService } from './party_roster_service.svelte.ts';
+import { playerJournalService } from './player_journal_service.svelte.ts';
 import type { PlayerStateServiceInterface } from './player_state_service.svelte';
-import type { QuestStateServiceInterface } from './quest_state_service.svelte';
+import {
+  questStateService as productionQuestStateService,
+  type QuestStateServiceInterface,
+} from './quest_state_service.svelte';
 
 /**
  * Synthetic ally id used when the loaded pack authors no distinct combat-capable
@@ -43,6 +49,80 @@ import type { QuestStateServiceInterface } from './quest_state_service.svelte';
  * identity is synthetic, and it is distinct so validation accepts the roster.
  */
 const ALLY_COMBATANT_ID = 'e2e_companion_ally';
+
+/** Clears authored quest evidence without detaching production bridge listeners. */
+const clearManagementQuestState = (): void => {
+  productionQuestStateService.hydrate({
+    schemaVersion: 1,
+    activeQuests: [],
+    completedQuestIds: [],
+    completedQuests: [],
+    failedQuestIds: [],
+    declinedQuestIds: [],
+    worldStateFlags: {},
+    repeatableCompletions: {},
+    journalEntries: [],
+  });
+};
+
+/** Clears campaign-scoped journal rows through the production CRUD path. */
+const clearPlayerJournalEntries = async (campaignId: string): Promise<void> => {
+  await playerJournalService.loadEntries({ campaignId });
+  for (const entry of [...playerJournalService.entries]) {
+    await playerJournalService.deleteEntry({ id: entry.id });
+  }
+};
+
+/** Populates the real inventory, equipment, quest and journal stores for review. */
+const populateManagementStores = async (options: {
+  readonly campaignId: string;
+}): Promise<{
+  inventoryCount: number;
+  equippedCount: number;
+  questCount: number;
+  noteCount: number;
+}> => {
+  inventoryService.hydrate({
+    items: [
+      { itemId: 'steelSword', quantity: 1 },
+      { itemId: 'healthPotion', quantity: 3 },
+      { itemId: 'manaPotion', quantity: 2 },
+      { itemId: 'wardWand', quantity: 1 },
+    ],
+    gold: 640,
+  });
+  equipmentService.hydrate({
+    slots: {
+      rightHand: 'ironSword',
+      body: 'ironArmor',
+      leftHand: 'woodenShield',
+    },
+  });
+  clearManagementQuestState();
+  productionQuestStateService.acceptQuest({ questId: 'fading_ward', npcId: 'village_elder' });
+  await clearPlayerJournalEntries(options.campaignId);
+  await playerJournalService.createEntry({
+    campaignId: options.campaignId,
+    sessionNumber: 1,
+    title: 'Inn lead',
+    content: 'Sella keeps the inn ledger. The wand was delivered there before the disappearance.',
+    tags: ['inn'],
+  });
+  await playerJournalService.createEntry({
+    campaignId: options.campaignId,
+    sessionNumber: 1,
+    title: 'Watch the eastern ward',
+    content: 'The eastern lantern flickers after dusk. Ask the elder which path feels wrong.',
+    tags: ['ward', 'clue'],
+  });
+  await playerJournalService.loadEntries({ campaignId: options.campaignId });
+  return {
+    inventoryCount: inventoryService.inventory.length,
+    equippedCount: equipmentService.equippedItems.length,
+    questCount: productionQuestStateService.quests.length,
+    noteCount: playerJournalService.entries.length,
+  };
+};
 
 /**
  * Everything the seam drives — all of it production, none of it replaced.
@@ -67,6 +147,8 @@ type GameTestSeamOptions = {
   djb2Hash: (value: string) => number;
   /** Diagnostics sink for a seam that failed to install. */
   warn: (label: string, detail: Record<string, unknown>) => void;
+  /** Active campaign identity used to scope persisted journal evidence. */
+  activeCampaignId: () => string | undefined;
 };
 
 /**
@@ -92,6 +174,7 @@ export const installGameTestSeam = (deps: GameTestSeamOptions): void => {
     playerStateService,
     questStateService,
     warn,
+    activeCampaignId,
   } = deps;
 
   try {
@@ -122,6 +205,26 @@ export const installGameTestSeam = (deps: GameTestSeamOptions): void => {
     Object.assign(window, {
       // biome-ignore lint/style/useNamingConvention: __AIKAMI_TEST__ is the fixed key the release-gate E2E reads back
       __AIKAMI_TEST__: {
+        seedManagementContent: async (options: { scenario: 'empty' | 'populated' }) => {
+          const campaignId = activeCampaignId();
+          if (!campaignId) {
+            throw new Error('Management evidence requires an active campaign');
+          }
+          inventoryService.reset();
+          equipmentService.reset();
+          clearManagementQuestState();
+          if (options.scenario === 'empty') {
+            await clearPlayerJournalEntries(campaignId);
+            playerJournalService.reset();
+            return {
+              inventoryCount: 0,
+              equippedCount: 0,
+              questCount: 0,
+              noteCount: 0,
+            };
+          }
+          return await populateManagementStores({ campaignId });
+        },
         discoverEvidenceAt: (location: string): string[] =>
           questStateService.discoverEvidenceAt(location),
         presentEvidence: (options: {
@@ -549,6 +652,10 @@ export const installGameTestSeam = (deps: GameTestSeamOptions): void => {
           // landmark) for a review capture; the named default spawn is skipped
           // in that case, since a spawn point would override the coordinates.
           const atLandmark = options.nearX !== undefined && options.nearY !== undefined;
+          // `MAP_LOADED` is a reusable event, so readiness from the previous map
+          // must not satisfy a later load. The next event flips this back only
+          // after the requested map has completed its load boundary.
+          mapLoaded = false;
           await gameEngineService.loadMap({
             mapUrl,
             targetX: options.nearX ?? entry.defaultX ?? 0,
@@ -561,6 +668,9 @@ export const installGameTestSeam = (deps: GameTestSeamOptions): void => {
         },
         /** C-523: the map the engine is actually on, for capture assertions. */
         getCurrentMapId: (): string => gameEngineService.currentMapId,
+        /** Current active engine-buffer position, independent of debug publication. */
+        getPlayerPosition: (): { x: number; y: number } | undefined =>
+          gameEngineService.getPlayerPosition(),
         /**
          * C-523 AC-3 probe: the cue currently holding the audio arbitration
          * authority, so a lane can prove map cues and the DJ are serialized by

@@ -10,6 +10,12 @@
 
 import type { Page } from '@playwright/test';
 
+const NARRATIVE_LABELS: Readonly<Record<string, string>> = {
+  likes: 'Likes',
+  temptations: 'Temptations',
+  keys: 'Keys',
+};
+
 export class CharacterSheetPage {
   readonly page: Page;
 
@@ -57,62 +63,73 @@ export class CharacterSheetPage {
     return this.card.getByRole('button', { name: 'AI Context Preview' });
   }
 
+  get jsonEditToggle() {
+    return this.card.getByRole('checkbox', { name: 'Edit JSON', exact: true });
+  }
+
   get jsonTextarea() {
     return this.card.locator('textarea.font-mono');
   }
 
   get jsonError() {
-    return this.card.locator('.text-error.font-mono');
+    return this.card.getByRole('alert');
   }
 
   // ── Ability Scores ────────────────────────────
 
-  abilityInput(key: string) {
+  abilityRow(key: string) {
     return this.card
-      .locator('.stat')
-      .filter({ has: this.page.locator(`.stat-title:text-is("${key}")`) })
-      .locator('input[type="number"]');
+      .locator('.game-ability-grid__item')
+      .filter({ has: this.page.getByText(key, { exact: true }) });
+  }
+
+  abilityInput(key: string) {
+    return this.card.getByRole('spinbutton', { name: `${key} score`, exact: true });
   }
 
   abilityModifier(key: string) {
-    return this.card
-      .locator('.stat')
-      .filter({ has: this.page.locator(`.stat-title:text-is("${key}")`) })
-      .locator('span.font-mono.font-bold');
+    return this.abilityRow(key).locator('span.game-numeric').last();
   }
 
   // ── Skills ────────────────────────────────────
 
   skillRow(name: string) {
-    return this.card.locator('.flex.items-center.justify-between').filter({ hasText: name });
+    return this.card
+      .locator('.game-surface--inset')
+      .filter({ has: this.page.getByText(name, { exact: true }) });
   }
 
   skillProficiencyCheckbox(name: string) {
-    return this.skillRow(name).locator('input[type="checkbox"]').first();
+    return this.card.getByRole('checkbox', { name: `Proficiency in ${name}`, exact: true });
   }
 
   skillExpertiseCheckbox(name: string) {
-    return this.skillRow(name).locator('input[type="checkbox"]').nth(1);
+    return this.card.getByRole('checkbox', { name: `Expertise in ${name}`, exact: true });
   }
 
   // ── Narrative Traits ──────────────────────────
 
-  narrativeChips(category: string) {
+  narrativeSection(category: string) {
+    const label = NARRATIVE_LABELS[category] ?? category;
     return this.card
-      .locator('div', { has: this.page.locator(`text=${category}`) })
-      .locator('.badge');
+      .locator('div.game-surface--inset')
+      .filter({ has: this.page.getByRole('heading', { name: label, exact: true }) })
+      .last();
+  }
+
+  narrativeChips(category: string) {
+    return this.narrativeSection(category).locator('.game-badge');
   }
 
   narrativeAddInput(category: string) {
-    return this.card
-      .locator('div', { has: this.page.locator(`text=${category}`) })
-      .locator('input[type="text"]');
+    const label = (NARRATIVE_LABELS[category] ?? category).toLowerCase();
+    return this.narrativeSection(category).getByPlaceholder(`Add a ${label} trait`, {
+      exact: true,
+    });
   }
 
   narrativeAddButton(category: string) {
-    return this.card
-      .locator('div', { has: this.page.locator(`text=${category}`) })
-      .locator('button:has-text("+")');
+    return this.narrativeSection(category).getByRole('button', { name: 'Add', exact: true });
   }
 
   // ── Modals ────────────────────────────────────
@@ -142,7 +159,7 @@ export class CharacterSheetPage {
     } else {
       tabEl = this.tabTraits;
     }
-    await expect(tabEl).toHaveClass(/tab-active/, { timeout: 3_000 });
+    await expect(tabEl).toHaveAttribute('aria-selected', 'true', { timeout: 3_000 });
   }
 
   async expectModifier(key: string, modifier: string): Promise<void> {

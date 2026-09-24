@@ -27,7 +27,6 @@ import type { getQuestTrackerViewModel } from '$views/game/ui/quest_tracker_comp
 import type { QuestTrackerViewModelInterface } from '$views/game/ui/quest_tracker_view_model.svelte';
 import type { getInventoryViewModel } from '$views/inventory/inventory_composition.ts';
 import type { getJournalViewModel } from '$views/journal/journal_composition.ts';
-import type { getQuestViewModel } from '$views/quest/quest_composition.ts';
 import type { getVendorViewModel } from '$views/vendor/vendor_composition.ts';
 import type { VendorViewModelInterface } from '$views/vendor/vendor_view_model.svelte';
 import type { getWorldViewModel } from '$views/world/world_composition.ts';
@@ -136,7 +135,6 @@ export type GameUIViewModelOptions = BaseViewModelOptions & {
   createCombatViewModel: typeof getCombatViewModel;
   createDialogueOverlayViewModel: typeof getDialogueOverlayViewModel;
   createInventoryViewModel: typeof getInventoryViewModel;
-  createQuestViewModel: typeof getQuestViewModel;
   createJournalViewModel: typeof getJournalViewModel;
   createCharacterSheetViewModel: typeof getCharacterSheetViewModel;
   createVendorViewModel: typeof getVendorViewModel;
@@ -255,7 +253,6 @@ class GameUIViewModel
       overlays: this._overlays,
       npcDialogue: this._npcDialogue,
       createInventoryViewModel: options.createInventoryViewModel,
-      createQuestViewModel: options.createQuestViewModel,
       createJournalViewModel: options.createJournalViewModel,
       createCharacterSheetViewModel: options.createCharacterSheetViewModel,
       createPartyRosterViewModel: options.createPartyRosterViewModel,

@@ -609,6 +609,7 @@ export class GameCompositionRoot
       playerStateService,
       questStateService,
       warn: (label, detail) => this.warn(label, detail),
+      activeCampaignId: () => campaignService.activeCampaign?.id,
     });
     // Recover interrupted operations (Phase 3): a `pending` turn/check/
     // generation from a previous run is flipped to `interrupted` so a restart

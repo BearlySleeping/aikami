@@ -66,12 +66,11 @@ export const MANAGEMENT_SECTIONS: readonly ManagementSectionDefinition[] = [
   {
     id: 'journal',
     label: 'Journal',
-    // The Journal view owns these three tabs (JournalTab). Quests are the
-    // authoritative tab; 'notes' is the canonical landing subview for the
-    // Journal section per the legacy mapping table.
+    // Quests are authoritative and lead the Journal. The legacy JOURNAL and
+    // QUEST_LOG entry points therefore converge on the same host subview.
     overlay: 'JOURNAL',
     subviews: ['quests', 'notes', 'recaps'],
-    defaultSubview: 'notes',
+    defaultSubview: 'quests',
     subviewOverlays: { quests: 'QUEST_LOG' },
   },
   {
@@ -138,9 +137,18 @@ export const managementSectionLabel = (section: ManagementSectionId): string =>
   SECTION_BY_ID.get(section)?.label ?? section;
 
 /** The overlay destination a canonical location routes to. */
-export const managementOverlayFor = (location: ManagementLocation): GameOverlayType | undefined =>
-  SECTION_BY_ID.get(location.section)?.subviewOverlays?.[location.subview ?? ''] ??
-  SECTION_BY_ID.get(location.section)?.overlay;
+export const managementOverlayFor = (location: ManagementLocation): GameOverlayType | undefined => {
+  const section = SECTION_BY_ID.get(location.section);
+  if (!section) {
+    return undefined;
+  }
+  // Journal quests are owned by the canonical Journal host. The retired
+  // QUEST_LOG destination remains a valid input alias, not a second panel.
+  if (section.id === 'journal' && location.subview === 'quests') {
+    return section.overlay;
+  }
+  return section.subviewOverlays?.[location.subview ?? ''] ?? section.overlay;
+};
 
 /**
  * Validates a requested location against the owning section's own allowlist.

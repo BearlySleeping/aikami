@@ -74,6 +74,9 @@ let cachedVisualScreenshotMode: boolean | undefined;
 /** Reusable per-entity position records, keyed by entity id string. */
 const entityPositionRecords: Record<string, EntityPosition> = {};
 
+/** Reused NPC entity-id records so metadata publication does not churn identity. */
+const npcEntityIdRecords: number[] = [];
+
 /**
  * Reads a URL search param defensively.
  *
@@ -191,6 +194,30 @@ export const publishPlayerDebug = (snapshot: PlayerDebugSnapshot): void => {
 };
 
 /**
+ * Publishes the entity IDs registered as NPCs in the active scene.
+ *
+ * NPC metadata changes at spawn and scene-discontinuity boundaries rather than
+ * every frame. Keeping the IDs on the debug object lets E2E distinguish NPC
+ * positions from props and other rendered entities without maintaining a second
+ * position stream. The record is reused in place so repeated metadata updates do
+ * not churn the object exposed to readers.
+ */
+export const publishNpcEntityIds = (entityIds: Iterable<number>): void => {
+  npcEntityIdRecords.length = 0;
+  for (const entityId of entityIds) {
+    npcEntityIdRecords.push(entityId);
+  }
+
+  const target = windowRecord();
+  if (!target) {
+    return;
+  }
+  const debug = (target[DEBUG_GLOBAL_KEY] ?? {}) as Record<string, unknown>;
+  debug.npcEntityIds = npcEntityIdRecords;
+  target[DEBUG_GLOBAL_KEY] = debug;
+};
+
+/**
  * Records one entity's world position on the shared debug object.
  *
  * Reuses the previous record for the entity so the per-frame render loop
@@ -213,6 +240,19 @@ export const publishEntityPosition = (eid: number, position: EntityPosition): vo
   record.y = position.y;
   debug.entityPositions = entityPositionRecords;
   target[DEBUG_GLOBAL_KEY] = debug;
+};
+
+/** Removes one entity's retained diagnostic position after invalid frame data. */
+export const clearEntityPosition = (eid: number): void => {
+  delete entityPositionRecords[String(eid)];
+  const target = windowRecord();
+  if (!target) {
+    return;
+  }
+  const debug = target[DEBUG_GLOBAL_KEY] as Record<string, unknown> | undefined;
+  if (debug) {
+    debug.entityPositions = entityPositionRecords;
+  }
 };
 
 /**

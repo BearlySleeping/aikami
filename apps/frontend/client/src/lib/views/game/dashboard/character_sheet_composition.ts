@@ -5,7 +5,7 @@
 // dependencies as typed capabilities, so unit tests never touch the global
 // service registry.
 
-import { equipmentService, playerStateService } from '$services';
+import { equipmentService, gameEngineService, playerStateService } from '$services';
 import {
   type CharacterSheetViewModelInterface,
   type CharacterSheetViewModelOptions,
@@ -28,4 +28,5 @@ export const getCharacterSheetViewModel = (
     ...options,
     playerState: playerStateService,
     equipment: equipmentService,
+    identity: gameEngineService,
   });

@@ -31,7 +31,11 @@ import {
   serializeForAi,
   validateSheetJson,
 } from '@aikami/utils';
-import type { EquipmentServiceInterface, PlayerStateServiceInterface } from '$services';
+import type {
+  EquipmentServiceInterface,
+  GameEngineServiceInterface,
+  PlayerStateServiceInterface,
+} from '$services';
 import { getItemDefinition } from '$utils/inventory_utils';
 
 export type { EquipmentSlot, ItemDefinition };
@@ -64,6 +68,8 @@ export const CHARACTER_SHEET_TABS: readonly CharacterSheetTab[] = [
 export type CharacterSheetViewModelInterface = BaseViewModelInterface & {
   // ── Game stats (from GameStateService) ──
 
+  /** Stable player-facing identity for the summary header. */
+  readonly characterName: string;
   readonly level: number;
   readonly xp: number;
   readonly xpToNext: number;
@@ -106,8 +112,6 @@ export type CharacterSheetViewModelInterface = BaseViewModelInterface & {
   // ── Computed / display helpers ──
 
   readonly abilityLabels: Record<AbilityKey, string>;
-  readonly modifierColor: (modifier: number) => string;
-  readonly modifierSign: (modifier: number) => string;
   readonly skillsByAbility: Record<AbilityKey, CharacterSkill[]>;
 
   // ── Class Features (C-337) ──
@@ -185,6 +189,12 @@ export type CharacterSheetEquipmentCapabilities = Pick<
   'totalAttack' | 'totalDefense' | 'equippedItems'
 >;
 
+/** Narrow identity read used by the management summary. */
+export type CharacterSheetIdentityCapabilities = Pick<
+  GameEngineServiceInterface,
+  'playerDisplayName'
+>;
+
 export type CharacterSheetViewModelOptions = BaseViewModelOptions & {
   /** Callback when the player closes the sheet. */
   onClose: () => void;
@@ -192,6 +202,8 @@ export type CharacterSheetViewModelOptions = BaseViewModelOptions & {
   playerState: CharacterSheetPlayerStateCapabilities;
   /** Equipment owner; dev sandboxes inject an isolated instance. */
   equipment: CharacterSheetEquipmentCapabilities;
+  /** Optional player identity; isolated tests fall back to Adventurer. */
+  identity?: CharacterSheetIdentityCapabilities;
 };
 
 // ── Implementation ────────────────────────────────────────
@@ -203,8 +215,13 @@ class CharacterSheetViewModel
   private readonly _onClose: () => void;
   private readonly _playerState: CharacterSheetPlayerStateCapabilities;
   private readonly _equipment: CharacterSheetEquipmentCapabilities;
+  private readonly _identity: CharacterSheetIdentityCapabilities;
 
   // ── Game stats proxied from GameStateService ──
+
+  get characterName(): string {
+    return this._identity.playerDisplayName.trim() || 'Adventurer';
+  }
 
   get level(): number {
     return this._playerState.playerLevel;
@@ -320,6 +337,7 @@ class CharacterSheetViewModel
     this._onClose = options.onClose;
     this._playerState = options.playerState;
     this._equipment = options.equipment;
+    this._identity = options.identity ?? { playerDisplayName: 'Adventurer' };
 
     // Restore pro mode preference from localStorage
     try {
@@ -344,21 +362,6 @@ class CharacterSheetViewModel
 
   /** Labels for ability keys. */
   readonly abilityLabels: Record<AbilityKey, string> = { ...ABILITY_LABELS };
-
-  /** Aikami UI color class for modifier. */
-  readonly modifierColor = (modifier: number): string => {
-    if (modifier > 0) {
-      return 'text-success';
-    }
-    if (modifier < 0) {
-      return 'text-error';
-    }
-    return 'text-base-content/50';
-  };
-
-  /** Format a modifier with sign (e.g. "+3" or "-1"). */
-  readonly modifierSign = (modifier: number): string =>
-    modifier >= 0 ? `+${modifier}` : `${modifier}`;
 
   /** Skills grouped by ability for tabular display. */
   get skillsByAbility(): Record<AbilityKey, CharacterSkill[]> {

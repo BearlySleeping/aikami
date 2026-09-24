@@ -76,6 +76,7 @@ describe('CharacterSheetViewModel — proxied stats', () => {
   test('reads level, xp, hp, attack, and defense from the capabilities', () => {
     const viewModel = createViewModel();
 
+    expect(viewModel.characterName).toBe('Adventurer');
     expect(viewModel.level).toBe(3);
     expect(viewModel.xp).toBe(50);
     expect(viewModel.xpToNext).toBe(100);

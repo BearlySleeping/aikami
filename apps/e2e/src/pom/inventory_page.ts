@@ -34,6 +34,7 @@ export class InventoryPage {
   /** Wait for the game engine canvas to appear in the DOM. */
   async waitForEngineReady(): Promise<void> {
     await this.page.waitForSelector('canvas', { state: 'attached', timeout: 15_000 });
+    await this.page.getByTestId('hud-menu-entry').waitFor({ state: 'visible', timeout: 60_000 });
   }
 
   /** Check if the game engine is fully loaded (canvas is visible/rendering). */
@@ -61,11 +62,19 @@ export class InventoryPage {
   // ── Locators ──────────────────────────────────────────────
 
   get inventoryCard() {
-    return this.page.locator('.card:has-text("Inventory")');
+    return this.page.getByTestId('management-workspace');
+  }
+
+  get closeButton() {
+    return this.page.getByTestId('management-close');
+  }
+
+  get pauseMenuResumeButton() {
+    return this.page.getByRole('button', { name: 'Resume Game', exact: true });
   }
 
   get emptyMessage() {
-    return this.page.locator('text=No items collected yet');
+    return this.page.getByText('Your bag is empty', { exact: true });
   }
 
   get itemList() {

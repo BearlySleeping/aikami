@@ -48,6 +48,7 @@ export const OVERLAY_COMPATIBILITY: Record<
     WORLD: 'allow',
   },
   DIALOGUE: {
+    INVENTORY: 'allow',
     COMBAT: 'clear',
     GAME_OVER: 'clear',
   },

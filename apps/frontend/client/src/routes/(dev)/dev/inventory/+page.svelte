@@ -35,3 +35,4 @@ const devActions = [
 {/if}
 
 <DevToolsPanel actions={devActions} />
+<div data-testid="game-ready" class="hidden"></div>

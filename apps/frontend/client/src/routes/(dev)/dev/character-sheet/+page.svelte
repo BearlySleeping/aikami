@@ -20,3 +20,4 @@ const viewModel = getCharacterSheetSandboxViewModel({
 <div class="relative min-h-screen bg-base-200">
   <CharacterSheetView {viewModel} />
 </div>
+<div data-testid="game-ready" class="hidden"></div>

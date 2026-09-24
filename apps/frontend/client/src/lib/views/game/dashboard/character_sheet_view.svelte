@@ -6,6 +6,7 @@
 
 import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
 import CharacterSheetContent from './character_sheet_content.svelte';
+import { createCharacterSheetPresentationState } from './character_sheet_presentation.svelte';
 import type { CharacterSheetViewModelInterface } from './character_sheet_view_model.svelte';
 
 type Props = {
@@ -13,11 +14,12 @@ type Props = {
 };
 
 const { viewModel }: Props = $props();
+const presentation = createCharacterSheetPresentationState({ startEditing: true });
 </script>
 
 <BaseViewModelContainer {viewModel}>
   <div
-    class="pointer-events-auto absolute inset-0 z-30 flex items-center justify-center overflow-y-auto bg-black/60 backdrop-blur-sm"
+    class="pointer-events-auto absolute inset-0 z-30 flex items-start justify-center overflow-y-auto bg-black/60 p-4 backdrop-blur-sm"
     role="dialog"
     aria-modal="true"
     aria-label="Character Sheet"
@@ -25,12 +27,12 @@ const { viewModel }: Props = $props();
     onclick={(event) => viewModel.handleBackdropClick(event)}
     onkeydown={(event) => viewModel.handleKeyDown(event)}
   >
-    <div class="card w-full max-w-lg bg-base-100 shadow-2xl">
+    <div class="card game-surface my-auto w-full max-w-lg shadow-2xl">
       <div class="card-body gap-3 p-4">
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-2">
             <h2 class="game-section-title">Character Sheet</h2>
-            <span class="badge badge-primary badge-sm game-numeric">{viewModel.level}</span>
+            <span class="game-badge game-badge--accent game-numeric">{viewModel.level}</span>
           </div>
           <div class="flex items-center gap-2">
             <!-- Developer affordance — standalone/dev only. -->
@@ -45,7 +47,7 @@ const { viewModel }: Props = $props();
             </label>
             <button
               type="button"
-              class="btn btn-sm btn-ghost btn-circle"
+              class="btn btn-sm game-control--quiet btn-circle"
               onclick={() => viewModel.closeSheet()}
               aria-label="Close character sheet"
             >
@@ -54,7 +56,7 @@ const { viewModel }: Props = $props();
           </div>
         </div>
         <div class="divider my-0"></div>
-        <CharacterSheetContent {viewModel} developerTools={true} />
+        <CharacterSheetContent {viewModel} {presentation} developerTools={true} />
       </div>
     </div>
   </div>

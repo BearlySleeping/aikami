@@ -40,6 +40,9 @@
     --game-radius-panel: 0.75rem;
     --game-radius-control: 0.375rem;
     --game-ornament: color-mix(in oklab, var(--ui-brass) 42%, transparent);
+    --game-selection: var(--ui-accent);
+    --game-selection-soft: color-mix(in oklab, var(--ui-accent) 18%, transparent);
+    --game-selection-border: color-mix(in oklab, var(--ui-accent) 72%, transparent);
     --game-ornament-quiet: color-mix(in oklab, var(--ui-brass) 20%, transparent);
     --game-surface-inset: color-mix(in oklab, var(--ui-ink) 96%, transparent);
     --game-focus-ring: 2px solid var(--ui-focus-ring);
@@ -175,8 +178,9 @@
 
     .game-workspace__nav-item[aria-current="page"] {
       color: var(--ui-base-content);
-      background-color: color-mix(in oklab, var(--ui-primary) 30%, transparent);
-      border-color: color-mix(in oklab, var(--ui-primary) 70%, transparent);
+      background-color: var(--game-selection-soft);
+      border-color: var(--game-selection-border);
+      box-shadow: inset 3px 0 0 var(--game-selection);
       font-weight: 600;
     }
 
@@ -248,7 +252,7 @@
       justify-content: center;
       gap: 0.5rem;
       text-align: center;
-      padding: 2rem 1rem;
+      padding: 1rem;
       color: var(--ui-muted-content);
     }
 
@@ -318,6 +322,441 @@
     .game-numeric {
       font-variant-numeric: tabular-nums;
       font-feature-settings: "tnum" 1;
+    }
+
+    .game-numeric--emphasis {
+      color: var(--ui-base-content);
+      font-size: 1.35em;
+      font-weight: 700;
+    }
+
+    .game-numeric--positive {
+      color: var(--ui-success);
+      font-weight: 700;
+    }
+
+    .game-numeric--negative,
+    .game-numeric--danger {
+      color: var(--ui-error);
+      font-weight: 700;
+    }
+
+    .game-numeric--neutral {
+      color: var(--ui-muted-content);
+      font-weight: 700;
+    }
+
+    .game-numeric--attack {
+      color: color-mix(in oklab, var(--ui-brass) 60%, var(--ui-base-content));
+      font-weight: 700;
+    }
+
+    .game-numeric--defense {
+      color: var(--ui-base-content);
+      font-weight: 700;
+    }
+
+    .game-numeric--accent {
+      color: var(--game-selection);
+      font-weight: 700;
+    }
+
+    /* ── C-551 game controls, selection and task layouts ───────────────── */
+
+    .game-control--accent {
+      --btn-color: var(--game-selection);
+      --btn-color-content: var(--ui-accent-content);
+      --btn-border: var(--game-selection-border);
+    }
+
+    .game-control--quiet {
+      --btn-color: var(--ui-elevated);
+      --btn-color-content: var(--ui-base-content);
+      --btn-border: var(--game-ornament-quiet);
+    }
+
+    .game-control--danger {
+      --btn-color: transparent;
+      --btn-color-content: var(--ui-error);
+      --btn-border: color-mix(in oklab, var(--ui-error) 55%, transparent);
+    }
+
+    .game-number-stepper {
+      min-block-size: var(--game-touch-target);
+    }
+
+    .game-number-stepper .number-stepper-button {
+      min-inline-size: var(--game-touch-target);
+    }
+
+    .game-number-stepper .number-stepper-input {
+      min-inline-size: 4rem;
+      font-size: var(--game-text-essential);
+    }
+
+    .game-tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.35rem;
+      border-block-end: 1px solid var(--game-ornament-quiet);
+      padding-block-end: 0.45rem;
+    }
+
+    .game-tab {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.4rem;
+      min-block-size: var(--game-touch-target);
+      padding: 0.4rem 0.75rem;
+      border: 1px solid transparent;
+      border-radius: var(--game-radius-control);
+      color: var(--ui-muted-content);
+      font-size: var(--game-text-essential);
+      cursor: pointer;
+    }
+
+    .game-tab:hover {
+      color: var(--ui-base-content);
+      background-color: color-mix(in oklab, var(--ui-base-content) 7%, transparent);
+    }
+
+    .game-tab--selected,
+    .game-tab[aria-selected="true"],
+    .game-segmented button[aria-pressed="true"] {
+      color: var(--ui-base-content);
+      background-color: var(--game-selection-soft);
+      border-color: var(--game-selection-border);
+      font-weight: 650;
+    }
+
+    .game-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+      min-block-size: 1.75rem;
+      padding: 0.2rem 0.5rem;
+      border: 1px solid var(--game-ornament-quiet);
+      border-radius: 999px;
+      color: var(--ui-base-content);
+      background-color: color-mix(in oklab, var(--ui-elevated) 88%, transparent);
+      font-size: 0.875rem;
+      line-height: 1.2;
+    }
+
+    .game-badge--accent {
+      border-color: var(--game-selection-border);
+      background-color: var(--game-selection-soft);
+    }
+
+    .game-badge--positive {
+      border-color: color-mix(in oklab, var(--ui-success) 48%, transparent);
+    }
+
+    .game-segmented {
+      display: inline-flex;
+      overflow: hidden;
+      border: 1px solid var(--game-ornament-quiet);
+      border-radius: var(--game-radius-control);
+    }
+
+    .game-segmented button {
+      min-block-size: 2.5rem;
+      padding: 0.35rem 0.65rem;
+      border: 0;
+      border-inline-end: 1px solid var(--game-ornament-quiet);
+      color: var(--ui-muted-content);
+      background: var(--ui-elevated);
+      cursor: pointer;
+    }
+
+    .game-segmented button:last-child {
+      border-inline-end: 0;
+    }
+
+    .game-notice {
+      padding: 0.65rem 0.8rem;
+      border: 1px solid var(--game-ornament-quiet);
+      border-radius: var(--game-radius-control);
+      color: var(--ui-base-content);
+      background-color: var(--ui-elevated);
+    }
+
+    .game-notice--warning {
+      border-color: color-mix(in oklab, var(--ui-warning) 55%, transparent);
+      background-color: color-mix(in oklab, var(--ui-warning) 12%, var(--ui-elevated));
+    }
+
+    .game-inline-action {
+      color: var(--ui-muted-content);
+      cursor: pointer;
+    }
+
+    .game-inline-action:hover,
+    .game-inline-action:focus-visible {
+      color: var(--ui-error);
+    }
+
+    .game-empty--inline {
+      min-block-size: 10rem;
+      padding: 1.25rem;
+    }
+
+    .game-detail-list {
+      display: grid;
+      gap: 0.4rem;
+    }
+
+    .game-detail-list > div,
+    .game-detail-list > li {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: 0.45rem 0;
+      border-block-end: 1px solid var(--game-ornament-quiet);
+      color: var(--ui-base-content);
+    }
+
+    .game-detail-list dt,
+    .game-detail-list > li {
+      font-size: var(--game-text-essential);
+    }
+
+    .game-detail-list dd {
+      color: var(--ui-muted-content);
+    }
+
+    .game-character-identity {
+      color: var(--ui-base-content);
+      background: linear-gradient(
+        100deg,
+        var(--game-selection-soft),
+        color-mix(in oklab, var(--ui-elevated) 94%, var(--ui-brass) 6%) 42%
+      );
+      border: 1px solid var(--game-ornament);
+      border-inline-start: 3px solid var(--game-selection);
+    }
+
+    .game-character-summary__stat,
+    .game-ability-grid__item {
+      display: flex;
+      min-inline-size: 0;
+      flex-direction: column;
+      gap: 0.3rem;
+      padding: 0.7rem;
+      border-radius: var(--game-radius-control);
+    }
+
+    .game-ability-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(min(8.5rem, 100%), 1fr));
+      gap: 0.5rem;
+    }
+
+    .game-inventory-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 0.8rem;
+      min-block-size: 0;
+    }
+
+    .game-inventory__panel {
+      display: flex;
+      min-inline-size: 0;
+      min-block-size: 0;
+      flex-direction: column;
+      padding: 1rem;
+      border-radius: var(--game-radius-panel);
+    }
+
+    .game-inventory__paperdoll {
+      display: grid;
+      min-block-size: 0;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      grid-template-rows: none;
+      grid-auto-rows: max-content;
+      align-content: start;
+      gap: 0.45rem;
+      flex: 0 0 auto;
+      overflow: visible;
+    }
+
+    .game-inventory__slot {
+      display: flex;
+      min-block-size: 0;
+      min-inline-size: 0;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0.3rem;
+      padding: 0.55rem;
+      border: 1px solid var(--game-ornament-quiet);
+      border-radius: var(--game-radius-control);
+      background: var(--game-surface-inset);
+    }
+
+    .game-inventory__slot--filled {
+      border-color: var(--game-selection-border);
+      background: var(--game-selection-soft);
+    }
+
+    .game-inventory__slot--empty {
+      border-style: dashed;
+    }
+
+    .game-inventory__list {
+      display: flex;
+      min-block-size: 0;
+      flex: 0 0 auto;
+      flex-direction: column;
+      gap: 0.4rem;
+      overflow: visible;
+    }
+
+    .game-inventory__item {
+      border: 1px solid var(--game-ornament-quiet);
+      border-radius: var(--game-radius-control);
+      background: var(--game-surface-inset);
+    }
+
+    .game-inventory__item--selected {
+      border-color: var(--game-selection-border);
+      background: var(--game-selection-soft);
+      box-shadow: inset 3px 0 0 var(--game-selection);
+    }
+
+    .game-inventory__item-select {
+      display: flex;
+      inline-size: 100%;
+      align-items: center;
+      gap: 0.7rem;
+      padding: 0.65rem;
+      color: var(--ui-base-content);
+      text-align: start;
+      cursor: pointer;
+    }
+
+    .game-inventory__item-icon,
+    .game-inventory__detail-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex: 0 0 auto;
+      color: var(--game-selection);
+      background: var(--game-selection-soft);
+      border: 1px solid var(--game-selection-border);
+      font-family: var(--ui-font-display, "Source Serif 4", Georgia, serif);
+      font-weight: 700;
+    }
+
+    .game-inventory__item-icon {
+      inline-size: 2.5rem;
+      block-size: 2.5rem;
+      border-radius: var(--game-radius-control);
+    }
+
+    .game-inventory__detail-icon {
+      inline-size: 3.5rem;
+      block-size: 3.5rem;
+      border-radius: 50%;
+      font-size: 1.5rem;
+    }
+
+    @container (min-width: 42rem) {
+      .game-inventory-layout {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .game-inventory__paperdoll {
+        grid-template-rows: none;
+        grid-auto-rows: max-content;
+      }
+
+      .game-inventory__panel:last-child {
+        grid-column: 1 / -1;
+        min-block-size: 0;
+      }
+    }
+
+    @container (max-width: 49.999rem) {
+      .game-inventory__panel {
+        min-block-size: 0;
+      }
+    }
+
+    @container (min-width: 64rem) {
+      .game-inventory-layout {
+        grid-template-columns: minmax(15rem, 0.9fr) minmax(18rem, 1.2fr) minmax(15rem, 0.9fr);
+      }
+
+      .game-inventory__panel,
+      .game-inventory__panel:last-child {
+        grid-column: auto;
+        min-block-size: 0;
+      }
+    }
+
+    .game-journal-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 0.8rem;
+      min-block-size: 28rem;
+    }
+
+    .game-journal__list,
+    .game-journal__detail {
+      min-inline-size: 0;
+      padding: 1rem;
+      border-radius: var(--game-radius-panel);
+    }
+
+    .game-journal__detail {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .game-journal__notes {
+      display: flex;
+      max-block-size: 32rem;
+      flex-direction: column;
+      gap: 0.45rem;
+      overflow-y: auto;
+    }
+
+    .game-journal__note {
+      inline-size: 100%;
+      padding: 0.7rem;
+      border: 1px solid var(--game-ornament-quiet);
+      border-radius: var(--game-radius-control);
+      color: var(--ui-base-content);
+      background: var(--game-surface-inset);
+      text-align: start;
+      cursor: pointer;
+    }
+
+    .game-journal__note--selected {
+      border-color: var(--game-selection-border);
+      background: var(--game-selection-soft);
+      box-shadow: inset 3px 0 0 var(--game-selection);
+    }
+
+    .game-journal__quest--completed {
+      color: var(--ui-base-content);
+      background: color-mix(in oklab, var(--ui-success) 9%, var(--ui-elevated));
+      border: 1px solid color-mix(in oklab, var(--ui-success) 38%, transparent);
+    }
+
+    .game-journal__quest--failed {
+      color: var(--ui-base-content);
+      background: color-mix(in oklab, var(--ui-error) 8%, var(--ui-elevated));
+      border: 1px solid color-mix(in oklab, var(--ui-error) 38%, transparent);
+    }
+
+    @container (min-width: 48rem) {
+      .game-journal-layout {
+        grid-template-columns: minmax(15rem, 0.85fr) minmax(20rem, 1.15fr);
+      }
     }
 
     /* ── Compact dialogue stage (C-547) ────────────────────────────────── */
