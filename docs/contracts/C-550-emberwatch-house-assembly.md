@@ -321,9 +321,9 @@ Current generated hashes recorded by the evidence plane:
 - E2E infrastructure unit (`bun run --cwd apps/e2e test:unit`): **32 pass / 0 fail**, 83 assertions. The e2e package exposes this script directly; its Moon config has no `test-unit` task.
 - Production house E2E (`bun run --cwd apps/e2e test -- --project=game tests/game/emberwatch_house.spec.ts`): **3 pass / 0 fail**; WebGL, walk-behind, and threshold blocker paths pass.
 - Emberwatch map validation: **0 warnings / 0 blockers**; coverage audit: **231 findings, 0 blockers**; locked identities unchanged; prop table in sync.
-- Affected lint, format, and typecheck: pass. Full `bun moon run :validate`: **174 tasks completed, 0 failed** (8 cached); source-size warnings are pre-existing advisory output.
+- Affected lint, format, and typecheck: pass. Full `bun moon run :validate`: **174 tasks completed, 0 failed** (121 cached); source-size warnings are pre-existing advisory output.
 - Structural guards: **10/10 pass** via `bun run scripts/src/lib/ops/run_guards.ts`.
-- `bun moon ci --base=origin/main`: **60 completed, 0 failed, 2 skipped** (18 cached).
+- `bun moon ci --base=origin/main`: **60 completed, 0 failed, 2 skipped** (19 cached).
 - WebGL evidence: automated capture produced 8 stills + 8 walk frames, renderer `webgl`, no page errors, and a passed expected-artifact fingerprint check. Walk evidence reaches `(54,6)` behind the upper roof, stays blocked at the front eave, and stays at `(54,10)` on the foundation-side approach.
 
 ### Evidence and blocked verification
