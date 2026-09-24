@@ -12,9 +12,7 @@
     "counts": {
       "orphans": 1
     },
-    "identities": [
-      "orphans:AgentRegistryService"
-    ]
+    "identities": ["orphans:AgentRegistryService"]
   },
   "apps/frontend/client/src/lib/services/agent/agent_schemas.ts": {
     "counts": {
@@ -32,116 +30,85 @@
     "counts": {
       "orphans": 1
     },
-    "identities": [
-      "orphans:isLocalProvider"
-    ]
+    "identities": ["orphans:isLocalProvider"]
   },
   "apps/frontend/client/src/lib/services/ai/local_ai_probe_executor.ts": {
     "counts": {
       "orphans": 1
     },
-    "identities": [
-      "orphans:createTauriProbeExecutor"
-    ]
+    "identities": ["orphans:createTauriProbeExecutor"]
   },
   "apps/frontend/client/src/lib/services/ai/sidecar_service.svelte.ts": {
     "counts": {
       "orphans": 1
     },
-    "identities": [
-      "orphans:SidecarService.registerCleanupOnQuit"
-    ]
+    "identities": ["orphans:SidecarService.registerCleanupOnQuit"]
   },
   "apps/frontend/client/src/lib/services/app/app.svelte.ts": {
     "counts": {
       "orphans": 1
     },
-    "identities": [
-      "orphans:AppService.setExternalLogging"
-    ]
+    "identities": ["orphans:AppService.setExternalLogging"]
   },
   "apps/frontend/client/src/lib/services/app/privacy_settings.ts": {
     "counts": {
       "orphans": 1
     },
-    "identities": [
-      "orphans:AI_PRIVACY_SETTINGS_STORAGE_KEY"
-    ]
+    "identities": ["orphans:AI_PRIVACY_SETTINGS_STORAGE_KEY"]
   },
   "apps/frontend/client/src/lib/services/assets/asset_manager.svelte.ts": {
     "counts": {
       "orphans": 1
     },
-    "identities": [
-      "orphans:AssetManager.peekBlobUrl"
-    ]
+    "identities": ["orphans:AssetManager.peekBlobUrl"]
   },
   "apps/frontend/client/src/lib/services/assets/asset_prefetch_service.svelte.ts": {
     "counts": {
       "orphans": 1
     },
-    "identities": [
-      "orphans:AssetPrefetchService.prefetchCore"
-    ]
+    "identities": ["orphans:AssetPrefetchService.prefetchCore"]
   },
   "apps/frontend/client/src/lib/services/assets/blob_url_loader.ts": {
     "counts": {
       "orphans": 1
     },
-    "identities": [
-      "orphans:registerBlobUrlTextureParser"
-    ]
+    "identities": ["orphans:registerBlobUrlTextureParser"]
   },
   "apps/frontend/client/src/lib/services/assets/registry_resolver.ts": {
     "counts": {
       "orphans": 1
     },
-    "identities": [
-      "orphans:createAssetTagResolver"
-    ]
+    "identities": ["orphans:createAssetTagResolver"]
   },
   "apps/frontend/client/src/lib/services/audio/audio_asset_resolver.ts": {
     "counts": {
       "orphans": 3
     },
-    "identities": [
-      "orphans:resolveAmbientUrl",
-      "orphans:resolveBgmUrl",
-      "orphans:resolveSfxUrl"
-    ]
+    "identities": ["orphans:resolveAmbientUrl", "orphans:resolveBgmUrl", "orphans:resolveSfxUrl"]
   },
   "apps/frontend/client/src/lib/services/audio/audio_queue_player.ts": {
     "counts": {
       "orphans": 2
     },
-    "identities": [
-      "orphans:AudioQueuePlayer",
-      "orphans:getAudioQueuePlayer"
-    ]
+    "identities": ["orphans:AudioQueuePlayer", "orphans:getAudioQueuePlayer"]
   },
   "apps/frontend/client/src/lib/services/audio/audio_service.svelte.ts": {
     "counts": {
       "orphans": 1
     },
-    "identities": [
-      "orphans:AudioService"
-    ]
+    "identities": ["orphans:AudioService"]
   },
   "apps/frontend/client/src/lib/services/audio/audio_track_catalog.ts": {
     "counts": {
       "orphans": 1
     },
-    "identities": [
-      "orphans:FALLBACK_TRACK_ID"
-    ]
+    "identities": ["orphans:FALLBACK_TRACK_ID"]
   },
   "apps/frontend/client/src/lib/services/audio/track_registry_service.svelte.ts": {
     "counts": {
       "orphans": 1
     },
-    "identities": [
-      "orphans:TrackRegistryService.findBestMatch"
-    ]
+    "identities": ["orphans:TrackRegistryService.findBestMatch"]
   },
   "apps/frontend/client/src/lib/services/audio/tts_service.svelte.ts": {
     "counts": {
@@ -182,9 +149,7 @@
     "counts": {
       "orphans": 1
     },
-    "identities": [
-      "orphans:resetDesktopSessionForTests"
-    ]
+    "identities": ["orphans:resetDesktopSessionForTests"]
   },
   "apps/frontend/client/src/lib/services/campaign/campaign_service.svelte.ts": {
     "counts": {
@@ -200,35 +165,25 @@
     "counts": {
       "orphans": 1
     },
-    "identities": [
-      "orphans:PackRegistryService.getPack"
-    ]
+    "identities": ["orphans:PackRegistryService.getPack"]
   },
   "apps/frontend/client/src/lib/services/capability/capability_service.svelte.ts": {
     "counts": {
       "orphans": 2
     },
-    "identities": [
-      "orphans:CapabilityService.detectImage",
-      "orphans:CapabilityService.detectText"
-    ]
+    "identities": ["orphans:CapabilityService.detectImage", "orphans:CapabilityService.detectText"]
   },
   "apps/frontend/client/src/lib/services/character/ability_score_inference.ts": {
     "counts": {
       "orphans": 2
     },
-    "identities": [
-      "orphans:FLAT_DEFAULT_SCORES",
-      "orphans:STANDARD_ARRAY_SCORES"
-    ]
+    "identities": ["orphans:FLAT_DEFAULT_SCORES", "orphans:STANDARD_ARRAY_SCORES"]
   },
   "apps/frontend/client/src/lib/services/character/card_compiler.ts": {
     "counts": {
       "orphans": 1
     },
-    "identities": [
-      "orphans:compileCardToNpc"
-    ]
+    "identities": ["orphans:compileCardToNpc"]
   },
   "apps/frontend/client/src/lib/services/character/character.svelte.ts": {
     "counts": {
@@ -245,37 +200,25 @@
     "counts": {
       "orphans": 3
     },
-    "identities": [
-      "orphans:buildTextChunk",
-      "orphans:crc32",
-      "orphans:embedTextChunk"
-    ]
+    "identities": ["orphans:buildTextChunk", "orphans:crc32", "orphans:embedTextChunk"]
   },
   "apps/frontend/client/src/lib/services/chat/chat_storage.svelte.ts": {
     "counts": {
       "orphans": 2
     },
-    "identities": [
-      "orphans:ChatStorage.deleteChat",
-      "orphans:ChatStorage.getMessages"
-    ]
+    "identities": ["orphans:ChatStorage.deleteChat", "orphans:ChatStorage.getMessages"]
   },
   "apps/frontend/client/src/lib/services/chat/chat.svelte.ts": {
     "counts": {
       "orphans": 2
     },
-    "identities": [
-      "orphans:ChatService.setConnectionId",
-      "orphans:ChatService.setLoading"
-    ]
+    "identities": ["orphans:ChatService.setConnectionId", "orphans:ChatService.setLoading"]
   },
   "apps/frontend/client/src/lib/services/chat/choice_history_store.svelte.ts": {
     "counts": {
       "orphans": 1
     },
-    "identities": [
-      "orphans:ChoiceHistoryStore"
-    ]
+    "identities": ["orphans:ChoiceHistoryStore"]
   },
   "apps/frontend/client/src/lib/services/chat/connected_chats_service.svelte.ts": {
     "counts": {
@@ -290,17 +233,13 @@
     "counts": {
       "orphans": 1
     },
-    "identities": [
-      "orphans:buildSlidingWindowContext"
-    ]
+    "identities": ["orphans:buildSlidingWindowContext"]
   },
   "apps/frontend/client/src/lib/services/chat/draft_store.ts": {
     "counts": {
       "orphans": 1
     },
-    "identities": [
-      "orphans:DraftStore.deleteOrphanedDrafts"
-    ]
+    "identities": ["orphans:DraftStore.deleteOrphanedDrafts"]
   },
   "apps/frontend/client/src/lib/services/chat/message_branch_store.svelte.ts": {
     "counts": {
@@ -335,9 +274,7 @@
     "counts": {
       "orphans": 1
     },
-    "identities": [
-      "orphans:createMacroPresetStore"
-    ]
+    "identities": ["orphans:createMacroPresetStore"]
   },
   "apps/frontend/client/src/lib/services/config/runtime_config_service.svelte.ts": {
     "counts": {
@@ -352,25 +289,19 @@
     "counts": {
       "orphans": 1
     },
-    "identities": [
-      "orphans:DiceService.rollCheck"
-    ]
+    "identities": ["orphans:DiceService.rollCheck"]
   },
   "apps/frontend/client/src/lib/services/expression/expression_asset_resolver.ts": {
     "counts": {
       "orphans": 1
     },
-    "identities": [
-      "orphans:ExpressionAssetResolver"
-    ]
+    "identities": ["orphans:ExpressionAssetResolver"]
   },
   "apps/frontend/client/src/lib/services/expression/expression_service.svelte.ts": {
     "counts": {
       "orphans": 1
     },
-    "identities": [
-      "orphans:ExpressionService.getEntry"
-    ]
+    "identities": ["orphans:ExpressionService.getEntry"]
   },
   "apps/frontend/client/src/lib/services/game/combat_intent_prompt.ts": {
     "counts": {
@@ -387,27 +318,19 @@
     "counts": {
       "orphans": 2
     },
-    "identities": [
-      "orphans:parseBoundaryReactions",
-      "orphans:parseCompanionReaction"
-    ]
+    "identities": ["orphans:parseBoundaryReactions", "orphans:parseCompanionReaction"]
   },
   "apps/frontend/client/src/lib/services/game/game_boot_service.svelte.ts": {
     "counts": {
       "orphans": 1
     },
-    "identities": [
-      "orphans:GameBootService.cancelBoot"
-    ]
+    "identities": ["orphans:GameBootService.cancelBoot"]
   },
   "apps/frontend/client/src/lib/services/game/game_composition_root.svelte.ts": {
     "counts": {
       "orphans": 2
     },
-    "identities": [
-      "orphans:GameCompositionRoot",
-      "orphans:GameCompositionRoot.setLootRollFn"
-    ]
+    "identities": ["orphans:GameCompositionRoot", "orphans:GameCompositionRoot.setLootRollFn"]
   },
   "apps/frontend/client/src/lib/services/game/game_engine_service.svelte.ts": {
     "counts": {
@@ -436,9 +359,7 @@
     "counts": {
       "orphans": 1
     },
-    "identities": [
-      "orphans:DEFAULT_DIFFICULTY"
-    ]
+    "identities": ["orphans:DEFAULT_DIFFICULTY"]
   },
   "apps/frontend/client/src/lib/services/game/input_action_service.svelte.ts": {
     "counts": {
@@ -465,18 +386,13 @@
     "counts": {
       "orphans": 2
     },
-    "identities": [
-      "orphans:OnboardingHintService",
-      "orphans:OnboardingHintService.refreshProgress"
-    ]
+    "identities": ["orphans:OnboardingHintService", "orphans:OnboardingHintService.refreshProgress"]
   },
   "apps/frontend/client/src/lib/services/game/operation_ledger_service.svelte.ts": {
     "counts": {
       "orphans": 1
     },
-    "identities": [
-      "orphans:OperationLedgerService"
-    ]
+    "identities": ["orphans:OperationLedgerService"]
   },
   "apps/frontend/client/src/lib/services/game/party_roster_service.svelte.ts": {
     "counts": {
@@ -491,25 +407,19 @@
     "counts": {
       "orphans": 1
     },
-    "identities": [
-      "orphans:PlayerJournalService"
-    ]
+    "identities": ["orphans:PlayerJournalService"]
   },
   "apps/frontend/client/src/lib/services/game/player_state_service.svelte.ts": {
     "counts": {
       "orphans": 1
     },
-    "identities": [
-      "orphans:PlayerStateService.resetAbilityUses"
-    ]
+    "identities": ["orphans:PlayerStateService.resetAbilityUses"]
   },
   "apps/frontend/client/src/lib/services/game/quest_state_service.svelte.ts": {
     "counts": {
       "orphans": 1
     },
-    "identities": [
-      "orphans:QuestStateService.canAcceptQuest"
-    ]
+    "identities": ["orphans:QuestStateService.canAcceptQuest"]
   },
   "apps/frontend/client/src/lib/services/game/relationship_service.svelte.ts": {
     "counts": {
@@ -564,9 +474,7 @@
     "counts": {
       "orphans": 1
     },
-    "identities": [
-      "orphans:ImpersonationService"
-    ]
+    "identities": ["orphans:ImpersonationService"]
   },
   "apps/frontend/client/src/lib/services/gm/narrative_director_service.svelte.ts": {
     "counts": {
@@ -582,60 +490,43 @@
     "counts": {
       "orphans": 1
     },
-    "identities": [
-      "orphans:SessionSummaryService"
-    ]
+    "identities": ["orphans:SessionSummaryService"]
   },
   "apps/frontend/client/src/lib/services/image/contextual_trigger_service.svelte.ts": {
     "counts": {
       "orphans": 1
     },
-    "identities": [
-      "orphans:ContextualTriggerService"
-    ]
+    "identities": ["orphans:ContextualTriggerService"]
   },
   "apps/frontend/client/src/lib/services/image/engine/image_engine_factory.svelte.ts": {
     "counts": {
       "orphans": 1
     },
-    "identities": [
-      "orphans:getEffectiveImageEngineId"
-    ]
+    "identities": ["orphans:getEffectiveImageEngineId"]
   },
   "apps/frontend/client/src/lib/services/image/gallery_service.svelte.ts": {
     "counts": {
       "orphans": 1
     },
-    "identities": [
-      "orphans:GalleryService"
-    ]
+    "identities": ["orphans:GalleryService"]
   },
   "apps/frontend/client/src/lib/services/image/image_generation_service.svelte.ts": {
     "counts": {
       "orphans": 2
     },
-    "identities": [
-      "orphans:ImageGenerationService",
-      "orphans:ImageGenerationService.isDemoMode"
-    ]
+    "identities": ["orphans:ImageGenerationService", "orphans:ImageGenerationService.isDemoMode"]
   },
   "apps/frontend/client/src/lib/services/image/style_profile_service.svelte.ts": {
     "counts": {
       "orphans": 2
     },
-    "identities": [
-      "orphans:StyleProfileService",
-      "orphans:StyleProfileService.resetToDefaults"
-    ]
+    "identities": ["orphans:StyleProfileService", "orphans:StyleProfileService.resetToDefaults"]
   },
   "apps/frontend/client/src/lib/services/lorebook/lorebook_store.svelte.ts": {
     "counts": {
       "orphans": 2
     },
-    "identities": [
-      "orphans:LorebookStore",
-      "orphans:LorebookStore.setActiveLorebookIds"
-    ]
+    "identities": ["orphans:LorebookStore", "orphans:LorebookStore.setActiveLorebookIds"]
   },
   "apps/frontend/client/src/lib/services/memory/local_embedding_backend.ts": {
     "counts": {
@@ -682,40 +573,30 @@
     "counts": {
       "orphans": 1
     },
-    "identities": [
-      "orphans:NpcScheduleService.getCurrentStatus"
-    ]
+    "identities": ["orphans:NpcScheduleService.getCurrentStatus"]
   },
   "apps/frontend/client/src/lib/services/persona/persona_creation_text_stream.svelte.ts": {
     "counts": {
       "orphans": 1
     },
-    "identities": [
-      "orphans:PersonaCreationTextStreamService"
-    ]
+    "identities": ["orphans:PersonaCreationTextStreamService"]
   },
   "apps/frontend/client/src/lib/services/persona/persona_storage.svelte.ts": {
     "counts": {
       "orphans": 1
     },
-    "identities": [
-      "orphans:PersonaStorage.savePersona"
-    ]
+    "identities": ["orphans:PersonaStorage.savePersona"]
   },
   "apps/frontend/client/src/lib/services/updater/updater_service.svelte.ts": {
     "counts": {
       "orphans": 1
     },
-    "identities": [
-      "orphans:UpdaterService"
-    ]
+    "identities": ["orphans:UpdaterService"]
   },
   "apps/frontend/client/src/lib/services/worldgen/world_gen_seeding_service.svelte.ts": {
     "counts": {
       "orphans": 1
     },
-    "identities": [
-      "orphans:WorldGenSeedingService"
-    ]
+    "identities": ["orphans:WorldGenSeedingService"]
   }
 }

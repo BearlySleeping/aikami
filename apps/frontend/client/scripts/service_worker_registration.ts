@@ -9,7 +9,7 @@
 export type RegistrationType = 'classic' | 'module';
 
 const REGISTER_CALL =
-  /navigator\.serviceWorker\.register\(\s*['"]\/service-worker\.js['"]\s*(?:,\s*\{([^}]*)\})?\s*\)/;
+  /navigator\s*\.\s*serviceWorker\s*\.\s*register\(\s*['"]\/service-worker\.js['"]\s*(?:,\s*\{([^}]*)\})?\s*\)/;
 const MODULE_TYPE = /\btype\s*:\s*['"]module['"]/;
 const MODULE_SYNTAX = /^\s*(?:import\s*(?:[\w*{'"])|export\s)/m;
 

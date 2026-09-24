@@ -100,6 +100,7 @@ const weatherIcon = $derived.by(() => {
     <!-- Main time pill -->
     <div
       class="flex items-center gap-2 rounded-full bg-base-200/80 px-3 py-1.5 text-sm backdrop-blur-sm shadow-md border border-base-300/50"
+      role="timer"
       aria-label={`${pad(gameHour)}:${pad(gameMinute)}, ${diurnalLabel}`}
     >
       <span class="text-base">{diurnalIcon}</span>

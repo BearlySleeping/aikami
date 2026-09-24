@@ -21,12 +21,12 @@ import {
   DEFAULT_KEYBINDINGS,
   loadKeybindings,
 } from '@aikami/frontend/engine/sim';
-import { isConsumedOrComposing, isEditableTarget } from './game_input_guard.ts';
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services/base';
+import { isConsumedOrComposing, isEditableTarget } from './game_input_guard.ts';
 
 // ---------------------------------------------------------------------------
 // Types

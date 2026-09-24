@@ -21,6 +21,7 @@ import { combatService } from './combat_service.svelte';
 import { gameEngineService } from './game_engine_service.svelte';
 import { isConsumedOrComposing, isEditableTarget } from './game_input_guard.ts';
 import { gameModeService } from './game_mode_service.svelte.ts';
+import { handleJournalShortcut } from './game_overlay_journal_shortcut';
 // GameOverlayService — overlay router for the game UI layer. C-332 replaced the
 // flat active-overlay toggle with an explicit stack; Escape always pops exactly
 // one layer.
@@ -38,7 +39,6 @@ import {
 import { parseSavePayloadEnvelope, validateEnvelopeChecksum } from './game_save_envelope.ts';
 import type { GameSaveServiceInterface } from './game_save_service.svelte.ts';
 import { gameSaveService } from './game_save_service.svelte.ts';
-import { handleJournalShortcut } from './game_overlay_journal_shortcut';
 import { inputActionService } from './input_action_service.svelte.ts';
 import { npcDialogueService } from './npc_dialogue_service.svelte';
 import { onboardingHintService } from './onboarding_hint_service.svelte.ts';

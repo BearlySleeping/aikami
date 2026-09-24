@@ -1,6 +1,6 @@
 <script lang="ts">
 // apps/frontend/client/src/lib/views/dev/layout/layout_index_page.dev.svelte
-import { getPublicMode } from '@aikami/frontend-configs';
+import { getPublicMode } from '@aikami/frontend/configs';
 import { routerService } from '$services';
 import tauriConfig from '../../../../../src-tauri/tauri.conf.json';
 import { NAV_ITEMS } from './layout_view_model.dev.svelte.ts';

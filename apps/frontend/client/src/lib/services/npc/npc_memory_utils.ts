@@ -217,7 +217,9 @@ export const buildOpenerUserPrompt = (options: {
 }): string =>
   [
     ...buildMemoryPromptFacts(options.record),
-    options.record.opener ? `[MEMORY] Your previous greeting was: ${options.record.opener.text}` : '',
+    options.record.opener
+      ? `[MEMORY] Your previous greeting was: ${options.record.opener.text}`
+      : '',
     '',
     '[CURRENT WORLD STATE]',
     options.gameStateFacts.length > 0 ? options.gameStateFacts.join('\n') : '(unknown)',

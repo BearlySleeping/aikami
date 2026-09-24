@@ -93,7 +93,6 @@ const { viewModel }: Props = $props();
           <p class="text-sm text-base-content/60 text-center py-4">Section not available</p>
         {/if}
       </div>
-
     </div>
   </div>
 </BaseViewModelContainer>

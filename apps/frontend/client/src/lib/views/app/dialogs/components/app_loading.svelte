@@ -19,11 +19,7 @@ const { viewModel }: Props = $props();
       <p class="text-sm font-medium text-base-content/70">
         {viewModel.appLoading.label}
       </p>
-      <button
-        type="button"
-        class="btn btn-sm"
-        onclick={() => viewModel.dismissLoading()}
-      >
+      <button type="button" class="btn btn-sm" onclick={() => viewModel.dismissLoading()}>
         Dismiss
       </button>
     </div>

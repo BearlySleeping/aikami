@@ -18,11 +18,11 @@ import type { RouteName } from '$router';
 import type {
   AppServiceInterface,
   AuthServiceInterface,
+  ConfigServiceInterface,
   EmulatorSeedServiceInterface,
   RouterServiceInterface,
   RuntimeConfigServiceInterface,
   UpdaterServiceInterface,
-  ConfigServiceInterface,
 } from '$services';
 import type { ClientHookData } from '$types';
 

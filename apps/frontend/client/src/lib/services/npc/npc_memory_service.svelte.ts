@@ -60,7 +60,8 @@ import {
 export type NpcMemoryServiceOptions = BaseFrontendClassOptions;
 
 /** Plain JSON-schema dictionaries for the structured-output transport (built once). */
-const toJsonSchema = (schema: object): Record<string, unknown> => JSON.parse(JSON.stringify(schema));
+const toJsonSchema = (schema: object): Record<string, unknown> =>
+  JSON.parse(JSON.stringify(schema));
 const DIGEST_JSON_SCHEMA = toJsonSchema(NpcMemoryDigestSchema);
 const OPENER_JSON_SCHEMA = toJsonSchema(NpcMemoryOpenerOutputSchema);
 
