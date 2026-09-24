@@ -92,16 +92,17 @@ export class GameOverlayService
   }
   isSaving = $state<boolean>(false);
   saveMessage = $state<string | undefined>(undefined);
+  get lastSavedAt(): string | undefined {
+    return campaignService.activeCampaign?.lastSavedAt;
+  }
   isTransitioning = $state<boolean>(false);
   autoSaveStatus = $state<AutoSaveStatus>('idle');
-
   get useOllama(): boolean {
     if (!this._settingsLoaded) {
       void this._initSettings();
     }
     return this._useOllama;
   }
-
   get textProvider(): { endpoint: string } | undefined {
     if (!this._settingsLoaded) {
       void this._initSettings();

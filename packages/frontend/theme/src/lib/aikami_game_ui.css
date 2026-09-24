@@ -69,6 +69,56 @@
   /* ── Management workspace ──────────────────────────────────────────── */
 
   :where([data-aikami-theme-scope]) {
+    .game-settings-scrim {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right))
+        max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
+      background-color: color-mix(in oklab, var(--ui-ink) 68%, transparent);
+      backdrop-filter: blur(8px);
+    }
+
+    .game-settings-panel {
+      inline-size: min(100%, 48rem);
+      max-block-size: min(88dvh, 52rem);
+      overflow-y: auto;
+      padding: 1rem;
+      color: var(--ui-base-content);
+      background-color: color-mix(in oklab, var(--ui-panel) 92%, var(--ui-brass) 8%);
+      border: 1px solid var(--game-ornament);
+      border-block-start: 2px solid color-mix(in oklab, var(--ui-brass) 78%, transparent);
+      border-radius: var(--game-radius-panel);
+      box-shadow: 0 30px 70px -34px rgb(0 0 0 / 0.75);
+    }
+
+    .game-settings-content {
+      min-inline-size: 0;
+    }
+
+    .game-pause-scrim {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right))
+        max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
+      background-color: color-mix(in oklab, var(--ui-ink) 68%, transparent);
+      backdrop-filter: blur(8px);
+    }
+
+    .game-pause-panel {
+      max-block-size: min(90dvh, 44rem);
+      overflow-y: auto;
+      color: var(--ui-base-content);
+      background-color: color-mix(in oklab, var(--ui-panel) 92%, var(--ui-brass) 8%);
+      border-color: var(--game-ornament);
+    }
+
+    .game-pause-save-status {
+      min-block-size: 1.5rem;
+      color: var(--ui-muted-content);
+    }
+
     .game-workspace-backdrop {
       display: flex;
       align-items: center;

@@ -21,6 +21,7 @@ export const createPauseMenuOverlay = (
 ): PauseMenuOverlayCapabilities => ({
   isSaving: false,
   saveMessage: undefined,
+  lastSavedAt: undefined,
   resumeGame: () => unconfigured('resumeGame'),
   saveGame: () => unconfigured('saveGame'),
   goToSettings: () => unconfigured('goToSettings'),

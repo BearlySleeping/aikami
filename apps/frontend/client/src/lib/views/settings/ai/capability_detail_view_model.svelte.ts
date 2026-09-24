@@ -11,18 +11,25 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services/base';
 import type { ConnectionCapability } from '$types';
-import type { CapabilityStatusEntry } from './ai_connection_status.svelte';
+import type { CapabilityStatus, CapabilityStatusEntry } from './ai_connection_status.svelte';
 import type { AiSettingsViewModelInterface } from './ai_settings_view_model.svelte';
+import { buildCapabilityGuidance, type CapabilityGuidance } from './capability_guidance';
 
 /** Presentation state and actions for configuring one AI capability. */
 export type CapabilityDetailViewModelInterface = BaseViewModelInterface & {
   readonly capability: ConnectionCapability;
-  readonly status: string;
+  readonly status: CapabilityStatus;
   /** Human-readable label for {@link status} — never the raw enum value. */
   readonly statusLabel: string;
   readonly statusColor: string;
+  readonly title: string;
+  readonly description: string;
+  readonly availabilityLabel: string;
+  readonly setupActionLabel: string;
+  readonly playableWithout: string;
   readonly modelName: string | undefined;
   readonly providerLabel: string | undefined;
+  readonly connectionLabel: string;
   readonly connectionId: string | undefined;
   readonly aiSettingsViewModel: AiSettingsViewModelInterface;
   openSetup(): void;
@@ -78,7 +85,7 @@ class CapabilityDetailViewModel
     return this._getStatusEntry()?.connectionId;
   }
 
-  get status(): string {
+  get status(): CapabilityStatus {
     const entry = this._getStatusEntry();
     if (!entry) {
       return 'not_configured';
@@ -109,12 +116,44 @@ class CapabilityDetailViewModel
     return entry.color;
   }
 
+  get guidance(): CapabilityGuidance {
+    return buildCapabilityGuidance({ capability: this.capability, status: this.status });
+  }
+
+  get title(): string {
+    return this.guidance.title;
+  }
+
+  get description(): string {
+    return this.guidance.description;
+  }
+
+  get availabilityLabel(): string {
+    return this.guidance.availabilityLabel;
+  }
+
+  get setupActionLabel(): string {
+    return this.guidance.setupActionLabel;
+  }
+
+  get playableWithout(): string {
+    return this.guidance.playableWithout;
+  }
+
   get modelName(): string | undefined {
     return this._getStatusEntry()?.modelName;
   }
 
   get providerLabel(): string | undefined {
     return this._getStatusEntry()?.providerLabel;
+  }
+
+  get connectionLabel(): string {
+    if (!this.isConfigured) {
+      return 'No connection configured';
+    }
+    const provider = this.providerLabel ?? 'Configured provider';
+    return this.modelName ? `${provider} · ${this.modelName}` : provider;
   }
 
   get isConfigured(): boolean {
