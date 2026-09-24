@@ -16,6 +16,10 @@ export type MapData = {
   height: number;
   ground: number[];
   collision: number[];
+  /** Explicit non-terrain tiles that must render in the ground band. */
+  groundExtra?: Array<[col: number, row: number, gid: number]>;
+  /** Explicit visual decals that must render in the decor band. */
+  decorExtra?: Array<[col: number, row: number, gid: number]>;
   overheadExtra?: Array<[col: number, row: number, gid: number]>;
   terrainOverrides?: Array<[col: number, row: number, terrain: string]>;
 };
@@ -95,6 +99,12 @@ export const blockRect = (m: MapData, c0: number, r0: number, c1: number, r1: nu
   }
 };
 
+/** True when any authored visual contribution owns a cell. */
+const hasExplicitContribution = (m: MapData, col: number, row: number): boolean =>
+  m.groundExtra?.some(([entryC, entryR]) => entryC === col && entryR === row) === true ||
+  m.decorExtra?.some(([entryC, entryR]) => entryC === col && entryR === row) === true ||
+  m.overheadExtra?.some(([entryC, entryR]) => entryC === col && entryR === row) === true;
+
 /**
  * Scatters `gid` across cells currently holding `baseGid`, using a
  * deterministic mask. `baseGid` is explicit so variant tiles apply to the
@@ -117,6 +127,11 @@ export const scatter = (
 ): void => {
   for (let r = r0; r <= r1; r++) {
     for (let c = c0; c <= c1; c++) {
+      // Explicit contributions own their cells even when base ground remains
+      // terrain. Skipping them also preserves the deterministic RNG stream.
+      if (hasExplicitContribution(m, c, r)) {
+        continue;
+      }
       if (m.ground[idx(m, c, r)] === baseGid && rng() < probability) {
         setTile(m, c, r, gid);
       }
@@ -172,7 +187,7 @@ export const scatterPatches = (options: {
   };
   for (let r = r0; r <= r1; r++) {
     for (let c = c0; c <= c1; c++) {
-      if (map.ground[idx(map, c, r)] !== baseGid) {
+      if (hasExplicitContribution(map, c, r) || map.ground[idx(map, c, r)] !== baseGid) {
         continue;
       }
       if (sample((c - c0) / scale, (r - r0) / scale) >= threshold) {

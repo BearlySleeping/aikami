@@ -28,9 +28,12 @@
 
 import {
   cell,
+  type DoorSide,
+  doorPlacement,
   isBridgeGid,
   OLD_ROAD_ARRIVAL,
   placeBridge,
+  placeHouse,
   placeLandmark,
   placeNpc,
   placeProp,
@@ -295,8 +298,6 @@ const stream = (m: MapData): void => {
   buildStreamBridge(m);
 };
 
-type DoorSide = 'north' | 'south' | 'east' | 'west';
-
 /** The building's wall ring. */
 const paintShell = (
   m: MapData,
@@ -328,37 +329,6 @@ const paintInterior = (m: MapData, c0: number, r0: number, w: number, h: number)
       block(m, c, r);
     }
   }
-};
-
-/** The two-tile door and the two-cell landing in front of it. */
-const doorPlacement = (options: {
-  c0: number;
-  r0: number;
-  w: number;
-  h: number;
-  doorSide: DoorSide;
-}): { doorCells: Array<[number, number]>; landingCells: Array<[number, number]> } => {
-  const { c0, r0, w, h, doorSide } = options;
-  const doorCells: Array<[number, number]> = [];
-  const landingCells: Array<[number, number]> = [];
-  if (doorSide === 'south' || doorSide === 'north') {
-    const doorRow = doorSide === 'south' ? r0 + h - 1 : r0;
-    const step = doorSide === 'south' ? 1 : -1;
-    const midC = c0 + Math.floor(w / 2);
-    for (const c of [midC - 1, midC]) {
-      doorCells.push([c, doorRow]);
-      landingCells.push([c, doorRow + step], [c, doorRow + step * 2]);
-    }
-    return { doorCells, landingCells };
-  }
-  const doorCol = doorSide === 'east' ? c0 + w - 1 : c0;
-  const step = doorSide === 'east' ? 1 : -1;
-  const midR = r0 + Math.floor(h / 2);
-  for (const r of [midR - 1, midR]) {
-    doorCells.push([doorCol, r]);
-    landingCells.push([doorCol + step, r], [doorCol + step * 2, r]);
-  }
-  return { doorCells, landingCells };
 };
 
 /** Opens a set of cells to stone floor, leaving out-of-bounds cells untouched. */
@@ -466,7 +436,12 @@ const placeBuildings = (m: MapData): void => {
   // read as a level-editor row, not a village.
   building(m, 18, 13, 7, 6, G.WOOD_WALL, 'south'); // cottage (north)
   building(m, 24, 36, 7, 6, G.WOOD_WALL, 'north'); // shed (south-west)
-  building(m, 51, 5, 6, 5, G.WOOD_WALL, 'south'); // hut (north-east)
+  placeHouse(m, {
+    region: { c0: 51, r0: 5, c1: 56, r1: 9 },
+    door: { c: 54 },
+    facing: 's',
+    mapId: 'village',
+  }); // hut (north-east)
 };
 
 /**

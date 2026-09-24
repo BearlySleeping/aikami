@@ -22,6 +22,7 @@
 //               anchor, shadow, decoration, tree density, building footprint,
 //               non-gameplay clutter, NPC position that preserves semantics.
 
+import { formatCells, isMapCell, isWalkableLand } from './emberwatch_map_authoring_helpers.ts';
 import {
   block,
   blockRect,
@@ -38,6 +39,19 @@ import {
   transition,
 } from './emberwatch_map_shared.ts';
 import { buildG, readManifestTiles } from './generate_emberwatch_tables.ts';
+
+export {
+  type DoorPlacement,
+  type DoorSide,
+  doorPlacement,
+  HOUSE_FRAMES,
+  type HouseDoorCell,
+  type HouseDoorPlacement,
+  type HouseFacing,
+  type HouseFrameRole,
+  houseDoorPlacement,
+  placeHouse,
+} from './emberwatch_house_authoring.ts';
 
 export type { MapData, MapObjectLayer, SpawnObject } from './emberwatch_map_shared.ts';
 
@@ -319,22 +333,8 @@ const applyBridgeCell = (options: {
   }
 };
 
-const isMapCell = (map: MapData, c: number, r: number): boolean =>
-  Number.isInteger(c) && Number.isInteger(r) && c >= 0 && c < map.width && r >= 0 && r < map.height;
-
 const isWaterGround = (map: MapData, c: number, r: number): boolean =>
   isMapCell(map, c, r) && map.ground[r * map.width + c] === G.WATER;
-
-const isWalkableLand = (map: MapData, c: number, r: number): boolean => {
-  if (!isMapCell(map, c, r)) {
-    return false;
-  }
-  const index = r * map.width + c;
-  return map.collision[index] === 0 && map.ground[index] !== G.WATER;
-};
-
-const formatCells = (cells: ReadonlyArray<[number, number]>): string =>
-  cells.map(([c, r]) => `(${c},${r})`).join(', ');
 
 /** Collects the approach-end and long-side cells just outside a span. */
 const bridgeBankCells = (options: {

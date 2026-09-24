@@ -136,6 +136,35 @@ export type TilemapRenderResult = {
 };
 
 /**
+ * Removes baked ground cells already represented by terrain or another visual
+ * band while leaving explicit non-terrain ground contributions renderable.
+ *
+ * C-550 uses the normal four map layers. A house facade is a ground-band GID,
+ * but terrain-channel maps replace the ordinary baked ground layer with
+ * autotiled terrain. Filtering only terrain-owned cells (and cells duplicated
+ * in decor/overhead) preserves that fallback without hiding the facade. If the
+ * terrain build fails, the caller uses the original layer instead.
+ */
+export const filterBakedGroundForTerrain = (
+  tilemap: TilemapData,
+  layer: TilemapLayer,
+): TilemapLayer => {
+  if (!tilemap.terrain) {
+    return layer;
+  }
+  const visualLayers = tilemap.layers.filter(
+    (candidate) => candidate.band === 'decor' || candidate.band === 'overhead',
+  );
+  const data = layer.data.map((gid, index) => {
+    const terrainId = tilemap.terrain?.[index] ?? '';
+    const hasTerrain = terrainId.length > 0;
+    const hasOtherVisual = visualLayers.some((candidate) => candidate.data[index] !== 0);
+    return hasTerrain || hasOtherVisual ? 0 : gid;
+  });
+  return { ...layer, data };
+};
+
+/**
  * Renders a parsed tilemap into a PixiJS Container using chunked Mesh
  * rendering instead of RenderTexture baking.
  *
@@ -318,13 +347,12 @@ export const renderTilemap = async (
   }
 
   // Render baked layers bottom-to-top (preserve Tiled draw order).
-  // C-378: when the autotiler supplied terrain layers, the baked ground
-  // band is REPLACED (terrain layers render in its place) — skip
-  // ground-band baked layers to avoid double-rendering the base fill.
-  // Decor/overhead baked layers still render on top. The baked ground band
-  // is skipped ONLY when terrain chunks really rendered — if the tileset
-  // texture or frame resolution prevented terrain rendering, the baked
-  // ground layers stay as the fallback.
+  // C-378/C-550: when terrain layers render, the ordinary baked terrain
+  // contribution is replaced by the autotiler. Keep the ground layer itself
+  // renderable, but filter terrain-owned and decor/overhead-duplicated cells;
+  // explicit non-terrain ground contributions (the house facade) must survive.
+  // If terrain chunks did not render, the original baked layer remains the
+  // fallback.
   const hasTerrainGround = terrainGroundRendered;
   for (const layer of tilemap.layers) {
     if (!layer.visible) {
@@ -336,9 +364,9 @@ export const renderTilemap = async (
     if (layerFilter && !layerFilter(layer.name)) {
       continue;
     }
-    if (hasTerrainGround && (layer.band ?? 'ground') === 'ground') {
-      continue;
-    }
+    const isGroundBand = (layer.band ?? 'ground') === 'ground';
+    const renderLayer =
+      hasTerrainGround && isGroundBand ? filterBakedGroundForTerrain(tilemap, layer) : layer;
 
     // Determine which tileset(s) this layer's GIDs reference.
     // C-379 AC-9: a layer may reference MULTIPLE tilesets. Build a per-
@@ -348,7 +376,7 @@ export const renderTilemap = async (
     // tileset binding rendered garbage when UVs came from a different
     // tileset's dimensions).
     const referencedTilesets = tilemap.tilesets.filter((ts) =>
-      _layerReferencesTileset(layer, ts, tilemap.tilesets),
+      _layerReferencesTileset(renderLayer, ts, tilemap.tilesets),
     );
     if (referencedTilesets.length === 0) {
       continue;
@@ -373,15 +401,15 @@ export const renderTilemap = async (
       // the flips array stays index-parallel to the zeroed data and is
       // passed through WITHOUT copying (C-379 AC-9, CodeRabbit review).
       const subLayer: TilemapLayer = {
-        ...layer,
-        data: layer.data.map((gid) => {
+        ...renderLayer,
+        data: renderLayer.data.map((gid) => {
           if (gid === 0) {
             return 0;
           }
           const resolved = resolveGid(gid, tilemap.tilesets);
           return resolved && resolved.tileset.firstgid === ts.firstgid ? gid : 0;
         }),
-        flips: layer.flips,
+        flips: renderLayer.flips,
       };
       const layerTilemap: TilemapData = {
         ...tilemap,
