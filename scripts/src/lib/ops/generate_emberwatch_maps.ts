@@ -64,6 +64,106 @@ const TILESET_BLOCK = {
 };
 
 // ---------------------------------------------------------------------------
+// Explicit contribution application
+// ---------------------------------------------------------------------------
+
+type Contribution = readonly [number, number, number];
+type LayerBuffers = {
+  ground: number[];
+  decor: number[];
+  overhead: number[];
+  terrainChannel: string[];
+};
+
+const contributionInBounds = (map: MapData, c: number, r: number): boolean =>
+  Number.isInteger(c) && Number.isInteger(r) && c >= 0 && c < map.width && r >= 0 && r < map.height;
+
+const cellKey = (c: number, r: number): string => `${c},${r}`;
+
+const applyGroundContributions = (options: {
+  map: MapData;
+  extras: ReadonlyArray<Contribution> | undefined;
+  layers: LayerBuffers;
+  terrainNameToId: ReadonlyMap<string, string>;
+}): Set<string> => {
+  const { map, extras, layers, terrainNameToId } = options;
+  const cells = new Set<string>();
+  for (const [c, r, gid] of extras ?? []) {
+    if (!contributionInBounds(map, c, r)) {
+      continue;
+    }
+    const index = idx(map, c, r);
+    layers.ground[index] = gid;
+    layers.decor[index] = 0;
+    layers.overhead[index] = 0;
+    cells.add(cellKey(c, r));
+    const tileName = GID_TO_NAME.get(gid);
+    layers.terrainChannel[index] = tileName ? (terrainNameToId.get(tileName) ?? '') : '';
+  }
+  return cells;
+};
+
+const applyDecorContributions = (options: {
+  map: MapData;
+  extras: ReadonlyArray<Contribution> | undefined;
+  layers: LayerBuffers;
+  groundCells: ReadonlySet<string>;
+}): Set<string> => {
+  const { map, extras, layers, groundCells } = options;
+  const cells = new Set<string>();
+  for (const [c, r, gid] of extras ?? []) {
+    if (!contributionInBounds(map, c, r)) {
+      continue;
+    }
+    const key = cellKey(c, r);
+    if (groundCells.has(key)) {
+      throw new Error(
+        `generate_emberwatch_maps: cell (${c},${r}) has both ground and decor contributions`,
+      );
+    }
+    layers.decor[idx(map, c, r)] = gid;
+    layers.overhead[idx(map, c, r)] = 0;
+    cells.add(key);
+  }
+  return cells;
+};
+
+const applyOverheadContributions = (options: {
+  map: MapData;
+  extras: ReadonlyArray<Contribution> | undefined;
+  layers: LayerBuffers;
+  lowerBandCells: ReadonlySet<string>;
+}): void => {
+  const { map, extras, layers, lowerBandCells } = options;
+  for (const [c, r, gid] of extras ?? []) {
+    if (!contributionInBounds(map, c, r)) {
+      continue;
+    }
+    const key = cellKey(c, r);
+    if (lowerBandCells.has(key)) {
+      throw new Error(
+        `generate_emberwatch_maps: cell (${c},${r}) has both lower-band and overhead contributions`,
+      );
+    }
+    layers.overhead[idx(map, c, r)] = gid;
+  }
+};
+
+const applyTerrainOverrides = (options: {
+  map: MapData;
+  overrides: ReadonlyArray<readonly [number, number, string]> | undefined;
+  layers: LayerBuffers;
+}): void => {
+  const { map, overrides, layers } = options;
+  for (const [c, r, terrain] of overrides ?? []) {
+    if (!contributionInBounds(map, c, r)) {
+      continue;
+    }
+    layers.terrainChannel[idx(map, c, r)] = terrain;
+  }
+};
+
+// ---------------------------------------------------------------------------
 // Build map JSON
 // ---------------------------------------------------------------------------
 
@@ -97,6 +197,7 @@ export const buildMapJson = ({
       }
     }
   }
+  const ground = [...m.ground];
   const decor: number[] = [];
   const overhead: number[] = [];
   const terrainChannel: string[] = [];
@@ -120,23 +221,29 @@ export const buildMapJson = ({
     }
   }
 
-  // Overlay `overheadExtra` tiles (e.g. the gate arch). Collision and the
-  // terrain channel are untouched, so byte-parity holds.
-  for (const [c, r, gid] of m.overheadExtra ?? []) {
-    if (c < 0 || c >= m.width || r < 0 || r >= m.height) {
-      continue;
-    }
-    overhead[idx(m, c, r)] = gid;
-  }
-
-  // Terrain-only materials with no baked tile GID write the terrain
-  // channel directly; the ground GID stays the base fill.
-  for (const [c, r, terrain] of m.terrainOverrides ?? []) {
-    if (c < 0 || c >= m.width || r < 0 || r >= m.height) {
-      continue;
-    }
-    terrainChannel[idx(m, c, r)] = terrain;
-  }
+  // Explicit contributions are authored after the baked layer split. Ground
+  // owns architectural silhouettes; decor owns contact decals; overhead owns
+  // walk-behind roof cells. Each helper rejects lower/upper band collisions.
+  const layers: LayerBuffers = { ground, decor, overhead, terrainChannel };
+  const groundExtraCells = applyGroundContributions({
+    map: m,
+    extras: m.groundExtra,
+    layers,
+    terrainNameToId,
+  });
+  const decorExtraCells = applyDecorContributions({
+    map: m,
+    extras: m.decorExtra,
+    layers,
+    groundCells: groundExtraCells,
+  });
+  applyOverheadContributions({
+    map: m,
+    extras: m.overheadExtra,
+    layers,
+    lowerBandCells: new Set([...groundExtraCells, ...decorExtraCells]),
+  });
+  applyTerrainOverrides({ map: m, overrides: m.terrainOverrides, layers });
 
   // A map whose terrain channel is ALL empty (interior maps like the inn)
   // OMITS the terrain property entirely. A present-but-empty channel would
@@ -165,7 +272,7 @@ export const buildMapJson = ({
         height: m.height,
         visible: true,
         properties: [{ name: 'band', type: 'string', value: 'ground' }],
-        data: m.ground,
+        data: ground,
       },
       {
         name: 'decor',

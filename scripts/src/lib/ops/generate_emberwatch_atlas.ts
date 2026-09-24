@@ -21,7 +21,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { deflateSync } from 'node:zlib';
-import { BRIDGE_FRAME_PAINT, paintBridgeFrame } from './generate_emberwatch_bridge_frames.ts';
+import { paintAssemblyFrame } from './generate_emberwatch_assembly_frames.ts';
 import {
   buf,
   clearCell,
@@ -811,11 +811,7 @@ const CORNER_TERRAIN_PAINTERS: Record<
 };
 
 const paintFrame = (key: string, col: number, row: number): void => {
-  // C-546 bridge assembly frames are table-driven (they compose boards + an
-  // optional rail/abutment per span position) rather than one case each.
-  const bridge = BRIDGE_FRAME_PAINT[key];
-  if (bridge) {
-    paintBridgeFrame({ col, row, ...bridge });
+  if (paintAssemblyFrame({ key, col, row })) {
     return;
   }
   // C-378 corner-16 terrain frames: `<terrain>_<mask>.png`. Only ids with a

@@ -16,6 +16,10 @@ export type MapData = {
   height: number;
   ground: number[];
   collision: number[];
+  /** Explicit non-terrain tiles that must render in the ground band. */
+  groundExtra?: Array<[col: number, row: number, gid: number]>;
+  /** Explicit visual decals that must render in the decor band. */
+  decorExtra?: Array<[col: number, row: number, gid: number]>;
   overheadExtra?: Array<[col: number, row: number, gid: number]>;
   terrainOverrides?: Array<[col: number, row: number, terrain: string]>;
 };
@@ -117,6 +121,15 @@ export const scatter = (
 ): void => {
   for (let r = r0; r <= r1; r++) {
     for (let c = c0; c <= c1; c++) {
+      // An explicit overhead contribution owns the cell even when its base
+      // ground remains terrain. Skipping it also preserves the deterministic
+      // RNG stream when an assembly adds walk-behind cells before scatter.
+      const hasOverheadContribution = m.overheadExtra?.some(
+        ([entryC, entryR]) => entryC === c && entryR === r,
+      );
+      if (hasOverheadContribution) {
+        continue;
+      }
       if (m.ground[idx(m, c, r)] === baseGid && rng() < probability) {
         setTile(m, c, r, gid);
       }

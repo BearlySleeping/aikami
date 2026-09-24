@@ -53,6 +53,18 @@ const collect = (
   return out;
 };
 
+const expectContributionCellsInside = (
+  map: { width: number; height: number },
+  cells: ReadonlyArray<readonly [number, number, ...unknown[]]> | undefined,
+): void => {
+  for (const [c, r] of cells ?? []) {
+    expect(c).toBeGreaterThanOrEqual(0);
+    expect(c).toBeLessThan(map.width);
+    expect(r).toBeGreaterThanOrEqual(0);
+    expect(r).toBeLessThan(map.height);
+  }
+};
+
 describe('Emberwatch map builders — gate 3 extents', () => {
   const cases = [
     { name: 'village', build: buildVillage, width: 64, height: 48 },
@@ -72,21 +84,13 @@ describe('Emberwatch map builders — gate 3 extents', () => {
     });
   }
 
-  test('terrain overrides and overhead extras stay inside the map', () => {
+  test('terrain, ground, decor, and overhead extras stay inside the map', () => {
     for (const { build } of cases) {
       const { map } = build();
-      for (const [c, r] of map.terrainOverrides ?? []) {
-        expect(c).toBeGreaterThanOrEqual(0);
-        expect(c).toBeLessThan(map.width);
-        expect(r).toBeGreaterThanOrEqual(0);
-        expect(r).toBeLessThan(map.height);
-      }
-      for (const [c, r] of map.overheadExtra ?? []) {
-        expect(c).toBeGreaterThanOrEqual(0);
-        expect(c).toBeLessThan(map.width);
-        expect(r).toBeGreaterThanOrEqual(0);
-        expect(r).toBeLessThan(map.height);
-      }
+      expectContributionCellsInside(map, map.terrainOverrides);
+      expectContributionCellsInside(map, map.decorExtra);
+      expectContributionCellsInside(map, map.overheadExtra);
+      expectContributionCellsInside(map, map.groundExtra);
     }
   });
 

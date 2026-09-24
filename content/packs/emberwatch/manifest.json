@@ -645,6 +645,141 @@
       "provenance": {
         "source": "generated:gpt"
       }
+    },
+    "146": {
+      "name": "house_roof_front",
+      "frame": "house_roof_front.png",
+      "isWalkable": false,
+      "isWall": true,
+      "provenance": {
+        "source": "generated:gpt"
+      }
+    },
+    "147": {
+      "name": "house_roof_back",
+      "frame": "house_roof_back.png",
+      "isWalkable": true,
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
+    },
+    "148": {
+      "name": "house_roof_ridge",
+      "frame": "house_roof_ridge.png",
+      "isWalkable": true,
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
+    },
+    "149": {
+      "name": "house_roof_gable_left",
+      "frame": "house_roof_gable_left.png",
+      "isWalkable": true,
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
+    },
+    "150": {
+      "name": "house_roof_gable_right",
+      "frame": "house_roof_gable_right.png",
+      "isWalkable": true,
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
+    },
+    "151": {
+      "name": "house_roof_eave_overhead",
+      "frame": "house_roof_eave_overhead.png",
+      "isWalkable": true,
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
+    },
+    "152": {
+      "name": "house_roof_eave_edge",
+      "frame": "house_roof_eave_edge.png",
+      "isWalkable": false,
+      "isWall": true,
+      "provenance": {
+        "source": "generated:gpt"
+      }
+    },
+    "153": {
+      "name": "house_facade_wall",
+      "frame": "house_facade_wall.png",
+      "isWalkable": false,
+      "isWall": true,
+      "provenance": {
+        "source": "generated:gpt"
+      }
+    },
+    "154": {
+      "name": "house_facade_window",
+      "frame": "house_facade_window.png",
+      "isWalkable": false,
+      "isWall": true,
+      "provenance": {
+        "source": "generated:gpt"
+      }
+    },
+    "155": {
+      "name": "house_facade_corner_left",
+      "frame": "house_facade_corner_left.png",
+      "isWalkable": false,
+      "isWall": true,
+      "provenance": {
+        "source": "generated:gpt"
+      }
+    },
+    "156": {
+      "name": "house_facade_corner_right",
+      "frame": "house_facade_corner_right.png",
+      "isWalkable": false,
+      "isWall": true,
+      "provenance": {
+        "source": "generated:gpt"
+      }
+    },
+    "157": {
+      "name": "house_door_closed",
+      "frame": "house_door_closed.png",
+      "isWalkable": false,
+      "isWall": true,
+      "provenance": {
+        "source": "generated:gpt"
+      }
+    },
+    "158": {
+      "name": "house_door_open",
+      "frame": "house_door_open.png",
+      "isWalkable": true,
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
+    },
+    "159": {
+      "name": "house_foundation",
+      "frame": "house_foundation.png",
+      "isWalkable": false,
+      "isWall": true,
+      "provenance": {
+        "source": "generated:gpt"
+      }
+    },
+    "160": {
+      "name": "house_foundation_shadow",
+      "frame": "house_foundation_shadow.png",
+      "isWalkable": true,
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
     }
   },
   "entities": {
