@@ -19,6 +19,7 @@ import {
 } from './emberwatch_authoring.ts';
 import { buildInn, buildShop, buildVillage } from './emberwatch_map_retained.ts';
 import { type MapData, type MapObjectLayer, makeMap } from './emberwatch_map_shared.ts';
+import beforeCollision from './fixtures/emberwatch_village_collision_before_c553.json';
 import { packAtlas } from './generate_emberwatch_atlas.ts';
 
 type HouseDefinition = {
@@ -138,11 +139,6 @@ const spawnById = (layers: readonly MapObjectLayer[], spawnId: string) => {
     throw new Error(`missing spawn ${spawnId}`);
   }
   return object;
-};
-
-const roofCellCount = (definition: HouseDefinition): number => {
-  const height = definition.region.r1 - definition.region.r0 + 1;
-  return (definition.region.c1 - definition.region.c0 + 1) * (height - 3);
 };
 
 const expectedRoofFrame = (definition: HouseDefinition, c: number, r: number): number => {
@@ -800,10 +796,14 @@ describe('C-553 — exact generated collision delta', () => {
   test('groups every changed cell under one building and pins the eight newly blocked cells', () => {
     const { map } = buildVillage();
     const expected = expectedVillageCollisionDelta(map);
-    const baseline = [...map.collision];
-    for (const change of expected) {
-      baseline[change.index] = change.before;
-    }
+    expect(beforeCollision.width).toBe(map.width);
+    expect(beforeCollision.height).toBe(map.height);
+    expect(beforeCollision.rows).toHaveLength(map.height);
+    expect(
+      beforeCollision.rows.every((row) => /^[01]+$/.test(row) && row.length === map.width),
+    ).toBe(true);
+    const baseline = beforeCollision.rows.flatMap((row) => Array.from(row, Number));
+    expect(map.collision).toHaveLength(baseline.length);
     const actual = map.collision.flatMap((value, index) =>
       value === baseline[index] ? [] : [{ index, before: baseline[index], after: value }],
     );
@@ -826,24 +826,5 @@ describe('C-553 — exact generated collision delta', () => {
       'shop:50,32',
       'shop:51,32',
     ]);
-    for (const definition of VILLAGE_HOUSES) {
-      const count = expected.filter((change) => change.role === definition.role).length;
-      if (definition.role === 'north-east hut') {
-        expect(count, 'hut collision delta').toBe(0);
-        continue;
-      }
-      const roofCells = roofCellCount(definition);
-      const legacyDoorCellsInRoof = (definition.legacyOpenDoor ?? []).filter(
-        ([, r]) => r < definition.region.r1 - 2,
-      ).length;
-      const newlyBlockedCount = (definition.legacyOpenDoor ?? []).filter(
-        ([c, r]) =>
-          r === definition.region.r1 &&
-          (c === definition.doorColumn - 1 || c === definition.doorColumn),
-      ).length;
-      expect(count, `${definition.role} collision delta`).toBe(
-        roofCells - legacyDoorCellsInRoof + newlyBlockedCount,
-      );
-    }
   });
 });

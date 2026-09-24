@@ -35,6 +35,31 @@ describe('PauseMenuViewModel — overlay state', () => {
     expect(viewModel.lastSavedLabel).toContain('Last saved');
   });
 
+  test('keeps the latest timestamp with success feedback and preserves save errors', () => {
+    let lastSavedAt = '2026-09-24T16:57:28Z';
+    const overlay: PauseMenuOverlayCapabilities = {
+      ...createPauseMenuOverlay({ saveMessage: 'Game Saved!' }),
+      get lastSavedAt() {
+        return lastSavedAt;
+      },
+    };
+    const viewModel = createViewModel(overlay);
+
+    const initialStatus = viewModel.saveStatusLabel;
+    expect(initialStatus).toBe(`Game Saved! · ${viewModel.lastSavedLabel}`);
+    lastSavedAt = '2026-09-25T16:57:28Z';
+    expect(viewModel.saveStatusLabel).toBe(`Game Saved! · ${viewModel.lastSavedLabel}`);
+    expect(viewModel.saveStatusLabel).not.toBe(initialStatus);
+
+    const failedViewModel = createViewModel(
+      createPauseMenuOverlay({
+        saveMessage: 'Save failed',
+        lastSavedAt: '2026-09-24T16:57:28Z',
+      }),
+    );
+    expect(failedViewModel.saveStatusLabel).toBe('Save failed');
+  });
+
   test('delegates gameplay actions to the overlay capability', async () => {
     const resumeGame = mock(() => {});
     const saveGame = mock(async () => {});

@@ -1358,8 +1358,6 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
           vendorInventory: npcData.vendorInventory || '',
         });
         publishNpcEntityIds(this._npcMeta.keys());
-        // Resolved from the AUTHORED npcId, never from worker mechanics.
-        this._maybeLoadAuthoredStaticVisual(eid);
       }
     }
 
@@ -1390,6 +1388,10 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       onAddedToStage: (info) => this.debug('entity-added-to-stage', info),
     });
     this._renderEntries.set(eid, display.entry);
+    if (this._npcMeta.has(eid)) {
+      // Resolved from the authored npcId after the replacement is registered.
+      this._maybeLoadAuthoredStaticVisual(eid);
+    }
     // Recipes will be loaded when the first APPEARANCE_CHANGED event arrives.
   }
 
