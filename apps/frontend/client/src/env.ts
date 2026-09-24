@@ -157,7 +157,7 @@ export const variables = defineEnvVars({
     schema: optionalString(),
   },
 
-  /** Force-enable the Eruda debug console (even in production). */
+  /** Force-enable the Eruda debug console in development builds only. */
   PUBLIC_ERUDA_ENABLED: {
     public: true,
     schema: optionalString(),

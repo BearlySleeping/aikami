@@ -78,20 +78,18 @@ describe('C-528 HUD layout presets', () => {
     expect(HUD_LAYOUT_PRESETS.map((preset) => preset.id)).toEqual([...HUD_PRESET_IDS]);
   });
 
-  test('orders the default top-right HUD from menu through onboarding hints', () => {
+  test('groups the default vitals and tutorial guidance into dedicated stacks', () => {
     const adventure = HUD_LAYOUT_PRESETS.find((preset) => preset.id === 'adventure');
-    const topRightOrder = adventure?.widgets
-      .filter((widget) => widget.anchor === 'top-end' && widget.widgetId !== 'autosave')
-      .toSorted((left, right) => left.order - right.order)
-      .map((widget) => widget.widgetId);
+    const playerStatus = adventure?.widgets.find((widget) => widget.widgetId === 'player-status');
+    const partyStatus = adventure?.widgets.find((widget) => widget.widgetId === 'party-status');
+    const objective = adventure?.widgets.find((widget) => widget.widgetId === 'objective');
+    const onboarding = adventure?.widgets.find((widget) => widget.widgetId === 'onboarding-hint');
 
-    expect(topRightOrder).toEqual([
-      'menu',
-      'player-status',
-      'clock',
-      'system-notice',
-      'onboarding-hint',
-    ]);
+    expect(playerStatus?.anchor).toBe('top-start');
+    expect(partyStatus?.anchor).toBe('top-start');
+    expect(objective?.anchor).toBe('bottom-start');
+    expect(onboarding?.anchor).toBe('bottom-start');
+    expect(onboarding?.order).toBeGreaterThan(objective?.order ?? 0);
   });
 
   test('every preset covers every registered widget exactly once', () => {

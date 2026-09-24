@@ -198,7 +198,10 @@ class AppViewModel extends BaseViewModel<AppViewModelOptions> implements AppView
     await this._handleRouteTransitions(this.currentRoute, user);
     this._initialRouteHandled = true;
 
-    if (isDevelopmentModePublic() || publicEnv.PUBLIC_ERUDA_ENABLED) {
+    // `PUBLIC_MODE=emulator` can be present while serving a production bundle.
+    // `import.meta.env.DEV` is therefore the build boundary: previewing an
+    // emulator-targeted build locally must not expose the debug console.
+    if (import.meta.env.DEV && (isDevelopmentModePublic() || publicEnv.PUBLIC_ERUDA_ENABLED)) {
       const eruda = (await import('eruda')).default;
       eruda.init();
     }

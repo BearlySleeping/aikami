@@ -1333,6 +1333,13 @@
       background-color: color-mix(in oklab, var(--ui-ink) 94%, transparent);
       color: var(--ui-base-content);
       font-size: 0.9375em;
+      box-shadow: 0 0.25rem 1rem color-mix(in oklab, var(--ui-ink) 35%, transparent);
+    }
+
+    /* The prompt sits in the bottom-centre stack above the hotbar, keeping the
+       action close to the player without covering the feet or target sprite. */
+    .hud-widget[data-hud-widget="interaction"] .hud-prompt {
+      margin-block-end: 1.75rem;
     }
 
     .hud-prompt__key {
@@ -1379,6 +1386,72 @@
     }
 
     /* ── Objective tracker ─────────────────────────────────────────────── */
+
+    /* Tutorial guidance is intentionally part of the objective stack rather
+       than a second floating panel. It shares the same quiet surface role. */
+    .hud-onboarding {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      max-inline-size: min(28rem, calc(100vw - 1.5rem));
+      padding: 0.55rem 0.7rem;
+      border: 1px solid var(--game-ornament-quiet);
+      border-block-start: 0;
+      border-radius: 0 0 0.7em 0.7em;
+      background-color: color-mix(in oklab, var(--ui-panel) 94%, transparent);
+      color: var(--ui-base-content);
+      font-size: 0.8125em;
+      pointer-events: auto;
+    }
+
+    .hud-onboarding__content {
+      display: flex;
+      min-inline-size: 0;
+      flex: 1;
+      flex-direction: column;
+      gap: 0.15rem;
+    }
+
+    .hud-onboarding__text {
+      line-height: 1.35;
+    }
+
+    .hud-onboarding__progress {
+      color: var(--ui-muted-content);
+      font-size: 0.85em;
+    }
+
+    .hud-onboarding__actions {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+
+    .hud-onboarding__skip,
+    .hud-onboarding__dismiss {
+      border: 1px solid var(--game-ornament-quiet);
+      border-radius: 0.3em;
+      background: transparent;
+      color: var(--ui-muted-content);
+      cursor: pointer;
+      font: inherit;
+      line-height: 1.3;
+    }
+
+    .hud-onboarding__skip {
+      padding: 0.2rem 0.5rem;
+    }
+
+    .hud-onboarding__dismiss {
+      border-color: transparent;
+      padding: 0.2rem 0.35rem;
+    }
+
+    .hud-onboarding__skip:hover,
+    .hud-onboarding__dismiss:hover {
+      background-color: var(--game-selection-soft);
+      color: var(--ui-base-content);
+    }
 
     .hud-objective {
       inline-size: 20rem;

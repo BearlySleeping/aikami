@@ -133,6 +133,28 @@ describe('C-528 AC-1 preset and visibility semantics', () => {
     }
   });
 
+  test('dialogue withdraws contextual HUD widgets while keeping Menu docked and reachable', () => {
+    const layout = resolveHudLayout(baseInput({ overlay: 'DIALOGUE' }));
+    for (const widgetId of [
+      'player-status',
+      'objective',
+      'interaction',
+      'autosave',
+      'clock',
+      'onboarding-hint',
+    ] as const) {
+      const widget = findResolvedHudWidget(layout, widgetId);
+      expect(widget?.visible).toBe(false);
+      expect(widget?.reserved).toBe(false);
+      expect(widget?.reason).toBe('overlay-hidden');
+    }
+    for (const widgetId of ['menu', 'system-notice'] as const) {
+      const widget = findResolvedHudWidget(layout, widgetId);
+      expect(widget?.visible).toBe(true);
+      expect(widget?.anchor).toBe('top-end');
+    }
+  });
+
   test('an unknown preset falls back to the shipped safe preset and says so', () => {
     const layout = resolveHudLayout(
       baseInput({

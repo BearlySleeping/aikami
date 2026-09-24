@@ -25,8 +25,10 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services/base';
+import { LpcAnimationState } from '@aikami/lpc';
 import type { EquipmentSlot, ItemDefinition } from '@aikami/types';
-import { getItemDefinition } from '$utils/inventory_utils';
+import { getLpcAssetPath } from '$lib/data/lpc_asset_catalog';
+import { getItemCategoryIcon, getItemDefinition } from '$utils/inventory_utils';
 
 // ── Capability contracts ────────────────────────────────────────────────
 
@@ -68,7 +70,8 @@ export type EquippedItemView = {
 export type InventoryItemView = {
   readonly itemId: string;
   readonly quantity: number;
-  readonly initial: string;
+  readonly artUrl: string | undefined;
+  readonly fallbackIcon: string;
 };
 
 /** Bag ordering options. `acquired` preserves pickup order — the default. */
@@ -202,10 +205,16 @@ export class InventoryViewModel
     } else if (this.sortMode === 'quantity') {
       filtered.sort((a, b) => b.quantity - a.quantity);
     }
-    return filtered.map((item) => ({
-      ...item,
-      initial: item.itemId.charAt(0).toUpperCase(),
-    }));
+    return filtered.map((item) => {
+      const definition = getItemDefinition(item.itemId);
+      return {
+        ...item,
+        artUrl: definition.lpcAssetId
+          ? (getLpcAssetPath('', definition.lpcAssetId, LpcAnimationState.Walk) ?? undefined)
+          : undefined,
+        fallbackIcon: getItemCategoryIcon(definition.itemType),
+      };
+    });
   }
 
   get slotOrder(): readonly EquipmentSlot[] {

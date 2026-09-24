@@ -277,7 +277,10 @@ class GameUIViewModel
         isTransitioning: this._overlays.isTransitioning,
         autoSaveStatus: this._overlays.autoSaveStatus,
         interactionPromptVisible: this.interactionPromptVisible,
-        hasObjective: this.questTrackerViewModel.hasQuests,
+        hasObjective:
+          this.questTrackerViewModel.hasQuests ||
+          this.questOverlayVisible ||
+          this.onboardingHintVisible,
         hasOnboardingHint: this.onboardingHintVisible,
         hasPlayerStatus: this.showHpBar,
         hasHotbar: this.showHotbar,

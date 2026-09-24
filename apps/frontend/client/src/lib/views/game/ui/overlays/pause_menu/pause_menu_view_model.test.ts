@@ -21,6 +21,18 @@ const createViewModel = (overlay: PauseMenuOverlayCapabilities = createPauseMenu
   });
 
 describe('PauseMenuViewModel — overlay state', () => {
+  test('shows the successful save confirmation before the campaign timestamp', () => {
+    const viewModel = createViewModel(
+      createPauseMenuOverlay({
+        saveMessage: 'Game Saved!',
+        lastSavedAt: '2026-09-24T16:57:28Z',
+      }),
+    );
+
+    expect(viewModel.saveStatusLabel).toBe('Game Saved!');
+    expect(viewModel.lastSavedLabel).toContain('Last saved');
+  });
+
   test('reads saving state, message, and last-saved projection from the overlay capability', () => {
     const viewModel = createViewModel(
       createPauseMenuOverlay({

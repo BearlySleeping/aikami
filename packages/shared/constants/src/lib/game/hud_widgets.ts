@@ -340,7 +340,7 @@ export const HUD_LAYOUT_PRESETS = [
       {
         widgetId: 'player-status',
         visibility: 'always',
-        anchor: 'top-end',
+        anchor: 'top-start',
         order: 1,
         density: 'comfortable',
         scale: 1,
@@ -412,8 +412,8 @@ export const HUD_LAYOUT_PRESETS = [
       {
         widgetId: 'onboarding-hint',
         visibility: 'contextual',
-        anchor: 'top-end',
-        order: 4,
+        anchor: 'bottom-start',
+        order: 1,
         density: 'comfortable',
         scale: 1,
       },
