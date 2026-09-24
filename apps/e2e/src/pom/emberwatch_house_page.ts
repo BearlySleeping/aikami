@@ -411,11 +411,16 @@ export class EmberwatchHousePage {
     if (raw.player?.playerX === undefined || raw.player.playerY === undefined) {
       throw new Error('C-550 evidence: engine position diagnostics are unavailable');
     }
-    const hasEngineCamera =
+    const hasFiniteEngineCamera =
       typeof raw.engine?.cameraX === 'number' &&
       Number.isFinite(raw.engine.cameraX) &&
       typeof raw.engine.cameraY === 'number' &&
       Number.isFinite(raw.engine.cameraY);
+    const engineCameraIsUninitialized =
+      raw.engine?.cameraX === 0 &&
+      raw.engine.cameraY === 0 &&
+      (raw.player.playerX !== 0 || raw.player.playerY !== 0);
+    const hasEngineCamera = hasFiniteEngineCamera && !engineCameraIsUninitialized;
     const cameraX = hasEngineCamera
       ? (raw.engine?.cameraX ?? raw.player.playerX)
       : raw.player.playerX;
