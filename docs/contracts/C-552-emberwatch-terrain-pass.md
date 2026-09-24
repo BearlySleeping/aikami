@@ -19,14 +19,14 @@ created_at: "2026-09-24T13:16:05Z"
 | Field | Value |
 |---|---|
 | **Source** | Human P2 acceptance sheet `/tmp/opencode/p2_acceptance_sheet.png`; `docs/reference/emberwatch-polish-review-and-plan.md` §1.6 and §5 terrain production guidance; C-545 ambient policy; C-546 pinned terrain GIDs; C-548 evidence plane; C-549 grass metrics; C-550 merged baseline |
-| **Target** | `scripts/src/lib/ops/` terrain/stone/grass/sand painters and focused tests; generated Emberwatch atlas/maps/hashes/reports; C-548 evidence capture output under `/tmp/opencode/c552-evidence/`; this contract |
+| **Target** | `scripts/src/lib/ops/` terrain/stone/grass/sand painters, runtime grass eligibility, focused tests; generated Emberwatch atlas/maps/hashes/reports; C-548 evidence capture output under `/tmp/opencode/c552-evidence-r2/`; this contract |
 | **Type** | thin |
 | **Priority** | P2 — bridge and house assemblies are accepted; terrain transitions and floor value now dominate the remaining environment defects |
 | **Dependencies** | C-545 (ambient parity), C-546 (append-only atlas/GID pinning), C-548 (candidate/evidence/entity-texture lane), C-549 (grass metrics and seeded patches), C-550 (merged baseline / #392) |
 | **Status** | implemented |
 | **Promotion** | — |
 | **Docs Impact** | internal → contract and evidence index only; no player-facing docs page |
-| **Contract version** | 1.0.0 |
+| **Contract version** | 1.1.0 |
 | **Production Surface** | `tooling: bun run emberwatch:studio` regenerates and serves the terrain candidate; `tooling: bun run emberwatch:validate` validates it; runtime consumes the generated atlas/maps through production `/game` |
 
 ## Problem & Baseline Evidence
@@ -47,11 +47,11 @@ Across all five Emberwatch maps, terrain families meet in soft irregular boundar
 
 ## Success Measures
 
-- **Transition quality:** each of the 16 corner16 cases has no uninterrupted 45-degree boundary run longer than 4 px, and edge-row/column boundary signatures meet their matching neighbour cases without a seam.
-- **Stone restraint:** measured stone luminance sits close to the dirt/path family, local mortar-to-stone contrast is bounded, and every map using `stone_floor` resolves the same corrected frame.
-- **Grass restraint:** every grass variant mean remains within ±4% of base; edge continuity remains within 1.5 luminance; explicit tuft occupancy is at most 3% of eligible grass cells and preserves paths/banks.
+- **Transition quality:** all 16 corner16 cases remain opaque, seam-compatible, and free of grass-hue leakage; isolated profiles are audited for short-period correlation, while the acceptance threshold is measured on actual 3×3 placed-cell composites at the crossing landing.
+- **Stone restraint:** measured stone luminance sits close to the dirt/path family; every frame actually used on a stone/cobble floor cell is enumerated from map GIDs and stays within the cobble local-contrast bound. GID 34 is reserved for restrained indoor flagstone and GID 47 is an outdoor cobble variant.
+- **Grass restraint:** every grass variant mean remains within ±4% of base; explicit tuft occupancy is at most 3% of authored grass cells; tuft frames are never selected on water, sand, path, bridge, stone, or other non-grass cells.
 - **Geometry identity:** all five regenerated collision layers are byte-identical to `origin/main`; object identities and map extents remain unchanged.
-- **Production evidence:** same-camera 1920×1080 DPR1 noon before/after captures cover the named crossing, square, old-road and remaining-map views, plus square dawn/night; WebGL and visible-entity texture guards pass; montage and index live under `/tmp/opencode/c552-evidence/`.
+- **Production evidence:** same-camera 1920×1080 DPR1 noon before/after captures cover the named crossing, square, old-road and remaining-map views, plus square dawn/night; 1280×720 close-ups cover the landing, merchant floor, and inn floor; WebGL and visible-entity texture guards pass; montage and index live under `/tmp/opencode/c552-evidence-r2/`.
 - **Scope:** fewer than 100 files; separate painter, regeneration, and documentation commits.
 
 ## Existing System & Reuse Map
@@ -68,7 +68,7 @@ Across all five Emberwatch maps, terrain families meet in soft irregular boundar
 
 ## Overview
 
-C-552 is a painter-and-evidence pass, not a map redesign. It replaces geometric corner16 diagonals with deterministic dithered/noise-shaped boundaries, calms the shared stone-floor material, and adds a very sparse tuft layer to the existing restrained grass family. The same fixed terrain GIDs feed all five regenerated maps. Sand receives only a base-palette correction if the dawn tint analysis proves the authored base is responsible.
+C-552 is a terrain-material and evidence pass, not a map-layout redesign. It replaces geometric corner16 diagonals with deterministic dithered/noise-shaped boundaries, calms the shared outdoor stone material, adds a very sparse tuft layer to the existing restrained grass family, and gives interiors a dedicated existing floor GID without changing dimensions, object layers, or collision. The same fixed terrain GIDs feed all five regenerated maps. Sand receives only a base-palette correction if the dawn tint analysis proves the authored base is responsible.
 
 ## Design Reference
 
@@ -90,7 +90,7 @@ One bounded terrain-material pass. Ambient engineering, map composition, archite
 
 **Given** the existing fixed terrain GID block 48–127
 **When** every corner16 frame is painted by the real atlas producer
-**Then** each boundary is dithered/noise-shaped with consistent material width, no uninterrupted 45-degree boundary run exceeds 4 px, and matching edge-row/column signatures tile continuously across all 16 cases. Existing GID-to-frame mappings remain byte-for-byte stable.
+**Then** each boundary is dithered/noise-shaped with a low-contrast fringe, matching edge-row/column signatures tile continuously across all 16 cases, and an actual 3×3 placed-cell composite at each crossing-landing window has no near-linear fringe run longer than 8 px and stays below the recorded short-period correlation bound. Existing GID-to-frame mappings remain byte-for-byte stable.
 
 **Verification**: `tooling: bun moon run scripts:test` — focused C-552 pixel/mask tests against `packAtlas()` output; terrain GID table test; `tooling: bun run emberwatch:validate`; `tooling: bun moon run scripts:validate`.
 
@@ -98,7 +98,7 @@ One bounded terrain-material pass. Ambient engineering, map composition, archite
 
 **Given** the one shared `stone_floor` frame used by village, inn, merchant, old road, and shrine
 **When** the atlas is regenerated
-**Then** the material uses larger irregular stones/cobble, bounded mortar contrast, and a luminance close to the authored dirt/path family. Pixel metrics assert explicit upper/lower luminance and contrast bounds against grass/dirt means on all five maps, and the same corrected frame resolves wherever `stone_floor` is used.
+**Then** the outdoor material uses larger irregular stones/cobble with bounded mortar contrast; GID 34 supplies a restrained indoor flagstone frame; and the test enumerates every frame used on a stone/cobble cell across the five builders rather than checking a hand-picked GID list.
 
 **Verification**: `tooling: bun moon run scripts:test` — C-552 stone pixel/metric tests and five-map frame-use assertions; visual evidence for every map.
 
@@ -106,7 +106,7 @@ One bounded terrain-material pass. Ambient engineering, map composition, archite
 
 **Given** C-549's shared grass base, dark patch and variant material
 **When** grass variants and map placement are regenerated
-**Then** broad seeded value patches remain, every grass variant mean stays within ±4% of base, edge means remain within 1.5 of base, and explicit small tufts occupy at most 3% of eligible grass cells with irregular connected components. No tuft is placed on paths, water, sand, stone, building pads, banks or other non-grass cells; no old full-cell square pattern returns.
+**Then** broad seeded value patches remain, every grass variant mean stays within ±4% of base, explicit small tufts occupy at most 3% of authored grass cells, and no tuft frame is selected on water, sand, path, bridge, stone, building pads, banks, or other non-grass cells.
 
 **Verification**: `tooling: bun moon run scripts:test` — C-549 metrics retained plus C-552 tuft occupancy/component/exclusion assertions on all five maps.
 
@@ -122,7 +122,7 @@ One bounded terrain-material pass. Ambient engineering, map composition, archite
 
 **Given** the five `origin/main` C-550 maps
 **When** the existing map generator runs after painter changes
-**Then** each regenerated map's collision layer is byte-identical to its baseline counterpart; extents, object layers, locked IDs, and authored map geometry are unchanged. Repeating generation is byte-deterministic. Generated files are changed only through their producers.
+**Then** each regenerated map's collision layer is byte-identical to its baseline counterpart; extents, object layers, locked IDs, and authored map geometry are unchanged. Interior floor GID substitutions are limited to the shop floor and inn threshold and do not alter collision. Repeating generation is byte-deterministic. Generated files are changed only through their producers.
 
 **Verification**: C-552 regression test compares parsed collision-layer bytes/JSON for all five maps against pinned baseline fixtures or `origin/main` content; two generator runs produce no diff; `tooling: bun run emberwatch:validate`; `tooling: bun run emberwatch:locked-ids`; `tooling: bun run emberwatch:audit`.
 
@@ -130,7 +130,7 @@ One bounded terrain-material pass. Ambient engineering, map composition, archite
 
 **Given** the read-only production catalog snapshot and before/after candidate planes
 **When** captures run at 1920×1080 DPR1, default world zoom, overlays off
-**Then** before/after pairs cover village crossing, village square, old-road crossing, and one named view for each remaining map, with additional square dawn/night pairs. WebGL is asserted; visible entity textures are real and fingerprint-covered; requested camera cells match actual cells. `magick montage` produces `/tmp/opencode/c552-evidence/sheet.png`; individual PNGs and `index.md` record identity, camera, game hour, hashes and observations.
+**Then** before/after pairs cover village crossing, village square, old-road crossing, and one named view for each remaining map, with additional square dawn/night pairs and 1280×720 landing/merchant/inn close-ups. WebGL is asserted; visible entity textures are real and fingerprint-covered; requested camera cells match actual cells. `magick montage` produces `/tmp/opencode/c552-evidence-r2/sheet.png`; individual PNGs and `index.md` record identity, camera, game hour, hashes and observations.
 
 **Verification**: C-548/C-550 capture lane and guard outputs; evidence index/manifest and contact-sheet existence; no Canvas2D or placeholder-entity capture is accepted.
 
@@ -161,6 +161,7 @@ Changes to ACs or scope require a version bump and user approval.
 | Version | Date | Change | Approved by |
 |---|---|---|---|
 | 1.0.0 | 2026-09-24 | Initial contract from accepted P2 terrain findings and direct user request | user (direct prompt) |
+| 1.1.0 | 2026-09-24 | R2 remediation: water-hue exclusion, interior/outdoor floor split, placed-cell transition evidence, and recaptured evidence set | user (direct prompt) |
 
 ## Promotion Lifecycle
 
@@ -177,29 +178,47 @@ Changes to ACs or scope require a version bump and user approval.
 
 ### Summary
 
-Completed the C-552 painter-and-evidence pass without changing map geometry,
-ambient curves, buildings, props, UI, or the reserved terrain GID block. The
-atlas painter now uses rounded, coherent-noise corner16 coverage; shared stone
-and cobble use wrapped irregular stones with restrained mortar contrast; grass
-keeps C-549's broad value patches and adds only a 1.8% sparse detail selection;
-and sand is slightly warmer/yellower. All five maps regenerate deterministically
-with byte-identical collision layers.
+Completed the C-552 R2 remediation without changing map dimensions, object
+identity, collision geometry, buildings, props, UI, ambient curves, or the
+reserved terrain GID block. Water corner frames now have a blue wet-bank
+under-material and a full-mask endpoint invariant; the runtime only selects
+sparse grass variants for authored grass cells; GID 34 is a restrained indoor
+flagstone while GID 47 is a calm outdoor cobble variant; and the placed-cell
+landing regression measures the real mask sequence rather than isolated frames.
+All five maps regenerate deterministically with byte-identical collision layers.
 
 ### AC Status
 
 | AC | Status | Notes |
 |---|---|---|
-| AC-1 | ✅ | All five corner16 families pass all-16 mask coverage, opacity, GID pinning, seam classification, and ≤4 px straight-run tests; max measured run is 4 px. |
-| AC-2 | ✅ | Shared stone mean luminance `116.877`, p90–p10 `14.068`, p95 local contrast `12.068`; no 8 px bevel grid; all five builders place `stone_floor`. |
-| AC-3 | ✅ | Real five-map autotiler occupancy is village `1.593%`, old road `1.788%`, shrine `2.599%`; interiors have no grass channel; non-grass contamination is `0`. C-549 mean/edge tests remain green. |
-| AC-4 | ✅ | Dawn ambient remains `[0.45, 0.25, 0.15]`; only sand base changed to `[218, 198, 132]`. No ambient/environment curve file changed. |
-| AC-5 | ✅ | All five serialized collision-layer SHA-256 digests match C-550; two generator runs produce no map diff. |
-| AC-6 | ✅ | Eight same-camera 1920×1080 DPR1 before/after pairs plus square dawn/night; WebGL and visible-entity texture guards pass; montage and index are under `/tmp/opencode/c552-evidence/`. |
+| AC-1 | ✅ | All five corner families retain GID pinning, opacity, endpoint-pure mask 15, seam classification, and bounded short-period profiles. Actual 3×3 landing composites at origins `(36,9)`, `(37,9)`, `(38,9)` have max near-linear fringe run `8`; max lag correlations are `0.967`, `0.693`, and `0.633`. |
+| AC-2 | ✅ | Used floor frames are enumerated from all five builders: `stone_floor` p95 local contrast `12.068`, `flagstone` `15.213`, `path_tough` `15.213`, and indoor `stone_floor_variant` `9.842`; shop/inn use GID 34 and no outdoor GID 6/47. |
+| AC-3 | ✅ | Authored-grass tuft occupancy is village `1.593%`, old road `1.788%`, shrine `2.599%`; interiors report `0`; water/sand/path/bridge/stone contamination is `0`. |
+| AC-4 | ✅ | Dawn ambient remains `[0.45, 0.25, 0.15]`; sand mean is `[217.819, 197.961, 131.641]` with R−G `19.858` and G−B `66.320`. No ambient curve changed. |
+| AC-5 | ✅ | All five serialized collision-layer SHA-256 digests and data arrays match C-550; two generator runs produce identical map hashes. |
+| AC-6 | ✅ | Eleven same-camera pairs per plane: eight 1920×1080 DPR1 views plus three 1280×720 close-ups; WebGL/entity guards pass; evidence is under `/tmp/opencode/c552-evidence-r2/`. |
 
-### Files Created
+### R2 root-cause report
+
+| Finding | Root cause and responsible code | R2 correction / proof |
+|---|---|---|
+| Water cells showed green flecks | The C-552 water corner painter used `paintGrass` as its under-material in `generate_emberwatch_atlas.ts:587-591`. The organic compositor also allowed a few low-coverage pixels in a fully-owned frame; `paintCornerFrame()` wrote those pixels opaque, so the alpha test missed them. This was not tuft decal placement: village stream cells are authored as `G.WATER` by `emberwatch_map_village.ts:182-214`, and bridge GIDs are separate. | `paintWaterUnderlay()` in `generate_emberwatch_terrain_frames.ts:299-309` removes grass from the water underlayer; `cornerCoverage()` now makes mask 15 endpoint-pure at `generate_emberwatch_terrain_frames.ts:447-456`. `autotile.ts:440-448` restricts sparse variants to authored `grass` IDs. All 16 packed water frames report `0` grass-hue pixels; map-level non-grass tuft contamination is `0`. |
+| Light square patches remained on cobble | The legacy `paintFlagstone()` painted four hard 12/13 px rectangles over the new stone base. GID 47 was scattered by the shop/village/shrine builders, and GID 34 shared the same painter. The old test measured only `stone_floor.png`, so it could not see the high-contrast frame. | GID 34 now routes to `paintInteriorFlagstone()` and GID 47 to `paintCobbleLight()` in `generate_emberwatch_atlas.ts:656-662`; the shop and inn threshold use GID 34 in `emberwatch_map_retained.ts:69-79,177-207`. The used-frame test enumerates all floor GIDs from the five builders; observed p95 local contrast is `9.842` (GID 34), `12.068` (GID 6), `15.213` (GID 47), and `15.213` (GID 5). |
+| Crossing landing had a sawtooth | `paintNoticeBoardApproach()` writes the south landing after the stream in `emberwatch_map_village.ts:421-427`; the final placed mask sequence is `14,15,13,12,12`. The old isolated diagonal-run test saw at most four pixels and ignored the repeated tile-local contour. | `generate_emberwatch_terrain_frames.ts:371-444` gives adjacent and three-corner masks signed, low-frequency fields, and `:592-605` uses a low-contrast dirt fringe. The regression composites the full resolved map before cropping 3×3 actual cells at the three landing origins; max near-linear run is `8`, and baseline C-550 measured `15` with max lag correlation `0.979–0.981`. |
+| Interiors read as outdoor cobble | Both the merchant floor and inn threshold used shared outdoor GID 6; GID 47 supplied the bright square wear. GID 6 remains the outdoor cobble frame, while GID 34 is now the dedicated indoor flagstone frame; the inn common room remains wood GID 7/35. | Builder assertions verify no GID 6 or GID 47 on the shop/inn interior surfaces, GID 34 on both thresholds, and wood in the inn common room. |
+| Hard dirt↔grass rectangles in the ward square | This remains report-only. `SQUARE_SPANS` at `emberwatch_map_village.ts:453-464` is painted before later primary paths, pads, ward-ring calls, building shells, and flagstone scatter (`:370-373`, `:405-411`, `:470-487`, `:584-589`, `:616-617`). `buildMapJson()` maps path/stone/sand/bridge frames to an empty terrain ID (`generate_emberwatch_maps.ts:194-233`), while `cornerMaskForCell()` gives a dirt island against base grass a full `15` mask (`autotile.ts:252-287`). Those cells therefore have no corner16 edge to soften. | No R2 map rewrite was made. Minimal follow-up: add explicit semantic terrain overrides for the baked visual cells (or a dedicated transition terrain) and then organic-author the square boundary; keep this separate from the painter pass. |
+
+### R2 metrics and evidence
+
+- Metrics: `/tmp/opencode/c552-evidence-r2/metrics.json`.
+- Baseline comparison: `/tmp/opencode/c552-evidence-r2/baseline-metrics.json` (water grass-hue pixels `4352`, floor-frame contrasts up to `29.644`, landing near-linear run `15`).
+- Collision proof: `/tmp/opencode/c552-evidence-r2/collision-proof.json`; all five current digests equal C-550 and two generator runs are deterministic.
+- Baseline/current manifests: `/tmp/opencode/c552-evidence-r2/baseline/capture_manifest.json` and `/tmp/opencode/c552-evidence-r2/current/capture_manifest.json`.
+- Contact sheet: `/tmp/opencode/c552-evidence-r2/sheet.png`; index: `/tmp/opencode/c552-evidence-r2/index.md`.### Files Created
 
 | File | Purpose |
 |---|---|
+| `scripts/src/lib/ops/generate_emberwatch_corner_painters.ts` | Isolated corner16 material routing keeps the atlas packer within its source-size budget. |
 | `scripts/src/lib/ops/generate_emberwatch_terrain_frames.ts` | Extracted terrain materials, irregular stone/cobble, warmer sand, and organic corner compositor. |
 | `scripts/src/lib/ops/emberwatch_terrain_pass.test.ts` | Real packed-atlas metrics, all-mask/seam/GID checks, five-map grass exclusion/occupancy, sand, and collision identity. |
 | `docs/contracts/C-552-emberwatch-terrain-pass.md` | Contract and execution report. |
@@ -211,10 +230,10 @@ with byte-identical collision layers.
 | `scripts/src/lib/ops/generate_emberwatch_atlas.ts` | Delegates terrain materials/compositor to the extracted module; fixed terrain block and packer unchanged. |
 | `scripts/src/lib/ops/generate_emberwatch_atlas.test.ts` | Updated painter dispatch/pixel expectations for extracted materials. |
 | `scripts/src/lib/ops/generate_emberwatch_grass_frames.ts` | Fixed material phase and irregular low-contrast tuft details. |
-| `packages/frontend/engine/src/assets/autotile.ts` | Coherent broad grass patches, 1.8% sparse detail selection, and base-frame fallback for non-grass/empty channels. |
+| `packages/frontend/engine/src/assets/autotile.ts` | Sparse variants are eligible only for authored base-terrain IDs, preventing tuft frames under baked water-adjacent/non-terrain cells while preserving base fallback resolution. |
 | `packages/frontend/engine/src/assets/autotile.test.ts` | Variant distribution, determinism, base dominance, and non-grass coverage regression tests. |
-| `scripts/src/lib/ops/guard_source_file_size_baseline.json` | Sanctioned reduction after atlas extraction. |
-| `scripts/src/lib/ops/guard_cognitive_complexity_baseline.json` | Sanctioned reduction after test decomposition. |
+| `scripts/src/lib/ops/emberwatch_map_retained.ts` | Shop and inn thresholds use the dedicated GID 34 indoor flagstone; collision arrays remain unchanged. |
+| `scripts/src/lib/ops/guard_source_file_size_baseline.json` | Sanctioned reduction after extracting corner painter routing from the atlas packer. |
 | `docs/reference/emberwatch-visual-report.json` | Regenerated derived report; notice-board placement now matches the C-549 authored map. |
 
 ### Generated outputs and evidence
@@ -222,37 +241,34 @@ with byte-identical collision layers.
 - `bun run emberwatch:studio --no-client --no-serve` completed the canonical
   portrait/audio/atlas/prop/map/scan/seed pipeline; the terrain atlas is
   `544×340`, 159 frames, and the derived seed has 81 rows.
-- Tracked map JSON, manifest, and atlas JSON hashes are unchanged from the
-  accepted baseline. The gitignored atlas WebP and derived seed are the only
-  changed generated artifacts.
-- Evidence index: `/tmp/opencode/c552-evidence/index.md`.
-- Contact sheet: `/tmp/opencode/c552-evidence/sheet.png`.
-- Collision proof: `/tmp/opencode/c552-evidence/collision-proof.json`.
-- Metrics: `/tmp/opencode/c552-evidence/metrics.json`.
+- Regenerated map JSON changes are limited to interior floor GIDs in `inn.json`
+  and `merchant_shop.json`; the terrain block, atlas frame rectangles, and
+  collision layers remain pinned.
+- Evidence index: `/tmp/opencode/c552-evidence-r2/index.md`.
+- Contact sheet: `/tmp/opencode/c552-evidence-r2/sheet.png`.
+- Collision proof: `/tmp/opencode/c552-evidence-r2/collision-proof.json`.
+- Metrics: `/tmp/opencode/c552-evidence-r2/metrics.json` and baseline comparison
+  `/tmp/opencode/c552-evidence-r2/baseline-metrics.json`.
 - Baseline/current capture manifests:
-  `/tmp/opencode/c552-evidence/baseline/capture_manifest.json` and
-  `/tmp/opencode/c552-evidence/current/capture_manifest.json`.
+  `/tmp/opencode/c552-evidence-r2/baseline/capture_manifest.json` and
+  `/tmp/opencode/c552-evidence-r2/current/capture_manifest.json`.
 
 ### Validation
 
-- `bun moon ci --base=origin/main` — PASS (54 completed, 2 skipped).
-- `bun moon run :validate` — PASS (174 tasks, 8 cached).
-- `bun moon run scripts:test -- --timeout=30000` — 2,161 pass, 0 fail.
-- `bun moon run frontend-engine:test` — 1,839 pass, 1 todo, 0 fail.
-- Focused C-552 terrain suite — 17 pass; C-549 grass + atlas suite — 27 pass.
+- `bun moon ci --base=origin/main` — PASS (54 completed, 2 skipped, 15 cached).
+- `bun moon run :validate` — PASS (174 tasks, 121 cached).
+- `bun moon run scripts:test -- --timeout=30000` — 2,169 pass, 0 fail.
+- `bun moon run frontend-engine:test` — 1,840 pass, 1 todo, 0 fail.
+- Focused C-552 terrain suite — 25 pass; atlas packer regression — 9 pass.
 - `bun run scripts/src/lib/ops/run_guards.ts` — 10/10 structural guards pass.
 - `emberwatch:validate`, `emberwatch:audit`, `emberwatch:locked-ids`,
   `emberwatch:visual-report`, and `emberwatch:visual-audit` — pass.
-- The repository's default full `scripts:test` still exposes two known
-  five-second `emberwatch:release --plan` subprocess timeouts under load; the
-  complete 10-test release file passes with `--timeout=30000`. No C-552 test
-  failed.
+- Canonical Studio regeneration — pass; two map-generation runs are byte-identical.
 
 ### Commits
 
-- `b601db03f83b081b14ac086065028386fcc523c1` —
-  `feat(emberwatch): C-552 terrain material pass`
-- `83b4473` — `chore(emberwatch): regenerate C-552 reports`
-- `docs(emberwatch): record C-552 terrain evidence` (current commit)
+- `0b8f40d` — `fix(emberwatch): close C-552 terrain review gaps`
+- `b8c19cc` — `chore(emberwatch): regenerate C-552 interior floors`
+- `docs(emberwatch): record C-552 R2 evidence` (this commit)
 
 Pull request: https://github.com/BearlySleeping/aikami/pull/395
