@@ -317,6 +317,18 @@ describe('C-550 — assertions and stable identities', () => {
     }
   });
 
+  test('terrain overrides cannot erase explicit facade ground art', () => {
+    const map = makeHouseMap();
+    map.terrainOverrides = [[3, 6, 'dirt']];
+    const ground = [...map.ground];
+    const collision = [...map.collision];
+    expect(() => placeTestHouse(map)).toThrow(/terrain override cell\(s\).*\(3,6\).*ground art/);
+    expect(map.ground).toEqual(ground);
+    expect(map.collision).toEqual(collision);
+    expect(map.groundExtra).toBeUndefined();
+    expect(map.overheadExtra).toBeUndefined();
+  });
+
   test('the village keeps its existing transition graph and other building shells', () => {
     const { map, objectLayers } = buildVillage();
     const transitions = objectLayers
@@ -336,9 +348,25 @@ describe('C-550 — assertions and stable identities', () => {
     expect(contribution(map.overheadExtra, 51, 5)).toBe(HOUSE_FRAMES.roofGableLeft);
     expect(contribution(map.decorExtra, 51, 10)).toBe(HOUSE_FRAMES.foundationShadow);
   });
+
+  test('the real village keeps the hut approach and upper roof reachable from the gate', () => {
+    const { map } = buildVillage();
+    const gate = { c: 32, r: 44 };
+    expect(reachable(map, gate, { c: 54, r: 10 })).toBe(true);
+    expect(reachable(map, gate, { c: 54, r: 6 })).toBe(true);
+  });
 });
 
 describe('C-550 — compiled map layers', () => {
+  test('rejects terrain overrides that overlap explicit ground contributions', () => {
+    const map = makeHouseMap();
+    map.groundExtra = [[3, 6, HOUSE_FRAMES.facadeWall]];
+    map.terrainOverrides = [[3, 6, 'dirt']];
+    expect(() => buildMapJson({ map, objectLayers: [] })).toThrow(
+      /terrain override \(3,6\) overlaps an explicit ground contribution/,
+    );
+  });
+
   test('facade/foundation use ground, contact shadow uses decor, and upper roof uses overhead', () => {
     const map = makeHouseMap();
     placeTestHouse(map);

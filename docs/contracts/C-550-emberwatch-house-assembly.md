@@ -228,7 +228,7 @@ Changes to ACs or scope require a version bump and user approval.
 
 ### Summary
 
-Replaced only the Emberwatch village's north-east hut `building()` call with one deterministic south-facing raised-house assembly. Added 15 procedural house frames at append-only GIDs 146–160, explicit ground/decor/overhead contributions, terrain-aware walkability assertions, actor-footprint navigation coverage, and a renderer regression for preserving facade art while autotiling terrain. All other village buildings, object identities, and transitions remain unchanged. Live WebGL evidence is indexed under `/tmp/opencode/c550-evidence/`; hut enter/exit evidence remains explicitly blocked because the approved exterior-only scope has no hut interior or transition edge.
+Replaced only the Emberwatch village's north-east hut `building()` call with one deterministic south-facing raised-house assembly. Added 15 procedural house frames at append-only GIDs 146–160, explicit ground/decor/overhead contributions, terrain-aware walkability assertions, actor-footprint navigation coverage, and a renderer regression for preserving facade art while autotiling terrain. All other village buildings, object identities, and transitions remain unchanged. Added a POM-backed production `/game` E2E spec and reproducible WebGL capture script, plus real-village reachability and terrain-override ownership regressions. Live WebGL evidence is indexed under `/tmp/opencode/c550-evidence/`; hut enter/exit evidence remains explicitly blocked because the approved exterior-only scope has no hut interior or transition edge.
 
 ### AC Status
 
@@ -236,8 +236,8 @@ Replaced only the Emberwatch village's north-east hut `building()` call with one
 |---|---|---|
 | AC-1 | ✅ | `placeHouse` authors the exact 51–56 × 5–9 footprint, door pair, roof/facade/foundation roles, and contact shadow; 15 atlas frames and pixel tests pass. |
 | AC-2 | ✅ | Returned door anchor is `(54,9)`; village transitions remain exactly `1005`, `1006`, `1007`; no hut trigger, arrival marker, or interior map was invented. |
-| AC-3 | ✅ | Upper roof rows are overhead/clear, front eave and foundation are solid, approach is reachable, and the base-to-generated collision delta is 12 cells at the hut's upper-roof band only. |
-| AC-4 | ✅ | 10 stills and 9 walk frames captured with live WebGL metadata and indexed; enter/exit is recorded as blocked rather than fabricated. |
+| AC-3 | ✅ | Upper roof rows are overhead/clear, front eave and foundation are solid, the real village gate reaches both the approach and upper roof, and the base-to-generated collision delta is 12 cells at the hut's upper-roof band only. |
+| AC-4 | ✅ | POM-backed production E2E plus a reproducible capture script record 8 automated stills and 8 automated walk frames with live WebGL metadata, candidate/artifact fingerprints, and image hashes; enter/exit is recorded as blocked rather than fabricated. |
 
 ### Files Created
 
@@ -249,6 +249,10 @@ Replaced only the Emberwatch village's north-east hut `building()` call with one
 | `scripts/src/lib/ops/generate_emberwatch_assembly_frames.ts` | Shared bridge/house atlas dispatch seam |
 | `scripts/src/lib/ops/emberwatch_house_assembly.test.ts` | Layout, door, collision, navigation, terrain, layer, and pixel-art tests |
 | `packages/frontend/engine/src/systems/emberwatch_house_rendering.test.ts` | Ground filtering, layer-band, and overhead occlusion regressions |
+| `apps/e2e/src/pom/emberwatch_house_page.ts` | Production-route house page object with map loading, movement, position, tutorial, and WebGL probes |
+| `apps/e2e/scripts/capture_c550_house.ts` | Reproducible candidate capture script with commit/artifact/image fingerprints |
+| `apps/e2e/tests/game/emberwatch_house.spec.ts` | Production `/game` E2E for WebGL, walk-behind, and threshold blocking |
+| `apps/e2e/src/visual/c550_house_expected_artifacts.json` | Expected generated-artifact fingerprint for the capture lane |
 | `docs/contracts/C-550-emberwatch-house-assembly.md` | Contract and this execution report |
 | `/tmp/opencode/c550-evidence/index.md` | WebGL still/walk evidence index and enter/exit blocker record |
 
@@ -263,6 +267,8 @@ Replaced only the Emberwatch village's north-east hut `building()` call with one
 | `scripts/src/lib/ops/generate_emberwatch_maps.ts` | Serialize ground/decor/overhead contributions with conflict checks and terrain-channel preservation |
 | `scripts/src/lib/ops/generate_emberwatch_maps.test.ts` | Cover all new contribution arrays and bounds |
 | `scripts/src/lib/ops/emberwatch_studio.ts` | Watch the new authoring/painter seams during studio regeneration |
+| `apps/e2e/src/pom/index.ts` | Export the house page object |
+| `apps/e2e/package.json` | Expose the reproducible `capture:c550-house` command |
 | `packages/frontend/engine/src/systems/tilemap_render_system.ts` | Filter only terrain/duplicate baked-ground cells so explicit house ground art survives terrain rendering |
 | `content/packs/emberwatch/manifest.json` | Append GIDs 146–160 without renumbering existing tiles |
 | `content/packs/emberwatch/maps/village.json` | Regenerated hut footprint/layers/terrain/collision; other maps remain byte-stable |
@@ -283,6 +289,7 @@ Generated outputs were produced through the existing Emberwatch tooling; no gene
 5. `bun run emberwatch:audit` → `docs/reference/emberwatch-coverage-audit.json`.
 6. `bun run emberwatch:validate` → `docs/reference/emberwatch-map-validation.json`.
 7. `bun run emberwatch:studio --no-client` plus the local candidate snapshot/seed sequence → read-only WebGL candidate plane for `/game` evidence.
+8. `C550_CLIENT_URL=http://127.0.0.1:5384 C550_EVIDENCE_DIR=/tmp/opencode/c550-evidence/automated bun run --cwd apps/e2e capture:c550-house` → POM-backed production capture, WebGL assertion, candidate fingerprint, and image hashes.
 
 Current generated hashes recorded by the evidence plane:
 
@@ -297,7 +304,7 @@ Current generated hashes recorded by the evidence plane:
 - The actual base crossing on this branch is `39–41 × 7–8`; C-549 is not present on `origin/main`, so no unrelated crossing geometry was imported.
 - Comparing generated `village.json` with `origin/main` yields 12 collision changes, all at the hut's upper-roof cells (`c=51..56`, `r=5..6`). Object-layer spawn and transition arrays are byte-identical.
 - The door anchor `(54,9)` is a visual threshold anchor, not a standable actor cell. The foundation row remains the hard boundary and the real approach is row `10`/the clear landing cells.
-- Terrain overrides are accepted only for walkable terrain; a solid override on walk-behind, threshold, approach, or contact-shadow cells fails before mutation.
+- Terrain overrides are accepted only for walkable terrain; a solid override on walk-behind, threshold, approach, or contact-shadow cells fails before mutation, and any override overlapping explicit house ground art is rejected so architecture cannot be erased by terrain filtering.
 
 ### Deviations from Spec
 
@@ -305,23 +312,27 @@ Current generated hashes recorded by the evidence plane:
 - **The visual threshold is intentionally not actor-standable.** The door opening is visible and returns the canonical anchor, while the foundation/actor-footprint collision rule keeps the player on the reachable approach. This preserves truthful exterior behavior without inventing enter/exit semantics.
 - **C-549 is absent from this branch's base.** The collision audit therefore compares against the actual generated base rather than claiming C-549's alternate crossing delta.
 - **No human visual acceptance is claimed.** The WebGL captures are technical observations only; the evidence index is outside the tracked repository under `/tmp/opencode/c550-evidence/`.
+- **Review follow-up:** terrain overrides are now rejected on explicit house ground cells, real-village reachability is asserted from `village_gate`, and the production capture lane is POM-backed with candidate/artifact fingerprints and WebGL checks.
 
 ### Test Results
 
-- Unit (`bun moon run scripts:test`): **2087 pass / 0 fail**.
+- Unit (`bun moon run scripts:test`): **2090 pass / 0 fail**.
 - Unit (`bun moon run frontend-engine:test`): **1831 pass / 0 fail**.
 - E2E infrastructure unit (`bun run --cwd apps/e2e test:unit`): **32 pass / 0 fail**, 83 assertions. The e2e package exposes this script directly; its Moon config has no `test-unit` task.
+- Production house E2E (`bun run --cwd apps/e2e test -- --project=game tests/game/emberwatch_house.spec.ts`): **3 pass / 0 fail**; WebGL, walk-behind, and threshold blocker paths pass.
 - Emberwatch map validation: **0 warnings / 0 blockers**; coverage audit: **231 findings, 0 blockers**; locked identities unchanged; prop table in sync.
 - Affected lint, format, and typecheck: pass. Full `bun moon run :validate`: **174 tasks completed, 0 failed** (8 cached); source-size warnings are pre-existing advisory output.
 - Structural guards: **10/10 pass** via `bun run scripts/src/lib/ops/run_guards.ts`.
-- `bun moon ci --base=origin/main`: **54 completed, 0 failed, 2 skipped** (7 cached).
-- WebGL evidence: 10 stills + 9 runtime walk frames, renderer `webgl`, no page errors. Walk evidence reaches `(54,6)` behind the upper roof, stops at the blocked front eave, and stops at `(54,10)` when approaching the threshold.
+- `bun moon ci --base=origin/main`: **60 completed, 0 failed, 2 skipped** (18 cached).
+- WebGL evidence: automated capture produced 8 stills + 8 walk frames, renderer `webgl`, no page errors, and a passed expected-artifact fingerprint check. Walk evidence reaches `(54,6)` behind the upper roof, stays blocked at the front eave, and stays at `(54,10)` on the foundation-side approach.
 
 ### Evidence and blocked verification
 
 - Evidence index: `/tmp/opencode/c550-evidence/index.md`
-- Still metadata: `/tmp/opencode/c550-evidence/capture_index.json`
-- Walk metadata: `/tmp/opencode/c550-evidence/walk_index.json`
+- Automated identity/fingerprint: `/tmp/opencode/c550-evidence/automated/automated_manifest.json`
+- Automated still metadata: `/tmp/opencode/c550-evidence/automated/capture_index.json`
+- Automated walk metadata: `/tmp/opencode/c550-evidence/automated/walk_index.json`
+- Reproduction command: `C550_CLIENT_URL=http://127.0.0.1:5384 C550_EVIDENCE_DIR=/tmp/opencode/c550-evidence/automated bun run --cwd apps/e2e capture:c550-house`
 - Enter/exit verification is **blocked**, not passed: the village still has only transition IDs `1005`, `1006`, and `1007`, and no hut destination map or arrival marker exists. No existing edge or arrival identity was retargeted to manufacture a result.
 
 ### Known follow-ups

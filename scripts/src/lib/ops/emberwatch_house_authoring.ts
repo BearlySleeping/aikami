@@ -171,6 +171,44 @@ const houseContactShadowCells = (options: {
   return cells;
 };
 
+const houseGroundCells = (options: {
+  c0: number;
+  c1: number;
+  r1: number;
+}): Array<[number, number]> => {
+  const cells: Array<[number, number]> = [];
+  for (let r = options.r1 - 2; r <= options.r1; r++) {
+    for (let c = options.c0; c <= options.c1; c++) {
+      cells.push([c, r]);
+    }
+  }
+  return cells;
+};
+
+const hasTerrainOverride = (map: MapData, c: number, r: number): boolean =>
+  map.terrainOverrides?.some(([overrideC, overrideR]) => overrideC === c && overrideR === r) ??
+  false;
+
+const assertNoGroundTerrainOverrides = (options: {
+  map: MapData;
+  name: string;
+  c0: number;
+  c1: number;
+  r1: number;
+}): void => {
+  const badGroundOverrides = houseGroundCells({
+    c0: options.c0,
+    c1: options.c1,
+    r1: options.r1,
+  }).filter(([c, r]) => hasTerrainOverride(options.map, c, r));
+  if (badGroundOverrides.length === 0) {
+    return;
+  }
+  throw new Error(
+    `emberwatch_authoring.placeHouse: ${options.name} terrain override cell(s) ${formatCells(badGroundOverrides)} overlap explicit house ground art`,
+  );
+};
+
 const facadeRoleForCell = (options: {
   c: number;
   r: number;
@@ -298,6 +336,13 @@ const assertHouseInputs = (options: {
       `emberwatch_authoring.placeHouse: ${name} door column ${options.door.c} is not on the derived two-cell south facade`,
     );
   }
+  assertNoGroundTerrainOverrides({
+    map: options.map,
+    name,
+    c0: region.c0,
+    c1: region.c1,
+    r1: region.r1,
+  });
   const walkBehindCells: Array<[number, number]> = [];
   for (let r = region.r0; r < region.r1 - 2; r++) {
     for (let c = region.c0; c <= region.c1; c++) {

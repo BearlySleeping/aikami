@@ -153,11 +153,18 @@ const applyTerrainOverrides = (options: {
   map: MapData;
   overrides: ReadonlyArray<readonly [number, number, string]> | undefined;
   layers: LayerBuffers;
+  protectedCells: ReadonlySet<string>;
 }): void => {
-  const { map, overrides, layers } = options;
+  const { map, overrides, layers, protectedCells } = options;
   for (const [c, r, terrain] of overrides ?? []) {
     if (!contributionInBounds(map, c, r)) {
       continue;
+    }
+    const key = cellKey(c, r);
+    if (protectedCells.has(key)) {
+      throw new Error(
+        `generate_emberwatch_maps: terrain override (${c},${r}) overlaps an explicit ground contribution`,
+      );
     }
     layers.terrainChannel[idx(map, c, r)] = terrain;
   }
@@ -243,7 +250,12 @@ export const buildMapJson = ({
     layers,
     lowerBandCells: new Set([...groundExtraCells, ...decorExtraCells]),
   });
-  applyTerrainOverrides({ map: m, overrides: m.terrainOverrides, layers });
+  applyTerrainOverrides({
+    map: m,
+    overrides: m.terrainOverrides,
+    layers,
+    protectedCells: groundExtraCells,
+  });
 
   // A map whose terrain channel is ALL empty (interior maps like the inn)
   // OMITS the terrain property entirely. A present-but-empty channel would
