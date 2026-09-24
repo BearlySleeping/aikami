@@ -757,8 +757,8 @@
     "158": {
       "name": "house_door_open",
       "frame": "house_door_open.png",
-      "isWalkable": true,
-      "isWall": false,
+      "isWalkable": false,
+      "isWall": true,
       "provenance": {
         "source": "generated:gpt"
       }
