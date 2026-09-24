@@ -14,11 +14,28 @@
 // asserted as "newly water" are read out of the map, not hard-coded twice.
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { addComponent, addEntity, createWorld, hasComponent, set, type World } from 'bitecs';
 import manifest from '../../../../../content/packs/emberwatch/manifest.json';
 import map from '../../../../../content/packs/emberwatch/maps/village.json';
+import { registerAppearanceObservers } from '../components/appearance.ts';
+import { registerCollisionDataObservers } from '../components/collision_data.ts';
+import { registerCompanionObservers } from '../components/companion.ts';
+import { registerGridPositionObservers } from '../components/grid_position.ts';
+import { registerNPCDialogObservers } from '../components/npc_dialog.ts';
+import { PathFollow, registerPathFollowObservers } from '../components/path_follow.ts';
+import { Position, registerPositionObservers } from '../components/position.ts';
+import { registerSpatialLinkObservers } from '../components/spatial_link.ts';
+import { registerVelocityObservers, Velocity } from '../components/velocity.ts';
+import { registerVisualObservers } from '../components/visual.ts';
+import { createNPC } from '../entities/create_npc.ts';
 import type { CollisionGrid } from '../systems/collision_system.ts';
-import { resetCollisionGrid, setCollisionGrid } from '../systems/collision_system.ts';
+import {
+  insertIntoSpatialGrid,
+  resetCollisionGrid,
+  setCollisionGrid,
+} from '../systems/collision_system.ts';
 import { clampSpawnToWalkable, isPlayerSpawnBlocked } from '../systems/movement_system.ts';
+import { relocateRestoredEntities } from '../worker/companion_restore.ts';
 
 /** True when one GID makes its cell solid, given the manifest's tile table. */
 const gidBlocks = (
@@ -146,21 +163,135 @@ describe('C-549 — restoring onto a cell the crossing change made water', () =>
   });
 });
 
-describe('C-549 — companion restore path (reported, not changed)', () => {
-  it.todo('C-549 follow-up: relocate a companion restored onto newly-water terrain', () => {
-    // Pending product work: the restore path must apply the same walkability
-    // policy to a companion. Keep this behavioural contract next to the
-    // real map oracle; do not turn it into a source-text check.
+describe('C-556 — companion restore clamp', () => {
+  let world: World;
+
+  beforeEach(() => {
+    world = createWorld();
+    registerPositionObservers(world);
+    registerVelocityObservers(world);
+    registerVisualObservers(world);
+    registerNPCDialogObservers(world);
+    registerAppearanceObservers(world);
+    registerCollisionDataObservers(world);
+    registerGridPositionObservers(world);
+    registerSpatialLinkObservers(world);
+    registerCompanionObservers(world);
+    registerPathFollowObservers(world);
+  });
+
+  afterEach(() => {
+    resetCollisionGrid();
+  });
+
+  it('relocates a companion restored onto newly-water terrain next to the player', () => {
+    setCollisionGrid(villageCollisionGrid());
+    const playerX = 38 * 32 + 16;
+    const playerY = 7 * 32 + 16;
+    const playerEntityId = addEntity(world);
+    addComponent(world, playerEntityId, set(Position, { x: playerX, y: playerY }));
     const savedCompanion = { x: 39 * 32 + 16, y: 8 * 32 + 16 };
+    const companionEntityId = createNPC(world, {
+      npcId: 'village_guard',
+      npcName: 'Village Guard',
+      x: savedCompanion.x,
+      y: savedCompanion.y,
+      textureKey: 'npc',
+      dialog: '',
+      interactionRadius: 32,
+      isCompanion: true,
+    });
+    insertIntoSpatialGrid(companionEntityId);
+    addComponent(
+      world,
+      companionEntityId,
+      set(PathFollow, {
+        waypoints: new Float32Array([playerX, playerY]),
+        index: 0,
+        length: 1,
+        speed: 80,
+        repathAtMs: Date.now() + 10_000,
+        arriveRadius: 8,
+      }),
+    );
+    addComponent(world, companionEntityId, set(Velocity, { x: 20, y: 0 }));
     expect(isPlayerSpawnBlocked(savedCompanion.x, savedCompanion.y)).toBe(true);
 
-    const restoredCompanion = clampSpawnToWalkable(
-      savedCompanion.x,
-      savedCompanion.y,
-      isPlayerSpawnBlocked,
-      { width: map.width * 32, height: map.height * 32 },
-    );
-    expect(restoredCompanion).not.toEqual(savedCompanion);
-    expect(isPlayerSpawnBlocked(restoredCompanion.x, restoredCompanion.y)).toBe(false);
+    const relocations = relocateRestoredEntities({
+      world,
+      playerEntityId,
+      source: 'RESTORE_PLAYER',
+    });
+    const restoredX = Position.x[companionEntityId] ?? 0;
+    const restoredY = Position.y[companionEntityId] ?? 0;
+
+    expect(relocations.some((entry) => entry.entityId === companionEntityId)).toBe(true);
+    expect({ x: restoredX, y: restoredY }).not.toEqual(savedCompanion);
+    expect(isPlayerSpawnBlocked(restoredX, restoredY)).toBe(false);
+    const playerCell = { x: Math.floor(playerX / 32), y: Math.floor(playerY / 32) };
+    const restoredCell = {
+      x: Math.floor(restoredX / 32),
+      y: Math.floor(restoredY / 32),
+    };
+    expect(
+      Math.max(Math.abs(restoredCell.x - playerCell.x), Math.abs(restoredCell.y - playerCell.y)),
+    ).toBe(1);
+    expect(hasComponent(world, companionEntityId, PathFollow)).toBe(false);
+    expect(hasComponent(world, companionEntityId, Velocity)).toBe(false);
+    expect(PathFollow.repathAtMs[companionEntityId]).toBe(0);
+  });
+
+  it('uses the companion mask before falling back to the saved-cell ring search', () => {
+    const grid = new Array<boolean>(64).fill(false);
+    grid[1 * 8 + 1] = true;
+    setCollisionGrid({ width: 8, height: 8, tileSize: 32, grid });
+    const playerEntityId = addEntity(world);
+    addComponent(world, playerEntityId, set(Position, { x: 4 * 32 + 16, y: 4 * 32 + 16 }));
+    const companionEntityId = createNPC(world, {
+      npcId: 'moving-companion',
+      npcName: 'Moving Companion',
+      x: 1 * 32 + 16,
+      y: 1 * 32 + 16,
+      textureKey: 'npc',
+      dialog: '',
+      interactionRadius: 32,
+      isCompanion: true,
+    });
+    insertIntoSpatialGrid(companionEntityId);
+
+    for (const [x, y] of [
+      [3, 3],
+      [4, 3],
+      [5, 3],
+      [3, 4],
+      [5, 4],
+      [3, 5],
+      [4, 5],
+      [5, 5],
+    ] as const) {
+      const blockerEntityId = createNPC(world, {
+        npcId: `blocking-companion-${x}-${y}`,
+        npcName: 'Blocking Companion',
+        x: x * 32 + 16,
+        y: y * 32 + 16,
+        textureKey: 'npc',
+        dialog: '',
+        interactionRadius: 32,
+        isCompanion: true,
+      });
+      insertIntoSpatialGrid(blockerEntityId);
+    }
+
+    relocateRestoredEntities({ world, playerEntityId, source: 'LOAD_GAME' });
+
+    const restoredCell = {
+      x: Math.floor((Position.x[companionEntityId] ?? 0) / 32),
+      y: Math.floor((Position.y[companionEntityId] ?? 0) / 32),
+    };
+    const distanceFromPlayer = Math.max(Math.abs(restoredCell.x - 4), Math.abs(restoredCell.y - 4));
+    expect(distanceFromPlayer).toBeGreaterThan(1);
+    expect(
+      isPlayerSpawnBlocked(Position.x[companionEntityId] ?? 0, Position.y[companionEntityId] ?? 0),
+    ).toBe(false);
   });
 });

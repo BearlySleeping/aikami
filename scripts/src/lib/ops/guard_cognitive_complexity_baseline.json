@@ -1322,7 +1322,7 @@
   "packages/frontend/engine/src/worker/ecs_worker.ts": {
     "counts": {
       "excessive": 4,
-      "worst": 197
+      "worst": 186
     }
   },
   "packages/frontend/local-runtime/src/lib/local_engine.ts": {
