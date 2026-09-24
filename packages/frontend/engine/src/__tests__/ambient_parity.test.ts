@@ -30,6 +30,7 @@ import {
   ENV_UBO_OFFSETS,
 } from '../environment/environment_ubo.ts';
 import type { RenderEntry } from '../game_world/render_entry.ts';
+import type { EntityAppearanceLoader } from '../game_world/entity_appearance.ts';
 import { SceneAmbientController } from '../game_world/scene_ambient.ts';
 import type { PropFrameAnchor } from '../game_world/scene_transition.ts';
 import type { GameWorld as GameWorldInstance, GameWorldOptions } from '../game_world.ts';
@@ -62,6 +63,7 @@ type GameWorldAmbientHarness = {
   _worldContainer: Container;
   _propFrameMeta: Map<string, PropFrameAnchor>;
   _renderEntries: Map<number, RenderEntry>;
+  _appearanceLoader: EntityAppearanceLoader;
   _sceneAmbient: SceneAmbientController;
   _handleEntityCreated(message: EntityCreatedMessage): void;
   _installScene(scene: {
@@ -72,12 +74,15 @@ type GameWorldAmbientHarness = {
   }): void;
 };
 
-const createGameWorldAmbientHarness = (): GameWorldAmbientHarness => {
+const createGameWorldAmbientHarness = (
+  actorVisualResolver?: GameWorldOptions['actorVisualResolver'],
+): GameWorldAmbientHarness => {
   const bridge: EngineBridge = new MockEngineBridge();
   const options: GameWorldOptions = {
     className: 'GameWorld',
     bridge,
     propFrameResolver: (frame) => ({ frame, texture: Texture.WHITE, source: 'hit' }),
+    actorVisualResolver,
   };
   const world = GameWorld.create(options) as unknown as GameWorldInstance;
   const harness = world as unknown as GameWorldAmbientHarness;
@@ -219,6 +224,40 @@ describe('C-545 — emissive opt-out', () => {
     expect(
       world._worldContainer.children.filter((child) => child.label === 'entity-42'),
     ).toHaveLength(1);
+  });
+
+  test('loads authored NPC visuals against the registered entry on creation and re-announcement', () => {
+    const world = createGameWorldAmbientHarness((npcId) =>
+      npcId === 'village_guard'
+        ? { kind: 'static', url: '/guard.webp', width: 32, height: 32 }
+        : undefined,
+    );
+    const loadedEntries: Array<RenderEntry | undefined> = [];
+    world._appearanceLoader.prepareStatic = async () => {
+      loadedEntries.push(world._renderEntries.get(42));
+      return { container: new Container(), layers: [] };
+    };
+    world._handleEntityCreated({ type: 'ENTITY_CREATED', eid: 1 });
+    const npcData = {
+      eid: 42,
+      npcId: 'village_guard',
+      npcName: 'Guard',
+      personaId: 'guard',
+      interactionRadius: 64,
+      relationshipValue: 0,
+      dialog: '',
+      isVendor: false,
+      vendorInventory: '',
+    };
+
+    world._handleEntityCreated({ type: 'ENTITY_CREATED', eid: 42, npcData });
+    const firstEntry = world._renderEntries.get(42);
+    expect(loadedEntries).toEqual([firstEntry]);
+
+    world._handleEntityCreated({ type: 'ENTITY_CREATED', eid: 42, npcData });
+    const replacement = world._renderEntries.get(42);
+    expect(replacement).not.toBe(firstEntry);
+    expect(loadedEntries).toEqual([firstEntry, replacement]);
   });
 
   test('GameWorld keeps an entity with emissive frame metadata untinted', () => {

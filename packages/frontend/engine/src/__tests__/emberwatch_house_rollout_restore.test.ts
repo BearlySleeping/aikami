@@ -125,12 +125,38 @@ describe('C-553 — village house navigation after rollout', () => {
   });
 
   it('keeps named return arrivals outside inclusive door-trigger bounds', () => {
-    const innTrigger = { left: 51 * 32, top: 20 * 32, right: 52 * 32, bottom: 22 * 32 };
-    const shopTrigger = { left: 51 * 32, top: 33 * 32, right: 52 * 32, bottom: 35 * 32 };
-    expect(51 * 32 >= innTrigger.left && 51 * 32 <= innTrigger.right).toBe(true);
-    expect(23 * 32 > innTrigger.bottom).toBe(true);
-    expect(51 * 32 >= shopTrigger.left && 51 * 32 <= shopTrigger.right).toBe(true);
-    expect(36 * 32 > shopTrigger.bottom).toBe(true);
+    const objects = map.layers.flatMap((layer) =>
+      'objects' in layer && Array.isArray(layer.objects) ? layer.objects : [],
+    );
+    for (const [targetMap, spawnId] of [
+      ['inn', 'from_inn'],
+      ['merchant_shop', 'from_merchant'],
+    ] as const) {
+      const transition = objects.find(
+        (object) =>
+          object.type === 'transition' &&
+          object.properties.some(
+            (property) => property.name === 'targetMap' && property.value === targetMap,
+          ),
+      );
+      const arrival = objects.find(
+        (object) =>
+          object.type === 'spawn' &&
+          object.properties.some(
+            (property) => property.name === 'spawnId' && property.value === spawnId,
+          ),
+      );
+      if (!transition || !arrival) {
+        throw new Error(`Missing ${targetMap} door transition or ${spawnId} arrival`);
+      }
+      expect(
+        arrival.x < transition.x ||
+          arrival.x > transition.x + transition.width ||
+          arrival.y < transition.y ||
+          arrival.y > transition.y + transition.height,
+        `${spawnId} outside ${targetMap} inclusive trigger bounds`,
+      ).toBe(true);
+    }
   });
 });
 

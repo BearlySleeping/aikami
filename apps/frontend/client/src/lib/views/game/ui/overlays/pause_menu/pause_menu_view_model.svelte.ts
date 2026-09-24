@@ -135,13 +135,10 @@ class PauseMenuViewModel
     if (this.isSaving) {
       return 'Saving…';
     }
-    if (!this.saveMessage) {
-      return this.lastSavedLabel;
+    if (this.saveMessage === 'Game Saved!' && this.lastSavedAt) {
+      return `${this.saveMessage} · ${this.lastSavedLabel}`;
     }
-    if (!this.lastSavedAt) {
-      return this.saveMessage;
-    }
-    return `${this.saveMessage} · ${this.lastSavedLabel}`;
+    return this.saveMessage ?? this.lastSavedLabel;
   }
 
   resumeGame(): void {

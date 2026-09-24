@@ -524,7 +524,9 @@ export class EmberwatchHousePage {
             const texture = isRecord(child) && isRecord(child.texture) ? child.texture : undefined;
             return (
               guardOptions.allowLegacyPositionlessPlaceholder &&
-              node.constructor?.name === 'Container' &&
+              Array.isArray(node.children) &&
+              typeof node.addChild === 'function' &&
+              node.renderPipeId === undefined &&
               numberOf(node, 'x') === 0 &&
               numberOf(node, 'y') === 0 &&
               childrenOf(node).length === 1 &&
@@ -541,7 +543,7 @@ export class EmberwatchHousePage {
             counts: TextureCounts,
           ): Observation['displayType'] => {
             if (counts.resolved + counts.unresolved === 0) {
-              return node.constructor?.name === 'Graphics' ? 'graphics' : 'missing';
+              return node.renderPipeId === 'graphics' ? 'graphics' : 'missing';
             }
             return childrenOf(node).length > 0 ? 'composed' : 'sprite';
           };
