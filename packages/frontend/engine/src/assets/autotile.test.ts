@@ -51,6 +51,45 @@ const WATER: ContentPackTerrain = {
 
 const TERRAINS = [GRASS, DIRT, WATER] as const;
 
+type VariantCounts = { base: number; detail: number; broad: number };
+type VariantSample = {
+  counts: VariantCounts;
+  broadCells: Array<{ x: number; y: number }>;
+};
+
+const sampleVariantGrid = (variants: readonly string[]): VariantSample => {
+  const counts: VariantCounts = { base: 0, detail: 0, broad: 0 };
+  const broadCells: Array<{ x: number; y: number }> = [];
+  for (let y = 0; y < 96; y++) {
+    for (let x = 0; x < 96; x++) {
+      const frame = pickFillVariant(variants, 'grass.png', x, y);
+      if (pickFillVariant(variants, 'grass.png', x, y) !== frame) {
+        throw new Error(`variant selection changed at ${x},${y}`);
+      }
+      if (frame === 'grass.png') {
+        counts.base += 1;
+      }
+      if (frame === 'grass_variant.png') {
+        counts.detail += 1;
+      }
+      if (frame === 'grass_dark.png') {
+        counts.broad += 1;
+        broadCells.push({ x, y });
+      }
+    }
+  }
+  return { counts, broadCells };
+};
+
+const isIsolatedBroadCell = (
+  cell: { x: number; y: number },
+  broadKeys: ReadonlySet<string>,
+): boolean =>
+  !broadKeys.has(`${cell.x - 1},${cell.y}`) &&
+  !broadKeys.has(`${cell.x + 1},${cell.y}`) &&
+  !broadKeys.has(`${cell.x},${cell.y - 1}`) &&
+  !broadKeys.has(`${cell.x},${cell.y + 1}`);
+
 // ---------------------------------------------------------------------------
 // AC-3: table-driven corner masks
 // ---------------------------------------------------------------------------
@@ -287,16 +326,75 @@ describe('autotileLayers — layered precedence emission (AC-3)', () => {
     expect(cornerFrameName('water.png', 3)).toBe('water_3.png');
   });
 
-  test('pickFillVariant is deterministic, pinned, and selects variants when present', () => {
-    // No variants → always the frameBase (fallback).
+  test('C-552 — pickFillVariant keeps the base dominant and detail variants sparse', () => {
     expect(pickFillVariant([], 'grass.png', 3, 7)).toBe('grass.png');
+
     const variants = ['grass_variant.png', 'grass_dark.png'];
-    // Pinned expectation for (3, 7): the Knuth cell hash picks the FIRST
-    // variant — a real value, not a self-comparison that always passes.
-    expect(pickFillVariant(variants, 'grass.png', 3, 7)).toBe('grass_variant.png');
-    // Coordinates that select the SECOND variant (not the frameBase), proving
-    // the variant branch is reached rather than always falling back.
-    expect(pickFillVariant(variants, 'grass.png', 2, 5)).toBe('grass_dark.png');
+    const sample = sampleVariantGrid(variants);
+    const { counts, broadCells } = sample;
+    const total = 96 * 96;
+    expect(counts.base / total, 'base grass share').toBeGreaterThan(0.6);
+    expect(counts.detail / total, 'sparse detail share').toBeGreaterThan(0.005);
+    expect(counts.detail / total, 'sparse detail share').toBeLessThanOrEqual(0.03);
+    expect(counts.broad / total, 'broad value-patch share').toBeGreaterThan(0.08);
+    expect(counts.broad / total, 'broad value-patch share').toBeLessThanOrEqual(0.35);
+
+    const broadKeys = new Set(broadCells.map(({ x, y }) => `${x},${y}`));
+    const isolated = broadCells.filter((cell) => isIsolatedBroadCell(cell, broadKeys));
+    expect(isolated.length / broadCells.length, 'isolated broad-patch cells').toBeLessThan(0.25);
+  });
+
+  test('C-552 — non-grass terrain is fully covered by its overlay above sparse base details', () => {
+    const width = 48;
+    const height = 48;
+    const terrain = Array.from({ length: width * height }, (_, index) => {
+      const x = index % width;
+      const y = Math.floor(index / width);
+      if (y === 24) {
+        return 'dirt';
+      }
+      if (x === 24) {
+        return 'water';
+      }
+      return 'grass';
+    });
+    const layers = autotileLayers({
+      width,
+      height,
+      terrain,
+      terrains: [
+        {
+          name: 'grass',
+          precedence: 0,
+          wang: 'fill',
+          frameBase: 'grass.png',
+          variants: ['grass_variant.png', 'grass_dark.png'],
+          isWalkable: true,
+        },
+        DIRT,
+        WATER,
+      ],
+    });
+    const base = layers.find((layer) => layer.isBase);
+    const dirt = layers.find((layer) => layer.name === 'terrain_dirt');
+    const water = layers.find((layer) => layer.name === 'terrain_water');
+    expect(base).toBeDefined();
+    expect(dirt).toBeDefined();
+    expect(water).toBeDefined();
+    if (!base || !dirt || !water) {
+      return;
+    }
+
+    for (let index = 0; index < terrain.length; index++) {
+      if (terrain[index] === 'dirt') {
+        expect(base.frames[index]).toBe('grass.png');
+        expect(dirt.frames[index]).toMatch(/^dirt_\d+\.png$/);
+      }
+      if (terrain[index] === 'water') {
+        expect(base.frames[index]).toBe('grass.png');
+        expect(water.frames[index]).toBe('water_15.png');
+      }
+    }
   });
 });
 
