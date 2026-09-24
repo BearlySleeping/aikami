@@ -37,5 +37,9 @@
   "combatInvalidRetreatNotAuthored": "La retirada no está disponible en este encuentro.",
   "combatInvalidRetreatNotTowardExit": "La retirada debe avanzar hacia una salida.",
   "combatInvalidSurrenderNotAuthored": "La rendición no está disponible en este encuentro.",
-  "combatReactionCost": "1 reacción"
+  "combatReactionCost": "1 reacción",
+  "character_edit": "Editar personaje",
+  "character_done": "Terminar edición",
+  "character_saving_throw": "Tirada de salvación",
+  "character_saving_throw_proficiency": "Competencia en tiradas de salvación para {ability}"
 }

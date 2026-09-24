@@ -29,13 +29,19 @@ import {
   buildEncounterRosterFromContentPack,
   checkModifiersFromCharacterSheet,
 } from './combat_encounter_roster.ts';
+import { equipmentService } from './equipment_service.svelte.ts';
 import type { GameEngineServiceInterface } from './game_engine_service.svelte';
 import type { GameModeServiceInterface } from './game_mode_service.svelte';
 import type { GameOverlayServiceInterface } from './game_overlay_service.svelte';
+import { inventoryService } from './inventory_service.svelte.ts';
 import type { NpcDialogueServiceInterface } from './npc_dialogue_service.svelte';
 import { partyRosterService } from './party_roster_service.svelte.ts';
+import { playerJournalService } from './player_journal_service.svelte.ts';
 import type { PlayerStateServiceInterface } from './player_state_service.svelte';
-import type { QuestStateServiceInterface } from './quest_state_service.svelte';
+import {
+  questStateService as productionQuestStateService,
+  type QuestStateServiceInterface,
+} from './quest_state_service.svelte';
 
 /**
  * Synthetic ally id used when the loaded pack authors no distinct combat-capable
@@ -43,6 +49,79 @@ import type { QuestStateServiceInterface } from './quest_state_service.svelte';
  * identity is synthetic, and it is distinct so validation accepts the roster.
  */
 const ALLY_COMBATANT_ID = 'e2e_companion_ally';
+
+/** Clears authored quest evidence without detaching production bridge listeners. */
+const clearManagementQuestState = (): void => {
+  productionQuestStateService.hydrate({
+    schemaVersion: 1,
+    activeQuests: [],
+    completedQuestIds: [],
+    completedQuests: [],
+    failedQuestIds: [],
+    declinedQuestIds: [],
+    worldStateFlags: {},
+    repeatableCompletions: {},
+    journalEntries: [],
+  });
+};
+
+/** Populates the real inventory, equipment, quest and journal stores for review. */
+const populateManagementStores = (): {
+  inventoryCount: number;
+  equippedCount: number;
+  questCount: number;
+  noteCount: number;
+} => {
+  inventoryService.hydrate({
+    items: [
+      { itemId: 'steelSword', quantity: 1 },
+      { itemId: 'healthPotion', quantity: 3 },
+      { itemId: 'manaPotion', quantity: 2 },
+      { itemId: 'wardWand', quantity: 1 },
+    ],
+    gold: 640,
+  });
+  equipmentService.hydrate({
+    slots: {
+      rightHand: 'ironSword',
+      body: 'ironArmor',
+      leftHand: 'woodenShield',
+    },
+  });
+  clearManagementQuestState();
+  productionQuestStateService.acceptQuest({ questId: 'fading_ward', npcId: 'village_elder' });
+  playerJournalService.hydrate({
+    entries: [
+      {
+        id: 'c551-note-ward',
+        campaignId: 'c551-evidence',
+        sessionNumber: 1,
+        title: 'Watch the eastern ward',
+        content: 'The eastern lantern flickers after dusk. Ask the elder which path feels wrong.',
+        tags: ['ward', 'clue'],
+        createdAt: '2026-09-24T00:00:00.000Z',
+        updatedAt: '2026-09-24T00:00:00.000Z',
+      },
+      {
+        id: 'c551-note-inn',
+        campaignId: 'c551-evidence',
+        sessionNumber: 1,
+        title: 'Inn lead',
+        content:
+          'Sella keeps the inn ledger. The wand was delivered there before the disappearance.',
+        tags: ['inn'],
+        createdAt: '2026-09-23T22:00:00.000Z',
+        updatedAt: '2026-09-23T22:30:00.000Z',
+      },
+    ],
+  });
+  return {
+    inventoryCount: inventoryService.inventory.length,
+    equippedCount: equipmentService.equippedItems.length,
+    questCount: productionQuestStateService.quests.length,
+    noteCount: playerJournalService.entries.length,
+  };
+};
 
 /**
  * Everything the seam drives — all of it production, none of it replaced.
@@ -122,6 +201,21 @@ export const installGameTestSeam = (deps: GameTestSeamOptions): void => {
     Object.assign(window, {
       // biome-ignore lint/style/useNamingConvention: __AIKAMI_TEST__ is the fixed key the release-gate E2E reads back
       __AIKAMI_TEST__: {
+        seedManagementContent: (options: { scenario: 'empty' | 'populated' }) => {
+          inventoryService.reset();
+          equipmentService.reset();
+          clearManagementQuestState();
+          playerJournalService.reset();
+          if (options.scenario === 'empty') {
+            return {
+              inventoryCount: 0,
+              equippedCount: 0,
+              questCount: 0,
+              noteCount: 0,
+            };
+          }
+          return populateManagementStores();
+        },
         discoverEvidenceAt: (location: string): string[] =>
           questStateService.discoverEvidenceAt(location),
         presentEvidence: (options: {
@@ -598,6 +692,15 @@ export const installGameTestSeam = (deps: GameTestSeamOptions): void => {
           overlay: gameOverlayService.activeOverlay,
           mode: gameModeService.currentMode,
         }),
+        /**
+         * C-551 evidence trigger: opens the production management Inventory
+         * over an active dialogue. The overlay router, return context, session
+         * creation and rendered panel remain unchanged; only the unavailable
+         * player shortcut is replaced for the paired capture.
+         */
+        openInventoryForEvidence: (): void => {
+          gameOverlayService.openInventory();
+        },
       },
     });
   } catch (error) {

@@ -1,15 +1,12 @@
 <script lang="ts">
 // apps/frontend/client/src/lib/views/inventory/inventory_view.svelte
 //
-// Inventory surface. C-543 PART B: a single CONTENT presentation is shared by
-// the standalone modal wrapper and the management workspace. Only the standalone
-// wrapper contributes a backdrop, `role="dialog"`, focus-on-mount and the
-// Close/X control; inside the management host the section contributes content
-// only, so there is no second top-level dialog, backdrop or close action.
-//
-// Equip/unequip updates the LPC character via the equipment service (C-374).
+// Production inventory task surface (C-551): equipment, bag and selected-item
+// detail share one responsive composition. The standalone wrapper below keeps
+// the legacy direct-overlay entry point without changing domain ownership.
 
 import { BaseViewModelContainer } from '$components';
+import { createInventoryPresentationState } from './inventory_presentation.svelte';
 import type { InventoryViewModelInterface } from './inventory_view_model.svelte';
 
 type Props = {
@@ -17,190 +14,269 @@ type Props = {
 };
 
 const { viewModel }: Props = $props();
+const presentation = createInventoryPresentationState({
+  get items() {
+    return viewModel.items;
+  },
+  getCompareLabel: (itemId) => viewModel.getCompareLabel(itemId),
+});
 </script>
 
-<BaseViewModelContainer {viewModel}>
+<BaseViewModelContainer {viewModel} class="h-full min-h-0">
   {#snippet children()}
     {#snippet inventoryBody()}
-      <div class="flex min-h-full w-full flex-col gap-4">
-        <!-- Stat totals -->
-        <div class="flex justify-center gap-6">
-          <div class="badge badge-lg badge-outline gap-1 px-4 py-3">
-            <span class="game-eyebrow">ATK</span>
-            <span class="font-semibold text-warning game-numeric">{viewModel.totalAttack}</span>
-          </div>
-          <div class="badge badge-lg badge-outline gap-1 px-4 py-3">
-            <span class="game-eyebrow">DEF</span>
-            <span class="font-semibold text-info game-numeric">{viewModel.totalDefense}</span>
-          </div>
-        </div>
-
-        <!-- Paperdoll -->
-        <div class="grid grid-cols-3 grid-rows-3 gap-2 w-full max-w-sm mx-auto">
-          {#each viewModel.slotOrder as slot (slot)}
-            {@const equipped = viewModel.getEquippedItem(slot)}
-            <div
-              class="rounded-lg border p-2 flex flex-col items-center justify-center text-center transition-colors {viewModel.getSlotGridClass(slot)} {equipped ? 'border-primary/40 bg-primary/5' : 'border-base-300 bg-base-200'}"
-            >
-              <div class="text-lg leading-none">{viewModel.getSlotIcon(slot)}</div>
-              <div class="mt-1 game-eyebrow text-center">{viewModel.getSlotLabel(slot)}</div>
-              {#if equipped}
-                <div class="mt-1 text-sm font-medium text-base-content leading-tight line-clamp-2">
-                  {equipped.definition.label}
-                </div>
-                <div class="mt-0.5 flex items-center gap-1 flex-wrap justify-center">
-                  {#if equipped.definition.attackBonus > 0}
-                    <span class="game-metadata font-semibold text-warning"
-                      >+{equipped.definition.attackBonus}
-                      ATK</span
-                    >
-                  {/if}
-                  {#if equipped.definition.defenseBonus > 0}
-                    <span class="game-metadata font-semibold text-info"
-                      >+{equipped.definition.defenseBonus}
-                      DEF</span
-                    >
-                  {/if}
-                </div>
-                <button
-                  type="button"
-                  class="btn btn-xs btn-ghost text-error mt-1"
-                  onclick={() => viewModel.unequipItem(slot)}
-                  aria-label="Unequip {equipped.definition.label}"
-                >
-                  Unequip
-                </button>
-              {:else}
-                <div class="mt-1 game-metadata">Empty</div>
-              {/if}
-            </div>
-          {/each}
-        </div>
-
-        <!-- Transient feedback (inventory full / used item / full HP) -->
-        {#if viewModel.feedbackMessage}
-          <div class="alert alert-warning py-1.5 px-3" role="status">
-            <span class="text-sm font-semibold">{viewModel.feedbackMessage}</span>
-          </div>
-        {/if}
-
-        <!-- Bag items -->
-        <div class="flex items-center justify-between gap-2">
-          <h3 class="game-section-title">Bag</h3>
-          {#if viewModel.hasItems}
-            <fieldset class="join m-0 border-0 p-0">
-              <legend class="sr-only">Sort bag</legend>
-              <button
-                type="button"
-                class="btn btn-xs join-item"
-                class:btn-active={viewModel.sortMode === 'acquired'}
-                onclick={() => viewModel.setSortMode('acquired')}
-              >
-                Recent
-              </button>
-              <button
-                type="button"
-                class="btn btn-xs join-item"
-                class:btn-active={viewModel.sortMode === 'name'}
-                onclick={() => viewModel.setSortMode('name')}
-              >
-                Name
-              </button>
-              <button
-                type="button"
-                class="btn btn-xs join-item"
-                class:btn-active={viewModel.sortMode === 'quantity'}
-                onclick={() => viewModel.setSortMode('quantity')}
-              >
-                Qty
-              </button>
-            </fieldset>
-          {/if}
-        </div>
-
-        {#if viewModel.hasItems}
-          <label class="block">
-            <span class="sr-only">Search bag</span>
-            <input
-              class="input input-bordered w-full"
-              type="search"
-              placeholder="Search items…"
-              data-testid="inventory-search"
-              value={viewModel.searchQuery}
-              oninput={(event) => viewModel.setSearchQuery(event.currentTarget.value)}
-            >
-          </label>
-        {/if}
-
-        {#if !viewModel.hasItems}
-          <div class="game-empty game-surface--inset rounded-lg">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              class="h-12 w-12"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              stroke-width="1.5"
-            >
-              <title>Empty bag</title>
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5m8.25 3v6.75m0 0l-3-3m3 3l3-3M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z"
-              />
-            </svg>
-            <p class="game-body-text font-medium">No items collected yet</p>
-            <p class="game-metadata">Walk up to items and press E to collect them</p>
-          </div>
-        {:else if viewModel.visibleItems.length === 0}
-          <p class="game-metadata">No items match “{viewModel.searchQuery}”.</p>
-        {:else}
-          <div class="game-item-grid">
-            {#each viewModel.visibleItems as item (item.itemId)}
-              <div class="game-surface--inset flex flex-col items-center gap-1 rounded-lg p-3">
-                <div class="flex h-12 w-12 items-center justify-center rounded-md bg-primary/10">
-                  <span class="text-lg font-bold text-primary">{item.initial}</span>
-                </div>
-                <span class="game-body-text truncate w-full text-center">
-                  {viewModel.getItemLabel(item.itemId)}
-                </span>
-                {#if item.quantity > 1}
-                  <span class="badge badge-sm badge-primary game-numeric">{item.quantity}</span>
-                {/if}
-                {#if viewModel.isEquippable(item.itemId)}
-                  <span class="game-metadata font-semibold text-warning">
-                    {viewModel.getCompareLabel(item.itemId)}
-                  </span>
-                  <button
-                    type="button"
-                    class="btn btn-xs btn-primary btn-outline mt-1"
-                    onclick={() => viewModel.equipItem(item.itemId)}
-                    aria-label="Equip {viewModel.getItemLabel(item.itemId)}"
-                  >
-                    Equip
-                  </button>
-                {/if}
-                {#if viewModel.isConsumable(item.itemId)}
-                  <button
-                    type="button"
-                    class="btn btn-xs btn-secondary btn-outline mt-1"
-                    onclick={() => viewModel.useItem(item.itemId)}
-                    aria-label="Use {viewModel.getItemLabel(item.itemId)}"
-                  >
-                    Use
-                  </button>
-                {/if}
+      <div class="@container h-full min-h-0 w-full">
+        <div class="game-inventory-layout">
+          <section
+            class="game-inventory__panel game-surface--raised"
+            data-testid="inventory-paperdoll"
+          >
+            <header class="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <p class="game-eyebrow">Paperdoll</p>
+                <h2 class="game-section-title">Equipment</h2>
               </div>
-            {/each}
-          </div>
-        {/if}
+              <div class="flex gap-2">
+                <span class="game-badge game-numeric game-numeric--attack">
+                  ATK {viewModel.totalAttack}
+                </span>
+                <span class="game-badge game-numeric game-numeric--defense">
+                  AC {viewModel.totalDefense}
+                </span>
+              </div>
+            </header>
 
-        {#if viewModel.isStandalonePresentation}
-          <div class="flex justify-center pt-1">
-            <kbd class="kbd kbd-sm game-metadata">I</kbd>
-            <span class="mx-2 game-metadata self-center">to close</span>
-          </div>
-        {/if}
+            <div class="game-inventory__paperdoll">
+              {#each viewModel.slotOrder as slot (slot)}
+                {@const equipped = viewModel.getEquippedItem(slot)}
+                <div
+                  class={`game-inventory__slot ${presentation.slotClass(slot, equipped !== undefined)}`}
+                >
+                  <span class="text-xl" aria-hidden="true">{viewModel.getSlotIcon(slot)}</span>
+                  <span class="game-eyebrow text-center">{viewModel.getSlotLabel(slot)}</span>
+                  {#if equipped}
+                    <span class="game-body-text line-clamp-2 text-center text-sm font-semibold">
+                      {equipped.definition.label}
+                    </span>
+                    <button
+                      type="button"
+                      class="btn btn-xs game-control--quiet"
+                      onclick={() => viewModel.unequipItem(slot)}
+                      aria-label="Unequip {equipped.definition.label}"
+                    >
+                      Unequip
+                    </button>
+                  {:else}
+                    <span class="game-metadata">Empty</span>
+                  {/if}
+                </div>
+              {/each}
+            </div>
+          </section>
+
+          <section class="game-inventory__panel game-surface--raised" data-testid="inventory-bag">
+            <header class="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <p class="game-eyebrow">Carried gear</p>
+                <h2 class="game-section-title">Bag</h2>
+              </div>
+              {#if viewModel.hasItems}
+                <fieldset class="game-segmented">
+                  <legend class="sr-only">Sort bag</legend>
+                  <button
+                    type="button"
+                    aria-pressed={viewModel.sortMode === 'acquired'}
+                    onclick={() => viewModel.setSortMode('acquired')}
+                  >
+                    Recent
+                  </button>
+                  <button
+                    type="button"
+                    aria-pressed={viewModel.sortMode === 'name'}
+                    onclick={() => viewModel.setSortMode('name')}
+                  >
+                    Name
+                  </button>
+                  <button
+                    type="button"
+                    aria-pressed={viewModel.sortMode === 'quantity'}
+                    onclick={() => viewModel.setSortMode('quantity')}
+                  >
+                    Qty
+                  </button>
+                </fieldset>
+              {/if}
+            </header>
+
+            {#if viewModel.feedbackMessage}
+              <div class="game-notice game-notice--warning mb-3" role="status">
+                {viewModel.feedbackMessage}
+              </div>
+            {/if}
+
+            {#if viewModel.hasItems}
+              <label class="mb-3 block">
+                <span class="sr-only">Search bag</span>
+                <input
+                  class="input w-full"
+                  type="search"
+                  placeholder="Search items…"
+                  data-testid="inventory-search"
+                  value={viewModel.searchQuery}
+                  oninput={(event) => viewModel.setSearchQuery(event.currentTarget.value)}
+                >
+              </label>
+            {/if}
+
+            {#if !viewModel.hasItems}
+              <div class="game-empty" data-testid="inventory-empty-state">
+                <span class="text-4xl" aria-hidden="true">🎒</span>
+                <p class="game-section-title">Your bag is empty</p>
+                <p class="game-metadata max-w-sm">
+                  Collect an item in the world with E. Equipment and supplies will stay grouped
+                  here.
+                </p>
+              </div>
+            {:else if viewModel.visibleItems.length === 0}
+              <div class="game-empty game-empty--inline">
+                <p class="game-body-text font-semibold">No matching items</p>
+                <p class="game-metadata">Clear the search to return to the full bag.</p>
+              </div>
+            {:else}
+              <ul class="game-inventory__list" data-testid="inventory-item-list">
+                {#each viewModel.visibleItems as item (item.itemId)}
+                  <li
+                    class={`game-inventory__item ${presentation.itemClass(item.itemId)}`}
+                    data-testid={`inventory-item-${item.itemId}`}
+                  >
+                    <button
+                      type="button"
+                      class="game-inventory__item-select"
+                      aria-pressed={presentation.isSelected(item.itemId)}
+                      onclick={() => presentation.selectItem(item.itemId)}
+                    >
+                      <span class="game-inventory__item-icon" aria-hidden="true">
+                        {item.initial}
+                      </span>
+                      <span class="min-w-0 flex-1 text-start">
+                        <span class="game-body-text block truncate font-semibold">
+                          {viewModel.getItemLabel(item.itemId)}
+                        </span>
+                        <span class="game-metadata block">
+                          {viewModel.isEquippable(item.itemId) ? 'Equipment' : 'Supply'}
+                          {#if viewModel.isConsumable(item.itemId)}
+                            · Consumable
+                          {/if}
+                        </span>
+                      </span>
+                      <span class="game-badge game-numeric">×{item.quantity}</span>
+                    </button>
+                  </li>
+                {/each}
+              </ul>
+            {/if}
+
+            {#if viewModel.isStandalonePresentation}
+              <div class="flex justify-center pt-1">
+                <kbd class="kbd kbd-sm game-metadata">I</kbd>
+                <span class="mx-2 game-metadata self-center">to close</span>
+              </div>
+            {/if}
+          </section>
+
+          <aside class="game-inventory__panel game-surface--raised" data-testid="inventory-detail">
+            <header class="mb-3">
+              <p class="game-eyebrow">Selection</p>
+              <h2 class="game-section-title">Item details</h2>
+            </header>
+
+            {#if presentation.selectedItem}
+              <div class="flex min-h-0 flex-1 flex-col gap-3">
+                <div class="game-surface--inset flex items-center gap-3 rounded-lg p-3">
+                  <span class="game-inventory__detail-icon" aria-hidden="true">
+                    {presentation.selectedItem.label.charAt(0)}
+                  </span>
+                  <div class="min-w-0">
+                    <p class="game-section-title truncate">{presentation.selectedItem.label}</p>
+                    <p class="game-metadata">{presentation.selectedItem.definition.itemType}</p>
+                  </div>
+                </div>
+
+                <dl class="game-detail-list">
+                  <div>
+                    <dt>Quantity</dt>
+                    <dd class="game-numeric">{presentation.selectedItem.quantity}</dd>
+                  </div>
+                  {#if presentation.selectedItem.definition.slot}
+                    <div>
+                      <dt>Slot</dt>
+                      <dd>{viewModel.getSlotLabel(presentation.selectedItem.definition.slot)}</dd>
+                    </div>
+                  {/if}
+                  <div>
+                    <dt>Attack</dt>
+                    <dd class="game-numeric game-numeric--attack">
+                      {presentation.selectedItem.definition.attackBonus}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Defense</dt>
+                    <dd class="game-numeric game-numeric--defense">
+                      {presentation.selectedItem.definition.defenseBonus}
+                    </dd>
+                  </div>
+                </dl>
+
+                <div class="flex flex-wrap gap-1">
+                  <span class="game-badge">
+                    {presentation.selectedItem.isEquippable ? 'Equippable' : 'Not equippable'}
+                  </span>
+                  {#if presentation.selectedItem.isConsumable}
+                    <span class="game-badge game-badge--positive">Usable</span>
+                  {/if}
+                  {#if presentation.selectedItem.compareLabel}
+                    <span class="game-badge game-badge--accent">
+                      {presentation.selectedItem.compareLabel}
+                    </span>
+                  {/if}
+                </div>
+
+                <div class="mt-auto flex flex-wrap gap-2">
+                  {#if presentation.selectedItem.isEquippable}
+                    <button
+                      type="button"
+                      class="btn game-control--accent"
+                      onclick={() => viewModel.equipItem(presentation.selectedItemId ?? '')}
+                      aria-label="Equip {presentation.selectedItem.label}"
+                    >
+                      Equip
+                    </button>
+                  {/if}
+                  {#if presentation.selectedItem.isConsumable}
+                    <button
+                      type="button"
+                      class="btn game-control--accent"
+                      onclick={() => viewModel.useItem(presentation.selectedItemId ?? '')}
+                      aria-label="Use {presentation.selectedItem.label}"
+                    >
+                      Use
+                    </button>
+                  {/if}
+                </div>
+              </div>
+            {:else}
+              <div class="game-empty">
+                <span class="text-3xl" aria-hidden="true">◇</span>
+                <p class="game-section-title">No item selected</p>
+                <p class="game-metadata max-w-xs">
+                  {viewModel.hasItems
+                  ? 'Choose a bag item to read its stats and available actions.'
+                  : 'Collect equipment or supplies to reveal their details here.'}
+                </p>
+              </div>
+            {/if}
+          </aside>
+        </div>
       </div>
     {/snippet}
 
@@ -211,29 +287,32 @@ const { viewModel }: Props = $props();
         aria-modal="true"
         aria-label="Inventory"
         tabindex="-1"
+        data-testid="inventory-overlay"
         onclick={(event) => viewModel.handleBackdropClick(event)}
         onkeydown={(event) => viewModel.handleKeyDown(event)}
       >
-        <div class="card max-h-[85vh] w-full max-w-xl overflow-y-auto bg-base-100 shadow-xl">
-          <div class="card-body gap-4 p-6">
-            <div class="flex items-center justify-between">
-              <h2 class="text-xl font-bold text-base-content">Inventory</h2>
+        <div class="card game-surface max-h-[85vh] w-full max-w-6xl overflow-y-auto shadow-xl">
+          <div class="card-body gap-4 p-4">
+            <div class="flex items-center justify-between gap-3">
+              <div>
+                <p class="game-eyebrow">Adventure gear</p>
+                <h2 class="game-section-title">Inventory</h2>
+              </div>
               <button
                 type="button"
-                class="btn btn-sm btn-ghost btn-circle"
+                class="btn btn-sm game-control--quiet btn-circle"
                 onclick={() => viewModel.closeInventory()}
                 aria-label="Close inventory"
               >
-                ✕
+                ×
               </button>
             </div>
-            <div class="divider my-0"></div>
             {@render inventoryBody()}
           </div>
         </div>
       </div>
     {:else}
-      <div class="h-full min-h-0 w-full overflow-x-hidden overflow-y-auto p-1">
+      <div class="game-workspace__scroll" data-testid="inventory-overlay">
         {@render inventoryBody()}
       </div>
     {/if}

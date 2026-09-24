@@ -75,14 +75,6 @@ export type InventoryItemView = {
 export type InventorySortMode = 'acquired' | 'name' | 'quantity';
 export type InventoryPresentation = 'standalone' | 'management';
 
-const SLOT_GRID_CLASS: Record<EquipmentSlot, string> = {
-  head: 'col-start-2 row-start-1',
-  leftHand: 'col-start-1 row-start-2',
-  body: 'col-start-2 row-start-2',
-  rightHand: 'col-start-3 row-start-2',
-  feet: 'col-start-2 row-start-3',
-};
-
 /** Base configuration used to create the inventory ViewModel. */
 export type InventoryViewModelOptions = BaseViewModelOptions & {
   /** Inventory data and operations. */
@@ -121,7 +113,6 @@ export type InventoryViewModelInterface = BaseViewModelInterface & {
   getItemLabel(itemId: string): string;
   getSlotLabel(slot: EquipmentSlot): string;
   getSlotIcon(slot: EquipmentSlot): string;
-  getSlotGridClass(slot: EquipmentSlot): string;
   /** Returns the equipped entry for a paperdoll slot (undefined = empty). */
   getEquippedItem(slot: EquipmentSlot): EquippedItemView | undefined;
   isEquippable(itemId: string): boolean;
@@ -256,10 +247,6 @@ export class InventoryViewModel
 
   getSlotIcon(slot: EquipmentSlot): string {
     return EQUIPMENT_SLOT_ICONS[slot];
-  }
-
-  getSlotGridClass(slot: EquipmentSlot): string {
-    return SLOT_GRID_CLASS[slot];
   }
 
   getEquippedItem(slot: EquipmentSlot): EquippedItemView | undefined {

@@ -47,6 +47,12 @@ export type PlayerJournalServiceInterface = BaseFrontendClassInterface & {
   /** Deletes a journal entry by ID. */
   deleteEntry(options: { id: string }): Promise<void>;
 
+  /** Serializes entries for the existing save envelope. */
+  serialize(): { entries: PlayerJournalEntry[] };
+
+  /** Hydrates entries from the existing save envelope. */
+  hydrate(data: { entries: PlayerJournalEntry[] }): void;
+
   /** Clears all entries (for reset). */
   reset(): void;
 };
