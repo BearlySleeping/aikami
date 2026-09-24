@@ -80,6 +80,8 @@ export type GameEngineServiceInterface = BaseFrontendClassInterface & {
    * e.g. "emberwatch_village"). Empty before the first map load.
    */
   readonly currentMapId: string;
+  /** NPC IDs created by the engine for the currently loaded map. */
+  readonly currentMapNpcIds: readonly string[];
 
   /** Resets engine state (map ID, scene) for teardown. */
   resetEngineState(): void;
@@ -227,6 +229,9 @@ class GameEngineService
 
   playerScene = $state<string>('unknown');
   currentMapId = $state<string>('');
+  get currentMapNpcIds(): readonly string[] {
+    return [...(this._gameWorld?.npcMeta.values() ?? [])].map((npc) => npc.npcId);
+  }
   isGameReady = $state<boolean>(false);
   gameError = $state<string | undefined>(undefined);
   activeContexts: ActiveContextEntry[] = $state([]);

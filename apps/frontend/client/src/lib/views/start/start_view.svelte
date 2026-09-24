@@ -160,7 +160,11 @@ let { viewModel }: { viewModel: StartViewModelInterface } = $props();
                   {item.label}
                 </a>
               {:else if item.action}
-                <button type="button" class="btn btn-outline btn-sm" onclick={item.action}>
+                <button
+                  type="button"
+                  class="btn btn-outline btn-sm"
+                  onclick={() => item.action?.()}
+                >
                   {item.label}
                 </button>
               {/if}

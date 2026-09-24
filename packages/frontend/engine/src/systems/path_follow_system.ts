@@ -93,6 +93,9 @@ const _setNpcHaltReason = (eid: number, reason: NpcHaltReason): void => {
   if (reason === 'reached_goal') {
     return;
   }
+  if (previous === 'reached_goal' && reason === 'none') {
+    return;
+  }
   if (reason === 'missing_waypoints') {
     logger.warn('path-follow:halt-reason', { eid, previous, reason });
     return;

@@ -70,7 +70,7 @@ const ANCHORS: readonly HudSlot[] = HUD_ANCHOR_ORDER;
          widget's intrinsic width stays flush with the viewport edge. -->
     {#each ANCHORS as anchor}
       <div
-        class="{hudAnchorClass(anchor)} z-50 flex gap-2 pointer-events-none has-[.game-stage--full]:hidden"
+        class="{hudAnchorClass(anchor)} z-50 flex gap-2 pointer-events-none [#game-ui-layer:has(.game-stage--full)_&]:hidden"
         class:flex-col-reverse={viewModel.hud.stacksUpward(anchor)}
         class:flex-col={!viewModel.hud.stacksUpward(anchor)}
         class:items-end={anchor === 'top-end' || anchor === 'bottom-end'}

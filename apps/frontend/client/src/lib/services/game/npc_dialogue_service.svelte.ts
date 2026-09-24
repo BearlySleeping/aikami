@@ -2010,7 +2010,7 @@ export class NpcDialogueService
         } catch (repairError) {
           // The streamed narrative is authoritative when envelope extraction
           // fails; fall back conservatively instead of failing the dialogue.
-          if (call2Error !== undefined && narrative.trim().length > 0) {
+          if (narrative.trim().length > 0) {
             recovered = {
               npcResponse: narrative.trim(),
               suggestedChips: [],
@@ -2882,7 +2882,7 @@ export function recoverIntentAnalysisOutput(
     narrative = trimmed;
   }
 
-  // Reject if narrative is too short (schema requires minLength: 20) or not a string
+  // Prefer a substantial repaired narrative; the caller preserves shorter streamed replies.
   if (!narrative || typeof narrative !== 'string' || narrative.length < 20) {
     throw new Error('Recovered narrative does not satisfy minimum length requirement');
   }

@@ -9,6 +9,7 @@
 // Contract: C-328 Integrate Bounded AI NPC Dialogue with Authored Fallbacks
 
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
+import { NpcIntentAnalysisOutputSchema } from '@aikami/schemas';
 import type {
   CommittedNarrativeEvent,
   ContentPackManifest,
@@ -16,6 +17,7 @@ import type {
   NpcStateDelta,
 } from '@aikami/types';
 import { encode } from 'gpt-tokenizer';
+import { Value } from 'typebox/value';
 import type { ConsequenceRequest, ConsequenceResult } from '$types';
 // These resolve to the same modules the service imports directly (it no
 // longer reads the `$services` barrel).
@@ -362,20 +364,17 @@ describe('AC-1: Provider failure surfaces an error', () => {
       signal: controller.signal,
     });
 
-    // The turn completes — it does NOT fail — using the recovered narrative.
     expect(output.requiresRoll).toBe(false);
     expect(output.npcResponse).toContain('The elder considers your words.');
-    // A pure-prose narrative recovers zero chips (C-499 edge case: chips are
-    // not guaranteed by the repair path — the empty-body retry in AC-2 is what
-    // restores the combat-chip envelope).
+    // A pure-prose narrative recovers zero chips.
     expect(output.suggestedChips).toEqual([]);
     expect(npcDialogueService.turnState.kind).toBe('complete');
   });
 
-  test('analyzeIntent: malformed envelope preserves a short authoritative narrative', async () => {
+  test('analyzeIntent: invalid envelope preserves a short authoritative narrative', async () => {
     const textGenerator = makeStreamingTextGenerator({
       chunks: ['Hi.'],
-      call2Error: new Error('No JSON object found in response'),
+      structured: { invalid: true },
     });
     npcDialogueService.configure({
       contentProvider: makeContentProvider(),
@@ -395,6 +394,7 @@ describe('AC-1: Provider failure surfaces an error', () => {
     expect(output.requiresRoll).toBe(false);
     expect(output.suggestedChips).toEqual([]);
     expect(npcDialogueService.turnState.kind).toBe('complete');
+    expect(Value.Check(NpcIntentAnalysisOutputSchema, output)).toBe(true);
   });
 
   test('resolveRoll: call 1 succeeds, call 2 rejects — propagates error and sets failed turn state', async () => {

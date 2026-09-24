@@ -10,8 +10,8 @@
 
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import type { World } from 'bitecs';
-import { logger } from '$logger';
 import { addComponent, addEntity, createWorld, getComponent, removeEntity, set } from 'bitecs';
+import { logger } from '$logger';
 import { Companion, registerCompanionObservers } from '../components/companion.ts';
 import { NPCDialog, registerNPCDialogObservers } from '../components/npc_dialog.ts';
 import { PathFollow, registerPathFollowObservers } from '../components/path_follow.ts';
@@ -125,7 +125,7 @@ describe('path_follow_system (C-379 AC-7)', () => {
     expect(frames).toBeLessThan(100);
   });
 
-  it('records normal completion without flooding debug logs', () => {
+  it('does not log normal completion or the next stroll', () => {
     setCollisionGrid(ALL_WALKABLE);
     const eid = nextEid();
     addComponent(world, eid, set(Position, { x: 160, y: 160 }));
@@ -135,17 +135,20 @@ describe('path_follow_system (C-379 AC-7)', () => {
     const debugSpy = spyOn(logger, 'debug');
     try {
       updatePathFollow(world, 100);
+      expect(getNpcHaltReason(eid)).toBe('reached_goal');
+      expect(hasActivePath(world, eid)).toBe(false);
+      attachPath(eid, [160, 160, 192, 160], 80, 8);
+      updatePathFollow(world, 100);
+      expect(getNpcHaltReason(eid)).toBe('none');
+      expect(hasActivePath(world, eid)).toBe(true);
+      expect(
+        debugSpy.mock.calls.filter(
+          (args: unknown[]) => String(args[0] ?? '') === 'path-follow:halt-reason',
+        ),
+      ).toHaveLength(0);
     } finally {
       debugSpy.mockRestore();
     }
-
-    expect(getNpcHaltReason(eid)).toBe('reached_goal');
-    expect(hasActivePath(world, eid)).toBe(false);
-    expect(
-      debugSpy.mock.calls.filter(
-        (args: unknown[]) => String(args[0] ?? '') === 'path-follow:halt-reason',
-      ),
-    ).toHaveLength(0);
   });
 
   it('arrives at a final waypoint closer than one step (no overshoot oscillation)', () => {

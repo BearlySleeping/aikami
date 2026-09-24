@@ -277,7 +277,7 @@ const stage = createDialogueStageState();
           </div>
         {/if}
 
-        {#if viewModel.streamError && !viewModel.capabilityError}
+        {#if viewModel.streamError}
           <div class="rounded-lg bg-error/10 p-2 text-center text-xs text-error">
             {viewModel.streamError}
           </div>

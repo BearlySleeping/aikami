@@ -140,6 +140,18 @@ describe('InputActionService', () => {
     expect(consumed).toBe(true);
     expect(toggleCount).toBe(1);
     expect(prevented).toBe(true);
+
+    const repeated = service.handleGlobalShortcut({
+      key: 'h',
+      repeat: true,
+      defaultPrevented: false,
+      isComposing: false,
+      keyCode: 0,
+      target: null,
+      preventDefault: () => {},
+    } as unknown as KeyboardEvent);
+    expect(repeated).toBe(true);
+    expect(toggleCount).toBe(1);
   });
 
   test('keyToAction: should be case-insensitive', () => {

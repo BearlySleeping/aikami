@@ -7,6 +7,7 @@
 // never grow with play time: old detail is folded into the rolling `summary`
 // instead of accumulating as raw transcript.
 
+import { NPC_MEMORY_LIMITS } from '@aikami/constants';
 import Type, { type Static } from 'typebox';
 import { NpcSuggestionChipSchema } from './npc_dialogue_command.ts';
 
@@ -19,7 +20,7 @@ export const NpcMemoryLineSchema = Type.Object(
     /** Who spoke. */
     role: Type.Union([Type.Literal('player'), Type.Literal('npc')]),
     /** Utterance text (truncated to the per-line budget on capture). */
-    content: Type.String(),
+    content: Type.String({ maxLength: NPC_MEMORY_LIMITS.lineChars }),
   },
   { additionalProperties: false },
 );
@@ -60,11 +61,15 @@ export const NpcMemoryRecordSchema = Type.Object(
     /** Epoch ms of the most recent completed conversation. */
     lastTalkedAt: Type.Number(),
     /** Rolling, compacted summary of every past conversation (NPC's point of view). */
-    summary: Type.String(),
+    summary: Type.String({ maxLength: NPC_MEMORY_LIMITS.summaryChars }),
     /** Durable key facts (names, promises, favours, secrets shared). Deduplicated. */
-    notes: Type.Array(Type.String()),
+    notes: Type.Array(Type.String({ maxLength: NPC_MEMORY_LIMITS.noteChars }), {
+      maxItems: NPC_MEMORY_LIMITS.maxNotes,
+    }),
     /** Tail of the most recent conversation — verbatim recall for the next talk. */
-    lastExchange: Type.Array(NpcMemoryLineSchema),
+    lastExchange: Type.Array(NpcMemoryLineSchema, {
+      maxItems: NPC_MEMORY_LIMITS.lastExchangeLines,
+    }),
     /** Pre-generated greeting for the next conversation, if ready. */
     opener: Type.Optional(NpcMemoryOpenerSchema),
   },
@@ -82,7 +87,9 @@ export const NpcMemoryStateSchema = Type.Object(
     /** Campaign the records belong to — records never leak across campaigns. */
     campaignId: Type.Optional(Type.String()),
     /** Records keyed by NPC ID. */
-    records: Type.Record(Type.String(), NpcMemoryRecordSchema),
+    records: Type.Record(Type.String(), NpcMemoryRecordSchema, {
+      maxProperties: NPC_MEMORY_LIMITS.maxRecords,
+    }),
   },
   { additionalProperties: false },
 );

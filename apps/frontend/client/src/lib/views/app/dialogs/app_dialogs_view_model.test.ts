@@ -11,6 +11,7 @@ import {
   createAppDialogCapabilities,
   createAppDialogsProgress,
 } from './testing/app_dialogs_fixtures.ts';
+import { createReactiveAppDialogsHarness } from './testing/app_dialogs_reactive_fixtures.svelte.ts';
 
 const createViewModel = (
   dialog = createAppDialogCapabilities(),
@@ -49,12 +50,14 @@ describe('AppDialogsViewModel — actions', () => {
   });
 
   test('dismissLoading hides the global loading overlay', () => {
-    const setAppLoading = mock((_loading: boolean, _label?: string) => {});
-    const viewModel = createViewModel(createAppDialogCapabilities({ setAppLoading }));
+    const harness = createReactiveAppDialogsHarness();
+    harness.setAppLoading({ label: 'Loading…' });
+    const viewModel = createViewModel(harness.dialog);
 
+    expect(viewModel.appLoading?.label).toBe('Loading…');
     viewModel.dismissLoading();
 
-    expect(setAppLoading).toHaveBeenCalledWith(false);
+    expect(viewModel.appLoading).toBeUndefined();
   });
 });
 

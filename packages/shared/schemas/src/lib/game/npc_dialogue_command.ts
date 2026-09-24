@@ -327,7 +327,7 @@ export const NpcIntentAnalysisOutputSchema = Type.Object(
     modifierSource: Type.Optional(Type.String()),
     /** Short narrative that plays BEFORE any roll UI appears — the NPC's reaction to what was said. */
     npcResponse: Type.String({
-      minLength: 20,
+      minLength: 1,
       description:
         "The NPC's complete spoken reply, first person, as a self-contained conversational turn. " +
         'Must contain actual spoken dialogue in double quotes. Brief physical actions in ' +

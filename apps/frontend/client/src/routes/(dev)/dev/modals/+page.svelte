@@ -3,9 +3,33 @@
 //
 // Sandbox for testing app modals, toast stack, and loading overlay.
 
+import { onDestroy } from 'svelte';
 import { dialogService, imageGenerationService } from '$services';
 
 let _simulating = $state(false);
+let simulationController: AbortController | undefined;
+
+onDestroy(() => {
+  simulationController?.abort();
+  simulationController = undefined;
+});
+
+const waitForSimulation = (milliseconds: number, signal: AbortSignal): Promise<boolean> =>
+  new Promise((resolve) => {
+    if (signal.aborted) {
+      resolve(false);
+      return;
+    }
+    const timer = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort);
+      resolve(true);
+    }, milliseconds);
+    const onAbort = () => {
+      clearTimeout(timer);
+      resolve(false);
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
 
 const showToast = (type: string) => {
   dialogService.showSnackbar({
@@ -49,15 +73,31 @@ const simulateProgress = async () => {
   if (_simulating) {
     return;
   }
+  const controller = new AbortController();
+  simulationController = controller;
   _simulating = true;
   imageGenerationService.simulateProgress(0);
-  for (let progress = 0; progress <= 100; progress += 5) {
-    imageGenerationService.simulateProgress(progress);
-    await new Promise((resolve) => setTimeout(resolve, 100));
+  const ownsProgress = (expected: number) =>
+    simulationController === controller &&
+    !controller.signal.aborted &&
+    !imageGenerationService.isGenerating &&
+    imageGenerationService.generationProgress === expected;
+  try {
+    for (let progress = 5; progress <= 100; progress += 5) {
+      if (!(await waitForSimulation(100, controller.signal)) || !ownsProgress(progress - 5)) {
+        return;
+      }
+      imageGenerationService.simulateProgress(progress);
+    }
+    if ((await waitForSimulation(1000, controller.signal)) && ownsProgress(100)) {
+      imageGenerationService.simulateProgress(0);
+    }
+  } finally {
+    if (simulationController === controller) {
+      simulationController = undefined;
+      _simulating = false;
+    }
   }
-  await new Promise((resolve) => setTimeout(resolve, 1000));
-  imageGenerationService.simulateProgress(0);
-  _simulating = false;
 };
 </script>
 

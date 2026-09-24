@@ -536,7 +536,7 @@
   "apps/frontend/client/src/lib/services/game/game_overlay_service.svelte.ts": {
     "counts": {
       "excessive": 1,
-      "worst": 73
+      "worst": 70
     }
   },
   "apps/frontend/client/src/lib/services/game/game_save_combat_preflight.ts": {

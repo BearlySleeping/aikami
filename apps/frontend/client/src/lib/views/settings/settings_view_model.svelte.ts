@@ -43,7 +43,7 @@ import {
 export type SettingsRouterCapabilities = {
   goBack(): Promise<void>;
   previousPage?: { url: URL };
-  goToHref(href: string): Promise<void>;
+  goToHref(href: string, options?: { replace?: boolean }): Promise<void>;
 };
 
 /** Callbacks the agent list uses to open the shared agent editor. */
@@ -471,7 +471,7 @@ export class SettingsViewModel
     // explicitly; all other entry points retain normal history-based back
     // navigation.
     if (readSearchParam('from') === 'game') {
-      await this._router.goToHref('/game');
+      await this._router.goToHref('/game', { replace: true });
       return;
     }
     const previousPage = this._router.previousPage;

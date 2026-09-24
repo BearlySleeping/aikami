@@ -137,6 +137,10 @@ export class InputActionService
     if (this.keyToAction(event.key) !== 'toggle_hud' || !this._hudShortcutCapability) {
       return false;
     }
+    if (event.repeat) {
+      event.preventDefault();
+      return true;
+    }
     this.onKeyDown();
     this._hudShortcutCapability.toggleHudTemporarilyHidden();
     event.preventDefault();

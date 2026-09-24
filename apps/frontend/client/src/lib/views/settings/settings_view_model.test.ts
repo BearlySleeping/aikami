@@ -154,7 +154,7 @@ describe('SettingsViewModel — deep links', () => {
 
     await vm.closeSettings();
 
-    expect(goToHref).toHaveBeenCalledWith('/game');
+    expect(goToHref).toHaveBeenCalledWith('/game', { replace: true });
     expect(goBack).not.toHaveBeenCalled();
   });
 

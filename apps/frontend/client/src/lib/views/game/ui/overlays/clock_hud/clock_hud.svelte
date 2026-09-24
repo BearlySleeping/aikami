@@ -96,7 +96,7 @@ const weatherIcon = $derived.by(() => {
 </script>
 
 <div class="clock-hud pointer-events-none w-fit max-w-full">
-  <div class="group pointer-events-auto relative">
+  <div class="pointer-events-auto relative">
     <!-- Main time pill -->
     <div
       class="flex items-center gap-2 rounded-full bg-base-200/80 px-3 py-1.5 text-sm backdrop-blur-sm shadow-md border border-base-300/50"
@@ -107,19 +107,12 @@ const weatherIcon = $derived.by(() => {
       <span class="font-mono font-semibold tabular-nums text-base-content">
         {pad(gameHour)}:{pad(gameMinute)}
       </span>
+      <span class="text-xs text-base-content/70">{diurnalLabel}</span>
       {#if showWeather && (rainIntensity > 0.05 || Math.abs(windVelocity) > 0.3)}
         <span class="text-xs text-base-content/60">
           {weatherIcon}
         </span>
       {/if}
     </div>
-
-    <!-- Diurnal phase tooltip -->
-    <span
-      class="pointer-events-none invisible absolute left-1/2 top-full z-10 mt-1 -translate-x-1/2 whitespace-nowrap rounded-md bg-base-content px-2 py-1 text-xs font-medium text-base-100 opacity-0 shadow-md transition-opacity group-hover:visible group-hover:opacity-100"
-      aria-hidden="true"
-    >
-      {diurnalLabel}
-    </span>
   </div>
 </div>

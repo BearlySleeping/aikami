@@ -142,6 +142,36 @@ describe('NpcMemoryService', () => {
     expect(extractStructure).not.toHaveBeenCalled();
   });
 
+  it('drops digest and opener work queued before a restore', async () => {
+    let releaseDigest: (() => void) | undefined;
+    extractStructure.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          releaseDigest = () => resolve(DIGEST);
+        }),
+    );
+    const first = npcMemoryService.recordConversation({
+      npcId: 'ivo',
+      npcName: 'Ivo',
+      messages: talk('First conversation'),
+    });
+    await Promise.resolve();
+    npcMemoryService.prefetchForNpcs(['ivo']);
+    const second = npcMemoryService.recordConversation({
+      npcId: 'ivo',
+      npcName: 'Ivo',
+      messages: talk('Second conversation'),
+    });
+    const snapshot = npcMemoryService.serialize();
+    npcMemoryService.hydrate(snapshot);
+    releaseDigest?.();
+    await Promise.all([first, second]);
+
+    expect(extractStructure).toHaveBeenCalledTimes(1);
+    expect(recordOf('ivo')?.summary).toBe(snapshot.records.ivo?.summary);
+    expect(recordOf('ivo')?.opener).toBeUndefined();
+  });
+
   it('round-trips through serialize/hydrate and rejects invalid snapshots', async () => {
     await npcMemoryService.recordConversation({
       npcId: 'ivo',

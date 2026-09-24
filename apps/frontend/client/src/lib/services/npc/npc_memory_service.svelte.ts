@@ -151,8 +151,9 @@ class NpcMemoryService
       lines: lines.length,
     });
 
+    const epoch = this._epoch;
     return this._enqueue(options.npcId, () =>
-      this._digest({ npcId: options.npcId, previous, lines }),
+      this._digest({ npcId: options.npcId, previous, lines, epoch, record }),
     );
   }
 
@@ -259,7 +260,8 @@ class NpcMemoryService
     }
     this._lastPrefetchAt.set(npcId, now);
     this._prefetching.add(npcId);
-    return this._enqueue(npcId, () => this._refreshOpener(npcId)).finally(() => {
+    const epoch = this._epoch;
+    return this._enqueue(npcId, () => this._refreshOpener({ npcId, epoch, record })).finally(() => {
       this._prefetching.delete(npcId);
     });
   }
@@ -325,10 +327,11 @@ class NpcMemoryService
     npcId: string;
     previous: NpcMemoryRecord | undefined;
     lines: NpcMemoryLine[];
+    epoch: number;
+    record: NpcMemoryRecord;
   }): Promise<void> {
-    const epoch = this._epoch;
-    const record = this._records[options.npcId];
-    if (!record) {
+    const { epoch, record } = options;
+    if (epoch !== this._epoch || this._records[options.npcId] !== record) {
       return;
     }
     const { persona, gameStateFacts } = this._npcContext(record);
@@ -370,10 +373,13 @@ class NpcMemoryService
   }
 
   /** Opener-only refresh for a remembered NPC (world state moved on). */
-  private async _refreshOpener(npcId: string): Promise<void> {
-    const epoch = this._epoch;
-    const record = this._records[npcId];
-    if (!record || !this._isOpenerStale(record)) {
+  private async _refreshOpener(options: {
+    npcId: string;
+    epoch: number;
+    record: NpcMemoryRecord;
+  }): Promise<void> {
+    const { npcId, epoch, record } = options;
+    if (epoch !== this._epoch || this._records[npcId] !== record || !this._isOpenerStale(record)) {
       return;
     }
     const { persona, gameStateFacts } = this._npcContext(record);
