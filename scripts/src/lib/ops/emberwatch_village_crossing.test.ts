@@ -136,10 +136,6 @@ describe('C-549 — the notice-board approach meets the crossing on both banks',
     ];
     for (const [r, c0, c1] of padSpans) {
       for (let c = c0; c <= c1; c++) {
-        if (c === 37 && r === 4) {
-          // The board prop's own origin cell is solid.
-          continue;
-        }
         expect(blockedAt(c, r), `board pad (${c},${r}) is walkable`).toBe(false);
         expect(groundAt(c, r), `board pad (${c},${r}) is worn earth`).toBe(G.DIRT);
       }
