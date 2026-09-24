@@ -70,7 +70,7 @@ const onMessageEnd = (state: StreamState, event: Json): Reduction => {
   }
   const text = assistantText(message);
   const errored =
-    message.stopReason === 'error' ? (str(message.errorMessage) ?? 'model error') : state.errored;
+    message.stopReason === 'error' ? (str(message.errorMessage) ?? 'model error') : undefined;
   return {
     state: {
       ...state,

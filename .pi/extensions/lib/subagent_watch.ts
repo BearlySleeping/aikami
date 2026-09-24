@@ -10,15 +10,14 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { TERMINAL_STATUSES } from '../../../scripts/src/lib/agents/subagents/constants.ts';
 import type {
   SubagentSpec,
   SubagentState,
   SubagentStatus,
 } from '../../../scripts/src/lib/agents/subagents/types.ts';
 
-export const TERMINAL: readonly SubagentStatus[] = ['succeeded', 'failed', 'killed', 'lost'];
-
-export const isTerminalStatus = (s: SubagentStatus): boolean => TERMINAL.includes(s);
+export const isTerminalStatus = (s: SubagentStatus): boolean => TERMINAL_STATUSES.includes(s);
 
 /** Main checkout root, even when pi runs inside a worktree. */
 export const mainRepoRoot = (cwd: string): string => {

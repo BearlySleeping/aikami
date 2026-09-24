@@ -10,20 +10,20 @@
 
 import { randomBytes } from 'node:crypto';
 import {
+  closeSync,
   existsSync,
   mkdirSync,
+  openSync,
   readdirSync,
   readFileSync,
   renameSync,
+  statSync,
+  unlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { join } from 'node:path';
-import {
-  type SubagentSpec,
-  type SubagentState,
-  type SubagentUsage,
-  TERMINAL_STATUSES,
-} from './types.ts';
+import { TERMINAL_STATUSES } from './constants.ts';
+import type { SubagentSpec, SubagentState, SubagentUsage } from './types.ts';
 
 export const RUNS_DIR = '.pi/subagent-runs';
 
@@ -91,18 +91,86 @@ export const writeState = (repoRoot: string, state: SubagentState): SubagentStat
   return next;
 };
 
-/** Read-modify-write. The supervisor is the only writer while a run is live. */
+const createStateLock = (lockPath: string): boolean => {
+  let lock: number;
+  try {
+    lock = openSync(lockPath, 'wx');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
+      return false;
+    }
+    throw error;
+  }
+  try {
+    writeFileSync(lock, String(process.pid));
+  } catch (error) {
+    closeSync(lock);
+    unlinkSync(lockPath);
+    throw error;
+  }
+  closeSync(lock);
+  return true;
+};
+
+const clearStaleStateLock = (lockPath: string): boolean => {
+  try {
+    const owner = Number(readFileSync(lockPath, 'utf8'));
+    if ((owner > 0 && !pidAlive(owner)) || statSync(lockPath).mtimeMs < Date.now() - 10_000) {
+      unlinkSync(lockPath);
+      return true;
+    }
+  } catch {
+    // Another process may have released the lock between reads.
+  }
+  return false;
+};
+
+const acquireStateLock = (lockPath: string, id: string): void => {
+  const deadline = Date.now() + 10_000;
+  while (!createStateLock(lockPath)) {
+    if (clearStaleStateLock(lockPath)) {
+      continue;
+    }
+    if (Date.now() >= deadline) {
+      throw new Error(`Timed out updating subagent run "${id}"`);
+    }
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
+  }
+};
+
+/** Serialize state changes across the supervisor and captain processes. */
+export const updateState = (
+  repoRoot: string,
+  id: string,
+  update: (current: SubagentState) => SubagentState,
+): SubagentState => {
+  const lockPath = `${runFile(repoRoot, id, 'state.json')}.lock`;
+  acquireStateLock(lockPath, id);
+  try {
+    const current = readState(repoRoot, id);
+    if (!current) {
+      throw new Error(`No subagent run "${id}" under ${runsRoot(repoRoot)}`);
+    }
+    return writeState(repoRoot, update(current));
+  } finally {
+    unlinkSync(lockPath);
+  }
+};
+
+/** Read-modify-write with the same lock used by killRun. */
 export const patchState = (
   repoRoot: string,
   id: string,
   patch: Partial<SubagentState>,
-): SubagentState => {
-  const current = readState(repoRoot, id);
-  if (!current) {
-    throw new Error(`No subagent run "${id}" under ${runsRoot(repoRoot)}`);
-  }
-  return writeState(repoRoot, { ...current, ...patch });
-};
+): SubagentState =>
+  updateState(repoRoot, id, (current) => {
+    const next = { ...current, ...patch };
+    if (current.status === 'killed' && patch.status !== 'queued') {
+      next.status = 'killed';
+      next.error = current.error;
+    }
+    return next;
+  });
 
 export const isTerminal = (state: SubagentState): boolean =>
   TERMINAL_STATUSES.includes(state.status);
@@ -139,12 +207,18 @@ export const readLiveState = (repoRoot: string, id: string): SubagentState | und
   if (pidAlive(state.supervisorPid)) {
     return state;
   }
-  return writeState(repoRoot, {
-    ...state,
-    status: 'lost',
-    finishedAt: new Date().toISOString(),
-    error: state.error ?? 'Supervisor process exited without recording a final status.',
-  });
+  return updateState(repoRoot, id, (current) =>
+    isTerminal(current) ||
+    pidAlive(current.supervisorPid) ||
+    (!current.supervisorPid && Date.now() - Date.parse(current.updatedAt) < 60_000)
+      ? current
+      : {
+          ...current,
+          status: 'lost',
+          finishedAt: new Date().toISOString(),
+          error: current.error ?? 'Supervisor process exited without recording a final status.',
+        },
+  );
 };
 
 export const listRunIds = (repoRoot: string): string[] => {

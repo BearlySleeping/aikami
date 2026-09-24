@@ -71,6 +71,7 @@ const DEFAULT_PR: PrOptions = {
 };
 
 const REVIEW_MODES: readonly ReviewMode[] = ['auto', 'always', 'never'];
+const MAX_TIMER_MS = 2_147_483_647;
 
 const resolvePr = (pr: SpawnRequest['pr'], base: string): PrOptions => {
   if (pr === false) {
@@ -89,6 +90,11 @@ export const buildSpec = (request: SpawnRequest): SubagentSpec => {
   const kind = request.kind ?? 'read';
   if (request.thinking !== undefined && !isThinking(request.thinking)) {
     throw new Error(`Invalid thinking level "${request.thinking}"`);
+  }
+  const timeoutMinutes = request.timeoutMinutes ?? 45;
+  const timeoutMs = Math.max(1, timeoutMinutes) * 60_000;
+  if (!Number.isFinite(timeoutMinutes) || timeoutMs > MAX_TIMER_MS) {
+    throw new Error('timeoutMinutes must be finite and within Bun timer range');
   }
   const { model, source } = resolveModel({ requested: request.model, repoRoot: request.repoRoot });
   const base = request.base ?? 'main';
@@ -109,7 +115,7 @@ export const buildSpec = (request: SpawnRequest): SubagentSpec => {
     install: request.install ?? true,
     reuseCheckout: request.reuseCheckout,
     pr: resolvePr(kind === 'write' ? request.pr : false, base),
-    timeoutMs: Math.max(1, request.timeoutMinutes ?? 45) * 60_000,
+    timeoutMs,
     herdr: request.herdr ?? true,
     repoRoot: request.repoRoot,
     captainSessionId: request.captainSessionId,
@@ -188,12 +194,16 @@ const supervisorCommand = (spec: SubagentSpec): string =>
 export const launchSupervisor = async (spec: SubagentSpec, state: SubagentState): Promise<void> => {
   if (state.paneId) {
     // 🔴 herdr `pane run` can drop the first character — lead with a newline.
-    await herdr([
+    const result = await herdr([
       'pane',
       'run',
       state.paneId,
       `\n${await wrapCommandForPane(state.paneId, supervisorCommand(spec))}`,
     ]);
+    if (result.code !== 0) {
+      const output = (result.stderr || result.stdout).trim();
+      throw new Error(`herdr pane run failed (${result.code}): ${output || 'no output'}`);
+    }
     return;
   }
   const logPath = join(runDir(spec.repoRoot, spec.id), 'supervisor.log');

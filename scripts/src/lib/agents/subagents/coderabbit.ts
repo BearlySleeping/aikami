@@ -63,12 +63,17 @@ const inlineFindings = (pr: string): number => {
   }
 };
 
-const rateLimitMinutes = (snap: PrSnapshot, since: number): number | undefined => {
+const rateLimitMinutes = (
+  snap: PrSnapshot,
+  since: number,
+): { minutes: number; at: number } | undefined => {
   const latest = snap.comments
     .filter((c) => BOT.test(c.author.login) && Date.parse(c.createdAt) >= since)
     .at(-1);
   const m = latest?.body.match(/available in[\s\S]{0,40}?(\d+)\s*min/i);
-  return m?.[1] ? Number.parseInt(m[1], 10) + 1 : undefined;
+  return m?.[1] && latest
+    ? { minutes: Number.parseInt(m[1], 10) + 1, at: Date.parse(latest.createdAt) }
+    : undefined;
 };
 
 /** Wait for a CodeRabbit review submitted after `since`. */
@@ -79,10 +84,16 @@ export const waitForReview = async (options: {
   report: Report;
 }): Promise<{ state?: string; findings: number }> => {
   const { pr, report } = options;
-  let deadline = Date.now() + options.timeoutMs;
+  const startedAt = Date.now();
+  const hardDeadline = startedAt + options.timeoutMs * 2;
+  let deadline = startedAt + options.timeoutMs;
+  let lastRateLimitAt = options.since - 1;
   let nudged = false;
-  while (Date.now() < deadline) {
+  while (Date.now() < Math.min(deadline, hardDeadline)) {
     const snap = snapshot(pr);
+    if (Date.now() >= hardDeadline) {
+      break;
+    }
     const review = snap.reviews
       .filter((r) => BOT.test(r.author.login) && Date.parse(r.submittedAt) >= options.since)
       .at(-1);
@@ -91,12 +102,16 @@ export const waitForReview = async (options: {
       report(`CodeRabbit review: ${review.state} (${findings} inline comments)`);
       return { state: review.state, findings };
     }
-    const wait = rateLimitMinutes(snap, options.since);
-    if (wait) {
-      report(`CodeRabbit rate-limited — retrying in ${wait} min`);
-      await sleep(wait * 60_000);
+    const limit = rateLimitMinutes(snap, Math.max(options.since, lastRateLimitAt + 1));
+    if (limit) {
+      lastRateLimitAt = limit.at;
+      report(`CodeRabbit rate-limited — retrying in ${limit.minutes} min`);
+      await sleep(Math.min(limit.minutes * 60_000, Math.max(0, hardDeadline - Date.now())));
+      if (Date.now() >= hardDeadline) {
+        break;
+      }
       comment(pr, '@coderabbitai review');
-      deadline = Math.max(deadline, Date.now() + options.timeoutMs / 2);
+      deadline = Math.min(hardDeadline, Math.max(deadline, Date.now() + options.timeoutMs / 2));
       continue;
     }
     if (!nudged && Date.now() - options.since > NUDGE_AFTER_MS) {
@@ -104,7 +119,7 @@ export const waitForReview = async (options: {
       comment(pr, '@coderabbitai review');
       nudged = true;
     }
-    await sleep(POLL_MS);
+    await sleep(Math.min(POLL_MS, Math.max(0, Math.min(deadline, hardDeadline) - Date.now())));
   }
   report('Timed out waiting for CodeRabbit review');
   return { findings: 0 };

@@ -5,14 +5,14 @@
 // for the review and drive autofix. Every step records its outcome in
 // state.json so the captain sees exactly how far it got.
 
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { openPullRequest, publishWorktree } from '../../herdr/worktree.ts';
 import { runGit } from '../git_worktree.ts';
 import { runAutofix, waitForReview } from './coderabbit.ts';
 import { splitTitle } from './prompt.ts';
 import { CODERABBIT_IGNORE, decideReview, parseNumstat } from './review_policy.ts';
-import { patchState, runsRoot } from './store.ts';
+import { patchState, runsRoot, writeText } from './store.ts';
 import type { ReviewOutcome, SubagentSpec } from './types.ts';
 
 type Report = (line: string) => void;
@@ -34,7 +34,7 @@ const readLastReviewAt = (repoRoot: string): number | undefined => {
 };
 
 const recordReview = (repoRoot: string, at: number): void => {
-  writeFileSync(ledgerPath(repoRoot), JSON.stringify({ lastReviewAt: at }));
+  writeText(ledgerPath(repoRoot), JSON.stringify({ lastReviewAt: at }));
 };
 
 const hasChanges = (checkoutPath: string, base: string): boolean => {

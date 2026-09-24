@@ -86,6 +86,11 @@ export const loadCatalog = (repoRoot: string): CatalogEntry[] => {
     }
   }
   const out = spawnSync('pi', ['--list-models'], { encoding: 'utf8', timeout: 30_000 });
+  if (out.error || out.status !== 0) {
+    const failure = out.error?.message || out.stderr?.trim() || `exit ${out.status}`;
+    console.error(`pi --list-models failed: ${failure}`);
+    return [];
+  }
   const entries = parseModelCatalog(`${out.stdout ?? ''}`);
   if (entries.length > 0) {
     mkdirSync(dirname(cachePath), { recursive: true });

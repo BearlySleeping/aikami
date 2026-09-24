@@ -18,6 +18,7 @@ import {
   readText,
   runDir,
   runFile,
+  updateState,
   writeText,
 } from './store.ts';
 import type { SubagentSpec, SubagentState } from './types.ts';
@@ -54,8 +55,13 @@ export const killRun = (repoRoot: string, id: string): SubagentState => {
   if (isTerminal(state)) {
     return state;
   }
-  const next = patchState(repoRoot, id, { status: 'killed', error: 'killed by captain' });
-  for (const pid of [state.piPid, state.supervisorPid]) {
+  const next = updateState(repoRoot, id, (current) =>
+    isTerminal(current) ? current : { ...current, status: 'killed', error: 'killed by captain' },
+  );
+  if (next.status !== 'killed') {
+    return next;
+  }
+  for (const pid of [next.piPid, next.supervisorPid]) {
     if (pid && pidAlive(pid)) {
       try {
         process.kill(pid, 'SIGTERM');

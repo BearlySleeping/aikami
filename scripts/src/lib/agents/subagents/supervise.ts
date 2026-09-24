@@ -12,10 +12,20 @@
 
 import { spawn } from 'node:child_process';
 import { appendFileSync } from 'node:fs';
+import { publishWorktree } from '../../herdr/worktree.ts';
 import { runGit } from '../git_worktree.ts';
 import { parseLine, reduceEvent, type StreamState } from './events.ts';
+import { splitTitle } from './prompt.ts';
 import { publishRun } from './publish.ts';
-import { patchState, readSpec, readState, readText, runFile, writeText } from './store.ts';
+import {
+  patchState,
+  readSpec,
+  readState,
+  readText,
+  runFile,
+  updateState,
+  writeText,
+} from './store.ts';
 import type { SubagentSpec, SubagentState } from './types.ts';
 
 const STATE_FLUSH_MS = 2_000;
@@ -52,14 +62,21 @@ export const buildPiArgs = (options: {
   if (spec.noSkillDiscovery) {
     args.push('--no-skills');
   }
-  if (spec.tools && spec.tools.length > 0) {
-    args.push('--tools', spec.tools.join(','));
+  const excluded = new Set([
+    ...ALWAYS_EXCLUDED,
+    ...(spec.kind === 'read' ? READ_EXCLUDED : WRITE_EXCLUDED),
+    ...spec.excludeTools,
+  ]);
+  const tools = spec.tools
+    ?.flatMap((tool) => tool.split(',').map((name) => name.trim()))
+    .filter(Boolean);
+  if (tools && tools.length > 0) {
+    const forbidden = tools.find((tool) => excluded.has(tool));
+    if (forbidden) {
+      throw new Error(`Tool "${forbidden}" is excluded for ${spec.kind} subagents`);
+    }
+    args.push('--tools', tools.join(','));
   } else {
-    const excluded = new Set([
-      ...ALWAYS_EXCLUDED,
-      ...(spec.kind === 'read' ? READ_EXCLUDED : WRITE_EXCLUDED),
-      ...spec.excludeTools,
-    ]);
     args.push('--exclude-tools', [...excluded].join(','));
   }
   args.push('-p', options.task);
@@ -133,11 +150,14 @@ const runPi = (options: {
       HERDR_DISABLE_SOUND: '1',
     },
   });
-  patchState(spec.repoRoot, spec.id, {
-    piPid: child.pid,
-    piSessionId: sessionId,
-    status: 'running',
-  });
+  const started = updateState(spec.repoRoot, spec.id, (current) =>
+    current.status === 'killed'
+      ? current
+      : { ...current, piPid: child.pid, piSessionId: sessionId, status: 'running' },
+  );
+  if (started.status === 'killed') {
+    child.kill('SIGTERM');
+  }
 
   let stream: StreamState = { usage: options.state.usage, lastText: '' };
   let dirty = false;
@@ -151,8 +171,8 @@ const runPi = (options: {
   const flusher = setInterval(flush, STATE_FLUSH_MS);
 
   let buffer = '';
-  child.stdout.on('data', (chunk: Buffer) => {
-    const text = chunk.toString('utf8');
+  child.stdout.setEncoding('utf8');
+  child.stdout.on('data', (text: string) => {
     appendFileSync(eventsPath, text);
     buffer += text;
     const lines = buffer.split('\n');
@@ -191,6 +211,8 @@ const runPi = (options: {
     child.on('close', (code) => {
       clearTimeout(timer);
       clearInterval(flusher);
+      process.removeListener('SIGTERM', forward);
+      process.removeListener('SIGINT', forward);
       if (buffer) {
         stream = reduceEvent(stream, parseLine(buffer)).state;
       }
@@ -201,10 +223,13 @@ const runPi = (options: {
 };
 
 const finish = (spec: SubagentSpec, patch: Partial<SubagentState>): SubagentState => {
-  const next = patchState(spec.repoRoot, spec.id, {
+  const next = updateState(spec.repoRoot, spec.id, (current) => ({
+    ...current,
     ...patch,
+    status: current.status === 'killed' ? 'killed' : (patch.status ?? current.status),
+    error: current.status === 'killed' ? current.error : patch.error,
     finishedAt: new Date().toISOString(),
-  });
+  }));
   reportPane(next.paneId, 'idle', `${next.status}${next.error ? `: ${next.error}` : ''}`);
   return next;
 };
@@ -231,10 +256,34 @@ const publishIfWanted = async (
   checkoutPath: string | undefined,
   result: string,
 ): Promise<string | undefined> => {
-  if (spec.kind !== 'write' || !spec.pr.enabled || !checkoutPath) {
+  if (spec.kind !== 'write' || !checkoutPath) {
     return undefined;
   }
   try {
+    const existingPr = readState(spec.repoRoot, spec.id)?.pr;
+    if (existingPr) {
+      const title = spec.pr.title ?? splitTitle(result).title ?? `chore: ${spec.name}`;
+      patchState(spec.repoRoot, spec.id, { status: 'publishing', activity: 'updating PR branch' });
+      const { headBranch, headCommit } = await publishWorktree({
+        checkoutPath,
+        repoRoot: spec.repoRoot,
+        base: spec.pr.base,
+        message: title,
+        authorName: 'Pi Subagent',
+        authorEmail: 'agent@pi.internal',
+      });
+      if (headBranch !== readState(spec.repoRoot, spec.id)?.branch) {
+        throw new Error(`published branch ${headBranch} differs from the existing PR branch`);
+      }
+      patchState(spec.repoRoot, spec.id, {
+        pr: { ...existingPr, headCommit },
+        activity: `PR #${existingPr.number} branch updated`,
+      });
+      return undefined;
+    }
+    if (!spec.pr.enabled) {
+      return undefined;
+    }
     await publishRun({
       spec,
       checkoutPath,
@@ -250,17 +299,26 @@ const publishIfWanted = async (
   }
 };
 
-const begin = (spec: SubagentSpec, initial: SubagentState, cwd: string, task: string): void => {
-  patchState(spec.repoRoot, spec.id, {
-    supervisorPid: process.pid,
-    status: 'starting',
-    startedAt: initial.startedAt ?? new Date().toISOString(),
-    finishedAt: undefined,
-    error: undefined,
-  });
+const begin = (spec: SubagentSpec, cwd: string, task: string): boolean => {
+  const state = updateState(spec.repoRoot, spec.id, (current) =>
+    current.status === 'killed'
+      ? current
+      : {
+          ...current,
+          supervisorPid: process.pid,
+          status: 'starting',
+          startedAt: current.startedAt ?? new Date().toISOString(),
+          finishedAt: undefined,
+          error: undefined,
+        },
+  );
+  if (state.status === 'killed') {
+    return false;
+  }
   print(`━━ subagent ${spec.id} (${spec.kind}) ━━`);
   print(`model ${spec.model}${spec.thinking ? `:${spec.thinking}` : ''} · cwd ${cwd}`);
   print(`task: ${task.split('\n')[0]?.slice(0, 160) ?? ''}\n`);
+  return true;
 };
 
 export const supervise = async (options: { repoRoot: string; id: string }): Promise<number> => {
@@ -272,28 +330,31 @@ export const supervise = async (options: { repoRoot: string; id: string }): Prom
   }
   const cwd = initial.checkoutPath ?? spec.repoRoot;
   const task = readText(runFile(spec.repoRoot, spec.id, 'task.md')) ?? spec.task;
-  begin(spec, initial, cwd, task);
+  if (!begin(spec, cwd, task)) {
+    return 1;
+  }
 
   const before = spec.kind === 'read' ? porcelain(spec.repoRoot) : undefined;
   const outcome = await runPi({ spec, state: initial, cwd, task });
-  const after = readState(spec.repoRoot, spec.id);
 
   const result = outcome.stream.lastText || '(the subagent produced no final text)';
   writeText(runFile(spec.repoRoot, spec.id, 'result.md'), `${result}\n`);
   const base: Partial<SubagentState> = {
     exitCode: outcome.code,
     summary: result.slice(0, SUMMARY_CHARS),
-    rounds: (after?.rounds ?? 0) + 1,
     strayWrites: before ? [...porcelain(spec.repoRoot)].filter((l) => !before.has(l)) : undefined,
   };
 
-  if (after?.status === 'killed') {
+  const after = updateState(spec.repoRoot, spec.id, (current) => ({
+    ...current,
+    ...base,
+    rounds: current.rounds + 1,
+  }));
+  if (after.status === 'killed') {
     print('\n🛑 killed');
-    finish(spec, base);
+    finish(spec, {});
     return 1;
   }
-  // Record the result before publishing so the captain can read it early.
-  patchState(spec.repoRoot, spec.id, base);
   const error =
     failureOf(spec, outcome) ?? (await publishIfWanted(spec, initial.checkoutPath, result));
   if (error) {
@@ -301,9 +362,13 @@ export const supervise = async (options: { repoRoot: string; id: string }): Prom
     finish(spec, { status: 'failed', error });
     return 1;
   }
+  const finished = finish(spec, { status: 'succeeded' });
+  if (finished.status === 'killed') {
+    print('\n🛑 killed');
+    return 1;
+  }
   print(
     `\n✅ done · ${outcome.stream.usage.turns} turns · $${outcome.stream.usage.cost.toFixed(4)}`,
   );
-  finish(spec, { status: 'succeeded' });
   return 0;
 };

@@ -88,13 +88,6 @@ export type SubagentStatus =
   | 'killed'
   | 'lost';
 
-export const TERMINAL_STATUSES: readonly SubagentStatus[] = [
-  'succeeded',
-  'failed',
-  'killed',
-  'lost',
-];
-
 export type SubagentUsage = {
   turns: number;
   toolCalls: number;
