@@ -397,6 +397,10 @@ export const setupBridgeListeners = async (params: SetupBridgeListenersParams): 
     }
   });
 
+  bridge.on('INTERACTION_TARGET_POSITION_UPDATED', (event) => {
+    gameOverlayService.setInteractionPromptPosition(event);
+  });
+
   // ── C-327 AC-5: Gamepad polling via UI rAF ──
   // Gamepad is polled externally via the game_ui_view_model frame loop
 };

@@ -434,6 +434,11 @@ export type GameEvent =
       targetScreenY?: number;
     }
   | {
+      type: 'INTERACTION_TARGET_POSITION_UPDATED';
+      targetScreenX?: number;
+      targetScreenY?: number;
+    }
+  | {
       /**
        * Emitted when a door opens.
        * Contract: C-342

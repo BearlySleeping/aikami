@@ -1351,9 +1351,13 @@
     .hud-prompt--target {
       position: fixed;
       inset-block-start: clamp(1rem, calc(var(--prompt-y) - 4rem), calc(100dvh - 1rem));
-      inset-inline-start: clamp(1rem, var(--prompt-x), calc(100vw - 1rem));
+      inset-inline-start: var(--prompt-x);
+      max-inline-size: calc(100vw - 2rem);
       margin-block-end: 0;
-      transform: translateX(-50%);
+      /* The percentage is the prompt's own width, so both edges stay in view. */
+      transform: translateX(
+        clamp(calc(1rem - var(--prompt-x)), -50%, calc(100vw - 1rem - var(--prompt-x) - 100%))
+      );
     }
 
     .hud-prompt__key {
@@ -1539,7 +1543,7 @@
 
   /* App snackbar is mounted outside the game-theme scope; move it above the
      dialogue stage so its bottom-right placement cannot cover the composer. */
-  body:has([data-testid="dialogue-overlay"]) .toast.toast-end {
+  body:has([data-testid="dialogue-session"]:not([hidden])) .toast.toast-end {
     top: 1rem;
     right: auto;
     bottom: auto;

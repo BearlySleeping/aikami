@@ -28,6 +28,7 @@ import { type InteractionTarget, selectInteractionTarget } from './interaction_t
  * Compared against the per-tick selection result to gate event emission.
  */
 let currentTarget: InteractionTarget | undefined;
+let currentScreenPosition: { x: number; y: number } | undefined;
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -59,6 +60,7 @@ export const updateInteractionProximity = (options: {
   if (!isSimulationActive()) {
     if (currentTarget) {
       currentTarget = undefined;
+      currentScreenPosition = undefined;
       bridge.emit({
         type: 'INTERACTION_TARGET_CHANGED',
         targetEntityId: undefined,
@@ -72,6 +74,7 @@ export const updateInteractionProximity = (options: {
     // Emit undefined target transition before returning — clears stale prompt (C-327)
     if (currentTarget) {
       currentTarget = undefined;
+      currentScreenPosition = undefined;
       bridge.emit({
         type: 'INTERACTION_TARGET_CHANGED',
         targetEntityId: undefined,
@@ -86,20 +89,24 @@ export const updateInteractionProximity = (options: {
     playerY: playerPos.y,
   });
 
-  // ── Dirty-check: emit only when the target changes ──
+  const targetPosition = newTarget
+    ? (getComponent(world, newTarget.entityId, Position) as PositionData | undefined)
+    : undefined;
+  const screenPosition = targetPosition
+    ? projectWorldPointToScreen(targetPosition.x, targetPosition.y)
+    : undefined;
+
+  // Keep the target identity notification dirty-checked, but refresh the
+  // retained prompt when camera motion changes its projected position.
   if (_targetsEqual(currentTarget, newTarget)) {
+    _refreshRetainedTargetPosition(newTarget, screenPosition, bridge);
     return;
   }
 
   currentTarget = newTarget;
+  currentScreenPosition = screenPosition;
 
   if (newTarget) {
-    const targetPosition = getComponent(world, newTarget.entityId, Position) as
-      | PositionData
-      | undefined;
-    const screenPosition = targetPosition
-      ? projectWorldPointToScreen(targetPosition.x, targetPosition.y)
-      : undefined;
     bridge.emit({
       type: 'INTERACTION_TARGET_CHANGED',
       targetEntityId: newTarget.entityId,
@@ -121,11 +128,32 @@ export const updateInteractionProximity = (options: {
  */
 export const clearInteractionProximityState = (): void => {
   currentTarget = undefined;
+  currentScreenPosition = undefined;
 };
 
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
+
+const _refreshRetainedTargetPosition = (
+  target: InteractionTarget | undefined,
+  screenPosition: { x: number; y: number } | undefined,
+  bridge: EngineBridge,
+): void => {
+  if (
+    !target ||
+    (screenPosition?.x === currentScreenPosition?.x &&
+      screenPosition?.y === currentScreenPosition?.y)
+  ) {
+    return;
+  }
+  currentScreenPosition = screenPosition;
+  bridge.emit({
+    type: 'INTERACTION_TARGET_POSITION_UPDATED',
+    targetScreenX: screenPosition?.x,
+    targetScreenY: screenPosition?.y,
+  });
+};
 
 /**
  * Compares two InteractionTarget objects for equality.

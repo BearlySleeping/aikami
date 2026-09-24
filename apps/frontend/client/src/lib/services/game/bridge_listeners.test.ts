@@ -50,6 +50,7 @@ describe('setupBridgeListeners (AC-5)', () => {
       clearActive: mock(() => {}),
       closeCombat: mock(() => {}),
       setCameraZoom: mock(() => {}),
+      setInteractionPromptPosition: mock(() => {}),
       openVendor: mock(() => {}),
       setTransitioning: mock(() => {}),
       onMapLoaded: mock(() => {}),
@@ -417,11 +418,37 @@ describe('setupBridgeListeners (AC-5)', () => {
       'COMBAT_LOG',
       'COMBAT_ENDED',
       'INTERACTION_TARGET_CHANGED',
+      'INTERACTION_TARGET_POSITION_UPDATED',
     ];
 
     for (const event of expectedEvents) {
       expect(bridgeListeners.has(event)).toBe(true);
     }
+  });
+
+  test('position updates refresh only the retained interaction prompt coordinates', async () => {
+    await setupBridgeListeners({
+      gameOverlayService: mockGameOverlayService as never,
+      npcDialogueService: mockNpcDialogueService as never,
+      gameEngineService: mockGameEngineService as never,
+      combatService: mockCombatService as never,
+      timeService: mockTimeService as never,
+      audioService: mockAudioService as never,
+      inputActionService: mockInputActionService as never,
+      onboardingHintService: mockOnboardingHintService as never,
+      partyFollowService: mockPartyFollowService as never,
+    });
+
+    bridgeListeners.get('INTERACTION_TARGET_POSITION_UPDATED')?.({
+      targetScreenX: 120,
+      targetScreenY: 80,
+    });
+
+    expect(mockGameOverlayService.setInteractionPromptPosition).toHaveBeenCalledWith({
+      targetScreenX: 120,
+      targetScreenY: 80,
+    });
+    expect(mockOnboardingHintService.onInteractionTargetChanged).not.toHaveBeenCalled();
   });
 
   // ── C-512: contextual generation caller ──

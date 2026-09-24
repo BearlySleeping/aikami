@@ -11,6 +11,9 @@
 
 import { describe, expect, mock, test } from 'bun:test';
 import { BaseViewModel } from '@aikami/frontend/services/base';
+import { LpcAnimationState } from '@aikami/lpc';
+import { getLpcAssetPath } from '$lib/data/lpc_asset_catalog';
+import { assetStore } from '$lib/services/assets/asset_store.svelte';
 import {
   createInventoryViewModel,
   type EquipmentCapabilities,
@@ -223,19 +226,26 @@ describe('InventoryViewModel — bag search and sort', () => {
     });
 
   test('filters by item label, case-insensitively', () => {
-    const viewModel = createViewModel({ inventory: bagInventory() });
+    const originalResolveUrl = assetStore.resolveUrl;
+    assetStore.resolveUrl = (tag) =>
+      tag === 'lpc:weapon:sword:longsword:walk'
+        ? 'https://assets.example/longsword.walk.webp'
+        : null;
+    try {
+      const viewModel = createViewModel({ inventory: bagInventory() });
+      viewModel.setSearchQuery('IRON');
 
-    viewModel.setSearchQuery('IRON');
-
-    expect(viewModel.hasSearchQuery).toBe(true);
-    expect(viewModel.visibleItems).toHaveLength(1);
-    expect(viewModel.visibleItems[0]?.itemId).toBe('ironSword');
-    expect(viewModel.visibleItems[0]?.quantity).toBe(1);
-    expect(viewModel.visibleItems[0]?.fallbackIcon).toBe('⚔️');
-    expect(
-      viewModel.visibleItems[0]?.artUrl === undefined ||
-        typeof viewModel.visibleItems[0]?.artUrl === 'string',
-    ).toBe(true);
+      expect(viewModel.hasSearchQuery).toBe(true);
+      expect(viewModel.visibleItems).toHaveLength(1);
+      expect(viewModel.visibleItems[0]?.itemId).toBe('ironSword');
+      expect(viewModel.visibleItems[0]?.quantity).toBe(1);
+      expect(viewModel.visibleItems[0]?.fallbackIcon).toBe('⚔️');
+      const resolvedUrl = getLpcAssetPath('', 'weapon/sword/longsword', LpcAnimationState.Walk);
+      expect(resolvedUrl).toBe('https://assets.example/longsword.walk.webp');
+      expect(viewModel.visibleItems[0]?.artUrl).toBe(resolvedUrl);
+    } finally {
+      assetStore.resolveUrl = originalResolveUrl;
+    }
   });
 
   test('a blank query returns the whole bag', () => {

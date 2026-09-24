@@ -438,13 +438,10 @@ export class GameOverlayService
     this._cameraZoomNpcScreenX = options.npcScreenX;
     this._cameraZoomNpcScreenY = options.npcScreenY;
   }
-
   vendorSessionOptions = $state<
     { vendorId: string; vendorName: string; vendorInventory: string } | undefined
   >(undefined);
-
   talkToPartyOptions = $state<{ npcId: string; name: string } | undefined>(undefined);
-
   interactionPromptLabel = $state<string>('');
   interactionPromptVisible = $state<boolean>(false);
   interactionPromptScreenX = $state<number | undefined>(undefined);
@@ -452,7 +449,6 @@ export class GameOverlayService
   private _interactionTargetMetadata = $state<{ verb: string; targetName: string } | undefined>(
     undefined,
   );
-
   setInteractionPrompt(options: {
     label: string;
     visible: boolean;
@@ -465,6 +461,10 @@ export class GameOverlayService
     this.interactionPromptScreenX = options.targetScreenX;
     this.interactionPromptScreenY = options.targetScreenY;
     this._interactionTargetMetadata = options.targetMetadata;
+  }
+  setInteractionPromptPosition(options: { targetScreenX?: number; targetScreenY?: number }): void {
+    this.interactionPromptScreenX = options.targetScreenX;
+    this.interactionPromptScreenY = options.targetScreenY;
   }
   async triggerAutoSave(): Promise<void> {
     await this._triggerAutoSave();

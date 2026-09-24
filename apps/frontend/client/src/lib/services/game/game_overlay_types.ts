@@ -207,6 +207,8 @@ export type GameOverlayServiceInterface = BaseFrontendClassInterface & {
     targetScreenX?: number;
     targetScreenY?: number;
   }): void;
+  /** Refreshes only the retained target's projected prompt position. */
+  setInteractionPromptPosition(options: { targetScreenX?: number; targetScreenY?: number }): void;
   /** Test/evidence seam: runs the real autosave transaction immediately. */
   triggerAutoSave(): Promise<void>;
 
