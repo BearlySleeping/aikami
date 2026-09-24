@@ -6,7 +6,8 @@
 
 import type { Region } from './emberwatch_authoring.ts';
 import { formatCells, isMapCell, isWalkableLand } from './emberwatch_map_authoring_helpers.ts';
-import { idx, type MapData, setTile } from './emberwatch_map_shared.ts';
+import { idx, type MapData, type MapObjectLayer, setTile } from './emberwatch_map_shared.ts';
+import { propFootprintCells } from './emberwatch_prop_footprint.ts';
 import type { HouseRoofMaterial } from './generate_emberwatch_house_frames.ts';
 import { buildG, readManifestTiles } from './generate_emberwatch_tables.ts';
 
@@ -30,6 +31,22 @@ export type DoorPlacement = {
 export type HouseDoorPlacement = {
   doorCells: Array<[number, number]>;
   landingCells: Array<[number, number]>;
+};
+
+/** Two solid facade rows are reserved below the roof on every house. */
+export const HOUSE_FACADE_ROWS = 2;
+
+/** Maximum pale/front roof depth before the darker back slope takes over. */
+export const HOUSE_MAX_VISIBLE_ROOF_ROWS = 3;
+
+/** Return the bounded front-roof depth for a footprint height. */
+export const houseVisibleRoofRows = (footprintRows: number): number => {
+  if (!Number.isInteger(footprintRows) || footprintRows <= HOUSE_FACADE_ROWS) {
+    throw new Error(
+      `emberwatch_authoring: footprintRows must be an integer greater than ${HOUSE_FACADE_ROWS}`,
+    );
+  }
+  return Math.min(footprintRows - HOUSE_FACADE_ROWS, HOUSE_MAX_VISIBLE_ROOF_ROWS);
 };
 
 /** Resolve a door pair and its two-row landing from a footprint. */
@@ -286,6 +303,118 @@ const houseContactShadowCells = (options: {
   return cells;
 };
 
+type HouseKeepOut = {
+  region: Region;
+  landingCells: ReadonlyArray<readonly [number, number]>;
+};
+
+const houseKeepOutByMap = new WeakMap<MapData, HouseKeepOut[]>();
+
+const rememberHouseKeepOut = (options: {
+  map: MapData;
+  region: Region;
+  landingCells: ReadonlyArray<readonly [number, number]>;
+}): void => {
+  const houses = houseKeepOutByMap.get(options.map) ?? [];
+  houses.push({ region: options.region, landingCells: options.landingCells });
+  houseKeepOutByMap.set(options.map, houses);
+};
+
+type MapObject = MapObjectLayer['objects'][number];
+
+const propertyString = (object: MapObject, name: string): string | undefined => {
+  const value = object.properties.find((property) => property.name === name)?.value;
+  return typeof value === 'string' ? value : undefined;
+};
+
+const addRegionCells = (target: Set<string>, region: Region): void => {
+  for (let r = region.r0; r <= region.r1; r += 1) {
+    for (let c = region.c0; c <= region.c1; c += 1) {
+      target.add(`${c},${r}`);
+    }
+  }
+};
+
+const buildKeepOutCells = (
+  houses: readonly HouseKeepOut[],
+): { houseCells: Set<string>; approachCells: Set<string> } => {
+  const houseCells = new Set<string>();
+  const approachCells = new Set<string>();
+  for (const house of houses) {
+    addRegionCells(houseCells, house.region);
+    for (const [c, r] of house.landingCells) {
+      approachCells.add(`${c},${r}`);
+    }
+  }
+  return { houseCells, approachCells };
+};
+
+const propOverlapViolation = (options: {
+  object: MapObject;
+  houseCells: ReadonlySet<string>;
+  approachCells: ReadonlySet<string>;
+}): string | undefined => {
+  const { object, houseCells, approachCells } = options;
+  if (object.type !== 'prop') {
+    return undefined;
+  }
+  const propId = propertyString(object, 'propId');
+  if (propId === undefined) {
+    throw new Error('emberwatch_authoring: prop object is missing its propId');
+  }
+  const overlaps = propFootprintCells({ propId, x: object.x, y: object.y }).filter(
+    ([c, r]) => houseCells.has(`${c},${r}`) || approachCells.has(`${c},${r}`),
+  );
+  return overlaps.length === 0
+    ? undefined
+    : `prop ${propId} (${object.id}) overlaps ${formatCells(overlaps)}`;
+};
+
+const collectPropOverlapViolations = (options: {
+  objectLayers: readonly MapObjectLayer[];
+  houseCells: ReadonlySet<string>;
+  approachCells: ReadonlySet<string>;
+}): string[] => {
+  const violations: string[] = [];
+  for (const layer of options.objectLayers) {
+    for (const object of layer.objects) {
+      const violation = propOverlapViolation({
+        object,
+        houseCells: options.houseCells,
+        approachCells: options.approachCells,
+      });
+      if (violation !== undefined) {
+        violations.push(violation);
+      }
+    }
+  }
+  return violations;
+};
+
+/**
+ * Fail closed when a prop's visual rectangle touches a house or its approach.
+ * This is intentionally an author-time assertion over the final object layers:
+ * it catches a later prop move even when the house itself was authored first.
+ */
+export const assertNoHousePropOverlaps = (options: {
+  map: MapData;
+  objectLayers: readonly MapObjectLayer[];
+}): void => {
+  const houses = houseKeepOutByMap.get(options.map) ?? [];
+  if (houses.length === 0) {
+    return;
+  }
+  const { houseCells, approachCells } = buildKeepOutCells(houses);
+  const violations = collectPropOverlapViolations({
+    objectLayers: options.objectLayers,
+    houseCells,
+    approachCells,
+  });
+  if (violations.length > 0) {
+    throw new Error(`emberwatch_authoring: house prop overlap(s): ${violations.join('; ')}`);
+  }
+};
+
 const houseGroundCells = (options: {
   c0: number;
   c1: number;
@@ -387,12 +516,19 @@ const roofRoleForCell = (options: {
   r0: number;
   r1: number;
   roofMaterial: HouseRoofMaterial;
+  visibleRoofRows: number;
 }): HouseCellRole => {
-  const { c, r, c0, c1, r0, r1, roofMaterial } = options;
+  const { c, r, c0, c1, r0, r1, roofMaterial, visibleRoofRows } = options;
   const frames = HOUSE_ROOF_FRAMES[roofMaterial];
-  if (r === r1 - 2) {
+  const frontRow = r1 - 2;
+  const ridgeRow = frontRow - (visibleRoofRows - 2);
+  if (r === frontRow) {
     const gid = c === c0 || c === c1 ? frames.eaveEdge : frames.front;
     return { layer: 'ground', gid, blocked: true };
+  }
+  if (r === ridgeRow) {
+    const gid = c === c0 || c === c1 ? frames.eaveOverhead : frames.ridge;
+    return { layer: 'overhead', gid, blocked: false };
   }
   if (r === r0) {
     let gid = frames.back;
@@ -403,10 +539,9 @@ const roofRoleForCell = (options: {
     }
     return { layer: 'overhead', gid, blocked: false };
   }
-  if (r === r0 + 1) {
-    const gid = c === c0 || c === c1 ? frames.eaveOverhead : frames.ridge;
-    return { layer: 'overhead', gid, blocked: false };
-  }
+  // Keep the full walk-behind depth, but render every row before the bounded
+  // front/ridge section as the darker back slope. The facade therefore gains
+  // one pale front band and one ridge highlight, never a second pale band.
   return { layer: 'overhead', gid: frames.back, blocked: false };
 };
 
@@ -420,12 +555,13 @@ const houseCellRole = (options: {
   doorCells: ReadonlyArray<[number, number]>;
   doorState: HouseDoorState;
   roofMaterial: HouseRoofMaterial;
+  visibleRoofRows: number;
 }): HouseCellRole => {
-  const { c, r, c0, c1, r0, r1, doorCells, doorState, roofMaterial } = options;
+  const { c, r, c0, c1, r0, r1, doorCells, doorState, roofMaterial, visibleRoofRows } = options;
   if (r === r1 - 1 || r === r1) {
     return facadeRoleForCell({ c, r, r1, c0, c1, doorCells, doorState });
   }
-  return roofRoleForCell({ c, r, c0, c1, r0, r1, roofMaterial });
+  return roofRoleForCell({ c, r, c0, c1, r0, r1, roofMaterial, visibleRoofRows });
 };
 
 const assertHouseInputs = (options: {
@@ -585,6 +721,7 @@ export const placeHouse = (
   });
   const doorState = options.door.state ?? 'closed';
   const roofMaterial = options.roofMaterial ?? 'cedar';
+  const visibleRoofRows = houseVisibleRoofRows(region.r1 - region.r0 + 1);
   for (let r = region.r0; r <= region.r1; r++) {
     for (let c = region.c0; c <= region.c1; c++) {
       const role = houseCellRole({
@@ -597,10 +734,12 @@ export const placeHouse = (
         doorCells,
         doorState,
         roofMaterial,
+        visibleRoofRows,
       });
       applyHouseCell(map, role, c, r);
     }
   }
   applyHouseApproach(map, landingCells, contactShadowCells);
+  rememberHouseKeepOut({ map, region, landingCells });
   return { c: options.door.c, r: region.r1 };
 };

@@ -2301,12 +2301,12 @@
       "propId": "inn_barrel",
       "frame": "prop_barrel.png",
       "cell": {
-        "c": 54,
-        "r": 21
+        "c": 56,
+        "r": 22
       },
       "world": {
-        "x": 1728,
-        "y": 672
+        "x": 1792,
+        "y": 704
       },
       "sourcePixels": {
         "width": 181,
@@ -2336,15 +2336,53 @@
     },
     {
       "map": "village",
-      "propId": "inn_chair",
-      "frame": "chair.png",
+      "propId": "inn_brazier",
+      "frame": "prop_brazier.png",
       "cell": {
         "c": 53,
-        "r": 20
+        "r": 22
       },
       "world": {
         "x": 1696,
-        "y": 640
+        "y": 704
+      },
+      "sourcePixels": {
+        "width": 126,
+        "height": 110
+      },
+      "worldSize": {
+        "width": 64,
+        "height": 56
+      },
+      "worldSizeAuthored": true,
+      "anchor": {
+        "x": 0.5,
+        "y": 1
+      },
+      "collision": {
+        "type": "rect",
+        "width": 22,
+        "height": 22
+      },
+      "shadow": {
+        "kind": "ellipse",
+        "width": 34,
+        "height": 14,
+        "opacity": 0.22
+      },
+      "classification": "accepted-generated"
+    },
+    {
+      "map": "village",
+      "propId": "inn_chair",
+      "frame": "chair.png",
+      "cell": {
+        "c": 55,
+        "r": 22
+      },
+      "world": {
+        "x": 1760,
+        "y": 704
       },
       "sourcePixels": {
         "width": 26,
@@ -2840,11 +2878,11 @@
       "propId": "woodland_oak_3",
       "frame": "oak.png",
       "cell": {
-        "c": 12,
+        "c": 15,
         "r": 20
       },
       "world": {
-        "x": 384,
+        "x": 480,
         "y": 640
       },
       "sourcePixels": {
@@ -3007,9 +3045,9 @@
       "width": 64,
       "height": 48,
       "npcCount": 4,
-      "propCount": 18,
+      "propCount": 19,
       "transitionCount": 3,
-      "walkablePercent": 75.7,
+      "walkablePercent": 81.2,
       "components": 9,
       "unreachableCells": 11,
       "legacyFrames": [],

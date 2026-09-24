@@ -9,6 +9,7 @@ import {
   clearCombatSelectionHighlights,
   drawCombatSelectionHighlights,
   drawDebugGrid,
+  isDoorThresholdTransition,
   renderTransitionZoneOverlays,
 } from './scene_overlays.ts';
 
@@ -45,6 +46,11 @@ describe('scene_overlays — transition zones', () => {
     renderTransitionZoneOverlays({ worldContainer, zones: [zone('c')] });
     expect(worldContainer.getChildByLabel('zone-overlay-a')).toBeNull();
     expect(worldContainer.getChildByLabel('zone-overlay-c')).not.toBeNull();
+  });
+
+  test('recognizes door-sized thresholds separately from gate zones', () => {
+    expect(isDoorThresholdTransition({ width: 32, height: 64 })).toBe(true);
+    expect(isDoorThresholdTransition({ width: 96, height: 64 })).toBe(false);
   });
 
   test('handles zero zones by only clearing overlays', () => {

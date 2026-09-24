@@ -6,11 +6,15 @@
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import {
+  assertNoHousePropOverlaps,
+  HOUSE_FACADE_ROWS,
   HOUSE_FRAMES,
+  HOUSE_MAX_VISIBLE_ROOF_ROWS,
   HOUSE_ROOF_FRAMES,
   type HouseDoorState,
   type HouseRoofMaterial,
   houseDoorPlacement,
+  houseVisibleRoofRows,
   placeHouse,
 } from './emberwatch_authoring.ts';
 import { buildInn, buildShop, buildVillage } from './emberwatch_map_retained.ts';
@@ -143,6 +147,8 @@ const roofCellCount = (definition: HouseDefinition): number => {
 
 const expectedRoofFrame = (definition: HouseDefinition, c: number, r: number): number => {
   const frames = HOUSE_ROOF_FRAMES[definition.roofMaterial];
+  const frontRow = definition.region.r1 - 2;
+  const ridgeRow = frontRow - 1;
   if (r === definition.region.r0) {
     if (c === definition.region.c0) {
       return frames.gableLeft;
@@ -152,7 +158,7 @@ const expectedRoofFrame = (definition: HouseDefinition, c: number, r: number): n
     }
     return frames.back;
   }
-  if (r === definition.region.r0 + 1) {
+  if (r === ridgeRow) {
     return c === definition.region.c0 || c === definition.region.c1
       ? frames.eaveOverhead
       : frames.ridge;
@@ -407,6 +413,72 @@ describe('C-553 — shared placeHouse options and layouts', () => {
       ],
     });
   });
+
+  test('caps front roof depth at three rows with one pale band and one ridge row', () => {
+    const map = makeMap(20, 16);
+    const region = { c0: 2, r0: 2, c1: 12, r1: 12 };
+    placeHouse(map, {
+      region,
+      door: { c: 7, state: 'closed' },
+      facing: 's',
+      roofMaterial: 'slate',
+      mapId: 'roof_cap_test',
+    });
+    const frames = HOUSE_ROOF_FRAMES.slate;
+    const frontRow = region.r1 - HOUSE_FACADE_ROWS;
+    const ridgeRow = frontRow - 1;
+    expect(houseVisibleRoofRows(region.r1 - region.r0 + 1)).toBe(HOUSE_MAX_VISIBLE_ROOF_ROWS);
+    for (let c = region.c0 + 1; c < region.c1; c += 1) {
+      const frontBands: number[] = [];
+      const ridgeRows: number[] = [];
+      for (let r = region.r0; r <= frontRow; r += 1) {
+        if (contribution(map.groundExtra, c, r) === frames.front) {
+          frontBands.push(r);
+        }
+        if (contribution(map.overheadExtra, c, r) === frames.ridge) {
+          ridgeRows.push(r);
+        }
+      }
+      expect(frontBands, `pale front bands at column ${c}`).toEqual([frontRow]);
+      expect(ridgeRows, `ridge highlights at column ${c}`).toEqual([ridgeRow]);
+    }
+  });
+
+  test('C-553 appended GIDs stay outside the C-552 repaint and corner16 block', () => {
+    const manifest = JSON.parse(
+      readFileSync(
+        new URL('../../../../content/packs/emberwatch/manifest.json', import.meta.url),
+        'utf8',
+      ),
+    ) as { tiles?: Record<string, { frame?: string }> };
+    const c553Frames = new Set([
+      'house_door_upper_closed.png',
+      'house_door_upper_open.png',
+      'house_roof_slate_front.png',
+      'house_roof_slate_back.png',
+      'house_roof_slate_ridge.png',
+      'house_roof_slate_gable_left.png',
+      'house_roof_slate_gable_right.png',
+      'house_roof_slate_eave_overhead.png',
+      'house_roof_slate_eave_edge.png',
+      'house_roof_thatch_front.png',
+      'house_roof_thatch_back.png',
+      'house_roof_thatch_ridge.png',
+      'house_roof_thatch_gable_left.png',
+      'house_roof_thatch_gable_right.png',
+      'house_roof_thatch_eave_overhead.png',
+      'house_roof_thatch_eave_edge.png',
+    ]);
+    const c553Gids = Object.entries(manifest.tiles ?? {})
+      .filter(([, definition]) => c553Frames.has(definition.frame ?? ''))
+      .map(([gid]) => Number(gid))
+      .sort((left, right) => left - right);
+    expect(c553Gids).toEqual(Array.from({ length: 16 }, (_, index) => 161 + index));
+    expect(
+      c553Gids.some((gid) => gid === 34 || gid === 47 || (gid >= 48 && gid < 128)),
+      'C-553 GIDs collide with C-552 terrain/corner16 allocations',
+    ).toBe(false);
+  });
 });
 
 describe('C-553 — packed door/window/roof pixel geometry', () => {
@@ -538,6 +610,27 @@ describe('C-553 — packed door/window/roof pixel geometry', () => {
     }
   });
 
+  test('back-slope pixels stay darker than the single front band', () => {
+    const peakLuminance = (key: string): number => {
+      let peak = 0;
+      for (let y = 0; y < 32; y += 1) {
+        for (let x = 0; x < 32; x += 1) {
+          const [red, green, blue, alpha] = pixel(key, x, y);
+          if (alpha === 0) {
+            continue;
+          }
+          peak = Math.max(peak, 0.2126 * red + 0.7152 * green + 0.0722 * blue);
+        }
+      }
+      return peak;
+    };
+    for (const material of ['cedar', 'slate', 'thatch'] as const) {
+      expect(peakLuminance(roofKey(material, 'back')), `${material} back slope`).toBeLessThan(
+        peakLuminance(roofKey(material, 'front')),
+      );
+    }
+  });
+
   test('stable facade-corner frames no longer add a dark side column', () => {
     const rgba = (key: string): string[] =>
       Array.from({ length: 32 * 32 }, (_, index) => {
@@ -553,6 +646,27 @@ describe('C-553 — packed door/window/roof pixel geometry', () => {
 describe('C-553 — village rollout and transition truth', () => {
   test('every village structure uses the shared two-row kit', () => {
     expectVillageHouses(buildVillage().map);
+  });
+
+  test('keeps prop visual footprints off house cells and door approaches', () => {
+    const village = buildVillage();
+    expect(() =>
+      assertNoHousePropOverlaps({ map: village.map, objectLayers: village.objectLayers }),
+    ).not.toThrow();
+    for (const [id, c, r] of [
+      [16, 15, 20],
+      [24, 56, 22],
+      [28, 55, 22],
+      [61, 53, 22],
+    ] as const) {
+      expect(objectById(village.objectLayers, id)).toMatchObject({ x: c * 32, y: r * 32 });
+    }
+    const brazier = objectById(village.objectLayers, 61);
+    brazier.x = 51 * 32;
+    brazier.y = 20 * 32;
+    expect(() =>
+      assertNoHousePropOverlaps({ map: village.map, objectLayers: village.objectLayers }),
+    ).toThrow(/inn_brazier/);
   });
 
   test('the village source has no legacy building() calls', () => {

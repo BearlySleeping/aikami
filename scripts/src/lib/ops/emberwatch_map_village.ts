@@ -27,6 +27,7 @@
 //   arrival spawns sit clear of every transition rectangle on this map.
 
 import {
+  assertNoHousePropOverlaps,
   cell,
   isBridgeGid,
   OLD_ROAD_ARRIVAL,
@@ -611,7 +612,7 @@ export const buildVillage = (): { map: MapData; objectLayers: MapObjectLayer[] }
         // and the south-east stays open toward the services.
         placeProp(13, 'woodland_oak', 'Woodland Oak', 'oak.png', 27, 14),
         placeProp(15, 'woodland_oak_2', 'Woodland Oak', 'oak.png', 44, 16),
-        placeProp(16, 'woodland_oak_3', 'Woodland Oak', 'oak.png', 12, 20),
+        placeProp(16, 'woodland_oak_3', 'Woodland Oak', 'oak.png', 15, 20),
         placeProp(17, 'woodland_oak_4', 'Woodland Oak', 'oak.png', 56, 40),
         placeProp(18, 'woodland_birch', 'Woodland Birch', 'birch.png', 27, 17),
         placeProp(19, 'woodland_birch_2', 'Woodland Birch', 'birch.png', 45, 29),
@@ -620,13 +621,13 @@ export const buildVillage = (): { map: MapData; objectLayers: MapObjectLayer[] }
         placeProp(23, 'ward_grove_c', 'Ward Grove (lit)', 'ward_small_c.png', 29, 20),
 
         // ── Building-adjacent clutter (never blocks a route) ───────────────
-        placeProp(24, 'inn_barrel', 'Barrel', 'prop_barrel.png', 54, 21),
+        placeProp(24, 'inn_barrel', 'Barrel', 'prop_barrel.png', 56, 22),
         placeProp(25, 'inn_crate', 'Crate', 'prop_crate.png', 5, 27),
         placeProp(26, 'yard_anvil', 'Smith Anvil', 'prop_anvil.png', 5, 28),
         placeProp(27, 'shop_crate', 'Crate', 'prop_crate.png', 55, 35),
-        placeProp(28, 'inn_chair', 'Chair', 'chair.png', 54, 20),
+        placeProp(28, 'inn_chair', 'Chair', 'chair.png', 55, 22),
         // One existing prop definition, used as the inn's warm door light.
-        placeProp(61, 'inn_brazier', 'Inn Door Brazier', 'prop_brazier.png', 53, 20),
+        placeProp(61, 'inn_brazier', 'Inn Door Brazier', 'prop_brazier.png', 53, 22),
 
         // ── Arrival markers ────────────────────────────────────────────────
         placeSpawn(7, 'from_merchant', 51, 36),
@@ -672,5 +673,6 @@ export const buildVillage = (): { map: MapData; objectLayers: MapObjectLayer[] }
     },
   ];
 
+  assertNoHousePropOverlaps({ map: m, objectLayers });
   return { map: m, objectLayers };
 };

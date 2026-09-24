@@ -25,8 +25,8 @@ created_at: "2026-09-24T00:00:00Z"
 | **Dependencies** | C-550 (accepted house kit), C-549 (village crossing and grass), C-548 (WebGL/entity-texture evidence plane), C-546 (append-only assembly pattern), C-545 (ambient parity) |
 | **Status** | implemented |
 | **Promotion** | — |
-| **Docs Impact** | internal → this contract, generated Emberwatch authoring/release references, and external `/tmp/opencode/c553-evidence/` evidence index |
-| **Contract version** | 1.0.0 |
+| **Docs Impact** | internal → this contract, generated Emberwatch authoring/release references, and external `/tmp/opencode/c553-evidence-r2/` evidence index |
+| **Contract version** | 1.2.0 |
 | **Production Surface** | `tooling: bun run emberwatch:studio` / `bun run emberwatch:validate`; generated Emberwatch pack consumed by production `/game` |
 
 ## FIRST — village building inventory (recorded before code edits)
@@ -72,7 +72,7 @@ Every village structure uses one coherent raised-house kit at true LPC scale. Do
 
 **Given** packed C-553 house frames
 **When** upper/lower door frames are composed and every village roof is inspected from end to centre
-**Then** the door-frame opening is at least 44px high (target 48px) and spans both facade rows; windows are proportionally smaller; gable/hip ends meet the roof on a clean diagonal or straight eave with no dark inset side columns; the measured top outline is monotonic from each end to the centre. The NE hut remains 51–56 × 5–9 with its C-550 collision roles unchanged.
+**Then** the door-frame opening is at least 44px high (target 48px) and spans both facade rows; windows are proportionally smaller; gable/hip ends meet the roof on a clean diagonal or straight eave with no dark inset side columns; the measured top outline is monotonic from each end to the centre. The NE hut remains 51–56 × 5–9 with its C-550 collision roles unchanged. Large footprints cap the pale/front roof at `min(footprintRows - 2, 3)` rows, retain the full overhead collision-clear walk-behind depth as a darker back slope, and carry exactly one ridge highlight per roof column.
 
 **Evidence Matrix**
 | AC | Test Level | Required Artifact | Production Path | Evidence |
@@ -83,7 +83,7 @@ Every village structure uses one coherent raised-house kit at true LPC scale. Do
 
 **Given** the FIRST inventory
 **When** village maps regenerate
-**Then** all six `building()` calls are gone; each structure uses `placeHouse` with the listed footprint, explicit door column, south-facing geometry and cedar/slate/thatch palette; enterable doors use open paired frames and non-interior doors use closed paired frames; no new transition or arrival identity exists.
+**Then** all six `building()` calls are gone; each structure uses `placeHouse` with the listed footprint, explicit door column, south-facing geometry and cedar/slate/thatch palette; enterable doors use open paired frames and non-interior doors use closed paired frames; no new transition or arrival identity exists. An author-time final-object-layer assertion rejects any prop visual footprint that touches a house facade/roof cell or a door approach cell.
 
 **Evidence Matrix**
 | AC | Test Level | Required Artifact | Production Path | Evidence |
@@ -116,12 +116,12 @@ Every village structure uses one coherent raised-house kit at true LPC scale. Do
 
 **Given** clean C-550 before plane and final C-553 candidate plane
 **When** the production `/game` capture lane runs
-**Then** WebGL and resolved visible-entity textures are asserted before every screenshot; same-camera before/after noon door shots exist for every building; one maximum-lane-width village overview, square dawn/night, inn walk-behind, and inn enter/exit are captured; `/tmp/opencode/c553-evidence/sheet.png`, PNGs, machine-readable indexes and `index.md` are written with commit/artifact/camera/player identities.
+**Then** WebGL and resolved visible-entity textures are asserted before every screenshot; same-camera before/after noon door shots exist for every building; one maximum-lane-width village overview, square dawn/night, inn walk-behind, and inn enter/exit are captured; `/tmp/opencode/c553-evidence-r2/sheet.png`, PNGs, machine-readable indexes and `index.md` are written with commit/artifact/camera/player identities.
 
 **Evidence Matrix**
 | AC | Test Level | Required Artifact | Production Path | Evidence |
 |---|---|---|---|---|
-| AC-5 | Visual + E2E | `apps/e2e/scripts/capture_c553_house_rollout.ts`, POM-backed spec, `/tmp/opencode/c553-evidence/` | production `/game` WebGL | paired PNG set, contact sheet, index; entity-texture guard status and hashes recorded |
+| AC-5 | Visual + E2E | `apps/e2e/scripts/capture_c553_house_rollout.ts`, POM-backed spec, `/tmp/opencode/c553-evidence-r2/` | production `/game` WebGL | paired PNG set, contact sheet, index; entity-texture guard status and hashes recorded |
 
 ## Implementation Sequence
 
@@ -148,6 +148,7 @@ Every village structure uses one coherent raised-house kit at true LPC scale. Do
 |---|---|---|---|
 | 1.0.0 | 2026-09-24 | Initial direct implementation contract and pre-edit building inventory | user (direct prompt) |
 | 1.1.0 | 2026-09-24 | Independent verification clarified actor-footprint roof reachability and versioned the fail-closed entity-texture guard; no map geometry or collision footprint changed | user (direct prompt) |
+| 1.2.0 | 2026-09-24 | Rebased onto C-552, regenerated the merged artifact plane, capped large-footprint front roof depth, added author-time prop keep-out enforcement, and removed the production door-threshold rectangle overlay | user (direct prompt) |
 
 ## Promotion Lifecycle
 
@@ -161,7 +162,7 @@ Every village structure uses one coherent raised-house kit at true LPC scale. Do
 
 ### Summary
 
-Rolled the refined C-550 raised-house kit across all seven Emberwatch village structures: six legacy `building()` shells were replaced with explicit south-facing `placeHouse` calls, while the north-east hut retained its footprint and collision contract. The shared kit now has paired upper/lower door frames, proportional windows, clean facade corners, monotonic transparent roof silhouettes, and cedar/slate/thatch palettes sharing one geometry. Existing transition identities and interior arrival IDs were preserved; only source trigger/fallback coordinates were moved to the visible inn and shop doors. Independent verification also versioned the fail-closed entity-texture guard, removed duplicate ECS player displays, and documented the north cottage's blocked-terrain roof-row exception. Technical WebGL evidence and the full generated-artifact plane are indexed under `/tmp/opencode/c553-evidence/`; this report does not claim human visual acceptance.
+Rolled the refined C-550 raised-house kit across all seven Emberwatch village structures: six legacy `building()` shells were replaced with explicit south-facing `placeHouse` calls, while the north-east hut retained its footprint and collision contract. The shared kit now has paired upper/lower door frames, proportional windows, clean facade corners, monotonic transparent roof silhouettes, and cedar/slate/thatch palettes sharing one geometry. Large footprints cap the pale/front roof at three rows while retaining darker back-slope overhead cells for walk-behind navigation. Existing transition identities and interior arrival IDs were preserved; only source trigger/fallback coordinates were moved to the visible inn and shop doors. Independent verification also versioned the fail-closed entity-texture guard, removed duplicate ECS player displays, and documented the north cottage's blocked-terrain roof-row exception. Technical WebGL evidence and the full generated-artifact plane are indexed under `/tmp/opencode/c553-evidence-r2/`; this report does not claim human visual acceptance.
 
 ### Building matrix
 
@@ -179,11 +180,12 @@ All seven calls are south-facing `placeHouse` calls. The six legacy village `bui
 
 ### Kit refinements and coverage
 
-- Preserved C-550 GIDs 146–160 and appended GIDs 161–176: upper closed/open door frames, seven slate roof frames, and seven thatch roof frames. The atlas is now 16×11 / 176 cells with a 544×374 extruded surface; one frame remains free.
+- Preserved C-550 GIDs 146–160 and appended GIDs 161–176: upper closed/open door frames, seven slate roof frames, and seven thatch roof frames. The atlas is now 16×11 / 176 cells with a 544×374 extruded surface; one frame remains free. C-552's repainted GIDs 34/47 and corner16 block 48–128 remain disjoint.
 - Door frames are selected as one column across both facade rows. Pixel tests measure a continuous opening of at least 44px (64px frame stack), and windows measure 8×10px rather than competing with the actor-height doorway.
-- All three roof palettes have identical alpha masks and shared front/back/ridge/gable/eave geometry. Tests enforce a monotonic end-to-centre silhouette, clean diagonal gable ends, and no dark inset side column in stable facade corners.
-- `placeHouse` validates bounds, south-facing input, door placement, walkable upper-roof cells, approach cells, contact-shadow cells, and blocked terrain overrides before mutating the map. Overhead roof cells clear collision; front eave and both facade rows remain solid.
-- Added focused C-553 layout/pixel/collision tests, C-550 compatibility tests, inclusive transition-boundary validation, all-cell actor-footprint roof reachability checks (including the explicit north-cottage blocked-row exception), real-map navigation/reachability checks, and save-restore clamp coverage for all eight newly blocked cells.
+- All three roof palettes have identical alpha masks and shared front/back/ridge/gable/eave geometry. Tests enforce a monotonic end-to-centre silhouette, clean diagonal gable ends, no dark inset side column in stable facade corners, and at most one pale front band/ridge highlight per roof column.
+- `placeHouse` validates bounds, south-facing input, door placement, walkable upper-roof cells, approach cells, contact-shadow cells, and blocked terrain overrides before mutating the map. The visible front roof is capped at `min(footprintRows - 2, 3)` rows; all remaining overhead cells use the darker back slope, preserving the full collision-clear walk-behind depth without a footprint shrink.
+- The village builder runs an author-time prop-footprint keep-out assertion over final object layers. Violations are rejected for any house facade/roof or door-approach cell; the moved placements are `inn_brazier` `(53,20)→(53,22)`, `inn_chair` `(54,20)→(55,22)`, `inn_barrel` `(54,21)→(56,22)`, and `woodland_oak_3` `(12,20)→(15,20)`.
+- Door-sized production transition overlays retain only the quiet grounded chevron; their full brass rectangle is suppressed. The outline was production-visible before remediation; the visible door art is now the threshold affordance. The red perimeter squares are report-only `plant.png` / GID 31 cells emitted by `paintOuterRing`/`thinTreeline`.
 
 ### Exact collision delta
 
@@ -200,7 +202,7 @@ Compared with the generated C-550 village plane, every changed cell is attributa
 | North-east hut | 0 | 0 | — |
 | **Total** | **187** | **179** | **8** |
 
-The eight newly blocked cells are covered by real-map `clampSpawnToWalkable` restore tests. The route validator also treats the trigger rectangle as inclusive, preventing an arrival exactly on the bottom boundary from producing a false pass.
+The eight newly blocked cells are covered by real-map `clampSpawnToWalkable` restore tests. The route validator also treats the trigger rectangle as inclusive, preventing an arrival exactly on the bottom boundary from producing a false pass. Against the rebased `origin/main` C-552 maps, only `village.json` changes collision: 187 cells, 179 newly clear and 8 newly blocked; all four other map collision layers are byte/digest identical.
 
 ### Actor-footprint roof reachability
 
@@ -228,25 +230,32 @@ The rollout test uses the production actor-footprint rule: a cell is standable o
 
 | Area | Files |
 |---|---|
-| House authoring and generation | `scripts/src/lib/ops/emberwatch_authoring.ts`, `emberwatch_house_authoring.ts`, `emberwatch_map_village.ts`, `emberwatch_map_retained.ts`, `generate_emberwatch_house_frames.ts`, `generate_emberwatch_atlas.ts`, `generate_emberwatch_canvas.ts`, `generate_emberwatch_tables.ts`, `generate_emberwatch_props_atlas.ts` |
-| Focused authoring/validation tests | `scripts/src/lib/ops/emberwatch_house_assembly.test.ts`, `emberwatch_map_validation.test.ts`, `emberwatch_map_validation_context.ts`, `emberwatch_map_validation_rules.ts`, `generate_emberwatch_derivation.test.ts` |
-| Generated content and reports | `content/packs/asset_hashes.json`, `content/packs/emberwatch/manifest.json`, all five `content/packs/emberwatch/maps/*.json`, `docs/reference/emberwatch-coverage-audit.json`, `docs/reference/emberwatch-map-validation.json` |
-| Atlas/capacity consumers | `packages/frontend/engine/src/__tests__/emberwatch_content_audit.test.ts`, `packages/shared/constants/src/lib/media_preparation.ts`, `packages/shared/local-ai/src/lib/preparation/atlas_bounds.ts`, `atlas_bounds.test.ts`, `packages/shared/schemas/src/lib/game/prop_atlas.ts` |
-| Candidate/evidence lane | `scripts/src/lib/ops/emberwatch_candidate_plane.ts`, `apps/e2e/package.json`, `apps/e2e/scripts/capture_c550_house.ts`, `apps/e2e/src/pom/emberwatch_house_page.ts`, `apps/e2e/src/visual/core/entity_texture_guard.ts`, `apps/e2e/src/visual/c550_house_expected_artifacts.json`, `apps/e2e/tests/game/emberwatch_house.spec.ts` |
+| House authoring and generation | `scripts/src/lib/ops/emberwatch_authoring.ts`, `emberwatch_house_authoring.ts`, `emberwatch_map_village.ts`, `emberwatch_map_retained.ts`, `emberwatch_prop_footprint.ts`, `generate_emberwatch_house_frames.ts`, `generate_emberwatch_atlas.ts`, `generate_emberwatch_canvas.ts`, `generate_emberwatch_tables.ts`, `generate_emberwatch_props_atlas.ts` |
+| Focused authoring/validation tests | `scripts/src/lib/ops/emberwatch_house_assembly.test.ts`, `emberwatch_house_rollout.test.ts`, `emberwatch_terrain_pass.test.ts`, `emberwatch_map_validation.test.ts`, `emberwatch_map_validation_context.ts`, `emberwatch_map_validation_rules.ts`, `generate_emberwatch_derivation.test.ts` |
+| Generated content and reports | `content/packs/asset_hashes.json`, `content/packs/emberwatch/manifest.json`, all five `content/packs/emberwatch/maps/*.json`, `docs/reference/emberwatch-coverage-audit.json`, `docs/reference/emberwatch-map-validation.json`, `docs/reference/emberwatch-visual-report.json` |
+| Atlas/capacity consumers | `packages/frontend/engine/src/__tests__/emberwatch_content_audit.test.ts`, `packages/frontend/engine/src/game_world/scene_overlays.ts`, `scene_overlays.test.ts`, `packages/shared/constants/src/lib/media_preparation.ts`, `packages/shared/local-ai/src/lib/preparation/atlas_bounds.ts`, `atlas_bounds.test.ts`, `packages/shared/schemas/src/lib/game/prop_atlas.ts` |
+| Candidate/evidence lane | `scripts/src/lib/ops/emberwatch_candidate_plane.ts`, `apps/e2e/package.json`, `apps/e2e/scripts/capture_c550_house.ts`, `capture_c553_house_rollout.ts`, `apps/e2e/src/pom/emberwatch_house_page.ts`, `apps/e2e/src/visual/core/entity_texture_guard.ts`, `apps/e2e/src/visual/c550_house_expected_artifacts.json`, `apps/e2e/src/visual/c553_house_rollout_expected_artifacts.json`, `apps/e2e/tests/game/emberwatch_house.spec.ts` |
 | Entity display identity | `packages/frontend/engine/src/game_world/entity_display.ts`, `packages/frontend/engine/src/game_world.ts`, `packages/frontend/engine/src/__tests__/ambient_parity.test.ts` |
 | Locked IDs and documentation | `scripts/src/lib/ops/emberwatch_locked_ids.golden.json`, `docs/guides/emberwatch-release.md`, `docs/plans/emberwatch_rebuild.md`, `docs/reference/asset-generation-review-2026-09.md` |
 
 The ignored local build outputs (`atlas.webp`, `atlas.json`, regenerated asset seed, local candidate origin, and client build directory) were regenerated through the producer commands and are represented by the tracked hashes/reports; they were not hand-edited.
 
+### Rebase, regeneration, and GID audit
+
+- Fetched `origin` and rebased the WIP commit onto `origin/main` `3f30e75eb` (C-552 #395). The only rebase conflict was `content/packs/asset_hashes.json`; main's generated version was selected, then all generated outputs were rebuilt from the merged source.
+- Regeneration order: `generate_emberwatch_atlas.ts` → `generate_emberwatch_props_atlas.ts` → `generate_emberwatch_maps.ts` → `scan_assets.ts` → `generate_asset_seed.ts --write` → `emberwatch:audit` → `emberwatch:validate` → `emberwatch:visual-report`. No generated JSON was hand-edited.
+- C-552 owns GID 34 (`stone_floor_variant.png`), GID 47 (`flagstone.png`), and the corner16 allocation GIDs 48–128. C-553 appends GIDs 161–176: 161–162 upper door frames, 163–169 slate roof frames, and 170–176 thatch roof frames. The sets are disjoint; atlas coverage remains 16×11 / 176 cells with one free frame.
+- Comparing the final generated maps with `origin/main` shows only `village.json` collision changes: 187 cells, 179 newly clear and 8 newly blocked. `inn`, `merchant_shop`, `old_road`, and `ruined_shrine` collision layers are unchanged.
+
 ### Test results
 
 | Check | Result |
 |---|---|
-| `bun moon run scripts:test -- src/lib/ops/emberwatch_house_rollout.test.ts` | **12 pass, 0 fail** |
+| `bun moon run scripts:test -- src/lib/ops/emberwatch_house_rollout.test.ts` | **16 pass, 0 fail** |
 | `bun moon run scripts:test -- src/lib/ops/emberwatch_house_assembly.test.ts` | **19 pass, 0 fail** |
-| `bun moon run scripts:test` | **2156 pass, 2 inherited 5s release-CLI timeouts**; focused release file with `--timeout 15000` is **10 pass, 0 fail** |
-| `bun moon run frontend-engine:test -- src/__tests__/ambient_parity.test.ts` | **14 pass, 0 fail** |
-| `bun moon run frontend-engine:test` | **1850 pass, 0 fail, 1 existing todo** |
+| `bun moon run scripts:test` | **2184 pass, 2 inherited 5s release-CLI timeouts**; focused release file with `--timeout 15000` is **10 pass, 0 fail** |
+| `bun moon run frontend-engine:test -- src/game_world/scene_overlays.test.ts` | **9 pass, 0 fail** |
+| `bun moon run frontend-engine:test` | **1854 pass, 0 fail, 1 existing todo** |
 | `apps/e2e` `bun run test:unit` | **38 pass, 0 fail** |
 | Targeted production game spec (`test:game -- emberwatch_house.spec.ts`) | **12 pass, 0 fail** |
 | `bun run emberwatch:validate` | **0 warnings, 0 blockers** |
@@ -256,20 +265,20 @@ The ignored local build outputs (`atlas.webp`, `atlas.json`, regenerated asset s
 | `bun run scripts/src/lib/ops/lint_contracts.ts --contract C-553` | **0 errors, 0 warnings**; the unscoped repository contract audit remains baseline-red on unrelated historical contracts |
 | C-553 capture | **20 PNGs**, WebGL and `visible-entity-textures-v2` passed for every capture; before lane recorded `legacy-positionless-placeholder-v1` compatibility, after lane had no exemption; `pageErrors: []` |
 
-The default full scripts run has two inherited `emberwatch:release --plan` tests exceeding Bun's 5-second per-test timeout; rerunning that exact file with a 15-second timeout passes all 10 tests. They are not C-553 failures.
+The full scripts run has two inherited `emberwatch:release --plan` tests exceeding Bun's 5-second per-test timeout. Rerunning that exact file with `--timeout 15000` passes all 10 tests; the two timeouts are not C-553 failures.
 
 ### Evidence
 
-- Index and machine-readable metadata: `/tmp/opencode/c553-evidence/index.md`, `manifest.json`, `before_index.json`, `after_index.json`.
-- Contact sheet: `/tmp/opencode/c553-evidence/sheet.png`.
+- Index and machine-readable metadata: `/tmp/opencode/c553-evidence-r2/index.md`, `manifest.json`, `before_index.json`, `after_index.json`.
+- Contact sheet: `/tmp/opencode/c553-evidence-r2/sheet.png`.
 - Seven paired noon building shots: `before_*.png` / `after_*.png` for inn, merchant-shop, smithy, north-west-cottage, north-cottage, south-west-shed, and north-east-hut.
 - Additional candidate shots: `after_village-overview.png`, `after_square-dawn.png`, `after_square-night.png`, `after_inn-walk-behind.png`, `after_enter_inn.png`, and `after_exit_inn.png`.
-- Capture used `C553_BEFORE_CLIENT_URL=http://127.0.0.1:5291`, `C553_BEFORE_ROOT=/tmp/opencode/c552-baseline`, `C553_AFTER_CLIENT_URL=http://127.0.0.1:5290`, `C553_AFTER_ROOT=/home/sonny/.herdr/worktrees/aikami/feat-ew-c553-house-rollout`, and `C553_EVIDENCE_DIR=/tmp/opencode/c553-evidence`.
+- Capture used `C553_BEFORE_CLIENT_URL=http://127.0.0.1:5291`, `C553_BEFORE_ROOT=/tmp/opencode/c552-baseline`, `C553_AFTER_CLIENT_URL=http://127.0.0.1:5290`, `C553_AFTER_ROOT=/home/sonny/.herdr/worktrees/aikami/feat-ew-c553-house-rollout`, and `C553_EVIDENCE_DIR=/tmp/opencode/c553-evidence-r2`.
 - Both lanes recorded WebGL; the browser reported 16384×16384 maximum viewport dimensions and the overview canvas allocated exactly 8192×6144. Pair cameras, world transforms, clips, player cells, artifact hashes, and entity-texture fingerprints are recorded in the indexes.
 
 ### Deviations and surprises
 
-- No map, interior, terrain, UI, or deployment scope deviation. C-552 was not merged into the recorded base; the branch remains based on C-550 `a43d67c3d0a20afe15188ad5ed6309afe3c35b11`. If C-552 later merges, generated maps, atlas, hashes, and reports must be regenerated rather than hand-merged.
+- No map, interior, terrain, UI, or deployment scope deviation. The branch was rebased onto `origin/main` `3f30e75eb` (C-552 #395); C-552's generated maps/atlas/hashes/reports were taken from main and regenerated from the merged source rather than hand-merged. The only post-main collision delta is the explicit C-553 village delta described above.
 - The maximum-width overview exposed an unpositioned ECS transition/spawn marker as a visible white placeholder at map origin. The v2 entity guard no longer exempts unmatched positioned displays: entity displays carry an `entity-<id>` label, and only explicitly labelled non-actor markers are filtered. The C-550 before lane uses one recorded, narrowly shaped `legacy-positionless-placeholder-v1` compatibility for its pre-v2 client; the C-553 after lane has no such exemption. Both lanes still require the player and every positioned visible actor to have resolved textures.
 - The overview requested and actual center were both c31,r23. The production nearest-walkable clamp instead affected the inn walk-behind probe, requested c51,r11 and resolved to c51,r13; both values are recorded in the index.
 - The existing `inn_brazier` was reused as the single approved door-light prop; no bespoke interior frame or image-model asset was introduced.
@@ -277,5 +286,5 @@ The default full scripts run has two inherited `emberwatch:release --plan` tests
 
 ### Review spacing and handoff
 
-The last substantive Emberwatch CodeRabbit review recorded for the preceding work was `2026-09-24T01:08:16Z`; the final evidence capture occurred more than one hour later. The branch has 48 changed paths including five new files, remains below the 100-file budget, and is left uncommitted/unpushed for independent verification. No PR was created. Intended PR title: `feat(emberwatch): C-553 roll house assembly out across the village`.
+The last substantive Emberwatch CodeRabbit review recorded for the preceding work was `2026-09-24T01:08:16Z`; the final r2 evidence capture occurs more than one hour later. The branch has 53 changed paths including six new files, remains below the 100-file budget, and is prepared for the requested PR. Intended PR title: `feat(emberwatch): C-553 roll house assembly out across the village`.
 
