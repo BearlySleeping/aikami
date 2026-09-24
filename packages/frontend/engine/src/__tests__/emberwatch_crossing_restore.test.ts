@@ -3,7 +3,7 @@
 // C-549 — restoring a saved position onto a cell that the village crossing
 // change made water.
 //
-// The crossing moved from cols 39–41 × rows 7–8 to cols 36–37 × rows 7–8 and the
+// The crossing moved from cols 39–41 × rows 7–8 to cols 36–38 × rows 7–8 and the
 // E–W reach widened to two rows. A save taken before that change can restore a
 // player (or a companion) onto a cell that is now river. `clampSpawnToWalkable`
 // is the worker's relocation policy for exactly that case, and it runs on both
@@ -69,30 +69,32 @@ describe('C-549 — restoring onto a cell the crossing change made water', () =>
 
   it('the new crossing span is walkable and its two long sides are water', () => {
     const at = (c: number, r: number): boolean => village.grid[r * village.width + c] === true;
-    // The span itself (36–37 × 7–8) must be walkable.
+    // The span itself (36–38 × 7–8) must be walkable.
     for (const [c, r] of [
       [36, 7],
       [37, 7],
+      [38, 7],
       [36, 8],
       [37, 8],
+      [38, 8],
     ] as const) {
       expect(at(c, r), `span (${c},${r}) is walkable`).toBe(false);
     }
     // The long sides are river: a save that lands here must be relocated.
     for (const [c, r] of [
       [35, 7],
-      [38, 7],
+      [39, 7],
       [35, 8],
-      [38, 8],
+      [39, 8],
     ] as const) {
       expect(at(c, r), `water (${c},${r}) is blocked`).toBe(true);
     }
   });
 
   it('relocates a player restored onto a newly-water cell to the nearest walkable cell', () => {
-    // A pre-C-549 save could stand at (38,8): walkable when the crossing was
-    // at 39–41, river now that the span moved west. Feet centre of cell (38,8).
-    const savedX = 38 * 32 + 16;
+    // A pre-C-549 save could stand at (39,8): walkable when the crossing was
+    // at 39–41, river now that the span moved west. Feet centre of cell (39,8).
+    const savedX = 39 * 32 + 16;
     const savedY = 8 * 32 + 16;
     expect(isPlayerSpawnBlocked(savedX, savedY), 'the saved cell is now water').toBe(true);
 
@@ -145,5 +147,20 @@ describe('C-549 — restoring onto a cell the crossing change made water', () =>
 });
 
 describe('C-549 — companion restore path (reported, not changed)', () => {
-  it.todo('relocates a companion restored onto newly-water terrain', () => {});
+  it.todo('C-549 follow-up: relocate a companion restored onto newly-water terrain', () => {
+    // Pending product work: the restore path must apply the same walkability
+    // policy to a companion. Keep this behavioural contract next to the
+    // real map oracle; do not turn it into a source-text check.
+    const savedCompanion = { x: 39 * 32 + 16, y: 8 * 32 + 16 };
+    expect(isPlayerSpawnBlocked(savedCompanion.x, savedCompanion.y)).toBe(true);
+
+    const restoredCompanion = clampSpawnToWalkable(
+      savedCompanion.x,
+      savedCompanion.y,
+      isPlayerSpawnBlocked,
+      { width: map.width * 32, height: map.height * 32 },
+    );
+    expect(restoredCompanion).not.toEqual(savedCompanion);
+    expect(isPlayerSpawnBlocked(restoredCompanion.x, restoredCompanion.y)).toBe(false);
+  });
 });

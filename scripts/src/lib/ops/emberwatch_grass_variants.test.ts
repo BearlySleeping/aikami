@@ -136,22 +136,23 @@ describe('C-549 — grass variants share the base value (plan §1.6)', () => {
 });
 
 describe('C-549 — the flower/fleck variant is sparse, low contrast and irregular', () => {
-  const baseMedian = median(framePixels(BASE).map(pixelLuminance));
+  const basePixels = framePixels(BASE);
+  const variantPixels = framePixels('grass_variant.png');
+  const baseMedian = median(basePixels.map(pixelLuminance));
+  // These are the painter's explicit clump colours. Selecting by RGB keeps
+  // base noise/speckles out of the decal measurement; the whole-frame checks
+  // below still catch legacy high-contrast pixels that are not clumps.
+  const decalPixels = variantPixels.filter(isClumpPixel);
 
-  test('the variant has no high-contrast decal pixels (low contrast)', () => {
-    // The pre-C-549 flower painter wrote near-white (240) and saturated magenta
-    // (201,91,210) flecks: ~110 luminance units above the grass median, which
-    // is exactly what read as "regular bright flecks". A restrained decal is a
-    // nudge, so the variant's value range stays inside the base grass family's.
-    const baseSpread = valueSpread(framePixels(BASE).map(pixelLuminance), baseMedian);
-    const variantSpread = valueSpread(
-      framePixels('grass_variant.png').map(pixelLuminance),
-      baseMedian,
+  test('the variant has non-empty, low-contrast decals', () => {
+    expect(decalPixels.length, 'explicit flower decal pixels').toBeGreaterThan(0);
+    const highContrastDecals = decalPixels.filter(
+      (pixel) => Math.abs(pixelLuminance(pixel) - baseMedian) > 25,
     );
-    expect(
-      variantSpread,
-      `variant spread ${variantSpread.toFixed(1)} vs base spread ${baseSpread.toFixed(1)}`,
-    ).toBeLessThanOrEqual(baseSpread + 4);
+    expect(highContrastDecals.length, 'high-contrast decal pixels').toBe(0);
+    const baseSpread = valueSpread(basePixels.map(pixelLuminance), baseMedian);
+    const decalSpread = valueSpread(decalPixels.map(pixelLuminance), baseMedian);
+    expect(decalSpread, 'decal luminance spread').toBeLessThanOrEqual(baseSpread + 4);
   });
 
   test('the variant is sparse: only a handful of pixels sit off the grass value', () => {
@@ -185,14 +186,19 @@ describe('C-549 — the flower/fleck variant is sparse, low contrast and irregul
   });
 
   test('the variant has no fixed-grid placement: decal offsets are irregular', () => {
+    const regularXs = [2, 10, 18, 26];
+    const regularStride = (regularXs[regularXs.length - 1] ?? 0) - (regularXs[0] ?? 0);
+    const regularProbe = regularXs.every(
+      (x, i) => i === 0 || x - (regularXs[i - 1] ?? 0) === regularStride / (regularXs.length - 1),
+    );
+    expect(regularProbe, 'the fixed-grid detector rejects a known regular row').toBe(true);
+
     const rows = new Map<number, number[]>();
-    for (const pixel of framePixels('grass_variant.png')) {
-      if (!isClumpPixel(pixel)) {
-        continue;
-      }
+    for (const pixel of decalPixels) {
       const rowBand = Math.floor(pixel.y / 8);
       rows.set(rowBand, [...(rows.get(rowBand) ?? []), pixel.x]);
     }
+    expect(decalPixels.length, 'explicit decals checked for grid placement').toBeGreaterThan(0);
     let checkedRows = 0;
     for (const [rowBand, xs] of rows) {
       if (xs.length < 3) {
@@ -208,12 +214,12 @@ describe('C-549 — the flower/fleck variant is sparse, low contrast and irregul
         `rows ${rowBand * 8}–${rowBand * 8 + 7} decals ${xs.join(',')} form a fixed grid`,
       ).toBe(false);
     }
-    expect(checkedRows).toBeGreaterThan(0);
+    expect(checkedRows, 'rows with at least three decals').toBeGreaterThan(0);
   });
 });
 
 describe('C-549 — scatterPatches forms broad deterministic patches', () => {
-  test('the same seed reproduces the same layout', () => {
+  test('the same seed reproduces the same non-empty layout', () => {
     const a = makeMap(40, 40);
     const b = makeMap(40, 40);
     const options = {
@@ -228,6 +234,8 @@ describe('C-549 — scatterPatches forms broad deterministic patches', () => {
     };
     scatterPatches({ map: a, seed: 1234, ...options });
     scatterPatches({ map: b, seed: 1234, ...options });
+    const variantCells = a.ground.filter((gid) => gid === G.GRASS_DARK).length;
+    expect(variantCells, 'variant cells painted by the same seed').toBeGreaterThan(0);
     expect(a.ground).toEqual(b.ground);
   });
 
@@ -246,10 +254,14 @@ describe('C-549 — scatterPatches forms broad deterministic patches', () => {
     };
     scatterPatches({ map: a, seed: 1, ...options });
     scatterPatches({ map: b, seed: 2, ...options });
+    const aVariantCells = a.ground.filter((gid) => gid === G.GRASS_DARK).length;
+    const bVariantCells = b.ground.filter((gid) => gid === G.GRASS_DARK).length;
+    expect(aVariantCells, 'first seed variant cells').toBeGreaterThan(0);
+    expect(bVariantCells, 'second seed variant cells').toBeGreaterThan(0);
     expect(a.ground).not.toEqual(b.ground);
   });
 
-  test('it never repaints a cell that is not holding the base GID', () => {
+  test('it paints base cells in broad patches without repainting other terrain', () => {
     const region = makeMap(40, 40);
     // Paint a non-base cell in the middle of the region.
     region.ground[20 * 40 + 20] = G.DIRT;
@@ -264,6 +276,28 @@ describe('C-549 — scatterPatches forms broad deterministic patches', () => {
       gid: G.GRASS_DARK,
       threshold: 0.0,
     });
-    expect(region.ground[20 * 40 + 20]).toBe(G.DIRT);
+
+    const variantCells: Array<{ c: number; r: number }> = [];
+    for (let r = 2; r <= 37; r++) {
+      for (let c = 2; c <= 37; c++) {
+        if (region.ground[r * 40 + c] === G.GRASS_DARK) {
+          variantCells.push({ c, r });
+        }
+      }
+    }
+    expect(variantCells.length, 'base cells painted by the patch pass').toBeGreaterThan(0);
+    expect(region.ground[20 * 40 + 20], 'non-base cell remains untouched').toBe(G.DIRT);
+
+    const isolatedCells = variantCells.filter(({ c, r }) =>
+      [
+        [1, 0],
+        [-1, 0],
+        [0, 1],
+        [0, -1],
+      ].every(([dc, dr]) => region.ground[(r + (dr ?? 0)) * 40 + c + (dc ?? 0)] !== G.GRASS_DARK),
+    );
+    expect(isolatedCells.length / variantCells.length, 'isolated patch-cell ratio').toBeLessThan(
+      0.5,
+    );
   });
 });
