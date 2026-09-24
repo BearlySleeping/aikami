@@ -617,9 +617,7 @@ class GameManagementSession
     // default quests tab. The canonical JOURNAL overlay restores the tab the
     // player last used in this section.
     const tab =
-      overlay === 'QUEST_LOG'
-        ? undefined
-        : this._rememberedTab('journal', JOURNAL_TAB_BY_SUBVIEW);
+      overlay === 'QUEST_LOG' ? undefined : this._rememberedTab('journal', JOURNAL_TAB_BY_SUBVIEW);
     if (tab !== undefined) {
       untrack(() => vm.setActiveTab(tab));
     }
