@@ -304,6 +304,7 @@ class JournalViewModel
   }
 
   async deleteNote(id: string): Promise<void> {
+    this.noteError = undefined;
     try {
       await this._notes.deleteEntry({ id });
       if (this.editingId === id) {

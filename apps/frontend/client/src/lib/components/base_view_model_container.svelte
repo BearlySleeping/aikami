@@ -9,12 +9,13 @@ import type { Snippet } from 'svelte';
 type Props = {
   viewModel: BaseViewModelInterface;
   fillHeight?: boolean;
+  class?: string;
   children?: Snippet;
 };
 
-const { viewModel, fillHeight = false, children }: Props = $props();
+const { viewModel, fillHeight = false, class: classStyle, children }: Props = $props();
 </script>
 
-<SharedBaseViewModelContainer {viewModel} {fillHeight}>
+<SharedBaseViewModelContainer {viewModel} {fillHeight} class={classStyle}>
   {@render children?.()}
 </SharedBaseViewModelContainer>

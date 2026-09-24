@@ -20,9 +20,9 @@ const { viewModel }: Props = $props();
 const presentation = createCharacterSheetPresentationState();
 </script>
 
-<BaseViewModelContainer {viewModel}>
-  <div class="h-full min-h-0">
-    <div class="game-workspace__scroll">
+<BaseViewModelContainer {viewModel} class="h-full min-h-0">
+  <div class="flex h-full min-h-0 flex-col">
+    <div class="game-workspace__scroll min-h-0 flex-1" data-testid="character-scroll">
       <div
         class="game-character-identity mb-3 flex flex-wrap items-center gap-3 rounded-lg p-3"
         data-testid="character-identity"
@@ -43,7 +43,8 @@ const presentation = createCharacterSheetPresentationState();
         <button
           type="button"
           class="btn game-control--accent"
-          aria-pressed={presentation.isEditing}
+          aria-expanded={presentation.isEditing}
+          aria-controls="character-panel"
           data-testid="character-edit-toggle"
           onclick={() => presentation.toggleEditing()}
         >

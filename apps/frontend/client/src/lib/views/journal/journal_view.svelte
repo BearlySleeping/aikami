@@ -6,7 +6,11 @@
 // editor only after an explicit create/edit action.
 
 import { BaseViewModelContainer } from '$components';
-import { createJournalPresentationState, focusJournalOnMount } from './journal_presentation.svelte';
+import {
+  createJournalPresentationState,
+  focusableScrollRegion,
+  focusJournalOnMount,
+} from './journal_presentation.svelte';
 import type { JournalViewModelInterface } from './journal_view_model.svelte';
 
 type Props = {
@@ -18,7 +22,7 @@ type Props = {
 const { viewModel, embedded = false }: Props = $props();
 const presentation = createJournalPresentationState({
   get notes() {
-    return viewModel.notes;
+    return viewModel.filteredNotes;
   },
 });
 </script>
@@ -76,10 +80,15 @@ const presentation = createJournalPresentationState({
         >
       </label>
 
+      {#if viewModel.noteError && !presentation.isEditorOpen}
+        <p class="game-numeric--negative" role="alert">{viewModel.noteError}</p>
+      {/if}
+
       <div
         id="journal-panel"
         class="min-h-0 flex-1 overflow-y-auto"
         role="tabpanel"
+        use:focusableScrollRegion
         data-testid="journal-panel"
       >
         {#if viewModel.activeTab === 'quests'}

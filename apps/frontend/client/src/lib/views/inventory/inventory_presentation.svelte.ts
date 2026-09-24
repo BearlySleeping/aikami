@@ -27,6 +27,8 @@ export type InventorySelectedItem = {
 export type InventoryPresentationState = {
   readonly selectedItemId: string | undefined;
   readonly selectedItem: InventorySelectedItem | undefined;
+  readonly selectedItemInitial: string;
+  readonly detailEmptyHint: string;
   selectItem(itemId: string): void;
   isSelected(itemId: string): boolean;
   itemClass(itemId: string): string;
@@ -56,25 +58,37 @@ export const createInventoryPresentationState = (
     return selected ?? source.items[0];
   };
 
+  const selectedItem = (): InventorySelectedItem | undefined => {
+    const entry = selectedEntry();
+    if (!entry) {
+      return undefined;
+    }
+    const definition = getItemDefinition(entry.itemId);
+    return {
+      itemId: entry.itemId,
+      quantity: entry.quantity,
+      label: definition.label,
+      definition,
+      compareLabel: source.getCompareLabel(entry.itemId),
+      isEquippable: definition.equippable,
+      isConsumable: definition.itemType === 'consumable' && definition.effect !== undefined,
+    };
+  };
+
   return {
     get selectedItemId(): string | undefined {
       return selectedEntry()?.itemId;
     },
     get selectedItem(): InventorySelectedItem | undefined {
-      const entry = selectedEntry();
-      if (!entry) {
-        return undefined;
-      }
-      const definition = getItemDefinition(entry.itemId);
-      return {
-        itemId: entry.itemId,
-        quantity: entry.quantity,
-        label: definition.label,
-        definition,
-        compareLabel: source.getCompareLabel(entry.itemId),
-        isEquippable: definition.equippable,
-        isConsumable: definition.itemType === 'consumable' && definition.effect !== undefined,
-      };
+      return selectedItem();
+    },
+    get selectedItemInitial(): string {
+      return selectedItem()?.label.charAt(0) ?? '';
+    },
+    get detailEmptyHint(): string {
+      return source.items.length > 0
+        ? 'Choose a bag item to read its stats and available actions.'
+        : 'Collect equipment or supplies to reveal their details here.';
     },
     selectItem(itemId: string): void {
       if (source.items.some((item) => item.itemId === itemId)) {

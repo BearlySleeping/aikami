@@ -52,11 +52,14 @@ export const createJournalPresentationState = (
   }>({ selectedNoteId: undefined, isEditorOpen: false });
 
   const selectedEntry = (): PlayerJournalEntry | undefined => {
-    if (state.isEditorOpen && state.selectedNoteId === undefined) {
-      return undefined;
-    }
     const selected = source.notes.find((note) => note.id === state.selectedNoteId);
-    return selected ?? source.notes[0];
+    if (selected) {
+      return selected;
+    }
+    // A new-note editor has no selected entry. An editor opened for a note
+    // filtered out of the current list also must not silently show another
+    // note as if it were the edit target.
+    return state.isEditorOpen ? undefined : source.notes[0];
   };
 
   return {
@@ -108,8 +111,11 @@ export const createJournalPresentationState = (
       }
     },
     async deleteNote(noteId: string, target: JournalMutationTarget): Promise<void> {
-      const deletedSelection = state.selectedNoteId === noteId;
+      const deletedSelection = selectedEntry()?.id === noteId;
       await target.deleteNote(noteId);
+      if (target.noteError !== undefined) {
+        return;
+      }
       if (deletedSelection) {
         state.selectedNoteId = source.notes.find((note) => note.id !== noteId)?.id;
         state.isEditorOpen = false;
@@ -125,8 +131,21 @@ export const createJournalPresentationState = (
   };
 };
 
+/** Makes a scrollable tab panel keyboard reachable without changing its semantics. */
+export const focusableScrollRegion = (node: HTMLElement): { destroy(): void } => {
+  node.tabIndex = 0;
+  return {
+    destroy: () => {
+      node.removeAttribute('tabindex');
+    },
+  };
+};
+
 /** Svelte action that focuses only the standalone Journal dialog. */
-export const focusJournalOnMount = (node: HTMLElement, embedded: boolean): { destroy(): void } => {
+export const focusJournalOnMount = (
+  node: Pick<HTMLElement, 'focus'>,
+  embedded: boolean,
+): { destroy(): void } => {
   if (!embedded) {
     node.focus();
   }

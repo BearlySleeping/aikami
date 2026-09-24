@@ -80,10 +80,7 @@ const _handleInput = (event: Event): void => {
   if (Number.isNaN(parsed)) {
     return;
   }
-  value = parsed;
-  if (onchange) {
-    onchange(parsed);
-  }
+  _commit(parsed);
 };
 
 const _handleBlur = (): void => {

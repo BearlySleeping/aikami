@@ -1033,16 +1033,17 @@ export class GameOverlayService
     return true;
   }
 
-  /** Pops the current overlay, resuming exploration when the stack empties. */
+  /** Pops the current overlay and restores the mode of the surface beneath it. */
   private _exitManagementOverlay(onClose?: () => void): void {
     this.popOverlay();
+    const nextMode =
+      this.activeOverlay === 'NONE' || this.activeOverlay === 'DIALOGUE' ? 'EXPLORE' : 'MENU';
+    gameModeService.setMode(nextMode);
     if (this.activeOverlay === 'NONE') {
-      gameModeService.setMode('EXPLORE');
       this._engineService?.resumeEngine();
     }
     onClose?.();
   }
-
   openJournal(): void {
     this._enterManagementOverlay('JOURNAL');
   }

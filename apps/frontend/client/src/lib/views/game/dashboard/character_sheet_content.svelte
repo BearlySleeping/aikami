@@ -11,7 +11,10 @@ import { ABILITY_KEYS } from '@aikami/types';
 import m from '$lib/views/utils/i18n';
 import {
   CHARACTER_NARRATIVE_CATEGORIES,
+  CHARACTER_NARRATIVE_LABELS,
+  CHARACTER_NARRATIVE_PROMPTS,
   CHARACTER_TRAIT_FIELDS,
+  CHARACTER_TRAIT_LABELS,
   type CharacterSheetPresentationState,
   characterModifierTone,
   characterTabClass,
@@ -53,6 +56,7 @@ const { viewModel, presentation, developerTools = false }: Props = $props();
           class="textarea w-full font-mono text-sm"
           style="min-block-size: 16rem"
           value={viewModel.jsonText}
+          aria-label="Character JSON"
           oninput={(event) => viewModel.setJsonText(event.currentTarget.value)}
         ></textarea>
         {#if viewModel.jsonError}
@@ -76,7 +80,7 @@ const { viewModel, presentation, developerTools = false }: Props = $props();
         </div>
       {:else}
         <pre
-          class="game-surface--inset max-block-size: 16rem overflow-auto rounded-lg p-3 font-mono text-sm leading-relaxed"
+          class="game-surface--inset max-h-64 overflow-auto rounded-lg p-3 font-mono text-sm leading-relaxed"
         >{viewModel.jsonText}</pre>
       {/if}
     </section>
@@ -96,6 +100,7 @@ const { viewModel, presentation, developerTools = false }: Props = $props();
             class="progress progress-error w-full"
             value={viewModel.hpPercent}
             max="100"
+            aria-label="Hit points"
           ></progress>
         </div>
         <div class="game-character-summary__stat game-surface--inset">
@@ -118,6 +123,7 @@ const { viewModel, presentation, developerTools = false }: Props = $props();
             class="progress progress-accent w-full"
             value={viewModel.xpPercent}
             max="100"
+            aria-label="Experience"
           ></progress>
         </div>
       </div>
@@ -185,7 +191,7 @@ const { viewModel, presentation, developerTools = false }: Props = $props();
 
     <section
       id="character-panel"
-      class="game-surface--raised min-block-size: 14rem flex-1 rounded-lg p-3"
+      class="game-surface--raised min-h-56 flex-1 rounded-lg p-3"
       role="tabpanel"
     >
       {#if viewModel.activeTab === 'abilities'}
@@ -203,7 +209,8 @@ const { viewModel, presentation, developerTools = false }: Props = $props();
                   value={ability.score}
                   min={3}
                   max={20}
-                  size="xs"
+                  size="md"
+                  class="game-number-stepper"
                   label="{ability.label} score"
                   onchange={(value) => viewModel.setAbilityScore(ability.key, value)}
                 />
@@ -212,6 +219,7 @@ const { viewModel, presentation, developerTools = false }: Props = $props();
                     type="checkbox"
                     class="checkbox checkbox-sm"
                     checked={ability.isSavingThrowProficient}
+                    aria-label={m.character_saving_throw_proficiency({ ability: ability.label })}
                     onchange={() => viewModel.toggleSaveProficiency(ability.key)}
                   >
                   <span class="game-metadata">{m.character_saving_throw()}</span>
@@ -344,9 +352,13 @@ const { viewModel, presentation, developerTools = false }: Props = $props();
         <div class="grid gap-3 lg:grid-cols-2">
           {#each CHARACTER_TRAIT_FIELDS as field (field)}
             <section class="game-surface--inset rounded-lg p-3">
-              <h3 class="game-eyebrow">{field}</h3>
+              <h3 id={`character-trait-label-${field}`} class="game-eyebrow">
+                {CHARACTER_TRAIT_LABELS[field]}
+              </h3>
               {#if presentation.isEditing}
                 <textarea
+                  id={`character-trait-${field}`}
+                  aria-labelledby={`character-trait-label-${field}`}
                   class="textarea mt-2 w-full"
                   rows="3"
                   maxlength="500"
@@ -367,7 +379,7 @@ const { viewModel, presentation, developerTools = false }: Props = $props();
           <div class="grid gap-3 lg:grid-cols-3">
             {#each CHARACTER_NARRATIVE_CATEGORIES as category}
               <div class="game-surface--inset rounded-lg p-3">
-                <h4 class="game-metadata uppercase">{category}</h4>
+                <h4 class="game-metadata uppercase">{CHARACTER_NARRATIVE_LABELS[category]}</h4>
                 <div class="mt-2 flex flex-wrap gap-1">
                   {#each viewModel.narrativeTraits[category] as trait}
                     <span class="game-badge">
@@ -389,10 +401,14 @@ const { viewModel, presentation, developerTools = false }: Props = $props();
                       class="flex w-full items-center gap-1"
                       onsubmit={(event) => submitNarrativeTrait(event, category, viewModel)}
                     >
+                      <label class="sr-only" for={`character-narrative-${category}`}>
+                        Add a {CHARACTER_NARRATIVE_PROMPTS[category]} trait
+                      </label>
                       <input
+                        id={`character-narrative-${category}`}
                         type="text"
                         class="input input-sm min-w-0 flex-1"
-                        placeholder="Add a {category} trait"
+                        placeholder="Add a {CHARACTER_NARRATIVE_PROMPTS[category]} trait"
                       >
                       <button type="submit" class="btn btn-sm game-control--quiet">Add</button>
                     </form>
@@ -451,7 +467,7 @@ const { viewModel, presentation, developerTools = false }: Props = $props();
   {/snippet}
   {#snippet children()}
     <pre
-      class="game-surface--inset max-block-size: 24rem overflow-auto whitespace-pre-wrap rounded-lg p-3 font-mono text-sm"
+      class="game-surface--inset max-h-96 overflow-auto whitespace-pre-wrap rounded-lg p-3 font-mono text-sm"
     >{viewModel.aiPreviewText}</pre>
   {/snippet}
   {#snippet actions()}

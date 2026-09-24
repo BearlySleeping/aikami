@@ -347,7 +347,7 @@
     }
 
     .game-numeric--attack {
-      color: var(--ui-brass);
+      color: color-mix(in oklab, var(--ui-brass) 60%, var(--ui-base-content));
       font-weight: 700;
     }
 
@@ -379,6 +379,19 @@
       --btn-color: transparent;
       --btn-color-content: var(--ui-error);
       --btn-border: color-mix(in oklab, var(--ui-error) 55%, transparent);
+    }
+
+    .game-number-stepper {
+      min-block-size: var(--game-touch-target);
+    }
+
+    .game-number-stepper .number-stepper-button {
+      min-inline-size: var(--game-touch-target);
+    }
+
+    .game-number-stepper .number-stepper-input {
+      min-inline-size: 4rem;
+      font-size: var(--game-text-essential);
     }
 
     .game-tabs {
@@ -546,13 +559,12 @@
       grid-template-columns: minmax(0, 1fr);
       gap: 0.8rem;
       min-block-size: 0;
-      block-size: 100%;
     }
 
     .game-inventory__panel {
       display: flex;
       min-inline-size: 0;
-      min-block-size: 20rem;
+      min-block-size: 0;
       flex-direction: column;
       padding: 1rem;
       border-radius: var(--game-radius-panel);
@@ -562,14 +574,17 @@
       display: grid;
       min-block-size: 0;
       grid-template-columns: repeat(3, minmax(0, 1fr));
-      grid-template-rows: repeat(3, minmax(5rem, auto));
+      grid-template-rows: none;
+      grid-auto-rows: max-content;
+      align-content: start;
       gap: 0.45rem;
-      flex: 1 1 auto;
-      overflow-y: auto;
+      flex: 0 0 auto;
+      overflow: visible;
     }
 
     .game-inventory__slot {
       display: flex;
+      min-block-size: 0;
       min-inline-size: 0;
       flex-direction: column;
       align-items: center;
@@ -593,10 +608,10 @@
     .game-inventory__list {
       display: flex;
       min-block-size: 0;
-      flex: 1 1 auto;
+      flex: 0 0 auto;
       flex-direction: column;
       gap: 0.4rem;
-      overflow-y: auto;
+      overflow: visible;
     }
 
     .game-inventory__item {
@@ -654,22 +669,23 @@
       }
 
       .game-inventory__paperdoll {
-        grid-template-rows: repeat(3, minmax(4.5rem, auto));
+        grid-template-rows: none;
+        grid-auto-rows: max-content;
       }
 
       .game-inventory__panel:last-child {
         grid-column: 1 / -1;
-        min-block-size: 18rem;
+        min-block-size: 0;
       }
     }
 
-    @container (max-width: 41.999rem) {
+    @container (max-width: 49.999rem) {
       .game-inventory__panel {
-        min-block-size: 17rem;
+        min-block-size: 0;
       }
     }
 
-    @container (min-width: 72rem) {
+    @container (min-width: 64rem) {
       .game-inventory-layout {
         grid-template-columns: minmax(15rem, 0.9fr) minmax(18rem, 1.2fr) minmax(15rem, 0.9fr);
       }

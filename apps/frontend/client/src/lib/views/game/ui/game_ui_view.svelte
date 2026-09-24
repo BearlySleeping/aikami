@@ -184,8 +184,6 @@ const ANCHORS: readonly HudSlot[] = HUD_ANCHOR_ORDER;
       <PauseMenuView viewModel={viewModel.pauseMenuViewModel} />
     {:else if viewModel.activeOverlay === 'HUD_EDITOR' && viewModel.hudEditorViewModel}
       <HudLayoutEditorOverlay viewModel={viewModel.hudEditorViewModel} />
-    {:else if viewModel.activeOverlay === 'DIALOGUE' && viewModel.dialogueViewModel}
-      <DialogueOverlay viewModel={viewModel.dialogueViewModel} />
     {:else if viewModel.activeOverlay === 'GAME_OVER'}
       <GameOverOverlay
         onRespawn={() => viewModel.respawnPlayer()}
@@ -199,6 +197,22 @@ const ANCHORS: readonly HudSlot[] = HUD_ANCHOR_ORDER;
       <SettingsOverlay viewModel={viewModel.settingsOverlayViewModel} />
     {:else if viewModel.activeOverlay === 'TALK_TO_PARTY' && viewModel.talkToPartyViewModel}
       <TalkToPartyView viewModel={viewModel.talkToPartyViewModel} />
+    {/if}
+
+    {#if viewModel.dialogueViewModel}
+      <!--
+        A management surface may temporarily cover Dialogue. Keep the
+        conversation mounted but hidden/inert so its BaseViewModelContainer
+        does not dispose the transcript and draft while Inventory is open.
+      -->
+      <div
+        class="contents"
+        hidden={viewModel.activeOverlay !== 'DIALOGUE'}
+        inert={viewModel.activeOverlay !== 'DIALOGUE'}
+        data-testid="dialogue-session"
+      >
+        <DialogueOverlay viewModel={viewModel.dialogueViewModel} />
+      </div>
     {/if}
 
     <TransitionOverlay {viewModel} />

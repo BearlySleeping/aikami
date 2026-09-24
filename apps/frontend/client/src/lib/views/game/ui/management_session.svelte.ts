@@ -400,6 +400,14 @@ class GameManagementSession
 
   /** @inheritdoc */
   openMenu(): void {
+    // Dialogue intentionally exposes Inventory as its one compatible
+    // temporary management destination. Route the real Menu entry there
+    // instead of attempting the default Character surface, which the overlay
+    // compatibility matrix correctly blocks over Dialogue.
+    if (this._overlays.activeOverlay === 'DIALOGUE') {
+      this.openLocation({ section: 'inventory' });
+      return;
+    }
     this.openLocation(this.menuLocation);
   }
 
@@ -523,12 +531,9 @@ class GameManagementSession
         untrack(() => this.journalViewModel?.setActiveTab(tab));
       }
     }
-    if (location.section === 'world' && this.worldViewModel) {
-      const tab = WORLD_TAB_BY_SUBVIEW[location.subview ?? ''];
-      if (tab !== undefined) {
-        untrack(() => this.worldViewModel?.setActiveTab(tab));
-      }
-    }
+    // World tabs (People/Places/…) are owned by WorldViewModel. The section's
+    // canonical `codex` subview names the surface, not a tab to reset to on
+    // every sibling return; applying it here would discard the player's tab.
   }
 
   /** @inheritdoc */

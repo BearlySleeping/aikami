@@ -142,18 +142,39 @@ const simpleOverlayCleanup = (
  */
 export const registerGameUIOverlayLifecycle = (options: GameUIOverlayLifecycleOptions): void => {
   const { overlays, npcDialogue, management } = options;
+  let dialogueViewModel: DialogueOverlayViewModelInterface | undefined;
+  let dialogueNpcId: string | undefined;
+
+  const clearDialogueViewModel = (): void => {
+    if (!dialogueViewModel) {
+      return;
+    }
+    dialogueViewModel.hasNpcScreenPosition = false;
+    dialogueViewModel = undefined;
+    dialogueNpcId = undefined;
+    options.setDialogueViewModel(undefined);
+  };
 
   options.registerEffectRoot(() => {
     // ── Dialogue ──
+    // Inventory can be a temporary surface above an active conversation. Keep
+    // the dialogue ViewModel alive while DIALOGUE remains anywhere in the
+    // overlay stack so returning from Inventory restores the transcript and
+    // unsent composer state instead of constructing a fresh conversation.
     $effect(() => {
-      if (overlays.activeOverlay !== 'DIALOGUE') {
-        return;
-      }
+      const activeOverlay = overlays.activeOverlay;
+      const dialogueInStack = overlays.overlayStack.some((entry) => entry.type === 'DIALOGUE');
       const npc = npcDialogue.activeNpc;
-      if (!npc) {
+      if (activeOverlay !== 'DIALOGUE' && !dialogueInStack) {
+        clearDialogueViewModel();
         return;
       }
-      const vm = options.createDialogueOverlayViewModel({
+      if (!npc || (dialogueViewModel && dialogueNpcId === npc.npcId)) {
+        return;
+      }
+
+      clearDialogueViewModel();
+      dialogueViewModel = options.createDialogueOverlayViewModel({
         className: 'DialogueOverlayViewModel',
         npcData: npc,
         onEndChat: () => overlays.endDialogue(),
@@ -165,12 +186,8 @@ export const registerGameUIOverlayLifecycle = (options: GameUIOverlayLifecycleOp
           });
         },
       });
-      options.setDialogueViewModel(vm);
-
-      return () => {
-        vm.hasNpcScreenPosition = false;
-        options.setDialogueViewModel(undefined);
-      };
+      dialogueNpcId = npc.npcId;
+      options.setDialogueViewModel(dialogueViewModel);
     });
 
     // ── Combat ──

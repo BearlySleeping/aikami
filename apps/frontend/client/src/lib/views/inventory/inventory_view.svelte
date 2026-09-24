@@ -25,7 +25,7 @@ const presentation = createInventoryPresentationState({
 <BaseViewModelContainer {viewModel} class="h-full min-h-0">
   {#snippet children()}
     {#snippet inventoryBody()}
-      <div class="@container h-full min-h-0 w-full">
+      <div class="@container min-h-full w-full">
         <div class="game-inventory-layout">
           <section
             class="game-inventory__panel game-surface--raised"
@@ -194,7 +194,7 @@ const presentation = createInventoryPresentationState({
               <div class="flex min-h-0 flex-1 flex-col gap-3">
                 <div class="game-surface--inset flex items-center gap-3 rounded-lg p-3">
                   <span class="game-inventory__detail-icon" aria-hidden="true">
-                    {presentation.selectedItem.label.charAt(0)}
+                    {presentation.selectedItemInitial}
                   </span>
                   <div class="min-w-0">
                     <p class="game-section-title truncate">{presentation.selectedItem.label}</p>
@@ -269,9 +269,7 @@ const presentation = createInventoryPresentationState({
                 <span class="text-3xl" aria-hidden="true">◇</span>
                 <p class="game-section-title">No item selected</p>
                 <p class="game-metadata max-w-xs">
-                  {viewModel.hasItems
-                  ? 'Choose a bag item to read its stats and available actions.'
-                  : 'Collect equipment or supplies to reveal their details here.'}
+                  {presentation.detailEmptyHint}
                 </p>
               </div>
             {/if}

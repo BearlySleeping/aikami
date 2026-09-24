@@ -19,6 +19,7 @@ import {
   exposeEngineState,
   isE2ETestMode,
   isVisualScreenshotMode,
+  publishNpcEntityIds,
   publishPlayerVisibleByMask,
   resetEntityPositions,
 } from './game_world/diagnostics.ts';
@@ -941,9 +942,9 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     // Release buffer references
     this._renderBufferPool.clear();
 
-    // Clear render entries
+    // Clear render entries and scene diagnostics
     this._renderEntries.clear();
-    resetEntityPositions();
+    this._resetNpcDiagnostics();
 
     // Destroy services
     this._apiService?.destroy();
@@ -1356,6 +1357,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
           isVendor: npcData.isVendor || false,
           vendorInventory: npcData.vendorInventory || '',
         });
+        publishNpcEntityIds(this._npcMeta.keys());
         // Resolved from the AUTHORED npcId, never from worker mechanics.
         this._maybeLoadAuthoredStaticVisual(eid);
       }
@@ -1737,10 +1739,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       entry.displayObject.destroy({ children: true });
     }
     this._renderEntries.clear();
-    this._npcMeta.clear();
-    this._staticVisualEntities.clear();
-    this._playerEntityId = 0;
-    resetEntityPositions();
+    this._resetNpcDiagnostics();
 
     // Wait for the worker to finish restoring. WorkerSession correlates the
     // reply and rejects on timeout/crash/disposal exactly once.
@@ -1813,6 +1812,16 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     return this._sceneTransition.load(options);
   }
 
+  /** Clears NPC identity and position diagnostics at every scene boundary. */
+  private _resetNpcDiagnostics(): void {
+    this._npcMeta.clear();
+    publishNpcEntityIds([]);
+    this._staticVisualEntities.clear();
+    this._debugNpcAppearance = {};
+    this._playerEntityId = 0;
+    resetEntityPositions();
+  }
+
   /**
    * Tears down the previous scene's display objects and derived state before
    * a new scene is prepared. Kept on the facade because it owns the PixiJS
@@ -1823,13 +1832,9 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       entry.displayObject.destroy({ children: true });
     }
     this._renderEntries.clear();
-    this._npcMeta.clear();
-    this._staticVisualEntities.clear();
-    // C-504 AC-5: reset the debug per-NPC appearance map on map switch so a
-    // stale map's NPCs never leak into the next map's debug state.
-    this._debugNpcAppearance = {};
-    this._playerEntityId = 0;
-    resetEntityPositions();
+    // C-504 AC-5: reset identity, appearance and position diagnostics together
+    // so a stale map's NPCs never leak into the next map's debug state.
+    this._resetNpcDiagnostics();
 
     // C-380 AC-6 / C-138: a click-to-move destination is map-local. Drop the
     // marker on a map switch so a destination clicked on the previous map does

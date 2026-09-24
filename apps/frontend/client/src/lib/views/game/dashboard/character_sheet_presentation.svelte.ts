@@ -4,11 +4,12 @@
 // Domain reads and mutations stay in CharacterSheetViewModel; this module only
 // controls edit disclosure and maps values onto game-scoped roles.
 
-import type {
-  AbilityKey,
-  AbilityScores,
-  CharacterSavingThrow,
-  NarrativeTraits,
+import {
+  ABILITY_KEYS,
+  type AbilityKey,
+  type AbilityScores,
+  type CharacterSavingThrow,
+  type NarrativeTraits,
 } from '@aikami/types';
 import type { CharacterSheetTab } from './character_sheet_view_model.svelte';
 
@@ -74,7 +75,7 @@ export const toCharacterAbilityRows = (options: {
   savingThrows: readonly CharacterSavingThrow[];
   abilityLabels: Readonly<Record<AbilityKey, string>>;
 }): readonly CharacterAbilityRow[] =>
-  (Object.keys(options.abilities) as AbilityKey[]).map((key) => ({
+  ABILITY_KEYS.map((key) => ({
     key,
     label: options.abilityLabels[key],
     score: options.abilities[key].value,
@@ -122,6 +123,30 @@ export const CHARACTER_NARRATIVE_CATEGORIES = ['likes', 'temptations', 'keys'] a
 
 /** Canonical long-form trait fields shown by the sheet. */
 export const CHARACTER_TRAIT_FIELDS = ['personalityTraits', 'ideals', 'bonds', 'flaws'] as const;
+
+/** Player-facing labels for the authored trait fields. */
+export const CHARACTER_TRAIT_LABELS: Readonly<
+  Record<(typeof CHARACTER_TRAIT_FIELDS)[number], string>
+> = {
+  personalityTraits: 'Personality',
+  ideals: 'Ideals',
+  bonds: 'Bonds',
+  flaws: 'Flaws',
+};
+
+/** Player-facing labels for narrative-trait categories. */
+export const CHARACTER_NARRATIVE_LABELS: Readonly<Record<keyof NarrativeTraits, string>> = {
+  likes: 'Likes',
+  temptations: 'Temptations',
+  keys: 'Keys',
+};
+
+/** Lower-case labels used naturally in the narrative-trait input prompt. */
+export const CHARACTER_NARRATIVE_PROMPTS: Readonly<Record<keyof NarrativeTraits, string>> = {
+  likes: 'likes',
+  temptations: 'temptations',
+  keys: 'keys',
+};
 
 /** Handles a narrative-trait form without leaking DOM mutation into the View. */
 export const submitNarrativeTrait = (
