@@ -437,7 +437,11 @@ export const autotileLayers = (options: AutotileOptions): TerrainLayerEmission[]
       for (let x = 0; x < width; x++) {
         const cellIndex = y * width + x;
         frames[cellIndex] = pickBaseFrame({
-          isBaseCell: cells[cellIndex] === 0,
+          // Empty channel values are also used by generated maps for baked
+          // non-terrain tiles (paths, sand, bridges, and building cells).
+          // Restrict sparse details to an authored base-terrain ID so those
+          // cells can never receive a grass tuft underneath their real frame.
+          isBaseCell: terrain[cellIndex] === base.name,
           variants: base.variants ?? [],
           frameBase: base.frameBase,
           x,

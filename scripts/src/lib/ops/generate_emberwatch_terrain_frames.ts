@@ -59,6 +59,19 @@ export const paintDirt: TerrainPaint = (col, row) => {
   }
 };
 
+/** Low-contrast dirt fringe keeps the grass/dirt handoff soft at cell scale. */
+export const paintDirtFringe: TerrainPaint = (col, row) => {
+  fillCell(col, row, 106, 116, 55);
+  noiseCell(col, row, 0xbb67ae85, 0.35, 8, 10, 8);
+  const rng = makeRng(0x3c6ef3);
+  for (let index = 0; index < 10; index++) {
+    const x = Math.floor(rng() * TILE);
+    const y = Math.floor(rng() * TILE);
+    const color = rng() < 0.5 ? ([112, 120, 60] as const) : ([98, 108, 52] as const);
+    setPx(col * TILE + x, row * TILE + y, color[0], color[1], color[2]);
+  }
+};
+
 /** Loose packed gravel, shared by the gravel overlay and earth base. */
 export const paintGravel: TerrainPaint = (col, row) => {
   fillCell(col, row, 112, 108, 96);
@@ -240,6 +253,24 @@ export const paintCobbleLight: TerrainPaint = (col, row) => {
   paintCobbleTone({ col, row, toneLift: 12 });
 };
 
+const INTERIOR_FLAGSTONE_TONES = [
+  [136, 132, 120],
+  [140, 136, 123],
+  [132, 130, 119],
+] as const;
+const INTERIOR_FLAGSTONE_MORTAR = [123, 125, 118] as const;
+
+/** Restrained indoor flagstone; its wrapped cells never form bright square decals. */
+export const paintInteriorFlagstone: TerrainPaint = (col, row) => {
+  paintIrregularStone({
+    col,
+    row,
+    tones: INTERIOR_FLAGSTONE_TONES,
+    mortar: INTERIOR_FLAGSTONE_MORTAR,
+    seed: 0x6a09e667,
+  });
+};
+
 /** Blue water material shared by the standalone and corner16 frames. */
 export const paintWater: TerrainPaint = (col, row) => {
   fillCell(col, row, 46, 111, 176);
@@ -254,6 +285,26 @@ export const paintWater: TerrainPaint = (col, row) => {
     for (let x = 2; x < TILE - 4; x += 3) {
       setPx(col * TILE + x, row * TILE + y, 82, 158, 214);
     }
+  }
+};
+
+/**
+ * Wet-bank under-material for water corner frames.
+ *
+ * Water cells are rendered above the grass base by the layered autotiler. If
+ * that base remains grass, every partial water mask leaks bright green pixels
+ * through the ripple field. A blue-grey under-material keeps the transition
+ * readable without introducing a second grass family into water tiles.
+ */
+export const paintWaterUnderlay: TerrainPaint = (col, row) => {
+  fillCell(col, row, 44, 88, 116);
+  noiseCell(col, row, 0x3c6ef3, 0.45, 10, 12, 10);
+  const rng = makeRng(0x1f83d9ab);
+  for (let index = 0; index < 14; index++) {
+    const x = Math.floor(rng() * TILE);
+    const y = Math.floor(rng() * TILE);
+    const color = rng() < 0.5 ? ([54, 102, 132] as const) : ([36, 76, 104] as const);
+    setPx(col * TILE + x, row * TILE + y, color[0], color[1], color[2]);
   }
 };
 
@@ -317,44 +368,121 @@ const edgeCoverage = (options: { mask: number; x: number; y: number; seed: numbe
   return active ? 0.58 + (noise - 0.5) * 0.12 : 0.42 + (noise - 0.5) * 0.12;
 };
 
+/**
+ * Returns a signed diagonal field for the three-corner masks.
+ *
+ * The missing corner owns the low-distance side of the field; the other three
+ * corners own the high-distance side. This replaces four repeated radial lobes
+ * at the real landing masks (13/14) with one coherent noisy contour.
+ */
+const diagonalCornerField = (options: {
+  mask: number;
+  x: number;
+  y: number;
+  seed: number;
+}): number | undefined => {
+  const { mask, x, y, seed } = options;
+  const px = x + 0.5;
+  const py = y + 0.5;
+  let distanceFromMissingCorner: number;
+  if (mask === 14) {
+    distanceFromMissingCorner = px + py;
+  } else if (mask === 13) {
+    distanceFromMissingCorner = py + TILE - px;
+  } else if (mask === 7) {
+    distanceFromMissingCorner = px + TILE - py;
+  } else if (mask === 11) {
+    distanceFromMissingCorner = TILE - px + TILE - py;
+  } else {
+    return undefined;
+  }
+  const boundary =
+    18.5 +
+    1.6 * Math.sin(distanceFromMissingCorner * 0.23 + seed * 0.047) +
+    1.0 * Math.sin((px - py) * 0.17 - seed * 0.031) +
+    0.6 * Math.sin(distanceFromMissingCorner * 0.61 + seed * 0.019);
+  return distanceFromMissingCorner - boundary + 2.4;
+};
+
+/**
+ * Returns a signed field for the four adjacent-corner masks.
+ *
+ * A radial union is attractive in isolation, but repeating one circle per cell
+ * makes a row of masks read as a row of triangular teeth. Adjacent-corner
+ * masks instead get a noisy, tile-local boundary across the owned half. The
+ * frequencies are deliberately incommensurate with the 32 px tile, so the
+ * contour does not settle into a short repeating sawtooth.
+ */
+const adjacentCornerField = (options: {
+  mask: number;
+  x: number;
+  y: number;
+  seed: number;
+}): number | undefined => {
+  const { mask, x, y, seed } = options;
+  const px = x + 0.5;
+  const py = y + 0.5;
+  const along = mask === 3 || mask === 12 ? px : py;
+  const boundary =
+    15.5 +
+    1.4 * Math.sin(along * 0.29 + seed * 0.071) +
+    1.0 * Math.sin(along * 0.17 - seed * 0.113) +
+    0.5 * Math.sin(along * 0.73 + seed * 0.037);
+  if (mask === 3) {
+    return boundary - py + 2.4;
+  }
+  if (mask === 12) {
+    return py - boundary + 2.4;
+  }
+  if (mask === 6) {
+    return px - boundary + 2.4;
+  }
+  if (mask === 9) {
+    return boundary - px + 2.4;
+  }
+  return undefined;
+};
+
 /** Material-independent organic coverage: rounded corners, coherent noise, opaque dither. */
 const cornerCoverage = (options: { mask: number; x: number; y: number; seed: number }): number => {
   const { mask, x, y, seed } = options;
   if (isOuterEdge(x, y)) {
     return edgeCoverage(options);
   }
+  // A fully-owned cell must never fall back to its base material. The noisy
+  // fields are for transition interiors only; mask 15 is an invariant.
+  if (mask === 0b1111) {
+    return 1;
+  }
 
   const px = x + 0.5;
   const py = y + 0.5;
   const foldX = Math.min(px, TILE - px);
   const foldY = Math.min(py, TILE - py);
-  let field = 10.5 - Math.hypot(px - 16, py - 16);
-  for (const corner of CORNERS) {
-    if ((mask & corner.bit) === 0) {
-      continue;
+  const adjacentField = diagonalCornerField(options) ?? adjacentCornerField(options);
+  let field = adjacentField ?? 10.5 - Math.hypot(px - 16, py - 16);
+  if (adjacentField === undefined) {
+    for (const corner of CORNERS) {
+      if ((mask & corner.bit) === 0) {
+        continue;
+      }
+      const dx = px - corner.x;
+      const dy = py - corner.y;
+      const distance = Math.hypot(dx, dy);
+      const angle = Math.atan2(Math.abs(dy), Math.abs(dx));
+      const radius =
+        20.5 + 1.6 * Math.sin(angle * 3 + seed * 0.01) + 0.9 * Math.sin(angle * 7 - seed * 0.013);
+      field = Math.max(field, radius - distance);
     }
-    const dx = px - corner.x;
-    const dy = py - corner.y;
-    const distance = Math.hypot(dx, dy);
-    const angle = Math.atan2(Math.abs(dy), Math.abs(dx));
-    const radius =
-      20.5 + 1.6 * Math.sin(angle * 3 + seed * 0.01) + 0.9 * Math.sin(angle * 7 - seed * 0.013);
-    field = Math.max(field, radius - distance);
   }
 
   const organic =
-    1.6 * Math.sin(foldX * 0.72 + foldY * 0.41 + seed * 0.017) +
-    1.0 * Math.sin(foldY * 0.93 - foldX * 0.23 - seed * 0.011);
+    0.8 * Math.sin(foldX * 0.37 + foldY * 0.23 + seed * 0.017) +
+    0.5 * Math.sin(foldY * 0.51 - foldX * 0.19 - seed * 0.011) +
+    0.3 * Math.sin((foldX + foldY) * 0.29 + seed * 0.007);
   const ordered = BAYER_4X4[(y & 3) * 4 + (x & 3)] / 15 - 0.5;
   const grain = hashCell(x, y, seed + 911) - 0.5;
-  const coverage = smoothstep(clamp01((field + organic + ordered * 2.5 + grain * 4 + 2.4) / 4.8));
-  if (coverage < 0.34) {
-    return 0;
-  }
-  if (coverage < 0.66) {
-    return 0.5;
-  }
-  return 1;
+  return smoothstep(clamp01((field + organic + ordered * 0.3 + grain * 0.05 + 3.25) / 6.5));
 };
 
 /** Material-independent organic coverage used by the compositor and pixel tests. */
@@ -396,6 +524,136 @@ const materialMean = (pixels: Uint8Array): readonly [number, number, number] => 
   return [red / total, green / total, blue / total];
 };
 
+type CornerColor = readonly [number, number, number];
+type CornerFrameSnapshot = {
+  basePixels: Uint8Array;
+  overlayPixels: Uint8Array;
+  fringePixels: Uint8Array;
+  baseMean: CornerColor;
+  overlayMean: CornerColor;
+};
+
+const snapshotCornerFrame = (options: {
+  col: number;
+  row: number;
+  base: TerrainPaint;
+  overlay: TerrainPaint;
+  fringe?: TerrainPaint;
+}): CornerFrameSnapshot => {
+  const basePixels = snapshotCell({ col: options.col, row: options.row, paint: options.base });
+  const overlayPixels = snapshotCell({
+    col: options.col,
+    row: options.row,
+    paint: options.overlay,
+  });
+  const fringePixels = snapshotCell({
+    col: options.col,
+    row: options.row,
+    paint: options.fringe ?? options.overlay,
+  });
+  return {
+    basePixels,
+    overlayPixels,
+    fringePixels,
+    baseMean: materialMean(basePixels),
+    overlayMean: materialMean(overlayPixels),
+  };
+};
+
+const cornerPixelColor = (pixels: Uint8Array, offset: number): CornerColor => [
+  pixels[offset] ?? 0,
+  pixels[offset + 1] ?? 0,
+  pixels[offset + 2] ?? 0,
+];
+
+const paintOuterCornerPixel = (options: {
+  col: number;
+  row: number;
+  x: number;
+  y: number;
+  coverage: number;
+  baseColor: CornerColor;
+  overlayColor: CornerColor;
+  snapshot: CornerFrameSnapshot;
+}): void => {
+  const { snapshot } = options;
+  const canonical: CornerColor = [
+    mixChannel(snapshot.baseMean[0], snapshot.overlayMean[0], options.coverage),
+    mixChannel(snapshot.baseMean[1], snapshot.overlayMean[1], options.coverage),
+    mixChannel(snapshot.baseMean[2], snapshot.overlayMean[2], options.coverage),
+  ];
+  mixCellPixel({
+    col: options.col,
+    row: options.row,
+    x: options.x,
+    y: options.y,
+    base: [
+      mixChannel(options.baseColor[0], options.overlayColor[0], options.coverage),
+      mixChannel(options.baseColor[1], options.overlayColor[1], options.coverage),
+      mixChannel(options.baseColor[2], options.overlayColor[2], options.coverage),
+    ],
+    overlay: canonical,
+    coverage: 0.8,
+  });
+};
+
+const selectCornerColor = (options: {
+  coverage: number;
+  baseColor: CornerColor;
+  fringeColor: CornerColor;
+  overlayColor: CornerColor;
+}): CornerColor => {
+  if (options.coverage >= 0.72) {
+    return options.overlayColor;
+  }
+  if (options.coverage >= 0.28) {
+    return options.fringeColor;
+  }
+  return options.baseColor;
+};
+
+const paintCornerPixel = (options: {
+  col: number;
+  row: number;
+  x: number;
+  y: number;
+  mask: number;
+  seed: number;
+  snapshot: CornerFrameSnapshot;
+}): void => {
+  const offset = (options.y * TILE + options.x) * 3;
+  const coverage = cornerCoverage({
+    mask: options.mask,
+    x: options.x,
+    y: options.y,
+    seed: options.seed,
+  });
+  const baseColor = cornerPixelColor(options.snapshot.basePixels, offset);
+  const overlayColor = cornerPixelColor(options.snapshot.overlayPixels, offset);
+  const fringeColor = cornerPixelColor(options.snapshot.fringePixels, offset);
+  if (isOuterEdge(options.x, options.y)) {
+    paintOuterCornerPixel({
+      col: options.col,
+      row: options.row,
+      x: options.x,
+      y: options.y,
+      coverage,
+      baseColor,
+      overlayColor,
+      snapshot: options.snapshot,
+    });
+    return;
+  }
+  const materialColor = selectCornerColor({ coverage, baseColor, fringeColor, overlayColor });
+  setPx(
+    options.col * TILE + options.x,
+    options.row * TILE + options.y,
+    materialColor[0],
+    materialColor[1],
+    materialColor[2],
+  );
+};
+
 /**
  * Paints one organic corner16 frame while keeping every pixel opaque.
  * Outer-edge coverage is shared by compatible masks; material phase is
@@ -407,54 +665,21 @@ export const paintCornerFrame = (options: {
   mask: number;
   base: TerrainPaint;
   overlay: TerrainPaint;
+  fringe?: TerrainPaint;
   seed: number;
 }): void => {
-  const { col, row, mask, base, overlay, seed } = options;
-  const basePixels = snapshotCell({ col, row, paint: base });
-  const overlayPixels = snapshotCell({ col, row, paint: overlay });
-  const baseMean = materialMean(basePixels);
-  const overlayMean = materialMean(overlayPixels);
-
+  const snapshot = snapshotCornerFrame(options);
   for (let y = 0; y < TILE; y++) {
     for (let x = 0; x < TILE; x++) {
-      const offset = (y * TILE + x) * 3;
-      const coverage = cornerCoverage({ mask, x, y, seed });
-      const baseColor: readonly [number, number, number] = [
-        basePixels[offset] ?? 0,
-        basePixels[offset + 1] ?? 0,
-        basePixels[offset + 2] ?? 0,
-      ];
-      const overlayColor: readonly [number, number, number] = [
-        overlayPixels[offset] ?? 0,
-        overlayPixels[offset + 1] ?? 0,
-        overlayPixels[offset + 2] ?? 0,
-      ];
-
-      if (isOuterEdge(x, y)) {
-        const canonicalBase = baseMean;
-        const canonicalOverlay = overlayMean;
-        const canonical: readonly [number, number, number] = [
-          mixChannel(canonicalBase[0], canonicalOverlay[0], coverage),
-          mixChannel(canonicalBase[1], canonicalOverlay[1], coverage),
-          mixChannel(canonicalBase[2], canonicalOverlay[2], coverage),
-        ];
-        mixCellPixel({
-          col,
-          row,
-          x,
-          y,
-          base: [
-            mixChannel(baseColor[0], overlayColor[0], coverage),
-            mixChannel(baseColor[1], overlayColor[1], coverage),
-            mixChannel(baseColor[2], overlayColor[2], coverage),
-          ],
-          overlay: canonical,
-          coverage: 0.8,
-        });
-        continue;
-      }
-
-      mixCellPixel({ col, row, x, y, base: baseColor, overlay: overlayColor, coverage });
+      paintCornerPixel({
+        col: options.col,
+        row: options.row,
+        x,
+        y,
+        mask: options.mask,
+        seed: options.seed,
+        snapshot,
+      });
     }
   }
 };

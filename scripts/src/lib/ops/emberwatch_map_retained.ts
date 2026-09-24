@@ -71,11 +71,11 @@ export const buildInn = (): { map: MapData; objectLayers: MapObjectLayer[] } => 
   // two door columns are paved through it, so the interior stays enclosed.
   for (let r = 14; r <= H - 3; r++) {
     for (let c = 12; c <= 15; c++) {
-      setTile(m, c, r, G.STONE_FLOOR);
+      setTile(m, c, r, G.STONE_VAR);
     }
   }
   for (const c of [13, 14, 15]) {
-    setTile(m, c, H - 2, G.STONE_FLOOR);
+    setTile(m, c, H - 2, G.STONE_VAR);
   }
 
   // Rugs: one under the common room's centre, one at each table cluster.
@@ -170,32 +170,31 @@ export const buildShop = (): { map: MapData; objectLayers: MapObjectLayer[] } =>
   const W = 24;
   const H = 18;
   const m = makeMap(W, H);
-  const rng = makeRng(0x5b0f);
 
   // South doorway, three tiles wide — the companion-safe corridor width.
   border(m, { south: [11, 12, 13] });
 
-  // Stone floor across the interior, with flagstone wear.
+  // Restrained indoor flagstone. GID 6 is reserved for outdoor cobble, while
+  // GID 34 is the dedicated interior floor variant.
   for (let r = 2; r < H - 2; r++) {
     for (let c = 2; c <= W - 3; c++) {
-      setTile(m, c, r, G.STONE_FLOOR);
+      setTile(m, c, r, G.STONE_VAR);
     }
   }
   for (const c of [11, 12, 13]) {
-    setTile(m, c, H - 2, G.STONE_FLOOR);
+    setTile(m, c, H - 2, G.STONE_VAR);
   }
-  scatter(m, rng, 2, 2, W - 3, H - 3, G.STONE_FLOOR, G.FLAGSTONE, 0.2);
 
   // Landing inside the door so the entrance is not a pinch point. The south
-  // wall-top rim (row H-2) is left intact; only the two door columns are paved
+  // wall-top rim (row H-2) is left intact; only the door columns are paved
   // through it.
   for (let r = 13; r <= H - 3; r++) {
     for (let c = 10; c <= 13; c++) {
-      setTile(m, c, r, G.STONE_FLOOR);
+      setTile(m, c, r, G.STONE_VAR);
     }
   }
   for (const c of [11, 12, 13]) {
-    setTile(m, c, H - 2, G.STONE_FLOOR);
+    setTile(m, c, H - 2, G.STONE_VAR);
   }
 
   // The counter run divides the room: a solid `counter` tile along row 11,

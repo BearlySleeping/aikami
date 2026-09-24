@@ -36,6 +36,7 @@ import {
   vline,
   W,
 } from './generate_emberwatch_canvas.ts';
+import { paintTerrainCornerFrame } from './generate_emberwatch_corner_painters.ts';
 import {
   paintGrass,
   paintGrassDark,
@@ -50,13 +51,10 @@ import {
   registerTerrainFrames,
 } from './generate_emberwatch_tables.ts';
 import {
-  CORNER_TERRAIN_SEEDS,
   paintCobble,
   paintCobbleLight,
-  paintCornerFrame,
   paintDirt,
-  paintEarth,
-  paintGravel,
+  paintInteriorFlagstone,
   paintSand,
   paintStoneFloor,
   paintWater,
@@ -532,16 +530,6 @@ const paintWoodDoor = (col: number, row: number): void => {
   setPx(col * TILE + 21, row * TILE + 2, 140, 92, 56);
 };
 
-const paintFlagstone = (col: number, row: number): void => {
-  paintStoneFloor(col, row);
-  // bigger irregular slabs
-  fillRect(col, row, 1, 1, 13, 13, 155, 155, 158);
-  fillRect(col, row, 17, 2, 13, 12, 155, 155, 158);
-  fillRect(col, row, 3, 17, 12, 12, 155, 155, 158);
-  fillRect(col, row, 18, 17, 12, 12, 155, 155, 158);
-  noiseCell(col, row, col * 3 + row * 17 + 33, 0.2, 12, 12, 12);
-};
-
 const paintRugRound = (col: number, row: number): void => {
   clearCell(col, row); // C-504: transparent unpainted region
   // round rug
@@ -576,25 +564,6 @@ const paintRugRound = (col: number, row: number): void => {
 // noise-shaped material coverage instead of exact half-plane triangles while
 // preserving the fixed terrain block and opaque lower-layer contract.
 
-const CORNER_TERRAIN_PAINTERS: Record<
-  string,
-  {
-    base: (col: number, row: number) => void;
-    overlay: (col: number, row: number) => void;
-    seed: number;
-  }
-> = {
-  dirt: { base: paintGrass, overlay: paintDirt, seed: CORNER_TERRAIN_SEEDS.dirt },
-  water: { base: paintGrass, overlay: paintWater, seed: CORNER_TERRAIN_SEEDS.water },
-  gravel: { base: paintGrass, overlay: paintGravel, seed: CORNER_TERRAIN_SEEDS.gravel },
-  earth: { base: paintGravel, overlay: paintEarth, seed: CORNER_TERRAIN_SEEDS.earth },
-  cobblestone: {
-    base: paintWoodFloor,
-    overlay: paintCobble,
-    seed: CORNER_TERRAIN_SEEDS.cobblestone,
-  },
-};
-
 const paintFrame = (key: string, col: number, row: number): void => {
   if (paintAssemblyFrame({ key, col, row })) {
     return;
@@ -603,20 +572,16 @@ const paintFrame = (key: string, col: number, row: number): void => {
   // registered painter pair are corner frames; an unknown id falls through to
   // the default below rather than being silently mis-painted.
   const cornerMatch = /^([a-z0-9_]+?)_(\d{1,2})\.png$/.exec(key);
-  if (cornerMatch) {
-    const painters = CORNER_TERRAIN_PAINTERS[cornerMatch[1]];
-    const mask = Number(cornerMatch[2]);
-    if (painters && mask >= 0 && mask < 16) {
-      paintCornerFrame({
-        col,
-        row,
-        mask,
-        base: painters.base,
-        overlay: painters.overlay,
-        seed: painters.seed,
-      });
-      return;
-    }
+  if (
+    cornerMatch &&
+    paintTerrainCornerFrame({
+      terrainName: cornerMatch[1] ?? '',
+      col,
+      row,
+      mask: Number(cornerMatch[2]),
+    })
+  ) {
+    return;
   }
   switch (key) {
     case 'grass.png':
@@ -641,7 +606,7 @@ const paintFrame = (key: string, col: number, row: number): void => {
       paintStoneFloor(col, row);
       break;
     case 'stone_floor_variant.png':
-      paintFlagstone(col, row);
+      paintInteriorFlagstone(col, row);
       break;
     case 'wood_floor.png':
       paintWoodFloor(col, row);
@@ -744,7 +709,7 @@ const paintFrame = (key: string, col: number, row: number): void => {
       paintWoodDoor(col, row);
       break;
     case 'flagstone.png':
-      paintFlagstone(col, row);
+      paintCobbleLight(col, row);
       break;
     case 'grass_edge_n.png':
     case 'grass_edge_s.png':

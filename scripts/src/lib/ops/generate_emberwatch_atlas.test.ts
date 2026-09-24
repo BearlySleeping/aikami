@@ -139,7 +139,7 @@ describe('C-378 AC-5 — atlas packer', () => {
         mask15Overlay: [138, 89, 51, 255],
       },
       water: {
-        mask0Base: [71, 144, 59, 255],
+        mask0Base: [44, 88, 116, 255],
         mask0Overlay: [46, 111, 176, 255],
         mask15Overlay: [47, 113, 177, 255],
       },
