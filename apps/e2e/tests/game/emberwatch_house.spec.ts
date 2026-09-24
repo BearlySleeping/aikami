@@ -43,14 +43,15 @@ test.describe('C-550 Emberwatch raised house', () => {
     await house.loadMapAt('village', HOUSE_APPROACH);
 
     const start = await house.snapshot();
-    expect(start.player.r).toBe(10);
+    // The closed door is solid; the actor footprint settles on the second clear landing row.
+    expect(start.player.r).toBe(11);
 
     await house.move('KeyW', 650);
     const thresholdAttempt = await house.snapshot();
-    expect(thresholdAttempt.player.r).toBe(10);
+    expect(thresholdAttempt.player.r).toBe(11);
 
     await house.move('KeyA', 350);
     const lateralApproach = await house.snapshot();
-    expect(lateralApproach.player.r).toBe(10);
+    expect(lateralApproach.player.r).toBe(11);
   });
 });

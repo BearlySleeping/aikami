@@ -46,8 +46,10 @@ export {
   doorPlacement,
   HOUSE_FRAMES,
   type HouseDoorCell,
+  type HouseDoorPlacement,
   type HouseFacing,
   type HouseFrameRole,
+  houseDoorPlacement,
   placeHouse,
 } from './emberwatch_house_authoring.ts';
 

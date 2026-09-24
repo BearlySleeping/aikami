@@ -65,6 +65,7 @@ export class EmberwatchHousePage {
       e2e?: boolean;
       authoring?: boolean;
       authoringLayers?: readonly string[];
+      textScale?: number;
     } = {},
   ): Promise<void> {
     const params = new URLSearchParams({
@@ -88,6 +89,11 @@ export class EmberwatchHousePage {
     await this.waitForSeam();
     await this.dismissTutorial();
     await this.waitForEngineState();
+    if (options.textScale !== undefined) {
+      await this.page.evaluate((scale) => {
+        document.documentElement.style.fontSize = `${scale * 100}%`;
+      }, options.textScale);
+    }
     await this.dismissTutorial();
   }
 

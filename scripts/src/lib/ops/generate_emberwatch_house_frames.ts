@@ -7,10 +7,10 @@
 
 import {
   buf,
+  clearCell,
   fillCell,
   fillRect,
   hline,
-  setPx,
   TILE,
   vline,
   W,
@@ -38,33 +38,47 @@ type FacadeVariant = Extract<HouseFrameRecipe, { kind: 'facade' }>['variant'];
 
 type Rgb = readonly [number, number, number];
 
+/** Six pixels is the authored upper bound for the visible base course. */
+export const HOUSE_PLINTH_HEIGHT = 6;
+
+/*
+ * Weathered cedar shingles are intentional here: the neighboring village
+ * buildings use warm wood, so a brown roof reads as one material family while
+ * the value structure—not a blue-grey color shift—carries the three-quarter
+ * roof read at tile scale.
+ */
 const ROOF = {
-  base: [88, 104, 116] as const,
-  light: [132, 146, 154] as const,
-  dark: [54, 68, 82] as const,
-  seam: [39, 52, 65] as const,
-  ridge: [166, 173, 176] as const,
+  base: [91, 66, 48] as const,
+  light: [174, 132, 82] as const,
+  dark: [67, 48, 37] as const,
+  seam: [78, 55, 41] as const,
+  ridge: [201, 157, 96] as const,
+  ridgeShadow: [123, 85, 54] as const,
+  gable: [132, 87, 56] as const,
+  hipShadow: [82, 55, 40] as const,
+  highlight: [193, 151, 94] as const,
 } satisfies Record<string, Rgb>;
 
 const FACADE = {
-  base: [124, 94, 67] as const,
-  light: [153, 116, 80] as const,
-  dark: [79, 58, 42] as const,
-  trim: [57, 43, 33] as const,
-  window: [79, 126, 139] as const,
-  windowLight: [144, 184, 185] as const,
-  doorDark: [42, 37, 37] as const,
-  door: [133, 88, 53] as const,
-  doorLight: [176, 121, 69] as const,
-  threshold: [162, 151, 126] as const,
+  base: [126, 82, 48] as const,
+  light: [158, 108, 61] as const,
+  dark: [82, 51, 35] as const,
+  trim: [55, 36, 28] as const,
+  eaveShadow: [79, 48, 33] as const,
+  window: [75, 116, 127] as const,
+  windowLight: [153, 183, 174] as const,
+  doorDark: [48, 32, 27] as const,
+  door: [108, 67, 38] as const,
+  doorLight: [145, 94, 52] as const,
+  threshold: [174, 145, 99] as const,
 } satisfies Record<string, Rgb>;
 
 const FOUNDATION = {
-  stone: [105, 108, 110] as const,
-  light: [143, 145, 143] as const,
-  dark: [61, 65, 69] as const,
+  stone: [119, 105, 86] as const,
+  light: [151, 136, 108] as const,
+  dark: [73, 59, 49] as const,
   earth: [79, 64, 50] as const,
-  shadow: [48, 47, 45] as const,
+  shadow: [48, 43, 37] as const,
 } satisfies Record<string, Rgb>;
 
 const rect = (
@@ -83,10 +97,6 @@ const lineH = (col: number, row: number, y: number, color: Rgb): void => {
   hline(col, row, 0, TILE - 1, y, color[0], color[1], color[2]);
 };
 
-const pixel = (col: number, row: number, x: number, y: number, color: Rgb): void => {
-  setPx(col * TILE + x, row * TILE + y, color[0], color[1], color[2]);
-};
-
 const lineV = (col: number, row: number, x: number, color: Rgb): void => {
   vline(col, row, x, 0, TILE - 1, color[0], color[1], color[2]);
 };
@@ -100,6 +110,30 @@ const lineVRange = (
   color: Rgb,
 ): void => {
   vline(col, row, x, y0, y1, color[0], color[1], color[2]);
+};
+
+const shiftColor = (color: Rgb, amount: number): Rgb => [
+  Math.max(0, Math.min(255, color[0] + amount)),
+  Math.max(0, Math.min(255, color[1] + amount)),
+  Math.max(0, Math.min(255, color[2] + amount)),
+];
+
+const setPixelRgba = (
+  col: number,
+  row: number,
+  x: number,
+  y: number,
+  color: Rgb,
+  alpha: number,
+): void => {
+  if (x < 0 || x >= TILE || y < 0 || y >= TILE) {
+    return;
+  }
+  const index = ((row * TILE + y) * W + col * TILE + x) * 4;
+  buf[index] = color[0];
+  buf[index + 1] = color[1];
+  buf[index + 2] = color[2];
+  buf[index + 3] = Math.max(0, Math.min(255, alpha));
 };
 
 /** Makes a repeatable interior run meet itself exactly at the tile seam. */
@@ -117,16 +151,16 @@ const copyLeftEdgeToRight = (col: number, row: number): void => {
   }
 };
 
-/** Repeating shingle courses shared by the front and back roof planes. */
+/** Repeating cedar courses shared by the front and back roof planes. */
 const paintRoofPlane = (col: number, row: number, light: boolean): void => {
   const base = light ? ROOF.light : ROOF.base;
   fillCell(col, row, base[0], base[1], base[2]);
   for (let y = 0; y < TILE; y++) {
     const course = Math.floor(y / 4);
-    const shade = course % 2 === 0 ? 0 : -12;
-    lineH(col, row, y, [base[0] + shade, base[1] + shade, base[2] + shade] as const);
+    const shade = course % 2 === 0 ? 0 : -10;
+    lineH(col, row, y, shiftColor(base, shade));
     if (y % 4 === 0) {
-      lineH(col, row, y, ROOF.light);
+      lineH(col, row, y, light ? ROOF.highlight : ROOF.ridgeShadow);
     }
     if (y % 4 === 3) {
       lineH(col, row, y, ROOF.dark);
@@ -139,53 +173,74 @@ const paintRoofPlane = (col: number, row: number, light: boolean): void => {
 };
 
 const paintRoofFront = (col: number, row: number): void => {
-  paintRoofPlane(col, row, false);
-  lineH(col, row, 1, ROOF.ridge);
-  lineH(col, row, 30, ROOF.dark);
+  paintRoofPlane(col, row, true);
+  lineH(col, row, 1, ROOF.highlight);
+  lineH(col, row, 29, ROOF.dark);
+  lineH(col, row, 30, ROOF.hipShadow);
   copyLeftEdgeToRight(col, row);
 };
 
 const paintRoofBack = (col: number, row: number): void => {
-  paintRoofPlane(col, row, true);
-  lineH(col, row, 0, ROOF.ridge);
+  paintRoofPlane(col, row, false);
+  lineH(col, row, 0, ROOF.hipShadow);
   lineH(col, row, 29, ROOF.dark);
   copyLeftEdgeToRight(col, row);
 };
 
 const paintRoofRidge = (col: number, row: number): void => {
-  paintRoofPlane(col, row, false);
-  rect(col, row, 0, 12, TILE, 8, ROOF.ridge);
-  lineH(col, row, 12, ROOF.light);
-  lineH(col, row, 19, ROOF.dark);
-  lineH(col, row, 20, ROOF.seam);
+  paintRoofPlane(col, row, true);
+  rect(col, row, 0, 10, TILE, 4, ROOF.ridge);
+  lineH(col, row, 10, ROOF.highlight);
+  rect(col, row, 0, 14, TILE, 4, ROOF.ridgeShadow);
+  lineH(col, row, 18, ROOF.hipShadow);
   copyLeftEdgeToRight(col, row);
 };
 
+/** Fill a solid hip/gable wedge instead of drawing a pair of thin diagonals. */
 const paintGable = (col: number, row: number, left: boolean): void => {
   paintRoofPlane(col, row, false);
-  for (let y = 2; y < 30; y++) {
-    const inset = Math.min(y, 31 - y);
-    const x = left ? inset : TILE - 1 - inset;
-    pixel(col, row, x, y, ROOF.ridge);
-    pixel(col, row, left ? x + 1 : x - 1, y, ROOF.dark);
+  for (let y = 3; y <= 28; y++) {
+    const rise = Math.min(y - 3, 28 - y);
+    const width = Math.min(15, 3 + Math.floor(rise * 0.55));
+    const x = left ? 0 : TILE - width;
+    rect(col, row, x, y, width, 1, ROOF.gable);
+    rect(col, row, left ? x + width - 2 : x + 1, y, 2, 1, ROOF.hipShadow);
   }
-  lineH(col, row, 30, ROOF.seam);
+  lineH(col, row, 2, ROOF.ridge);
+  lineH(col, row, 29, ROOF.dark);
+  copyLeftEdgeToRight(col, row);
 };
 
 const paintEave = (col: number, row: number, overhead: boolean): void => {
-  paintRoofPlane(col, row, false);
+  paintRoofPlane(col, row, !overhead);
   if (overhead) {
     lineH(col, row, 0, ROOF.ridge);
-    lineH(col, row, 27, ROOF.dark);
+    rect(col, row, 0, 26, TILE, 6, ROOF.hipShadow);
   } else {
-    rect(col, row, 0, 25, TILE, 7, ROOF.dark);
-    lineH(col, row, 25, ROOF.light);
-    lineH(col, row, 31, ROOF.seam);
+    lineH(col, row, 0, ROOF.highlight);
+    rect(col, row, 0, 25, TILE, 5, ROOF.ridgeShadow);
+    lineH(col, row, 30, ROOF.hipShadow);
   }
   copyLeftEdgeToRight(col, row);
 };
 
-const paintFacadeWall = (col: number, row: number): void => {
+/** A short, warm shadow at the top of the lower facade row reads as eave shade. */
+const paintEaveShadow = (col: number, row: number): void => {
+  rect(col, row, 0, 0, TILE, 4, FACADE.eaveShadow);
+  lineH(col, row, 4, FACADE.dark);
+};
+
+const paintPlinth = (col: number, row: number): void => {
+  const top = TILE - HOUSE_PLINTH_HEIGHT;
+  rect(col, row, 0, top, TILE, HOUSE_PLINTH_HEIGHT, FOUNDATION.stone);
+  lineH(col, row, top, FOUNDATION.light);
+  for (let x = 4; x < TILE; x += 10) {
+    lineVRange(col, row, x, top + 1, TILE - 1, FOUNDATION.dark);
+  }
+  lineH(col, row, TILE - 1, FOUNDATION.dark);
+};
+
+const paintUpperFacade = (col: number, row: number): void => {
   fillCell(col, row, FACADE.base[0], FACADE.base[1], FACADE.base[2]);
   for (let x = 0; x < TILE; x += 8) {
     rect(col, row, x, 0, 1, TILE, FACADE.dark);
@@ -193,65 +248,81 @@ const paintFacadeWall = (col: number, row: number): void => {
       rect(col, row, x + 1, 0, 2, TILE, FACADE.light);
     }
   }
-  lineH(col, row, 2, FACADE.trim);
+  paintEaveShadow(col, row);
   lineH(col, row, 29, FACADE.trim);
-  for (let y = 7; y < 26; y += 6) {
-    lineH(col, row, y, FACADE.dark);
-  }
   copyLeftEdgeToRight(col, row);
 };
 
+const paintLowerFacade = (col: number, row: number): void => {
+  fillCell(col, row, FACADE.base[0], FACADE.base[1], FACADE.base[2]);
+  for (let x = 0; x < TILE; x += 8) {
+    rect(col, row, x, 0, 1, TILE - HOUSE_PLINTH_HEIGHT, FACADE.dark);
+    if (x + 1 < TILE) {
+      rect(col, row, x + 1, 0, 2, TILE - HOUSE_PLINTH_HEIGHT, FACADE.light);
+    }
+  }
+  paintEaveShadow(col, row);
+  paintPlinth(col, row);
+  copyLeftEdgeToRight(col, row);
+};
+
+const paintFacadeWall = (col: number, row: number): void => {
+  paintUpperFacade(col, row);
+};
+
 const paintFacadeWindow = (col: number, row: number): void => {
-  paintFacadeWall(col, row);
-  rect(col, row, 8, 7, 16, 19, FACADE.trim);
-  rect(col, row, 10, 9, 12, 15, FACADE.window);
+  paintLowerFacade(col, row);
+  rect(col, row, 8, 7, 16, 18, FACADE.trim);
+  rect(col, row, 10, 9, 12, 14, FACADE.window);
   rect(col, row, 11, 10, 4, 4, FACADE.windowLight);
-  lineVRange(col, row, 15, 9, 23, FACADE.trim);
+  lineVRange(col, row, 15, 9, 22, FACADE.trim);
   lineH(col, row, 16, FACADE.trim);
 };
 
 const paintFacadeCorner = (col: number, row: number, left: boolean): void => {
-  paintFacadeWall(col, row);
+  paintUpperFacade(col, row);
   const x = left ? 2 : 28;
   rect(col, row, x, 3, 3, 26, FACADE.trim);
   lineV(col, row, left ? 4 : 27, FACADE.light);
 };
 
 const paintDoor = (col: number, row: number, open: boolean): void => {
-  paintFacadeWall(col, row);
-  rect(col, row, 6, 2, 20, 28, FACADE.trim);
-  rect(col, row, 8, 4, 16, 24, open ? FACADE.doorDark : FACADE.door);
+  paintLowerFacade(col, row);
+  rect(col, row, 6, 2, 20, 24, FACADE.trim);
   if (open) {
-    rect(col, row, 9, 5, 5, 20, [55, 53, 51] as const);
-    rect(col, row, 17, 5, 5, 20, [67, 60, 53] as const);
-    lineH(col, row, 25, FACADE.threshold);
+    rect(col, row, 8, 4, 16, 21, FACADE.doorDark);
+    rect(col, row, 9, 5, 5, 18, [42, 36, 31]);
+    rect(col, row, 17, 5, 5, 18, [58, 45, 37]);
   } else {
-    for (let x = 9; x < 24; x += 4) {
-      rect(col, row, x, 5, 2, 22, FACADE.doorLight);
-      lineVRange(col, row, x + 2, 5, 26, FACADE.trim);
+    rect(col, row, 8, 4, 16, 21, FACADE.door);
+    for (let y = 6; y < 24; y += 6) {
+      lineH(col, row, y, FACADE.doorLight);
     }
-    pixel(col, row, 21, 17, [220, 197, 129]);
+    for (let x = 10; x < 23; x += 5) {
+      lineVRange(col, row, x, 5, 24, FACADE.trim);
+    }
+    // Boarded, closed, and deliberately knobless: there is no hut transition.
+    lineH(col, row, 24, FACADE.threshold);
   }
-  lineH(col, row, 29, FACADE.threshold);
+  lineH(col, row, 25, FACADE.trim);
 };
 
 const paintFoundation = (col: number, row: number, shadow: boolean): void => {
   if (shadow) {
-    fillCell(col, row, FOUNDATION.earth[0], FOUNDATION.earth[1], FOUNDATION.earth[2]);
-    rect(col, row, 0, 22, TILE, 10, FOUNDATION.shadow);
-    lineH(col, row, 22, FOUNDATION.earth);
+    clearCell(col, row);
+    for (let y = 0; y < TILE; y++) {
+      const verticalFade = 1 - y / (TILE + 4);
+      for (let x = 0; x < TILE; x++) {
+        const edgeFade = Math.min(1, x / 5, (TILE - 1 - x) / 5);
+        const alpha = Math.floor(92 * verticalFade * edgeFade);
+        if (alpha > 0) {
+          setPixelRgba(col, row, x, y, FOUNDATION.shadow, alpha);
+        }
+      }
+    }
     return;
   }
-  fillCell(col, row, FOUNDATION.stone[0], FOUNDATION.stone[1], FOUNDATION.stone[2]);
-  rect(col, row, 0, 0, TILE, 8, FOUNDATION.light);
-  for (let y = 10; y < 27; y += 6) {
-    lineH(col, row, y, FOUNDATION.dark);
-    for (let x = (Math.floor(y / 6) % 2) * 6 + 2; x < TILE; x += 12) {
-      lineVRange(col, row, x, y + 1, y + 4, FOUNDATION.dark);
-    }
-  }
-  rect(col, row, 0, 27, TILE, 5, FOUNDATION.shadow);
-  copyLeftEdgeToRight(col, row);
+  paintLowerFacade(col, row);
 };
 
 const ROOF_PAINTERS: Readonly<Record<RoofPlane, (col: number, row: number) => void>> = {

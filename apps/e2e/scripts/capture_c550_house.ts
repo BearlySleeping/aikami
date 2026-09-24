@@ -30,6 +30,7 @@ type EvidenceCase = {
   e2e?: boolean;
   authoring?: boolean;
   authoringLayers?: readonly string[];
+  textScale?: number;
   actions?: readonly EvidenceAction[];
 };
 
@@ -44,6 +45,7 @@ type EvidenceRecord = {
   cameraSource: 'engine' | 'playerFallback';
   renderer: string;
   viewport: EvidenceViewport;
+  textScale: number;
   purpose: string;
   sha256: string;
 };
@@ -91,13 +93,13 @@ const STILL_CASES: readonly EvidenceCase[] = [
     file: 'automated_hut_front_noon_1280x720.png',
     label: 'C-550 hut front, noon',
     mapId: 'village',
-    target: { c: 54, r: 6 },
+    target: { c: 54, r: 8 },
   },
   {
     file: 'automated_hut_front_dawn_1920x1080.png',
     label: 'C-550 hut front, dawn',
     mapId: 'village',
-    target: { c: 54, r: 6 },
+    target: { c: 54, r: 8 },
     viewport: { width: 1920, height: 1080 },
     gameHour: 6,
   },
@@ -105,7 +107,7 @@ const STILL_CASES: readonly EvidenceCase[] = [
     file: 'automated_hut_front_night_2048x1152.png',
     label: 'C-550 hut front, night',
     mapId: 'village',
-    target: { c: 54, r: 6 },
+    target: { c: 54, r: 8 },
     viewport: { width: 2048, height: 1152 },
     gameHour: 0,
   },
@@ -113,14 +115,14 @@ const STILL_CASES: readonly EvidenceCase[] = [
     file: 'automated_hut_front_compact_800x600.png',
     label: 'C-550 hut front, compact viewport',
     mapId: 'village',
-    target: { c: 54, r: 6 },
+    target: { c: 54, r: 8 },
     viewport: { width: 800, height: 600 },
   },
   {
     file: 'automated_hut_front_collision_1920x1080.png',
     label: 'C-550 hut front, collision overlay',
     mapId: 'village',
-    target: { c: 54, r: 6 },
+    target: { c: 54, r: 8 },
     viewport: { width: 1920, height: 1080 },
     e2e: true,
   },
@@ -128,23 +130,53 @@ const STILL_CASES: readonly EvidenceCase[] = [
     file: 'automated_hut_front_authoring_1920x1080.png',
     label: 'C-550 hut front, authoring overlay',
     mapId: 'village',
-    target: { c: 54, r: 6 },
+    target: { c: 54, r: 8 },
     viewport: { width: 1920, height: 1080 },
     authoring: true,
     authoringLayers: HOUSE_LAYERS,
   },
   {
+    file: 'automated_hut_front_text_200_1920x1080.png',
+    label: 'C-550 hut front, noon, 200% root text',
+    mapId: 'village',
+    target: { c: 54, r: 8 },
+    viewport: { width: 1920, height: 1080 },
+    textScale: 2,
+  },
+  {
     file: 'automated_crossing_noon_1920x1080.png',
-    label: 'C-550 base crossing, noon',
+    label: 'C-550 C-549 crossing, noon',
     mapId: 'village',
     target: { c: 40, r: 7 },
     viewport: { width: 1920, height: 1080 },
+  },
+  {
+    file: 'automated_crossing_dawn_1920x1080.png',
+    label: 'C-550 C-549 crossing, dawn',
+    mapId: 'village',
+    target: { c: 40, r: 7 },
+    viewport: { width: 1920, height: 1080 },
+    gameHour: 6,
   },
   {
     file: 'automated_inn_interior_noon_1280x720.png',
     label: 'C-550 unchanged inn comparison',
     mapId: 'inn',
     target: { c: 14, r: 10 },
+  },
+  {
+    file: 'automated_hut_beside_unchanged_inn_noon_1920x1080.png',
+    label: 'C-550 hut beside unchanged village inn, noon',
+    mapId: 'village',
+    target: { c: 51, r: 11 },
+    viewport: { width: 1920, height: 1080 },
+  },
+  {
+    file: 'automated_hut_with_c549_crossing_noon_3200x1080.png',
+    label: 'C-550 hut with C-549 crossing, noon',
+    mapId: 'village',
+    target: { c: 46, r: 8 },
+    viewport: { width: 3200, height: 1080 },
   },
 ];
 
@@ -214,6 +246,16 @@ const WALK_CASES: readonly EvidenceCase[] = [
     actions: [
       { key: 'KeyW', holdMs: 650, label: 'attempt the visible threshold' },
       { key: 'KeyA', holdMs: 350, label: 'move laterally on the clear approach' },
+    ],
+  },
+  {
+    file: 'automated_door_approach_05_return.png',
+    label: 'C-550 door approach, return west',
+    mapId: 'village',
+    target: { c: 54, r: 10 },
+    actions: [
+      { key: 'KeyW', holdMs: 650, label: 'attempt the visible threshold' },
+      { key: 'KeyA', holdMs: 700, label: 'return across the clear approach' },
     ],
   },
 ];
@@ -289,6 +331,7 @@ const main = async (): Promise<void> => {
       e2e: definition.e2e,
       authoring: definition.authoring,
       authoringLayers: definition.authoringLayers,
+      textScale: definition.textScale,
     });
     await house.loadMapAt(definition.mapId, definition.target);
     for (const action of definition.actions ?? []) {
@@ -307,6 +350,7 @@ const main = async (): Promise<void> => {
       cameraSource: snapshot.cameraSource,
       renderer: snapshot.renderer,
       viewport,
+      textScale: definition.textScale ?? 1,
       purpose: definition.actions?.at(-1)?.label ?? definition.label,
       sha256: hashFile(path),
     };

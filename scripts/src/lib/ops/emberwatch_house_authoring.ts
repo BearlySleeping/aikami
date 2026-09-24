@@ -17,8 +17,14 @@ export type HouseFacing = 'n' | 's' | 'e' | 'w';
 /** Long-form side names used by the legacy shell builder and door geometry. */
 export type DoorSide = 'north' | 'south' | 'east' | 'west';
 
-/** The two-cell door and landing geometry shared by old shells and placeHouse. */
+/** The two-cell door and landing geometry shared by legacy village shells. */
 export type DoorPlacement = {
+  doorCells: Array<[number, number]>;
+  landingCells: Array<[number, number]>;
+};
+
+/** The single-boarded-door geometry used by the exterior-only C-550 hut. */
+export type HouseDoorPlacement = {
   doorCells: Array<[number, number]>;
   landingCells: Array<[number, number]>;
 };
@@ -52,6 +58,35 @@ export const doorPlacement = (options: {
     landingCells.push([doorCol + step, r], [doorCol + step * 2, r]);
   }
   return { doorCells, landingCells };
+};
+
+/**
+ * Derive the hut's one closed door and its two-row exterior approach.
+ *
+ * The legacy village shells intentionally retain their wider two-cell door
+ * geometry. The C-550 hut has no interior contract, so it gets one boarded
+ * leaf and one narrow landing column instead of an implied second entrance.
+ */
+export const houseDoorPlacement = (options: {
+  c0: number;
+  r0: number;
+  w: number;
+  h: number;
+  doorSide: DoorSide;
+}): HouseDoorPlacement => {
+  const { c0, r0, w, h, doorSide } = options;
+  if (doorSide !== 'south') {
+    throw new Error('houseDoorPlacement currently supports only a south-facing door');
+  }
+  const doorColumn = c0 + Math.floor(w / 2);
+  const doorRow = r0 + h - 1;
+  return {
+    doorCells: [[doorColumn, doorRow]],
+    landingCells: [
+      [doorColumn, doorRow + 1],
+      [doorColumn, doorRow + 2],
+    ],
+  };
 };
 
 const HOUSE_FRAME_NAMES = {
@@ -154,7 +189,7 @@ const houseDoorHasCell = (
   r: number,
 ): boolean => doorCells.some(([doorC, doorR]) => doorC === c && doorR === r);
 
-/** Contact-shadow cells flank the two-cell threshold on the first approach row. */
+/** Contact-shadow cells flank the single door on the first approach row. */
 const houseContactShadowCells = (options: {
   c0: number;
   c1: number;
@@ -205,16 +240,12 @@ const assertNoBlockedGroundTerrainOverrides = (options: {
   c0: number;
   c1: number;
   r1: number;
-  doorCells: ReadonlyArray<[number, number]>;
 }): void => {
   const badGroundOverrides = houseGroundCells({
     c0: options.c0,
     c1: options.c1,
     r1: options.r1,
   }).filter(([c, r]) => {
-    if (houseDoorHasCell(options.doorCells, c, r)) {
-      return false;
-    }
     const terrain = terrainOverrideAt(options.map, c, r);
     return terrain !== undefined && terrain !== '';
   });
@@ -229,22 +260,28 @@ const assertNoBlockedGroundTerrainOverrides = (options: {
 const facadeRoleForCell = (options: {
   c: number;
   r: number;
+  r1: number;
   c0: number;
   c1: number;
   doorCells: ReadonlyArray<[number, number]>;
 }): HouseCellRole => {
-  const { c, r, c0, c1, doorCells } = options;
+  const { c, r, r1, c0, c1, doorCells } = options;
+  const isLowerFacade = r === r1;
+  if (isLowerFacade) {
+    if (houseDoorHasCell(doorCells, c, r)) {
+      return { layer: 'ground', gid: HOUSE_FRAMES.doorClosed, blocked: true };
+    }
+    const doorColumn = doorCells[0]?.[0];
+    if (doorColumn !== undefined && c === doorColumn + 1 && c < c1) {
+      return { layer: 'ground', gid: HOUSE_FRAMES.facadeWindow, blocked: true };
+    }
+    return { layer: 'ground', gid: HOUSE_FRAMES.foundation, blocked: true };
+  }
   if (c === c0) {
     return { layer: 'ground', gid: HOUSE_FRAMES.facadeCornerLeft, blocked: true };
   }
   if (c === c1) {
     return { layer: 'ground', gid: HOUSE_FRAMES.facadeCornerRight, blocked: true };
-  }
-  if (houseDoorHasCell(doorCells, c, r)) {
-    return { layer: 'ground', gid: HOUSE_FRAMES.doorOpen, blocked: false };
-  }
-  if (c === c1 - 1) {
-    return { layer: 'ground', gid: HOUSE_FRAMES.facadeWindow, blocked: true };
   }
   return { layer: 'ground', gid: HOUSE_FRAMES.facadeWall, blocked: true };
 };
@@ -288,11 +325,8 @@ const houseCellRole = (options: {
   doorCells: ReadonlyArray<[number, number]>;
 }): HouseCellRole => {
   const { c, r, c0, c1, r0, r1, doorCells } = options;
-  if (r === r1 - 1) {
-    return { layer: 'ground', gid: HOUSE_FRAMES.foundation, blocked: true };
-  }
-  if (r === r1) {
-    return facadeRoleForCell({ c, r, c0, c1, doorCells });
+  if (r === r1 - 1 || r === r1) {
+    return facadeRoleForCell({ c, r, r1, c0, c1, doorCells });
   }
   return roofRoleForCell({ c, r, c0, c1, r0, r1 });
 };
@@ -313,9 +347,9 @@ const assertHouseInputs = (options: {
   const region = normalizedRegion(options.region);
   const width = region.c1 - region.c0 + 1;
   const height = region.r1 - region.r0 + 1;
-  if (width < 4 || height < 4) {
+  if (width < 4 || height < 5) {
     throw new Error(
-      `emberwatch_authoring.placeHouse: ${name} footprint must be at least 4×4 (got ${width}×${height})`,
+      `emberwatch_authoring.placeHouse: ${name} footprint must be at least 4×5 (got ${width}×${height})`,
     );
   }
   if (
@@ -340,7 +374,7 @@ const assertHouseInputs = (options: {
       `emberwatch_authoring.placeHouse: ${name} door column ${options.door.c} is outside the facade`,
     );
   }
-  const placement = doorPlacement({
+  const placement = houseDoorPlacement({
     c0: region.c0,
     r0: region.r0,
     w: width,
@@ -350,7 +384,7 @@ const assertHouseInputs = (options: {
   const doorCell: [number, number] = [options.door.c, region.r1];
   if (!houseDoorHasCell(placement.doorCells, doorCell[0], doorCell[1])) {
     throw new Error(
-      `emberwatch_authoring.placeHouse: ${name} door column ${options.door.c} is not on the derived two-cell south facade`,
+      `emberwatch_authoring.placeHouse: ${name} door column ${options.door.c} is not on the derived single south door`,
     );
   }
   assertNoBlockedGroundTerrainOverrides({
@@ -359,7 +393,6 @@ const assertHouseInputs = (options: {
     c0: region.c0,
     c1: region.c1,
     r1: region.r1,
-    doorCells: placement.doorCells,
   });
   const walkBehindCells: Array<[number, number]> = [];
   for (let r = region.r0; r < region.r1 - 2; r++) {
@@ -367,13 +400,13 @@ const assertHouseInputs = (options: {
       walkBehindCells.push([c, r]);
     }
   }
-  const traversableCells = [...walkBehindCells, ...placement.doorCells];
+  const traversableCells = walkBehindCells;
   const badTraversableCells = traversableCells.filter(
     ([c, r]) => !isMapCell(options.map, c, r) || !isWalkableLand(options.map, c, r),
   );
   if (badTraversableCells.length > 0) {
     throw new Error(
-      `emberwatch_authoring.placeHouse: ${name} walk-behind/threshold cell(s) ${formatCells(badTraversableCells)} must be walkable land`,
+      `emberwatch_authoring.placeHouse: ${name} walk-behind cell(s) ${formatCells(badTraversableCells)} must be walkable land`,
     );
   }
   const badApproach = placement.landingCells.filter(
@@ -434,11 +467,11 @@ const applyHouseApproach = (
 /**
  * Authors one raised south-facing house as explicit map contributions.
  *
- * The bottom row is facade (with the returned door anchor on its two-cell
- * opening), the row above is a blocked foundation, the next row is a blocked
- * front roof/eave, and the remaining upper roof rows are overhead/clear. The
- * latter are the only walk-behind cells: an actor can pass north of the house
- * and the overhead band draws the roof over them, while the facade/foundation
+ * The three upper rows are roof: a back plane, a capped ridge, and a blocked
+ * front eave. The two lower rows are facade, with one closed door on the
+ * bottom row and a narrow plinth integrated into the lower facade frames. The
+ * upper roof rows are the only walk-behind cells: an actor can pass north of
+ * the house and the overhead band draws the roof over them, while the facade
  * and front eave remain hard movement boundaries.
  *
  * Assertions run before any mutation, so a failed author-time check leaves the

@@ -5,10 +5,17 @@
 // they exercise the authored source rather than a hand-maintained fixture.
 
 import { describe, expect, test } from 'bun:test';
-import { doorPlacement, G, HOUSE_FRAMES, placeHouse } from './emberwatch_authoring.ts';
+import {
+  doorPlacement,
+  G,
+  HOUSE_FRAMES,
+  houseDoorPlacement,
+  placeHouse,
+} from './emberwatch_authoring.ts';
 import { type MapData, makeMap } from './emberwatch_map_shared.ts';
 import { buildVillage } from './emberwatch_map_village.ts';
 import { packAtlas } from './generate_emberwatch_atlas.ts';
+import { HOUSE_PLINTH_HEIGHT } from './generate_emberwatch_house_frames.ts';
 import { buildMapJson } from './generate_emberwatch_maps.ts';
 
 const at = (map: MapData, c: number, r: number): number => r * map.width + c;
@@ -50,7 +57,7 @@ const makeHouseMap = (): MapData => makeMap(10, 12);
 const placeTestHouse = (map: MapData): { c: number; r: number } =>
   placeHouse(map, {
     region: { c0: 2, r0: 2, c1: 7, r1: 6 },
-    door: { c: 4 },
+    door: { c: 5 },
     facing: 's',
     mapId: 'house_test',
   });
@@ -143,13 +150,13 @@ const expectAssemblyDelta = (options: {
 };
 
 describe('C-550 — placeHouse layout and collision', () => {
-  test('authors the exact south-facing frame grid and returns the door anchor', () => {
+  test('authors three roof rows, two facade rows, and one closed door', () => {
     const map = makeHouseMap();
     const groundBefore = [...map.ground];
     const collisionBefore = [...map.collision];
     const door = placeTestHouse(map);
 
-    expect(door).toEqual({ c: 4, r: 6 });
+    expect(door).toEqual({ c: 5, r: 6 });
     expect(contribution(map.overheadExtra, 2, 2)).toBe(HOUSE_FRAMES.roofGableLeft);
     expect(contribution(map.overheadExtra, 3, 2)).toBe(HOUSE_FRAMES.roofBack);
     expect(contribution(map.overheadExtra, 7, 2)).toBe(HOUSE_FRAMES.roofGableRight);
@@ -160,20 +167,22 @@ describe('C-550 — placeHouse layout and collision', () => {
     expect(contribution(map.groundExtra, 2, 4)).toBe(HOUSE_FRAMES.roofEaveEdge);
     expect(contribution(map.groundExtra, 3, 4)).toBe(HOUSE_FRAMES.roofFront);
     expect(contribution(map.groundExtra, 7, 4)).toBe(HOUSE_FRAMES.roofEaveEdge);
-    for (let c = 2; c <= 7; c++) {
-      expect(contribution(map.groundExtra, c, 5), `foundation (${c},5)`).toBe(
-        HOUSE_FRAMES.foundation,
-      );
-    }
-    expect(contribution(map.groundExtra, 2, 6)).toBe(HOUSE_FRAMES.facadeCornerLeft);
-    expect(contribution(map.groundExtra, 3, 6)).toBe(HOUSE_FRAMES.facadeWall);
-    expect(contribution(map.groundExtra, 4, 6)).toBe(HOUSE_FRAMES.doorOpen);
-    expect(contribution(map.groundExtra, 5, 6)).toBe(HOUSE_FRAMES.doorOpen);
+    expect(contribution(map.groundExtra, 2, 5)).toBe(HOUSE_FRAMES.facadeCornerLeft);
+    expect(contribution(map.groundExtra, 3, 5)).toBe(HOUSE_FRAMES.facadeWall);
+    expect(contribution(map.groundExtra, 7, 5)).toBe(HOUSE_FRAMES.facadeCornerRight);
+    expect(contribution(map.groundExtra, 2, 6)).toBe(HOUSE_FRAMES.foundation);
+    expect(contribution(map.groundExtra, 3, 6)).toBe(HOUSE_FRAMES.foundation);
+    expect(contribution(map.groundExtra, 4, 6)).toBe(HOUSE_FRAMES.foundation);
+    expect(contribution(map.groundExtra, 5, 6)).toBe(HOUSE_FRAMES.doorClosed);
     expect(contribution(map.groundExtra, 6, 6)).toBe(HOUSE_FRAMES.facadeWindow);
-    expect(contribution(map.groundExtra, 7, 6)).toBe(HOUSE_FRAMES.facadeCornerRight);
+    expect(contribution(map.groundExtra, 7, 6)).toBe(HOUSE_FRAMES.foundation);
+    const doorFrames = (map.groundExtra ?? []).filter(
+      ([, , gid]) => gid === HOUSE_FRAMES.doorClosed || gid === HOUSE_FRAMES.doorOpen,
+    );
+    expect(doorFrames).toEqual([[5, 6, HOUSE_FRAMES.doorClosed]]);
 
     for (let c = 2; c <= 7; c++) {
-      if (c === 4 || c === 5) {
+      if (c === 5) {
         continue;
       }
       expect(contribution(map.decorExtra, c, 7), `contact shadow (${c},7)`).toBe(
@@ -188,12 +197,12 @@ describe('C-550 — placeHouse layout and collision', () => {
     expect(map.ground[at(map, 4, 4)]).toBe(HOUSE_FRAMES.roofFront);
     expect(map.collision[at(map, 4, 4)]).toBe(1);
     expect(map.collision[at(map, 4, 5)]).toBe(1);
-    expect(map.collision[at(map, 4, 6)]).toBe(0);
+    expect(map.collision[at(map, 5, 6)]).toBe(1);
     expect(map.collision[at(map, 4, 7)]).toBe(0);
     expect(map.collision[at(map, 4, 8)]).toBe(0);
   });
 
-  test('doorPlacement keeps the legacy two-cell threshold and two-row landing', () => {
+  test('legacy shells keep two-cell doors while the hut gets one closed door', () => {
     expect(doorPlacement({ c0: 2, r0: 2, w: 6, h: 5, doorSide: 'south' })).toEqual({
       doorCells: [
         [4, 6],
@@ -206,23 +215,30 @@ describe('C-550 — placeHouse layout and collision', () => {
         [5, 8],
       ],
     });
+    expect(houseDoorPlacement({ c0: 2, r0: 2, w: 6, h: 5, doorSide: 'south' })).toEqual({
+      doorCells: [[5, 6]],
+      landingCells: [
+        [5, 7],
+        [5, 8],
+      ],
+    });
   });
 
   test('collision leaves the upper roof walk-behind and the front threshold solid', () => {
     const map = makeHouseMap();
     placeTestHouse(map);
 
-    expect(isStandable(map, 4, 3)).toBe(true);
-    expect(isStandable(map, 4, 2)).toBe(true);
-    expect(isStandable(map, 4, 4)).toBe(false);
-    expect(isStandable(map, 4, 5)).toBe(false);
-    expect(isStandable(map, 4, 6)).toBe(false);
-    expect(isStandable(map, 4, 7)).toBe(true);
-    expect(isStandable(map, 4, 8)).toBe(true);
+    expect(isStandable(map, 5, 3)).toBe(true);
+    expect(isStandable(map, 5, 2)).toBe(true);
+    expect(isStandable(map, 5, 4)).toBe(false);
+    expect(isStandable(map, 5, 5)).toBe(false);
+    expect(isStandable(map, 5, 6)).toBe(false);
+    expect(isStandable(map, 5, 7)).toBe(false);
+    expect(isStandable(map, 5, 8)).toBe(true);
 
-    expect(reachable(map, { c: 4, r: 8 }, { c: 4, r: 7 })).toBe(true);
-    expect(reachable(map, { c: 4, r: 1 }, { c: 4, r: 3 })).toBe(true);
-    expect(reachable(map, { c: 4, r: 1 }, { c: 4, r: 4 })).toBe(false);
+    expect(reachable(map, { c: 5, r: 8 }, { c: 4, r: 8 })).toBe(true);
+    expect(reachable(map, { c: 5, r: 1 }, { c: 5, r: 3 })).toBe(true);
+    expect(reachable(map, { c: 5, r: 1 }, { c: 5, r: 4 })).toBe(false);
   });
 
   test('only the hut footprint and its authored approach change', () => {
@@ -251,7 +267,7 @@ describe('C-550 — assertions and stable identities', () => {
         name: 'facing',
         options: {
           region: { c0: 2, r0: 2, c1: 7, r1: 6 },
-          door: { c: 4 },
+          door: { c: 5 },
           facing: 'n' as const,
           mapId: 'bad_facing',
         },
@@ -265,7 +281,7 @@ describe('C-550 — assertions and stable identities', () => {
           facing: 's' as const,
           mapId: 'bad_door',
         },
-        pattern: /not on the derived two-cell south facade/,
+        pattern: /not on the derived single south door/,
       },
     ] as const;
     for (const testCase of cases) {
@@ -281,12 +297,20 @@ describe('C-550 — assertions and stable identities', () => {
     }
   });
 
-  test('blocked approach and contact-shadow cells fail atomically', () => {
+  test('blocked walk-behind, approach, and contact-shadow cells fail atomically', () => {
+    const blockedRoof = makeHouseMap();
+    blockedRoof.collision[at(blockedRoof, 5, 3)] = 1;
+    const roofGround = [...blockedRoof.ground];
+    const roofCollision = [...blockedRoof.collision];
+    expect(() => placeTestHouse(blockedRoof)).toThrow(/walk-behind cell\(s\).*\(5,3\)/);
+    expect(blockedRoof.ground).toEqual(roofGround);
+    expect(blockedRoof.collision).toEqual(roofCollision);
+
     const blockedApproach = makeHouseMap();
-    blockedApproach.collision[at(blockedApproach, 4, 7)] = 1;
+    blockedApproach.collision[at(blockedApproach, 5, 7)] = 1;
     const approachGround = [...blockedApproach.ground];
     const approachCollision = [...blockedApproach.collision];
-    expect(() => placeTestHouse(blockedApproach)).toThrow(/approach cell\(s\).*\(4,7\)/);
+    expect(() => placeTestHouse(blockedApproach)).toThrow(/approach cell\(s\).*\(5,7\)/);
     expect(blockedApproach.ground).toEqual(approachGround);
     expect(blockedApproach.collision).toEqual(approachCollision);
 
@@ -301,8 +325,8 @@ describe('C-550 — assertions and stable identities', () => {
 
   test('solid terrain overrides reject walk-behind and approach cells before mutation', () => {
     const cases = [
-      { cell: [3, 2] as const, pattern: /walk-behind\/threshold cell\(s\).*\(3,2\)/ },
-      { cell: [4, 7] as const, pattern: /approach cell\(s\).*\(4,7\)/ },
+      { cell: [3, 2] as const, pattern: /walk-behind cell\(s\).*\(3,2\)/ },
+      { cell: [5, 7] as const, pattern: /approach cell\(s\).*\(5,7\)/ },
     ] as const;
     for (const testCase of cases) {
       const map = makeHouseMap();
@@ -329,12 +353,16 @@ describe('C-550 — assertions and stable identities', () => {
     expect(map.overheadExtra).toBeUndefined();
   });
 
-  test('terrain overrides may replace a walkable house threshold', () => {
+  test('terrain overrides cannot replace the closed door leaf', () => {
     const map = makeHouseMap();
-    map.terrainOverrides = [[4, 6, 'dirt']];
-    expect(placeTestHouse(map)).toEqual({ c: 4, r: 6 });
-    expect(contribution(map.groundExtra, 4, 6)).toBe(HOUSE_FRAMES.doorOpen);
-    expect(map.collision[at(map, 4, 6)]).toBe(0);
+    map.terrainOverrides = [[5, 6, 'dirt']];
+    const ground = [...map.ground];
+    const collision = [...map.collision];
+    expect(() => placeTestHouse(map)).toThrow(/terrain override cell\(s\).*\(5,6\).*ground art/);
+    expect(map.ground).toEqual(ground);
+    expect(map.collision).toEqual(collision);
+    expect(map.groundExtra).toBeUndefined();
+    expect(map.overheadExtra).toBeUndefined();
   });
 
   test('the village keeps its existing transition graph and other building shells', () => {
@@ -360,7 +388,7 @@ describe('C-550 — assertions and stable identities', () => {
   test('the real village keeps the hut approach and upper roof reachable from the gate', () => {
     const { map } = buildVillage();
     const gate = { c: 32, r: 44 };
-    expect(reachable(map, gate, { c: 54, r: 10 })).toBe(true);
+    expect(reachable(map, gate, { c: 54, r: 11 })).toBe(true);
     expect(reachable(map, gate, { c: 54, r: 6 })).toBe(true);
   });
 });
@@ -378,7 +406,7 @@ describe('C-550 — compiled map layers', () => {
 
   test('allows terrain overrides on walkable or terrain-owned ground cells', () => {
     const walkableMap = makeHouseMap();
-    walkableMap.groundExtra = [[3, 6, HOUSE_FRAMES.doorOpen]];
+    walkableMap.groundExtra = [[3, 6, HOUSE_FRAMES.doorClosed]];
     walkableMap.terrainOverrides = [[3, 6, 'dirt']];
     const walkableJson = buildMapJson({ map: walkableMap, objectLayers: [] }).json;
     expect(readTerrain(walkableJson)[at(walkableMap, 3, 6)]).toBe('dirt');
@@ -401,13 +429,13 @@ describe('C-550 — compiled map layers', () => {
     const collision = readLayer(json, 'collision');
     const terrain = readTerrain(json);
 
-    expect(ground[at(map, 3, 6)]).toBe(HOUSE_FRAMES.facadeWall);
+    expect(ground[at(map, 3, 6)]).toBe(HOUSE_FRAMES.foundation);
     expect(decor[at(map, 3, 6)]).toBe(0);
     expect(overhead[at(map, 3, 6)]).toBe(0);
     expect(collision[at(map, 3, 6)]).toBe(1);
     expect(terrain[at(map, 3, 6)]).toBe('');
 
-    expect(ground[at(map, 2, 5)]).toBe(HOUSE_FRAMES.foundation);
+    expect(ground[at(map, 2, 5)]).toBe(HOUSE_FRAMES.facadeCornerLeft);
     expect(overhead[at(map, 2, 5)]).toBe(0);
     expect(ground[at(map, 3, 2)]).toBe(G.GRASS);
     expect(decor[at(map, 3, 2)]).toBe(0);
@@ -450,7 +478,7 @@ describe('C-550 — house atlas frames', () => {
     });
   });
 
-  test('all house frames are opaque and contain their distinguishing pixels', () => {
+  test('all solid house frames are opaque and the contact shadow stays soft', () => {
     const keys = [
       'house_roof_front.png',
       'house_roof_back.png',
@@ -466,7 +494,6 @@ describe('C-550 — house atlas frames', () => {
       'house_door_closed.png',
       'house_door_open.png',
       'house_foundation.png',
-      'house_foundation_shadow.png',
     ];
     for (const key of keys) {
       for (let y = 0; y < 32; y++) {
@@ -481,7 +508,62 @@ describe('C-550 — house atlas frames', () => {
     expect(pixel('house_facade_window.png', 16, 16)).not.toEqual(
       pixel('house_facade_wall.png', 16, 16),
     );
-    expect(pixel('house_roof_ridge.png', 16, 16)).not.toEqual(pixel('house_roof_back.png', 16, 16));
-    expect(pixel('house_foundation_shadow.png', 16, 24)).toEqual([48, 47, 45, 255]);
+    const shadowAlpha = Array.from(
+      { length: 32 * 32 },
+      (_, index) => pixel('house_foundation_shadow.png', index % 32, Math.floor(index / 32))[3],
+    );
+    expect(shadowAlpha.some((alpha) => alpha === 0)).toBe(true);
+    expect(shadowAlpha.some((alpha) => alpha > 0 && alpha < 255)).toBe(true);
+    expect(Math.max(...shadowAlpha)).toBeLessThanOrEqual(92);
+  });
+
+  test('roof value hierarchy, facade contrast, and bounded plinth are measurable', () => {
+    const luminance = (color: [number, number, number, number]): number =>
+      0.2126 * color[0] + 0.7152 * color[1] + 0.0722 * color[2];
+    const meanLuminance = (key: string, x0: number, y0: number, x1: number, y1: number): number => {
+      let total = 0;
+      let count = 0;
+      for (let y = y0; y <= y1; y++) {
+        for (let x = x0; x <= x1; x++) {
+          total += luminance(pixel(key, x, y));
+          count++;
+        }
+      }
+      return total / count;
+    };
+
+    const frontSlope = meanLuminance('house_roof_front.png', 4, 5, 27, 10);
+    const ridgeShadow = meanLuminance('house_roof_ridge.png', 4, 14, 27, 17);
+    const backPlane = meanLuminance('house_roof_back.png', 4, 5, 27, 10);
+    const facade = meanLuminance('house_facade_wall.png', 4, 8, 27, 24);
+    expect(frontSlope).toBeGreaterThan(ridgeShadow);
+    expect(ridgeShadow).toBeGreaterThan(backPlane);
+    expect(facade).toBeLessThan(frontSlope);
+
+    const plinthColor = pixel('house_foundation.png', 16, 32 - HOUSE_PLINTH_HEIGHT);
+    let measuredPlinthHeight = 0;
+    for (let y = 32 - HOUSE_PLINTH_HEIGHT; y < 32; y++) {
+      const current = pixel('house_foundation.png', 16, y);
+      if (
+        current[0] !== plinthColor[0] ||
+        current[1] !== plinthColor[1] ||
+        current[2] !== plinthColor[2]
+      ) {
+        break;
+      }
+      measuredPlinthHeight++;
+    }
+    expect(measuredPlinthHeight).toBeGreaterThan(0);
+    expect(measuredPlinthHeight).toBeLessThanOrEqual(8);
+  });
+
+  test('assembled hut uses exactly one closed door frame', () => {
+    const map = makeHouseMap();
+    placeTestHouse(map);
+    const doorFrames = (map.groundExtra ?? []).filter(
+      ([, , gid]) => gid === HOUSE_FRAMES.doorClosed || gid === HOUSE_FRAMES.doorOpen,
+    );
+    expect(doorFrames.filter(([, , gid]) => gid === HOUSE_FRAMES.doorClosed)).toHaveLength(1);
+    expect(doorFrames.filter(([, , gid]) => gid === HOUSE_FRAMES.doorOpen)).toHaveLength(0);
   });
 });
