@@ -17,16 +17,22 @@ const createViewModel = (overlay: PauseMenuOverlayCapabilities = createPauseMenu
     className: 'PauseMenuViewModelTest',
     overlay,
     dice: createPauseMenuDice(),
+    hud: { isEditorEnabled: true },
   });
 
 describe('PauseMenuViewModel — overlay state', () => {
-  test('reads saving state and message from the overlay capability', () => {
+  test('reads saving state, message, and last-saved projection from the overlay capability', () => {
     const viewModel = createViewModel(
-      createPauseMenuOverlay({ isSaving: true, saveMessage: 'Saving…' }),
+      createPauseMenuOverlay({
+        isSaving: true,
+        saveMessage: 'Saving…',
+        lastSavedAt: '2026-09-24T16:57:28Z',
+      }),
     );
 
     expect(viewModel.isSaving).toBe(true);
     expect(viewModel.saveMessage).toBe('Saving…');
+    expect(viewModel.lastSavedLabel).toContain('Last saved');
   });
 
   test('delegates gameplay actions to the overlay capability', async () => {
@@ -94,6 +100,7 @@ describe('PauseMenuViewModel — roll history', () => {
       dice: createPauseMenuDice([
         { roll: 15, sides: 20, modifier: 3, total: 18, timestamp: new Date() },
       ]),
+      hud: { isEditorEnabled: true },
     });
 
     expect(viewModel.rollHistory).toHaveLength(1);

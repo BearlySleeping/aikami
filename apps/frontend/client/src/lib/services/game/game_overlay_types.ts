@@ -50,6 +50,8 @@ export type GameOverlayServiceInterface = BaseFrontendClassInterface & {
   readonly dialogueNpc: DialogueNpcData | undefined;
   readonly isSaving: boolean;
   readonly saveMessage: string | undefined;
+  /** Timestamp of the active campaign's last successful save, if any. */
+  readonly lastSavedAt: string | undefined;
   readonly isTransitioning: boolean;
   readonly autoSaveStatus: AutoSaveStatus;
   readonly useOllama: boolean;
