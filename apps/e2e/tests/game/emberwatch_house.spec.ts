@@ -1,4 +1,4 @@
-// apps/e2e/tests/client/emberwatch_house.spec.ts
+// apps/e2e/tests/game/emberwatch_house.spec.ts
 //
 // C-550 production-route E2E coverage for the Emberwatch raised house. The
 // page object owns the test seam and renderer probes so this spec exercises
