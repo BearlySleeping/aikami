@@ -31,17 +31,9 @@ export type PauseMenuOverlayCapabilities = {
   openHudEditor(): void;
 };
 
-/**
- * C-528 — the temporary Hide HUD / Customize HUD capability.
- *
- * Hide HUD is session-scoped and reversible: it never writes the preference
- * snapshot, and the resolver keeps the required recovery surfaces visible while
- * it is on.
- */
+/** C-528 — capability required to open the paused HUD layout editor. */
 export type PauseMenuHudCapabilities = {
-  readonly isHudTemporarilyHidden: boolean;
   readonly isEditorEnabled: boolean;
-  toggleHudTemporarilyHidden(): void;
 };
 
 /** The dice-history capability the pause menu reads (reactively). */
@@ -78,14 +70,10 @@ export type PauseMenuViewModelInterface = BaseViewModelInterface & {
   openReputation(): void;
   openRollHistory(): void;
   closeRollHistory(): void;
-  /** C-528: whether the HUD is temporarily hidden. */
-  readonly isHudTemporarilyHidden: boolean;
   /** C-528: whether the HUD editor is available in this build. */
   readonly isHudEditorEnabled: boolean;
   /** C-528: opens the paused HUD layout editor. */
   openHudEditor(): void;
-  /** C-528: toggles the temporary Hide HUD state. */
-  toggleHudTemporarilyHidden(): void;
 };
 
 // ── Implementation ──────────────────────────────────────────────────────
@@ -109,11 +97,6 @@ class PauseMenuViewModel
   }
 
   /** @inheritdoc */
-  get isHudTemporarilyHidden(): boolean {
-    return this._hud.isHudTemporarilyHidden;
-  }
-
-  /** @inheritdoc */
   get isHudEditorEnabled(): boolean {
     return this._hud.isEditorEnabled;
   }
@@ -121,11 +104,6 @@ class PauseMenuViewModel
   /** @inheritdoc */
   openHudEditor(): void {
     this._overlay.openHudEditor();
-  }
-
-  /** @inheritdoc */
-  toggleHudTemporarilyHidden(): void {
-    this._hud.toggleHudTemporarilyHidden();
   }
 
   get rollHistory(): DiceHistoryEntry[] {

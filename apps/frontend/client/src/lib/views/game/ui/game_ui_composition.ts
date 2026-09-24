@@ -17,6 +17,7 @@ import {
   motionPreferenceService,
   musicPlayerService,
   npcDialogueService,
+  npcMemoryService,
   onboardingHintService,
   partyRosterService,
   playerStateService,
@@ -49,8 +50,9 @@ import { hudViewState } from './hud_view_state.svelte.ts';
  * Builds the game-UI ViewModel wired to the production service singletons and
  * child overlay compositions.
  */
-export const getGameUIViewModel = (options: BaseViewModelOptions): GameUIViewModelInterface =>
-  createGameUIViewModel({
+export const getGameUIViewModel = (options: BaseViewModelOptions): GameUIViewModelInterface => {
+  inputActionService.setHudShortcutCapability(hudPreferenceService);
+  return createGameUIViewModel({
     ...options,
     chat: chatService,
     combat: combatService,
@@ -59,6 +61,7 @@ export const getGameUIViewModel = (options: BaseViewModelOptions): GameUIViewMod
     overlays: gameOverlayService,
     inputAction: inputActionService,
     npcDialogue: npcDialogueService,
+    npcMemory: npcMemoryService,
     onboarding: onboardingHintService,
     playerState: playerStateService,
     party: partyRosterService,
@@ -88,3 +91,4 @@ export const getGameUIViewModel = (options: BaseViewModelOptions): GameUIViewMod
     createTalkToPartyViewModel: getTalkToPartyViewModel,
     createQuestTrackerViewModel: getQuestTrackerViewModel,
   });
+};

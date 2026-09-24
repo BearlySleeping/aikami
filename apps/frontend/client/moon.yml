@@ -40,6 +40,7 @@ fileGroups:
     - 'package.json'
     - 'tsconfig.json'
     - 'vite.config.ts'
+    - 'tsconfig.service-worker.json'
   srcTauri:
     - 'src-tauri/**/*'
   unitTests:
@@ -114,6 +115,8 @@ tasks:
       - 'scripts/gate_dev_routes.ts'
       - 'scripts/dev_routes_gate.ts'
       - 'scripts/check_bundle.ts'
+      - 'scripts/check_service_worker.ts'
+      - 'scripts/service_worker_registration.ts'
       - 'scripts/check_deploy_assets.ts'
       - 'scripts/check_ineffective_dynamic_imports.ts'
       - 'scripts/diagnostic_collector.ts'

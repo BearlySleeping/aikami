@@ -38,6 +38,7 @@ import {
 import { parseSavePayloadEnvelope, validateEnvelopeChecksum } from './game_save_envelope.ts';
 import type { GameSaveServiceInterface } from './game_save_service.svelte.ts';
 import { gameSaveService } from './game_save_service.svelte.ts';
+import { handleJournalShortcut } from './game_overlay_journal_shortcut';
 import { inputActionService } from './input_action_service.svelte.ts';
 import { npcDialogueService } from './npc_dialogue_service.svelte';
 import { onboardingHintService } from './onboarding_hint_service.svelte.ts';
@@ -724,6 +725,7 @@ export class GameOverlayService
       return;
     }
 
+    handleJournalShortcut({ actionId, event, service: this });
     // ── Overlay toggle: open_character ──
     if (actionId === 'open_character') {
       if (this.activeOverlay === 'CHARACTER_DASHBOARD') {
@@ -740,7 +742,6 @@ export class GameOverlayService
         return;
       }
     }
-
     // ── Overlay toggle: open_party_roster (C-340) — P key ──
     if (actionId === 'open_party_roster') {
       if (this.activeOverlay === 'PARTY_ROSTER') {
@@ -757,7 +758,6 @@ export class GameOverlayService
         return;
       }
     }
-
     // ── Hotbar activation: keys 1-6 ──
     if (this.activeOverlay === 'NONE') {
       const key = event.key;
@@ -772,13 +772,11 @@ export class GameOverlayService
         return;
       }
     }
-
     // ── Fallthrough: notify onboarding of any recognized action that wasn't rejected ──
     if (actionId) {
       onboardingHintService.onActionPerformed(actionId);
     }
   }
-
   resumeGame(): void {
     this.clearStack();
     gameModeService.setMode('EXPLORE');

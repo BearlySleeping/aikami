@@ -627,8 +627,7 @@ class DialogueOverlayViewModel
     if (!this.isStreaming) {
       return false;
     }
-    const latestMessage = this.messages.at(-1);
-    return latestMessage?.role === 'player' || latestMessage?.content === '';
+    return this.messages.at(-1)?.role === 'player';
   }
 
   /** Streamed narrative for the in-flight turn (C-401). */
@@ -1025,12 +1024,11 @@ class DialogueOverlayViewModel
       | undefined;
     const timedOut = turnState?.kind === 'failed' && turnState.reason === 'timeout';
     this.streamError = timedOut ? formatTimeoutError() : message;
-    // A non-timeout failure whose message points at a missing text provider is a
-    // configuration gap — surface an actionable error with a Settings deep-link.
     if (!timedOut) {
       const setupError = classifySetupError(message);
       if (setupError) {
         this.capabilityError = setupError;
+        this.streamError = null;
       }
     }
     this.messages = this.messages.filter((m) => m.id !== npcMessageId);

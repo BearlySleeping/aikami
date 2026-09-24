@@ -43,6 +43,7 @@ export * from './lib/location.ts';
 export * from './lib/logger.ts';
 export * from './lib/media_preparation.ts';
 export * from './lib/memory.ts';
+export * from './lib/npc_memory.ts';
 export * from './lib/music.ts';
 export * from './lib/openrouter_models.ts';
 export * from './lib/ort_runtime.ts';

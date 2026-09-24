@@ -105,9 +105,7 @@ const { viewModel }: Props = $props();
             Settings
           </button>
 
-          <!-- C-528: HUD customization. Customize HUD opens the paused editor;
-               Hide HUD is temporary and reversible, and never erases saved
-               preferences. -->
+          <!-- C-528: HUD customization opens the paused editor. -->
           <button
             type="button"
             class="btn btn-outline btn-block"
@@ -116,15 +114,6 @@ const { viewModel }: Props = $props();
             onclick={() => viewModel.openHudEditor()}
           >
             Customize HUD
-          </button>
-
-          <button
-            type="button"
-            class="btn btn-ghost btn-block"
-            data-testid="pause-hide-hud"
-            onclick={() => viewModel.toggleHudTemporarilyHidden()}
-          >
-            {viewModel.isHudTemporarilyHidden ? 'Show HUD' : 'Hide HUD'}
           </button>
 
           <button

@@ -39,6 +39,10 @@ import {
   setActiveAudioCueContext,
 } from '../audio/audio_asset_resolver';
 import type { ContextualTriggerServiceInterface } from '../image/contextual_trigger_service.svelte.ts';
+// Direct singletons (like combatSettlementLedger): background memory prefetch
+// needs no injection seam and must not grow the overlay service's wiring.
+import { npcAwarenessService } from '../npc/npc_awareness_service.svelte.ts';
+import { npcMemoryService } from '../npc/npc_memory_service.svelte.ts';
 import type { CombatServiceInterface } from './combat_service.svelte';
 import { combatSettlementLedger } from './combat_settlement_ledger.svelte.ts';
 import type { GameEngineServiceInterface } from './game_engine_service.svelte';
@@ -229,6 +233,8 @@ export const setupBridgeListeners = async (params: SetupBridgeListenersParams): 
     gameOverlayService.setTransitioning(false);
     gameOverlayService.onMapLoaded();
     partyFollowService.onMapLoaded();
+    // Warm returning-greeting openers for remembered NPCs on this map.
+    npcMemoryService.prefetchForNpcs(npcAwarenessService.nearbyNpcIds);
     setActiveAudioCueContext({
       packId: gameEngineService.contentPackId,
       mapId: gameEngineService.currentMapId,
@@ -380,6 +386,11 @@ export const setupBridgeListeners = async (params: SetupBridgeListenersParams): 
     // Forward target changes to the onboarding service for near_interactable hints
     if (event.targetEntityId !== undefined) {
       onboardingHintService.onInteractionTargetChanged();
+    }
+
+    // Approaching a remembered NPC: refresh a stale opener before they talk.
+    if (event.targetType === 'npc' && event.targetName) {
+      npcMemoryService.prefetchByName(event.targetName);
     }
   });
 

@@ -32,13 +32,11 @@ export const createPauseMenuOverlay = (
   ...overrides,
 });
 
-/** C-528: HUD capability with an inert default and overridable actions. */
+/** C-528: HUD capability with an overridable editor-enabled state. */
 export const createPauseMenuHud = (
   overrides: Partial<PauseMenuHudCapabilities> = {},
 ): PauseMenuHudCapabilities => ({
-  isHudTemporarilyHidden: false,
   isEditorEnabled: true,
-  toggleHudTemporarilyHidden: () => unconfigured('toggleHudTemporarilyHidden'),
   ...overrides,
 });
 

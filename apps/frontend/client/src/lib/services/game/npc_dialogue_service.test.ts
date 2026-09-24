@@ -372,7 +372,7 @@ describe('AC-1: Provider failure surfaces an error', () => {
     expect(npcDialogueService.turnState.kind).toBe('complete');
   });
 
-  test('analyzeIntent: repair itself fails when the narrative is too short — surfaces the real error (C-499 AC-3)', async () => {
+  test('analyzeIntent: malformed envelope preserves a short authoritative narrative', async () => {
     const textGenerator = makeStreamingTextGenerator({
       chunks: ['Hi.'],
       call2Error: new Error('No JSON object found in response'),
@@ -384,22 +384,17 @@ describe('AC-1: Provider failure surfaces an error', () => {
     });
 
     const controller = new AbortController();
-    // The streamed narrative "Hi." is < 20 chars, so recoverIntentAnalysisOutput
-    // throws; analyzeIntent surfaces the original provider error while retaining
-    // the repair error as its cause (AC-3: no silent/endless turn).
-    await expect(
-      npcDialogueService.analyzeIntent({
-        npcId: 'village_elder',
-        npcName: 'Elder Thalia',
-        messages: [{ role: 'player', content: 'I try to persuade you.' }],
-        signal: controller.signal,
-      }),
-    ).rejects.toThrow('No JSON object found in response');
+    const output = await npcDialogueService.analyzeIntent({
+      npcId: 'village_elder',
+      npcName: 'Elder Thalia',
+      messages: [{ role: 'player', content: 'I try to persuade you.' }],
+      signal: controller.signal,
+    });
 
-    expect(npcDialogueService.turnState.kind).toBe('failed');
-    if (npcDialogueService.turnState.kind === 'failed') {
-      expect(npcDialogueService.turnState.reason).toBe('provider_error');
-    }
+    expect(output.npcResponse).toBe('Hi.');
+    expect(output.requiresRoll).toBe(false);
+    expect(output.suggestedChips).toEqual([]);
+    expect(npcDialogueService.turnState.kind).toBe('complete');
   });
 
   test('resolveRoll: call 1 succeeds, call 2 rejects — propagates error and sets failed turn state', async () => {

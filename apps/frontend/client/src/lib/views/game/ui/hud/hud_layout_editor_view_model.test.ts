@@ -77,22 +77,36 @@ const createVm = (
   viewModel: HudLayoutEditorViewModelInterface;
   hud: ReturnType<typeof createHudFixture>;
   closes: number[];
+  visibilityToggles: number[];
 } => {
   const hud = createHudFixture();
   const closes: number[] = [];
+  const visibilityToggles: number[] = [];
   const viewModel = createHudLayoutEditorViewModel({
     className: 'HudLayoutEditorViewModel',
     hud,
+    visibility: {
+      isHudTemporarilyHidden: false,
+      toggleHudTemporarilyHidden: () => visibilityToggles.push(1),
+    },
     view: { viewport: { width: 1920, height: 1080 }, textScale: 1 },
     capabilities: ['party', 'time', 'audio-library'],
     dormantWidgetIds: [],
     onClose: () => closes.push(1),
     ...overrides,
   });
-  return { viewModel, hud, closes };
+  return { viewModel, hud, closes, visibilityToggles };
 };
 
 describe('C-528 editor ViewModel — input parity (AC-2)', () => {
+  test('toggles temporary HUD visibility from the editor', () => {
+    const { viewModel, visibilityToggles } = createVm();
+
+    viewModel.toggleHudTemporarilyHidden();
+
+    expect(visibilityToggles).toEqual([1]);
+  });
+
   test('pointer drag and keyboard anchor moves reach the same configuration', () => {
     const pointer = createVm();
     pointer.viewModel.beginDrag('objective');

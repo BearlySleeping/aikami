@@ -22,12 +22,13 @@ import {
 export const getHudLayoutEditorViewModel = (
   options: Omit<
     HudLayoutEditorViewModelOptions,
-    'hud' | 'view' | 'capabilities' | 'dormantWidgetIds' | 'onClose'
+    'hud' | 'visibility' | 'view' | 'capabilities' | 'dormantWidgetIds' | 'onClose'
   >,
 ): HudLayoutEditorViewModelInterface =>
   createHudLayoutEditorViewModel({
     ...options,
     hud: configuredHudPreferenceService,
+    visibility: configuredHudPreferenceService,
     view: hudViewState,
     capabilities: [...HUD_WIDGET_CAPABILITIES],
     dormantWidgetIds: configuredHudPreferenceService.dormantWidgetIds,

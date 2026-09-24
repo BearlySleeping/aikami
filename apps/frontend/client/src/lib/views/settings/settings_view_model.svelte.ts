@@ -42,6 +42,8 @@ import {
 /** Router capability used when closing the settings page. */
 export type SettingsRouterCapabilities = {
   goBack(): Promise<void>;
+  previousPage?: { url: URL };
+  goToHref(href: string): Promise<void>;
 };
 
 /** Callbacks the agent list uses to open the shared agent editor. */
@@ -465,7 +467,19 @@ export class SettingsViewModel
   async closeSettings(): Promise<void> {
     this.debug('closeSettings');
     // Immediate-save: settings were applied as they changed, so there is
-    // nothing to roll back on close.
+    // nothing to roll back on close. The in-game overlay records its origin
+    // explicitly; all other entry points retain normal history-based back
+    // navigation.
+    if (readSearchParam('from') === 'game') {
+      await this._router.goToHref('/game');
+      return;
+    }
+    const previousPage = this._router.previousPage;
+    const previousHref = previousPage?.url.href;
+    if (previousHref && previousPage?.url.pathname !== '/settings') {
+      await this._router.goToHref(previousHref);
+      return;
+    }
     await this._router.goBack();
   }
 }

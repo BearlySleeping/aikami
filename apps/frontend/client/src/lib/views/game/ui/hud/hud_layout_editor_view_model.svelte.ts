@@ -74,6 +74,12 @@ export type HudEditorPreferenceCapabilities = {
   importPreset(preset: unknown): { reason: string } | undefined;
 };
 
+/** Session-scoped HUD visibility controlled from the editor header. */
+export type HudEditorVisibilityCapabilities = {
+  readonly isHudTemporarilyHidden: boolean;
+  toggleHudTemporarilyHidden(): void;
+};
+
 /** Measurement the preview reflows against. */
 export type HudEditorViewportCapabilities = {
   readonly viewport: HudViewport;
@@ -109,6 +115,7 @@ export type HudEditorDragPosition = {
 
 export type HudLayoutEditorViewModelOptions = BaseViewModelOptions & {
   readonly hud: HudEditorPreferenceCapabilities;
+  readonly visibility: HudEditorVisibilityCapabilities;
   /** Returns to the pause menu after Save or Cancel. */
   readonly onClose: () => void;
   readonly view: HudEditorViewportCapabilities;
@@ -121,6 +128,7 @@ export type HudLayoutEditorViewModelOptions = BaseViewModelOptions & {
 export type HudLayoutEditorViewModelInterface = BaseViewModelInterface & {
   readonly isOpen: boolean;
   readonly isEditorEnabled: boolean;
+  readonly isHudTemporarilyHidden: boolean;
   readonly recoveryNotice: string | undefined;
   readonly widgetRows: readonly HudEditorWidgetRow[];
   readonly dormantWidgetIds: readonly string[];
@@ -151,6 +159,7 @@ export type HudLayoutEditorViewModelInterface = BaseViewModelInterface & {
   handleDragPointerMove(event: PointerEvent): void;
   handleKeyDown(event: KeyboardEvent): void;
   handleGamepadAction(action: HudEditorGamepadAction): void;
+  toggleHudTemporarilyHidden(): void;
   beginDrag(widgetId: HudWidgetId): void;
   /** Records the pointer position (and region) for the drag ghost. */
   updateDrag(position: HudEditorDragPosition): void;
@@ -200,6 +209,7 @@ class HudLayoutEditorViewModel
   implements HudLayoutEditorViewModelInterface
 {
   private readonly _hud: HudEditorPreferenceCapabilities;
+  private readonly _visibility: HudEditorVisibilityCapabilities;
   private readonly _onClose: () => void;
   private readonly _view: HudEditorViewportCapabilities;
   private readonly _capabilities: readonly string[];
@@ -228,6 +238,7 @@ class HudLayoutEditorViewModel
   constructor(options: HudLayoutEditorViewModelOptions) {
     super(options);
     this._hud = options.hud;
+    this._visibility = options.visibility;
     this._onClose = options.onClose;
     this._view = options.view;
     this._capabilities = options.capabilities;
@@ -257,6 +268,11 @@ class HudLayoutEditorViewModel
   /** @inheritdoc */
   get isEditorEnabled(): boolean {
     return this._hud.isEditorEnabled;
+  }
+
+  /** @inheritdoc */
+  get isHudTemporarilyHidden(): boolean {
+    return this._visibility.isHudTemporarilyHidden;
   }
 
   /** @inheritdoc */
@@ -320,6 +336,10 @@ class HudLayoutEditorViewModel
       viewport: this._view.viewport,
       textScale: this._view.textScale,
     });
+  }
+
+  toggleHudTemporarilyHidden(): void {
+    this._visibility.toggleHudTemporarilyHidden();
   }
 
   /** @inheritdoc */

@@ -22,6 +22,7 @@ import type {
   RouterServiceInterface,
   RuntimeConfigServiceInterface,
   UpdaterServiceInterface,
+  ConfigServiceInterface,
 } from '$services';
 import type { ClientHookData } from '$types';
 
@@ -48,6 +49,9 @@ export type AppRouterCapabilities = Pick<
 /** Runtime engine config loader. */
 export type AppRuntimeConfigCapabilities = Pick<RuntimeConfigServiceInterface, 'loadConfig'>;
 
+/** Encrypted AI configuration loader. */
+export type AppConfigCapabilities = Pick<ConfigServiceInterface, 'load'>;
+
 /** Emulator-only local seed. */
 export type AppEmulatorSeedCapabilities = Pick<EmulatorSeedServiceInterface, 'seedIfEmpty'>;
 
@@ -68,6 +72,8 @@ export type AppViewModelOptions = AppViewModelCallerOptions & {
   router: AppRouterCapabilities;
   /** Runtime config capability. */
   runtimeConfig: AppRuntimeConfigCapabilities;
+  /** Encrypted AI configuration capability. */
+  config: AppConfigCapabilities;
   /** Emulator seed capability. */
   emulatorSeed: AppEmulatorSeedCapabilities;
   /** Desktop updater capability. */
@@ -93,6 +99,7 @@ class AppViewModel extends BaseViewModel<AppViewModelOptions> implements AppView
   private readonly _app: AppShellCapabilities;
   private readonly _router: AppRouterCapabilities;
   private readonly _runtimeConfig: AppRuntimeConfigCapabilities;
+  private readonly _config: AppConfigCapabilities;
   private readonly _emulatorSeed: AppEmulatorSeedCapabilities;
   private readonly _updater: AppUpdaterCapabilities;
 
@@ -104,6 +111,7 @@ class AppViewModel extends BaseViewModel<AppViewModelOptions> implements AppView
     this._app = options.app;
     this._router = options.router;
     this._runtimeConfig = options.runtimeConfig;
+    this._config = options.config;
     this._emulatorSeed = options.emulatorSeed;
     this._updater = options.updater;
 
@@ -160,6 +168,9 @@ class AppViewModel extends BaseViewModel<AppViewModelOptions> implements AppView
     //    index.html, Tauri app config dir, or dev-only defaults. Loaded
     //    early so first engine requests target the configured hosts.
     await this._runtimeConfig.loadConfig();
+    // AI connections live in the encrypted local vault. Load them before
+    // route/game services resolve providers, including after a full reload.
+    await this._config.load();
 
     // 1. Wire router into SvelteKit primitives.
     this._router.initialize({ goto, page: appState.page as never });

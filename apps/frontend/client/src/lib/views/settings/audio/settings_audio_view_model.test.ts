@@ -8,7 +8,6 @@ import type { VoiceModelState } from '$types';
 import {
   createSettingsAudioViewModel,
   type SettingsAudioEngineCapabilities,
-  type SettingsAudioMusicPlayerCapabilities,
   type SettingsAudioRuntimeConfigCapabilities,
   type SettingsAudioTtsCapabilities,
   type SettingsAudioVoiceModelCapabilities,
@@ -28,14 +27,6 @@ const createAudio = (
   setSfxVolume: mock(() => {}),
   playTestSfx: mock(() => {}),
   stopAll: mock(() => {}),
-  ...overrides,
-});
-
-const createMusicPlayer = (
-  overrides: Partial<SettingsAudioMusicPlayerCapabilities> = {},
-): SettingsAudioMusicPlayerCapabilities => ({
-  visible: false,
-  toggleVisible: mock(() => {}),
   ...overrides,
 });
 
@@ -76,7 +67,6 @@ const createRuntimeConfig = (): SettingsAudioRuntimeConfigCapabilities => ({
 
 const createViewModel = (options?: {
   audio?: SettingsAudioEngineCapabilities;
-  musicPlayer?: SettingsAudioMusicPlayerCapabilities;
   tts?: SettingsAudioTtsCapabilities;
   voiceModel?: SettingsAudioVoiceModelCapabilities;
   playSceneBgm?: (scene: 'explore' | 'combat') => Promise<void>;
@@ -84,7 +74,6 @@ const createViewModel = (options?: {
   createSettingsAudioViewModel({
     className: 'SettingsAudioViewModelTest',
     audio: options?.audio ?? createAudio(),
-    musicPlayer: options?.musicPlayer ?? createMusicPlayer(),
     tts: options?.tts ?? createTts(),
     voiceModel: options?.voiceModel ?? createVoiceModel(),
     runtimeConfig: createRuntimeConfig(),
@@ -145,13 +134,7 @@ describe('SettingsAudioViewModel — test playback', () => {
   });
 });
 
-describe('SettingsAudioViewModel — music player and voice model', () => {
-  test('musicPlayerVisible reflects the injected capability', () => {
-    const vm = createViewModel({ musicPlayer: createMusicPlayer({ visible: true }) });
-
-    expect(vm.musicPlayerVisible).toBe(true);
-  });
-
+describe('SettingsAudioViewModel — voice model', () => {
   test('voiceModelSizeLabel formats the injected byte count', () => {
     const vm = createViewModel();
 

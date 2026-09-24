@@ -58,6 +58,7 @@ import type {
   GameUIInputActionCapabilities,
   GameUIMotionCapabilities,
   GameUIMusicCapabilities,
+  GameUINpcMemoryCapabilities,
   GameUIOnboardingCapabilities,
   GameUIOverlayCapabilities,
   GameUIPartyCapabilities,
@@ -93,6 +94,8 @@ export type { AutoSaveStatus, DialogueNpcData, GameOverlayType, ManagementReturn
 export type GameUIViewModelOptions = BaseViewModelOptions & {
   /** Chat state read for the auto-summary threshold effect. */
   chat: GameUIChatCapabilities;
+  /** Per-NPC memory — optional so fixtures without it keep working. */
+  npcMemory?: GameUINpcMemoryCapabilities;
   /** Combat-encounter state read when the combat overlay activates. */
   combat: GameUICombatStateCapabilities;
   /** Text-provider configuration read for onboarding hints. */
@@ -170,6 +173,7 @@ class GameUIViewModel
   private readonly _overlays: GameUIOverlayCapabilities;
   private readonly _inputAction: GameUIInputActionCapabilities;
   private readonly _npcDialogue: NpcDialogueServiceInterface;
+  private readonly _npcMemory: GameUINpcMemoryCapabilities | undefined;
   private readonly _onboarding: GameUIOnboardingCapabilities;
   private readonly _playerState: GameUIPlayerStateCapabilities;
   private readonly _party: GameUIPartyCapabilities;
@@ -227,6 +231,7 @@ class GameUIViewModel
     this._overlays = options.overlays;
     this._inputAction = options.inputAction;
     this._npcDialogue = options.npcDialogue;
+    this._npcMemory = options.npcMemory;
     this._onboarding = options.onboarding;
     this._playerState = options.playerState;
     this._party = options.party;
@@ -538,6 +543,7 @@ class GameUIViewModel
       registerEffectRoot: (fn) => this.registerEffectRoot(fn),
       overlays: this._overlays,
       npcDialogue: this._npcDialogue,
+      npcMemory: this._npcMemory,
       combat: this._combat,
       chat: this._chat,
       session: this._session,
@@ -591,6 +597,9 @@ class GameUIViewModel
   // ── Delegated ──
 
   handleKeyDown(event: KeyboardEvent): void {
+    if (this._inputAction.handleGlobalShortcut(event)) {
+      return;
+    }
     this._overlays.handleKeyDown(event);
   }
 

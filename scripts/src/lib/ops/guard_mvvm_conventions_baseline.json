@@ -3,196 +3,275 @@
     "counts": {
       "v6": 1
     },
-    "identities": ["v6:46249b86"]
+    "identities": [
+      "v6:46249b86"
+    ]
   },
   "apps/frontend/client/src/lib/views/character/lpc_preview/lpc_preview_view.svelte": {
     "counts": {
       "v6": 1
     },
-    "identities": ["v6:46249b86"]
+    "identities": [
+      "v6:46249b86"
+    ]
   },
   "apps/frontend/client/src/lib/views/character/persona/create/persona_create_view.svelte": {
     "counts": {
       "v6": 2,
       "v7": 1
     },
-    "identities": ["v6:46249b86", "v6:46249b86", "v7:6881dfab"]
+    "identities": [
+      "v6:46249b86",
+      "v6:46249b86",
+      "v7:6881dfab"
+    ]
   },
   "apps/frontend/client/src/lib/views/chat/chat_enhancements_sandbox_view_model.svelte.ts": {
     "counts": {
       "m8": 1
     },
-    "identities": ["m8:69ba4da7"]
+    "identities": [
+      "m8:69ba4da7"
+    ]
   },
   "apps/frontend/client/src/lib/views/chat/chat_modes_sandbox_view_model.svelte.ts": {
     "counts": {
       "m8": 1
     },
-    "identities": ["m8:69ba4da7"]
+    "identities": [
+      "m8:69ba4da7"
+    ]
   },
   "apps/frontend/client/src/lib/views/chat/connected_chats_sandbox_view_model.svelte.ts": {
     "counts": {
       "m8": 1
     },
-    "identities": ["m8:69ba4da7"]
+    "identities": [
+      "m8:69ba4da7"
+    ]
   },
   "apps/frontend/client/src/lib/views/dev/character_sheet_sandbox_view_model.svelte.ts": {
     "counts": {
       "m8": 1
     },
-    "identities": ["m8:d2b4aa2b"]
+    "identities": [
+      "m8:d2b4aa2b"
+    ]
   },
   "apps/frontend/client/src/lib/views/dev/export_sandbox_view_model.svelte.ts": {
     "counts": {
       "m8": 1
     },
-    "identities": ["m8:8925d6e1"]
+    "identities": [
+      "m8:8925d6e1"
+    ]
   },
   "apps/frontend/client/src/lib/views/dev/lpc_ai/lpc_ai_test_view.svelte": {
     "counts": {
       "v6": 1
     },
-    "identities": ["v6:46249b86"]
+    "identities": [
+      "v6:46249b86"
+    ]
   },
   "apps/frontend/client/src/lib/views/dev/lpc_inventory/lpc_inventory_view_model.svelte.ts": {
     "counts": {
       "m8": 1
     },
-    "identities": ["m8:3061cb3c"]
+    "identities": [
+      "m8:3061cb3c"
+    ]
   },
   "apps/frontend/client/src/lib/views/dev/sandbox/camera/camera_sandbox_view.svelte": {
     "counts": {
       "v7": 1
     },
-    "identities": ["v7:301dde02"]
+    "identities": [
+      "v7:301dde02"
+    ]
   },
   "apps/frontend/client/src/lib/views/dev/sandbox/environment/environment_sandbox_view_model.svelte.ts": {
     "counts": {
       "m9": 3
     },
-    "identities": ["m9:0ebfcc0e", "m9:2b5c454b", "m9:c9cccbe9"]
+    "identities": [
+      "m9:0ebfcc0e",
+      "m9:2b5c454b",
+      "m9:c9cccbe9"
+    ]
   },
   "apps/frontend/client/src/lib/views/dev/sandbox/environment/environment_sandbox_view.svelte": {
     "counts": {
       "v6": 1
     },
-    "identities": ["v6:46249b86"]
+    "identities": [
+      "v6:46249b86"
+    ]
   },
   "apps/frontend/client/src/lib/views/dev/sandbox/party_follow/party_follow_sandbox_view_model.svelte.ts": {
     "counts": {
       "m9": 2
     },
-    "identities": ["m9:2b5c454b", "m9:d0479108"]
+    "identities": [
+      "m9:2b5c454b",
+      "m9:d0479108"
+    ]
   },
   "apps/frontend/client/src/lib/views/dev/sandbox/party_follow/party_follow_sandbox_view.svelte": {
     "counts": {
       "v6": 1
     },
-    "identities": ["v6:46249b86"]
+    "identities": [
+      "v6:46249b86"
+    ]
   },
   "apps/frontend/client/src/lib/views/dev/sandbox/sandbox_view.svelte": {
     "counts": {
       "v7": 1
     },
-    "identities": ["v7:301dde02"]
+    "identities": [
+      "v7:301dde02"
+    ]
   },
   "apps/frontend/client/src/lib/views/dev/text/text_view.svelte": {
     "counts": {
       "v6": 1
     },
-    "identities": ["v6:46249b86"]
+    "identities": [
+      "v6:46249b86"
+    ]
   },
   "apps/frontend/client/src/lib/views/dev/world_gen_sandbox_view_model.svelte.ts": {
     "counts": {
       "m8": 1
     },
-    "identities": ["m8:fd3c6791"]
+    "identities": [
+      "m8:fd3c6791"
+    ]
   },
   "apps/frontend/client/src/lib/views/onboarding/onboarding_appearance_step_view.svelte": {
     "counts": {
       "v6": 2,
       "v7": 1
     },
-    "identities": ["v6:46249b86", "v6:46249b86", "v7:6881dfab"]
+    "identities": [
+      "v6:46249b86",
+      "v6:46249b86",
+      "v7:6881dfab"
+    ]
   },
   "apps/frontend/client/src/lib/views/onboarding/onboarding_chat_view.svelte": {
     "counts": {
       "v6": 2,
       "v7": 1
     },
-    "identities": ["v6:46249b86", "v6:46249b86", "v7:6881dfab"]
+    "identities": [
+      "v6:46249b86",
+      "v6:46249b86",
+      "v7:6881dfab"
+    ]
   },
   "apps/frontend/client/src/lib/views/onboarding/onboarding_review_view.svelte": {
     "counts": {
       "v6": 1,
       "v7": 1
     },
-    "identities": ["v6:46249b86", "v7:6881dfab"]
+    "identities": [
+      "v6:46249b86",
+      "v7:6881dfab"
+    ]
   },
   "apps/frontend/client/src/lib/views/onboarding/starter_hero_card_view_model.svelte.ts": {
     "counts": {
       "m8": 1
     },
-    "identities": ["m8:3c4e7d6f"]
+    "identities": [
+      "m8:3c4e7d6f"
+    ]
   },
   "apps/frontend/client/src/lib/views/settings/autonomous/autonomous_settings_view_model.svelte.ts": {
     "counts": {
       "m8": 1
     },
-    "identities": ["m8:1e07f31c"]
+    "identities": [
+      "m8:1e07f31c"
+    ]
   },
   "apps/frontend/client/src/lib/views/setup_subflow/setup_entry_view_model.svelte.ts": {
     "counts": {
       "m8": 1
     },
-    "identities": ["m8:bb35174d"]
+    "identities": [
+      "m8:bb35174d"
+    ]
   },
   "apps/frontend/client/src/lib/views/vendor/vendor_view.svelte": {
     "counts": {
       "v6": 3
     },
-    "identities": ["v6:46249b86", "v6:46249b86", "v6:46249b86"]
+    "identities": [
+      "v6:46249b86",
+      "v6:46249b86",
+      "v6:46249b86"
+    ]
   },
   "apps/frontend/client/src/routes/(dev)/dev/(sandbox)/sandbox/map/map_sandbox_route_view_model.svelte.ts": {
     "counts": {
       "m9": 2
     },
-    "identities": ["m9:4aafc085", "m9:a0dc41d3"]
+    "identities": [
+      "m9:4aafc085",
+      "m9:a0dc41d3"
+    ]
   },
   "apps/frontend/client/src/routes/(dev)/dev/lpc-walk/lpc_walk_view_model.svelte.ts": {
     "counts": {
       "m9": 1
     },
-    "identities": ["m9:a0dc41d3"]
+    "identities": [
+      "m9:a0dc41d3"
+    ]
   },
   "apps/frontend/client/src/routes/(dev)/dev/tauri-test/tauri_test_view_model.svelte.ts": {
     "counts": {
       "m9": 3
     },
-    "identities": ["m9:07d87336", "m9:4a75dc9d", "m9:a29a2d68"]
+    "identities": [
+      "m9:07d87336",
+      "m9:4a75dc9d",
+      "m9:a29a2d68"
+    ]
   },
   "apps/frontend/hub/src/lib/views/catalog/catalog_asset_view_model.svelte.ts": {
     "counts": {
       "m9": 1
     },
-    "identities": ["m9:84fbf295"]
+    "identities": [
+      "m9:84fbf295"
+    ]
   },
   "apps/frontend/hub/src/lib/views/catalog/catalog_asset_view.svelte": {
     "counts": {
       "v7": 1
     },
-    "identities": ["v7:301dde02"]
+    "identities": [
+      "v7:301dde02"
+    ]
   },
   "apps/frontend/hub/src/lib/views/sandbox/walk_sandbox_view_model.svelte.ts": {
     "counts": {
       "m9": 1
     },
-    "identities": ["m9:84fbf295"]
+    "identities": [
+      "m9:84fbf295"
+    ]
   },
   "apps/frontend/hub/src/lib/views/sandbox/walk_sandbox_view.svelte": {
     "counts": {
       "v7": 1
     },
-    "identities": ["v7:301dde02"]
+    "identities": [
+      "v7:301dde02"
+    ]
   }
 }

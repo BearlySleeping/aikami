@@ -1,6 +1,8 @@
 <script lang="ts">
 // apps/frontend/client/src/lib/views/dev/layout/layout_index_page.dev.svelte
+import { getPublicMode } from '@aikami/frontend-configs';
 import { routerService } from '$services';
+import tauriConfig from '../../../../../src-tauri/tauri.conf.json';
 import { NAV_ITEMS } from './layout_view_model.dev.svelte.ts';
 </script>
 
@@ -9,9 +11,9 @@ import { NAV_ITEMS } from './layout_view_model.dev.svelte.ts';
   <div class="mb-8">
     <h1 class="text-3xl font-bold text-primary">Aikami Dev Console</h1>
     <div class="mt-2 flex flex-wrap gap-3 text-sm">
-      <span class="badge badge-primary">v0.1.0</span>
+      <span class="badge badge-primary">v{tauriConfig.version}</span>
       <span class="badge badge-outline">client</span>
-      <span class="badge badge-outline">emulator</span>
+      <span class="badge badge-outline">{getPublicMode()}</span>
     </div>
     <p class="mt-4 text-base-content/60">
       Isolated frontend sandboxes for testing individual microservices.

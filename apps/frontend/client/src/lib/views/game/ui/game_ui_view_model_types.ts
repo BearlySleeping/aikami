@@ -12,6 +12,7 @@ import type {
   HudPreferenceServiceInterface,
   InputActionServiceInterface,
   MotionPreferenceServiceInterface,
+  NpcMemoryServiceInterface,
   OnboardingHintServiceInterface,
   PartyRosterServiceInterface,
   PlayerStateServiceInterface,
@@ -22,6 +23,12 @@ import type {
 } from '$services';
 
 export type GameUIChatCapabilities = Pick<ChatServiceInterface, 'messages'>;
+
+/** Per-NPC conversational memory: capture on close, returning greeting on open. */
+export type GameUINpcMemoryCapabilities = Pick<
+  NpcMemoryServiceInterface,
+  'recordConversation' | 'resolveGreeting'
+>;
 
 export type GameUICombatStateCapabilities = Pick<
   CombatServiceInterface,
@@ -71,7 +78,10 @@ export type GameUIOverlayCapabilities = Pick<
   | 'replaceOverlay'
 >;
 
-export type GameUIInputActionCapabilities = Pick<InputActionServiceInterface, 'actionDisplayLabel'>;
+export type GameUIInputActionCapabilities = Pick<
+  InputActionServiceInterface,
+  'actionDisplayLabel' | 'handleGlobalShortcut'
+>;
 
 export type GameUIOnboardingCapabilities = Pick<
   OnboardingHintServiceInterface,

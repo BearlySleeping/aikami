@@ -47,6 +47,15 @@ describe('AppDialogsViewModel — actions', () => {
 
     expect(close).toHaveBeenCalledWith('confirmed');
   });
+
+  test('dismissLoading hides the global loading overlay', () => {
+    const setAppLoading = mock((_loading: boolean, _label?: string) => {});
+    const viewModel = createViewModel(createAppDialogCapabilities({ setAppLoading }));
+
+    viewModel.dismissLoading();
+
+    expect(setAppLoading).toHaveBeenCalledWith(false);
+  });
 });
 
 describe('AppDialogsViewModel — real base class', () => {

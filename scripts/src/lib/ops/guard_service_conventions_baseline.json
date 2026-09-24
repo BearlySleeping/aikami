@@ -17,13 +17,17 @@
     "counts": {
       "s11": 1
     },
-    "identities": ["s11:5a13815b"]
+    "identities": [
+      "s11:5a13815b"
+    ]
   },
   "apps/frontend/client/src/lib/services/config/config_service.svelte.ts": {
     "counts": {
       "s11": 1
     },
-    "identities": ["s11:aeaec4a5"]
+    "identities": [
+      "s11:aeaec4a5"
+    ]
   },
   "apps/frontend/client/src/lib/services/game/game_boot_service.svelte.ts": {
     "counts": {
@@ -56,6 +60,12 @@
     "counts": {
       "s12": 5
     },
-    "identities": ["s12:7c798956", "s12:7c798956", "s12:7c798956", "s12:9a41876c", "s12:b43a0086"]
+    "identities": [
+      "s12:7c798956",
+      "s12:7c798956",
+      "s12:7c798956",
+      "s12:9a41876c",
+      "s12:b43a0086"
+    ]
   }
 }

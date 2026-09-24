@@ -21,6 +21,7 @@ import {
   DEFAULT_KEYBINDINGS,
   loadKeybindings,
 } from '@aikami/frontend/engine/sim';
+import { isConsumedOrComposing, isEditableTarget } from './game_input_guard.ts';
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
@@ -47,10 +48,19 @@ export type InputActionServiceInterface = BaseFrontendClassInterface & {
   pollGamepad(): void;
   /** Called on keydown to update device tracking. */
   onKeyDown(): void;
+  /** Registers the authority used by global non-overlay shortcuts. */
+  setHudShortcutCapability(capability: HudShortcutCapability): void;
+  /** Handles a global shortcut and reports whether the event was consumed. */
+  handleGlobalShortcut(event: KeyboardEvent): boolean;
   /** Refreshes the keybinding cache from localStorage. */
   refreshBindings(): void;
   /** Processes gamepad input and returns the list of active action IDs. */
   getActiveGamepadActions(): string[];
+};
+
+/** Session-scoped HUD authority consumed by the global shortcut handler. */
+type HudShortcutCapability = {
+  toggleHudTemporarilyHidden(): void;
 };
 
 export type InputActionServiceOptions = BaseFrontendClassOptions;
@@ -69,6 +79,7 @@ export class InputActionService
   private _bindings = { ...DEFAULT_KEYBINDINGS };
   private _keyToActionMap = buildKeyToAction(this._bindings);
   private _lastDeviceSwitchTime = 0;
+  private _hudShortcutCapability: HudShortcutCapability | undefined;
   // biome-ignore lint/correctness/noUnusedPrivateClassMembers: reserved for future dpad edge-trigger detection
   private _previousDpadState: number[] = [];
   private _previousButtonState: Array<{ pressed: boolean }> = [];
@@ -111,6 +122,25 @@ export class InputActionService
   onKeyDown(): void {
     this._switchToDevice('keyboard');
     this.debug('[InputActionService] device:keyboard');
+  }
+
+  /** Registers the authority used by global non-overlay shortcuts. */
+  setHudShortcutCapability(capability: HudShortcutCapability): void {
+    this._hudShortcutCapability = capability;
+  }
+
+  /** Handles a global shortcut and reports whether the event was consumed. */
+  handleGlobalShortcut(event: KeyboardEvent): boolean {
+    if (isConsumedOrComposing(event) || isEditableTarget(event.target)) {
+      return false;
+    }
+    if (this.keyToAction(event.key) !== 'toggle_hud' || !this._hudShortcutCapability) {
+      return false;
+    }
+    this.onKeyDown();
+    this._hudShortcutCapability.toggleHudTemporarilyHidden();
+    event.preventDefault();
+    return true;
   }
 
   /**

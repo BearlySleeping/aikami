@@ -8,8 +8,9 @@
 // - Path completion detaches the component and zeroes velocity.
 // - An empty path is a no-op.
 
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import type { World } from 'bitecs';
+import { logger } from '$logger';
 import { addComponent, addEntity, createWorld, getComponent, removeEntity, set } from 'bitecs';
 import { Companion, registerCompanionObservers } from '../components/companion.ts';
 import { NPCDialog, registerNPCDialogObservers } from '../components/npc_dialog.ts';
@@ -122,6 +123,29 @@ describe('path_follow_system (C-379 AC-7)', () => {
     // Component detached — no live path remains.
     expect(hasActivePath(world, eid)).toBe(false);
     expect(frames).toBeLessThan(100);
+  });
+
+  it('records normal completion without flooding debug logs', () => {
+    setCollisionGrid(ALL_WALKABLE);
+    const eid = nextEid();
+    addComponent(world, eid, set(Position, { x: 160, y: 160 }));
+    addComponent(world, eid, set(Velocity, { x: 0, y: 0 }));
+    attachPath(eid, [144, 160, 160, 160], 80, 8);
+
+    const debugSpy = spyOn(logger, 'debug');
+    try {
+      updatePathFollow(world, 100);
+    } finally {
+      debugSpy.mockRestore();
+    }
+
+    expect(getNpcHaltReason(eid)).toBe('reached_goal');
+    expect(hasActivePath(world, eid)).toBe(false);
+    expect(
+      debugSpy.mock.calls.filter(
+        (args: unknown[]) => String(args[0] ?? '') === 'path-follow:halt-reason',
+      ),
+    ).toHaveLength(0);
   });
 
   it('arrives at a final waypoint closer than one step (no overshoot oscillation)', () => {

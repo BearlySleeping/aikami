@@ -1960,7 +1960,6 @@ export class NpcDialogueService
       );
       this._checkAbort(options.signal);
 
-      // ── Call 2: extract the intent envelope from the narrative ──────
       this.turnState = { kind: 'awaiting_envelope', text: narrative };
       let rawOutput: unknown;
       let call2Error: unknown;
@@ -1984,11 +1983,6 @@ export class NpcDialogueService
         this.warn('_analyzeIntent:call2-failed', {
           detail: error instanceof Error ? error.message : String(error),
         });
-        // C-499 AC-1: call-2 failure (e.g. "No JSON object found in response")
-        // is recoverable — fall through to the repair path below, which
-        // salvages the authoritative streamed narrative instead of failing
-        // the whole turn. Abort was already checked above and re-thrown by
-        // `_checkAbort`; only non-cancellation failures reach this fallback.
         call2Error = error;
         rawOutput = undefined;
       }
@@ -2005,10 +1999,6 @@ export class NpcDialogueService
       }
 
       if (!output) {
-        // Repair attempt: salvage narrative from the streamed text. Reached
-        // both when call 2 returned an invalid envelope and when it threw
-        // (No JSON / provider error) — the streamed narrative is authoritative
-        // and must still surface to the player (C-499 AC-1).
         let repairReason = 'invalid-envelope';
         if (call2Error !== undefined) {
           repairReason = call2Error instanceof Error ? call2Error.message : String(call2Error);
@@ -2018,7 +2008,17 @@ export class NpcDialogueService
         try {
           recovered = recoverIntentAnalysisOutput(narrative.trim(), NpcIntentAnalysisOutputSchema);
         } catch (repairError) {
-          throw new Error(repairReason, { cause: repairError });
+          // The streamed narrative is authoritative when envelope extraction
+          // fails; fall back conservatively instead of failing the dialogue.
+          if (call2Error !== undefined && narrative.trim().length > 0) {
+            recovered = {
+              npcResponse: narrative.trim(),
+              suggestedChips: [],
+              questActivation: undefined,
+            };
+          } else {
+            throw new Error(repairReason, { cause: repairError });
+          }
         }
         output = {
           requiresRoll: false,
@@ -2031,7 +2031,6 @@ export class NpcDialogueService
         };
       }
 
-      // The streamed narrative is authoritative — the player already read it.
       const finalOutput: NpcIntentAnalysisOutput = {
         ...output,
         npcResponse: narrative || output.npcResponse,

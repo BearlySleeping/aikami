@@ -443,6 +443,8 @@ describe('DialogueOverlayViewModel', () => {
     vm.inputText = 'Hello';
     vm.sendMessage();
     expect(vm.messages.length).toBeGreaterThan(1); // player + response
+    expect(vm.isStreaming).toBe(true);
+    expect(vm.isTyping).toBe(false);
   });
 
   test('sendMessage clears input after sending', () => {
@@ -1145,9 +1147,8 @@ describe('DialogueOverlayViewModel', () => {
     vm.inputText = 'Tell me about the ward.';
     await vm.sendMessage();
 
-    // streamError still carries the raw failure for the inline banner…
-    expect(vm.streamError).toBe('Ollama is not configured (text.url missing from config.json)');
-    // …and capabilityError adds the actionable Settings deep-link.
+    // The actionable banner replaces the raw provider error text.
+    expect(vm.streamError).toBeNull();
     expect(vm.capabilityError?.title).toContain('Text');
     expect(vm.capabilityError?.section).toBe('story-dialogue');
     expect(vm.capabilityError?.group).toBe('ai');

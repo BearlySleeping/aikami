@@ -34,7 +34,7 @@ describe('DevViewModel', () => {
     expect(routes).toContain('/dev/image');
     expect(routes).toContain('/dev/audio');
     expect(routes).toContain('/dev/character');
-    expect(routes).toContain('/dev/dialogs');
+    expect(routes).toContain('/dev/modals');
     expect(routes).toContain('/dev/sandbox');
     expect(routes).toContain('/dev/lpc');
     expect(routes).toContain('/dev/combat');

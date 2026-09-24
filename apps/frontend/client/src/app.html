@@ -25,15 +25,21 @@
     <script>
     // Register the audio-range service worker for iOS Safari compatibility.
     // Contract: C-150 Audio System — Service Worker Range Interceptor
+    // SvelteKit builds src/service-worker.ts as an ES module (it imports
+    // /_app/env.js), so it must be registered with type: 'module' — a classic
+    // registration throws during script evaluation. Enforced at build time by
+    // scripts/check_service_worker.ts.
     // Deferred to avoid forcing layout before stylesheets load (Firefox FOUC warning).
     // Tauri serves the app from tauri://localhost, and the Service Worker
     // spec only permits http/https script URLs — registering there throws an
     // unhandled rejection. The worker is an iOS Safari Range-request shim, so
     // the desktop webview has nothing to gain from it anyway.
+    // Windows Tauri serves from http://tauri.localhost, so the host is checked too.
     var swScheme = window.location.protocol;
-    if ('serviceWorker' in navigator && (swScheme === 'http:' || swScheme === 'https:')) {
+    var swIsTauriHost = window.location.hostname === 'tauri.localhost';
+    if ('serviceWorker' in navigator && !swIsTauriHost && (swScheme === 'http:' || swScheme === 'https:')) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/service-worker.js', { scope: '/' }).catch((error) => {
+        navigator.serviceWorker.register('/service-worker.js', { scope: '/', type: 'module' }).catch((error) => {
           // biome-ignore lint/suspicious/noConsole: inline bootstrap script — the app logger is not loaded yet
           console.warn('service-worker registration failed', error);
         });

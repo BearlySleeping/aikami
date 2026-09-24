@@ -24,7 +24,20 @@
 
 import { version } from '$app/env';
 
-const worker = self as unknown as ServiceWorkerGlobalScope; // guard-ignore lint/type-safety/casting: ServiceWorkerGlobalScope type not available in Vite service worker context
+// SvelteKit emits this file as an ES module (it prepends an import of
+// `/_app/env.js`), so `src/app.html` MUST register it with `{ type: 'module' }`
+// — a classic registration fails during script evaluation. Guarded by
+// `scripts/check_service_worker.ts`.
+
+/** Narrows the worker global without a cast; throws if evaluated outside a service worker. */
+const resolveWorkerScope = (): ServiceWorkerGlobalScope => {
+  if (!(self instanceof ServiceWorkerGlobalScope)) {
+    throw new TypeError('service-worker.ts must be evaluated in a ServiceWorkerGlobalScope');
+  }
+  return self;
+};
+
+const worker = resolveWorkerScope();
 
 /** Base paths for audio assets to intercept. */
 const AUDIO_PATH_PREFIXES = ['/game-data/music/', '/game-data/sfx/', '/game-data/ambient/'];

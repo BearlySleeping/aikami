@@ -12,12 +12,14 @@ export type AdvancedEntry = {
   readonly label: string;
   /** Description shown below the button. */
   readonly description: string;
+  /** Optional external URL for the entry button. */
+  readonly buttonHref?: string;
   /** Optional external link shown at the end of the description. */
   readonly href?: string;
-  /** Label for the external link. */
+  /** Label for the external description link. */
   readonly hrefLabel?: string;
   /** Action to invoke when the button is clicked. */
-  readonly action: () => void;
+  readonly action?: () => void;
 };
 
 /** The actions the Advanced entries invoke — supplied by StartViewModel. */
@@ -61,5 +63,10 @@ export const buildAdvancedItems = (actions: StartAdvancedActions): readonly Adva
     action: () => {
       actions.openDevTools();
     },
+  },
+  {
+    label: 'Hub',
+    description: 'Browse community content and open the Aikami Hub.',
+    buttonHref: import.meta.env.PUBLIC_HUB_PAGE_URL,
   },
 ];

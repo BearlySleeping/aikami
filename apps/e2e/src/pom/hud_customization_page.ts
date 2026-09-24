@@ -229,7 +229,9 @@ export class HudCustomizationPage {
   }
 
   async toggleHiddenHudAndResume(): Promise<void> {
-    await this.page.getByTestId('pause-hide-hud').click();
+    await this.page.getByTestId('pause-customize-hud').click();
+    await this.page.getByTestId('hud-editor-toggle-visibility').click();
+    await this.page.getByTestId('hud-editor-close').click();
     await this.page.getByRole('button', { name: 'Resume Game' }).click();
   }
 

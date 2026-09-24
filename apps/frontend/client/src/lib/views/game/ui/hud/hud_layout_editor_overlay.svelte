@@ -39,15 +39,26 @@ const DROP_ANCHORS: readonly HudSlot[] = HUD_ANCHOR_ORDER;
     <div class="modal-box w-full max-w-4xl max-h-[90vh] overflow-y-auto">
       <div class="flex items-center justify-between mb-3">
         <h2 class="text-lg font-bold">Customize HUD</h2>
-        <button
-          type="button"
-          class="btn btn-ghost btn-sm btn-circle"
-          aria-label="Close HUD editor"
-          data-testid="hud-editor-close"
-          onclick={() => viewModel.requestClose()}
-        >
-          ✕
-        </button>
+        <div class="flex items-center gap-2">
+          <button
+            type="button"
+            class="btn btn-ghost btn-sm"
+            aria-pressed={viewModel.isHudTemporarilyHidden}
+            data-testid="hud-editor-toggle-visibility"
+            onclick={() => viewModel.toggleHudTemporarilyHidden()}
+          >
+            {viewModel.isHudTemporarilyHidden ? 'Show HUD' : 'Hide HUD'}
+          </button>
+          <button
+            type="button"
+            class="btn btn-ghost btn-sm btn-circle"
+            aria-label="Close HUD editor"
+            data-testid="hud-editor-close"
+            onclick={() => viewModel.requestClose()}
+          >
+            ✕
+          </button>
+        </div>
       </div>
 
       {#if !viewModel.isEditorEnabled}
