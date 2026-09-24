@@ -17,6 +17,29 @@ import { EMULATOR_PORTS } from '../config';
 /** Origin of the client dev server for this run (contract-scoped offset applied). */
 const CLIENT_ORIGIN = `http://localhost:${EMULATOR_PORTS.client}`;
 
+/** bounded route from the Emberwatch spawn to the nearest dialogue NPC. */
+const NPC_WALK_PATTERN = [
+  'w',
+  'w',
+  'd',
+  'w',
+  'd',
+  's',
+  'd',
+  'w',
+  'a',
+  'w',
+  'a',
+  's',
+  'a',
+  'w',
+  'd',
+  's',
+  'a',
+  'w',
+  'd',
+] as const;
+
 export type GamePageOptions = {
   /** Whether to use the QA bypass flag to skip text AI requirement */
   bypassTextAi?: boolean;
@@ -235,23 +258,51 @@ export class GamePage {
   // ── NPC Interaction ───────────────────────────────────────
 
   /**
-   * Walk toward the nearest NPC using arrow keys and interact.
-   * In the demo, the NPC spawns near the player.
+   * Walk toward the nearest production NPC and interact.
+   * Movement input stays locked until map NPCs have spawned, so wait for the
+   * live debug snapshot before holding WASD keys long enough for engine ticks.
    */
   async approachAndTalkToNpc(): Promise<void> {
-    // Walk a few steps toward NPC spawn point (typically south-east)
-    for (let i = 0; i < 8; i++) {
-      await this.page.keyboard.press('ArrowRight');
-      await this.page.waitForTimeout(100);
-    }
-    for (let i = 0; i < 4; i++) {
-      await this.page.keyboard.press('ArrowDown');
-      await this.page.waitForTimeout(100);
+    await this.page.waitForFunction(
+      () => {
+        const debug = (window as unknown as Record<string, unknown>).__AIKAMI_DEBUG__ as
+          | { playerX?: unknown; playerY?: unknown; npcCount?: unknown }
+          | undefined;
+        return (
+          typeof debug?.playerX === 'number' &&
+          Number.isFinite(debug.playerX) &&
+          typeof debug.playerY === 'number' &&
+          Number.isFinite(debug.playerY) &&
+          typeof debug.npcCount === 'number' &&
+          debug.npcCount > 0
+        );
+      },
+      undefined,
+      { timeout: 45_000 },
+    );
+
+    const dialogueOverlay = this.page.locator(
+      '[data-testid="dialogue-overlay"], .dialogue-overlay',
+    );
+    const maxSteps = 150;
+    for (let step = 0; step < maxSteps; step++) {
+      if (await dialogueOverlay.isVisible().catch(() => false)) {
+        await this.expectDialogueVisible();
+        return;
+      }
+
+      const key = NPC_WALK_PATTERN[step % NPC_WALK_PATTERN.length] ?? 'w';
+      await this.page.keyboard.down(key);
+      try {
+        await this.page.waitForTimeout(140);
+      } finally {
+        await this.page.keyboard.up(key);
+      }
+      await this.page.keyboard.press('Enter');
+      await this.page.waitForTimeout(120);
     }
 
-    // Press Enter/Space to interact with NPC
-    await this.page.keyboard.press('Enter');
-    await this.page.waitForTimeout(1000);
+    await this.expectDialogueVisible();
   }
 
   // ── Dialogue ──────────────────────────────────────────────
@@ -299,7 +350,7 @@ export class GamePage {
 
   /** The most recent NPC response rendered in the dialogue overlay. */
   get npcResponse() {
-    return this.page.locator('[data-testid="dialogue-overlay"] .chat-start').last();
+    return this.page.locator('[data-testid="dialogue-overlay"] .rounded-bl-md.bg-base-100').last();
   }
 
   /** Hover the first NPC message bubble to reveal its action controls. */

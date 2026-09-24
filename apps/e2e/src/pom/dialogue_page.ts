@@ -46,14 +46,14 @@ export class DialoguePage {
     return this.page.locator('textarea').first();
   }
 
-  /** The send/cancel button (title switches between Send and Cancel). */
+  /** The send button, labelled by its accessible name. */
   get sendButton() {
-    return this.page.getByTitle('Send');
+    return this.overlay.getByRole('button', { name: 'Send', exact: true });
   }
 
-  /** The cancel streaming button (visible while streaming). */
+  /** The streaming cancel button, labelled by its accessible name. */
   get cancelButton() {
-    return this.page.getByTitle('Cancel');
+    return this.overlay.getByRole('button', { name: 'Cancel', exact: true });
   }
 
   /** The End Chat button in the overlay header. */
