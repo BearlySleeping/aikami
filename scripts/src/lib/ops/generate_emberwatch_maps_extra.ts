@@ -38,6 +38,7 @@ import {
   makeMap,
   makeRng,
   scatter,
+  scatterPatches,
   setTile,
 } from './emberwatch_map_shared.ts';
 import { buildG } from './generate_emberwatch_tables.ts';
@@ -154,8 +155,30 @@ const raiseWaystation = (m: MapData): void => {
 const scatterRoadWear = (m: MapData, rng: () => number): void => {
   const W = m.width;
   const H = m.height;
-  scatter(m, rng, 2, 2, W - 3, H - 3, G.GRASS, G.GRASS_DARK, 0.12);
-  scatter(m, rng, 2, 2, W - 3, H - 3, G.GRASS, G.GRASS_VARIANT, 0.05);
+  // C-549: broad, soft patches (deterministic value noise) rather than
+  // independent per-cell flecks (plan §1.6).
+  scatterPatches({
+    map: m,
+    seed: 0x0d0a,
+    c0: 2,
+    r0: 2,
+    c1: W - 3,
+    r1: H - 3,
+    baseGid: G.GRASS,
+    gid: G.GRASS_DARK,
+    threshold: 0.64,
+  });
+  scatterPatches({
+    map: m,
+    seed: 0x0d0b,
+    c0: 2,
+    r0: 2,
+    c1: W - 3,
+    r1: H - 3,
+    baseGid: G.GRASS,
+    gid: G.GRASS_VARIANT,
+    threshold: 0.84,
+  });
   for (let r = 3; r <= 15; r++) {
     for (let c = 30; c <= 42; c++) {
       if (m.ground[r * W + c] === G.GRASS && rng() < 0.14) {
@@ -413,11 +436,21 @@ const layCloister = (m: MapData): void => {
 };
 
 /** The scorched ward scar and the surrounding grass variation. */
-const scarWard = (m: MapData, rng: () => number): void => {
+const scarWard = (m: MapData): void => {
   for (const [c, r] of SHRINE_WARD_SCAR) {
     setTile(m, c, r, G.SAND);
   }
-  scatter(m, rng, 2, 2, m.width - 3, m.height - 3, G.GRASS, G.GRASS_DARK, 0.1);
+  scatterPatches({
+    map: m,
+    seed: 0x5c1a,
+    c0: 2,
+    r0: 2,
+    c1: m.width - 3,
+    r1: m.height - 3,
+    baseGid: G.GRASS,
+    gid: G.GRASS_DARK,
+    threshold: 0.66,
+  });
 };
 
 /**
@@ -441,7 +474,7 @@ export const buildRuinedShrine = (): { map: MapData; objectLayers: MapObjectLaye
   raiseShrineApron(m, rng);
   layShrineApproaches(m);
   layCloister(m);
-  scarWard(m, rng);
+  scarWard(m);
 
   const objectLayers: MapObjectLayer[] = [
     {

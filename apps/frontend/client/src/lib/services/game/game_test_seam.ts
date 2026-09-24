@@ -598,6 +598,16 @@ export const installGameTestSeam = (deps: GameTestSeamOptions): void => {
           overlay: gameOverlayService.activeOverlay,
           mode: gameModeService.currentMode,
         }),
+        /**
+         * C-549 evidence seam: resolve authored NPC ids to the live entity ids
+         * so a same-camera capture can assert which NPC state it photographed.
+         */
+        getNpcEntityIds: (): Record<string, number> =>
+          Object.fromEntries(
+            Object.keys(contentPack.manifest.npcs)
+              .map((npcId) => [npcId, gameEngineService.getEntityIdForNpc(npcId)] as const)
+              .filter((entry): entry is readonly [string, number] => entry[1] !== undefined),
+          ),
       },
     });
   } catch (error) {

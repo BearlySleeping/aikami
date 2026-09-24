@@ -99,6 +99,10 @@ export const blockRect = (m: MapData, c0: number, r0: number, c1: number, r1: nu
  * Scatters `gid` across cells currently holding `baseGid`, using a
  * deterministic mask. `baseGid` is explicit so variant tiles apply to the
  * actual interior floor instead of hard-coding a base that silently no-ops.
+ *
+ * Independent per-cell placement, so at map scale the variant reads as an even
+ * fleck grid. Use {@link scatterPatches} for terrain variants that must form
+ * broad, soft patches instead (plan §1.6).
  */
 export const scatter = (
   m: MapData,
@@ -115,6 +119,64 @@ export const scatter = (
     for (let c = c0; c <= c1; c++) {
       if (m.ground[idx(m, c, r)] === baseGid && rng() < probability) {
         setTile(m, c, r, gid);
+      }
+    }
+  }
+};
+
+/** Smoothstep so a lattice corner does not leave a visible seam. */
+const smoothstep = (t: number): number => t * t * (3 - 2 * t);
+
+/**
+ * Deterministic value-noise scatter: paints `gid` over `baseGid` cells in
+ * broad, soft patches instead of independent per-cell flecks (plan §1.6). A
+ * coarse lattice of seeded random values is bilinearly interpolated across the
+ * region and cells whose noise exceeds `threshold` (0..1) take the variant.
+ * The same `seed` always produces the same patch layout, so maps stay
+ * reproducible; `scale` sets the lattice spacing in cells (larger = broader
+ * patches). Only cells still holding `baseGid` are touched, so paths, water,
+ * pads and buildings are never repainted.
+ */
+export const scatterPatches = (options: {
+  map: MapData;
+  seed: number;
+  c0: number;
+  r0: number;
+  c1: number;
+  r1: number;
+  baseGid: number;
+  gid: number;
+  threshold: number;
+  /** Lattice spacing in cells; larger = broader patches. */
+  scale?: number;
+}): void => {
+  const { map, seed, c0, r0, c1, r1, baseGid, gid, threshold } = options;
+  const scale = Math.max(1, options.scale ?? 6);
+  const cols = Math.ceil((c1 - c0 + 1) / scale) + 2;
+  const rows = Math.ceil((r1 - r0 + 1) / scale) + 2;
+  const rng = makeRng(seed);
+  const lattice = new Float64Array(cols * rows);
+  for (let i = 0; i < lattice.length; i++) {
+    lattice[i] = rng();
+  }
+  const corner = (cx: number, cy: number): number => lattice[cy * cols + cx] ?? 0;
+  const lerp = (a: number, b: number, t: number): number => a + (b - a) * t;
+  const sample = (fx: number, fy: number): number => {
+    const x0 = Math.floor(fx);
+    const y0 = Math.floor(fy);
+    const tx = smoothstep(fx - x0);
+    const ty = smoothstep(fy - y0);
+    const top = lerp(corner(x0, y0), corner(x0 + 1, y0), tx);
+    const bottom = lerp(corner(x0, y0 + 1), corner(x0 + 1, y0 + 1), tx);
+    return lerp(top, bottom, ty);
+  };
+  for (let r = r0; r <= r1; r++) {
+    for (let c = c0; c <= c1; c++) {
+      if (map.ground[idx(map, c, r)] !== baseGid) {
+        continue;
+      }
+      if (sample((c - c0) / scale, (r - r0) / scale) >= threshold) {
+        setTile(map, c, r, gid);
       }
     }
   }
