@@ -22,6 +22,8 @@ export type ReactivePauseMenuHarness = {
   setSaving(saving: boolean): void;
   /** Set the reactive save message. */
   setSaveMessage(message: string | undefined): void;
+  /** Set the reactive last-saved timestamp. */
+  setLastSavedAt(timestamp: string | undefined): void;
   /** Replace the reactive dice history. */
   setHistory(history: DiceHistoryEntry[]): void;
 };
@@ -37,6 +39,7 @@ const unconfigured = (operation: string): never => {
 export const createReactivePauseMenuHarness = (): ReactivePauseMenuHarness => {
   let isSaving = $state(false);
   let saveMessage = $state<string | undefined>(undefined);
+  let lastSavedAt = $state<string | undefined>(undefined);
   let history = $state<DiceHistoryEntry[]>([]);
 
   const overlay: PauseMenuOverlayCapabilities = {
@@ -45,6 +48,9 @@ export const createReactivePauseMenuHarness = (): ReactivePauseMenuHarness => {
     },
     get saveMessage() {
       return saveMessage;
+    },
+    get lastSavedAt() {
+      return lastSavedAt;
     },
     resumeGame: () => unconfigured('resumeGame'),
     saveGame: () => unconfigured('saveGame'),
@@ -73,6 +79,9 @@ export const createReactivePauseMenuHarness = (): ReactivePauseMenuHarness => {
     },
     setSaveMessage: (next) => {
       saveMessage = next;
+    },
+    setLastSavedAt: (next) => {
+      lastSavedAt = next;
     },
     setHistory: (next) => {
       history = next;

@@ -16,6 +16,7 @@ import { createWorld, hasComponent } from 'bitecs';
 import type { SpawnPoint } from '../assets/map_loader.ts';
 import { Appearance, getAppearanceLayers } from '../components/appearance.ts';
 import {
+  COMPANION_COLLISION_MASK,
   CollisionData,
   CollisionLayer,
   registerCollisionDataObservers,
@@ -107,6 +108,28 @@ describe('spawnEntities — spatial collision components (C-375 AC-3)', () => {
     // symmetric block was the deadlock root cause. NPCs still block walls
     // and other NPCs; the halt rule stops NPCs at interactionRadius.
     expect(CollisionData.mask[eid]).toBe(CollisionLayer.wall | CollisionLayer.npc);
+  });
+
+  test('companion NPC spawns with the canonical companion mask', () => {
+    const results = spawnEntities({
+      world,
+      spawnPoints: [
+        makeSpawnPoint({
+          id: 'guard',
+          type: 'npc',
+          x: 288,
+          y: 192,
+          properties: {
+            npcId: 'village_guard',
+            npcName: 'Village Guard',
+            isCompanion: true,
+          },
+        }),
+      ],
+    });
+
+    expect(results).toHaveLength(1);
+    expect(CollisionData.mask[results[0].eid]).toBe(COMPANION_COLLISION_MASK);
   });
 
   test('solid prop spawns with layer wall and a blocking mask', () => {

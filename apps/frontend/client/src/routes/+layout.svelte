@@ -13,9 +13,14 @@ import '$appCss';
 import 'pixi.js/unsafe-eval';
 
 import { untrack } from 'svelte';
+import { getLocale } from '$lib/paraglide/runtime.js';
 import { getAppViewModel } from '$lib/views/app/app_composition.ts';
 import AppView from '$lib/views/app/app_view.svelte';
 import type { LayoutProps } from './$types';
+
+if (typeof document !== 'undefined') {
+  document.documentElement.lang = getLocale();
+}
 
 let { data, children }: LayoutProps = $props();
 

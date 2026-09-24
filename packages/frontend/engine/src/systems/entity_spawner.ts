@@ -17,7 +17,11 @@ import { logger } from '$logger';
 import type { SpawnPoint, TransitionZone } from '../assets/map_loader.ts';
 import { djb2Hash } from '../assets/map_loader.ts';
 import { Appearance, setAppearanceLayers } from '../components/appearance.ts';
-import { CollisionData, CollisionLayer } from '../components/collision_data.ts';
+import {
+  COMPANION_COLLISION_MASK,
+  CollisionData,
+  CollisionLayer,
+} from '../components/collision_data.ts';
 import { CombatStats } from '../components/combat_stats.ts';
 import { Companion } from '../components/companion.ts';
 import { Enemy } from '../components/enemy.ts';
@@ -408,6 +412,8 @@ const _spawnNpc = (
   );
   const isVendor = _getBoolProperty(spawnPoint.properties, 'isVendor', false);
   const vendorInventory = _getStringProperty(spawnPoint.properties, 'vendorInventory', '');
+  const isCompanion = _getBoolProperty(spawnPoint.properties, 'isCompanion', false);
+  const collisionMask = isCompanion ? COMPANION_COLLISION_MASK : NPC_COLLISION_MASK;
 
   addComponent(world, eid, Position);
   addComponent(world, eid, set(Position, { x: spawnPoint.x, y: spawnPoint.y }));
@@ -416,14 +422,7 @@ const _spawnNpc = (
   // collide with them (C-402: PLAYER_COLLISION_MASK no longer includes
   // npc; NPCs are soft obstacles and the halt rule stops them at their
   // interaction radius). Other NPCs and walls still block NPCs.
-  _addSpatialCollision(
-    world,
-    eid,
-    spawnPoint.x,
-    spawnPoint.y,
-    CollisionLayer.npc,
-    NPC_COLLISION_MASK,
-  );
+  _addSpatialCollision(world, eid, spawnPoint.x, spawnPoint.y, CollisionLayer.npc, collisionMask);
 
   addComponent(world, eid, Visual);
   addComponent(
@@ -503,7 +502,6 @@ const _spawnNpc = (
   addComponent(world, eid, set(VisionVisible, { visibleByMask: 0 }));
 
   // ── Companion attachment (C-340) ──
-  const isCompanion = _getBoolProperty(spawnPoint.properties, 'isCompanion', false);
   const companionClassId = _getStringProperty(spawnPoint.properties, 'companionClassId', '');
   const initialApproval = _getNumberProperty(
     spawnPoint.properties,

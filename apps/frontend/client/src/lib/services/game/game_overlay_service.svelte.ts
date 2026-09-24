@@ -47,10 +47,10 @@ import { applyOverlayModeTransition } from './overlay_combat_mode.ts';
 import { OVERLAY_COMPATIBILITY } from './overlay_compatibility.ts';
 import { partyFollowService } from './party_follow_service.svelte.ts';
 import { buildSaveMapBlock, getCurrentMapName } from './save_map_block';
+import { getSessionPlaytimeMinutes } from './session_playtime.ts';
 import { sessionService } from './session_service.svelte.ts';
 import { timeService } from './time_service.svelte';
 import { worldStateService } from './world_state_service.svelte.ts';
-
 export type GameOverlayServiceInterface = GameOverlayServiceContract;
 export type GameOverlayServiceOptions = GameOverlayServiceContractOptions;
 
@@ -92,16 +92,17 @@ export class GameOverlayService
   }
   isSaving = $state<boolean>(false);
   saveMessage = $state<string | undefined>(undefined);
+  get lastSavedAt(): string | undefined {
+    return campaignService.activeCampaign?.lastSavedAt;
+  }
   isTransitioning = $state<boolean>(false);
   autoSaveStatus = $state<AutoSaveStatus>('idle');
-
   get useOllama(): boolean {
     if (!this._settingsLoaded) {
       void this._initSettings();
     }
     return this._useOllama;
   }
-
   get textProvider(): { endpoint: string } | undefined {
     if (!this._settingsLoaded) {
       void this._initSettings();
@@ -1190,8 +1191,6 @@ export class GameOverlayService
     this._engineService?.resumeEngine();
   }
 
-  // ── Session Management (C-240) ─────────────────────────────────────
-
   /** @inheritdoc */
   openEndSession(): void {
     const success = this.pushOverlay('END_SESSION');
@@ -1210,7 +1209,9 @@ export class GameOverlayService
 
   /** @inheritdoc */
   async endSession(): Promise<void> {
-    await sessionService.endSession({ playtimeMinutes: 30 });
+    await sessionService.endSession({
+      playtimeMinutes: getSessionPlaytimeMinutes(sessionService.activeSession),
+    });
   }
 
   /** @inheritdoc */

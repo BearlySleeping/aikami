@@ -13,6 +13,7 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services/base';
 import type { DiceHistoryEntry } from '$types';
+import { formatLastSavedAt } from './pause_menu_presentation';
 
 // ── Capability contracts ────────────────────────────────────────────────
 
@@ -20,6 +21,7 @@ import type { DiceHistoryEntry } from '$types';
 export type PauseMenuOverlayCapabilities = {
   readonly isSaving: boolean;
   readonly saveMessage: string | undefined;
+  readonly lastSavedAt: string | undefined;
   resumeGame(): void;
   saveGame(): Promise<void>;
   goToSettings(): Promise<void>;
@@ -56,6 +58,9 @@ export type PauseMenuViewModelOptions = BaseViewModelOptions & {
 export type PauseMenuViewModelInterface = BaseViewModelInterface & {
   readonly isSaving: boolean;
   readonly saveMessage: string | undefined;
+  readonly lastSavedAt: string | undefined;
+  readonly lastSavedLabel: string;
+  readonly saveStatusLabel: string;
   readonly confirmingQuit: boolean;
   readonly isRollHistoryOpen: boolean;
   readonly rollHistory: DiceHistoryEntry[];
@@ -116,6 +121,24 @@ class PauseMenuViewModel
 
   get saveMessage(): string | undefined {
     return this._overlay.saveMessage;
+  }
+
+  get lastSavedAt(): string | undefined {
+    return this._overlay.lastSavedAt;
+  }
+
+  get lastSavedLabel(): string {
+    return formatLastSavedAt(this.lastSavedAt);
+  }
+
+  get saveStatusLabel(): string {
+    if (this.isSaving) {
+      return 'Saving…';
+    }
+    if (this.saveMessage === 'Game Saved!' && this.lastSavedAt) {
+      return `${this.saveMessage} · ${this.lastSavedLabel}`;
+    }
+    return this.saveMessage ?? this.lastSavedLabel;
   }
 
   resumeGame(): void {

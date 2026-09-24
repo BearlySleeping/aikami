@@ -22,6 +22,7 @@ import {
   type MapSummary,
   reachableAt,
   rectCells,
+  rectContainsPoint,
   str,
   type ValidationFinding,
 } from './emberwatch_map_validation_context.ts';
@@ -392,7 +393,7 @@ const bounceBackFindings = (
   }
 
   const inZone = targetContext.transitions.some((zone) =>
-    rectCells(zone).some((cell) => cell.c === markerCell.c && cell.r === markerCell.r),
+    rectContainsPoint(zone, marker.x, marker.y),
   );
   if (inZone) {
     findings.push(

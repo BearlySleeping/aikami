@@ -56,6 +56,7 @@ const ANCHORS: readonly HudSlot[] = HUD_ANCHOR_ORDER;
     data-motion={viewModel.motionAttribute}
     data-testid="game-ui-overlay-layer"
     id="game-ui-layer"
+    data-overlay-active={viewModel.activeOverlay === 'PAUSE_MENU' || viewModel.activeOverlay === 'SETTINGS' || viewModel.activeOverlay === 'END_SESSION' || viewModel.activeOverlay === 'GAME_OVER'}
     onfocusin={(event) => viewModel.hud.handleFocusIn(event)}
     onfocusout={() => viewModel.hud.setFocusedWidget(undefined)}
   >

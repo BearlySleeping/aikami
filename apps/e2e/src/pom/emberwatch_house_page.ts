@@ -15,13 +15,38 @@ import { assertGpuRendererName } from '../visual/core/gpu_renderer_guard.ts';
 import { GamePage } from './game_page';
 
 export type EmberwatchHouseCell = { c: number; r: number };
+export type EmberwatchHouseMapId = 'village' | 'inn' | 'merchant_shop';
+export type EmberwatchHouseClip = { x: number; y: number; width: number; height: number };
 
 export type EmberwatchHouseWorldSnapshot = {
   player: EmberwatchHouseCell & { x: number; y: number };
   camera: EmberwatchHouseCell & { x: number; y: number };
-  cameraSource: 'engine' | 'playerFallback';
+  cameraSource: 'worldTransform' | 'engine' | 'playerFallback';
+  worldTransform: { x: number; y: number; scaleX: number; scaleY: number };
   renderer: string;
   mapId: string;
+};
+
+export type EmberwatchHouseGraphicsLimits = {
+  maxTextureSize: number;
+  maxViewportWidth: number;
+  maxViewportHeight: number;
+};
+
+export type EmberwatchHouseCanvasAllocation = {
+  width: number;
+  height: number;
+  clientWidth: number;
+  clientHeight: number;
+};
+
+export type EmberwatchHousePageOptions = {
+  /**
+   * C-550's pre-v2 client leaves one origin Texture.WHITE placeholder when a
+   * reconnect re-announces the player. The before lane may opt into this
+   * narrowly shaped compatibility exemption; the candidate lane never does.
+   */
+  allowLegacyPositionlessPlaceholder?: boolean;
 };
 
 type EngineState = {
@@ -36,6 +61,136 @@ type PlayerDebug = {
 };
 
 const HOUSE_CELL_SIZE = 32;
+
+type SnapshotWorld = {
+  x: number | undefined;
+  y: number | undefined;
+  scaleX: number | undefined;
+  scaleY: number | undefined;
+};
+type SnapshotScreen = { width: number | undefined; height: number | undefined };
+type SnapshotProbe = {
+  player: PlayerDebug | undefined;
+  engine: EngineState | undefined;
+  world: SnapshotWorld;
+  screen: SnapshotScreen;
+};
+type SnapshotCamera = {
+  x: number;
+  y: number;
+  source: EmberwatchHouseWorldSnapshot['cameraSource'];
+};
+
+const finiteNumber = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isFinite(value);
+
+/** Production seam predicate shared by map-load waits. */
+const mapAndPlayerReady = (expectedMapId: string): boolean => {
+  const globals = window as unknown as {
+    __AIKAMI_TEST__?: { getCurrentMapId(): string };
+    __AIKAMI_DEBUG__?: PlayerDebug;
+  };
+  const seam = globals.__AIKAMI_TEST__;
+  const debug = globals.__AIKAMI_DEBUG__;
+  if (seam === undefined || debug?.playerX === undefined || debug.playerY === undefined) {
+    return false;
+  }
+  return seam.getCurrentMapId() === expectedMapId;
+};
+
+/** Read the rendered world transform without embedding page logic in `snapshot`. */
+const readRenderedSnapshot = (): SnapshotProbe => {
+  type Dict = Record<string, unknown>;
+  const isRecord = (value: unknown): value is Dict => value instanceof Object;
+  const isFiniteNumber = (value: unknown): value is number =>
+    typeof value === 'number' && Number.isFinite(value);
+  const childrenOf = (value: unknown): unknown[] =>
+    isRecord(value) && Array.isArray(value.children) ? (value.children as unknown[]) : [];
+  const numberOf = (value: unknown, key: string): number | undefined => {
+    if (!isRecord(value)) {
+      return undefined;
+    }
+    const candidate = value[key];
+    return isFiniteNumber(candidate) ? candidate : undefined;
+  };
+  const globals = window as unknown as Dict;
+  const app = globals.__PIXI_APP__;
+  const stage = isRecord(app) ? app.stage : undefined;
+  const world = childrenOf(stage).find((child) =>
+    childrenOf(child).some((nested) => {
+      const label = isRecord(nested) ? nested.label : undefined;
+      return typeof label === 'string' && label.startsWith('tilemap-band-');
+    }),
+  );
+  const scale = isRecord(world) ? world.scale : undefined;
+  const screen = isRecord(app) ? app.screen : undefined;
+  return {
+    player: globals.__AIKAMI_DEBUG__ as PlayerDebug | undefined,
+    engine: globals.__AIKAMI_ENGINE_STATE__ as EngineState | undefined,
+    world: {
+      x: numberOf(world, 'x'),
+      y: numberOf(world, 'y'),
+      scaleX: numberOf(scale, 'x'),
+      scaleY: numberOf(scale, 'y'),
+    },
+    screen: {
+      width: numberOf(screen, 'width'),
+      height: numberOf(screen, 'height'),
+    },
+  };
+};
+
+const worldCameraFrom = (probe: SnapshotProbe): { x: number; y: number } | undefined => {
+  const { world, screen } = probe;
+  if (
+    !finiteNumber(world.x) ||
+    !finiteNumber(world.y) ||
+    !finiteNumber(world.scaleX) ||
+    !finiteNumber(world.scaleY) ||
+    world.scaleX === 0 ||
+    world.scaleY === 0 ||
+    !finiteNumber(screen.width) ||
+    !finiteNumber(screen.height)
+  ) {
+    return undefined;
+  }
+  return {
+    x: (screen.width / 2 - world.x) / world.scaleX,
+    y: (screen.height / 2 - world.y) / world.scaleY,
+  };
+};
+
+const engineCameraFrom = (probe: SnapshotProbe): { x: number; y: number } | undefined => {
+  const engine = probe.engine;
+  const player = probe.player;
+  if (!finiteNumber(engine?.cameraX) || !finiteNumber(engine.cameraY)) {
+    return undefined;
+  }
+  if (
+    engine.cameraX === 0 &&
+    engine.cameraY === 0 &&
+    (player?.playerX !== 0 || player?.playerY !== 0)
+  ) {
+    return undefined;
+  }
+  return { x: engine.cameraX, y: engine.cameraY };
+};
+
+const cameraFrom = (probe: SnapshotProbe): SnapshotCamera => {
+  const worldCamera = worldCameraFrom(probe);
+  if (worldCamera !== undefined) {
+    return { ...worldCamera, source: 'worldTransform' };
+  }
+  const engineCamera = engineCameraFrom(probe);
+  if (engineCamera !== undefined) {
+    return { ...engineCamera, source: 'engine' };
+  }
+  return {
+    x: probe.player?.playerX ?? 0,
+    y: probe.player?.playerY ?? 0,
+    source: 'playerFallback',
+  };
+};
 
 /** Resolve a cell center in the same world-pixel coordinates used by `loadMap`. */
 const cellCenter = (cell: EmberwatchHouseCell): { x: number; y: number } => ({
@@ -55,11 +210,14 @@ export class EmberwatchHousePage {
   readonly page: Page;
   readonly game: GamePage;
   readonly origin: string;
+  private readonly _allowLegacyPositionlessPlaceholder: boolean;
 
-  constructor(page: Page) {
+  constructor(page: Page, origin?: string, options: EmberwatchHousePageOptions = {}) {
     this.page = page;
     this.game = new GamePage(page);
-    this.origin = process.env.C550_CLIENT_URL ?? `http://localhost:${EMULATOR_PORTS.client}`;
+    this.origin =
+      origin ?? process.env.C550_CLIENT_URL ?? `http://localhost:${EMULATOR_PORTS.client}`;
+    this._allowLegacyPositionlessPlaceholder = options.allowLegacyPositionlessPlaceholder ?? false;
   }
 
   /** Navigate to the real game route with deterministic visual parameters. */
@@ -102,7 +260,7 @@ export class EmberwatchHousePage {
   }
 
   /** Load an authored map through the existing production map-loading seam. */
-  async loadMapAt(mapId: 'village' | 'inn', cell: EmberwatchHouseCell): Promise<void> {
+  async loadMapAt(mapId: EmberwatchHouseMapId, cell: EmberwatchHouseCell): Promise<void> {
     const center = cellCenter(cell);
     const loaded = await this.page.evaluate(
       async (options) => {
@@ -146,6 +304,18 @@ export class EmberwatchHousePage {
     await this.dismissTutorial();
   }
 
+  /** Wait until the production seam and renderer settle on a requested map. */
+  async waitForMap(mapId: EmberwatchHouseMapId): Promise<void> {
+    await this.page.waitForFunction(mapAndPlayerReady, mapId, { timeout: 20_000 });
+    await this.page.evaluate(
+      () =>
+        new Promise<void>((resolve) => {
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+        }),
+    );
+    await this.dismissTutorial();
+  }
+
   /** Load the village through the production map-loading seam. */
   async loadVillageAt(cell: EmberwatchHouseCell): Promise<void> {
     await this.loadMapAt('village', cell);
@@ -176,6 +346,42 @@ export class EmberwatchHousePage {
     return renderer;
   }
 
+  /** Read live WebGL limits used to justify the widest evidence viewport. */
+  async graphicsLimits(): Promise<EmberwatchHouseGraphicsLimits> {
+    return this.page.evaluate(() => {
+      const canvas = document.querySelector('canvas');
+      const gl = canvas?.getContext('webgl2') ?? canvas?.getContext('webgl');
+      if (!canvas || !gl) {
+        throw new Error('C-553 evidence requires a live WebGL canvas');
+      }
+      const viewport = gl.getParameter(gl.MAX_VIEWPORT_DIMS);
+      if (!(viewport instanceof Int32Array)) {
+        throw new Error('C-553 evidence could not read WebGL MAX_VIEWPORT_DIMS');
+      }
+      return {
+        maxTextureSize: gl.getParameter(gl.MAX_TEXTURE_SIZE) as number,
+        maxViewportWidth: viewport[0] ?? 0,
+        maxViewportHeight: viewport[1] ?? 0,
+      };
+    });
+  }
+
+  /** Read the actual backing-store allocation after Chromium clamps a viewport. */
+  async canvasAllocation(): Promise<EmberwatchHouseCanvasAllocation> {
+    return this.page.evaluate(() => {
+      const canvas = document.querySelector('canvas');
+      if (!canvas) {
+        throw new Error('C-553 evidence canvas is unavailable');
+      }
+      return {
+        width: canvas.width,
+        height: canvas.height,
+        clientWidth: canvas.clientWidth,
+        clientHeight: canvas.clientHeight,
+      };
+    });
+  }
+
   /**
    * Wait until every visible scene-graph entity has a resolved texture.
    *
@@ -187,196 +393,236 @@ export class EmberwatchHousePage {
     const deadline = Date.now() + 5_000;
     let lastError: unknown;
     while (Date.now() < deadline) {
-      const probe = await this.page.evaluate(() => {
-        type Dict = Record<string, unknown>;
-        type Bounds = { x: number; y: number; width: number; height: number };
-        type TextureCounts = { resolved: number; unresolved: number };
-        type Observation = {
-          entityId: string;
-          visible: boolean;
-          displayType: 'sprite' | 'composed' | 'graphics' | 'missing';
-          resolvedTextureCount: number;
-          unresolvedTextureCount: number;
-        };
-        const isRecord = (value: unknown): value is Dict => value instanceof Object;
-        const childrenOf = (value: unknown): unknown[] =>
-          isRecord(value) && Array.isArray(value.children) ? (value.children as unknown[]) : [];
-        const labelOf = (value: unknown): string =>
-          isRecord(value) && typeof value.label === 'string' ? value.label : '';
-        const numberOf = (value: Dict, key: string): number | undefined => {
-          const candidate = value[key];
-          return typeof candidate === 'number' && Number.isFinite(candidate)
-            ? candidate
-            : undefined;
-        };
-        const globals = window as unknown as Dict;
-        const getDebug = (): Dict | undefined => {
-          const value = globals.__AIKAMI_DEBUG__;
-          return isRecord(value) ? value : undefined;
-        };
-        const getStage = (): Dict | undefined => {
-          const app = globals.__PIXI_APP__;
-          if (!isRecord(app) || !isRecord(app.stage)) {
-            return undefined;
-          }
-          return app.stage;
-        };
-        const getWorld = (): Dict | undefined => {
-          const stage = getStage();
-          const world = childrenOf(stage).find((child) =>
-            childrenOf(child).some((nested) => labelOf(nested).startsWith('tilemap-band-')),
-          );
-          return isRecord(world) ? world : undefined;
-        };
-        const readPosition = (value: unknown): { x: number; y: number } | undefined => {
-          if (!isRecord(value)) {
-            return undefined;
-          }
-          const x = numberOf(value, 'x');
-          const y = numberOf(value, 'y');
-          return x === undefined || y === undefined ? undefined : { x, y };
-        };
-        const getPositions = (): Map<string, { x: number; y: number }> => {
-          const positions = new Map<string, { x: number; y: number }>();
-          const value = getDebug()?.entityPositions;
-          if (!isRecord(value)) {
-            return positions;
-          }
-          for (const [entityId, entry] of Object.entries(value)) {
-            const position = readPosition(entry);
-            if (position !== undefined) {
-              positions.set(entityId, position);
-            }
-          }
-          return positions;
-        };
-        const getBounds = (value: Dict): Bounds | undefined => {
-          const getter = value.getBounds;
-          if (typeof getter !== 'function') {
-            return undefined;
-          }
-          const result = getter.call(value);
-          if (!isRecord(result)) {
-            return undefined;
-          }
-          const x = numberOf(result, 'x');
-          const y = numberOf(result, 'y');
-          const width = numberOf(result, 'width');
-          const height = numberOf(result, 'height');
-          if (x === undefined || y === undefined || width === undefined || height === undefined) {
-            return undefined;
-          }
-          return { x, y, width, height };
-        };
-        const stageBounds = getBounds(getStage() ?? {});
-        const isVisible = (bounds: Bounds | undefined, visible: boolean): boolean => {
-          if (!visible) {
-            return false;
-          }
-          if (!stageBounds || !bounds) {
-            return true;
-          }
-          return (
-            bounds.x + bounds.width >= stageBounds.x &&
-            bounds.x <= stageBounds.x + stageBounds.width &&
-            bounds.y + bounds.height >= stageBounds.y &&
-            bounds.y <= stageBounds.y + stageBounds.height
-          );
-        };
-        const countTexture = (texture: Dict, counts: TextureCounts): void => {
-          const width = numberOf(texture, 'width');
-          const height = numberOf(texture, 'height');
-          if (width === undefined || height === undefined) {
-            return;
-          }
-          if (width > 1 && height > 1 && texture.valid !== false) {
-            counts.resolved += 1;
-            return;
-          }
-          counts.unresolved += 1;
-        };
-        const addTextureCount = (value: unknown, counts: TextureCounts): void => {
-          if (!isRecord(value)) {
-            return;
-          }
-          const texture = value.texture;
-          if (isRecord(texture)) {
-            countTexture(texture, counts);
-          }
-        };
-        const readTextureCounts = (node: unknown): TextureCounts => {
-          const counts: TextureCounts = { resolved: 0, unresolved: 0 };
-          addTextureCount(node, counts);
-          for (const child of childrenOf(node)) {
-            addTextureCount(child, counts);
-          }
-          return counts;
-        };
-        const readDisplayType = (node: Dict, counts: TextureCounts): Observation['displayType'] => {
-          if (counts.resolved + counts.unresolved === 0) {
-            return node.constructor?.name === 'Graphics' ? 'graphics' : 'missing';
-          }
-          return childrenOf(node).length > 0 ? 'composed' : 'sprite';
-        };
-        const ignoredLabels = [
-          'tilemap-band-',
-          'zone-overlay-',
-          'debug-grid',
-          'authoring-overlay',
-          'hover-highlight',
-          'destination-marker',
-          'combat-',
-          'weather-',
-        ];
-        const findEntityId = (
-          node: Dict,
-          index: number,
-          positionMap: ReadonlyMap<string, { x: number; y: number }>,
-        ): string => {
-          const x = numberOf(node, 'x');
-          const y = numberOf(node, 'y');
-          if (x === undefined || y === undefined) {
-            return `unidentified:${index}`;
-          }
-          for (const [entityId, position] of positionMap) {
-            if (Math.abs(position.x - x) <= 4 && Math.abs(position.y - y) <= 4) {
-              return entityId;
-            }
-          }
-          return `unidentified:${index}`;
-        };
-        const toObservation = (
-          node: unknown,
-          index: number,
-          positionMap: ReadonlyMap<string, { x: number; y: number }>,
-        ): Observation | undefined => {
-          if (!isRecord(node) || ignoredLabels.some((prefix) => labelOf(node).startsWith(prefix))) {
-            return undefined;
-          }
-          if (numberOf(node, 'x') === undefined || numberOf(node, 'y') === undefined) {
-            return undefined;
-          }
-          const counts = readTextureCounts(node);
-          return {
-            entityId: findEntityId(node, index, positionMap),
-            visible: isVisible(getBounds(node), node.visible !== false),
-            displayType: readDisplayType(node, counts),
-            resolvedTextureCount: counts.resolved,
-            unresolvedTextureCount: counts.unresolved,
+      const probe = await this.page.evaluate(
+        (guardOptions: { allowLegacyPositionlessPlaceholder: boolean }) => {
+          type Dict = Record<string, unknown>;
+          type Bounds = { x: number; y: number; width: number; height: number };
+          type TextureCounts = { resolved: number; unresolved: number };
+          type Observation = {
+            entityId: string;
+            visible: boolean;
+            displayType: 'sprite' | 'composed' | 'graphics' | 'missing';
+            resolvedTextureCount: number;
+            unresolvedTextureCount: number;
           };
-        };
-        const entityPositions = getPositions();
-        const worldChildren = childrenOf(getWorld());
-        const observations = worldChildren.flatMap((node, index) => {
-          const observation = toObservation(node, index, entityPositions);
-          return observation === undefined ? [] : [observation];
-        });
-        const playerEid = getDebug()?.playerEid;
-        return {
-          observations,
-          playerEid: typeof playerEid === 'number' ? String(playerEid) : undefined,
-        };
-      });
+          const isRecord = (value: unknown): value is Dict => value instanceof Object;
+          const childrenOf = (value: unknown): unknown[] =>
+            isRecord(value) && Array.isArray(value.children) ? (value.children as unknown[]) : [];
+          const labelOf = (value: unknown): string =>
+            isRecord(value) && typeof value.label === 'string' ? value.label : '';
+          const numberOf = (value: Dict, key: string): number | undefined => {
+            const candidate = value[key];
+            return typeof candidate === 'number' && Number.isFinite(candidate)
+              ? candidate
+              : undefined;
+          };
+          const globals = window as unknown as Dict;
+          const getDebug = (): Dict | undefined => {
+            const value = globals.__AIKAMI_DEBUG__;
+            return isRecord(value) ? value : undefined;
+          };
+          const getStage = (): Dict | undefined => {
+            const app = globals.__PIXI_APP__;
+            if (!isRecord(app) || !isRecord(app.stage)) {
+              return undefined;
+            }
+            return app.stage;
+          };
+          const getWorld = (): Dict | undefined => {
+            const stage = getStage();
+            const world = childrenOf(stage).find((child) =>
+              childrenOf(child).some((nested) => labelOf(nested).startsWith('tilemap-band-')),
+            );
+            return isRecord(world) ? world : undefined;
+          };
+          const readPosition = (value: unknown): { x: number; y: number } | undefined => {
+            if (!isRecord(value)) {
+              return undefined;
+            }
+            const x = numberOf(value, 'x');
+            const y = numberOf(value, 'y');
+            return x === undefined || y === undefined ? undefined : { x, y };
+          };
+          const getPositions = (): Map<string, { x: number; y: number }> => {
+            const positions = new Map<string, { x: number; y: number }>();
+            const value = getDebug()?.entityPositions;
+            if (!isRecord(value)) {
+              return positions;
+            }
+            for (const [entityId, entry] of Object.entries(value)) {
+              const position = readPosition(entry);
+              if (position !== undefined) {
+                positions.set(entityId, position);
+              }
+            }
+            return positions;
+          };
+          const getBounds = (value: Dict): Bounds | undefined => {
+            const getter = value.getBounds;
+            if (typeof getter !== 'function') {
+              return undefined;
+            }
+            const result = getter.call(value);
+            if (!isRecord(result)) {
+              return undefined;
+            }
+            const x = numberOf(result, 'x');
+            const y = numberOf(result, 'y');
+            const width = numberOf(result, 'width');
+            const height = numberOf(result, 'height');
+            if (x === undefined || y === undefined || width === undefined || height === undefined) {
+              return undefined;
+            }
+            return { x, y, width, height };
+          };
+          const stageBounds = getBounds(getStage() ?? {});
+          const isVisible = (bounds: Bounds | undefined, visible: boolean): boolean => {
+            if (!visible) {
+              return false;
+            }
+            if (!stageBounds || !bounds) {
+              return true;
+            }
+            return (
+              bounds.x + bounds.width >= stageBounds.x &&
+              bounds.x <= stageBounds.x + stageBounds.width &&
+              bounds.y + bounds.height >= stageBounds.y &&
+              bounds.y <= stageBounds.y + stageBounds.height
+            );
+          };
+          const countTexture = (texture: Dict, counts: TextureCounts): void => {
+            const width = numberOf(texture, 'width');
+            const height = numberOf(texture, 'height');
+            if (width === undefined || height === undefined) {
+              return;
+            }
+            if (width > 1 && height > 1 && texture.valid !== false) {
+              counts.resolved += 1;
+              return;
+            }
+            counts.unresolved += 1;
+          };
+          const addTextureCount = (value: unknown, counts: TextureCounts): void => {
+            if (!isRecord(value)) {
+              return;
+            }
+            const texture = value.texture;
+            if (isRecord(texture)) {
+              countTexture(texture, counts);
+            }
+          };
+          const readTextureCounts = (node: unknown): TextureCounts => {
+            const counts: TextureCounts = { resolved: 0, unresolved: 0 };
+            addTextureCount(node, counts);
+            for (const child of childrenOf(node)) {
+              addTextureCount(child, counts);
+            }
+            return counts;
+          };
+          const isLegacyPositionlessPlaceholder = (node: Dict, counts: TextureCounts): boolean => {
+            const child = childrenOf(node)[0];
+            const texture = isRecord(child) && isRecord(child.texture) ? child.texture : undefined;
+            return (
+              guardOptions.allowLegacyPositionlessPlaceholder &&
+              Array.isArray(node.children) &&
+              typeof node.addChild === 'function' &&
+              node.renderPipeId === undefined &&
+              numberOf(node, 'x') === 0 &&
+              numberOf(node, 'y') === 0 &&
+              childrenOf(node).length === 1 &&
+              counts.resolved === 0 &&
+              counts.unresolved === 1 &&
+              texture !== undefined &&
+              numberOf(texture, 'width') === 1 &&
+              numberOf(texture, 'height') === 1 &&
+              texture.label === 'WHITE'
+            );
+          };
+          const readDisplayType = (
+            node: Dict,
+            counts: TextureCounts,
+          ): Observation['displayType'] => {
+            if (counts.resolved + counts.unresolved === 0) {
+              return node.renderPipeId === 'graphics' ? 'graphics' : 'missing';
+            }
+            return childrenOf(node).length > 0 ? 'composed' : 'sprite';
+          };
+          const ignoredLabels = [
+            'tilemap-band-',
+            'zone-overlay-',
+            'transition-marker-',
+            'spawn-marker-',
+            'debug-grid',
+            'authoring-overlay',
+            'hover-highlight',
+            'destination-marker',
+            'combat-',
+            'weather-',
+          ];
+          const findEntityId = (
+            node: Dict,
+            index: number,
+            positionMap: ReadonlyMap<string, { x: number; y: number }>,
+          ): string => {
+            const labelledEntityId = /^entity-(\d+)$/.exec(labelOf(node))?.[1];
+            const x = numberOf(node, 'x');
+            const y = numberOf(node, 'y');
+            const matchedEntityId = [...positionMap.entries()].find(
+              ([, position]) =>
+                x !== undefined &&
+                y !== undefined &&
+                Math.abs(position.x - x) <= 4 &&
+                Math.abs(position.y - y) <= 4,
+            )?.[0];
+            return labelledEntityId ?? matchedEntityId ?? `unidentified:${index}`;
+          };
+          const toObservation = (
+            node: unknown,
+            index: number,
+            positionMap: ReadonlyMap<string, { x: number; y: number }>,
+          ): Observation | undefined => {
+            if (
+              !isRecord(node) ||
+              ignoredLabels.some((prefix) => labelOf(node).startsWith(prefix))
+            ) {
+              return undefined;
+            }
+            if (numberOf(node, 'x') === undefined || numberOf(node, 'y') === undefined) {
+              return undefined;
+            }
+            const counts = readTextureCounts(node);
+            const entityId = findEntityId(node, index, positionMap);
+            if (
+              entityId.startsWith('unidentified:') &&
+              isLegacyPositionlessPlaceholder(node, counts)
+            ) {
+              return undefined;
+            }
+            // Unmatched positioned displays stay in the observation set. A
+            // missing ECS identity is a guard failure, not an exemption; the
+            // before lane's legacy placeholder is the only opt-in exception.
+            return {
+              entityId,
+              visible: isVisible(getBounds(node), node.visible !== false),
+              displayType: readDisplayType(node, counts),
+              resolvedTextureCount: counts.resolved,
+              unresolvedTextureCount: counts.unresolved,
+            };
+          };
+          const entityPositions = getPositions();
+          const worldChildren = childrenOf(getWorld());
+          const observations = worldChildren.flatMap((node, index) => {
+            const observation = toObservation(node, index, entityPositions);
+            return observation === undefined ? [] : [observation];
+          });
+          const playerEid = getDebug()?.playerEid;
+          return {
+            observations,
+            playerEid: typeof playerEid === 'number' ? String(playerEid) : undefined,
+          };
+        },
+        { allowLegacyPositionlessPlaceholder: this._allowLegacyPositionlessPlaceholder },
+      );
       try {
         assertEntityTexturesResolved(probe.observations);
         if (probe.playerEid === undefined) {
@@ -399,39 +645,25 @@ export class EmberwatchHousePage {
     throw new Error('C-550 entity texture guard timed out before textures resolved');
   }
 
-  /** Read player, camera, map, and renderer state from the live production route. */
+  /** Read player, rendered camera, map, and renderer state from production. */
   async snapshot(): Promise<EmberwatchHouseWorldSnapshot> {
-    const raw = await this.page.evaluate(() => {
-      const record = window as unknown as Record<string, unknown>;
-      return {
-        player: record.__AIKAMI_DEBUG__ as PlayerDebug | undefined,
-        engine: record.__AIKAMI_ENGINE_STATE__ as EngineState | undefined,
-      };
-    });
-    if (raw.player?.playerX === undefined || raw.player.playerY === undefined) {
-      throw new Error('C-550 evidence: engine position diagnostics are unavailable');
+    const probe = await this.page.evaluate(readRenderedSnapshot);
+    const player = probe.player;
+    if (player?.playerX === undefined || player.playerY === undefined) {
+      throw new Error('C-553 evidence: engine position diagnostics are unavailable');
     }
-    const hasFiniteEngineCamera =
-      typeof raw.engine?.cameraX === 'number' &&
-      Number.isFinite(raw.engine.cameraX) &&
-      typeof raw.engine.cameraY === 'number' &&
-      Number.isFinite(raw.engine.cameraY);
-    const engineCameraIsUninitialized =
-      raw.engine?.cameraX === 0 &&
-      raw.engine.cameraY === 0 &&
-      (raw.player.playerX !== 0 || raw.player.playerY !== 0);
-    const hasEngineCamera = hasFiniteEngineCamera && !engineCameraIsUninitialized;
-    const cameraX = hasEngineCamera
-      ? (raw.engine?.cameraX ?? raw.player.playerX)
-      : raw.player.playerX;
-    const cameraY = hasEngineCamera
-      ? (raw.engine?.cameraY ?? raw.player.playerY)
-      : raw.player.playerY;
+    const camera = cameraFrom(probe);
     const renderer = await this.requireWebGL();
     return {
-      player: toCell(raw.player.playerX, raw.player.playerY),
-      camera: toCell(cameraX, cameraY),
-      cameraSource: hasEngineCamera ? 'engine' : 'playerFallback',
+      player: toCell(player.playerX, player.playerY),
+      camera: toCell(camera.x, camera.y),
+      cameraSource: camera.source,
+      worldTransform: {
+        x: probe.world.x ?? 0,
+        y: probe.world.y ?? 0,
+        scaleX: probe.world.scaleX ?? 0,
+        scaleY: probe.world.scaleY ?? 0,
+      },
       renderer,
       mapId: await this.currentMapId(),
     };
@@ -460,13 +692,54 @@ export class EmberwatchHousePage {
     await this.page.waitForTimeout(150);
   }
 
+  /** Hold a key until a production map transition fires, releasing it immediately. */
+  async moveThroughTransition(options: {
+    key: 'KeyW' | 'KeyA' | 'KeyS' | 'KeyD';
+    fromMap: EmberwatchHouseMapId;
+    toMap: EmberwatchHouseMapId;
+    timeoutMs?: number;
+  }): Promise<void> {
+    const initialMap = await this.currentMapId();
+    if (initialMap !== options.fromMap) {
+      throw new Error(
+        `C-553 transition expected ${options.fromMap}, but production loaded ${initialMap}`,
+      );
+    }
+    await this.page.keyboard.down(options.key);
+    try {
+      await this.page.waitForFunction(
+        (expectedMapId) => {
+          const seam = (
+            window as unknown as {
+              __AIKAMI_TEST__?: { getCurrentMapId(): string };
+            }
+          ).__AIKAMI_TEST__;
+          return seam?.getCurrentMapId() === expectedMapId;
+        },
+        options.toMap,
+        { timeout: options.timeoutMs ?? 20_000 },
+      );
+    } finally {
+      await this.page.keyboard.up(options.key);
+    }
+    await this.waitForMap(options.toMap);
+    await this.requireResolvedEntityTextures();
+  }
+
   /** Capture only after re-asserting the live renderer. */
-  async capture(path: string): Promise<EmberwatchHouseWorldSnapshot> {
+  async capture(
+    path: string,
+    options: { clip?: EmberwatchHouseClip } = {},
+  ): Promise<EmberwatchHouseWorldSnapshot> {
     await this.dismissTutorial();
     await this.requireWebGL();
     await this.requireResolvedEntityTextures();
     const snapshot = await this.snapshot();
-    await this.page.screenshot({ path, animations: 'disabled' });
+    await this.page.screenshot({
+      path,
+      animations: 'disabled',
+      ...(options.clip ? { clip: options.clip } : {}),
+    });
     return snapshot;
   }
 

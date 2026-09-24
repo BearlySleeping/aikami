@@ -26,12 +26,10 @@ import { fileURLToPath } from 'node:url';
  * C-376).
  */
 export const ATLAS_COLS = 16;
-// C-546: rows grew from 8 to 10 to append the bridge assembly frames. The
-// original 128 cells were full — 48 baked tiles (GIDs 1..48) + five corner16
-// terrains × 16 masks = 128 — so an append needs new rows. All existing GIDs
-// keep their cells: the terrain block stays at its original start (below) and
-// the appended frames occupy the cells AFTER it.
-export const ATLAS_ROWS = 10;
+// C-546 grew 8→10 for bridge frames; C-553 grows 10→11 for the two upper door
+// frames plus palette-only slate/thatch roof variants. Existing GIDs and the
+// pinned corner16 terrain block never move.
+export const ATLAS_ROWS = 11;
 export const ATLAS_TILE_SIZE = 32;
 
 /** 1px edge extrusion around every frame (C-378 AC-5). */
@@ -42,8 +40,8 @@ export const ATLAS_CELL = ATLAS_TILE_SIZE + ATLAS_PADDING * 2;
 
 export const ATLAS_WIDTH = ATLAS_COLS * ATLAS_CELL; // 544
 
-export const ATLAS_HEIGHT = ATLAS_ROWS * ATLAS_CELL; // 340
-export const ATLAS_TILE_COUNT = ATLAS_COLS * ATLAS_ROWS; // 160
+export const ATLAS_HEIGHT = ATLAS_ROWS * ATLAS_CELL; // 374
+export const ATLAS_TILE_COUNT = ATLAS_COLS * ATLAS_ROWS; // 176
 
 /**
  * First atlas cell (0-based) reserved for the corner16 terrain block.

@@ -261,11 +261,11 @@ the report. The immutable objects it references are still present.
 
 ## Terrains and atlas headroom
 
-The grid atlas is a fixed **16×8 = 128 cells**. It is exactly full: 48 baked
-tiles plus five `corner16` terrains × 16 masks. Adding a sixth `corner16`
-terrain requires deliberately growing `ATLAS_ROWS` (and every tileset block,
-`ATLAS_*` constant and test that derives from it) in one atomic change — never by
-letting the painter overflow. Reuse or re-art an existing semantic terrain first.
+The grid atlas is a fixed **16×11 = 176 cells**. C-553 uses 175 cells: baked
+terrain/house tiles plus five `corner16` terrains × 16 masks, leaving one frame.
+Adding another frame or a sixth `corner16` terrain requires deliberately growing
+`ATLAS_ROWS` (and every tileset block, `ATLAS_*` constant and derived test) in one
+atomic change — never by letting the painter overflow.
 
 ## Known follow-ups
 

@@ -11,8 +11,13 @@
 import { describe, expect, test } from 'bun:test';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { EMBERWATCH_TERRAIN_ATLAS_CAPACITY } from '@aikami/constants';
 import {
   ATLAS_COLS,
+  ATLAS_HEIGHT,
+  ATLAS_ROWS,
+  ATLAS_TILE_COUNT,
+  ATLAS_WIDTH,
   buildFrames,
   buildG,
   cornerFrameName,
@@ -22,6 +27,12 @@ import {
   resetManifestTilesCache,
   setManifestTilesForTest,
 } from './generate_emberwatch_tables.ts';
+
+test('generator atlas dimensions match the shared terrain capacity', () => {
+  expect(ATLAS_COLS).toBe(EMBERWATCH_TERRAIN_ATLAS_CAPACITY.columns);
+  expect(ATLAS_ROWS).toBe(EMBERWATCH_TERRAIN_ATLAS_CAPACITY.rows);
+  expect(ATLAS_TILE_COUNT).toBe(EMBERWATCH_TERRAIN_ATLAS_CAPACITY.cells);
+});
 
 const REPO_ROOT = join(import.meta.dir, '../../../..');
 const MANIFEST_PATH = join(REPO_ROOT, 'content/packs/emberwatch/manifest.json');
@@ -138,7 +149,10 @@ describe('generate_emberwatch G/FRAMES derivation (C-376 AC-6)', () => {
   test('buildFrames throws when a GID is outside the atlas grid', () => {
     try {
       setManifestTilesForTest({
-        '161': { name: 'out_of_bounds', frame: 'oob.png' }, // > ATLAS_COLS*ATLAS_ROWS (160)
+        [String(ATLAS_TILE_COUNT + 1)]: {
+          name: 'out_of_bounds',
+          frame: 'oob.png',
+        },
       });
       expect(() => buildFrames()).toThrow(/outside the atlas grid/);
     } finally {
@@ -238,10 +252,10 @@ describe.skipIf(!hasCommittedAtlas)('C-378 AC-5 — atlas packer determinism', (
     expect(checked).toBe(32);
   });
 
-  test('the committed atlas is 544×340 (extruded)', () => {
+  test('the committed atlas matches shared extruded geometry', () => {
     const atlas = JSON.parse(readFileSync(ATLAS_PATH, 'utf-8')) as {
       meta: { size: { w: number; h: number } };
     };
-    expect(atlas.meta.size).toEqual({ w: 544, h: 340 });
+    expect(atlas.meta.size).toEqual({ w: ATLAS_WIDTH, h: ATLAS_HEIGHT });
   });
 });

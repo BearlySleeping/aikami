@@ -7,6 +7,7 @@
     "test": "playwright test",
     "test:unit": "bun test src/services",
     "capture:c550-house": "bun run scripts/capture_c550_house.ts",
+    "capture:c553-house-rollout": "bun run scripts/capture_c553_house_rollout.ts",
     "test:ui": "playwright test --ui",
     "test:client": "playwright test --project=client",
     "test:hub": "playwright test --project=hub",

@@ -152,6 +152,11 @@ export const drawDebugGrid = (options: {
   worldContainer.addChild(grid);
 };
 
+/** True for the narrow, door-sized trigger rectangles used by Emberwatch houses. */
+export const isDoorThresholdTransition = (
+  zone: Pick<TransitionZone, 'width' | 'height'>,
+): boolean => zone.width <= 32 && zone.height <= 64;
+
 /**
  * Draws a quiet, in-world marker for each transition zone (portal/exit).
  *
@@ -160,7 +165,8 @@ export const drawDebugGrid = (options: {
  * indication of where a transition can be triggered, so they remain rendered —
  * but as a restrained brass-tinted zone outline with a compact grounded chevron,
  * consistent with the Obsidian Chronicle material language, rather than a debug
- * neon overlay.
+ * neon overlay. Narrow door thresholds keep only the chevron; their visible
+ * authored door art is the production affordance.
  */
 export const renderTransitionZoneOverlays = (options: {
   worldContainer: Container;
@@ -182,11 +188,17 @@ export const renderTransitionZoneOverlays = (options: {
   for (const zone of zones) {
     const graphics = new Graphics();
 
-    // Quiet zone footprint.
-    graphics.rect(zone.x, zone.y, zone.width, zone.height);
-    graphics.fill({ color: markerColor, alpha: 0.07 });
-    graphics.rect(zone.x, zone.y, zone.width, zone.height);
-    graphics.stroke({ width: 1, color: markerColor, alpha: 0.35 });
+    const isDoorThreshold = isDoorThresholdTransition(zone);
+    // Door-sized zones sit directly on visible thresholds. Suppress their
+    // full rectangle in production so a brass debug-looking outline does not
+    // compete with the authored door art; larger gate zones keep the quiet
+    // footprint marker.
+    if (!isDoorThreshold) {
+      graphics.rect(zone.x, zone.y, zone.width, zone.height);
+      graphics.fill({ color: markerColor, alpha: 0.07 });
+      graphics.rect(zone.x, zone.y, zone.width, zone.height);
+      graphics.stroke({ width: 1, color: markerColor, alpha: 0.35 });
+    }
 
     // Small grounded chevron at the zone centre (direction hint, not a rail).
     const cx = zone.x + zone.width / 2;
@@ -194,7 +206,7 @@ export const renderTransitionZoneOverlays = (options: {
     graphics.moveTo(cx - 4, cy - 3);
     graphics.lineTo(cx, cy + 2);
     graphics.lineTo(cx + 4, cy - 3);
-    graphics.stroke({ width: 1.5, color: markerColor, alpha: 0.6 });
+    graphics.stroke({ width: 1.5, color: markerColor, alpha: isDoorThreshold ? 0.35 : 0.6 });
 
     graphics.label = `zone-overlay-${zone.id}`;
     graphics.eventMode = 'none';

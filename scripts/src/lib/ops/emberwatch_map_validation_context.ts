@@ -123,6 +123,13 @@ const placedObjects = (map: RawMap): PlacedObject[] => {
   return out;
 };
 
+/** Inclusive point test matching the runtime zoning rectangle. */
+export const rectContainsPoint = (object: PlacedObject, x: number, y: number): boolean =>
+  x >= object.x &&
+  x <= object.x + Math.max(0, object.width) &&
+  y >= object.y &&
+  y <= object.y + Math.max(0, object.height);
+
 /** Cells inside a transition's trigger rectangle. */
 export const rectCells = (object: PlacedObject): Array<{ c: number; r: number }> => {
   const cells: Array<{ c: number; r: number }> = [];

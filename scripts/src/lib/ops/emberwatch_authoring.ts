@@ -41,15 +41,23 @@ import {
 import { buildG, readManifestTiles } from './generate_emberwatch_tables.ts';
 
 export {
+  assertNoHousePropOverlaps,
   type DoorPlacement,
   type DoorSide,
   doorPlacement,
+  HOUSE_FACADE_ROWS,
   HOUSE_FRAMES,
+  HOUSE_MAX_VISIBLE_ROOF_ROWS,
+  HOUSE_ROOF_FRAMES,
   type HouseDoorCell,
   type HouseDoorPlacement,
+  type HouseDoorState,
   type HouseFacing,
   type HouseFrameRole,
+  type HouseRoofFrameRole,
+  type HouseRoofMaterial,
   houseDoorPlacement,
+  houseVisibleRoofRows,
   placeHouse,
 } from './emberwatch_house_authoring.ts';
 

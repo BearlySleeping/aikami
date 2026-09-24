@@ -18,10 +18,10 @@
   "counts": {
     "maps": 5,
     "terrains": 6,
-    "bakedTiles": 79,
+    "bakedTiles": 95,
     "corner16Terrains": 5,
-    "atlasCellsUsed": 159,
-    "atlasCellsTotal": 160,
+    "atlasCellsUsed": 175,
+    "atlasCellsTotal": 176,
     "atlasCellsFree": 1,
     "props": 95,
     "npcs": 13,
@@ -38,7 +38,7 @@
       "id": "map:village",
       "surface": "map",
       "classification": "accepted/current",
-      "detail": "64x48; 18 prop placements, 4 NPC placements, 3 transitions"
+      "detail": "64x48; 19 prop placements, 4 NPC placements, 3 transitions"
     },
     {
       "id": "map:inn",
@@ -104,7 +104,7 @@
       "id": "atlas:headroom",
       "surface": "atlas-frame",
       "classification": "accepted/current",
-      "detail": "159/160 atlas cells used (79 baked tiles + 5×16 corner16) — 1 free; a new corner16 terrain requires an explicit geometry change"
+      "detail": "175/176 atlas cells used (95 baked tiles + 5×16 corner16) — 1 free; a new corner16 terrain requires an explicit geometry change"
     },
     {
       "id": "prop:ward_tree_landmark",
@@ -1172,7 +1172,7 @@
       "id": "atlas:frames",
       "surface": "atlas-frame",
       "classification": "accepted/current",
-      "detail": "grid atlas declares 159 frames (expected 159)"
+      "detail": "grid atlas declares 175 frames (expected 175)"
     },
     {
       "id": "props-atlas:frames",

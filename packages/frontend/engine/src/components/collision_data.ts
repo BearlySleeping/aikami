@@ -28,6 +28,15 @@ export const CollisionLayer = {
   item: 16,
 } as const;
 
+/**
+ * Collision mask for recruited and recruitable companion actors.
+ *
+ * Companions collide with terrain, dynamic NPCs, and enemies while retaining
+ * the player pass-through rule shared by other NPC actors.
+ */
+export const COMPANION_COLLISION_MASK =
+  CollisionLayer.wall | CollisionLayer.npc | CollisionLayer.enemy;
+
 /** Type alias for CollisionLayer values. */
 export type CollisionLayer = (typeof CollisionLayer)[keyof typeof CollisionLayer];
 

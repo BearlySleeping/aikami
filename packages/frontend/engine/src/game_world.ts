@@ -1358,8 +1358,6 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
           vendorInventory: npcData.vendorInventory || '',
         });
         publishNpcEntityIds(this._npcMeta.keys());
-        // Resolved from the AUTHORED npcId, never from worker mechanics.
-        this._maybeLoadAuthoredStaticVisual(eid);
       }
     }
 
@@ -1368,6 +1366,15 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     // entity is never tinted by the day/night cycle.
     const ambientExempt =
       message.frame !== undefined && this._propFrameMeta.get(message.frame)?.emissive === true;
+
+    // A reconnect or map load can announce the same ECS identity again. Replace
+    // the previous display before creating the new one; otherwise the old
+    // placeholder remains in the world graph at (0, 0) and is indistinguishable
+    // from a live actor to evidence guards.
+    const previousDisplay = this._renderEntries.get(eid);
+    if (previousDisplay) {
+      previousDisplay.displayObject.destroy({ children: true });
+    }
 
     const display = createEntityDisplay({
       eid,
@@ -1381,6 +1388,10 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       onAddedToStage: (info) => this.debug('entity-added-to-stage', info),
     });
     this._renderEntries.set(eid, display.entry);
+    if (this._npcMeta.has(eid)) {
+      // Resolved from the authored npcId after the replacement is registered.
+      this._maybeLoadAuthoredStaticVisual(eid);
+    }
     // Recipes will be loaded when the first APPEARANCE_CHANGED event arrives.
   }
 
