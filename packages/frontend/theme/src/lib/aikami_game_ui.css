@@ -1348,6 +1348,14 @@
       margin-block-end: 1.75rem;
     }
 
+    .hud-prompt--target {
+      position: fixed;
+      inset-block-start: clamp(1rem, calc(var(--prompt-y) - 4rem), calc(100dvh - 1rem));
+      inset-inline-start: clamp(1rem, var(--prompt-x), calc(100vw - 1rem));
+      margin-block-end: 0;
+      transform: translateX(-50%);
+    }
+
     .hud-prompt__key {
       display: inline-flex;
       align-items: center;
@@ -1538,4 +1546,12 @@
     left: 50%;
     transform: translateX(-50%);
   }
+}
+
+[data-testid="hud-anchor-bottom-center"]:has(.hud-prompt--target) {
+  transform: none !important;
+  display: contents !important;
+  --tw-translate-x: 0% !important;
+  --tw-translate-y: 0% !important;
+  translate: 0 0 !important;
 }

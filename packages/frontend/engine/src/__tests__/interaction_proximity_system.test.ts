@@ -72,7 +72,12 @@ describe('updateInteractionProximity', () => {
     const playerEid = addPlayer(world, 0, 0);
     addNPC(world, 'npc-1', 'Elder', 30, 0, 50);
 
-    const events: Array<{ type: string; targetName?: string }> = [];
+    const events: Array<{
+      type: string;
+      targetName?: string;
+      targetScreenX?: number;
+      targetScreenY?: number;
+    }> = [];
     bridge.on('INTERACTION_TARGET_CHANGED', (e) => events.push(e));
 
     updateInteractionProximity({ world, playerEntityId: playerEid, bridge });
@@ -80,6 +85,8 @@ describe('updateInteractionProximity', () => {
     expect(events).toHaveLength(1);
     expect(events[0].type).toBe('INTERACTION_TARGET_CHANGED');
     expect(events[0].targetName).toBe('Elder');
+    expect(events[0].targetScreenX).toBe(120);
+    expect(events[0].targetScreenY).toBe(0);
   });
 
   it('emits INTERACTION_TARGET_CHANGED with undefined when nothing in range', () => {

@@ -82,6 +82,12 @@ test.describe('C-555 exploration HUD', () => {
     });
     await page.getByTestId('interaction-prompt').waitFor({ state: 'visible', timeout: 15_000 });
     await page.setViewportSize({ width: 800, height: 600 });
+    await page.evaluate(async () => {
+      const seam = (
+        window as unknown as { __AIKAMI_TEST__?: { triggerAutoSave?: () => Promise<void> } }
+      ).__AIKAMI_TEST__;
+      await seam?.triggerAutoSave?.();
+    });
     await page.keyboard.press('KeyE');
     await page.getByTestId('dialogue-overlay').waitFor({ state: 'visible', timeout: 15_000 });
     const toast = page.getByRole('alert').filter({ hasText: 'Auto-saved' });

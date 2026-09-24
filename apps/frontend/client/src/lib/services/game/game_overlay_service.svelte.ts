@@ -339,13 +339,10 @@ export class GameOverlayService
 
   // ── Auto-Save Scheduler (C-334) ───────────────────────────────────
 
-  /** Default auto-save interval in milliseconds (2 minutes). */
   private static readonly _AUTOSAVE_INTERVAL_MS = 2 * 60 * 1000;
 
-  /** Interval timer handle. */
   private _autoSaveTimer: ReturnType<typeof setInterval> | undefined;
 
-  /** Whether the auto-save scheduler is running. */
   autoSaveSchedulerActive = $state(false);
 
   /** @inheritdoc */
@@ -442,33 +439,36 @@ export class GameOverlayService
     this._cameraZoomNpcScreenY = options.npcScreenY;
   }
 
-  /** Stores the last vendor session options for VM creation. */
   vendorSessionOptions = $state<
     { vendorId: string; vendorName: string; vendorInventory: string } | undefined
   >(undefined);
 
-  /** Stores the companion the Talk to Party overlay was opened for (C-340). */
   talkToPartyOptions = $state<{ npcId: string; name: string } | undefined>(undefined);
 
-  /** Interaction prompt state (C-327 AC-2). */
   interactionPromptLabel = $state<string>('');
   interactionPromptVisible = $state<boolean>(false);
+  interactionPromptScreenX = $state<number | undefined>(undefined);
+  interactionPromptScreenY = $state<number | undefined>(undefined);
   private _interactionTargetMetadata = $state<{ verb: string; targetName: string } | undefined>(
     undefined,
   );
 
-  /** Sets the interaction prompt label and visibility (called by bridge_listeners). */
   setInteractionPrompt(options: {
     label: string;
     visible: boolean;
     targetMetadata?: { verb: string; targetName: string };
+    targetScreenX?: number;
+    targetScreenY?: number;
   }): void {
     this.interactionPromptLabel = options.label;
     this.interactionPromptVisible = options.visible;
+    this.interactionPromptScreenX = options.targetScreenX;
+    this.interactionPromptScreenY = options.targetScreenY;
     this._interactionTargetMetadata = options.targetMetadata;
   }
-
-  /** Plays pickup SFX when inventory count increases. */
+  async triggerAutoSave(): Promise<void> {
+    await this._triggerAutoSave();
+  }
   onInventoryCountChange(newCount: number): void {
     if (newCount > this._previousInventoryCount) {
       void playSfxByName('sfx_pickup');

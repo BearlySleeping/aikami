@@ -51,6 +51,8 @@ export type GameUIOverlayCapabilities = Pick<
   | '_cameraZoomNpcScreenY'
   | 'interactionPromptLabel'
   | 'interactionPromptVisible'
+  | 'interactionPromptScreenX'
+  | 'interactionPromptScreenY'
   | 'setEngineService'
   | 'initialize'
   | 'handleKeyDown'

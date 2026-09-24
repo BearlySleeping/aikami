@@ -299,6 +299,14 @@ class GameUIViewModel
     return this._overlays.interactionPromptVisible;
   }
 
+  get interactionPromptScreenX(): number | undefined {
+    return this._overlays.interactionPromptScreenX;
+  }
+
+  get interactionPromptScreenY(): number | undefined {
+    return this._overlays.interactionPromptScreenY;
+  }
+
   get onboardingHintText(): string | undefined {
     const hint = this._onboarding.currentHint;
     if (!hint) {

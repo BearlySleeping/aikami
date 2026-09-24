@@ -60,6 +60,8 @@ const createOverlay = () => ({
   _cameraZoomNpcScreenY: undefined,
   interactionPromptLabel: '',
   interactionPromptVisible: false,
+  interactionPromptScreenX: undefined,
+  interactionPromptScreenY: undefined,
   setEngineService: mock((_service: GameEngineServiceInterface) => {}),
   initialize: mock(async () => {}),
   handleKeyDown: mock((_event: KeyboardEvent) => {}),
