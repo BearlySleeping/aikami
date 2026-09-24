@@ -144,7 +144,7 @@ The production evidence seam now mutates the real inventory, equipment, quest an
 
 | AC | Status | Notes |
 |---|---|---|
-| AC-1 | ✅ | Management selection, controls, focus and numeric roles use the brass/orange game accent. Scoped static class-token audit found no legacy `base-*`, `primary`, `badge`, `tabs-bordered`, `stat`, `alert` or `join` tokens; theme tests and axe passed. |
+| AC-1 | ✅ | Management selection, controls, focus and numeric roles use the brass/orange game accent. Scoped static class-token audit found no exact legacy `base-*`, `primary`, `badge`, `tabs-bordered`, `stat`, `alert` or `join` tokens (`game-*` replacements are allowed); theme tests and axe passed. |
 | AC-2 | ✅ | Inventory composes equipment paperdoll, carried bag, selected detail and a deliberate `game-empty` state. Compact/200% keyboard coverage and the 800×600 evidence matrix pass without bottom clipping. |
 | AC-3 | ✅ | Character summary shows identity, level, HP, Armor Class, attack, experience and six abilities. Edit is explicit; the standalone/developer path starts authorized and retains Pro/JSON tools. Saving-throw wording is explicit. |
 | AC-4 | ✅ | Journal defaults to Quests, Notes uses list/detail, the editor opens only after New/Edit, and Recaps remain read-only. Legacy `QUEST_LOG` routing converges on Journal. |
@@ -178,7 +178,7 @@ The complete changed-file set is 45 files, below the 100-file review limit. The 
 
 ### Verification
 
-- `bun moon run client:test` — 4,057 pass, 0 fail, 7 skip, 2 todo.
+- `bun moon run client:test` — 4,058 pass, 0 fail, 7 skip, 2 todo.
 - `bun moon run frontend-theme:test` — 99 pass; frontend-theme lint/typecheck pass.
 - `bun moon run client:typecheck` / `client:lint` — pass.
 - `bun run --cwd apps/e2e test:unit` — 32 pass; `e2e:lint` / `e2e:typecheck` pass.
