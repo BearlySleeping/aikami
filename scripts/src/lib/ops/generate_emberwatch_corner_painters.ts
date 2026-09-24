@@ -10,6 +10,7 @@ import {
   paintCornerFrame,
   paintDirt,
   paintDirtFringe,
+  paintLanding,
   paintSand,
   paintStoneFloor,
   paintWater,
@@ -61,6 +62,12 @@ const CORNER_PAINTERS: Readonly<Record<string, CornerPainters>> = {
     overlay: paintCobble,
     fringe: paintCobble,
     seed: CORNER_TERRAIN_SEEDS.path,
+  },
+  landing: {
+    base: paintGrass,
+    overlay: paintLanding,
+    fringe: paintDirtFringe,
+    seed: CORNER_TERRAIN_SEEDS.landing,
   },
 };
 

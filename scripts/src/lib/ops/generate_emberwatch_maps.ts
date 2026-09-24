@@ -233,6 +233,22 @@ const resolveGroundCell = (options: {
   return { ground: gid, decor: gid, overhead: 0, terrain: '' };
 };
 
+const addOutdoorSemanticMappings = (options: {
+  terrainNameToId: Map<string, string>;
+  ground: readonly number[];
+}): void => {
+  const hasOutdoorBase = options.ground.some((gid) => GID_TO_NAME.get(gid) === 'grass');
+  if (!hasOutdoorBase) {
+    return;
+  }
+  for (const tile of Object.values(readManifestTiles())) {
+    const semanticTerrain = semanticTerrainForTileName(tile.name);
+    if (semanticTerrain) {
+      options.terrainNameToId.set(tile.name, semanticTerrain);
+    }
+  }
+};
+
 /**
  * Builds the runtime Tiled JSON for one map, deterministically. Exported (and
  * pure) so the map-compile-stability test can compare the builder output to the
@@ -263,12 +279,10 @@ export const buildMapJson = ({
       }
     }
   }
-  for (const tile of Object.values(readManifestTiles())) {
-    const semanticTerrain = semanticTerrainForTileName(tile.name);
-    if (semanticTerrain) {
-      terrainNameToId.set(tile.name, semanticTerrain);
-    }
-  }
+  // Interior maps intentionally have no grass base. Their stone/wood floors
+  // stay on the baked indoor/outdoor split; applying outdoor corner16 terrain
+  // here would reveal the engine's grass base around walls and thresholds.
+  addOutdoorSemanticMappings({ terrainNameToId, ground: m.ground });
   const ground: number[] = [];
   const decor: number[] = [];
   const overhead: number[] = [];

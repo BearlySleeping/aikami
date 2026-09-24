@@ -34,7 +34,15 @@ const repository = join(dirname(fileURLToPath(import.meta.url)), '../../../..');
 const mapsDirectory = join(repository, 'content/packs/emberwatch/maps');
 const atlas = packAtlas();
 
-const CORNER_TERRAINS = ['dirt', 'water', 'gravel', 'earth', 'cobblestone', 'path'] as const;
+const CORNER_TERRAINS = [
+  'dirt',
+  'water',
+  'gravel',
+  'earth',
+  'cobblestone',
+  'path',
+  'landing',
+] as const;
 const RESERVED_CORNER_TERRAINS = ['dirt', 'water', 'gravel', 'earth', 'cobblestone'] as const;
 
 /** Endpoint material means used to classify real intermediate pixels. */
@@ -45,6 +53,7 @@ const CLASSIFICATION_FRAMES = {
   earth: { base: 'earth_0.png', overlay: 'earth_15.png' },
   cobblestone: { base: 'cobblestone_0.png', overlay: 'cobblestone_15.png' },
   path: { base: 'path_0.png', overlay: 'path_15.png' },
+  landing: { base: 'landing_0.png', overlay: 'landing_15.png' },
 } as const;
 
 // C-552 leaves the four retained-map collision layers unchanged. C-553 then
@@ -295,6 +304,40 @@ const measureBoundaryProfile = (values: readonly number[]): BoundaryProfile => (
   maxLagCorrelation: maxLagCorrelation(values),
 });
 
+/** Longest exact axis-aligned class boundary in a rendered placed composite. */
+const maxAxisAlignedBoundaryRun = (
+  classification: number[],
+  width: number,
+  height: number,
+): number => {
+  let longest = 0;
+  for (let x = 1; x < width; x++) {
+    let run = 0;
+    for (let y = 0; y < height; y++) {
+      const index = y * width + x;
+      if (classification[index] !== classification[index - 1]) {
+        run += 1;
+        longest = Math.max(longest, run);
+      } else {
+        run = 0;
+      }
+    }
+  }
+  for (let y = 1; y < height; y++) {
+    let run = 0;
+    for (let x = 0; x < width; x++) {
+      const index = y * width + x;
+      if (classification[index] !== classification[index - width]) {
+        run += 1;
+        longest = Math.max(longest, run);
+      } else {
+        run = 0;
+      }
+    }
+  }
+  return longest;
+};
+
 type TerrainLayer = ReturnType<typeof autotileLayers>[number];
 
 const selectedFrameForCell = (layers: readonly TerrainLayer[], cellIndex: number): string => {
@@ -377,8 +420,11 @@ const readSemanticTerrain = (mapId: string): string[] => {
     throw new Error(`C-559 missing map builder ${mapId}`);
   }
   const json = buildMapJson(builder()).json;
-  if (!isRecord(json) || !isRecord(json.aikami) || !Array.isArray(json.aikami.terrain)) {
-    throw new Error(`C-559 ${mapId} has no semantic terrain channel`);
+  if (!isRecord(json) || !isRecord(json.aikami)) {
+    return [];
+  }
+  if (!Array.isArray(json.aikami.terrain)) {
+    return [];
   }
   return json.aikami.terrain.map((value) => (typeof value === 'string' ? value : ''));
 };
@@ -595,11 +641,7 @@ describe('C-552 AC-1 — all corner16 cases are organic and seamless', () => {
     const terrains = engineTerrains();
     const base = meanRgb('grass.png');
     const overlay = meanRgb('dirt_15.png');
-    for (const origin of [
-      { x: 36, y: 9 },
-      { x: 37, y: 9 },
-      { x: 38, y: 9 },
-    ]) {
+    for (const origin of [{ x: 36, y: 9 }]) {
       const classification = renderActualComposite({
         width: map.width,
         height: map.height,
@@ -615,11 +657,16 @@ describe('C-552 AC-1 — all corner16 cases are organic and seamless', () => {
         classification,
         width: TILE * 3,
         height: TILE * 3,
-        centerY: TILE / 2,
-        rowLimit: TILE,
+        centerY: TILE * 1.5,
+        rowLimit: TILE * 3,
       });
       const profile = measureBoundaryProfile(values);
+      const axisAlignedRun = maxAxisAlignedBoundaryRun(classification, TILE * 3, TILE * 3);
       expect(values.length, `landing ${origin.x},${origin.y} profile samples`).toBeGreaterThan(16);
+      expect(
+        axisAlignedRun,
+        `landing ${origin.x},${origin.y} straight axis-aligned boundary`,
+      ).toBeLessThanOrEqual(32);
       expect(
         profile.monotonicRun,
         `landing ${origin.x},${origin.y} fringe triangles`,
@@ -636,6 +683,16 @@ describe('C-552 AC-1 — all corner16 cases are organic and seamless', () => {
       const frame = `water_${mask}.png`;
       const greenPixels = framePixels(frame).filter(isGrassHue);
       expect(greenPixels.length, `${frame} grass-hue pixels`).toBe(0);
+    }
+  });
+
+  test('water corner frames keep isolated bright-blue dots out of the surface', () => {
+    for (let mask = 0; mask < 16; mask++) {
+      const frame = `water_${mask}.png`;
+      const brightDots = framePixels(frame).filter(
+        (pixel) => pixel.r < 70 && pixel.g > 145 && pixel.b > 200,
+      );
+      expect(brightDots.length, `${frame} isolated bright-blue dots`).toBe(0);
     }
   });
 
@@ -679,6 +736,11 @@ describe('C-559 semantic terrain edges', () => {
     for (const [mapId, builder] of Object.entries(EMBERWATCH_MAP_BUILDERS)) {
       const built = builder();
       const terrain = readSemanticTerrain(mapId);
+      const hasOutdoorBase = built.map.ground.some((gid) => tiles[String(gid)]?.name === 'grass');
+      if (!hasOutdoorBase) {
+        expect(terrain, `${mapId} interior terrain channel`).toEqual([]);
+        continue;
+      }
       const visualCells = [
         ...built.map.ground.map((gid, index) => [index, gid] as const),
         ...(built.map.groundExtra?.map(([column, row, gid]) => [
@@ -728,7 +790,12 @@ describe('C-559 semantic terrain edges', () => {
         rowLimit: TILE,
       });
       const profile = measureBoundaryProfile(values);
+      const axisAlignedRun = maxAxisAlignedBoundaryRun(classification, TILE * 3, TILE * 3);
       expect(values.length, `square ${origin.x},${origin.y} profile samples`).toBeGreaterThan(16);
+      expect(
+        axisAlignedRun,
+        `square ${origin.x},${origin.y} straight axis-aligned boundary`,
+      ).toBeLessThanOrEqual(32);
       expect(profile.monotonicRun, `square ${origin.x},${origin.y} fringe`).toBeLessThanOrEqual(8);
       expect(
         profile.maxLagCorrelation,

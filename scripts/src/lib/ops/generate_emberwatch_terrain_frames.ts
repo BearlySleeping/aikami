@@ -59,6 +59,11 @@ export const paintDirt: TerrainPaint = (col, row) => {
   }
 };
 
+/** Tiled landing material stays flat at cell seams so adjacent masks cannot form a line. */
+export const paintLanding: TerrainPaint = (col, row) => {
+  fillCell(col, row, 138, 90, 51);
+};
+
 /** Low-contrast dirt fringe keeps the grass/dirt handoff soft at cell scale. */
 export const paintDirtFringe: TerrainPaint = (col, row) => {
   fillCell(col, row, 106, 116, 55);
@@ -274,16 +279,12 @@ export const paintInteriorFlagstone: TerrainPaint = (col, row) => {
 /** Blue water material shared by the standalone and corner16 frames. */
 export const paintWater: TerrainPaint = (col, row) => {
   fillCell(col, row, 46, 111, 176);
-  const rng = makeRng(0x5be0cd19);
-  for (let index = 0; index < 30; index++) {
-    const x = Math.floor(rng() * TILE);
-    const y = Math.floor(rng() * TILE);
-    const color = rng() < 0.5 ? ([63, 132, 196] as const) : ([39, 97, 156] as const);
-    setPx(col * TILE + x, row * TILE + y, color[0], color[1], color[2]);
-  }
+  // Keep the water read as a continuous surface with short ripple marks. Do
+  // not add isolated bright pixels: at bridge scale they read as blue polka
+  // dots rather than water.
   for (let y = 4; y < TILE; y += 8) {
     for (let x = 2; x < TILE - 4; x += 3) {
-      setPx(col * TILE + x, row * TILE + y, 82, 158, 214);
+      setPx(col * TILE + x, row * TILE + y, 58, 128, 188);
     }
   }
 };
@@ -329,6 +330,7 @@ export const CORNER_TERRAIN_SEEDS = {
   earth: 120,
   cobblestone: 128,
   path: 131,
+  landing: 137,
 } as const;
 
 const isOuterEdge = (x: number, y: number): boolean =>
@@ -401,8 +403,7 @@ const diagonalCornerField = (options: {
     18.5 +
     1.6 * Math.sin(distanceFromMissingCorner * 0.23 + seed * 0.047) +
     1.0 * Math.sin((px - py) * 0.17 - seed * 0.031) +
-    0.6 * Math.sin(distanceFromMissingCorner * 0.61 + seed * 0.019) +
-    0.45 * Math.sin(distanceFromMissingCorner * 1.13 - seed * 0.023);
+    0.6 * Math.sin(distanceFromMissingCorner * 0.61 + seed * 0.019);
   return distanceFromMissingCorner - boundary + 2.4;
 };
 
@@ -429,8 +430,7 @@ const adjacentCornerField = (options: {
     15.5 +
     1.4 * Math.sin(along * 0.29 + seed * 0.071) +
     1.0 * Math.sin(along * 0.17 - seed * 0.113) +
-    0.5 * Math.sin(along * 0.73 + seed * 0.037) +
-    0.45 * Math.sin(along * 1.19 + seed * 0.029);
+    0.5 * Math.sin(along * 0.73 + seed * 0.037);
   if (mask === 3) {
     return boundary - py + 2.4;
   }

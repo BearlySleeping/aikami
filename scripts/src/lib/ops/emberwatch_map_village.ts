@@ -357,8 +357,11 @@ const paintNoticeBoardApproach = (m: MapData): void => {
   // Reassert the authored trunk after the symmetric bank pass.
   fillRect(m, 39, 9, 40, 22, G.DIRT);
   fillRect(m, 36, 9, 38, 9, G.DIRT);
-  setTile(m, 36, 10, G.DIRT);
-  fillRect(m, 38, 10, 40, 10, G.DIRT);
+  fillRect(m, 36, 10, 40, 10, G.DIRT);
+  fillRect(m, 37, 11, 39, 11, G.DIRT);
+  fillRect(m, 38, 12, 40, 12, G.DIRT);
+  fillRect(m, 39, 13, 40, 13, G.DIRT);
+  setTile(m, 40, 11, G.GRASS);
   fillRect(m, 36, 5, 38, 5, G.DIRT); // short worn landing below the board
   fillRect(m, 36, 6, 38, 6, G.DIRT); // north landing → board walk
 };
@@ -602,6 +605,28 @@ export const buildVillage = (): { map: MapData; objectLayers: MapObjectLayer[] }
   scatter(m, rng, 26, 19, 39, 28, G.DIRT, G.FLAGSTONE, 0.14);
 
   reassertContainment(m);
+  // Two landing cells use a dedicated dirt transition family so adjacent
+  // corner masks do not repeat a full 32 px edge at the crossing approach.
+  m.terrainOverrides = [
+    [36, 9, 'landing'],
+    [37, 9, 'landing'],
+    [38, 9, 'landing'],
+    [39, 9, 'landing'],
+    [40, 9, 'landing'],
+    [36, 10, 'landing'],
+    [37, 10, 'landing'],
+    [38, 10, 'landing'],
+    [39, 10, 'landing'],
+    [40, 10, 'landing'],
+    [37, 11, 'landing'],
+    [38, 11, 'landing'],
+    [39, 11, 'landing'],
+    [38, 12, 'landing'],
+    [39, 12, 'landing'],
+    [40, 12, 'landing'],
+    [39, 13, 'landing'],
+    [40, 13, 'landing'],
+  ];
 
   const objectLayers: MapObjectLayer[] = [
     {

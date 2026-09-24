@@ -27,7 +27,7 @@ import { fileURLToPath } from 'node:url';
  */
 export const ATLAS_COLS = 16;
 // C-546 grew 8→10 for bridge frames; C-553 grows 10→11 for house frames;
-// C-559 grows 11→13 for the append-only pinned path transition family. Existing
+// C-559 grows 11→13 for append-only pinned path and landing families. Existing
 // GIDs and the original corner16 terrain block never move.
 export const ATLAS_ROWS = 13;
 export const ATLAS_TILE_SIZE = 32;

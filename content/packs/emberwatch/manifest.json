@@ -73,6 +73,13 @@
       "wang": "corner16",
       "frameBase": "path_0.png",
       "isWalkable": true
+    },
+    {
+      "name": "landing",
+      "precedence": 7,
+      "wang": "corner16",
+      "frameBase": "landing_0.png",
+      "isWalkable": true
     }
   ],
   "tiles": {
@@ -1070,6 +1077,150 @@
     "192": {
       "name": "path_15",
       "frame": "path_15.png",
+      "isWalkable": true,
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
+    },
+    "193": {
+      "name": "landing_0",
+      "frame": "landing_0.png",
+      "isWalkable": true,
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
+    },
+    "194": {
+      "name": "landing_1",
+      "frame": "landing_1.png",
+      "isWalkable": true,
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
+    },
+    "195": {
+      "name": "landing_2",
+      "frame": "landing_2.png",
+      "isWalkable": true,
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
+    },
+    "196": {
+      "name": "landing_3",
+      "frame": "landing_3.png",
+      "isWalkable": true,
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
+    },
+    "197": {
+      "name": "landing_4",
+      "frame": "landing_4.png",
+      "isWalkable": true,
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
+    },
+    "198": {
+      "name": "landing_5",
+      "frame": "landing_5.png",
+      "isWalkable": true,
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
+    },
+    "199": {
+      "name": "landing_6",
+      "frame": "landing_6.png",
+      "isWalkable": true,
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
+    },
+    "200": {
+      "name": "landing_7",
+      "frame": "landing_7.png",
+      "isWalkable": true,
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
+    },
+    "201": {
+      "name": "landing_8",
+      "frame": "landing_8.png",
+      "isWalkable": true,
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
+    },
+    "202": {
+      "name": "landing_9",
+      "frame": "landing_9.png",
+      "isWalkable": true,
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
+    },
+    "203": {
+      "name": "landing_10",
+      "frame": "landing_10.png",
+      "isWalkable": true,
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
+    },
+    "204": {
+      "name": "landing_11",
+      "frame": "landing_11.png",
+      "isWalkable": true,
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
+    },
+    "205": {
+      "name": "landing_12",
+      "frame": "landing_12.png",
+      "isWalkable": true,
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
+    },
+    "206": {
+      "name": "landing_13",
+      "frame": "landing_13.png",
+      "isWalkable": true,
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
+    },
+    "207": {
+      "name": "landing_14",
+      "frame": "landing_14.png",
+      "isWalkable": true,
+      "isWall": false,
+      "provenance": {
+        "source": "generated:gpt"
+      }
+    },
+    "208": {
+      "name": "landing_15",
+      "frame": "landing_15.png",
       "isWalkable": true,
       "isWall": false,
       "provenance": {
