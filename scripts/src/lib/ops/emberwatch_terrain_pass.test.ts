@@ -9,7 +9,10 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { autotileLayers } from '../../../../packages/frontend/engine/src/assets/autotile.ts';
+import {
+  autotileLayers,
+  resolveTerrainGrid,
+} from '../../../../packages/frontend/engine/src/assets/autotile.ts';
 import { G } from './emberwatch_authoring.ts';
 import { packAtlas } from './generate_emberwatch_atlas.ts';
 import { EMBERWATCH_MAP_BUILDERS } from './generate_emberwatch_maps.ts';
@@ -21,10 +24,6 @@ import {
   readManifestTerrains,
   readManifestTiles,
 } from './generate_emberwatch_tables.ts';
-import {
-  CORNER_TERRAIN_SEEDS,
-  cornerCoverageForPixel,
-} from './generate_emberwatch_terrain_frames.ts';
 
 const TILE = ATLAS_TILE_SIZE;
 const repository = join(dirname(fileURLToPath(import.meta.url)), '../../../..');
@@ -88,6 +87,12 @@ const measureGrassTufts = (options: {
   terrain: string[];
   terrains: ReturnType<typeof engineTerrains>;
 }): GrassTuftMetrics => {
+  const resolved = resolveTerrainGrid({
+    width: options.width,
+    height: options.height,
+    terrain: options.terrain,
+    terrains: options.terrains,
+  });
   const layers = autotileLayers({
     width: options.width,
     height: options.height,
@@ -102,8 +107,7 @@ const measureGrassTufts = (options: {
   let tufts = 0;
   let contaminated = 0;
   for (let index = 0; index < options.terrain.length; index++) {
-    const isGrass = options.terrain[index] === 'grass';
-    if (isGrass) {
+    if (resolved.cells[index] === 0) {
       eligible += 1;
       if (base.frames[index] === 'grass_variant.png') {
         tufts += 1;
@@ -348,20 +352,12 @@ const measureSeamStats = (terrain: (typeof CORNER_TERRAINS)[number]): SeamStats 
 describe('C-552 AC-1 — all corner16 cases are organic and seamless', () => {
   for (const terrain of CORNER_TERRAINS) {
     test(`${terrain} has no straight 45-degree boundary run longer than 4 px`, () => {
-      const seed = CORNER_TERRAIN_SEEDS[terrain];
+      const palette = CLASSIFICATION_FRAMES[terrain];
+      const base = meanRgb(palette.base);
+      const overlay = meanRgb(palette.overlay);
       const runs: number[] = [];
       for (let mask = 1; mask < 15; mask++) {
-        const coverage = Array.from({ length: TILE * TILE }, (_, index) =>
-          cornerCoverageForPixel({
-            mask,
-            x: index % TILE,
-            y: Math.floor(index / TILE),
-            seed,
-          }) >= 0.5
-            ? 1
-            : 0,
-        );
-        runs.push(longestDiagonalRun(coverage));
+        runs.push(longestDiagonalRun(classifyPixels(`${terrain}_${mask}.png`, base, overlay)));
       }
       expect(Math.max(...runs), `${terrain} diagonal runs ${runs.join(',')}`).toBeLessThanOrEqual(
         4,

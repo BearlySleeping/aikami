@@ -379,14 +379,13 @@ export const pickFillVariant = (
 };
 
 const pickBaseFrame = (options: {
-  terrain: string;
-  baseName: string;
+  isBaseCell: boolean;
   variants: readonly string[];
   frameBase: string;
   x: number;
   y: number;
 }): string => {
-  if (options.terrain !== options.baseName) {
+  if (!options.isBaseCell) {
     return options.frameBase;
   }
   return pickFillVariant(options.variants, options.frameBase, options.x, options.y);
@@ -438,8 +437,7 @@ export const autotileLayers = (options: AutotileOptions): TerrainLayerEmission[]
       for (let x = 0; x < width; x++) {
         const cellIndex = y * width + x;
         frames[cellIndex] = pickBaseFrame({
-          terrain: terrain[cellIndex],
-          baseName: base.name,
+          isBaseCell: cells[cellIndex] === 0,
           variants: base.variants ?? [],
           frameBase: base.frameBase,
           x,

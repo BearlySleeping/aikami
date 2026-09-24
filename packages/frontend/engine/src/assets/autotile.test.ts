@@ -270,6 +270,20 @@ describe('autotileLayers — layered precedence emission (AC-3)', () => {
     expect(base.frames.every((f) => typeof f === 'string')).toBe(true);
   });
 
+  test('uses base variants for terrain IDs that resolve to the base cell', () => {
+    const layers = autotileLayers({
+      width: 1,
+      height: 6,
+      terrain: ['grass', 'dirt', 'grass', 'grass', 'not_a_terrain', ''],
+      terrains: [{ ...GRASS, variants: ['grass_variant.png', 'grass_dark.png'] }, DIRT, WATER],
+    });
+    const base = layers[0];
+
+    expect(base.frames[1]).toBe('grass.png');
+    expect(base.frames[4]).toBe('grass_dark.png');
+    expect(base.frames[5]).toBe('grass_dark.png');
+  });
+
   test('dirt overlay emits only dirt cells, each with its corner mask frame', () => {
     // 3×3: center dirt, everything else grass. Center's corners all owned
     // by dirt (no higher terrain) → mask 15 → dirt_15.png.
