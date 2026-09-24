@@ -22,9 +22,9 @@
     "@aikami/types": "workspace:*",
     "@aikami/utils": "workspace:*",
     "@aikami/backend-database": "workspace:*",
-    "drizzle-orm": "^0.45.2"
+    "drizzle-orm": "0.45.3"
   },
   "devDependencies": {
-    "wrangler": "4.135.0"
+    "wrangler": "4.136.2"
   }
 }

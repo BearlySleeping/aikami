@@ -11,10 +11,10 @@
     "db:generate": "drizzle-kit generate"
   },
   "dependencies": {
-    "drizzle-orm": "^0.45.2"
+    "drizzle-orm": "0.45.3"
   },
   "devDependencies": {
     "@libsql/client": "0.18.0",
-    "drizzle-kit": "^0.31.10"
+    "drizzle-kit": "0.31.11"
   }
 }

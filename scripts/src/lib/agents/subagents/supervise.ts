@@ -1,0 +1,309 @@
+// scripts/src/lib/agents/subagents/supervise.ts
+//
+// The supervisor: one process per subagent round. It runs `pi --mode json`
+// as a CHILD (so completion is the exact exit code, never a scraped pane
+// status), streams a readable log to its own stdout (the herdr tab), folds
+// events into state.json, and — for write agents — publishes the PR and runs
+// the CodeRabbit loop after pi exits.
+//
+// 🔴 Why JSON mode and not an interactive TUI in the pane: the contract
+// pipeline learned the hard way that PTY keystroke injection and agent-status
+// scraping are unreliable. A child process with a pipe is not.
+
+import { spawn } from 'node:child_process';
+import { appendFileSync } from 'node:fs';
+import { runGit } from '../git_worktree.ts';
+import { parseLine, reduceEvent, type StreamState } from './events.ts';
+import { publishRun } from './publish.ts';
+import { patchState, readSpec, readState, readText, runFile, writeText } from './store.ts';
+import type { SubagentSpec, SubagentState } from './types.ts';
+
+const STATE_FLUSH_MS = 2_000;
+const SUMMARY_CHARS = 400;
+
+/** Tools no subagent gets by default: recursion, pane control, releases. */
+const ALWAYS_EXCLUDED = ['subagent', 'herdr', 'gh_workflow', 'gh_release', 'task_pr', 'contract'];
+/** Extra exclusions for read agents: anything that mutates files or GitHub. */
+const READ_EXCLUDED = [
+  'edit',
+  'write',
+  'edit_lines',
+  'gh_pr',
+  'gh_issue',
+  'code_rabbit',
+  'herdr_session',
+];
+/** Write agents never open PRs themselves — the supervisor does. */
+const WRITE_EXCLUDED = ['gh_pr', 'code_rabbit', 'herdr_session'];
+
+export const buildPiArgs = (options: {
+  spec: SubagentSpec;
+  sessionId: string;
+  task: string;
+}): string[] => {
+  const { spec } = options;
+  const args = ['--mode', 'json', '--approve', '--model', spec.model];
+  if (spec.thinking) {
+    args.push('--thinking', spec.thinking);
+  }
+  // `--session-id` creates the session on round 1 and resumes it on follow-ups.
+  args.push('--session-id', options.sessionId);
+  args.push('--append-system-prompt', runFile(spec.repoRoot, spec.id, 'prompt.md'));
+  if (spec.noSkillDiscovery) {
+    args.push('--no-skills');
+  }
+  if (spec.tools && spec.tools.length > 0) {
+    args.push('--tools', spec.tools.join(','));
+  } else {
+    const excluded = new Set([
+      ...ALWAYS_EXCLUDED,
+      ...(spec.kind === 'read' ? READ_EXCLUDED : WRITE_EXCLUDED),
+      ...spec.excludeTools,
+    ]);
+    args.push('--exclude-tools', [...excluded].join(','));
+  }
+  args.push('-p', options.task);
+  return args;
+};
+
+const porcelain = (cwd: string): Set<string> => {
+  try {
+    return new Set(runGit('status --porcelain', { cwd }).split('\n').filter(Boolean));
+  } catch {
+    return new Set();
+  }
+};
+
+/**
+ * Mirror lifecycle into herdr's sidebar (working/idle + message) so a human
+ * scanning workspaces sees subagent progress. Fire-and-forget, best effort.
+ */
+const reportPane = (
+  paneId: string | undefined,
+  state: 'working' | 'idle',
+  message?: string,
+): void => {
+  if (!paneId) {
+    return;
+  }
+  const args = [
+    'pane',
+    'report-agent',
+    '--source',
+    'aikami-subagent',
+    '--agent',
+    'pi',
+    '--state',
+    state,
+  ];
+  if (message) {
+    args.push('--message', message.slice(0, 120));
+  }
+  try {
+    spawn('herdr', [...args, paneId], { stdio: 'ignore' })
+      .on('error', () => undefined)
+      .unref();
+  } catch {
+    // herdr absent — nothing to mirror into.
+  }
+};
+
+const print = (line: string): void => {
+  process.stdout.write(`${line}\n`);
+};
+
+const runPi = (options: {
+  spec: SubagentSpec;
+  state: SubagentState;
+  cwd: string;
+  task: string;
+}): Promise<{ code: number | null; stream: StreamState; timedOut: boolean }> => {
+  const { spec } = options;
+  const sessionId = options.state.piSessionId ?? crypto.randomUUID();
+  const args = buildPiArgs({ spec, sessionId, task: options.task });
+  const eventsPath = runFile(spec.repoRoot, spec.id, 'events.jsonl');
+
+  const child = spawn('pi', args, {
+    cwd: options.cwd,
+    stdio: ['ignore', 'pipe', 'pipe'],
+    env: {
+      ...process.env,
+      SUBAGENT_ID: spec.id,
+      SUBAGENT_DEPTH: String(Number(process.env.SUBAGENT_DEPTH ?? '0') + 1),
+      HERDR_DISABLE_SOUND: '1',
+    },
+  });
+  patchState(spec.repoRoot, spec.id, {
+    piPid: child.pid,
+    piSessionId: sessionId,
+    status: 'running',
+  });
+
+  let stream: StreamState = { usage: options.state.usage, lastText: '' };
+  let dirty = false;
+  const flush = (): void => {
+    if (dirty) {
+      dirty = false;
+      patchState(spec.repoRoot, spec.id, { usage: stream.usage, activity: stream.activity });
+      reportPane(options.state.paneId, 'working', stream.activity);
+    }
+  };
+  const flusher = setInterval(flush, STATE_FLUSH_MS);
+
+  let buffer = '';
+  child.stdout.on('data', (chunk: Buffer) => {
+    const text = chunk.toString('utf8');
+    appendFileSync(eventsPath, text);
+    buffer += text;
+    const lines = buffer.split('\n');
+    buffer = lines.pop() ?? '';
+    for (const line of lines) {
+      const { state: next, log } = reduceEvent(stream, parseLine(line));
+      stream = next;
+      dirty = true;
+      if (log) {
+        print(log);
+      }
+    }
+  });
+  child.stderr.on('data', (chunk: Buffer) => {
+    const text = chunk.toString('utf8');
+    if (!/No models match pattern/.test(text)) {
+      process.stderr.write(text);
+    }
+  });
+
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    child.kill('SIGTERM');
+    setTimeout(() => child.kill('SIGKILL'), 10_000).unref();
+  }, spec.timeoutMs);
+
+  // Forward a kill of the supervisor to pi, then let the exit handler record it.
+  const forward = (): void => {
+    child.kill('SIGTERM');
+  };
+  process.once('SIGTERM', forward);
+  process.once('SIGINT', forward);
+
+  return new Promise((resolve) => {
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      clearInterval(flusher);
+      if (buffer) {
+        stream = reduceEvent(stream, parseLine(buffer)).state;
+      }
+      flush();
+      resolve({ code, stream, timedOut });
+    });
+  });
+};
+
+const finish = (spec: SubagentSpec, patch: Partial<SubagentState>): SubagentState => {
+  const next = patchState(spec.repoRoot, spec.id, {
+    ...patch,
+    finishedAt: new Date().toISOString(),
+  });
+  reportPane(next.paneId, 'idle', `${next.status}${next.error ? `: ${next.error}` : ''}`);
+  return next;
+};
+
+type PiOutcome = Awaited<ReturnType<typeof runPi>>;
+
+/** Failure reason for a finished pi run, or undefined when it succeeded. */
+const failureOf = (spec: SubagentSpec, outcome: PiOutcome): string | undefined => {
+  if (outcome.timedOut) {
+    return `timed out after ${Math.round(spec.timeoutMs / 60_000)} min`;
+  }
+  if (outcome.stream.errored) {
+    return outcome.stream.errored;
+  }
+  if (outcome.code !== 0) {
+    return `pi exited with code ${outcome.code}`;
+  }
+  return outcome.stream.lastText ? undefined : 'no final answer';
+};
+
+/** Publish a write agent's work; returns an error message on failure. */
+const publishIfWanted = async (
+  spec: SubagentSpec,
+  checkoutPath: string | undefined,
+  result: string,
+): Promise<string | undefined> => {
+  if (spec.kind !== 'write' || !spec.pr.enabled || !checkoutPath) {
+    return undefined;
+  }
+  try {
+    await publishRun({
+      spec,
+      checkoutPath,
+      result,
+      report: (line) => {
+        print(`  ◆ ${line}`);
+        patchState(spec.repoRoot, spec.id, { activity: line });
+      },
+    });
+    return undefined;
+  } catch (error) {
+    return `publish failed: ${error instanceof Error ? error.message : String(error)}`;
+  }
+};
+
+const begin = (spec: SubagentSpec, initial: SubagentState, cwd: string, task: string): void => {
+  patchState(spec.repoRoot, spec.id, {
+    supervisorPid: process.pid,
+    status: 'starting',
+    startedAt: initial.startedAt ?? new Date().toISOString(),
+    finishedAt: undefined,
+    error: undefined,
+  });
+  print(`━━ subagent ${spec.id} (${spec.kind}) ━━`);
+  print(`model ${spec.model}${spec.thinking ? `:${spec.thinking}` : ''} · cwd ${cwd}`);
+  print(`task: ${task.split('\n')[0]?.slice(0, 160) ?? ''}\n`);
+};
+
+export const supervise = async (options: { repoRoot: string; id: string }): Promise<number> => {
+  const spec = readSpec(options.repoRoot, options.id);
+  const initial = readState(options.repoRoot, options.id);
+  if (!spec || !initial) {
+    print(`❌ Unknown subagent ${options.id}`);
+    return 1;
+  }
+  const cwd = initial.checkoutPath ?? spec.repoRoot;
+  const task = readText(runFile(spec.repoRoot, spec.id, 'task.md')) ?? spec.task;
+  begin(spec, initial, cwd, task);
+
+  const before = spec.kind === 'read' ? porcelain(spec.repoRoot) : undefined;
+  const outcome = await runPi({ spec, state: initial, cwd, task });
+  const after = readState(spec.repoRoot, spec.id);
+
+  const result = outcome.stream.lastText || '(the subagent produced no final text)';
+  writeText(runFile(spec.repoRoot, spec.id, 'result.md'), `${result}\n`);
+  const base: Partial<SubagentState> = {
+    exitCode: outcome.code,
+    summary: result.slice(0, SUMMARY_CHARS),
+    rounds: (after?.rounds ?? 0) + 1,
+    strayWrites: before ? [...porcelain(spec.repoRoot)].filter((l) => !before.has(l)) : undefined,
+  };
+
+  if (after?.status === 'killed') {
+    print('\n🛑 killed');
+    finish(spec, base);
+    return 1;
+  }
+  // Record the result before publishing so the captain can read it early.
+  patchState(spec.repoRoot, spec.id, base);
+  const error =
+    failureOf(spec, outcome) ?? (await publishIfWanted(spec, initial.checkoutPath, result));
+  if (error) {
+    print(`\n❌ ${error}`);
+    finish(spec, { status: 'failed', error });
+    return 1;
+  }
+  print(
+    `\n✅ done · ${outcome.stream.usage.turns} turns · $${outcome.stream.usage.cost.toFixed(4)}`,
+  );
+  finish(spec, { status: 'succeeded' });
+  return 0;
+};

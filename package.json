@@ -58,6 +58,7 @@
     "workspace:cleanup": "bun run scripts/src/lib/ops/workspace_cleanup.ts",
     "herdr:pi": "bun run scripts/src/lib/herdr/start_pi.ts",
     "herdr:task": "bun run scripts/src/lib/herdr/task.ts",
+    "subagent": "bun run scripts/src/lib/agents/subagents/cli.ts",
     "worktree:bootstrap": "bun run scripts/src/lib/herdr/worktree_bootstrap.ts",
     "scout": "bun run scripts/src/lib/agents/scout/run.ts",
     "guru": "bun run scripts/src/lib/agents/guru/run.ts",
@@ -122,7 +123,7 @@
     "@google-cloud/secret-manager": "7.1.0",
     "@moonrepo/cli": "2.5.5",
     "@types/bun": "1.4.2",
-    "@types/node": "26.6.1",
+    "@types/node": "26.6.2",
     "@typescript/native-preview": "7.0.0-dev.20260707.2",
     "syncpack": "15.3.3",
     "typescript": "6.0.3"

@@ -28,11 +28,11 @@
     "discord-api-types": "0.38.55"
   },
   "devDependencies": {
-    "cf": "0.10.0",
+    "cf": "0.11.0",
     "jiti": "2.7.0",
     "png-to-ico": "3.0.2",
     "sharp": "0.35.4",
     "typescript": "6.0.3",
-    "wrangler": "4.135.0"
+    "wrangler": "4.136.2"
   }
 }
