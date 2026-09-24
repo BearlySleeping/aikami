@@ -11,7 +11,7 @@ const { viewModel }: Props = $props();
 </script>
 <BaseViewModelContainer {viewModel}>
   <div
-    class="game-pause-scrim pointer-events-auto absolute inset-0 z-20 flex items-center justify-center"
+    class="game-pause-scrim pointer-events-auto absolute inset-0 z-[60] flex items-center justify-center"
     role="dialog"
     aria-modal="true"
     aria-label="Pause Menu"
