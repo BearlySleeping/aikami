@@ -27,7 +27,7 @@ created_at: "2026-09-24T19:07:22+02:00"
 | **Promotion** | — |
 | **Docs Impact** | internal → contract and execution report only. |
 | **Contract version** | 1.0.0 |
-| **Production Surface** | `tooling: bun run emberwatch:release --mode staging|production --plan`; CLI behavior is unchanged. |
+| **Production Surface** | `tooling: bun run emberwatch:release --mode staging\|production --plan`; CLI behavior is unchanged. |
 
 ## Problem & Baseline Evidence
 

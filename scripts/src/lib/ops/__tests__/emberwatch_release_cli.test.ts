@@ -45,9 +45,10 @@ import { RELEASE_PLANE_ENV } from '../emberwatch_release_io.ts';
 const REPOSITORY = join(import.meta.dir, '../../../../..');
 const CLI = 'scripts/src/lib/ops/emberwatch_release.ts';
 
-// The real CLI was 4.27s in the isolated baseline and crossed Bun's 5s default
-// at 5.01s under the full scripts suite. These are deliberately subprocess
-// tests, so budget for loaded CI while keeping a runaway process bounded.
+// The real CLI cases now measure ~0.2–0.3s. The original isolated baseline
+// was 4.27s and crossed Bun's 5s default at 5.01s under the full scripts suite.
+// These are deliberately subprocess tests, so budget for loaded CI while
+// keeping a runaway process bounded.
 const SUBPROCESS_TEST_TIMEOUT_MS = 30_000;
 
 type CliRun = { status: number | null; output: string };
@@ -144,7 +145,7 @@ const runCli = (args: string[]): CliRun => {
   const result = spawnSync('bun', [CLI, ...args], {
     cwd: REPOSITORY,
     encoding: 'utf8',
-    timeout: 180_000,
+    timeout: SUBPROCESS_TEST_TIMEOUT_MS,
     env,
   });
   return { status: result.status, output: `${result.stdout ?? ''}${result.stderr ?? ''}` };
