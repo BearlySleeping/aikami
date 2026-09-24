@@ -3,8 +3,10 @@
 // Inventory selection and role projections for the production task surface
 // (C-551). Domain inventory/equipment operations remain in the ViewModel.
 
+import { LpcAnimationState } from '@aikami/lpc';
 import type { EquipmentSlot, ItemDefinition } from '@aikami/types';
-import { getItemDefinition } from '$utils/inventory_utils';
+import { getLpcAssetPath } from '$lib/data/lpc_asset_catalog';
+import { getItemCategoryIcon, getItemDefinition } from '$utils/inventory_utils';
 
 /** Minimal ViewModel data the selected-item projection reads. */
 export type InventoryPresentationSource = {
@@ -17,6 +19,8 @@ export type InventorySelectedItem = {
   readonly itemId: string;
   readonly quantity: number;
   readonly label: string;
+  readonly artUrl: string | undefined;
+  readonly fallbackIcon: string;
   readonly definition: ItemDefinition;
   readonly compareLabel: string | undefined;
   readonly isEquippable: boolean;
@@ -27,7 +31,8 @@ export type InventorySelectedItem = {
 export type InventoryPresentationState = {
   readonly selectedItemId: string | undefined;
   readonly selectedItem: InventorySelectedItem | undefined;
-  readonly selectedItemInitial: string;
+  readonly selectedItemIcon: string;
+  readonly selectedItemArtUrl: string | undefined;
   readonly detailEmptyHint: string;
   selectItem(itemId: string): void;
   isSelected(itemId: string): boolean;
@@ -68,6 +73,10 @@ export const createInventoryPresentationState = (
       itemId: entry.itemId,
       quantity: entry.quantity,
       label: definition.label,
+      artUrl: definition.lpcAssetId
+        ? (getLpcAssetPath('', definition.lpcAssetId, LpcAnimationState.Walk) ?? undefined)
+        : undefined,
+      fallbackIcon: getItemCategoryIcon(definition.itemType),
       definition,
       compareLabel: source.getCompareLabel(entry.itemId),
       isEquippable: definition.equippable,
@@ -82,8 +91,11 @@ export const createInventoryPresentationState = (
     get selectedItem(): InventorySelectedItem | undefined {
       return selectedItem();
     },
-    get selectedItemInitial(): string {
-      return selectedItem()?.label.charAt(0) ?? '';
+    get selectedItemIcon(): string {
+      return selectedItem()?.fallbackIcon ?? '';
+    },
+    get selectedItemArtUrl(): string | undefined {
+      return selectedItem()?.artUrl;
     },
     get detailEmptyHint(): string {
       return source.items.length > 0

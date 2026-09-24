@@ -14,6 +14,7 @@ import { getComponent } from 'bitecs';
 import { isSimulationActive } from '../components/engine_state.ts';
 import { Position, type PositionData } from '../components/position.ts';
 import type { EngineBridge } from '../engine_bridge.ts';
+import { projectWorldPointToScreen } from './camera_system.ts';
 import { type InteractionTarget, selectInteractionTarget } from './interaction_target_selector.ts';
 
 // ---------------------------------------------------------------------------
@@ -93,11 +94,19 @@ export const updateInteractionProximity = (options: {
   currentTarget = newTarget;
 
   if (newTarget) {
+    const targetPosition = getComponent(world, newTarget.entityId, Position) as
+      | PositionData
+      | undefined;
+    const screenPosition = targetPosition
+      ? projectWorldPointToScreen(targetPosition.x, targetPosition.y)
+      : undefined;
     bridge.emit({
       type: 'INTERACTION_TARGET_CHANGED',
       targetEntityId: newTarget.entityId,
       targetType: newTarget.targetType,
       targetName: newTarget.targetName,
+      targetScreenX: screenPosition?.x,
+      targetScreenY: screenPosition?.y,
     });
   } else {
     bridge.emit({

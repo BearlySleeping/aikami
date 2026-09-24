@@ -174,6 +174,18 @@ export const setScreenSize = (options: { width: number; height: number; scale?: 
 export const getCameraPosition = (): { x: number; y: number } => ({ x: cameraX, y: cameraY });
 
 /**
+ * Projects a world-space point into the current CSS-pixel viewport.
+ * Interaction prompts use this instead of a detached screen anchor.
+ */
+export const projectWorldPointToScreen = (x: number, y: number): { x: number; y: number } => {
+  const effectiveScale = currentWorldScale * currentZoom;
+  return {
+    x: (x - cameraX) * effectiveScale + screenWidth / 2,
+    y: (y - cameraY) * effectiveScale + screenHeight / 2,
+  };
+};
+
+/**
  * Returns the current camera zoom factor (lerped).
  *
  * Called by the worker to include in STATE_UPDATE for the main thread

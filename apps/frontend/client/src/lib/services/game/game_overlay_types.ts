@@ -196,12 +196,19 @@ export type GameOverlayServiceInterface = BaseFrontendClassInterface & {
   readonly interactionPromptLabel: string;
   /** Whether the interaction prompt is visible (C-327 AC-2). */
   readonly interactionPromptVisible: boolean;
+  /** Target-relative CSS-pixel position for the interaction prompt. */
+  readonly interactionPromptScreenX: number | undefined;
+  readonly interactionPromptScreenY: number | undefined;
   /** Sets the interaction prompt state (called by bridge_listeners). */
   setInteractionPrompt(options: {
     label: string;
     visible: boolean;
     targetMetadata?: { verb: string; targetName: string };
+    targetScreenX?: number;
+    targetScreenY?: number;
   }): void;
+  /** Test/evidence seam: runs the real autosave transaction immediately. */
+  triggerAutoSave(): Promise<void>;
 
   /** C-334: Checks for a stale session_active marker (crash detection). Returns the campaign ID or undefined. */
   checkSessionMarker(): Promise<string | undefined>;

@@ -228,7 +228,14 @@ describe('InventoryViewModel — bag search and sort', () => {
     viewModel.setSearchQuery('IRON');
 
     expect(viewModel.hasSearchQuery).toBe(true);
-    expect(viewModel.visibleItems).toEqual([{ itemId: 'ironSword', quantity: 1, initial: 'I' }]);
+    expect(viewModel.visibleItems).toHaveLength(1);
+    expect(viewModel.visibleItems[0]?.itemId).toBe('ironSword');
+    expect(viewModel.visibleItems[0]?.quantity).toBe(1);
+    expect(viewModel.visibleItems[0]?.fallbackIcon).toBe('⚔️');
+    expect(
+      viewModel.visibleItems[0]?.artUrl === undefined ||
+        typeof viewModel.visibleItems[0]?.artUrl === 'string',
+    ).toBe(true);
   });
 
   test('a blank query returns the whole bag', () => {

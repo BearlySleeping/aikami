@@ -373,12 +373,16 @@ export const setupBridgeListeners = async (params: SetupBridgeListenersParams): 
         label: `${keyLabel} — ${verb} ${event.targetName}`,
         visible: gameOverlayService.activeOverlay === 'NONE',
         targetMetadata: { verb, targetName: event.targetName },
+        targetScreenX: event.targetScreenX,
+        targetScreenY: event.targetScreenY,
       });
     } else {
       gameOverlayService.setInteractionPrompt({
         label: '',
         visible: false,
         targetMetadata: undefined,
+        targetScreenX: undefined,
+        targetScreenY: undefined,
       });
     }
 

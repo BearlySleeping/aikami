@@ -429,6 +429,9 @@ export type GameEvent =
         | 'trap';
       /** Display name for the prompt. */
       targetName?: string;
+      /** Target's projected CSS-pixel position, when available. */
+      targetScreenX?: number;
+      targetScreenY?: number;
     }
   | {
       /**
