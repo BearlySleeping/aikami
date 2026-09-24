@@ -13,32 +13,10 @@
 
 import type { Page } from '@playwright/test';
 import { EMULATOR_PORTS } from '../config';
+import { approachProductionNpc } from './npc_approach';
 
 /** Origin of the client dev server for this run (contract-scoped offset applied). */
 const CLIENT_ORIGIN = `http://localhost:${EMULATOR_PORTS.client}`;
-
-/** bounded route from the Emberwatch spawn to the nearest dialogue NPC. */
-const NPC_WALK_PATTERN = [
-  'w',
-  'w',
-  'd',
-  'w',
-  'd',
-  's',
-  'd',
-  'w',
-  'a',
-  'w',
-  'a',
-  's',
-  'a',
-  'w',
-  'd',
-  's',
-  'a',
-  'w',
-  'd',
-] as const;
 
 export type GamePageOptions = {
   /** Whether to use the QA bypass flag to skip text AI requirement */
@@ -257,51 +235,9 @@ export class GamePage {
 
   // ── NPC Interaction ───────────────────────────────────────
 
-  /**
-   * Walk toward the nearest production NPC and interact.
-   * Movement input stays locked until map NPCs have spawned, so wait for the
-   * live debug snapshot before holding WASD keys long enough for engine ticks.
-   */
+  /** Walk toward the nearest production NPC and interact through real WASD input. */
   async approachAndTalkToNpc(): Promise<void> {
-    await this.page.waitForFunction(
-      () => {
-        const debug = (window as unknown as Record<string, unknown>).__AIKAMI_DEBUG__ as
-          | { playerX?: unknown; playerY?: unknown; npcCount?: unknown }
-          | undefined;
-        return (
-          typeof debug?.playerX === 'number' &&
-          Number.isFinite(debug.playerX) &&
-          typeof debug.playerY === 'number' &&
-          Number.isFinite(debug.playerY) &&
-          typeof debug.npcCount === 'number' &&
-          debug.npcCount > 0
-        );
-      },
-      undefined,
-      { timeout: 45_000 },
-    );
-
-    const dialogueOverlay = this.page.locator(
-      '[data-testid="dialogue-overlay"], .dialogue-overlay',
-    );
-    const maxSteps = 150;
-    for (let step = 0; step < maxSteps; step++) {
-      if (await dialogueOverlay.isVisible().catch(() => false)) {
-        await this.expectDialogueVisible();
-        return;
-      }
-
-      const key = NPC_WALK_PATTERN[step % NPC_WALK_PATTERN.length] ?? 'w';
-      await this.page.keyboard.down(key);
-      try {
-        await this.page.waitForTimeout(140);
-      } finally {
-        await this.page.keyboard.up(key);
-      }
-      await this.page.keyboard.press('Enter');
-      await this.page.waitForTimeout(120);
-    }
-
+    await approachProductionNpc(this.page);
     await this.expectDialogueVisible();
   }
 

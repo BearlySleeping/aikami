@@ -427,6 +427,16 @@ describe('GameOverlayService', () => {
     expect(service.canOpenOverlay('INVENTORY')).toBe(true);
   });
 
+  test('C-551: allows Inventory over Dialogue so the management host can preserve return context', () => {
+    service.pushOverlay('DIALOGUE');
+
+    expect(service.canOpenOverlay('INVENTORY')).toBe(true);
+    service.openInventory();
+
+    expect(service.activeOverlay).toBe('INVENTORY');
+    expect(service.overlayStack.map((entry) => entry.type)).toEqual(['DIALOGUE', 'INVENTORY']);
+  });
+
   test('should clear stack on dialogue close', () => {
     service.activeOverlay = 'DIALOGUE';
     service.dialogueNpc = { npcId: 'npc-1', npcName: 'Test NPC' };

@@ -84,7 +84,7 @@ describe('C-527 legacy entry-point mapping', () => {
     });
     expect(managementLocationFromOverlay('JOURNAL')).toEqual({
       section: 'journal',
-      subview: 'notes',
+      subview: 'quests',
     });
     expect(managementLocationFromOverlay('REPUTATION')).toEqual({
       section: 'world',
@@ -124,14 +124,14 @@ describe('C-527 legacy entry-point mapping', () => {
     );
   });
 
-  test('round-trips every mapped location back to its overlay', () => {
+  test('routes every mapped location to its owning host overlay', () => {
     for (const [overlay] of cases) {
       const location = managementLocationFromOverlay(overlay);
       expect(location).toBeDefined();
       if (location === undefined) {
         throw new Error(`expected a management location for ${overlay}`);
       }
-      expect(managementOverlayFor(location)).toBe(overlay);
+      expect(managementOverlayFor(location)).toBe(overlay === 'QUEST_LOG' ? 'JOURNAL' : overlay);
     }
   });
 
@@ -139,7 +139,7 @@ describe('C-527 legacy entry-point mapping', () => {
     expect(managementOverlayFor({ section: 'inventory' })).toBe('INVENTORY');
     expect(managementOverlayFor({ section: 'party' })).toBe('PARTY_ROSTER');
     expect(managementOverlayFor({ section: 'journal' })).toBe('JOURNAL');
-    expect(managementOverlayFor({ section: 'journal', subview: 'quests' })).toBe('QUEST_LOG');
+    expect(managementOverlayFor({ section: 'journal', subview: 'quests' })).toBe('JOURNAL');
   });
 });
 
@@ -147,7 +147,7 @@ describe('C-527 location normalization', () => {
   test('fills the section default subview when none is requested', () => {
     expect(normalizeManagementLocation({ section: 'journal' })).toEqual({
       section: 'journal',
-      subview: 'notes',
+      subview: 'quests',
     });
     expect(normalizeManagementLocation({ section: 'world' })).toEqual({
       section: 'world',
@@ -158,7 +158,7 @@ describe('C-527 location normalization', () => {
   test('an unknown subview falls back to the section default instead of throwing', () => {
     expect(normalizeManagementLocation({ section: 'journal', subview: 'nope' })).toEqual({
       section: 'journal',
-      subview: 'notes',
+      subview: 'quests',
     });
     expect(normalizeManagementLocation({ section: 'world', subview: '' })).toEqual({
       section: 'world',

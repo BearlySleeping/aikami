@@ -9,6 +9,7 @@
 
 import { Type } from 'typebox';
 import { defineConfig } from '$visual/core/config';
+import { EMULATOR_PORTS } from '../../config';
 
 // ── Schema ───────────────────────────────────────────────────
 
@@ -78,22 +79,33 @@ const MOBILE_PROMPT = [
 
 // ── Setup hooks ──────────────────────────────────────────────
 
+/** Opens the standalone inventory sandbox through its production toggle. */
+const openInventorySandbox = async (page: import('playwright').Page): Promise<void> => {
+  const openButton = page.getByRole('button', { name: 'Open Inventory', exact: true });
+  if (await openButton.isVisible().catch(() => false)) {
+    await openButton.click();
+  }
+  await page.getByTestId('inventory-overlay').waitFor({ state: 'visible', timeout: 10_000 });
+};
+
 /**
  * Populates the inventory with junk items via the dev tools button.
  */
 const setupFillJunk = async (page: import('playwright').Page): Promise<void> => {
-  // Wait for the page to fully render
-  await page.waitForSelector('h2:has-text("Inventory")', { timeout: 10_000 });
+  await openInventorySandbox(page);
 
   // Click "Fill with Junk" dev action button
-  const fillBtn = page.locator('button', { hasText: 'Fill with Junk' });
+  const fillBtn = page.getByTestId('dev-action-fill-with-junk');
   await fillBtn.click();
 
   // Wait for items to populate
   await page.waitForTimeout(1000);
 
   // Verify items appeared
-  await page.waitForSelector('.card-body', { timeout: 5000 });
+  await page.getByTestId('inventory-item-list').locator('li').first().waitFor({
+    state: 'visible',
+    timeout: 5000,
+  });
 };
 
 /**
@@ -101,16 +113,66 @@ const setupFillJunk = async (page: import('playwright').Page): Promise<void> => 
  */
 const setupMobileViewport = async (page: import('playwright').Page): Promise<void> => {
   await page.setViewportSize({ width: 375, height: 667 });
-
-  // Wait for the page to fully render
-  await page.waitForSelector('h2:has-text("Inventory")', { timeout: 10_000 });
+  await openInventorySandbox(page);
 
   // Click "Fill with Junk" dev action button
-  const fillBtn = page.locator('button', { hasText: 'Fill with Junk' });
+  const fillBtn = page.getByTestId('dev-action-fill-with-junk');
   await fillBtn.click();
 
   // Wait for items to populate
   await page.waitForTimeout(1000);
+};
+
+const MANAGEMENT_INVENTORY_PROMPT = [
+  'This is the production /game Inventory management task, captured inside the single management workspace.',
+  'Observe the equipment paperdoll, the carried bag, and the selected-item detail as one composition.',
+  'For populated state, the player should be able to identify equipped gear, a selected bag item, its quantity, slot, attack/defense facts, and available Equip/Use actions.',
+  'For empty state, the bag and detail regions should form a deliberate empty task state rather than a clipped grey strip.',
+  'Report clipping, overlap, unreadable values, missing actions, or large unexplained blank regions.',
+].join('\n');
+
+const hideProductionDevTools = async (page: import('playwright').Page): Promise<void> => {
+  await page.evaluate(() => {
+    const panel = document.querySelector('button[title="Collapse Dev Tools"]')?.parentElement;
+    if (panel) {
+      panel.style.display = 'none';
+    }
+    const eruda = document.querySelector<HTMLElement>('#eruda');
+    if (eruda) {
+      eruda.style.display = 'none';
+    }
+  });
+};
+
+const openProductionInventory = async (
+  page: import('playwright').Page,
+  scenario: 'empty' | 'populated',
+): Promise<void> => {
+  await page.goto(`http://localhost:${EMULATOR_PORTS.client}/game`, {
+    waitUntil: 'domcontentloaded',
+  });
+  await page.getByTestId('hud-menu-entry').waitFor({ state: 'visible', timeout: 30_000 });
+  const renderer = await page.evaluate(() => {
+    const app = (window as unknown as Record<string, unknown>).__PIXI_APP__ as
+      | { renderer?: { name?: unknown } }
+      | undefined;
+    return typeof app?.renderer?.name === 'string' ? app.renderer.name : 'none';
+  });
+  if (renderer !== 'webgl') {
+    throw new Error(`Expected WebGL renderer, received ${renderer}`);
+  }
+  await page.getByTestId('hud-menu-entry').click();
+  await page.getByTestId('section-tab-inventory').click();
+  await page.evaluate((contentScenario) => {
+    const seam = (window as unknown as Record<string, unknown>).__AIKAMI_TEST__ as
+      | {
+          seedManagementContent(options: { scenario: 'empty' | 'populated' }): unknown;
+        }
+      | undefined;
+    seam?.seedManagementContent({ scenario: contentScenario });
+  }, scenario);
+  await page.waitForTimeout(400);
+  await hideProductionDevTools(page);
 };
 
 // ── Suite ────────────────────────────────────────────────────
@@ -125,23 +187,26 @@ export default defineConfig({
       name: 'Inventory — Empty (Default Viewport)',
       prompt: INVENTORY_PROMPT,
       schema: InventorySchema,
+      screenshotSelector: '[data-testid="inventory-overlay"]',
+      setupHook: openInventorySandbox,
     },
     {
       name: 'Inventory — Filled with Junk',
       prompt: INVENTORY_PROMPT,
       schema: InventorySchema,
+      screenshotSelector: '[data-testid="inventory-overlay"]',
       setupHook: setupFillJunk,
     },
     {
       name: 'Inventory — Mobile Viewport Filled',
       prompt: MOBILE_PROMPT,
       schema: InventorySchema,
+      screenshotSelector: '[data-testid="inventory-overlay"]',
       setupHook: setupMobileViewport,
     },
     // ── Production Route Case (C-335 AC-7) ────────────────
     {
       name: 'Inventory — Production Route',
-      searchParams: { bypassTextAi: 'true' },
       prompt: [
         INVENTORY_PROMPT,
         '',
@@ -151,7 +216,7 @@ export default defineConfig({
       schema: InventorySchema,
       setupHook: async (page) => {
         // Navigate to production route
-        await page.goto('http://localhost:5274/game?bypassTextAi=true', {
+        await page.goto('http://localhost:5274/game', {
           waitUntil: 'domcontentloaded',
         });
         // Wait for engine and HUD
@@ -164,6 +229,20 @@ export default defineConfig({
         await page.keyboard.press('KeyI');
         await page.waitForTimeout(1000);
       },
+    },
+    {
+      name: 'Inventory — Management Empty',
+      prompt: MANAGEMENT_INVENTORY_PROMPT,
+      schema: InventorySchema,
+      screenshotSelector: '[data-testid="management-workspace"]',
+      setupHook: (page) => openProductionInventory(page, 'empty'),
+    },
+    {
+      name: 'Inventory — Management Populated',
+      prompt: MANAGEMENT_INVENTORY_PROMPT,
+      schema: InventorySchema,
+      screenshotSelector: '[data-testid="management-workspace"]',
+      setupHook: (page) => openProductionInventory(page, 'populated'),
     },
   ],
 });

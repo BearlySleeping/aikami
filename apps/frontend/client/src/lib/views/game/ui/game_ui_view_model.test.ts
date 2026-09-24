@@ -9,7 +9,7 @@
 import { describe, expect, mock, test } from 'bun:test';
 import type { BaseViewModelInterface } from '@aikami/frontend/services/base';
 import type { GameEngineServiceInterface, NpcDialogueServiceInterface } from '$services';
-import type { AutoSaveStatus, GameOverlayType, MotionPreference } from '$types';
+import type { AutoSaveStatus, GameOverlayType, MotionPreference, OverlayStackEntry } from '$types';
 import type { CombatViewModelInterface } from '$views/combat/combat_view_model.svelte';
 import type { CharacterSheetViewModelInterface } from '$views/game/dashboard/character_sheet_view_model.svelte';
 import type { DialogueOverlayViewModelInterface } from '$views/game/ui/overlays/dialogue/dialogue_overlay_view_model.svelte';
@@ -23,7 +23,6 @@ import type { TalkToPartyViewModelInterface } from '$views/game/ui/overlays/talk
 import type { QuestTrackerViewModelInterface } from '$views/game/ui/quest_tracker_view_model.svelte';
 import type { InventoryViewModelInterface } from '$views/inventory/inventory_view_model.svelte';
 import type { JournalViewModelInterface } from '$views/journal/journal_view_model.svelte';
-import type { QuestViewModelInterface } from '$views/quest/quest_view_model.svelte';
 import type { VendorViewModelInterface } from '$views/vendor/vendor_view_model.svelte';
 import type { WorldViewModelInterface } from '$views/world/world_view_model.svelte';
 import {
@@ -53,7 +52,7 @@ const createMotionCapability = (initial: MotionPreference = 'auto') => {
 
 const createOverlay = () => ({
   activeOverlay: 'NONE' as GameOverlayType,
-  overlayStack: [],
+  overlayStack: [] as OverlayStackEntry[],
   isTransitioning: false,
   autoSaveStatus: 'idle' as AutoSaveStatus,
   vendorSessionOptions: undefined,
@@ -128,7 +127,6 @@ const buildOptions = (
   createCombatViewModel: () => subStub as CombatViewModelInterface,
   createDialogueOverlayViewModel: () => subStub as DialogueOverlayViewModelInterface,
   createInventoryViewModel: () => subStub as InventoryViewModelInterface,
-  createQuestViewModel: () => subStub as QuestViewModelInterface,
   createJournalViewModel: () => subStub as JournalViewModelInterface,
   createCharacterSheetViewModel: () => subStub as CharacterSheetViewModelInterface,
   createVendorViewModel: () => subStub as VendorViewModelInterface,
@@ -278,7 +276,8 @@ describe('GameUIViewModel — management navigation (C-527)', () => {
     vm.openManagementLocation({ section: 'journal', subview: 'quests' });
     vm.openManagementLocation({ section: 'world', subview: 'reputation' });
 
-    expect(overlay.openQuestLog).toHaveBeenCalledTimes(1);
+    expect(overlay.openJournal).toHaveBeenCalledTimes(1);
+    expect(overlay.openQuestLog).not.toHaveBeenCalled();
     expect(overlay.openReputation).toHaveBeenCalledTimes(1);
     expect(overlay.openInventory).not.toHaveBeenCalled();
   });
@@ -426,6 +425,21 @@ describe('GameUIViewModel — captured return context (C-527 AC-2)', () => {
     vm.openManagementSection('inventory');
 
     expect(vm.returnContext?.originOverlay).toBe('PAUSE_MENU');
+  });
+
+  test('C-551: reads Dialogue beneath Inventory when the overlay router pushes first', () => {
+    const overlay = createOverlay();
+    overlay.activeOverlay = 'INVENTORY';
+    overlay.overlayStack = [
+      { type: 'DIALOGUE', previousFocus: undefined },
+      { type: 'INVENTORY', previousFocus: undefined },
+    ];
+    const vm = createVm({}, overlay);
+
+    vm.management.beginSession();
+
+    expect(vm.returnContext?.originOverlay).toBe('DIALOGUE');
+    expect(vm.management.backLabel).toBe('Back to conversation');
   });
 
   test('captures the conversation identity so a draft stays on the same actor', () => {

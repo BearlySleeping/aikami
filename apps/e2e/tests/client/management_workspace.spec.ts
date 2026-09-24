@@ -111,6 +111,7 @@ const applyCustomTheme = async (): Promise<void> => {
   await appearance.openClean();
   await appearance.openEditor();
   await appearance.editRole('color.primary', '#c2185b');
+  await appearance.editRole('color.accent', '#ff8a3d');
   await appearance.editRole('color.panel', '#20303a');
   await appearance.editRole('color.elevated', '#2b3d47');
   await appearance.editorApplyButton.click();
@@ -183,7 +184,7 @@ test.describe('C-543 production theme integration', () => {
 
     // The workspace surface consumes the theme's `color.panel`.
     expect(themed.workspaceBackground).not.toBe(baseline.workspaceBackground);
-    // The active navigation item consumes the theme's `color.primary`.
+    // The active navigation item consumes the game selection/accent role.
     expect(themed.navActiveBackground).not.toBe(baseline.navActiveBackground);
     // HUD status and hotbar surfaces consume semantic elevated/primary roles.
     expect(themed.playerStatusBackground).not.toBe(baseline.playerStatusBackground);

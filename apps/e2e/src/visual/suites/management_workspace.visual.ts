@@ -74,6 +74,10 @@ const hideDevTools = async (page: Page): Promise<void> => {
     if (panel) {
       panel.style.display = 'none';
     }
+    const eruda = document.querySelector<HTMLElement>('#eruda');
+    if (eruda) {
+      eruda.style.display = 'none';
+    }
   });
 };
 
@@ -95,36 +99,156 @@ const seedHudPreset = async (page: Page, presetId: string): Promise<void> => {
   }, presetId);
 };
 
-/**
- * Selects the dark Obsidian Chronicle appearance — the documented signature
- * default from the design review and the product owner's reference screenshots.
- * This is a real persisted appearance selection, not a test-only bypass.
- */
-const seedDarkAppearance = async (page: Page): Promise<void> => {
-  await page.addInitScript(() => {
+/** Seeds a real persisted built-in appearance selection. */
+const seedAppearance = async (page: Page, mode: 'light' | 'dark'): Promise<void> => {
+  await page.addInitScript((appearanceMode) => {
     localStorage.setItem(
       'aikami:theme:selection',
       JSON.stringify({
         schemaVersion: 1,
         themeId: 'obsidian-chronicle',
         version: '1.0.0',
-        mode: 'dark',
+        mode: appearanceMode,
       }),
     );
+  }, mode);
+};
+
+const seedDarkAppearance = (page: Page): Promise<void> => seedAppearance(page, 'dark');
+
+/** Seeds the real management stores after the target section finishes mounting. */
+const seedManagementStores = async (page: Page, scenario: 'empty' | 'populated'): Promise<void> => {
+  await page.evaluate((contentScenario) => {
+    const seam = (window as unknown as Record<string, unknown>).__AIKAMI_TEST__ as
+      | {
+          seedManagementContent(options: {
+            scenario: 'empty' | 'populated';
+          }): Record<string, number>;
+        }
+      | undefined;
+    seam?.seedManagementContent({ scenario: contentScenario });
+  }, scenario);
+};
+
+const EMPTY_CHARACTER_SHEET = {
+  abilities: {
+    strength: { value: 10, modifier: 0 },
+    dexterity: { value: 10, modifier: 0 },
+    constitution: { value: 10, modifier: 0 },
+    intelligence: { value: 10, modifier: 0 },
+    wisdom: { value: 10, modifier: 0 },
+    charisma: { value: 10, modifier: 0 },
+  },
+  skills: [],
+  savingThrows: [],
+  traits: { personalityTraits: '', ideals: '', bonds: '', flaws: '' },
+  narrativeTraits: { likes: [], temptations: [], keys: [] },
+  proficiencyBonus: 2,
+  level: 1,
+  xp: 0,
+  hp: 10,
+  maxHp: 10,
+  attack: 0,
+  defense: 12,
+  classId: 'fighter',
+  classFeatures: [],
+  hotbarSlots: [],
+} as const;
+
+const POPULATED_CHARACTER_SHEET = {
+  abilities: {
+    strength: { value: 16, modifier: 3 },
+    dexterity: { value: 14, modifier: 2 },
+    constitution: { value: 15, modifier: 2 },
+    intelligence: { value: 12, modifier: 1 },
+    wisdom: { value: 13, modifier: 1 },
+    charisma: { value: 16, modifier: 3 },
+  },
+  skills: [
+    {
+      name: 'Persuasion',
+      ability: 'charisma',
+      isProficient: true,
+      isExpertise: false,
+      modifier: 0,
+    },
+  ],
+  savingThrows: [{ ability: 'wisdom', isProficient: true, isExpertise: false, modifier: 0 }],
+  traits: {
+    personalityTraits: 'Keeps watch when the village turns quiet.',
+    ideals: 'A protected home is worth defending.',
+    bonds: 'The ward keepers of Emberwatch.',
+    flaws: 'Troubles a lantern left unattended.',
+  },
+  narrativeTraits: { likes: ['Old maps'], temptations: ['Rare maps'], keys: ['The eastern ward'] },
+  proficiencyBonus: 3,
+  level: 5,
+  xp: 480,
+  hp: 34,
+  maxHp: 42,
+  attack: 4,
+  defense: 17,
+  classId: 'fighter',
+  classFeatures: ['fighter_second_wind', 'fighter_action_surge'],
+  hotbarSlots: ['fighter_second_wind'],
+} as const;
+
+const characterSheetFor = (populated: boolean) =>
+  populated ? POPULATED_CHARACTER_SHEET : EMPTY_CHARACTER_SHEET;
+
+/** Seeds an authored character sheet through the existing production constructor seam. */
+const seedCharacterSheet = async (page: Page, populated: boolean): Promise<void> => {
+  await page.addInitScript((sheet) => {
+    (window as unknown as Record<string, unknown>).__AIKAMI_E2E_SHEET__ = sheet;
+  }, characterSheetFor(populated));
+};
+
+/** Proves the production evidence plane selected PixiJS WebGL. */
+const assertProductionWebGl = async (page: Page): Promise<void> => {
+  await page.waitForFunction(() => {
+    const app = (window as unknown as Record<string, unknown>).__PIXI_APP__ as
+      | { renderer?: { name?: unknown } }
+      | undefined;
+    return typeof app?.renderer?.name === 'string';
   });
+  const renderer = await page.evaluate(() => {
+    const app = (window as unknown as Record<string, unknown>).__PIXI_APP__ as
+      | { renderer?: { name?: unknown } }
+      | undefined;
+    return typeof app?.renderer?.name === 'string' ? app.renderer.name : 'none';
+  });
+  if (renderer !== 'webgl') {
+    throw new Error(`Expected PixiJS WebGL renderer, received ${renderer}`);
+  }
 };
 
 /** Opens /game and activates the management host. */
 const openManagement = async (
   page: Page,
   section?: string,
-  options: { readonly seedDark?: boolean } = {},
+  options: {
+    readonly seedDark?: boolean;
+    readonly appearance?: 'light' | 'dark';
+    readonly scenario?: 'empty' | 'populated';
+    readonly character?: 'empty' | 'populated';
+    readonly viewport?: { readonly width: number; readonly height: number };
+    readonly textScale?: number;
+  } = {},
 ): Promise<void> => {
-  if (options.seedDark !== false) {
+  if (options.viewport) {
+    await page.setViewportSize(options.viewport);
+  }
+  if (options.appearance) {
+    await seedAppearance(page, options.appearance);
+  } else if (options.seedDark !== false) {
     await seedDarkAppearance(page);
+  }
+  if (options.character) {
+    await seedCharacterSheet(page, options.character === 'populated');
   }
   await page.goto(`${CLIENT_ORIGIN}/game`);
   await waitForHud(page);
+  await assertProductionWebGl(page);
   await page.getByTestId('hud-menu-entry').click();
   await page.waitForSelector('[data-testid="management-workspace"]', {
     state: 'visible',
@@ -133,6 +257,14 @@ const openManagement = async (
   if (section !== undefined) {
     await page.getByTestId(`section-tab-${section}`).click();
     await page.waitForTimeout(300);
+  }
+  if (options.scenario) {
+    await seedManagementStores(page, options.scenario);
+  }
+  if (options.textScale) {
+    await page.evaluate((scale) => {
+      document.documentElement.style.fontSize = `${scale}%`;
+    }, options.textScale);
   }
   await hideDevTools(page);
 };
@@ -147,6 +279,11 @@ const managementCase = (options: {
   readonly name: string;
   readonly section?: string;
   readonly prompt: string;
+  readonly appearance?: 'light' | 'dark';
+  readonly scenario?: 'empty' | 'populated';
+  readonly character?: 'empty' | 'populated';
+  readonly viewport?: { readonly width: number; readonly height: number };
+  readonly textScale?: number;
   /** Extra production navigation (e.g. an in-view tab) after the section opens. */
   readonly afterOpen?: (page: Page) => Promise<void>;
 }) => ({
@@ -158,7 +295,13 @@ const managementCase = (options: {
   screenshotSelector: 'body',
   fullPageClip: false,
   setupHook: async (page: Page) => {
-    await openManagement(page, options.section);
+    await openManagement(page, options.section, {
+      appearance: options.appearance,
+      scenario: options.scenario,
+      character: options.character,
+      viewport: options.viewport,
+      textScale: options.textScale,
+    });
     if (options.afterOpen) {
       await options.afterOpen(page);
     }
@@ -191,16 +334,57 @@ export default defineConfig({
       name: 'management-character',
       section: 'character',
       prompt: shellPrompt('Character'),
+      character: 'empty',
+      scenario: 'empty',
+    }),
+    managementCase({
+      name: 'management-character-populated',
+      section: 'character',
+      prompt: shellPrompt('Character (authored sheet)'),
+      character: 'populated',
     }),
     managementCase({
       name: 'management-inventory-empty',
       section: 'inventory',
       prompt: shellPrompt('Inventory'),
+      scenario: 'empty',
+    }),
+    managementCase({
+      name: 'management-inventory-populated',
+      section: 'inventory',
+      prompt: shellPrompt('Inventory (equipped gear, bag and selected item)'),
+      scenario: 'populated',
+    }),
+    managementCase({
+      name: 'management-inventory-populated-light-compact',
+      section: 'inventory',
+      prompt: shellPrompt('Inventory (populated light compact layout)'),
+      appearance: 'light',
+      scenario: 'populated',
+      viewport: { width: 800, height: 600 },
+    }),
+    managementCase({
+      name: 'management-inventory-populated-text200',
+      section: 'inventory',
+      prompt: shellPrompt('Inventory (populated at 200% text)'),
+      scenario: 'populated',
+      viewport: { width: 1280, height: 720 },
+      textScale: 200,
     }),
     managementCase({
       name: 'management-journal-quests',
       section: 'journal',
       prompt: shellPrompt('Journal (Quests subview)'),
+      scenario: 'empty',
+      afterOpen: async (page) => {
+        await clickTab(page, 'journal-tabs', 'Quests');
+      },
+    }),
+    managementCase({
+      name: 'management-journal-quests-populated',
+      section: 'journal',
+      prompt: shellPrompt('Journal (active quest and objectives)'),
+      scenario: 'populated',
       afterOpen: async (page) => {
         await clickTab(page, 'journal-tabs', 'Quests');
       },
@@ -209,6 +393,16 @@ export default defineConfig({
       name: 'management-journal-notes',
       section: 'journal',
       prompt: shellPrompt('Journal (Notes subview)'),
+      scenario: 'empty',
+      afterOpen: async (page) => {
+        await clickTab(page, 'journal-tabs', 'Notes');
+      },
+    }),
+    managementCase({
+      name: 'management-journal-notes-populated',
+      section: 'journal',
+      prompt: shellPrompt('Journal (note list and selected detail)'),
+      scenario: 'populated',
       afterOpen: async (page) => {
         await clickTab(page, 'journal-tabs', 'Notes');
       },
@@ -358,6 +552,8 @@ export default defineConfig({
         await page.waitForSelector('[data-testid="theme-editor-preview"]', { state: 'visible' });
         await page.getByTestId('theme-editor-role-color.primary').fill('#e91e63');
         await page.getByTestId('theme-editor-role-color.primary').press('Tab');
+        await page.getByTestId('theme-editor-role-color.accent').fill('#e91e63');
+        await page.getByTestId('theme-editor-role-color.accent').press('Tab');
         await page.getByTestId('theme-editor-role-color.panel').fill('#3a2140');
         await page.getByTestId('theme-editor-role-color.panel').press('Tab');
         await page.getByTestId('theme-editor-apply').click();

@@ -49,6 +49,87 @@ export class PlayShellPage {
     return this.page.getByTestId(`management-panel-${panel}`);
   }
 
+  get characterSummary() {
+    return this.page.getByTestId('character-summary');
+  }
+
+  get characterEditToggle() {
+    return this.page.getByTestId('character-edit-toggle');
+  }
+
+  get inventoryPaperdoll() {
+    return this.page.getByTestId('inventory-paperdoll');
+  }
+
+  get inventoryBag() {
+    return this.page.getByTestId('inventory-bag');
+  }
+
+  get inventoryDetail() {
+    return this.page.getByTestId('inventory-detail');
+  }
+
+  get inventoryEmptyState() {
+    return this.page.getByTestId('inventory-empty-state');
+  }
+
+  get inventoryItemList() {
+    return this.page.getByTestId('inventory-item-list');
+  }
+
+  get journalTabs() {
+    return this.page.getByTestId('journal-tabs');
+  }
+
+  get journalPanel() {
+    return this.page.getByTestId('journal-panel');
+  }
+
+  get journalNoteList() {
+    return this.page.getByTestId('journal-note-list');
+  }
+
+  get journalNoteDetail() {
+    return this.page.getByTestId('journal-note-detail');
+  }
+
+  get journalNotesEmpty() {
+    return this.page.getByTestId('journal-notes-empty');
+  }
+
+  /** Seeds real production management stores through the non-production seam. */
+  async seedManagementContent(scenario: 'empty' | 'populated'): Promise<void> {
+    await this.page.evaluate((contentScenario) => {
+      const seam = (window as unknown as Record<string, unknown>).__AIKAMI_TEST__ as
+        | {
+            seedManagementContent(options: {
+              scenario: 'empty' | 'populated';
+            }): Record<string, number>;
+          }
+        | undefined;
+      seam?.seedManagementContent({ scenario: contentScenario });
+    }, scenario);
+  }
+
+  /** Confirms PixiJS selected its WebGL renderer. */
+  async expectWebGl(): Promise<void> {
+    await this.page.waitForFunction(() => {
+      const app = (window as unknown as Record<string, unknown>).__PIXI_APP__ as
+        | { renderer?: { name?: unknown } }
+        | undefined;
+      return typeof app?.renderer?.name === 'string';
+    });
+    const renderer = await this.page.evaluate(() => {
+      const app = (window as unknown as Record<string, unknown>).__PIXI_APP__ as
+        | { renderer?: { name?: unknown } }
+        | undefined;
+      return typeof app?.renderer?.name === 'string' ? app.renderer.name : 'none';
+    });
+    if (renderer !== 'webgl') {
+      throw new Error(`Expected PixiJS WebGL renderer, received ${renderer}`);
+    }
+  }
+
   /** Bounding box of the workspace surface, for geometry assertions. */
   async managementWorkspaceBox(): Promise<{
     readonly width: number;
