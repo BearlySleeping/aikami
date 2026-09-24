@@ -39,7 +39,7 @@ created_at: "2026-09-24T19:03:53+02:00"
 
 ## User Outcome
 
-A player loading or crossing into a changed map never sees a recruited companion stranded inside newly blocked terrain. Relocated companions appear beside the player when possible and resume following on a fresh path.
+A player loading or crossing into a changed map sees recruited companions relocated beside the player when a safe target exists, then they resume following on a fresh path. If no safe target exists, the companion's saved position is kept rather than moving it to an unsafe location.
 
 ## Success Measures
 
@@ -58,7 +58,7 @@ A player loading or crossing into a changed map never sees a recruited companion
 
 ## Overview
 
-Extract restore relocation out of the size-constrained worker and apply it to player and companion entities. Companion validity uses the canonical companion collision mask and footprint-aware terrain grid; target selection prefers one of the eight cells touching the player, then uses the existing 20-ring nearest-cell policy. Successful moves repair `Position`, `GridPosition`, and spatial occupancy, clear stale movement, and schedule a fresh party-follow path.
+Extract restore relocation out of the size-constrained worker and apply it to player and companion entities. Companion validity uses the canonical companion collision mask and footprint-aware terrain grid; recruited companions prefer one of the eight cells touching the player, then use the existing 20-ring nearest-cell policy. Unrecruited companions use the ring search around their own saved position. Successful moves repair `Position`, `GridPosition`, and spatial occupancy, clear stale movement, and schedule a fresh party-follow path.
 
 ## Architecture Directives
 
