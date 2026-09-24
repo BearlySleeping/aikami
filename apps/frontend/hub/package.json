@@ -27,16 +27,16 @@
     "deploy": "bun run scripts/deploy.ts"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "5.20260918.1",
+    "@cloudflare/workers-types": "5.20260922.1",
     "@inlang/paraglide-js": "2.25.4",
     "@libsql/client": "0.18.0",
     "@sveltejs/adapter-cloudflare": "8.0.0-next.7",
     "@sveltejs/kit": "3.0.0-next.27",
     "@sveltejs/vite-plugin-svelte": "7.3.0",
     "@tailwindcss/vite": "4.3.3",
-    "@types/node": "26.6.1",
+    "@types/node": "26.6.2",
     "rollup-plugin-visualizer": "7.1.1",
-    "svelte": "5.57.0",
+    "svelte": "5.57.1",
     "svelte-check": "4.7.6",
     "tailwindcss": "4.3.3",
     "vite": "8.3.0",
@@ -55,7 +55,7 @@
     "@aikami/types": "workspace:*",
     "@aikami/utils": "workspace:*",
     "@elysiajs/eden": "^1.4.9",
-    "drizzle-orm": "^0.45.2",
+    "drizzle-orm": "0.45.3",
     "elysia": "1.4.30",
     "eruda": "3.4.3"
   }

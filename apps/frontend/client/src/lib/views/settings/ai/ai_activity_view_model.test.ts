@@ -44,11 +44,15 @@ const span: TextTelemetrySpan = {
 
 const build = (options?: { assignments?: RoleAssignments; spans?: TextTelemetrySpan[] }) => {
   const clear = mock(() => {});
+  const setRoleAssignment = mock(() => {});
+  const clearRoleAssignment = mock(() => {});
   const viewModel = createAiActivityViewModel({
     className: 'AiActivityViewModel',
     config: {
       getAiConnections: () => [makeConnection({})],
       getRoleAssignments: () => options?.assignments ?? {},
+      setRoleAssignment,
+      clearRoleAssignment,
     },
     telemetry: {
       spans: options?.spans ?? [],
@@ -56,7 +60,7 @@ const build = (options?: { assignments?: RoleAssignments; spans?: TextTelemetryS
       clear,
     },
   });
-  return { viewModel, clear };
+  return { viewModel, clear, setRoleAssignment, clearRoleAssignment };
 };
 
 describe('AiActivityViewModel', () => {
@@ -70,6 +74,14 @@ describe('AiActivityViewModel', () => {
 
     const narrationRow = rows.find((row) => row.task === 'narration');
     expect(narrationRow?.connectionLabel).toBe('Inherits default');
+  });
+
+  test('updates and clears a task role connection', () => {
+    const { viewModel, setRoleAssignment, clearRoleAssignment } = build();
+    viewModel.assignRole('narration', 'conn-1');
+    viewModel.clearRole('narration');
+    expect(setRoleAssignment).toHaveBeenCalledWith('narration', 'conn-1');
+    expect(clearRoleAssignment).toHaveBeenCalledWith('narration');
   });
 
   test('exposes the telemetry buffer and summary', () => {

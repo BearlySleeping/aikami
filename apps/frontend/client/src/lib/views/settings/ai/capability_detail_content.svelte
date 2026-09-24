@@ -47,7 +47,7 @@ let advancedOpen = $state(false);
   </div>
 
   <!-- Actions -->
-  <div class="flex gap-3">
+  <div class="flex flex-wrap gap-3">
     {#if viewModel.isConfigured}
       <button type="button" class="btn btn-primary" onclick={() => viewModel.openChange()}>
         Change
@@ -65,6 +65,13 @@ let advancedOpen = $state(false);
         Set Up
       </button>
     {/if}
+    <button
+      type="button"
+      class="btn btn-outline"
+      onclick={() => aiVm.openCapabilitySetup(viewModel.capability)}
+    >
+      + New connection
+    </button>
   </div>
 
   <!-- Connection settings (every capability) -->

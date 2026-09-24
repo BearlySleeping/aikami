@@ -15,7 +15,8 @@
 //
 //   1. Any value import from outside `.pi` must be a runtime dependency
 //      (node:/bun: builtin or `@earendil-works/*` / `typebox`) or a pure
-//      constants module (`packages/shared/constants`). Everything else must
+//      constants module (`packages/shared/constants` or the subagent status
+//      constants). Everything else must
 //      be `import type` / `export type`.
 //   2. No extension source may reference the `Bun` global — it does not exist
 //      under the Node runtime pi uses in production.
@@ -56,7 +57,9 @@ const isAllowedDependency = (specifier: string): boolean =>
 
 /** Pure constants packages an extension may import for their value. */
 const isAllowedConstants = (specifier: string): boolean =>
-  specifier === '@aikami/constants' || specifier.includes('/packages/shared/constants/');
+  specifier === '@aikami/constants' ||
+  specifier.includes('/packages/shared/constants/') ||
+  specifier === '../../../scripts/src/lib/agents/subagents/constants.ts';
 
 type ImportStatement = {
   /** The statement head (from the previous `from` up to this one). */
@@ -251,6 +254,14 @@ describe('pi extensions import only types and pure constants from outside .pi', 
       expect(violations, 'value imports outside .pi must be deps or constants').toEqual([]);
     });
   }
+});
+
+it('keeps the shared subagent status module free of runtime imports', () => {
+  const source = readFileSync(
+    join(REPO_ROOT, 'scripts/src/lib/agents/subagents/constants.ts'),
+    'utf8',
+  );
+  expect(parseImports(source).filter((entry) => !isTypeOnly(entry.statement))).toEqual([]);
 });
 
 describe('pi extensions never reference the Bun global', () => {

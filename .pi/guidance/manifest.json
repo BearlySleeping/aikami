@@ -218,6 +218,10 @@
       "class": "pi_extensions",
       "active": true
     },
+    ".pi/extensions/lib/subagent_watch.ts": {
+      "class": "pi_extensions",
+      "active": true
+    },
     ".pi/extensions/lib/tool_namespace.test.ts": {
       "class": "pi_extensions",
       "active": true
@@ -247,6 +251,10 @@
       "active": true
     },
     ".pi/extensions/rtk.ts": {
+      "class": "pi_extensions",
+      "active": true
+    },
+    ".pi/extensions/subagents.ts": {
       "class": "pi_extensions",
       "active": true
     },
@@ -583,6 +591,10 @@
       "active": true
     },
     "scripts/src/lib/agents/contract_pipeline/prompt_loader.ts": {
+      "class": "agent_system_prompts",
+      "active": true
+    },
+    "scripts/src/lib/agents/subagents/prompt.ts": {
       "class": "agent_system_prompts",
       "active": true
     }

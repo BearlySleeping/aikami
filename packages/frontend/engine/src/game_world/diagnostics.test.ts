@@ -2,6 +2,7 @@
 
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import {
+  clearEntityPosition,
   exposeEngineState,
   isAuthoringOverlayMode,
   isE2ETestMode,
@@ -10,7 +11,6 @@ import {
   publishNpcEntityIds,
   publishPlayerDebug,
   publishPlayerVisibleByMask,
-  clearEntityPosition,
   resetEntityPositions,
   resetVisualScreenshotModeCache,
 } from './diagnostics.ts';

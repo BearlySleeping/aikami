@@ -24,6 +24,7 @@ const LOADERS: Record<string, () => Promise<{ handlers: PiHandlers }>> = {
   env: () => import('./env.ts'),
   git: () => import('./git.ts'),
   herdr: () => import('./herdr.ts'),
+  subagent: () => import('./subagent.ts'),
   worktree: () => import('./worktree.ts'),
 };
 
