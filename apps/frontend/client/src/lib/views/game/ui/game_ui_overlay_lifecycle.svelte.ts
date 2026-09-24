@@ -40,6 +40,7 @@ import type { VendorViewModelInterface } from '$views/vendor/vendor_view_model.s
 import type {
   GameUIChatCapabilities,
   GameUICombatStateCapabilities,
+  GameUINpcMemoryCapabilities,
   GameUIOverlayCapabilities,
   GameUISessionCapabilities,
 } from './game_ui_view_model_types.ts';
@@ -52,6 +53,8 @@ export type GameUIOverlayLifecycleOptions = {
   overlays: GameUIOverlayCapabilities;
   /** Conversation source for the dialogue ViewModel. */
   npcDialogue: NpcDialogueServiceInterface;
+  /** Per-NPC memory: transcript captured on close, returning greeting on open. */
+  npcMemory?: GameUINpcMemoryCapabilities;
   /** Combat service state read when the combat overlay activates. */
   combat: GameUICombatStateCapabilities;
   /** Chat state read for the auto-summary threshold effect. */
@@ -149,6 +152,20 @@ export const registerGameUIOverlayLifecycle = (options: GameUIOverlayLifecycleOp
     if (!dialogueViewModel) {
       return;
     }
+    // Hand the finished transcript to NPC memory before the VM is released.
+    // Untracked: this runs inside the dialogue effect and must not subscribe
+    // it to the (now orphaned) transcript.
+    const closing = dialogueViewModel;
+    const closingNpcId = dialogueNpcId;
+    untrack(() => {
+      if (closingNpcId !== undefined) {
+        void options.npcMemory?.recordConversation({
+          npcId: closingNpcId,
+          npcName: closing.npcName,
+          messages: closing.messages,
+        });
+      }
+    });
     dialogueViewModel.hasNpcScreenPosition = false;
     dialogueViewModel = undefined;
     dialogueNpcId = undefined;
@@ -176,7 +193,8 @@ export const registerGameUIOverlayLifecycle = (options: GameUIOverlayLifecycleOp
       clearDialogueViewModel();
       dialogueViewModel = options.createDialogueOverlayViewModel({
         className: 'DialogueOverlayViewModel',
-        npcData: npc,
+        // A remembered NPC greets with its prepared, history-aware opener.
+        npcData: untrack(() => options.npcMemory?.resolveGreeting(npc) ?? npc),
         onEndChat: () => overlays.endDialogue(),
         npcDialogueService: npcDialogue,
         onStartCombat: (combatNpcData) => {

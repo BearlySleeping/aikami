@@ -21,6 +21,8 @@ import { combatService } from './combat_service.svelte';
 import { gameEngineService } from './game_engine_service.svelte';
 import { isConsumedOrComposing, isEditableTarget } from './game_input_guard.ts';
 import { gameModeService } from './game_mode_service.svelte.ts';
+import { handleHotbarShortcut } from './game_overlay_hotbar_shortcut';
+import { handleJournalShortcut } from './game_overlay_journal_shortcut';
 // GameOverlayService — overlay router for the game UI layer. C-332 replaced the
 // flat active-overlay toggle with an explicit stack; Escape always pops exactly
 // one layer.
@@ -44,7 +46,6 @@ import { onboardingHintService } from './onboarding_hint_service.svelte.ts';
 import { applyOverlayModeTransition } from './overlay_combat_mode.ts';
 import { OVERLAY_COMPATIBILITY } from './overlay_compatibility.ts';
 import { partyFollowService } from './party_follow_service.svelte.ts';
-import { playerStateService } from './player_state_service.svelte';
 import { buildSaveMapBlock, getCurrentMapName } from './save_map_block';
 import { sessionService } from './session_service.svelte.ts';
 import { timeService } from './time_service.svelte';
@@ -724,6 +725,12 @@ export class GameOverlayService
       return;
     }
 
+    if (actionId === 'open_journal') {
+      if (handleJournalShortcut({ actionId, event, service: this })) {
+        onboardingHintService.onActionPerformed('open_journal');
+      }
+      return;
+    }
     // ── Overlay toggle: open_character ──
     if (actionId === 'open_character') {
       if (this.activeOverlay === 'CHARACTER_DASHBOARD') {
@@ -740,7 +747,6 @@ export class GameOverlayService
         return;
       }
     }
-
     // ── Overlay toggle: open_party_roster (C-340) — P key ──
     if (actionId === 'open_party_roster') {
       if (this.activeOverlay === 'PARTY_ROSTER') {
@@ -757,28 +763,21 @@ export class GameOverlayService
         return;
       }
     }
-
-    // ── Hotbar activation: keys 1-6 ──
-    if (this.activeOverlay === 'NONE') {
-      const key = event.key;
-      if (key >= '1' && key <= '6') {
-        event.preventDefault();
-        const slotIndex = Number.parseInt(key, 10) - 1; // Convert to zero-based index (key "1" -> index 0)
-        const featureId = playerStateService.hotbarSlots[slotIndex];
-        if (featureId) {
-          playerStateService.useAbility(featureId);
-          this.debug('hotbar:activate', { slotIndex, featureId });
-        }
-        return;
-      }
+    if (
+      handleHotbarShortcut({
+        event,
+        activeOverlay: this.activeOverlay,
+        onActivate: ({ slotIndex, featureId }) =>
+          this.debug('hotbar:activate', { slotIndex, featureId }),
+      })
+    ) {
+      return;
     }
-
     // ── Fallthrough: notify onboarding of any recognized action that wasn't rejected ──
     if (actionId) {
       onboardingHintService.onActionPerformed(actionId);
     }
   }
-
   resumeGame(): void {
     this.clearStack();
     gameModeService.setMode('EXPLORE');

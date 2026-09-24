@@ -63,12 +63,17 @@ const ANCHORS: readonly HudSlot[] = HUD_ANCHOR_ORDER;
          Each anchor renders exactly the widgets the resolver placed in it, in
          the resolver's stack order. A widget can no longer invent its own
          coordinates, and an inactive widget is not rendered at all — so a
-         hidden node can never capture pointer input or a tab stop. -->
+         hidden node can never capture pointer input or a tab stop. The
+         fullscreen dialogue state stays local to that overlay; the relational
+         class below hides every HUD anchor without leaking presentation state
+         into the game UI ViewModel. End anchors also use `items-end` so each
+         widget's intrinsic width stays flush with the viewport edge. -->
     {#each ANCHORS as anchor}
       <div
-        class="{hudAnchorClass(anchor)} z-50 flex gap-2 pointer-events-none"
+        class="{hudAnchorClass(anchor)} z-50 flex gap-2 pointer-events-none [#game-ui-layer:has(.game-stage--full)_&]:hidden"
         class:flex-col-reverse={viewModel.hud.stacksUpward(anchor)}
         class:flex-col={!viewModel.hud.stacksUpward(anchor)}
+        class:items-end={anchor === 'top-end' || anchor === 'bottom-end'}
         data-testid="hud-anchor-{anchor}"
       >
         {#each viewModel.hud.widgetsInAnchor(anchor) as widget (widget.widgetId)}

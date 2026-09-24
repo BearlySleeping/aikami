@@ -40,6 +40,9 @@ export const createReactiveAppDialogsHarness = (): ReactiveAppDialogsHarness => 
     close: () => {
       currentDialog = undefined;
     },
+    setAppLoading: (loading, label) => {
+      appLoading = loading ? { label } : undefined;
+    },
     hideSnackbar: () => {
       snackbar = undefined;
     },

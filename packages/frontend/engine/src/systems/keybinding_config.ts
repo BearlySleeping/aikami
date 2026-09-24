@@ -23,8 +23,11 @@ export type InputActionId =
   | 'interact'
   | 'open_inventory'
   | 'open_quest_log'
+  | 'open_journal'
   | 'open_character'
-  | 'open_menu';
+  | 'open_party_roster'
+  | 'open_menu'
+  | 'toggle_hud';
 
 /** Action IDs that map to movement directions. */
 export const MOVEMENT_ACTION_IDS = ['move_up', 'move_down', 'move_left', 'move_right'] as const;
@@ -34,8 +37,11 @@ export const OVERLAY_ACTION_IDS = [
   'interact',
   'open_inventory',
   'open_quest_log',
+  'open_journal',
   'open_character',
+  'open_party_roster',
   'open_menu',
+  'toggle_hud',
 ] as const;
 
 /** Maps action IDs to engine Direction values. */
@@ -77,11 +83,15 @@ export const DEFAULT_KEYBINDINGS: KeybindingMap = {
   // biome-ignore lint/style/useNamingConvention: action IDs are snake_case constants
   open_quest_log: 'q',
   // biome-ignore lint/style/useNamingConvention: action IDs are snake_case constants
+  open_journal: 'j',
+  // biome-ignore lint/style/useNamingConvention: action IDs are snake_case constants
   open_character: 'c',
   // biome-ignore lint/style/useNamingConvention: action IDs are snake_case constants
   open_menu: 'Escape',
   // biome-ignore lint/style/useNamingConvention: action IDs are snake_case constants (C-340)
   open_party_roster: 'p',
+  // biome-ignore lint/style/useNamingConvention: action IDs are snake_case constants
+  toggle_hud: 'h',
 };
 
 // ---------------------------------------------------------------------------

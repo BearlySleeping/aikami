@@ -221,6 +221,7 @@ describe('SettingsOverlayViewModel', () => {
     expect(href).toContain('/settings');
     expect(href).toContain('group=play');
     expect(href).toContain('section=controls');
+    expect(href).toContain('from=game');
   });
 
   test('AC-4: navigateToFullSettings from gameplay includes correct params', async () => {

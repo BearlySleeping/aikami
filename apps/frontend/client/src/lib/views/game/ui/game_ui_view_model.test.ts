@@ -104,7 +104,10 @@ const buildOptions = (
   config: { getActiveTextProvider: mock(() => ({ provider: 'ollama' })) },
   runtimeConfig: { getTextUrl: mock(() => 'http://localhost:11434') },
   overlays: overlay,
-  inputAction: { actionDisplayLabel: mock((id: string) => id) },
+  inputAction: {
+    actionDisplayLabel: mock((id: string) => id),
+    handleGlobalShortcut: mock(() => false),
+  },
   npcDialogue: {} as NpcDialogueServiceInterface,
   onboarding: {
     currentHint: undefined,

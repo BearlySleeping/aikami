@@ -23,6 +23,7 @@ export type AppDialogCapabilities = {
   readonly appLoading: AppLoadingData | undefined;
   readonly snackbar: SnackbarData | undefined;
   close(result?: unknown): void;
+  setAppLoading(loading: boolean, label?: string): void;
   hideSnackbar(): void;
 };
 
@@ -53,6 +54,7 @@ export type AppDialogsViewModelInterface = BaseViewModelInterface & {
   /** Background task progress (0-100). 0 = hidden. */
   readonly bottomProgress: number;
   closeDialog(result?: unknown): void;
+  dismissLoading(): void;
   dismissToast(id: number): void;
 };
 
@@ -93,6 +95,10 @@ class AppDialogsViewModel
 
   closeDialog(result?: unknown): void {
     this._dialog.close(result);
+  }
+
+  dismissLoading(): void {
+    this._dialog.setAppLoading(false);
   }
 
   dismissToast(id: number): void {

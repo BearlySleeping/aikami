@@ -118,6 +118,12 @@ export type ImageGenerationServiceInterface = BaseFrontendClassInterface & {
   /** Progress of the current generation (0-100). */
   readonly generationProgress: number;
 
+  /**
+   * Publishes externally simulated progress for the dev sandbox without
+   * starting an engine-backed generation.
+   */
+  simulateProgress(progress: number): void;
+
   /** Human-readable status label for the current generation step. */
   readonly generationStatus: string;
 
@@ -175,6 +181,11 @@ export class ImageGenerationService
   /** Progress of the current generation (0-100). */
   get generationProgress(): number {
     return this._generationProgress;
+  }
+
+  /** Publishes clamped progress for the dev progress-bar sandbox. */
+  simulateProgress(progress: number): void {
+    this._generationProgress = Math.round(Math.max(0, Math.min(100, progress)));
   }
 
   /** Human-readable status label for the current generation step. */

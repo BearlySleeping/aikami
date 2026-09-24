@@ -56,9 +56,7 @@ export const createReactivePauseMenuHarness = (): ReactivePauseMenuHarness => {
     openHudEditor: () => unconfigured('openHudEditor'),
   };
   const hud: PauseMenuHudCapabilities = {
-    isHudTemporarilyHidden: false,
     isEditorEnabled: true,
-    toggleHudTemporarilyHidden: () => unconfigured('toggleHudTemporarilyHidden'),
   };
   const dice: PauseMenuDiceCapabilities = {
     get history() {

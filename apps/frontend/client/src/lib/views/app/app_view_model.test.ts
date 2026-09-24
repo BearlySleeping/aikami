@@ -9,6 +9,7 @@ import { BaseViewModel } from '@aikami/frontend/services/base';
 import type { CurrentUser } from '@aikami/types';
 import {
   type AppAuthCapabilities,
+  type AppConfigCapabilities,
   type AppEmulatorSeedCapabilities,
   type AppRouterCapabilities,
   type AppRuntimeConfigCapabilities,
@@ -46,6 +47,10 @@ const createRuntimeConfig = (): AppRuntimeConfigCapabilities => ({
   loadConfig: mock(async () => ({})),
 });
 
+const createConfig = (): AppConfigCapabilities => ({
+  load: mock(async () => {}),
+});
+
 const createEmulatorSeed = (): AppEmulatorSeedCapabilities => ({
   seedIfEmpty: mock(async () => {}),
 });
@@ -62,6 +67,7 @@ const createViewModel = (overrides: Partial<AppViewModelOptions> = {}) =>
     app: createApp(),
     router: createRouter(),
     runtimeConfig: createRuntimeConfig(),
+    config: createConfig(),
     emulatorSeed: createEmulatorSeed(),
     updater: createUpdater(),
     ...overrides,

@@ -95,24 +95,24 @@ const weatherIcon = $derived.by(() => {
 });
 </script>
 
-<div class="clock-hud pointer-events-none flex items-center gap-2">
-  <!-- Main time pill -->
-  <div
-    class="flex items-center gap-2 rounded-full bg-base-200/80 px-3 py-1.5 text-sm backdrop-blur-sm shadow-md border border-base-300/50"
-  >
-    <span class="text-base">{diurnalIcon}</span>
-    <span class="font-mono font-semibold tabular-nums text-base-content">
-      {pad(gameHour)}:{pad(gameMinute)}
-    </span>
-    {#if showWeather && (rainIntensity > 0.05 || Math.abs(windVelocity) > 0.3)}
-      <span class="text-xs text-base-content/60">
-        {weatherIcon}
+<div class="clock-hud pointer-events-none w-fit max-w-full">
+  <div class="pointer-events-auto relative">
+    <!-- Main time pill -->
+    <div
+      class="flex items-center gap-2 rounded-full bg-base-200/80 px-3 py-1.5 text-sm backdrop-blur-sm shadow-md border border-base-300/50"
+      role="timer"
+      aria-label={`${pad(gameHour)}:${pad(gameMinute)}, ${diurnalLabel}`}
+    >
+      <span class="text-base">{diurnalIcon}</span>
+      <span class="font-mono font-semibold tabular-nums text-base-content">
+        {pad(gameHour)}:{pad(gameMinute)}
       </span>
-    {/if}
+      <span class="text-xs text-base-content/70">{diurnalLabel}</span>
+      {#if showWeather && (rainIntensity > 0.05 || Math.abs(windVelocity) > 0.3)}
+        <span class="text-xs text-base-content/60">
+          {weatherIcon}
+        </span>
+      {/if}
+    </div>
   </div>
-
-  <!-- Diurnal phase label (small, below the pill) -->
-  <span class="text-xs text-base-content/50 font-medium hidden sm:inline">
-    {diurnalLabel}
-  </span>
 </div>

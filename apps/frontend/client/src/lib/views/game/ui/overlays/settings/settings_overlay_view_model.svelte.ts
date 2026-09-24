@@ -175,7 +175,7 @@ export class SettingsOverlayViewModel
     const section = activeSection?.id ?? 'controls';
     // Use goToHref because the settings route's typed queryParameters don't
     // include the ?section= / ?group= params that settings_view_model parses.
-    await this._router.goToHref(`/settings?group=${group}&section=${section}`);
+    await this._router.goToHref(`/settings?group=${group}&section=${section}&from=game`);
   }
 
   override async dispose(): Promise<void> {

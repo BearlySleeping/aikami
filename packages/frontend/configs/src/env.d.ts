@@ -18,6 +18,8 @@ declare global {
     readonly PUBLIC_VAPID_KEY?: string;
     readonly PUBLIC_PARSE_LEVEL?: string;
     readonly PUBLIC_SITE_URL?: string;
+    readonly PUBLIC_HUB_PAGE_URL?: string;
+    readonly PUBLIC_CLIENT_URL?: string;
     readonly PUBLIC_APP_CHECK_DEBUG_TOKEN?: string;
     readonly PUBLIC_LOG_PERSIST_LEVEL?: string;
     readonly PUBLIC_MUTE_AUDIO?: string;

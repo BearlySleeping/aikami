@@ -42,16 +42,25 @@ const { viewModel }: Props = $props();
   >
     <div class="modal-box w-full max-w-lg max-h-[80vh] overflow-y-auto">
       <!-- Header -->
-      <div class="flex items-center justify-between mb-4">
+      <div class="flex items-center justify-between gap-3 mb-4">
         <h2 class="text-lg font-bold">Settings</h2>
-        <button
-          type="button"
-          class="btn btn-ghost btn-sm btn-circle"
-          onclick={() => viewModel.close()}
-          aria-label="Close settings"
-        >
-          ✕
-        </button>
+        <div class="flex items-center gap-2">
+          <button
+            type="button"
+            class="btn btn-ghost btn-sm text-base-content/60 hover:text-base-content"
+            onclick={() => viewModel.navigateToFullSettings()}
+          >
+            Full Settings →
+          </button>
+          <button
+            type="button"
+            class="btn btn-ghost btn-sm btn-circle"
+            onclick={() => viewModel.close()}
+            aria-label="Close settings"
+          >
+            ✕
+          </button>
+        </div>
       </div>
 
       <!-- Registry-driven tabs -->
@@ -83,17 +92,6 @@ const { viewModel }: Props = $props();
         {:else}
           <p class="text-sm text-base-content/60 text-center py-4">Section not available</p>
         {/if}
-      </div>
-
-      <!-- Full Settings navigation action (AC-4) -->
-      <div class="mt-4 pt-3 border-t border-base-300">
-        <button
-          type="button"
-          class="btn btn-sm btn-ghost w-full justify-center text-base-content/60 hover:text-base-content"
-          onclick={() => viewModel.navigateToFullSettings()}
-        >
-          Full Settings →
-        </button>
       </div>
     </div>
   </div>

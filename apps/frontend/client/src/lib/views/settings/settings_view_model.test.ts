@@ -39,7 +39,7 @@ const buildOptions = (
   overrides: Partial<SettingsViewModelOptions> = {},
 ): SettingsViewModelOptions => ({
   className: 'SettingsViewModel',
-  router: { goBack: mock(async () => {}) },
+  router: { goBack: mock(async () => {}), goToHref: mock(async () => {}) },
   connectionStatus: createAiConnectionStatus(),
   createAccount: () => subStub as AccountViewModelInterface,
   createGameplay: () => subStub as GameplayViewModelInterface,
@@ -144,6 +144,31 @@ describe('SettingsViewModel — deep links', () => {
     await vm.initialize();
     expect(vm.activeSectionId).toBe('controls');
     expect(vm.activeGroupId).toBe('play');
+  });
+
+  test('close returns explicitly to /game when settings were opened from the game overlay', async () => {
+    setSearch('?from=game');
+    const goBack = mock(async () => {});
+    const goToHref = mock(async () => {});
+    const vm = createVm({ router: { goBack, goToHref } });
+
+    await vm.closeSettings();
+
+    expect(goToHref).toHaveBeenCalledWith('/game', { replace: true });
+    expect(goBack).not.toHaveBeenCalled();
+  });
+
+  test('close returns to the start page when settings were opened from there', async () => {
+    setSearch('');
+    const goBack = mock(async () => {});
+    const goToHref = mock(async () => {});
+    const previousPage = { url: new URL('https://aikami.local/') };
+    const vm = createVm({ router: { goBack, goToHref, previousPage } });
+
+    await vm.closeSettings();
+
+    expect(goToHref).toHaveBeenCalledWith('https://aikami.local/');
+    expect(goBack).not.toHaveBeenCalled();
   });
 });
 
