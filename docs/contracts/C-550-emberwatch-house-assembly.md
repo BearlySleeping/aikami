@@ -304,7 +304,7 @@ Current generated hashes recorded by the evidence plane:
 - The actual base crossing on this branch is `39–41 × 7–8`; C-549 is not present on `origin/main`, so no unrelated crossing geometry was imported.
 - Comparing generated `village.json` with `origin/main` yields 12 collision changes, all at the hut's upper-roof cells (`c=51..56`, `r=5..6`). Object-layer spawn and transition arrays are byte-identical.
 - The door anchor `(54,9)` is a visual threshold anchor, not a standable actor cell. The foundation row remains the hard boundary and the real approach is row `10`/the clear landing cells.
-- Terrain overrides are accepted only for walkable terrain; a solid override on walk-behind, threshold, approach, or contact-shadow cells fails before mutation, and any override overlapping explicit house ground art is rejected so architecture cannot be erased by terrain filtering.
+- Terrain overrides are accepted on walkable threshold cells and terrain-owned ground cells; non-empty overrides on blocked, non-terrain house ground art fail before mutation so terrain filtering cannot erase facade or foundation art. Solid overrides on walk-behind, approach, or contact-shadow cells still fail before mutation.
 
 ### Deviations from Spec
 
@@ -312,11 +312,11 @@ Current generated hashes recorded by the evidence plane:
 - **The visual threshold is intentionally not actor-standable.** The door opening is visible and returns the canonical anchor, while the foundation/actor-footprint collision rule keeps the player on the reachable approach. This preserves truthful exterior behavior without inventing enter/exit semantics.
 - **C-549 is absent from this branch's base.** The collision audit therefore compares against the actual generated base rather than claiming C-549's alternate crossing delta.
 - **No human visual acceptance is claimed.** The WebGL captures are technical observations only; the evidence index is outside the tracked repository under `/tmp/opencode/c550-evidence/`.
-- **Review follow-up:** terrain overrides are now rejected on explicit house ground cells, real-village reachability is asserted from `village_gate`, and the production capture lane is POM-backed with candidate/artifact fingerprints and WebGL checks.
+- **Review follow-up:** terrain overrides now reject only non-empty overrides on blocked, non-terrain house ground cells, while preserving walkable threshold and terrain-owned cells; real-village reachability is asserted from `village_gate`, and the production capture lane is POM-backed with candidate/artifact fingerprints and WebGL checks.
 
 ### Test Results
 
-- Unit (`bun moon run scripts:test`): **2090 pass / 0 fail**.
+- Unit (`bun moon run scripts:test`): **2092 pass / 0 fail**.
 - Unit (`bun moon run frontend-engine:test`): **1831 pass / 0 fail**.
 - E2E infrastructure unit (`bun run --cwd apps/e2e test:unit`): **32 pass / 0 fail**, 83 assertions. The e2e package exposes this script directly; its Moon config has no `test-unit` task.
 - Production house E2E (`bun run --cwd apps/e2e test -- --project=game tests/game/emberwatch_house.spec.ts`): **3 pass / 0 fail**; WebGL, walk-behind, and threshold blocker paths pass.

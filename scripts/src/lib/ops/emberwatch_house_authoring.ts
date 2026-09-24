@@ -185,27 +185,44 @@ const houseGroundCells = (options: {
   return cells;
 };
 
-const hasTerrainOverride = (map: MapData, c: number, r: number): boolean =>
-  map.terrainOverrides?.some(([overrideC, overrideR]) => overrideC === c && overrideR === r) ??
-  false;
+const terrainOverrideAt = (map: MapData, c: number, r: number): string | undefined => {
+  const overrides = map.terrainOverrides;
+  if (!overrides) {
+    return undefined;
+  }
+  for (let index = overrides.length - 1; index >= 0; index--) {
+    const entry = overrides[index];
+    if (entry && entry[0] === c && entry[1] === r) {
+      return entry[2];
+    }
+  }
+  return undefined;
+};
 
-const assertNoGroundTerrainOverrides = (options: {
+const assertNoBlockedGroundTerrainOverrides = (options: {
   map: MapData;
   name: string;
   c0: number;
   c1: number;
   r1: number;
+  doorCells: ReadonlyArray<[number, number]>;
 }): void => {
   const badGroundOverrides = houseGroundCells({
     c0: options.c0,
     c1: options.c1,
     r1: options.r1,
-  }).filter(([c, r]) => hasTerrainOverride(options.map, c, r));
+  }).filter(([c, r]) => {
+    if (houseDoorHasCell(options.doorCells, c, r)) {
+      return false;
+    }
+    const terrain = terrainOverrideAt(options.map, c, r);
+    return terrain !== undefined && terrain !== '';
+  });
   if (badGroundOverrides.length === 0) {
     return;
   }
   throw new Error(
-    `emberwatch_authoring.placeHouse: ${options.name} terrain override cell(s) ${formatCells(badGroundOverrides)} overlap explicit house ground art`,
+    `emberwatch_authoring.placeHouse: ${options.name} terrain override cell(s) ${formatCells(badGroundOverrides)} overlap blocked house ground art`,
   );
 };
 
@@ -336,12 +353,13 @@ const assertHouseInputs = (options: {
       `emberwatch_authoring.placeHouse: ${name} door column ${options.door.c} is not on the derived two-cell south facade`,
     );
   }
-  assertNoGroundTerrainOverrides({
+  assertNoBlockedGroundTerrainOverrides({
     map: options.map,
     name,
     c0: region.c0,
     c1: region.c1,
     r1: region.r1,
+    doorCells: placement.doorCells,
   });
   const walkBehindCells: Array<[number, number]> = [];
   for (let r = region.r0; r < region.r1 - 2; r++) {

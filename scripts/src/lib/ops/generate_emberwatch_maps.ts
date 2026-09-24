@@ -153,20 +153,25 @@ const applyTerrainOverrides = (options: {
   map: MapData;
   overrides: ReadonlyArray<readonly [number, number, string]> | undefined;
   layers: LayerBuffers;
-  protectedCells: ReadonlySet<string>;
+  groundCells: ReadonlySet<string>;
 }): void => {
-  const { map, overrides, layers, protectedCells } = options;
+  const { map, overrides, layers, groundCells } = options;
   for (const [c, r, terrain] of overrides ?? []) {
     if (!contributionInBounds(map, c, r)) {
       continue;
     }
-    const key = cellKey(c, r);
-    if (protectedCells.has(key)) {
+    const index = idx(map, c, r);
+    if (
+      terrain !== '' &&
+      groundCells.has(cellKey(c, r)) &&
+      map.collision[index] !== 0 &&
+      layers.terrainChannel[index] === ''
+    ) {
       throw new Error(
-        `generate_emberwatch_maps: terrain override (${c},${r}) overlaps an explicit ground contribution`,
+        `generate_emberwatch_maps: cell (${c},${r}) has both a blocked non-terrain ground contribution and terrain override "${terrain}"`,
       );
     }
-    layers.terrainChannel[idx(map, c, r)] = terrain;
+    layers.terrainChannel[index] = terrain;
   }
 };
 
@@ -230,7 +235,8 @@ export const buildMapJson = ({
 
   // Explicit contributions are authored after the baked layer split. Ground
   // owns architectural silhouettes; decor owns contact decals; overhead owns
-  // walk-behind roof cells. Each helper rejects lower/upper band collisions.
+  // walk-behind roof cells. Contribution helpers reject lower/upper band
+  // collisions, and terrain overrides reject blocked non-terrain ground cells.
   const layers: LayerBuffers = { ground, decor, overhead, terrainChannel };
   const groundExtraCells = applyGroundContributions({
     map: m,
@@ -254,7 +260,7 @@ export const buildMapJson = ({
     map: m,
     overrides: m.terrainOverrides,
     layers,
-    protectedCells: groundExtraCells,
+    groundCells: groundExtraCells,
   });
 
   // A map whose terrain channel is ALL empty (interior maps like the inn)

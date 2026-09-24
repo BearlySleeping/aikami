@@ -329,6 +329,14 @@ describe('C-550 — assertions and stable identities', () => {
     expect(map.overheadExtra).toBeUndefined();
   });
 
+  test('terrain overrides may replace a walkable house threshold', () => {
+    const map = makeHouseMap();
+    map.terrainOverrides = [[4, 6, 'dirt']];
+    expect(placeTestHouse(map)).toEqual({ c: 4, r: 6 });
+    expect(contribution(map.groundExtra, 4, 6)).toBe(HOUSE_FRAMES.doorOpen);
+    expect(map.collision[at(map, 4, 6)]).toBe(0);
+  });
+
   test('the village keeps its existing transition graph and other building shells', () => {
     const { map, objectLayers } = buildVillage();
     const transitions = objectLayers
@@ -358,13 +366,29 @@ describe('C-550 — assertions and stable identities', () => {
 });
 
 describe('C-550 — compiled map layers', () => {
-  test('rejects terrain overrides that overlap explicit ground contributions', () => {
+  test('rejects terrain overrides on blocked non-terrain ground contributions', () => {
     const map = makeHouseMap();
     map.groundExtra = [[3, 6, HOUSE_FRAMES.facadeWall]];
+    map.collision[at(map, 3, 6)] = 1;
     map.terrainOverrides = [[3, 6, 'dirt']];
     expect(() => buildMapJson({ map, objectLayers: [] })).toThrow(
-      /terrain override \(3,6\) overlaps an explicit ground contribution/,
+      /cell \(3,6\) has both a blocked non-terrain ground contribution and terrain override "dirt"/,
     );
+  });
+
+  test('allows terrain overrides on walkable or terrain-owned ground cells', () => {
+    const walkableMap = makeHouseMap();
+    walkableMap.groundExtra = [[3, 6, HOUSE_FRAMES.doorOpen]];
+    walkableMap.terrainOverrides = [[3, 6, 'dirt']];
+    const walkableJson = buildMapJson({ map: walkableMap, objectLayers: [] }).json;
+    expect(readTerrain(walkableJson)[at(walkableMap, 3, 6)]).toBe('dirt');
+
+    const terrainOwnedMap = makeHouseMap();
+    terrainOwnedMap.groundExtra = [[3, 6, G.DIRT]];
+    terrainOwnedMap.collision[at(terrainOwnedMap, 3, 6)] = 1;
+    terrainOwnedMap.terrainOverrides = [[3, 6, 'gravel']];
+    const terrainOwnedJson = buildMapJson({ map: terrainOwnedMap, objectLayers: [] }).json;
+    expect(readTerrain(terrainOwnedJson)[at(terrainOwnedMap, 3, 6)]).toBe('gravel');
   });
 
   test('facade/foundation use ground, contact shadow uses decor, and upper roof uses overhead', () => {
