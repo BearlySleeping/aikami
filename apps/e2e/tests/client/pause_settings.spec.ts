@@ -32,6 +32,8 @@ test.describe('C-554 pause and settings surfaces', () => {
     await expect(pause.getByRole('button', { name: 'End Session' })).toBeVisible();
     await expect(pause.getByRole('button', { name: 'Quit to Main Menu' })).toBeVisible();
 
+    await expect(page.getByTestId('player-hud')).toBeHidden();
+
     await page.getByRole('button', { name: 'Quit to Main Menu' }).click();
     await expect(page.getByText('Quit to Main Menu?')).toBeVisible();
     await expect(page.getByText(/existing local saves stay on this device/)).toBeVisible();
@@ -57,7 +59,55 @@ test.describe('C-554 pause and settings surfaces', () => {
     await expect(page.getByTestId('hud-hide-toggle')).toBeVisible();
     await expect(page.getByTestId('hud-preset-adventure')).toBeVisible();
 
+    const settingsBounds = await page.getByTestId('in-game-settings-root').evaluate((panel) => {
+      const rect = panel.getBoundingClientRect();
+      const viewportHeight = window.innerHeight;
+      const style = getComputedStyle(panel);
+      const content = panel.querySelector<HTMLElement>('.game-settings-content');
+      return {
+        top: rect.top,
+        bottom: rect.bottom,
+        viewportHeight,
+        overflowY: style.overflowY,
+        contentOverflowY: content ? getComputedStyle(content).overflowY : '',
+        contentScrollHeight: content?.scrollHeight ?? 0,
+        contentClientHeight: content?.clientHeight ?? 0,
+      };
+    });
+    expect(settingsBounds.top).toBeGreaterThanOrEqual(0);
+    expect(settingsBounds.bottom).toBeLessThanOrEqual(settingsBounds.viewportHeight);
+    expect(settingsBounds.overflowY).toBe('hidden');
+    expect(settingsBounds.contentOverflowY).toBe('auto');
+    expect(settingsBounds.contentScrollHeight).toBeGreaterThanOrEqual(
+      settingsBounds.contentClientHeight,
+    );
+
     expect(await seriousAxeViolations(page)).toEqual([]);
+  });
+
+  test('pause remains scrollable at 200% text', async ({ page }) => {
+    const hud = new HudCustomizationPage(page);
+    await hud.open();
+    await page.evaluate(() => {
+      document.documentElement.style.fontSize = '200%';
+    });
+    await hud.openPauseMenu();
+
+    const pauseBounds = await page.getByTestId('pause-menu').evaluate((panel) => {
+      const rect = panel.getBoundingClientRect();
+      return {
+        top: rect.top,
+        bottom: rect.bottom,
+        viewportHeight: window.innerHeight,
+        overflowY: getComputedStyle(panel).overflowY,
+        scrollHeight: panel.scrollHeight,
+        clientHeight: panel.clientHeight,
+      };
+    });
+    expect(pauseBounds.top).toBeGreaterThanOrEqual(0);
+    expect(pauseBounds.bottom).toBeLessThanOrEqual(pauseBounds.viewportHeight);
+    expect(pauseBounds.overflowY).toBe('auto');
+    expect(pauseBounds.scrollHeight).toBeGreaterThanOrEqual(pauseBounds.clientHeight);
   });
 
   test('full settings capability detail explains unconfigured state and keeps setup action', async ({

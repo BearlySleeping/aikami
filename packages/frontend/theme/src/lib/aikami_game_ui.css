@@ -70,6 +70,9 @@
 
   :where([data-aikami-theme-scope]) {
     .game-settings-scrim {
+      position: absolute;
+      inset: 0;
+      z-index: 60;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -77,12 +80,18 @@
         max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
       background-color: color-mix(in oklab, var(--ui-ink) 68%, transparent);
       backdrop-filter: blur(8px);
+      overflow: hidden;
     }
 
     .game-settings-panel {
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
       inline-size: min(100%, 48rem);
-      max-block-size: min(88dvh, 52rem);
-      overflow-y: auto;
+      max-block-size: min(44rem, calc(100dvh - 2rem));
+      min-block-size: 0;
+      margin: auto;
+      overflow: hidden;
       padding: 1rem;
       color: var(--ui-base-content);
       background-color: color-mix(in oklab, var(--ui-panel) 92%, var(--ui-brass) 8%);
@@ -92,11 +101,27 @@
       box-shadow: 0 30px 70px -34px rgb(0 0 0 / 0.75);
     }
 
+    .game-settings-panel > .game-settings-header {
+      flex: 0 0 auto;
+    }
+
     .game-settings-content {
+      min-block-size: 0;
       min-inline-size: 0;
+      flex: 1 1 auto;
+      overflow-y: auto;
+      padding-block-end: 0.5rem;
+    }
+
+    [data-overlay-active="true"] .hud-anchor {
+      visibility: hidden;
+      pointer-events: none;
     }
 
     .game-pause-scrim {
+      position: absolute;
+      inset: 0;
+      z-index: 60;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -104,11 +129,17 @@
         max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
       background-color: color-mix(in oklab, var(--ui-ink) 68%, transparent);
       backdrop-filter: blur(8px);
+      overflow: hidden;
     }
 
     .game-pause-panel {
-      max-block-size: min(90dvh, 44rem);
+      box-sizing: border-box;
+      max-block-size: min(44rem, calc(100dvh - 2rem));
+      min-block-size: 0;
+      margin: auto;
       overflow-y: auto;
+      overscroll-behavior: contain;
+      scrollbar-gutter: stable;
       color: var(--ui-base-content);
       background-color: color-mix(in oklab, var(--ui-panel) 92%, var(--ui-brass) 8%);
       border-color: var(--game-ornament);
@@ -450,6 +481,10 @@
       gap: 0.35rem;
       border-block-end: 1px solid var(--game-ornament-quiet);
       padding-block-end: 0.45rem;
+    }
+
+    .game-settings-panel > .game-tabs {
+      flex: 0 0 auto;
     }
 
     .game-tab {

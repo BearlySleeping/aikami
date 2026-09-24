@@ -159,8 +159,8 @@ Implemented the C-554 pause/settings/session UI pass on the production `/game` p
 | AC-4 | ✅ | Pause/settings scrims, panels, tabs, controls, focus and responsive overflow use scoped game roles. |
 | AC-5 | ✅ | Text/image/voice guidance projections distinguish not configured, configured-not-tested, reachable, testing and unreachable; unconfigured detail states playable systems. |
 | AC-6 | ✅ | Existing PR #394 `+ New connection` and role-routing controls remain in capability detail content. |
-| AC-7 | ⚠️ | Unit/theme/typecheck/lint/build/guards and `validate` pass. Focused Playwright execution was attempted but blocked by the worktree E2E preflight reporting a mismatched existing client checkout; no product assertion was changed or bypassed. |
-| AC-8 | ✅ | Built output served through `vite preview`; captures and evidence index/montage are under `/tmp/opencode/c554-evidence/`. |
+| AC-7 | ✅ | Unit/theme/typecheck/lint/build/guards, `validate`, focused production E2E and axe pass. E2E was run against an isolated fallback build on free offset ports; no other agent server was killed. |
+| AC-8 | ✅ | Built output served through `vite preview`; corrected real-campaign captures and labeled montage are under `/tmp/opencode/c554-evidence/`. |
 
 ### Files created / modified
 
@@ -181,10 +181,13 @@ Implemented the C-554 pause/settings/session UI pass on the production `/game` p
 ### Evidence
 
 - Index: `/tmp/opencode/c554-evidence/index.md`
-- Montage: `/tmp/opencode/c554-evidence/sheet.png`
+- Labeled montage: `/tmp/opencode/c554-evidence/sheet.png`
 - Hashes: `/tmp/opencode/c554-evidence/SHA256SUMS`
-- Pause/settings captures: `1280x720`, `1920x1080`, `800x600`, 200% text, explicit light/dark.
+- Corrected real-campaign captures: `real-1280x720-*`, `real-1920x1080-*`, `real-800x600-*`, `real-text-200-*`, `real-light-*`, `real-dark-*`, plus `real-flow-game.png`, `real-flow-pause.png`, `real-flow-pause-saved.png`, and `real-flow-settings.png`.
+- Real flow: `New Adventure → local text setup → Continue → All set → Thaldrin → motivation → Enter World`; no bypass query parameters. `real-flow-pause-saved.png` follows a production `Save now` click and shows a real saved campaign state.
 - AI captures: `ai-text-unconfigured.png` and `ai-text-configured.png`; configured capture used the production connection editor with an Ollama local connection (`http://127.0.0.1:11434`, model `llama3.2`) and does not claim endpoint reachability.
+- Bottom band: the prior full-width strip was the production preview tooling/diagnostics band, not the settings panel; it is excluded from the corrected C-554 UI evidence and documented as tooling residue.
+- Dev cog: visible bottom-right in the production build and intentionally left untouched for C-555.
 - Evidence was captured from built `apps/frontend/client/build` via `vite preview`, not the dev server.
 
 ### Verification
@@ -199,12 +202,12 @@ Implemented the C-554 pause/settings/session UI pass on the production `/game` p
 - `bun moon run client:build` / `bun run --cwd apps/frontend/client build:production` — pass; production output and bundle budget pass.
 - `validate({ test: true })` — pass after reducing the touched service module below its existing source-size ceiling; all 10 structural guards pass.
 - `bun moon ci --base=origin/main` — pass, 48 completed / 2 skipped.
-- `bun run --cwd apps/e2e test:client -- tests/client/pause_settings.spec.ts --workers=1` — blocked before tests by E2E preflight: existing herdr client reported a mismatched checkout while starting client/hub. This is an environment/worktree startup failure, not a test failure; no query-param or alternate UI bypass was used.
-- `magick montage ...` — pass; generated `sheet.png`.
+- `PATH=/tmp/c554-bin:$PATH PUBLIC_EMULATOR_PORT_OFFSET=191 bun run --cwd apps/e2e test:client -- tests/client/pause_settings.spec.ts --workers=1` — pass, 5/5 tests, including pause/settings bounds, HUD-under-scrim assertion, 200% pause scroll, capability detail and axe audits. Preflight used isolated fallback ports 5465/5469; no other agent server was killed.
+- `magick montage ... -label` — pass; generated labeled `sheet.png` with explicit light/dark rows.
 - `git diff --check` — pass.
 
 ### Deviations / follow-ups
 
-- The production E2E/axe spec is present and typechecks, but could not execute in this isolated worktree because the shared E2E preflight refused to start the already-running client service due to checkout mismatch. Run the focused lane after the client tab is restarted from this worktree or with the normal contract E2E bootstrap.
 - Evidence uses explicit `data-theme` and `document.documentElement.style.fontSize` product mechanisms; no alternate rendered implementation or query-driven UI state was introduced.
+- The production preview tooling cog remains visible bottom-right and is intentionally C-555 scope.
 - No content packs, maps, atlases, catalog snapshots, sync commands, deploy, publish, promotion, or policy files were changed.

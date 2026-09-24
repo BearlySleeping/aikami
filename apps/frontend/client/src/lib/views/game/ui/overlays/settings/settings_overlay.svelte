@@ -24,7 +24,7 @@ const { viewModel }: Props = $props();
      visible (opacity:0 otherwise) — see party_roster_view for the pattern. -->
 <BaseViewModelContainer {viewModel}>
   <div
-    class="game-settings-scrim pointer-events-auto"
+    class="game-settings-scrim pointer-events-auto z-[60]"
     data-aikami-theme-scope
     role="dialog"
     aria-modal="true"
@@ -43,7 +43,7 @@ const { viewModel }: Props = $props();
   >
     <div class="game-settings-panel" data-testid="in-game-settings-root">
       <!-- Header -->
-      <div class="flex items-center justify-between gap-3 mb-4">
+      <div class="game-settings-header flex items-center justify-between gap-3 mb-4">
         <h2 class="game-section-title">Settings</h2>
         <div class="flex items-center gap-2">
           <button
