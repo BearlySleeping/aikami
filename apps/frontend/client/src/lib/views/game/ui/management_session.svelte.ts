@@ -533,6 +533,10 @@ class GameManagementSession
 
   /** @inheritdoc */
   ensureSection(overlay: GameOverlayType): void {
+    if (overlay === 'JOURNAL' || overlay === 'QUEST_LOG') {
+      this._ensureJournalSection(overlay);
+      return;
+    }
     if (this._createdOverlays.has(overlay)) {
       return;
     }
@@ -545,22 +549,6 @@ class GameManagementSession
           presentation: 'management',
         });
         return;
-      case 'QUEST_LOG':
-      case 'JOURNAL': {
-        const vm = this._createJournalViewModel({ className: 'JournalViewModel' });
-        this.journalViewModel = vm;
-        // QUEST_LOG is a legacy input alias and always lands on the Journal's
-        // default quests tab. The canonical JOURNAL overlay restores the tab
-        // the player last used in this section.
-        const tab =
-          overlay === 'QUEST_LOG'
-            ? undefined
-            : this._rememberedTab('journal', JOURNAL_TAB_BY_SUBVIEW);
-        if (tab !== undefined) {
-          untrack(() => vm.setActiveTab(tab as JournalTab));
-        }
-        return;
-      }
       case 'CHARACTER_DASHBOARD':
         this.dashboardViewModel = this._createCharacterSheetViewModel({
           className: 'CharacterSheetViewModel',
@@ -607,6 +595,34 @@ class GameManagementSession
     this.reputationViewModel = undefined;
     this.worldViewModel = undefined;
     this._createdOverlays.clear();
+  }
+
+  /** Creates or reuses the single ViewModel behind the two Journal aliases. */
+  private _ensureJournalSection(overlay: 'JOURNAL' | 'QUEST_LOG'): void {
+    const journal = this.journalViewModel;
+    if (journal) {
+      const tab =
+        overlay === 'QUEST_LOG'
+          ? 'quests'
+          : (this._rememberedTab('journal', JOURNAL_TAB_BY_SUBVIEW) ?? 'quests');
+      untrack(() => journal.setActiveTab(tab));
+      return;
+    }
+
+    const vm = this._createJournalViewModel({ className: 'JournalViewModel' });
+    this.journalViewModel = vm;
+    this._createdOverlays.add('JOURNAL');
+    this._createdOverlays.add('QUEST_LOG');
+    // QUEST_LOG is a legacy input alias and always lands on the Journal's
+    // default quests tab. The canonical JOURNAL overlay restores the tab the
+    // player last used in this section.
+    const tab =
+      overlay === 'QUEST_LOG'
+        ? undefined
+        : this._rememberedTab('journal', JOURNAL_TAB_BY_SUBVIEW);
+    if (tab !== undefined) {
+      untrack(() => vm.setActiveTab(tab));
+    }
   }
 
   /** The remembered own-tab for a section, translated through its map. */
