@@ -41,6 +41,9 @@ type Rgb = readonly [number, number, number];
 /** Six pixels is the authored upper bound for the visible base course. */
 export const HOUSE_PLINTH_HEIGHT = 6;
 
+/** Ten pixels keeps the contact band soft while staying below one tile. */
+export const HOUSE_SHADOW_FADE_HEIGHT = 10;
+
 /*
  * Weathered cedar shingles are intentional here: the neighboring village
  * buildings use warm wood, so a brown roof reads as one material family while
@@ -56,6 +59,7 @@ const ROOF = {
   ridgeShadow: [123, 85, 54] as const,
   gable: [132, 87, 56] as const,
   hipShadow: [82, 55, 40] as const,
+  hip: [126, 91, 61] as const,
   highlight: [193, 151, 94] as const,
 } satisfies Record<string, Rgb>;
 
@@ -199,15 +203,17 @@ const paintRoofRidge = (col: number, row: number): void => {
 /** Fill a solid hip/gable wedge instead of drawing a pair of thin diagonals. */
 const paintGable = (col: number, row: number, left: boolean): void => {
   paintRoofPlane(col, row, false);
-  for (let y = 3; y <= 28; y++) {
-    const rise = Math.min(y - 3, 28 - y);
-    const width = Math.min(15, 3 + Math.floor(rise * 0.55));
+  for (let y = 2; y <= 29; y++) {
+    const rise = Math.min(y - 2, 29 - y);
+    const width = Math.min(16, 3 + Math.floor(rise * 0.6));
     const x = left ? 0 : TILE - width;
     rect(col, row, x, y, width, 1, ROOF.gable);
-    rect(col, row, left ? x + width - 2 : x + 1, y, 2, 1, ROOF.hipShadow);
+    if (width >= 6) {
+      rect(col, row, left ? x + 2 : x + 1, y, width - 3, 1, ROOF.hip);
+    }
   }
-  lineH(col, row, 2, ROOF.ridge);
-  lineH(col, row, 29, ROOF.dark);
+  lineH(col, row, 1, ROOF.ridge);
+  lineH(col, row, 30, ROOF.dark);
   copyLeftEdgeToRight(col, row);
 };
 
@@ -311,13 +317,13 @@ const paintFoundation = (col: number, row: number, shadow: boolean): void => {
   if (shadow) {
     clearCell(col, row);
     for (let y = 0; y < TILE; y++) {
-      const verticalFade = 1 - y / (TILE + 4);
+      const verticalFade = Math.max(0, 1 - y / HOUSE_SHADOW_FADE_HEIGHT);
+      const alpha = Math.floor(92 * verticalFade);
+      if (alpha === 0) {
+        continue;
+      }
       for (let x = 0; x < TILE; x++) {
-        const edgeFade = Math.min(1, x / 5, (TILE - 1 - x) / 5);
-        const alpha = Math.floor(92 * verticalFade * edgeFade);
-        if (alpha > 0) {
-          setPixelRgba(col, row, x, y, FOUNDATION.shadow, alpha);
-        }
+        setPixelRgba(col, row, x, y, FOUNDATION.shadow, alpha);
       }
     }
     return;

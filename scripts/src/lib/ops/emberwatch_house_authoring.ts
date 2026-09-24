@@ -189,19 +189,15 @@ const houseDoorHasCell = (
   r: number,
 ): boolean => doorCells.some(([doorC, doorR]) => doorC === c && doorR === r);
 
-/** Contact-shadow cells flank the single door on the first approach row. */
+/** Contact shadow spans the full facade width on the first approach row. */
 const houseContactShadowCells = (options: {
   c0: number;
   c1: number;
   doorRow: number;
-  doorCells: ReadonlyArray<[number, number]>;
 }): Array<[number, number]> => {
-  const doorColumns = new Set(options.doorCells.map(([c]) => c));
   const cells: Array<[number, number]> = [];
   for (let c = options.c0; c <= options.c1; c++) {
-    if (!doorColumns.has(c)) {
-      cells.push([c, options.doorRow + 1]);
-    }
+    cells.push([c, options.doorRow + 1]);
   }
   return cells;
 };
@@ -272,7 +268,7 @@ const facadeRoleForCell = (options: {
       return { layer: 'ground', gid: HOUSE_FRAMES.doorClosed, blocked: true };
     }
     const doorColumn = doorCells[0]?.[0];
-    if (doorColumn !== undefined && c === doorColumn + 1 && c < c1) {
+    if (doorColumn !== undefined && c === doorColumn - 1 && c > c0) {
       return { layer: 'ground', gid: HOUSE_FRAMES.facadeWindow, blocked: true };
     }
     return { layer: 'ground', gid: HOUSE_FRAMES.foundation, blocked: true };
@@ -421,7 +417,6 @@ const assertHouseInputs = (options: {
     c0: region.c0,
     c1: region.c1,
     doorRow: region.r1,
-    doorCells: placement.doorCells,
   });
   const badShadowCells = contactShadowCells.filter(
     ([c, r]) => !isMapCell(options.map, c, r) || !isWalkableLand(options.map, c, r),

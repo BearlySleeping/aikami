@@ -261,6 +261,29 @@ describe('C-549 — scatterPatches forms broad deterministic patches', () => {
     expect(a.ground).not.toEqual(b.ground);
   });
 
+  test('preserves ground, decor, and overhead contribution ownership', () => {
+    const map = makeMap(12, 12);
+    map.groundExtra = [[2, 2, G.GRASS_DARK]];
+    map.decorExtra = [[3, 3, G.GRASS_DARK]];
+    map.overheadExtra = [[4, 4, G.GRASS_DARK]];
+
+    scatterPatches({
+      map,
+      seed: 7,
+      c0: 0,
+      r0: 0,
+      c1: 11,
+      r1: 11,
+      baseGid: G.GRASS,
+      gid: G.GRASS_DARK,
+      threshold: 0,
+    });
+
+    expect(map.ground[2 * 12 + 2]).toBe(G.GRASS);
+    expect(map.ground[3 * 12 + 3]).toBe(G.GRASS);
+    expect(map.ground[4 * 12 + 4]).toBe(G.GRASS);
+  });
+
   test('it paints base cells in broad patches without repainting other terrain', () => {
     const region = makeMap(40, 40);
     // Paint a non-base cell in the middle of the region.

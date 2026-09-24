@@ -11,6 +11,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { chromium } from 'playwright';
 import { type EmberwatchHouseCell, EmberwatchHousePage } from '../src/pom/emberwatch_house_page.ts';
+import { ENTITY_TEXTURE_GUARD_POLICY } from '../src/visual/core/entity_texture_guard.ts';
 
 type EvidenceViewport = { width: number; height: number };
 
@@ -39,14 +40,15 @@ type EvidenceRecord = {
   label: string;
   phase: 'stills' | 'walk';
   mapId: string;
-  targetCell: string;
-  playerCell: string;
-  cameraCell: string;
+  requestedCell: string;
+  actualPlayerCell: string;
+  actualCameraCell: string;
   cameraSource: 'engine' | 'playerFallback';
   renderer: string;
   viewport: EvidenceViewport;
   textScale: number;
   purpose: string;
+  entityTextureFingerprint: string;
   sha256: string;
 };
 
@@ -55,6 +57,7 @@ type ExpectedArtifacts = {
   villageMap: string;
   atlasWebp: string;
   atlasJson: string;
+  entityTextureGuard: string;
 };
 
 const ROOT = resolve(import.meta.dirname, '../../..');
@@ -93,13 +96,13 @@ const STILL_CASES: readonly EvidenceCase[] = [
     file: 'automated_hut_front_noon_1280x720.png',
     label: 'C-550 hut front, noon',
     mapId: 'village',
-    target: { c: 54, r: 8 },
+    target: { c: 54, r: 11 },
   },
   {
     file: 'automated_hut_front_dawn_1920x1080.png',
     label: 'C-550 hut front, dawn',
     mapId: 'village',
-    target: { c: 54, r: 8 },
+    target: { c: 54, r: 11 },
     viewport: { width: 1920, height: 1080 },
     gameHour: 6,
   },
@@ -107,7 +110,7 @@ const STILL_CASES: readonly EvidenceCase[] = [
     file: 'automated_hut_front_night_2048x1152.png',
     label: 'C-550 hut front, night',
     mapId: 'village',
-    target: { c: 54, r: 8 },
+    target: { c: 54, r: 11 },
     viewport: { width: 2048, height: 1152 },
     gameHour: 0,
   },
@@ -115,14 +118,14 @@ const STILL_CASES: readonly EvidenceCase[] = [
     file: 'automated_hut_front_compact_800x600.png',
     label: 'C-550 hut front, compact viewport',
     mapId: 'village',
-    target: { c: 54, r: 8 },
+    target: { c: 54, r: 11 },
     viewport: { width: 800, height: 600 },
   },
   {
     file: 'automated_hut_front_collision_1920x1080.png',
     label: 'C-550 hut front, collision overlay',
     mapId: 'village',
-    target: { c: 54, r: 8 },
+    target: { c: 54, r: 11 },
     viewport: { width: 1920, height: 1080 },
     e2e: true,
   },
@@ -130,7 +133,7 @@ const STILL_CASES: readonly EvidenceCase[] = [
     file: 'automated_hut_front_authoring_1920x1080.png',
     label: 'C-550 hut front, authoring overlay',
     mapId: 'village',
-    target: { c: 54, r: 8 },
+    target: { c: 54, r: 11 },
     viewport: { width: 1920, height: 1080 },
     authoring: true,
     authoringLayers: HOUSE_LAYERS,
@@ -139,7 +142,7 @@ const STILL_CASES: readonly EvidenceCase[] = [
     file: 'automated_hut_front_text_200_1920x1080.png',
     label: 'C-550 hut front, noon, 200% root text',
     mapId: 'village',
-    target: { c: 54, r: 8 },
+    target: { c: 54, r: 11 },
     viewport: { width: 1920, height: 1080 },
     textScale: 2,
   },
@@ -163,6 +166,20 @@ const STILL_CASES: readonly EvidenceCase[] = [
     label: 'C-550 unchanged inn comparison',
     mapId: 'inn',
     target: { c: 14, r: 10 },
+  },
+  {
+    file: 'automated_hut_door_actor_noon_1920x1080.png',
+    label: 'C-550 player standing at the closed door',
+    mapId: 'village',
+    target: { c: 54, r: 11 },
+    viewport: { width: 1920, height: 1080 },
+  },
+  {
+    file: 'automated_hut_side_wall_actor_noon_1920x1080.png',
+    label: 'C-550 player beside the hut side wall for scale',
+    mapId: 'village',
+    target: { c: 57, r: 11 },
+    viewport: { width: 1920, height: 1080 },
   },
   {
     file: 'automated_hut_beside_unchanged_inn_noon_1920x1080.png',
@@ -216,23 +233,30 @@ const WALK_CASES: readonly EvidenceCase[] = [
     ],
   },
   {
+    file: 'automated_walk_behind_roof_05_partly_occluded.png',
+    label: 'C-550 player walking behind the roof, partly occluded',
+    mapId: 'village',
+    target: { c: 54, r: 4 },
+    actions: [{ key: 'KeyS', holdMs: 350, label: 'move south behind the roof, partly occluded' }],
+  },
+  {
     file: 'automated_door_approach_01_start.png',
     label: 'C-550 door approach, start',
     mapId: 'village',
-    target: { c: 54, r: 10 },
+    target: { c: 54, r: 11 },
   },
   {
     file: 'automated_door_approach_02_attempt.png',
     label: 'C-550 door approach, threshold attempt',
     mapId: 'village',
-    target: { c: 54, r: 10 },
+    target: { c: 54, r: 11 },
     actions: [{ key: 'KeyW', holdMs: 650, label: 'attempt the visible threshold' }],
   },
   {
     file: 'automated_door_approach_03_side_east.png',
     label: 'C-550 door approach, lateral east',
     mapId: 'village',
-    target: { c: 54, r: 10 },
+    target: { c: 54, r: 11 },
     actions: [
       { key: 'KeyW', holdMs: 650, label: 'attempt the visible threshold' },
       { key: 'KeyD', holdMs: 350, label: 'move laterally on the clear approach' },
@@ -242,7 +266,7 @@ const WALK_CASES: readonly EvidenceCase[] = [
     file: 'automated_door_approach_04_side_west.png',
     label: 'C-550 door approach, lateral west',
     mapId: 'village',
-    target: { c: 54, r: 10 },
+    target: { c: 54, r: 11 },
     actions: [
       { key: 'KeyW', holdMs: 650, label: 'attempt the visible threshold' },
       { key: 'KeyA', holdMs: 350, label: 'move laterally on the clear approach' },
@@ -252,7 +276,7 @@ const WALK_CASES: readonly EvidenceCase[] = [
     file: 'automated_door_approach_05_return.png',
     label: 'C-550 door approach, return west',
     mapId: 'village',
-    target: { c: 54, r: 10 },
+    target: { c: 54, r: 11 },
     actions: [
       { key: 'KeyW', holdMs: 650, label: 'attempt the visible threshold' },
       { key: 'KeyA', holdMs: 700, label: 'return across the clear approach' },
@@ -277,13 +301,19 @@ const main = async (): Promise<void> => {
   process.env.C550_CLIENT_URL = CLIENT_URL;
 
   const expected = JSON.parse(readFileSync(EXPECTED_ARTIFACTS_PATH, 'utf8')) as ExpectedArtifacts;
-  const artifactHashes: Record<keyof ExpectedArtifacts, string> = {
+  type ArtifactHashKey = Exclude<keyof ExpectedArtifacts, 'entityTextureGuard'>;
+  const artifactHashes: Record<ArtifactHashKey, string> = {
     manifest: hashFile(ARTIFACT_PATHS.manifest),
     villageMap: hashFile(ARTIFACT_PATHS.villageMap),
     atlasWebp: hashFile(ARTIFACT_PATHS.atlasWebp),
     atlasJson: hashFile(ARTIFACT_PATHS.atlasJson),
   };
-  const mismatchedArtifacts = (Object.keys(expected) as Array<keyof ExpectedArtifacts>).filter(
+  if (expected.entityTextureGuard !== ENTITY_TEXTURE_GUARD_POLICY) {
+    throw new Error(
+      `C-550 evidence entity-texture guard policy mismatch: expected ${ENTITY_TEXTURE_GUARD_POLICY}, got ${expected.entityTextureGuard}`,
+    );
+  }
+  const mismatchedArtifacts = (Object.keys(artifactHashes) as ArtifactHashKey[]).filter(
     (key) => expected[key] !== artifactHashes[key],
   );
   if (mismatchedArtifacts.length > 0) {
@@ -296,7 +326,9 @@ const main = async (): Promise<void> => {
   const branch = gitOutput(['rev-parse', '--abbrev-ref', 'HEAD']);
   const diff = execFileSync('git', ['diff', '--binary', 'HEAD'], { cwd: ROOT });
   const candidateFingerprint = hashBytes(
-    Buffer.from(`${commit}\n${branch}\n${hashBytes(diff)}\n${JSON.stringify(artifactHashes)}`),
+    Buffer.from(
+      `${commit}\n${branch}\n${hashBytes(diff)}\n${JSON.stringify(artifactHashes)}\n${ENTITY_TEXTURE_GUARD_POLICY}`,
+    ),
   );
   const browser = await chromium.launch({
     headless: true,
@@ -338,20 +370,22 @@ const main = async (): Promise<void> => {
       await house.move(action.key, action.holdMs);
     }
     const path = join(EVIDENCE_DIR, definition.file);
+    const entityTextures = await house.requireResolvedEntityTextures();
     const snapshot = await house.capture(path);
     const record: EvidenceRecord = {
       file: definition.file,
       label: definition.label,
       phase,
       mapId: definition.mapId,
-      targetCell: formatCell(definition.target),
-      playerCell: formatCell(snapshot.player),
-      cameraCell: formatCell(snapshot.camera),
+      requestedCell: formatCell(definition.target),
+      actualPlayerCell: formatCell(snapshot.player),
+      actualCameraCell: formatCell(snapshot.camera),
       cameraSource: snapshot.cameraSource,
       renderer: snapshot.renderer,
       viewport,
       textScale: definition.textScale ?? 1,
       purpose: definition.actions?.at(-1)?.label ?? definition.label,
+      entityTextureFingerprint: hashBytes(Buffer.from(JSON.stringify(entityTextures))),
       sha256: hashFile(path),
     };
     if (phase === 'stills') {
@@ -376,6 +410,16 @@ const main = async (): Promise<void> => {
     await browser.close();
   }
 
+  const entityTextureFingerprint = hashBytes(
+    Buffer.from(
+      JSON.stringify(
+        [...stillRecords, ...walkRecords].map((record) => record.entityTextureFingerprint).sort(),
+      ),
+    ),
+  );
+  const captureFingerprint = hashBytes(
+    Buffer.from(`${candidateFingerprint}\n${entityTextureFingerprint}`),
+  );
   const identity = {
     schemaVersion: 1,
     capturedAt: new Date().toISOString(),
@@ -384,9 +428,15 @@ const main = async (): Promise<void> => {
     branch,
     commit,
     candidateFingerprint,
+    captureFingerprint,
     artifactHashes,
     expectedArtifactHashes: expected,
     artifactFingerprintCheck: 'passed',
+    entityTextureGuard: {
+      policy: ENTITY_TEXTURE_GUARD_POLICY,
+      status: 'passed',
+      fingerprint: entityTextureFingerprint,
+    },
     renderer: 'webgl',
   };
   await writeJson(join(EVIDENCE_DIR, 'automated_manifest.json'), {

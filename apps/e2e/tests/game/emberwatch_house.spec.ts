@@ -8,7 +8,7 @@ import { expect, test } from '@playwright/test';
 import { EmberwatchHousePage } from '$pom';
 
 const HOUSE_ROOF_START = { c: 54, r: 4 } as const;
-const HOUSE_APPROACH = { c: 54, r: 10 } as const;
+const HOUSE_APPROACH = { c: 54, r: 11 } as const;
 
 test.describe('C-550 Emberwatch raised house', () => {
   test('loads the house map through production and reports WebGL', async ({ page }) => {
@@ -44,10 +44,14 @@ test.describe('C-550 Emberwatch raised house', () => {
 
     const start = await house.snapshot();
     // The closed door is solid; the actor footprint settles on the second clear landing row.
+    expect(start.player.c).toBe(54);
     expect(start.player.r).toBe(11);
+    expect(start.camera.c).toBe(54);
+    expect(start.camera.r).toBe(11);
 
     await house.move('KeyW', 650);
     const thresholdAttempt = await house.snapshot();
+    expect(thresholdAttempt.player.c).toBe(54);
     expect(thresholdAttempt.player.r).toBe(11);
 
     await house.move('KeyA', 350);

@@ -15,7 +15,10 @@ import {
 import { type MapData, makeMap } from './emberwatch_map_shared.ts';
 import { buildVillage } from './emberwatch_map_village.ts';
 import { packAtlas } from './generate_emberwatch_atlas.ts';
-import { HOUSE_PLINTH_HEIGHT } from './generate_emberwatch_house_frames.ts';
+import {
+  HOUSE_PLINTH_HEIGHT,
+  HOUSE_SHADOW_FADE_HEIGHT,
+} from './generate_emberwatch_house_frames.ts';
 import { buildMapJson } from './generate_emberwatch_maps.ts';
 
 const at = (map: MapData, c: number, r: number): number => r * map.width + c;
@@ -172,9 +175,9 @@ describe('C-550 — placeHouse layout and collision', () => {
     expect(contribution(map.groundExtra, 7, 5)).toBe(HOUSE_FRAMES.facadeCornerRight);
     expect(contribution(map.groundExtra, 2, 6)).toBe(HOUSE_FRAMES.foundation);
     expect(contribution(map.groundExtra, 3, 6)).toBe(HOUSE_FRAMES.foundation);
-    expect(contribution(map.groundExtra, 4, 6)).toBe(HOUSE_FRAMES.foundation);
+    expect(contribution(map.groundExtra, 4, 6)).toBe(HOUSE_FRAMES.facadeWindow);
     expect(contribution(map.groundExtra, 5, 6)).toBe(HOUSE_FRAMES.doorClosed);
-    expect(contribution(map.groundExtra, 6, 6)).toBe(HOUSE_FRAMES.facadeWindow);
+    expect(contribution(map.groundExtra, 6, 6)).toBe(HOUSE_FRAMES.foundation);
     expect(contribution(map.groundExtra, 7, 6)).toBe(HOUSE_FRAMES.foundation);
     const doorFrames = (map.groundExtra ?? []).filter(
       ([, , gid]) => gid === HOUSE_FRAMES.doorClosed || gid === HOUSE_FRAMES.doorOpen,
@@ -182,9 +185,6 @@ describe('C-550 — placeHouse layout and collision', () => {
     expect(doorFrames).toEqual([[5, 6, HOUSE_FRAMES.doorClosed]]);
 
     for (let c = 2; c <= 7; c++) {
-      if (c === 5) {
-        continue;
-      }
       expect(contribution(map.decorExtra, c, 7), `contact shadow (${c},7)`).toBe(
         HOUSE_FRAMES.foundationShadow,
       );
@@ -391,6 +391,35 @@ describe('C-550 — assertions and stable identities', () => {
     expect(reachable(map, gate, { c: 54, r: 11 })).toBe(true);
     expect(reachable(map, gate, { c: 54, r: 6 })).toBe(true);
   });
+
+  test('pins the exact 14-cell collision delta from merged C-549', () => {
+    const { map } = buildVillage();
+    const roofCells = [5, 6].flatMap((r) =>
+      [51, 52, 53, 54, 55, 56].map((c) => ({ c, r, before: 1, after: 0 })),
+    );
+    const formerDoorCells = [
+      { c: 53, r: 9, before: 0, after: 1 },
+      { c: 54, r: 9, before: 0, after: 1 },
+    ];
+    const expectedDelta = [...roofCells, ...formerDoorCells];
+    const mergedC549Collision = [...map.collision];
+    for (const cell of expectedDelta) {
+      mergedC549Collision[at(map, cell.c, cell.r)] = cell.before;
+    }
+
+    const changed = map.collision.flatMap((value, index) =>
+      value === mergedC549Collision[index]
+        ? []
+        : [{ index, before: mergedC549Collision[index], after: value }],
+    );
+    expect(changed).toEqual(
+      expectedDelta.map((cell) => ({
+        index: at(map, cell.c, cell.r),
+        before: cell.before,
+        after: cell.after,
+      })),
+    );
+  });
 });
 
 describe('C-550 — compiled map layers', () => {
@@ -465,6 +494,44 @@ describe('C-550 — house atlas frames', () => {
     ];
   };
 
+  type PixelReader = (key: string, x: number, y: number) => [number, number, number, number];
+  const readShadowAlpha = (readPixel: PixelReader): number[][] => {
+    const shadowAlpha: number[][] = [];
+    for (let shadowY = 0; shadowY < 32; shadowY++) {
+      const row: number[] = [];
+      for (let shadowX = 0; shadowX < 32; shadowX++) {
+        row.push(readPixel('house_foundation_shadow.png', shadowX, shadowY)[3]);
+      }
+      shadowAlpha.push(row);
+    }
+    return shadowAlpha;
+  };
+  const assertShadowFalloff = (shadowAlpha: number[][]): void => {
+    for (let x = 0; x < 32; x++) {
+      for (let y = 1; y < 32; y++) {
+        expect(shadowAlpha[y]?.[x], `shadow vertical falloff (${x},${y})`).toBeLessThanOrEqual(
+          shadowAlpha[y - 1]?.[x] ?? 0,
+        );
+      }
+    }
+    for (let y = 0; y < 32; y++) {
+      for (let x = 1; x < 32; x++) {
+        expect(
+          Math.abs((shadowAlpha[y]?.[x] ?? 0) - (shadowAlpha[y]?.[x - 1] ?? 0)),
+          `shadow horizontal seam (${x},${y})`,
+        ).toBeLessThanOrEqual(1);
+      }
+    }
+  };
+  const assertContactShadow = (readPixel: PixelReader): void => {
+    const shadowAlpha = readShadowAlpha(readPixel);
+    assertShadowFalloff(shadowAlpha);
+    expect(shadowAlpha[0]?.[0]).toBe(92);
+    expect(shadowAlpha[HOUSE_SHADOW_FADE_HEIGHT]?.[0]).toBe(0);
+    expect(shadowAlpha.flat().some((alpha) => alpha > 0 && alpha < 255)).toBe(true);
+    expect(Math.max(...shadowAlpha.flat())).toBeLessThanOrEqual(92);
+  };
+
   test('house GIDs append after the bridge family without renumbering', () => {
     expect(Object.values(HOUSE_FRAMES).sort((a, b) => a - b)).toEqual([
       146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159, 160,
@@ -508,13 +575,7 @@ describe('C-550 — house atlas frames', () => {
     expect(pixel('house_facade_window.png', 16, 16)).not.toEqual(
       pixel('house_facade_wall.png', 16, 16),
     );
-    const shadowAlpha = Array.from(
-      { length: 32 * 32 },
-      (_, index) => pixel('house_foundation_shadow.png', index % 32, Math.floor(index / 32))[3],
-    );
-    expect(shadowAlpha.some((alpha) => alpha === 0)).toBe(true);
-    expect(shadowAlpha.some((alpha) => alpha > 0 && alpha < 255)).toBe(true);
-    expect(Math.max(...shadowAlpha)).toBeLessThanOrEqual(92);
+    assertContactShadow(pixel);
   });
 
   test('roof value hierarchy, facade contrast, and bounded plinth are measurable', () => {
@@ -536,9 +597,35 @@ describe('C-550 — house atlas frames', () => {
     const ridgeShadow = meanLuminance('house_roof_ridge.png', 4, 14, 27, 17);
     const backPlane = meanLuminance('house_roof_back.png', 4, 5, 27, 10);
     const facade = meanLuminance('house_facade_wall.png', 4, 8, 27, 24);
+    const leftGable = meanLuminance('house_roof_gable_left.png', 0, 4, 15, 27);
+    const rightGable = meanLuminance('house_roof_gable_right.png', 16, 4, 31, 27);
     expect(frontSlope).toBeGreaterThan(ridgeShadow);
     expect(ridgeShadow).toBeGreaterThan(backPlane);
+    expect(leftGable).toBeGreaterThan(backPlane);
+    expect(leftGable).toBeLessThan(frontSlope);
+    expect(rightGable).toBeGreaterThan(backPlane);
+    expect(rightGable).toBeLessThan(frontSlope);
     expect(facade).toBeLessThan(frontSlope);
+
+    const gableStrokeColor = [82, 55, 40] as const;
+    const maxStrokeRun = (key: string): number => {
+      let maximum = 0;
+      for (let y = 0; y < 32; y++) {
+        let run = 0;
+        for (let x = 0; x < 32; x++) {
+          const color = pixel(key, x, y);
+          const isStroke =
+            color[0] === gableStrokeColor[0] &&
+            color[1] === gableStrokeColor[1] &&
+            color[2] === gableStrokeColor[2];
+          run = isStroke ? run + 1 : 0;
+          maximum = Math.max(maximum, run);
+        }
+      }
+      return maximum;
+    };
+    expect(maxStrokeRun('house_roof_gable_left.png')).toBe(0);
+    expect(maxStrokeRun('house_roof_gable_right.png')).toBe(0);
 
     const plinthColor = pixel('house_foundation.png', 16, 32 - HOUSE_PLINTH_HEIGHT);
     let measuredPlinthHeight = 0;
