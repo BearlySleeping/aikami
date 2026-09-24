@@ -3,7 +3,7 @@ id: C-551
 title: "Management content on game UI roles"
 source: direct
 contract_type: thin
-status: in_progress
+status: implemented
 github:
   issue_number: null
   issue_url: null
@@ -23,7 +23,7 @@ created_at: "2026-09-24T00:00:00Z"
 | **Type** | thin |
 | **Priority** | P1 — management is a core player task and currently mixes violet product controls with the brass/orange game accent while wasting task space |
 | **Dependencies** | C-543 (production management host and game-scoped roles), C-547 (dialogue presentation/game-role pattern), C-529 (theme runtime), C-548 evidence sequence |
-| **Status** | in_progress |
+| **Status** | implemented |
 | **Promotion** | integrated |
 | **Docs Impact** | internal — production task composition and theme roles change without a player-facing feature page |
 | **Contract version** | 2.0.0 |
@@ -134,4 +134,63 @@ Changes to ACs or scope require a version bump and user approval.
 
 ## Execution Report
 
-Pending implementation.
+### Summary
+
+Implemented the management-content pass on the production `/game` management host. Character now opens as a summary with an explicit Edit disclosure, Inventory is a responsive paperdoll/bag/detail composition with a real empty state, and Journal is quest-first with note list/detail editing on demand and read-only recaps. Management selection, controls, focus and numeric emphasis use the shared game accent roles. View-local mappings and disclosure state moved into sibling presentation modules; the feature ViewModels were not expanded with presentation logic.
+
+The production evidence seam now mutates the real inventory, equipment, quest and player-journal stores. The legacy `QUEST_LOG` entry point remains an input alias, but routes to the canonical Journal host. Inventory can be opened over Dialogue through the production overlay router, preserving the conversation as the management return context.
+
+### AC Status
+
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | Management selection, controls, focus and numeric roles use the brass/orange game accent. Scoped static class-token audit found no legacy `base-*`, `primary`, `badge`, `tabs-bordered`, `stat`, `alert` or `join` tokens; theme tests and axe passed. |
+| AC-2 | ✅ | Inventory composes equipment paperdoll, carried bag, selected detail and a deliberate `game-empty` state. Compact/200% keyboard coverage and the 800×600 evidence matrix pass without bottom clipping. |
+| AC-3 | ✅ | Character summary shows identity, level, HP, Armor Class, attack, experience and six abilities. Edit is explicit; the standalone/developer path starts authorized and retains Pro/JSON tools. Saving-throw wording is explicit. |
+| AC-4 | ✅ | Journal defaults to Quests, Notes uses list/detail, the editor opens only after New/Edit, and Recaps remain read-only. Legacy `QUEST_LOG` routing converges on Journal. |
+| AC-5 | ✅ | Character, Inventory and Journal presentation modules own selection, mapping and disclosure state. MVVM, composition, source-size, type-safety, orphan and test-boundary guards pass; no scoped ViewModel exceeds its reviewed guard baseline. |
+| AC-6 | ✅ | `/tmp/opencode/c551-evidence/index.md` records 48 management captures plus four dialogue↔Inventory pair captures. Every capture asserts PixiJS WebGL, bounded geometry and real-store seed counts. |
+| AC-7 | ✅ | Dialogue follow-up journeys use accessible Send selection, world-readiness/WASD NPC approach and the production interaction key. Focused branching/skill-check rerun: 6/6; prior full five-file lane: 15/15. |
+
+### Files created / modified
+
+| Area | Files |
+|---|---|
+| Management host/session | `apps/frontend/client/src/lib/views/game/ui/management_host.svelte`, `management_session.svelte.ts`, `management_sections.ts`, `game_ui_view_model.svelte.ts`, `game_ui_composition.ts` |
+| Character | `character_sheet_management_view.svelte`, `character_sheet_content.svelte`, `character_sheet_view.svelte`, `character_sheet_composition.ts`, `character_sheet_view_model.svelte.ts`, `character_sheet_presentation.svelte.ts` |
+| Inventory | `inventory_view.svelte`, `inventory_view_model.svelte.ts`, `inventory_presentation.svelte.ts` |
+| Journal | `journal_view.svelte`, `journal_presentation.svelte.ts` |
+| Production evidence seam | `game_test_seam.ts`, `overlay_compatibility.ts`, `player_journal_service.svelte.ts` and the associated overlay test |
+| Theme/build budget | `packages/frontend/theme/src/lib/aikami_game_ui.css`, `apps/frontend/client/scripts/bundle_budget.baseline.json` |
+| E2E/POM/visual coverage | `management_content.spec.ts`, management/Character/Inventory visual suites, `npc_approach.ts`, play-shell/Game/Inventory/Character POM repairs, legacy E2E selectors and unit fixtures |
+
+The complete changed-file set is 45 files, below the 100-file review limit. The reviewed CSS budget baseline was updated only for the intentional new game-role payload (`totalCssBytes` 169,670 → 187,758); no structural-guard baseline or waiver was raised.
+
+### Production evidence
+
+- Evidence index: `/tmp/opencode/c551-evidence/index.md`
+- Machine-readable manifest: `/tmp/opencode/c551-evidence/manifest.json`
+- Management matrix: 48 captures covering Character, Inventory and Journal; empty/populated; light/dark; 1280×720, 1920×1080, 800×600 and 200% text.
+- Dialogue pairs: `/tmp/opencode/c551-evidence/pairs/dialogue-1920x1080.png`, `inventory-1920x1080.png`, `dialogue-text-200.png`, `inventory-text-200.png`.
+- Candidate content snapshot: `b0aab0f66a02e930d9eb1fe9998bed725bc276dd89f0f9b0b5c97442cd9d8fcb`.
+- Every recorded management/pair capture asserts `window.__PIXI_APP__.renderer.name === "webgl"`, reaches the production `/game` host, has no horizontal document overflow, and uses `__AIKAMI_TEST__.seedManagementContent()` against real stores rather than a management-state query parameter.
+- Fresh production snapshot CLI could not be run because `CATALOG_ORIGIN_URL` is absent from `scripts/.env.production`; the read-only copied candidate snapshot above was used for the evidence plane. This is an environment/provenance deviation, not a rendered-state bypass.
+
+### Verification
+
+- `bun moon run client:test` — 4,057 pass, 0 fail, 7 skip, 2 todo.
+- `bun moon run frontend-theme:test` — 99 pass; frontend-theme lint/typecheck pass.
+- `bun moon run client:typecheck` / `client:lint` — pass.
+- `bun run --cwd apps/e2e test:unit` — 32 pass; `e2e:lint` / `e2e:typecheck` pass.
+- `management_content.spec.ts` — 8/8 pass, including compact empty Inventory, 200% text and axe (no serious/critical violations).
+- Legacy Character/Inventory/management E2E lane — 23/23 pass; focused dialogue branching/skill-check rerun — 6/6 pass.
+- Visual capture-only: management-workspace 20/20, character-sheet 7/7, inventory 6/6 (33/33); the production evidence matrix contains 52 hashed captures including the four dialogue pairs.
+- `client:build` — pass; `report_bundle_budget.ts` reports no tracked regressions after the reviewed CSS-budget update.
+- Structural guards: MVVM, service conventions, image component, data plane, type safety, orphan capability, test boundary, ViewModel composition and source-size all pass. The direct cognitive-complexity invocation reports Biome's inherited “0 files examined” failure in this worktree; the same failure reproduces on `origin/main`. Running the identical guard with explicit `apps packages scripts .pi` roots measures 619 findings in 387 files and passes the unchanged baseline, including the C-551 files.
+- `bun moon ci --base=origin/main` — all affected builds/tests/checks pass; the sole failure is the same inherited cognitive-complexity invocation reported above.
+
+### Follow-up / deviations
+
+- The broad `e2e:test` lane still requires the local AI-service stack; the required production management and dialogue lanes above are green.
+- Visual capture is recorded as capture-only evidence. Existing rubric thresholds and prompts were not changed.
+- The cognitive guard invocation issue is pre-existing and names no C-551 file; it is reported rather than folded into this contract's implementation. No guard policy, baseline ceiling or waiver was relaxed.
