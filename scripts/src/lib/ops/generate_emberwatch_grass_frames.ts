@@ -33,8 +33,8 @@ export const GRASS_BASE = [74, 143, 60] as const;
  */
 export const paintGrass = (col: number, row: number): void => {
   fillCell(col, row, GRASS_BASE[0], GRASS_BASE[1], GRASS_BASE[2]);
-  noiseCell(col, row, col * 31 + row * 17 + 1, 0.55, 26, 30, 20);
-  const rng = makeRng(col * 131 + row * 73 + 7);
+  noiseCell(col, row, 0x7f4a7c15, 0.55, 26, 30, 20);
+  const rng = makeRng(0x4a7c15f1);
   for (let i = 0; i < 24; i++) {
     const x = Math.floor(rng() * TILE);
     const y = Math.floor(rng() * TILE);
@@ -56,15 +56,18 @@ export const paintGrass = (col: number, row: number): void => {
  */
 export const paintGrassFlowers = (col: number, row: number): void => {
   paintGrass(col, row);
-  const rng = makeRng(col * 211 + row * 97 + 13);
+  const rng = makeRng(0x2c1b3c6d);
   const clumps = [[88, 154, 70] as const, [64, 126, 52] as const];
-  for (let i = 0; i < 5; i++) {
-    const x = 2 + Math.floor(rng() * (TILE - 5));
-    const y = 2 + Math.floor(rng() * (TILE - 5));
-    const c = clumps[Math.floor(rng() * clumps.length)];
-    setPx(col * TILE + x, row * TILE + y, c[0], c[1], c[2]);
-    if (rng() < 0.5) {
-      setPx(col * TILE + x + 1, row * TILE + y, c[0], c[1], c[2]);
+  for (let index = 0; index < 2; index++) {
+    const x = 3 + Math.floor(rng() * (TILE - 7));
+    const y = 4 + Math.floor(rng() * (TILE - 8));
+    const color = clumps[Math.floor(rng() * clumps.length)] ?? clumps[0];
+    setPx(col * TILE + x, row * TILE + y, color[0], color[1], color[2]);
+    setPx(col * TILE + x + 1, row * TILE + y, color[0], color[1], color[2]);
+    setPx(col * TILE + x + 3, row * TILE + y, color[0], color[1], color[2]);
+    if (index === 0) {
+      setPx(col * TILE + x, row * TILE + y - 1, clumps[0][0], clumps[0][1], clumps[0][2]);
+      setPx(col * TILE + x + 2, row * TILE + y + 1, clumps[1][0], clumps[1][1], clumps[1][2]);
     }
   }
 };
@@ -76,7 +79,7 @@ export const paintGrassFlowers = (col: number, row: number): void => {
  */
 export const paintGrassDark = (col: number, row: number): void => {
   paintGrass(col, row);
-  const rng = makeRng(col * 173 + row * 59 + 29);
+  const rng = makeRng(0x6c8e9cf5);
   for (let i = 0; i < 9; i++) {
     const x = Math.floor(rng() * TILE);
     const y = Math.floor(rng() * TILE);

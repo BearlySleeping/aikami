@@ -36,6 +36,7 @@ import {
   vline,
   W,
 } from './generate_emberwatch_canvas.ts';
+import { paintTerrainCornerFrame } from './generate_emberwatch_corner_painters.ts';
 import {
   paintGrass,
   paintGrassDark,
@@ -49,6 +50,16 @@ import {
   buildFrames,
   registerTerrainFrames,
 } from './generate_emberwatch_tables.ts';
+import {
+  paintCobble,
+  paintCobbleLight,
+  paintDirt,
+  paintInteriorFlagstone,
+  paintSand,
+  paintStoneFloor,
+  paintWater,
+  paintWoodFloor,
+} from './generate_emberwatch_terrain_frames.ts';
 
 // ---------------------------------------------------------------------------
 // Constants — atlas geometry is derived from the shared tables module so the
@@ -76,112 +87,8 @@ const CH = ATLAS_HEIGHT; // 272 — final atlas height
 // reading as a square.
 // ---------------------------------------------------------------------------
 
-const paintDirt = (col: number, row: number): void => {
-  fillCell(col, row, 138, 90, 51);
-  noiseCell(col, row, col * 41 + row * 23 + 3, 0.6, 30, 24, 18);
-  const rng = makeRng(col * 89 + row * 151 + 5);
-  for (let i = 0; i < 18; i++) {
-    const x = Math.floor(rng() * TILE);
-    const y = Math.floor(rng() * TILE);
-    const v = rng();
-    if (v < 0.5) {
-      setPx(col * TILE + x, row * TILE + y, 153, 104, 63);
-    } else {
-      setPx(col * TILE + x, row * TILE + y, 122, 76, 42);
-    }
-  }
-};
-
-/** Loose packed gravel: muted grey-brown, dense small-stone speckle. */
-const paintGravel = (col: number, row: number): void => {
-  fillCell(col, row, 112, 108, 96);
-  noiseCell(col, row, col * 43 + row * 71 + 4, 0.7, 34, 32, 26);
-  const rng = makeRng(col * 59 + row * 37 + 8);
-  for (let i = 0; i < 40; i++) {
-    const x = Math.floor(rng() * TILE);
-    const y = Math.floor(rng() * TILE);
-    const v = rng();
-    if (v < 0.4) {
-      setPx(col * TILE + x, row * TILE + y, 138, 134, 122);
-    } else if (v < 0.7) {
-      setPx(col * TILE + x, row * TILE + y, 88, 84, 74);
-    }
-  }
-};
-
-/** Dark packed earth: cooler and deeper than the dirt road material. */
-const paintEarth = (col: number, row: number): void => {
-  fillCell(col, row, 78, 58, 40);
-  noiseCell(col, row, col * 67 + row * 29 + 6, 0.65, 26, 20, 16);
-  const rng = makeRng(col * 97 + row * 53 + 12);
-  for (let i = 0; i < 22; i++) {
-    const x = Math.floor(rng() * TILE);
-    const y = Math.floor(rng() * TILE);
-    if (rng() < 0.5) {
-      setPx(col * TILE + x, row * TILE + y, 96, 72, 50);
-    } else {
-      setPx(col * TILE + x, row * TILE + y, 62, 46, 32);
-    }
-  }
-};
-
-const paintCobble = (
-  col: number,
-  row: number,
-  base: readonly [number, number, number] = [154, 154, 154],
-): void => {
-  fillCell(col, row, base[0], base[1], base[2]);
-  // Mortar grid
-  for (let i = 1; i < TILE; i += 4) {
-    hline(col, row, 0, TILE - 1, i, 126, 126, 126);
-    vline(col, row, i, 0, TILE - 1, 126, 126, 126);
-  }
-  // Stone highlights + shadows
-  const rng = makeRng(col * 47 + row * 61 + 9);
-  for (let i = 0; i < 26; i++) {
-    const x = Math.floor(rng() * TILE);
-    const y = Math.floor(rng() * TILE);
-    const v = rng();
-    if (v < 0.45) {
-      setPx(col * TILE + x, row * TILE + y, 181, 181, 181);
-    } else if (v < 0.8) {
-      setPx(col * TILE + x, row * TILE + y, 130, 130, 130);
-    }
-  }
-};
-
-const paintStoneFloor = (col: number, row: number): void => {
-  fillCell(col, row, 143, 143, 146);
-  // Large slabs 8×8 with grout
-  for (let sy = 0; sy < TILE; sy += 8) {
-    for (let sx = 0; sx < TILE; sx += 8) {
-      fillRect(col, row, sx, sy, 7, 7, 143, 143, 146);
-      // slab shading
-      hline(col, row, sx, sx + 6, sy, 168, 168, 172);
-      hline(col, row, sx, sx + 6, sy + 6, 118, 118, 122);
-      vline(col, row, sx, sy, sy + 6, 168, 168, 172);
-      vline(col, row, sx + 6, sy, sy + 6, 118, 118, 122);
-    }
-  }
-  noiseCell(col, row, col * 53 + row * 29 + 11, 0.25, 14, 14, 14);
-};
-
-const paintWoodFloor = (col: number, row: number): void => {
-  fillCell(col, row, 155, 106, 63);
-  // Horizontal planks 4px tall with seams every 8
-  for (let y = 0; y < TILE; y++) {
-    const plank = Math.floor(y / 4);
-    const shade = plank % 2 === 0 ? 0 : -14;
-    hline(col, row, 0, TILE - 1, y, 155 + shade, 106 + shade, 63 + shade);
-    // vertical seam staggered per plank row
-    const seam = (plank * 7) % TILE;
-    if (y % 4 === 3) {
-      setPx(col * TILE + seam, row * TILE + y, 110, 68, 38);
-      setPx(col * TILE + ((seam + 16) % TILE), row * TILE + y, 110, 68, 38);
-    }
-  }
-  noiseCell(col, row, col * 71 + row * 13 + 5, 0.2, 16, 12, 10);
-};
+// Terrain materials live in `generate_emberwatch_terrain_frames.ts` (C-552)
+// so the organic corner compositor and its material palette stay cohesive.
 
 const paintBrick = (col: number, row: number): void => {
   fillCell(col, row, 143, 63, 51);
@@ -288,27 +195,6 @@ const paintRoof = (col: number, row: number): void => {
         scallop ? 68 + rowShade : 58 + rowShade,
         scallop ? 58 + rowShade : 46 + rowShade,
       );
-    }
-  }
-};
-
-const paintWater = (col: number, row: number): void => {
-  fillCell(col, row, 46, 111, 176);
-  const rng = makeRng(col * 37 + row * 83 + 15);
-  for (let i = 0; i < 30; i++) {
-    const x = Math.floor(rng() * TILE);
-    const y = Math.floor(rng() * TILE);
-    const v = rng();
-    if (v < 0.5) {
-      setPx(col * TILE + x, row * TILE + y, 63, 132, 196);
-    } else {
-      setPx(col * TILE + x, row * TILE + y, 39, 97, 156);
-    }
-  }
-  // Wave streaks
-  for (let y = 4; y < TILE; y += 8) {
-    for (let x = 2; x < TILE - 4; x += 3) {
-      setPx(col * TILE + x, row * TILE + y, 82, 158, 214);
     }
   }
 };
@@ -644,16 +530,6 @@ const paintWoodDoor = (col: number, row: number): void => {
   setPx(col * TILE + 21, row * TILE + 2, 140, 92, 56);
 };
 
-const paintFlagstone = (col: number, row: number): void => {
-  paintStoneFloor(col, row);
-  // bigger irregular slabs
-  fillRect(col, row, 1, 1, 13, 13, 155, 155, 158);
-  fillRect(col, row, 17, 2, 13, 12, 155, 155, 158);
-  fillRect(col, row, 3, 17, 12, 12, 155, 155, 158);
-  fillRect(col, row, 18, 17, 12, 12, 155, 155, 158);
-  noiseCell(col, row, col * 3 + row * 17 + 33, 0.2, 12, 12, 12);
-};
-
 const paintRugRound = (col: number, row: number): void => {
   clearCell(col, row); // C-504: transparent unpainted region
   // round rug
@@ -678,137 +554,15 @@ const paintRugRound = (col: number, row: number): void => {
   }
 };
 
-const paintSand = (col: number, row: number): void => {
-  fillCell(col, row, 216, 194, 140);
-  noiseCell(col, row, col * 27 + row * 19 + 25, 0.5, 22, 20, 14);
-};
-
 // ---------------------------------------------------------------------------
 // Paint all frames
 // ---------------------------------------------------------------------------
 
-// ---- Corner-16 terrain frames (C-378) ------------------------------------
+// ---- Corner-16 terrain frames (C-552) ------------------------------------
 //
-// Each corner frame composites the terrain (dirt/water) onto the base
-// (grass) using the corner-16 geometry:
-//   - the four corner wedges are the triangles cut by the tile diagonals
-//     through the edge midpoints — a corner whose mask bit is set owns its
-//     wedge;
-//   - the center diamond (pixels in no wedge) is ALWAYS terrain — the
-//     cell's own terrain owns its core regardless of the corners.
-// Mask bit order is the documented contract: bit0=NW, bit1=NE, bit2=SE,
-// bit3=SW (clockwise from north-west). This produces the diagonal blended
-// edges the autotiler relies on (mask 3 = top half, mask 12 = bottom half,
-// mask 5 = diagonal pair, …).
-
-/** Corner bit → wedge test (tile-local x,y in 0..TILE-1, center at 16). */
-// The four wedges are true mirror images around the tile center
-// ((x,y) → (31-x,31-y)) and each selects exactly 136 pixels for TILE = 32
-// (the triangle cut by the two edge-midpoint diagonals). Bit order is the
-// documented contract: bit0=NW, bit1=NE, bit2=SE, bit3=SW.
-export const CORNER_WEDGE_TESTS: Array<{
-  bit: number;
-  test: (x: number, y: number) => boolean;
-}> = [
-  { bit: 0b0001, test: (x, y) => x + y < 16 }, // NW: top-left triangle
-  { bit: 0b0010, test: (x, y) => x - y > 15 }, // NE: top-right triangle (mirror of NW across the vertical axis)
-  { bit: 0b0100, test: (x, y) => x + y > 46 }, // SE: bottom-right triangle (mirror of NW through the center)
-  { bit: 0b1000, test: (x, y) => y - x > 15 }, // SW: bottom-left triangle (mirror of NW across the horizontal axis)
-];
-
-/** True when the pixel is in the center diamond (always terrain). */
-const inCenterDiamond = (x: number, y: number): boolean =>
-  !CORNER_WEDGE_TESTS.some(({ test }) => test(x, y));
-
-/** True when the pixel is owned by a set-corner wedge (or the diamond). */
-export const terrainOwnsPixel = (mask: number, x: number, y: number): boolean => {
-  if (inCenterDiamond(x, y)) {
-    return true;
-  }
-  return CORNER_WEDGE_TESTS.some(({ bit, test }) => (mask & bit) !== 0 && test(x, y));
-};
-
-/**
- * Paints a corner-16 frame: base fill everywhere, terrain stamped into the
- * owned wedges + center diamond.
- *
- * The terrain/base painters write the full cell; we snapshot both into
- * scratch buffers then composite pixel-by-pixel (deterministic — the
- * painters' rng is driven by cell coordinates only).
- */
-const paintCornerFrame = (
-  col: number,
-  row: number,
-  mask: number,
-  paintBase: (col: number, row: number) => void,
-  paintTerrain: (col: number, row: number) => void,
-): void => {
-  const cx = col * TILE;
-  const cy = row * TILE;
-
-  // Snapshot the base fill (grass) into a scratch array.
-  const basePixels = new Uint8Array(TILE * TILE * 3);
-  paintBase(col, row);
-  for (let y = 0; y < TILE; y++) {
-    for (let x = 0; x < TILE; x++) {
-      const i = ((cy + y) * W + (cx + x)) * 4;
-      const o = (y * TILE + x) * 3;
-      basePixels[o] = buf[i];
-      basePixels[o + 1] = buf[i + 1];
-      basePixels[o + 2] = buf[i + 2];
-    }
-  }
-
-  // Snapshot the terrain fill (dirt/water) into a scratch array.
-  const terrainPixels = new Uint8Array(TILE * TILE * 3);
-  paintTerrain(col, row);
-  for (let y = 0; y < TILE; y++) {
-    for (let x = 0; x < TILE; x++) {
-      const i = ((cy + y) * W + (cx + x)) * 4;
-      const o = (y * TILE + x) * 3;
-      terrainPixels[o] = buf[i];
-      terrainPixels[o + 1] = buf[i + 1];
-      terrainPixels[o + 2] = buf[i + 2];
-    }
-  }
-
-  // Composite: owned wedges + diamond → terrain; everything else → base.
-  for (let y = 0; y < TILE; y++) {
-    for (let x = 0; x < TILE; x++) {
-      const i = ((cy + y) * W + (cx + x)) * 4;
-      const o = (y * TILE + x) * 3;
-      if (terrainOwnsPixel(mask, x, y)) {
-        buf[i] = terrainPixels[o];
-        buf[i + 1] = terrainPixels[o + 1];
-        buf[i + 2] = terrainPixels[o + 2];
-      } else {
-        buf[i] = basePixels[o];
-        buf[i + 1] = basePixels[o + 1];
-        buf[i + 2] = basePixels[o + 2];
-      }
-    }
-  }
-};
-
-/**
- * Base + overlay painters per corner-16 terrain id.
- *
- * The overlay is the terrain the cell owns; the base is the material the
- * frame composites over (the terrain directly beneath it in the biome) and is
- * baked into the unset regions exactly like the original dirt/water-over-grass
- * sets. Adding a new corner-16 set is one entry here plus its manifest
- * `terrains` declaration — the frame registrar and painter derive the rest.
- */
-const CORNER_TERRAIN_PAINTERS: Record<
-  string,
-  { base: (col: number, row: number) => void; overlay: (col: number, row: number) => void }
-> = {
-  dirt: { base: paintGrass, overlay: paintDirt },
-  water: { base: paintGrass, overlay: paintWater },
-  gravel: { base: paintGrass, overlay: paintGravel },
-  earth: { base: paintGravel, overlay: paintEarth },
-  cobblestone: { base: paintWoodFloor, overlay: paintCobble },
-};
+// The engine still owns mask selection. The painter now composites rounded,
+// noise-shaped material coverage instead of exact half-plane triangles while
+// preserving the fixed terrain block and opaque lower-layer contract.
 
 const paintFrame = (key: string, col: number, row: number): void => {
   if (paintAssemblyFrame({ key, col, row })) {
@@ -818,13 +572,16 @@ const paintFrame = (key: string, col: number, row: number): void => {
   // registered painter pair are corner frames; an unknown id falls through to
   // the default below rather than being silently mis-painted.
   const cornerMatch = /^([a-z0-9_]+?)_(\d{1,2})\.png$/.exec(key);
-  if (cornerMatch) {
-    const painters = CORNER_TERRAIN_PAINTERS[cornerMatch[1]];
-    const mask = Number(cornerMatch[2]);
-    if (painters && mask >= 0 && mask < 16) {
-      paintCornerFrame(col, row, mask, painters.base, painters.overlay);
-      return;
-    }
+  if (
+    cornerMatch &&
+    paintTerrainCornerFrame({
+      terrainName: cornerMatch[1] ?? '',
+      col,
+      row,
+      mask: Number(cornerMatch[2]),
+    })
+  ) {
+    return;
   }
   switch (key) {
     case 'grass.png':
@@ -843,13 +600,13 @@ const paintFrame = (key: string, col: number, row: number): void => {
       paintCobble(col, row);
       break;
     case 'path_tough_variant.png':
-      paintCobble(col, row, [166, 166, 166] as const);
+      paintCobbleLight(col, row);
       break;
     case 'stone_floor.png':
       paintStoneFloor(col, row);
       break;
     case 'stone_floor_variant.png':
-      paintFlagstone(col, row);
+      paintInteriorFlagstone(col, row);
       break;
     case 'wood_floor.png':
       paintWoodFloor(col, row);
@@ -952,7 +709,7 @@ const paintFrame = (key: string, col: number, row: number): void => {
       paintWoodDoor(col, row);
       break;
     case 'flagstone.png':
-      paintFlagstone(col, row);
+      paintCobbleLight(col, row);
       break;
     case 'grass_edge_n.png':
     case 'grass_edge_s.png':

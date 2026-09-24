@@ -2415,12 +2415,12 @@
       "propId": "notice_board",
       "frame": "prop_notice_board.png",
       "cell": {
-        "c": 45,
-        "r": 11
+        "c": 37,
+        "r": 4
       },
       "world": {
-        "x": 1440,
-        "y": 352
+        "x": 1184,
+        "y": 128
       },
       "sourcePixels": {
         "width": 88,

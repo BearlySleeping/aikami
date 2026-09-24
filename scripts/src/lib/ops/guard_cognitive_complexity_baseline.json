@@ -2077,8 +2077,8 @@
   },
   "scripts/src/lib/ops/generate_emberwatch_atlas.test.ts": {
     "counts": {
-      "excessive": 3,
-      "worst": 29
+      "excessive": 2,
+      "worst": 17
     }
   },
   "scripts/src/lib/ops/generate_emberwatch_atlas.ts": {
