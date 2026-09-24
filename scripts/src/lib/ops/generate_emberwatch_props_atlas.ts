@@ -3,7 +3,7 @@
 // Packs the Emberwatch pack's approved prop artwork into irregular prop-atlas
 // pages and validates the resulting frame namespace.
 //
-// Why this exists: the grid atlas is a fixed 16×8 grid of 32×32 cells with
+// Why this exists: the grid atlas is a fixed 16-column grid of 32×32 cells with
 // per-cell edge extrusion. Every approved prop is larger than 32×32 (the inn
 // is 256×224, the ward tree 192×152, a table 96×42), so none of them can live
 // there — per-cell extrusion would draw seams through a sprite spanning

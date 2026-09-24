@@ -1369,6 +1369,15 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     const ambientExempt =
       message.frame !== undefined && this._propFrameMeta.get(message.frame)?.emissive === true;
 
+    // A reconnect or map load can announce the same ECS identity again. Replace
+    // the previous display before creating the new one; otherwise the old
+    // placeholder remains in the world graph at (0, 0) and is indistinguishable
+    // from a live actor to evidence guards.
+    const previousDisplay = this._renderEntries.get(eid);
+    if (previousDisplay) {
+      previousDisplay.displayObject.destroy({ children: true });
+    }
+
     const display = createEntityDisplay({
       eid,
       tint,

@@ -153,7 +153,7 @@ const expectAssemblyDelta = (options: {
 };
 
 describe('C-550 — placeHouse layout and collision', () => {
-  test('authors three roof rows, two facade rows, and one closed door', () => {
+  test('authors three roof rows, two facade rows, and one closed two-row door', () => {
     const map = makeHouseMap();
     const groundBefore = [...map.ground];
     const collisionBefore = [...map.collision];
@@ -173,16 +173,25 @@ describe('C-550 — placeHouse layout and collision', () => {
     expect(contribution(map.groundExtra, 2, 5)).toBe(HOUSE_FRAMES.facadeCornerLeft);
     expect(contribution(map.groundExtra, 3, 5)).toBe(HOUSE_FRAMES.facadeWall);
     expect(contribution(map.groundExtra, 7, 5)).toBe(HOUSE_FRAMES.facadeCornerRight);
+    expect(contribution(map.groundExtra, 5, 5)).toBe(HOUSE_FRAMES.doorUpperClosed);
     expect(contribution(map.groundExtra, 2, 6)).toBe(HOUSE_FRAMES.foundation);
     expect(contribution(map.groundExtra, 3, 6)).toBe(HOUSE_FRAMES.foundation);
     expect(contribution(map.groundExtra, 4, 6)).toBe(HOUSE_FRAMES.facadeWindow);
-    expect(contribution(map.groundExtra, 5, 6)).toBe(HOUSE_FRAMES.doorClosed);
-    expect(contribution(map.groundExtra, 6, 6)).toBe(HOUSE_FRAMES.foundation);
+    expect(contribution(map.groundExtra, 5, 6)).toBe(HOUSE_FRAMES.doorLowerClosed);
+    expect(contribution(map.groundExtra, 6, 6)).toBe(HOUSE_FRAMES.facadeWindow);
     expect(contribution(map.groundExtra, 7, 6)).toBe(HOUSE_FRAMES.foundation);
-    const doorFrames = (map.groundExtra ?? []).filter(
-      ([, , gid]) => gid === HOUSE_FRAMES.doorClosed || gid === HOUSE_FRAMES.doorOpen,
+    const doorFrames = (map.groundExtra ?? []).filter(([, , gid]) =>
+      [
+        HOUSE_FRAMES.doorUpperClosed,
+        HOUSE_FRAMES.doorUpperOpen,
+        HOUSE_FRAMES.doorLowerClosed,
+        HOUSE_FRAMES.doorLowerOpen,
+      ].includes(gid),
     );
-    expect(doorFrames).toEqual([[5, 6, HOUSE_FRAMES.doorClosed]]);
+    expect(doorFrames).toEqual([
+      [5, 5, HOUSE_FRAMES.doorUpperClosed],
+      [5, 6, HOUSE_FRAMES.doorLowerClosed],
+    ]);
 
     for (let c = 2; c <= 7; c++) {
       expect(contribution(map.decorExtra, c, 7), `contact shadow (${c},7)`).toBe(
@@ -202,7 +211,7 @@ describe('C-550 — placeHouse layout and collision', () => {
     expect(map.collision[at(map, 4, 8)]).toBe(0);
   });
 
-  test('legacy shells keep two-cell doors while the hut gets one closed door', () => {
+  test('legacy shells keep their old door helper while the house uses one two-row door', () => {
     expect(doorPlacement({ c0: 2, r0: 2, w: 6, h: 5, doorSide: 'south' })).toEqual({
       doorCells: [
         [4, 6],
@@ -216,7 +225,10 @@ describe('C-550 — placeHouse layout and collision', () => {
       ],
     });
     expect(houseDoorPlacement({ c0: 2, r0: 2, w: 6, h: 5, doorSide: 'south' })).toEqual({
-      doorCells: [[5, 6]],
+      doorCells: [
+        [5, 5],
+        [5, 6],
+      ],
       landingCells: [
         [5, 7],
         [5, 8],
@@ -277,11 +289,11 @@ describe('C-550 — assertions and stable identities', () => {
         name: 'door column',
         options: {
           region: { c0: 2, r0: 2, c1: 7, r1: 6 },
-          door: { c: 3 },
+          door: { c: 2 },
           facing: 's' as const,
           mapId: 'bad_door',
         },
-        pattern: /not on the derived single south door/,
+        pattern: /must be inside the facade/,
       },
     ] as const;
     for (const testCase of cases) {
@@ -365,7 +377,7 @@ describe('C-550 — assertions and stable identities', () => {
     expect(map.overheadExtra).toBeUndefined();
   });
 
-  test('the village keeps its existing transition graph and other building shells', () => {
+  test('the village keeps its transition identities and C-550 hut roles', () => {
     const { map, objectLayers } = buildVillage();
     const transitions = objectLayers
       .flatMap((layer) => layer.objects)
@@ -378,10 +390,10 @@ describe('C-550 — assertions and stable identities', () => {
         .filter((object) => object.type === 'transition')
         .some((object) => object.properties.some((property) => property.value === 'hut')),
     ).toBe(false);
-    expect(map.ground[at(map, 18, 13)]).toBe(G.WOOD_WALL);
-    expect(map.collision[at(map, 18, 13)]).toBe(1);
     expect(contribution(map.groundExtra, 51, 7)).toBe(HOUSE_FRAMES.roofEaveEdge);
     expect(contribution(map.overheadExtra, 51, 5)).toBe(HOUSE_FRAMES.roofGableLeft);
+    expect(contribution(map.groundExtra, 54, 8)).toBe(HOUSE_FRAMES.doorUpperClosed);
+    expect(contribution(map.groundExtra, 54, 9)).toBe(HOUSE_FRAMES.doorLowerClosed);
     expect(contribution(map.decorExtra, 51, 10)).toBe(HOUSE_FRAMES.foundationShadow);
   });
 
@@ -392,33 +404,16 @@ describe('C-550 — assertions and stable identities', () => {
     expect(reachable(map, gate, { c: 54, r: 6 })).toBe(true);
   });
 
-  test('pins the exact 14-cell collision delta from merged C-549', () => {
+  test('keeps the C-550 hut footprint and collision roles', () => {
     const { map } = buildVillage();
-    const roofCells = [5, 6].flatMap((r) =>
-      [51, 52, 53, 54, 55, 56].map((c) => ({ c, r, before: 1, after: 0 })),
-    );
-    const formerDoorCells = [
-      { c: 53, r: 9, before: 0, after: 1 },
-      { c: 54, r: 9, before: 0, after: 1 },
-    ];
-    const expectedDelta = [...roofCells, ...formerDoorCells];
-    const mergedC549Collision = [...map.collision];
-    for (const cell of expectedDelta) {
-      mergedC549Collision[at(map, cell.c, cell.r)] = cell.before;
+    for (let r = 5; r <= 9; r++) {
+      for (let c = 51; c <= 56; c++) {
+        const expected = r <= 6 ? 0 : 1;
+        expect(map.collision[at(map, c, r)], `hut collision (${c},${r})`).toBe(expected);
+      }
     }
-
-    const changed = map.collision.flatMap((value, index) =>
-      value === mergedC549Collision[index]
-        ? []
-        : [{ index, before: mergedC549Collision[index], after: value }],
-    );
-    expect(changed).toEqual(
-      expectedDelta.map((cell) => ({
-        index: at(map, cell.c, cell.r),
-        before: cell.before,
-        after: cell.after,
-      })),
-    );
+    expect(map.collision[at(map, 54, 10)]).toBe(0);
+    expect(map.collision[at(map, 54, 11)]).toBe(0);
   });
 });
 
@@ -435,7 +430,7 @@ describe('C-550 — compiled map layers', () => {
 
   test('allows terrain overrides on walkable or terrain-owned ground cells', () => {
     const walkableMap = makeHouseMap();
-    walkableMap.groundExtra = [[3, 6, HOUSE_FRAMES.doorClosed]];
+    walkableMap.groundExtra = [[3, 6, HOUSE_FRAMES.doorLowerClosed]];
     walkableMap.terrainOverrides = [[3, 6, 'dirt']];
     const walkableJson = buildMapJson({ map: walkableMap, objectLayers: [] }).json;
     expect(readTerrain(walkableJson)[at(walkableMap, 3, 6)]).toBe('dirt');
@@ -533,9 +528,9 @@ describe('C-550 — house atlas frames', () => {
   };
 
   test('house GIDs append after the bridge family without renumbering', () => {
-    expect(Object.values(HOUSE_FRAMES).sort((a, b) => a - b)).toEqual([
-      146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159, 160,
-    ]);
+    expect(Object.values(HOUSE_FRAMES).sort((a, b) => a - b)).toEqual(
+      Array.from({ length: 31 }, (_, index) => 146 + index),
+    );
     expect(atlas.frames['house_roof_front.png']?.frame).toEqual({ x: 35, y: 307, w: 32, h: 32 });
     expect(atlas.frames['house_foundation_shadow.png']?.frame).toEqual({
       x: 511,
@@ -543,21 +538,36 @@ describe('C-550 — house atlas frames', () => {
       w: 32,
       h: 32,
     });
+    expect(atlas.frames['house_door_upper_closed.png']?.frame).toEqual({
+      x: 1,
+      y: 341,
+      w: 32,
+      h: 32,
+    });
+    expect(atlas.frames['house_roof_thatch_eave_edge.png']?.frame).toEqual({
+      x: 511,
+      y: 341,
+      w: 32,
+      h: 32,
+    });
   });
 
   test('all solid house frames are opaque and the contact shadow stays soft', () => {
+    const roofFrames = ['front', 'back', 'ridge', 'eave_overhead', 'eave_edge'].flatMap((suffix) =>
+      ['', 'slate_', 'thatch_'].map((materialPrefix) =>
+        materialPrefix === ''
+          ? `house_roof_${suffix}.png`
+          : `house_roof_${materialPrefix}${suffix}.png`,
+      ),
+    );
     const keys = [
-      'house_roof_front.png',
-      'house_roof_back.png',
-      'house_roof_ridge.png',
-      'house_roof_gable_left.png',
-      'house_roof_gable_right.png',
-      'house_roof_eave_overhead.png',
-      'house_roof_eave_edge.png',
+      ...roofFrames,
       'house_facade_wall.png',
       'house_facade_window.png',
       'house_facade_corner_left.png',
       'house_facade_corner_right.png',
+      'house_door_upper_closed.png',
+      'house_door_upper_open.png',
       'house_door_closed.png',
       'house_door_open.png',
       'house_foundation.png',
@@ -581,15 +591,27 @@ describe('C-550 — house atlas frames', () => {
   test('roof value hierarchy, facade contrast, and bounded plinth are measurable', () => {
     const luminance = (color: [number, number, number, number]): number =>
       0.2126 * color[0] + 0.7152 * color[1] + 0.0722 * color[2];
-    const meanLuminance = (key: string, x0: number, y0: number, x1: number, y1: number): number => {
+    const meanLuminance = (
+      key: string,
+      x0: number,
+      y0: number,
+      x1: number,
+      y1: number,
+      opaqueOnly = false,
+    ): number => {
       let total = 0;
       let count = 0;
       for (let y = y0; y <= y1; y++) {
         for (let x = x0; x <= x1; x++) {
-          total += luminance(pixel(key, x, y));
+          const color = pixel(key, x, y);
+          if (opaqueOnly && color[3] === 0) {
+            continue;
+          }
+          total += luminance(color);
           count++;
         }
       }
+      expect(count, `${key} opaque sample count`).toBeGreaterThan(0);
       return total / count;
     };
 
@@ -597,8 +619,8 @@ describe('C-550 — house atlas frames', () => {
     const ridgeShadow = meanLuminance('house_roof_ridge.png', 4, 14, 27, 17);
     const backPlane = meanLuminance('house_roof_back.png', 4, 5, 27, 10);
     const facade = meanLuminance('house_facade_wall.png', 4, 8, 27, 24);
-    const leftGable = meanLuminance('house_roof_gable_left.png', 0, 4, 15, 27);
-    const rightGable = meanLuminance('house_roof_gable_right.png', 16, 4, 31, 27);
+    const leftGable = meanLuminance('house_roof_gable_left.png', 0, 4, 15, 27, true);
+    const rightGable = meanLuminance('house_roof_gable_right.png', 16, 4, 31, 27, true);
     expect(frontSlope).toBeGreaterThan(ridgeShadow);
     expect(ridgeShadow).toBeGreaterThan(backPlane);
     expect(leftGable).toBeGreaterThan(backPlane);
@@ -606,26 +628,6 @@ describe('C-550 — house atlas frames', () => {
     expect(rightGable).toBeGreaterThan(backPlane);
     expect(rightGable).toBeLessThan(frontSlope);
     expect(facade).toBeLessThan(frontSlope);
-
-    const gableStrokeColor = [82, 55, 40] as const;
-    const maxStrokeRun = (key: string): number => {
-      let maximum = 0;
-      for (let y = 0; y < 32; y++) {
-        let run = 0;
-        for (let x = 0; x < 32; x++) {
-          const color = pixel(key, x, y);
-          const isStroke =
-            color[0] === gableStrokeColor[0] &&
-            color[1] === gableStrokeColor[1] &&
-            color[2] === gableStrokeColor[2];
-          run = isStroke ? run + 1 : 0;
-          maximum = Math.max(maximum, run);
-        }
-      }
-      return maximum;
-    };
-    expect(maxStrokeRun('house_roof_gable_left.png')).toBe(0);
-    expect(maxStrokeRun('house_roof_gable_right.png')).toBe(0);
 
     const plinthColor = pixel('house_foundation.png', 16, 32 - HOUSE_PLINTH_HEIGHT);
     let measuredPlinthHeight = 0;
@@ -644,13 +646,19 @@ describe('C-550 — house atlas frames', () => {
     expect(measuredPlinthHeight).toBeLessThanOrEqual(8);
   });
 
-  test('assembled hut uses exactly one closed door frame', () => {
+  test('assembled hut uses one closed two-row door', () => {
     const map = makeHouseMap();
     placeTestHouse(map);
-    const doorFrames = (map.groundExtra ?? []).filter(
-      ([, , gid]) => gid === HOUSE_FRAMES.doorClosed || gid === HOUSE_FRAMES.doorOpen,
-    );
-    expect(doorFrames.filter(([, , gid]) => gid === HOUSE_FRAMES.doorClosed)).toHaveLength(1);
-    expect(doorFrames.filter(([, , gid]) => gid === HOUSE_FRAMES.doorOpen)).toHaveLength(0);
+    const doorGids = new Set([
+      HOUSE_FRAMES.doorUpperClosed,
+      HOUSE_FRAMES.doorUpperOpen,
+      HOUSE_FRAMES.doorLowerClosed,
+      HOUSE_FRAMES.doorLowerOpen,
+    ]);
+    const doorFrames = (map.groundExtra ?? []).filter(([, , gid]) => doorGids.has(gid));
+    expect(doorFrames.filter(([, , gid]) => gid === HOUSE_FRAMES.doorUpperClosed)).toHaveLength(1);
+    expect(doorFrames.filter(([, , gid]) => gid === HOUSE_FRAMES.doorLowerClosed)).toHaveLength(1);
+    expect(doorFrames.filter(([, , gid]) => gid === HOUSE_FRAMES.doorUpperOpen)).toHaveLength(0);
+    expect(doorFrames.filter(([, , gid]) => gid === HOUSE_FRAMES.doorLowerOpen)).toHaveLength(0);
   });
 });

@@ -207,6 +207,20 @@ describe('C-545 — emissive opt-out', () => {
     expect(sprite.getGlobalTint()).toBe(0xffffff);
   });
 
+  test('re-announcing an ECS identity replaces its previous display', () => {
+    const world = createGameWorldAmbientHarness();
+    world._handleEntityCreated({ type: 'ENTITY_CREATED', eid: 42, tint: 0xffffff });
+    const firstDisplay = world._renderEntries.get(42)?.displayObject;
+    expect(firstDisplay).toBeDefined();
+
+    world._handleEntityCreated({ type: 'ENTITY_CREATED', eid: 42, tint: 0xffffff });
+
+    expect(firstDisplay?.destroyed).toBe(true);
+    expect(
+      world._worldContainer.children.filter((child) => child.label === 'entity-42'),
+    ).toHaveLength(1);
+  });
+
   test('GameWorld keeps an entity with emissive frame metadata untinted', () => {
     const world = createGameWorldAmbientHarness();
     world._propFrameMeta.set('prop_hearth.png', {

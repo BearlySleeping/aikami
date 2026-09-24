@@ -12,8 +12,8 @@
 //   * Has terrain capacity overrun its explicit cell budget?
 //
 // Capacity overflow must fail *visibly*: the shipped Emberwatch terrain atlas
-// has zero headroom (16x8 = 128 cells), so adding a terrain is an explicit
-// capacity change, never a painter that silently drops a cell.
+// has one free frame (16x11 = 176 cells), so another append or a new corner-16
+// terrain is an explicit capacity change, never a silent dropped cell.
 //
 // Contract: C-520 Versioned image workflows and asset preparation
 
@@ -55,7 +55,7 @@ export const validateAtlasPages = (options: {
   maxPageSize: number;
   paddingPx: number;
   extrudePx: number;
-  /** Optional explicit cell capacity, e.g. the terrain grid's 128 cells. */
+  /** Optional explicit cell capacity, e.g. the terrain grid's 176 cells. */
   capacityCells?: number;
   /** Frames the packer intended to emit, per page name. */
   expectedFrameCounts?: Readonly<Record<string, number>>;

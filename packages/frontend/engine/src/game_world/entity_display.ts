@@ -40,6 +40,7 @@ export const createEntityDisplay = (options: {
   onAddedToStage: (info: { eid: number; stageChildren: number }) => void;
 }): EntityDisplay => {
   const container = new Container();
+  container.label = `entity-${options.eid}`;
 
   // Draw a debug colored square using the worker's tint so entities are visible
   // even before LPC textures load. Uses Sprite(Texture.WHITE) because PixiJS v8

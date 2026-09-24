@@ -2,7 +2,7 @@
 //
 // Irregular prop-atlas pages (oversized transparent props).
 //
-// The grid atlas is a fixed 16×8 grid of 32×32 cells with per-cell edge
+// The grid atlas is a fixed 16-column grid of 32×32 cells with per-cell edge
 // extrusion, and map GIDs index it by `row * columns + col`. Oversized
 // transparent props cannot live in that grid: a 192×152 ward tree, a 256×224
 // inn or a 96×42 table are not tile cells, and per-cell extrusion would put

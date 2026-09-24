@@ -1,9 +1,9 @@
 // scripts/src/lib/ops/generate_emberwatch_house_frames.ts
 //
-// C-550 — procedural frames for the ordinary Emberwatch house assembly.
-// The house is built from small, named tile frames rather than a second sprite
-// or image sheet. Every recipe is a pure function of the tile-local pixel grid,
-// so adjacent runs share an edge and repeated atlas generation is byte-stable.
+// C-550/C-553 — procedural frames for the shared Emberwatch house assembly.
+// Every material reuses the same silhouette and facade geometry; only the roof
+// palette changes. Packing is deterministic and tile-sized for the existing map
+// layer model.
 
 import {
   buf,
@@ -16,27 +16,41 @@ import {
   W,
 } from './generate_emberwatch_canvas.ts';
 
-/** One of the deliberately small house-assembly frame families. */
+/** Roof palette selected by {@link placeHouse}; geometry is material-independent. */
+export type HouseRoofMaterial = 'cedar' | 'slate' | 'thatch';
+
+type RoofPlane =
+  | 'front'
+  | 'back'
+  | 'ridge'
+  | 'gable-left'
+  | 'gable-right'
+  | 'eave-overhead'
+  | 'eave-edge';
+type FacadeVariant = 'wall' | 'window' | 'corner-left' | 'corner-right';
+type DoorSection = 'upper' | 'lower';
+
+/** One recipe in the deliberately small shared house-assembly family. */
 export type HouseFrameRecipe =
-  | {
-      kind: 'roof';
-      plane:
-        | 'front'
-        | 'back'
-        | 'ridge'
-        | 'gable-left'
-        | 'gable-right'
-        | 'eave-overhead'
-        | 'eave-edge';
-    }
-  | { kind: 'facade'; variant: 'wall' | 'window' | 'corner-left' | 'corner-right' }
-  | { kind: 'door'; open: boolean }
+  | { kind: 'roof'; plane: RoofPlane; material: HouseRoofMaterial }
+  | { kind: 'facade'; variant: FacadeVariant }
+  | { kind: 'door'; open: boolean; section: DoorSection }
   | { kind: 'foundation'; shadow: boolean };
 
-type RoofPlane = Extract<HouseFrameRecipe, { kind: 'roof' }>['plane'];
-type FacadeVariant = Extract<HouseFrameRecipe, { kind: 'facade' }>['variant'];
-
 type Rgb = readonly [number, number, number];
+
+type RoofPalette = Readonly<{
+  base: Rgb;
+  light: Rgb;
+  dark: Rgb;
+  seam: Rgb;
+  ridge: Rgb;
+  ridgeShadow: Rgb;
+  gable: Rgb;
+  hipShadow: Rgb;
+  hip: Rgb;
+  highlight: Rgb;
+}>;
 
 /** Six pixels is the authored upper bound for the visible base course. */
 export const HOUSE_PLINTH_HEIGHT = 6;
@@ -44,45 +58,65 @@ export const HOUSE_PLINTH_HEIGHT = 6;
 /** Ten pixels keeps the contact band soft while staying below one tile. */
 export const HOUSE_SHADOW_FADE_HEIGHT = 10;
 
-/*
- * Weathered cedar shingles are intentional here: the neighboring village
- * buildings use warm wood, so a brown roof reads as one material family while
- * the value structure—not a blue-grey color shift—carries the three-quarter
- * roof read at tile scale.
- */
-const ROOF = {
-  base: [91, 66, 48] as const,
-  light: [174, 132, 82] as const,
-  dark: [67, 48, 37] as const,
-  seam: [78, 55, 41] as const,
-  ridge: [201, 157, 96] as const,
-  ridgeShadow: [123, 85, 54] as const,
-  gable: [132, 87, 56] as const,
-  hipShadow: [82, 55, 40] as const,
-  hip: [126, 91, 61] as const,
-  highlight: [193, 151, 94] as const,
-} satisfies Record<string, Rgb>;
+const ROOF_PALETTES = {
+  cedar: {
+    base: [91, 66, 48],
+    light: [174, 132, 82],
+    dark: [67, 48, 37],
+    seam: [78, 55, 41],
+    ridge: [201, 157, 96],
+    ridgeShadow: [123, 85, 54],
+    gable: [132, 87, 56],
+    hipShadow: [82, 55, 40],
+    hip: [126, 91, 61],
+    highlight: [193, 151, 94],
+  },
+  slate: {
+    base: [72, 82, 89],
+    light: [117, 132, 140],
+    dark: [40, 49, 56],
+    seam: [62, 73, 81],
+    ridge: [163, 176, 182],
+    ridgeShadow: [84, 98, 107],
+    gable: [92, 106, 115],
+    hipShadow: [48, 58, 66],
+    hip: [108, 123, 132],
+    highlight: [190, 201, 205],
+  },
+  thatch: {
+    base: [151, 116, 61],
+    light: [199, 165, 91],
+    dark: [92, 69, 39],
+    seam: [126, 94, 49],
+    ridge: [220, 188, 112],
+    ridgeShadow: [145, 108, 57],
+    gable: [174, 136, 72],
+    hipShadow: [104, 77, 42],
+    hip: [185, 146, 77],
+    highlight: [231, 202, 132],
+  },
+} satisfies Record<HouseRoofMaterial, RoofPalette>;
 
 const FACADE = {
-  base: [126, 82, 48] as const,
-  light: [158, 108, 61] as const,
-  dark: [82, 51, 35] as const,
-  trim: [55, 36, 28] as const,
-  eaveShadow: [79, 48, 33] as const,
-  window: [75, 116, 127] as const,
-  windowLight: [153, 183, 174] as const,
-  doorDark: [48, 32, 27] as const,
-  door: [108, 67, 38] as const,
-  doorLight: [145, 94, 52] as const,
-  threshold: [174, 145, 99] as const,
+  base: [126, 82, 48],
+  light: [158, 108, 61],
+  dark: [82, 51, 35],
+  trim: [55, 36, 28],
+  eaveShadow: [79, 48, 33],
+  window: [75, 116, 127],
+  windowLight: [153, 183, 174],
+  doorDark: [48, 32, 27],
+  door: [108, 67, 38],
+  doorLight: [145, 94, 52],
+  threshold: [174, 145, 99],
 } satisfies Record<string, Rgb>;
 
 const FOUNDATION = {
-  stone: [119, 105, 86] as const,
-  light: [151, 136, 108] as const,
-  dark: [73, 59, 49] as const,
-  earth: [79, 64, 50] as const,
-  shadow: [48, 43, 37] as const,
+  stone: [119, 105, 86],
+  light: [151, 136, 108],
+  dark: [73, 59, 49],
+  earth: [79, 64, 50],
+  shadow: [48, 43, 37],
 } satisfies Record<string, Rgb>;
 
 const rect = (
@@ -99,10 +133,6 @@ const rect = (
 
 const lineH = (col: number, row: number, y: number, color: Rgb): void => {
   hline(col, row, 0, TILE - 1, y, color[0], color[1], color[2]);
-};
-
-const lineV = (col: number, row: number, x: number, color: Rgb): void => {
-  vline(col, row, x, 0, TILE - 1, color[0], color[1], color[2]);
 };
 
 const lineVRange = (
@@ -148,89 +178,96 @@ const copyLeftEdgeToRight = (col: number, row: number): void => {
   for (let y = 0; y < TILE; y++) {
     const source = ((top + y) * W + left) * 4;
     const target = ((top + y) * W + right) * 4;
-    buf[target] = buf[source];
-    buf[target + 1] = buf[source + 1];
-    buf[target + 2] = buf[source + 2];
-    buf[target + 3] = buf[source + 3];
+    buf[target] = buf[source] ?? 0;
+    buf[target + 1] = buf[source + 1] ?? 0;
+    buf[target + 2] = buf[source + 2] ?? 0;
+    buf[target + 3] = buf[source + 3] ?? 0;
   }
 };
 
-/** Repeating cedar courses shared by the front and back roof planes. */
-const paintRoofPlane = (col: number, row: number, light: boolean): void => {
-  const base = light ? ROOF.light : ROOF.base;
+/** Repeating shingle/thatch courses shared by front and back roof planes. */
+const paintRoofPlane = (col: number, row: number, palette: RoofPalette, light: boolean): void => {
+  const base = light ? palette.light : palette.base;
   fillCell(col, row, base[0], base[1], base[2]);
   for (let y = 0; y < TILE; y++) {
     const course = Math.floor(y / 4);
     const shade = course % 2 === 0 ? 0 : -10;
     lineH(col, row, y, shiftColor(base, shade));
     if (y % 4 === 0) {
-      lineH(col, row, y, light ? ROOF.highlight : ROOF.ridgeShadow);
+      lineH(col, row, y, light ? palette.highlight : palette.ridgeShadow);
     }
     if (y % 4 === 3) {
-      lineH(col, row, y, ROOF.dark);
+      lineH(col, row, y, palette.dark);
     }
   }
   for (let band = 0; band < 8; band++) {
     const joint = ((band * 9 + 3) % 28) + 2;
-    lineVRange(col, row, joint, band * 4 + 1, band * 4 + 2, ROOF.seam);
+    lineVRange(col, row, joint, band * 4 + 1, band * 4 + 2, palette.seam);
   }
 };
 
-const paintRoofFront = (col: number, row: number): void => {
-  paintRoofPlane(col, row, true);
-  lineH(col, row, 1, ROOF.highlight);
-  lineH(col, row, 29, ROOF.dark);
-  lineH(col, row, 30, ROOF.hipShadow);
+const paintRoofFront = (col: number, row: number, palette: RoofPalette): void => {
+  paintRoofPlane(col, row, palette, true);
+  lineH(col, row, 1, palette.highlight);
+  lineH(col, row, 29, palette.dark);
+  lineH(col, row, 30, palette.hipShadow);
   copyLeftEdgeToRight(col, row);
 };
 
-const paintRoofBack = (col: number, row: number): void => {
-  paintRoofPlane(col, row, false);
-  lineH(col, row, 0, ROOF.hipShadow);
-  lineH(col, row, 29, ROOF.dark);
+const paintRoofBack = (col: number, row: number, palette: RoofPalette): void => {
+  paintRoofPlane(col, row, palette, false);
+  lineH(col, row, 0, palette.hipShadow);
+  lineH(col, row, 29, palette.dark);
   copyLeftEdgeToRight(col, row);
 };
 
-const paintRoofRidge = (col: number, row: number): void => {
-  paintRoofPlane(col, row, true);
-  rect(col, row, 0, 10, TILE, 4, ROOF.ridge);
-  lineH(col, row, 10, ROOF.highlight);
-  rect(col, row, 0, 14, TILE, 4, ROOF.ridgeShadow);
-  lineH(col, row, 18, ROOF.hipShadow);
+const paintRoofRidge = (col: number, row: number, palette: RoofPalette): void => {
+  paintRoofPlane(col, row, palette, true);
+  rect(col, row, 0, 10, TILE, 4, palette.ridge);
+  lineH(col, row, 10, palette.highlight);
+  rect(col, row, 0, 14, TILE, 4, palette.ridgeShadow);
+  lineH(col, row, 18, palette.hipShadow);
   copyLeftEdgeToRight(col, row);
 };
 
-/** Fill a solid hip/gable wedge instead of drawing a pair of thin diagonals. */
-const paintGable = (col: number, row: number, left: boolean): void => {
-  paintRoofPlane(col, row, false);
-  for (let y = 2; y <= 29; y++) {
-    const rise = Math.min(y - 2, 29 - y);
-    const width = Math.min(16, 3 + Math.floor(rise * 0.6));
-    const x = left ? 0 : TILE - width;
-    rect(col, row, x, y, width, 1, ROOF.gable);
-    if (width >= 6) {
-      rect(col, row, left ? x + 2 : x + 1, y, width - 3, 1, ROOF.hip);
+/** Top-edge y for a one-tile hip: outer end starts low, inner edge reaches centre height. */
+const gableTop = (x: number, left: boolean): number => {
+  const rise = left ? TILE - 1 - x : x;
+  return Math.round((rise * 16) / (TILE - 1));
+};
+
+/** Fill one monotonic hip wedge; transparent corners create the roof silhouette. */
+const paintGable = (col: number, row: number, palette: RoofPalette, left: boolean): void => {
+  paintRoofPlane(col, row, palette, false);
+  for (let x = 0; x < TILE; x++) {
+    const top = gableTop(x, left);
+    for (let y = 0; y < top; y++) {
+      setPixelRgba(col, row, x, y, palette.base, 0);
+    }
+    setPixelRgba(col, row, x, top, palette.ridge, 255);
+    if (top + 1 < TILE) {
+      setPixelRgba(col, row, x, top + 1, palette.hipShadow, 255);
+    }
+    if (top + 2 < TILE) {
+      setPixelRgba(col, row, x, top + 2, palette.gable, 255);
     }
   }
-  lineH(col, row, 1, ROOF.ridge);
-  lineH(col, row, 30, ROOF.dark);
-  copyLeftEdgeToRight(col, row);
 };
 
-const paintEave = (col: number, row: number, overhead: boolean): void => {
-  paintRoofPlane(col, row, !overhead);
+const paintEave = (col: number, row: number, palette: RoofPalette, overhead: boolean): void => {
+  paintRoofPlane(col, row, palette, !overhead);
   if (overhead) {
-    lineH(col, row, 0, ROOF.ridge);
-    rect(col, row, 0, 26, TILE, 6, ROOF.hipShadow);
+    lineH(col, row, 0, palette.ridge);
+    rect(col, row, 0, 26, TILE, 6, palette.hipShadow);
   } else {
-    lineH(col, row, 0, ROOF.highlight);
-    rect(col, row, 0, 25, TILE, 5, ROOF.ridgeShadow);
-    lineH(col, row, 30, ROOF.hipShadow);
+    lineH(col, row, 0, palette.highlight);
+    rect(col, row, 0, 25, TILE, 5, palette.ridgeShadow);
+    lineH(col, row, 30, palette.hipShadow);
   }
   copyLeftEdgeToRight(col, row);
 };
 
-/** A short, warm shadow at the top of the lower facade row reads as eave shade. */
+/** A short, warm shadow at the top of the upper facade row reads as eave shade. */
 const paintEaveShadow = (col: number, row: number): void => {
   rect(col, row, 0, 0, TILE, 4, FACADE.eaveShadow);
   lineH(col, row, 4, FACADE.dark);
@@ -278,39 +315,56 @@ const paintFacadeWall = (col: number, row: number): void => {
 
 const paintFacadeWindow = (col: number, row: number): void => {
   paintLowerFacade(col, row);
-  rect(col, row, 8, 7, 16, 18, FACADE.trim);
-  rect(col, row, 10, 9, 12, 14, FACADE.window);
-  rect(col, row, 11, 10, 4, 4, FACADE.windowLight);
-  lineVRange(col, row, 15, 9, 22, FACADE.trim);
-  lineH(col, row, 16, FACADE.trim);
+  rect(col, row, 10, 9, 12, 14, FACADE.trim);
+  rect(col, row, 12, 11, 8, 10, FACADE.window);
+  rect(col, row, 13, 12, 3, 4, FACADE.windowLight);
+  lineVRange(col, row, 15, 11, 20, FACADE.trim);
+  lineH(col, row, 15, FACADE.trim);
 };
 
-const paintFacadeCorner = (col: number, row: number, left: boolean): void => {
+/** Corner role keeps its stable GID while sharing the facade's clean wall pixels. */
+const paintFacadeCorner = (col: number, row: number): void => {
   paintUpperFacade(col, row);
-  const x = left ? 2 : 28;
-  rect(col, row, x, 3, 3, 26, FACADE.trim);
-  lineV(col, row, left ? 4 : 27, FACADE.light);
 };
 
-const paintDoor = (col: number, row: number, open: boolean): void => {
-  paintLowerFacade(col, row);
-  rect(col, row, 6, 2, 20, 24, FACADE.trim);
+/** Door top edge in the upper tile; its lower edge is the shared facade seam. */
+const paintDoorUpper = (col: number, row: number, open: boolean): void => {
+  paintUpperFacade(col, row);
+  rect(col, row, 3, 8, 26, 24, FACADE.trim);
   if (open) {
-    rect(col, row, 8, 4, 16, 21, FACADE.doorDark);
-    rect(col, row, 9, 5, 5, 18, [42, 36, 31]);
-    rect(col, row, 17, 5, 5, 18, [58, 45, 37]);
+    rect(col, row, 5, 10, 22, 22, FACADE.doorDark);
+    rect(col, row, 6, 11, 9, 21, [42, 36, 31]);
+    rect(col, row, 17, 11, 9, 21, [58, 45, 37]);
   } else {
-    rect(col, row, 8, 4, 16, 21, FACADE.door);
-    for (let y = 6; y < 24; y += 6) {
+    rect(col, row, 5, 10, 22, 22, FACADE.door);
+    for (let y = 12; y < 32; y += 6) {
       lineH(col, row, y, FACADE.doorLight);
     }
-    for (let x = 10; x < 23; x += 5) {
-      lineVRange(col, row, x, 5, 24, FACADE.trim);
+    for (let x = 7; x < 27; x += 5) {
+      lineVRange(col, row, x, 11, 31, FACADE.trim);
     }
-    // Boarded, closed, and deliberately knobless: there is no hut transition.
-    lineH(col, row, 24, FACADE.threshold);
   }
-  lineH(col, row, 25, FACADE.trim);
+};
+
+/** Door lower tile completes a 50px leaf and terminates on a stone threshold. */
+const paintDoorLower = (col: number, row: number, open: boolean): void => {
+  paintLowerFacade(col, row);
+  rect(col, row, 3, 0, 26, 28, FACADE.trim);
+  if (open) {
+    rect(col, row, 5, 0, 22, 28, FACADE.doorDark);
+    rect(col, row, 6, 0, 9, 28, [42, 36, 31]);
+    rect(col, row, 17, 0, 9, 28, [58, 45, 37]);
+  } else {
+    rect(col, row, 5, 0, 22, 28, FACADE.door);
+    for (let y = 1; y < 28; y += 6) {
+      lineH(col, row, y, FACADE.doorLight);
+    }
+    for (let x = 7; x < 27; x += 5) {
+      lineVRange(col, row, x, 0, 27, FACADE.trim);
+    }
+  }
+  rect(col, row, 5, 28, 22, 4, FACADE.threshold);
+  lineH(col, row, 31, FACADE.trim);
 };
 
 const paintFoundation = (col: number, row: number, shadow: boolean): void => {
@@ -331,21 +385,66 @@ const paintFoundation = (col: number, row: number, shadow: boolean): void => {
   paintLowerFacade(col, row);
 };
 
-const ROOF_PAINTERS: Readonly<Record<RoofPlane, (col: number, row: number) => void>> = {
+const ROOF_PAINTERS: Readonly<
+  Record<RoofPlane, (col: number, row: number, palette: RoofPalette) => void>
+> = {
   front: paintRoofFront,
   back: paintRoofBack,
   ridge: paintRoofRidge,
-  'gable-left': (col, row) => paintGable(col, row, true),
-  'gable-right': (col, row) => paintGable(col, row, false),
-  'eave-overhead': (col, row) => paintEave(col, row, true),
-  'eave-edge': (col, row) => paintEave(col, row, false),
+  'gable-left': (col, row, palette) => paintGable(col, row, palette, true),
+  'gable-right': (col, row, palette) => paintGable(col, row, palette, false),
+  'eave-overhead': (col, row, palette) => paintEave(col, row, palette, true),
+  'eave-edge': (col, row, palette) => paintEave(col, row, palette, false),
 };
 
 const FACADE_PAINTERS: Readonly<Record<FacadeVariant, (col: number, row: number) => void>> = {
   wall: paintFacadeWall,
   window: paintFacadeWindow,
-  'corner-left': (col, row) => paintFacadeCorner(col, row, true),
-  'corner-right': (col, row) => paintFacadeCorner(col, row, false),
+  'corner-left': (col, row) => paintFacadeCorner(col, row),
+  'corner-right': (col, row) => paintFacadeCorner(col, row),
+};
+
+const roofPlaneSuffixes = {
+  front: 'front',
+  back: 'back',
+  ridge: 'ridge',
+  'gable-left': 'gable_left',
+  'gable-right': 'gable_right',
+  'eave-overhead': 'eave_overhead',
+  'eave-edge': 'eave_edge',
+} as const satisfies Record<RoofPlane, string>;
+
+const roofFramePaint = Object.fromEntries(
+  (Object.keys(ROOF_PALETTES) as HouseRoofMaterial[]).flatMap((material) =>
+    (Object.entries(roofPlaneSuffixes) as Array<[RoofPlane, string]>).map(
+      ([plane, suffix]): [string, HouseFrameRecipe] => [
+        material === 'cedar' ? `house_roof_${suffix}.png` : `house_roof_${material}_${suffix}.png`,
+        { kind: 'roof', plane, material },
+      ],
+    ),
+  ),
+);
+
+const DOOR_PAINTERS: Readonly<
+  Record<DoorSection, (col: number, row: number, open: boolean) => void>
+> = {
+  upper: paintDoorUpper,
+  lower: paintDoorLower,
+};
+
+/** Frame name → recipe. Keys mirror the append-only manifest entries. */
+export const HOUSE_FRAME_PAINT: Readonly<Record<string, HouseFrameRecipe>> = {
+  ...roofFramePaint,
+  'house_facade_wall.png': { kind: 'facade', variant: 'wall' },
+  'house_facade_window.png': { kind: 'facade', variant: 'window' },
+  'house_facade_corner_left.png': { kind: 'facade', variant: 'corner-left' },
+  'house_facade_corner_right.png': { kind: 'facade', variant: 'corner-right' },
+  'house_door_upper_closed.png': { kind: 'door', open: false, section: 'upper' },
+  'house_door_upper_open.png': { kind: 'door', open: true, section: 'upper' },
+  'house_door_closed.png': { kind: 'door', open: false, section: 'lower' },
+  'house_door_open.png': { kind: 'door', open: true, section: 'lower' },
+  'house_foundation.png': { kind: 'foundation', shadow: false },
+  'house_foundation_shadow.png': { kind: 'foundation', shadow: true },
 };
 
 /** Writes one recipe into an atlas cell; exported for the packer's dispatch. */
@@ -356,7 +455,7 @@ export const paintHouseFrame = (options: {
 }): void => {
   const { col, row, recipe } = options;
   if (recipe.kind === 'roof') {
-    ROOF_PAINTERS[recipe.plane](col, row);
+    ROOF_PAINTERS[recipe.plane](col, row, ROOF_PALETTES[recipe.material]);
     return;
   }
   if (recipe.kind === 'facade') {
@@ -364,37 +463,13 @@ export const paintHouseFrame = (options: {
     return;
   }
   if (recipe.kind === 'door') {
-    paintDoor(col, row, recipe.open);
+    DOOR_PAINTERS[recipe.section](col, row, recipe.open);
     return;
   }
   paintFoundation(col, row, recipe.shadow);
 };
 
-/** Frame name → recipe. Keys mirror the append-only manifest entries. */
-export const HOUSE_FRAME_PAINT: Readonly<Record<string, HouseFrameRecipe>> = {
-  'house_roof_front.png': { kind: 'roof', plane: 'front' },
-  'house_roof_back.png': { kind: 'roof', plane: 'back' },
-  'house_roof_ridge.png': { kind: 'roof', plane: 'ridge' },
-  'house_roof_gable_left.png': { kind: 'roof', plane: 'gable-left' },
-  'house_roof_gable_right.png': { kind: 'roof', plane: 'gable-right' },
-  'house_roof_eave_overhead.png': { kind: 'roof', plane: 'eave-overhead' },
-  'house_roof_eave_edge.png': { kind: 'roof', plane: 'eave-edge' },
-  'house_facade_wall.png': { kind: 'facade', variant: 'wall' },
-  'house_facade_window.png': { kind: 'facade', variant: 'window' },
-  'house_facade_corner_left.png': { kind: 'facade', variant: 'corner-left' },
-  'house_facade_corner_right.png': { kind: 'facade', variant: 'corner-right' },
-  'house_door_closed.png': { kind: 'door', open: false },
-  'house_door_open.png': { kind: 'door', open: true },
-  'house_foundation.png': { kind: 'foundation', shadow: false },
-  'house_foundation_shadow.png': { kind: 'foundation', shadow: true },
-};
-
-/**
- * Paint a named house frame when it belongs to the C-550 kit.
- *
- * Keeping the lookup here gives the atlas generator a single table-driven
- * dispatch seam without coupling the large painter registry to house details.
- */
+/** Paint a named house frame when it belongs to the shared C-550/C-553 kit. */
 export const paintHouseFrameByName = (options: {
   key: string;
   col: number;

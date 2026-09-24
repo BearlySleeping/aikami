@@ -1,13 +1,17 @@
 // scripts/src/lib/ops/emberwatch_house_authoring.ts
 //
-// C-550 — deterministic authoring seam for the Emberwatch raised house.
-// The helper writes the existing MapData fields and explicit contribution
-// lists; it does not introduce a second runtime map model or a transition.
+// C-550/C-553 — deterministic shared authoring seam for Emberwatch houses.
+// The helper writes existing MapData fields and explicit contribution lists;
+// it does not introduce a second runtime map model or own transitions.
 
 import type { Region } from './emberwatch_authoring.ts';
 import { formatCells, isMapCell, isWalkableLand } from './emberwatch_map_authoring_helpers.ts';
-import { idx, type MapData, setTile } from './emberwatch_map_shared.ts';
+import { idx, type MapData, type MapObjectLayer, setTile } from './emberwatch_map_shared.ts';
+import { propFootprintCells } from './emberwatch_prop_footprint.ts';
+import type { HouseRoofMaterial } from './generate_emberwatch_house_frames.ts';
 import { buildG, readManifestTiles } from './generate_emberwatch_tables.ts';
+
+export type { HouseRoofMaterial } from './generate_emberwatch_house_frames.ts';
 
 const G = buildG();
 
@@ -23,10 +27,26 @@ export type DoorPlacement = {
   landingCells: Array<[number, number]>;
 };
 
-/** The single-boarded-door geometry used by the exterior-only C-550 hut. */
+/** Two-row door geometry shared by enterable and closed village houses. */
 export type HouseDoorPlacement = {
   doorCells: Array<[number, number]>;
   landingCells: Array<[number, number]>;
+};
+
+/** Two solid facade rows are reserved below the roof on every house. */
+export const HOUSE_FACADE_ROWS = 2;
+
+/** Maximum pale/front roof depth before the darker back slope takes over. */
+export const HOUSE_MAX_VISIBLE_ROOF_ROWS = 3;
+
+/** Return the bounded front-roof depth for a footprint height. */
+export const houseVisibleRoofRows = (footprintRows: number): number => {
+  if (!Number.isInteger(footprintRows) || footprintRows <= HOUSE_FACADE_ROWS) {
+    throw new Error(
+      `emberwatch_authoring: footprintRows must be an integer greater than ${HOUSE_FACADE_ROWS}`,
+    );
+  }
+  return Math.min(footprintRows - HOUSE_FACADE_ROWS, HOUSE_MAX_VISIBLE_ROOF_ROWS);
 };
 
 /** Resolve a door pair and its two-row landing from a footprint. */
@@ -60,28 +80,26 @@ export const doorPlacement = (options: {
   return { doorCells, landingCells };
 };
 
-/**
- * Derive the hut's one closed door and its two-row exterior approach.
- *
- * The legacy village shells intentionally retain their wider two-cell door
- * geometry. The C-550 hut has no interior contract, so it gets one boarded
- * leaf and one narrow landing column instead of an implied second entrance.
- */
+/** Resolve a two-row south door and its two clear exterior landing rows. */
 export const houseDoorPlacement = (options: {
   c0: number;
   r0: number;
   w: number;
   h: number;
   doorSide: DoorSide;
+  doorColumn?: number;
 }): HouseDoorPlacement => {
   const { c0, r0, w, h, doorSide } = options;
   if (doorSide !== 'south') {
     throw new Error('houseDoorPlacement currently supports only a south-facing door');
   }
-  const doorColumn = c0 + Math.floor(w / 2);
+  const doorColumn = options.doorColumn ?? c0 + Math.floor(w / 2);
   const doorRow = r0 + h - 1;
   return {
-    doorCells: [[doorColumn, doorRow]],
+    doorCells: [
+      [doorColumn, doorRow - 1],
+      [doorColumn, doorRow],
+    ],
     landingCells: [
       [doorColumn, doorRow + 1],
       [doorColumn, doorRow + 2],
@@ -97,18 +115,77 @@ const HOUSE_FRAME_NAMES = {
   roofGableRight: 'house_roof_gable_right.png',
   roofEaveOverhead: 'house_roof_eave_overhead.png',
   roofEaveEdge: 'house_roof_eave_edge.png',
+  roofSlateFront: 'house_roof_slate_front.png',
+  roofSlateBack: 'house_roof_slate_back.png',
+  roofSlateRidge: 'house_roof_slate_ridge.png',
+  roofSlateGableLeft: 'house_roof_slate_gable_left.png',
+  roofSlateGableRight: 'house_roof_slate_gable_right.png',
+  roofSlateEaveOverhead: 'house_roof_slate_eave_overhead.png',
+  roofSlateEaveEdge: 'house_roof_slate_eave_edge.png',
+  roofThatchFront: 'house_roof_thatch_front.png',
+  roofThatchBack: 'house_roof_thatch_back.png',
+  roofThatchRidge: 'house_roof_thatch_ridge.png',
+  roofThatchGableLeft: 'house_roof_thatch_gable_left.png',
+  roofThatchGableRight: 'house_roof_thatch_gable_right.png',
+  roofThatchEaveOverhead: 'house_roof_thatch_eave_overhead.png',
+  roofThatchEaveEdge: 'house_roof_thatch_eave_edge.png',
   facadeWall: 'house_facade_wall.png',
   facadeWindow: 'house_facade_window.png',
   facadeCornerLeft: 'house_facade_corner_left.png',
   facadeCornerRight: 'house_facade_corner_right.png',
-  doorClosed: 'house_door_closed.png',
-  doorOpen: 'house_door_open.png',
+  doorUpperClosed: 'house_door_upper_closed.png',
+  doorUpperOpen: 'house_door_upper_open.png',
+  doorLowerClosed: 'house_door_closed.png',
+  doorLowerOpen: 'house_door_open.png',
   foundation: 'house_foundation.png',
   foundationShadow: 'house_foundation_shadow.png',
 } as const;
 
-/** A named role in the C-550 house frame kit. */
+/** A named role in the shared C-550/C-553 house frame kit. */
 export type HouseFrameRole = keyof typeof HOUSE_FRAME_NAMES;
+
+/** Semantic roof role exposed to placeHouse callers. */
+export type HouseRoofFrameRole =
+  | 'front'
+  | 'back'
+  | 'ridge'
+  | 'gableLeft'
+  | 'gableRight'
+  | 'eaveOverhead'
+  | 'eaveEdge';
+
+/** Door leaf state; transitions remain the map object layer's responsibility. */
+export type HouseDoorState = 'closed' | 'open';
+
+const HOUSE_ROOF_FRAME_ROLES = {
+  cedar: {
+    front: 'roofFront',
+    back: 'roofBack',
+    ridge: 'roofRidge',
+    gableLeft: 'roofGableLeft',
+    gableRight: 'roofGableRight',
+    eaveOverhead: 'roofEaveOverhead',
+    eaveEdge: 'roofEaveEdge',
+  },
+  slate: {
+    front: 'roofSlateFront',
+    back: 'roofSlateBack',
+    ridge: 'roofSlateRidge',
+    gableLeft: 'roofSlateGableLeft',
+    gableRight: 'roofSlateGableRight',
+    eaveOverhead: 'roofSlateEaveOverhead',
+    eaveEdge: 'roofSlateEaveEdge',
+  },
+  thatch: {
+    front: 'roofThatchFront',
+    back: 'roofThatchBack',
+    ridge: 'roofThatchRidge',
+    gableLeft: 'roofThatchGableLeft',
+    gableRight: 'roofThatchGableRight',
+    eaveOverhead: 'roofThatchEaveOverhead',
+    eaveEdge: 'roofThatchEaveEdge',
+  },
+} as const satisfies Record<HouseRoofMaterial, Record<HouseRoofFrameRole, HouseFrameRole>>;
 
 const resolveHouseFrames = (): Record<HouseFrameRole, number> => {
   const gidByFrame = new Map<string, number>();
@@ -132,6 +209,30 @@ const resolveHouseFrames = (): Record<HouseFrameRole, number> => {
 
 /** House frame role → manifest GID. Resolved once from the authored manifest. */
 export const HOUSE_FRAMES: Readonly<Record<HouseFrameRole, number>> = resolveHouseFrames();
+
+const roofFramesFor = (
+  material: HouseRoofMaterial,
+): Readonly<Record<HouseRoofFrameRole, number>> => {
+  const roles = HOUSE_ROOF_FRAME_ROLES[material];
+  return {
+    front: HOUSE_FRAMES[roles.front],
+    back: HOUSE_FRAMES[roles.back],
+    ridge: HOUSE_FRAMES[roles.ridge],
+    gableLeft: HOUSE_FRAMES[roles.gableLeft],
+    gableRight: HOUSE_FRAMES[roles.gableRight],
+    eaveOverhead: HOUSE_FRAMES[roles.eaveOverhead],
+    eaveEdge: HOUSE_FRAMES[roles.eaveEdge],
+  };
+};
+
+/** Material-specific GIDs for the seven shared roof geometry roles. */
+export const HOUSE_ROOF_FRAMES: Readonly<
+  Record<HouseRoofMaterial, Readonly<Record<HouseRoofFrameRole, number>>>
+> = {
+  cedar: roofFramesFor('cedar'),
+  slate: roofFramesFor('slate'),
+  thatch: roofFramesFor('thatch'),
+};
 
 /** The canonical door anchor returned by {@link placeHouse}. */
 export type HouseDoorCell = { c: number; r: number };
@@ -202,6 +303,118 @@ const houseContactShadowCells = (options: {
   return cells;
 };
 
+type HouseKeepOut = {
+  region: Region;
+  landingCells: ReadonlyArray<readonly [number, number]>;
+};
+
+const houseKeepOutByMap = new WeakMap<MapData, HouseKeepOut[]>();
+
+const rememberHouseKeepOut = (options: {
+  map: MapData;
+  region: Region;
+  landingCells: ReadonlyArray<readonly [number, number]>;
+}): void => {
+  const houses = houseKeepOutByMap.get(options.map) ?? [];
+  houses.push({ region: options.region, landingCells: options.landingCells });
+  houseKeepOutByMap.set(options.map, houses);
+};
+
+type MapObject = MapObjectLayer['objects'][number];
+
+const propertyString = (object: MapObject, name: string): string | undefined => {
+  const value = object.properties.find((property) => property.name === name)?.value;
+  return typeof value === 'string' ? value : undefined;
+};
+
+const addRegionCells = (target: Set<string>, region: Region): void => {
+  for (let r = region.r0; r <= region.r1; r += 1) {
+    for (let c = region.c0; c <= region.c1; c += 1) {
+      target.add(`${c},${r}`);
+    }
+  }
+};
+
+const buildKeepOutCells = (
+  houses: readonly HouseKeepOut[],
+): { houseCells: Set<string>; approachCells: Set<string> } => {
+  const houseCells = new Set<string>();
+  const approachCells = new Set<string>();
+  for (const house of houses) {
+    addRegionCells(houseCells, house.region);
+    for (const [c, r] of house.landingCells) {
+      approachCells.add(`${c},${r}`);
+    }
+  }
+  return { houseCells, approachCells };
+};
+
+const propOverlapViolation = (options: {
+  object: MapObject;
+  houseCells: ReadonlySet<string>;
+  approachCells: ReadonlySet<string>;
+}): string | undefined => {
+  const { object, houseCells, approachCells } = options;
+  if (object.type !== 'prop') {
+    return undefined;
+  }
+  const propId = propertyString(object, 'propId');
+  if (propId === undefined) {
+    throw new Error('emberwatch_authoring: prop object is missing its propId');
+  }
+  const overlaps = propFootprintCells({ propId, x: object.x, y: object.y }).filter(
+    ([c, r]) => houseCells.has(`${c},${r}`) || approachCells.has(`${c},${r}`),
+  );
+  return overlaps.length === 0
+    ? undefined
+    : `prop ${propId} (${object.id}) overlaps ${formatCells(overlaps)}`;
+};
+
+const collectPropOverlapViolations = (options: {
+  objectLayers: readonly MapObjectLayer[];
+  houseCells: ReadonlySet<string>;
+  approachCells: ReadonlySet<string>;
+}): string[] => {
+  const violations: string[] = [];
+  for (const layer of options.objectLayers) {
+    for (const object of layer.objects) {
+      const violation = propOverlapViolation({
+        object,
+        houseCells: options.houseCells,
+        approachCells: options.approachCells,
+      });
+      if (violation !== undefined) {
+        violations.push(violation);
+      }
+    }
+  }
+  return violations;
+};
+
+/**
+ * Fail closed when a prop's visual rectangle touches a house or its approach.
+ * This is intentionally an author-time assertion over the final object layers:
+ * it catches a later prop move even when the house itself was authored first.
+ */
+export const assertNoHousePropOverlaps = (options: {
+  map: MapData;
+  objectLayers: readonly MapObjectLayer[];
+}): void => {
+  const houses = houseKeepOutByMap.get(options.map) ?? [];
+  if (houses.length === 0) {
+    return;
+  }
+  const { houseCells, approachCells } = buildKeepOutCells(houses);
+  const violations = collectPropOverlapViolations({
+    objectLayers: options.objectLayers,
+    houseCells,
+    approachCells,
+  });
+  if (violations.length > 0) {
+    throw new Error(`emberwatch_authoring: house prop overlap(s): ${violations.join('; ')}`);
+  }
+};
+
 const houseGroundCells = (options: {
   c0: number;
   c1: number;
@@ -253,6 +466,13 @@ const assertNoBlockedGroundTerrainOverrides = (options: {
   );
 };
 
+const doorFrame = (state: HouseDoorState, lower: boolean): number => {
+  if (state === 'open') {
+    return lower ? HOUSE_FRAMES.doorLowerOpen : HOUSE_FRAMES.doorUpperOpen;
+  }
+  return lower ? HOUSE_FRAMES.doorLowerClosed : HOUSE_FRAMES.doorUpperClosed;
+};
+
 const facadeRoleForCell = (options: {
   c: number;
   r: number;
@@ -260,15 +480,21 @@ const facadeRoleForCell = (options: {
   c0: number;
   c1: number;
   doorCells: ReadonlyArray<[number, number]>;
+  doorState: HouseDoorState;
 }): HouseCellRole => {
-  const { c, r, r1, c0, c1, doorCells } = options;
+  const { c, r, r1, c0, c1, doorCells, doorState } = options;
   const isLowerFacade = r === r1;
+  if (houseDoorHasCell(doorCells, c, r)) {
+    return { layer: 'ground', gid: doorFrame(doorState, isLowerFacade), blocked: true };
+  }
   if (isLowerFacade) {
-    if (houseDoorHasCell(doorCells, c, r)) {
-      return { layer: 'ground', gid: HOUSE_FRAMES.doorClosed, blocked: true };
-    }
     const doorColumn = doorCells[0]?.[0];
-    if (doorColumn !== undefined && c === doorColumn - 1 && c > c0) {
+    if (
+      doorColumn !== undefined &&
+      (c === doorColumn - 1 || c === doorColumn + 1) &&
+      c > c0 &&
+      c < c1
+    ) {
       return { layer: 'ground', gid: HOUSE_FRAMES.facadeWindow, blocked: true };
     }
     return { layer: 'ground', gid: HOUSE_FRAMES.foundation, blocked: true };
@@ -289,26 +515,34 @@ const roofRoleForCell = (options: {
   c1: number;
   r0: number;
   r1: number;
+  roofMaterial: HouseRoofMaterial;
+  visibleRoofRows: number;
 }): HouseCellRole => {
-  const { c, r, c0, c1, r0, r1 } = options;
-  if (r === r1 - 2) {
-    const gid = c === c0 || c === c1 ? HOUSE_FRAMES.roofEaveEdge : HOUSE_FRAMES.roofFront;
+  const { c, r, c0, c1, r0, r1, roofMaterial, visibleRoofRows } = options;
+  const frames = HOUSE_ROOF_FRAMES[roofMaterial];
+  const frontRow = r1 - 2;
+  const ridgeRow = frontRow - (visibleRoofRows - 2);
+  if (r === frontRow) {
+    const gid = c === c0 || c === c1 ? frames.eaveEdge : frames.front;
     return { layer: 'ground', gid, blocked: true };
   }
+  if (r === ridgeRow) {
+    const gid = c === c0 || c === c1 ? frames.eaveOverhead : frames.ridge;
+    return { layer: 'overhead', gid, blocked: false };
+  }
   if (r === r0) {
-    let gid = HOUSE_FRAMES.roofBack;
+    let gid = frames.back;
     if (c === c0) {
-      gid = HOUSE_FRAMES.roofGableLeft;
+      gid = frames.gableLeft;
     } else if (c === c1) {
-      gid = HOUSE_FRAMES.roofGableRight;
+      gid = frames.gableRight;
     }
     return { layer: 'overhead', gid, blocked: false };
   }
-  if (r === r0 + 1) {
-    const gid = c === c0 || c === c1 ? HOUSE_FRAMES.roofEaveOverhead : HOUSE_FRAMES.roofRidge;
-    return { layer: 'overhead', gid, blocked: false };
-  }
-  return { layer: 'overhead', gid: HOUSE_FRAMES.roofBack, blocked: false };
+  // Keep the full walk-behind depth, but render every row before the bounded
+  // front/ridge section as the darker back slope. The facade therefore gains
+  // one pale front band and one ridge highlight, never a second pale band.
+  return { layer: 'overhead', gid: frames.back, blocked: false };
 };
 
 const houseCellRole = (options: {
@@ -319,19 +553,23 @@ const houseCellRole = (options: {
   r0: number;
   r1: number;
   doorCells: ReadonlyArray<[number, number]>;
+  doorState: HouseDoorState;
+  roofMaterial: HouseRoofMaterial;
+  visibleRoofRows: number;
 }): HouseCellRole => {
-  const { c, r, c0, c1, r0, r1, doorCells } = options;
+  const { c, r, c0, c1, r0, r1, doorCells, doorState, roofMaterial, visibleRoofRows } = options;
   if (r === r1 - 1 || r === r1) {
-    return facadeRoleForCell({ c, r, r1, c0, c1, doorCells });
+    return facadeRoleForCell({ c, r, r1, c0, c1, doorCells, doorState });
   }
-  return roofRoleForCell({ c, r, c0, c1, r0, r1 });
+  return roofRoleForCell({ c, r, c0, c1, r0, r1, roofMaterial, visibleRoofRows });
 };
 
 const assertHouseInputs = (options: {
   map: MapData;
   region: Region;
-  door: { c: number };
+  door: { c: number; state?: HouseDoorState };
   facing: HouseFacing;
+  roofMaterial?: HouseRoofMaterial;
   mapId?: string;
 }): {
   region: Region;
@@ -363,11 +601,11 @@ const assertHouseInputs = (options: {
   }
   if (
     !Number.isInteger(options.door.c) ||
-    options.door.c < region.c0 ||
-    options.door.c > region.c1
+    options.door.c <= region.c0 ||
+    options.door.c >= region.c1
   ) {
     throw new Error(
-      `emberwatch_authoring.placeHouse: ${name} door column ${options.door.c} is outside the facade`,
+      `emberwatch_authoring.placeHouse: ${name} door column ${options.door.c} must be inside the facade`,
     );
   }
   const placement = houseDoorPlacement({
@@ -376,13 +614,8 @@ const assertHouseInputs = (options: {
     w: width,
     h: height,
     doorSide: 'south',
+    doorColumn: options.door.c,
   });
-  const doorCell: [number, number] = [options.door.c, region.r1];
-  if (!houseDoorHasCell(placement.doorCells, doorCell[0], doorCell[1])) {
-    throw new Error(
-      `emberwatch_authoring.placeHouse: ${name} door column ${options.door.c} is not on the derived single south door`,
-    );
-  }
   assertNoBlockedGroundTerrainOverrides({
     map: options.map,
     name,
@@ -462,23 +695,23 @@ const applyHouseApproach = (
 /**
  * Authors one raised south-facing house as explicit map contributions.
  *
- * The three upper rows are roof: a back plane, a capped ridge, and a blocked
- * front eave. The two lower rows are facade, with one closed door on the
- * bottom row and a narrow plinth integrated into the lower facade frames. The
- * upper roof rows are the only walk-behind cells: an actor can pass north of
- * the house and the overhead band draws the roof over them, while the facade
- * and front eave remain hard movement boundaries.
+ * `region` carries the requested width/height. `door.c` places one two-row
+ * opening across both facade rows; `door.state` selects paired open/closed art
+ * without creating a transition. `roofMaterial` selects a palette on the same
+ * seven roof geometries. Upper roof cells remain walkable overhead, while the
+ * front eave and both facade rows stay solid.
  *
- * Assertions run before any mutation, so a failed author-time check leaves the
- * map unchanged. C-550 intentionally does not create a transition or arrival
- * marker; a future interior edge can use the returned cell as its anchor.
+ * Assertions run before mutation, so invalid input leaves the map unchanged.
+ * Transition and arrival objects remain owned by `placeTransition` and
+ * `placeSpawn` in the map builder.
  */
 export const placeHouse = (
   map: MapData,
   options: {
     region: Region;
-    door: { c: number };
+    door: { c: number; state?: HouseDoorState };
     facing: HouseFacing;
+    roofMaterial?: HouseRoofMaterial;
     mapId?: string;
   },
 ): HouseDoorCell => {
@@ -486,6 +719,9 @@ export const placeHouse = (
     map,
     ...options,
   });
+  const doorState = options.door.state ?? 'closed';
+  const roofMaterial = options.roofMaterial ?? 'cedar';
+  const visibleRoofRows = houseVisibleRoofRows(region.r1 - region.r0 + 1);
   for (let r = region.r0; r <= region.r1; r++) {
     for (let c = region.c0; c <= region.c1; c++) {
       const role = houseCellRole({
@@ -496,10 +732,14 @@ export const placeHouse = (
         r0: region.r0,
         r1: region.r1,
         doorCells,
+        doorState,
+        roofMaterial,
+        visibleRoofRows,
       });
       applyHouseCell(map, role, c, r);
     }
   }
   applyHouseApproach(map, landingCells, contactShadowCells);
+  rememberHouseKeepOut({ map, region, landingCells });
   return { c: options.door.c, r: region.r1 };
 };

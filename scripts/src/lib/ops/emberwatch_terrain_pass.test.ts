@@ -45,12 +45,15 @@ const CLASSIFICATION_FRAMES = {
   cobblestone: { base: 'cobblestone_0.png', overlay: 'cobblestone_15.png' },
 } as const;
 
-const BASELINE_COLLISION_SHA256: Readonly<Record<string, string>> = {
+// C-552 leaves the four retained-map collision layers unchanged. C-553 then
+// adds the explicit village-house delta; its village digest is the post-C-553
+// value, not a loosened C-552 baseline.
+const EXPECTED_COLLISION_SHA256: Readonly<Record<string, string>> = {
   inn: 'e0334e3d214c755173a637245b00ee037e186b559c8726029af7b86b4817260d',
   merchant_shop: '11d9b9b16de7ac3cd6cf83edd16258131e75efc94b96dcef69ac8218337c91a6',
   old_road: '83bb92ecf8def467fc1271b61f7f7f3d4a15bc2620ae2f972b20065399b97db9',
   ruined_shrine: '16b8b021c07f0c91abe7dc2dd4bd95d499d88aa343d74d9c3ab686a2fffc5a7f',
-  village: '7b9d42aae44f6adac468f6a8bbb6c191e965ccea1edc5b84936e5e0736f21db1',
+  village: '09d2397f021163a6e6dac712d9d732489452848865ae0c18ca90cddfde209ffc',
 } as const;
 
 type GrassTuftMetrics = { eligible: number; tufts: number; contaminated: number; excluded: number };
@@ -747,15 +750,15 @@ describe('C-552 AC-3/4 — sparse tufts and a warm sand base', () => {
   });
 });
 
-describe('C-552 AC-5 — all five collision layers retain C-550 identity', () => {
-  test('committed collision-layer digests and builder arrays are unchanged', () => {
+describe('C-552/C-553 AC-5 — collision identity is explicit', () => {
+  test('pins retained C-550 layers and the intentional C-553 village delta', () => {
     for (const [mapId, builder] of Object.entries(EMBERWATCH_MAP_BUILDERS)) {
       const parsed: unknown = JSON.parse(
         readFileSync(join(mapsDirectory, `${mapId}.json`), 'utf8'),
       );
       const committed = readCollisionLayer(parsed);
       const built = builder().map;
-      expect(committed.digest, `${mapId} collision digest`).toBe(BASELINE_COLLISION_SHA256[mapId]);
+      expect(committed.digest, `${mapId} collision digest`).toBe(EXPECTED_COLLISION_SHA256[mapId]);
       expect(built.width, `${mapId} collision width`).toBe(committed.width);
       expect(built.height, `${mapId} collision height`).toBe(committed.height);
       expect(built.collision, `${mapId} collision data`).toEqual(committed.data);

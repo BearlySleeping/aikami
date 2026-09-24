@@ -13,6 +13,9 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   ATLAS_COLS,
+  ATLAS_HEIGHT,
+  ATLAS_TILE_COUNT,
+  ATLAS_WIDTH,
   buildFrames,
   buildG,
   cornerFrameName,
@@ -138,7 +141,10 @@ describe('generate_emberwatch G/FRAMES derivation (C-376 AC-6)', () => {
   test('buildFrames throws when a GID is outside the atlas grid', () => {
     try {
       setManifestTilesForTest({
-        '161': { name: 'out_of_bounds', frame: 'oob.png' }, // > ATLAS_COLS*ATLAS_ROWS (160)
+        [String(ATLAS_TILE_COUNT + 1)]: {
+          name: 'out_of_bounds',
+          frame: 'oob.png',
+        },
       });
       expect(() => buildFrames()).toThrow(/outside the atlas grid/);
     } finally {
@@ -238,10 +244,10 @@ describe.skipIf(!hasCommittedAtlas)('C-378 AC-5 — atlas packer determinism', (
     expect(checked).toBe(32);
   });
 
-  test('the committed atlas is 544×340 (extruded)', () => {
+  test('the committed atlas matches shared extruded geometry', () => {
     const atlas = JSON.parse(readFileSync(ATLAS_PATH, 'utf-8')) as {
       meta: { size: { w: number; h: number } };
     };
-    expect(atlas.meta.size).toEqual({ w: 544, h: 340 });
+    expect(atlas.meta.size).toEqual({ w: ATLAS_WIDTH, h: ATLAS_HEIGHT });
   });
 });

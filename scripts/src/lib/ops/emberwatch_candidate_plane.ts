@@ -214,9 +214,10 @@ const enemyOverrides = (packRoot: string): CandidateOverride[] => {
  * original exclusion ("the origin deliberately proxies the accepted published
  * terrain rather than replacing it with a locally regenerated one") assumed the
  * atlas was stable across a candidate. C-546 changed that: it appended bridge
- * frames 129-145 and grew the atlas 544×272 → 544×340, so a candidate whose
- * maps paint those GIDs would render its crossings from the fallback tile if
- * the published atlas were proxied. The rule below preserves the intent —
+ * frames 129-145 and grew the atlas 544×272 → 544×340; C-553 appends
+ * house GIDs 161-176 and grows it again to 544×374. A candidate whose maps
+ * paint any appended GID would render from the fallback if the published atlas
+ * were proxied. The rule below preserves the intent —
  * unchanged atlas bytes are still proxied, so a local-origin run does not
  * silently swap accepted art — while forcing the local build to win the moment
  * its content differs from what is published.
