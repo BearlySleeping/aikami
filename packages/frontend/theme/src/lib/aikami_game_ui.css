@@ -1522,4 +1522,14 @@
   [data-aikami-theme-scope][data-contrast="high"] .hud-menu {
     border-color: var(--ui-base-content);
   }
+
+  /* App snackbar is mounted outside the game-theme scope; move it above the
+     dialogue stage so its bottom-right placement cannot cover the composer. */
+  body:has([data-testid="dialogue-overlay"]) .toast.toast-end {
+    top: 1rem;
+    right: auto;
+    bottom: auto;
+    left: 50%;
+    transform: translateX(-50%);
+  }
 }

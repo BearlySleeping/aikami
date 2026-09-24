@@ -40,17 +40,14 @@ test.describe('C-555 exploration HUD', () => {
     expect(await seriousAxeViolations(page)).toEqual([]);
   });
 
-  test('pause reports a successful save before showing the campaign timestamp', async ({
-    page,
-  }) => {
+  test('pause reports a successful save with the campaign timestamp', async ({ page }) => {
     const hud = new HudCustomizationPage(page);
     await hud.open();
     await page.waitForFunction(
-      () => {
-        const seam = (window as unknown as { __AIKAMI_TEST__?: { isMapReady?: () => boolean } })
-          .__AIKAMI_TEST__;
-        return typeof seam?.isMapReady === 'function' && seam.isMapReady() === true;
-      },
+      () =>
+        (
+          window as unknown as { __AIKAMI_TEST__?: { isMapReady?: () => boolean } }
+        ).__AIKAMI_TEST__?.isMapReady?.() === true,
       undefined,
       { timeout: 30_000 },
     );
@@ -58,8 +55,53 @@ test.describe('C-555 exploration HUD', () => {
     const pause = page.getByTestId('pause-menu');
     await expect(pause).toBeVisible();
     await pause.getByRole('button', { name: 'Save now' }).click();
-    await expect(pause.getByText('Game Saved!', { exact: true })).toBeVisible({ timeout: 15_000 });
-    await expect(pause.getByText(/Last saved/)).toHaveCount(0);
+    await expect(pause.getByText('Game Saved!', { exact: false })).toBeVisible({ timeout: 15_000 });
+    await expect(pause.getByText(/Last saved/)).toBeVisible();
+  });
+
+  test('dialogue keeps the autosave toast clear of its stage at 800x600', async ({ page }) => {
+    const shell = new PlayShellPage(page);
+    await shell.open();
+    await page.waitForFunction(
+      () =>
+        (
+          window as unknown as { __AIKAMI_TEST__?: { isMapReady?: () => boolean } }
+        ).__AIKAMI_TEST__?.isMapReady?.() === true,
+      undefined,
+      { timeout: 30_000 },
+    );
+    await page.evaluate(() => {
+      const seam = (
+        window as unknown as {
+          __AIKAMI_TEST__?: {
+            loadPackMap(options: { mapId: string; nearX: number; nearY: number }): Promise<boolean>;
+          };
+        }
+      ).__AIKAMI_TEST__;
+      return seam?.loadPackMap({ mapId: 'village', nearX: 1056, nearY: 1376 });
+    });
+    await page.getByTestId('interaction-prompt').waitFor({ state: 'visible', timeout: 15_000 });
+    await page.setViewportSize({ width: 800, height: 600 });
+    await page.keyboard.press('KeyE');
+    await page.getByTestId('dialogue-overlay').waitFor({ state: 'visible', timeout: 15_000 });
+    const toast = page.getByRole('alert').filter({ hasText: 'Auto-saved' });
+    await expect(toast).toBeVisible({ timeout: 15_000 });
+    const overlap = await page.evaluate(() => {
+      const stage = document.querySelector<HTMLElement>('.game-stage');
+      const notice = [...document.querySelectorAll<HTMLElement>('[role="alert"]')].find((element) =>
+        element.textContent?.includes('Auto-saved'),
+      );
+      if (!stage || !notice) {
+        return Number.POSITIVE_INFINITY;
+      }
+      const a = stage.getBoundingClientRect();
+      const b = notice.getBoundingClientRect();
+      return (
+        Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left)) *
+        Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top))
+      );
+    });
+    expect(overlap).toBeLessThanOrEqual(4);
   });
 
   test('inventory remains accessible while the production route is icon-ready', async ({

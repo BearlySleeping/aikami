@@ -33,18 +33,21 @@ The existing HUD preference service, presets, temporary Hide HUD state, pause ed
 | AC-6 | Customization, presets, and temporary hiding remain available. | No preference schema/service/editor changes. Default preset only changes placement; required-widget coercion and temporary hidden snapshot remain intact. |
 | AC-7 | Dev cog is absent from production builds. | Root cause was `app_view_model.svelte.ts` importing Eruda whenever `PUBLIC_MODE=emulator`, even when serving a Vite production bundle. `import.meta.env.DEV` now gates the import. `apps/frontend/client/src/lib/views/app/app_view_model.svelte.ts:202-207`; build guard `apps/frontend/client/scripts/check_no_eruda.ts`, invoked at `build_client.ts:98` and tracked in `moon.yml:118`. Production build scanned 105 text assets and found no `eruda.init`/`loglevel-plugin`. |
 | AC-8 | Inventory no longer shows letter monograms. | Existing LPC `LpcItemIcon` is used when `lpcAssetId` resolves; fallback is a category map, never an item-id map: weapon ⚔️, armor 🛡️, consumable 🧪, key 🗝️, misc 📦. `apps/frontend/client/src/lib/utils/inventory_utils.ts:9-18`; inventory projection `inventory_view_model.svelte.ts:70-77,205-217`; markup `inventory_view.svelte:160,198`. |
-| AC-9 | Save confirmation wins over timestamp. | `saveStatusLabel` already gives `Game Saved!` precedence over `lastSavedLabel`; C-555 adds explicit regression coverage in `pause_menu_view_model.test.ts`. Real `campaignService.activeCampaign.lastSavedAt` remains the fallback projection. |
+| AC-9 | Save confirmation and timestamp coexist. | `saveStatusLabel` now returns `Game Saved! · Last saved ...` after a successful manual save, while failures remain visible and `lastSavedAt` continues to come from the real campaign seam. Regression coverage is in `pause_menu_view_model.test.ts` and the production E2E spec. |
 
 ## Verification
 
 - Generated Emberwatch portraits/audio/atlas/props/maps/asset seed successfully; `git status` showed no generated tracked diff.
 - Client typecheck: passed, 0 errors / 0 warnings.
 - Theme, constants, and E2E typechecks: passed.
-- Client focused tests (HUD policy, inventory ViewModel, pause ViewModel): 48 passed, 0 failed; full client unit lane in Moon CI: 4100 passed, 0 failed, 7 skipped, 2 todo.
-- E2E C-555 spec: 4 passed (default HUD + axe, pause save confirmation, inventory accessibility; setup included). Command: `env -u CI PUBLIC_EMULATOR_PORT_OFFSET=14 bunx playwright test tests/client/exploration_hud.spec.ts --project=client`.
+- C-555 E2E spec: 5 passed, 0 failed, including the new 800×600 dialogue/autosave non-overlap assertion and axe WCAG 2A/AA checks. Auth setup also passed.
+- Pause ViewModel focused suite: 8 passed, 0 failed.
+- Client focused tests (HUD policy, inventory ViewModel, pause ViewModel): 48 passed, 0 failed. Full client unit lane in Moon CI is rerun below.
+- E2E C-555 spec command: `env -u CI PUBLIC_EMULATOR_PORT_OFFSET=14 bunx playwright test tests/client/exploration_hud.spec.ts --project=client` — 5 passed, 0 failed.
 - Client/theme/constants/E2E lint and fix: passed for changed source. The repository's E2E unit lane has 2 inherited environment-sensitive failures in `preflight.test.ts` / `service_map.test.ts` when the ambient offset is present; rerun with `env -u PUBLIC_EMULATOR_PORT_OFFSET` still reports the base branch's port/fallback expectation failures. No C-555 E2E unit files were changed.
-- Production build: passed. `PUBLIC_APP_ID=client PUBLIC_MODE=emulator bun moon run client:build -- --mode production`; `check-no-eruda` passed, chunk-cycle/deploy-asset/dynamic-import/budget guards passed.
-- Evidence: `/tmp/opencode/c555-evidence/index.md`, labeled `/tmp/opencode/c555-evidence/sheet.png`, plus eight PNGs. VLM evidence check scored 85/100 (pass; evaluator noted the 200% and post-save details are subtle in the montage).
+- Production build: passed with `PUBLIC_APP_ID=client PUBLIC_MODE=emulator PUBLIC_ASSETS_BASE_URL=http://localhost:8788 bun moon run client:build -- --mode production`; `check-no-eruda` passed, chunk-cycle/deploy-asset/dynamic-import/budget guards passed.
+- Empty-map diagnosis: production map source is the content-pack registry tag `emberwatch:maps:village`, not `static/game-data/maps`. The read-only production snapshot command was attempted but could not authenticate because this worktree has no R2 credentials. Final evidence used an ignored local seed plus `local_asset_origin.ts`; system Chromium WebGL was required because Playwright headless shell selected Canvas2D and produced 1×1 custom-shader tilemap textures. No content source was changed.
+- Evidence: `/tmp/opencode/c555-evidence/index.md`, labeled `/tmp/opencode/c555-evidence/sheet.png`, plus eight PNGs. VLM evidence check scored 95/100 (pass).
 
 ## Files created / modified
 
@@ -64,6 +67,7 @@ The existing HUD preference service, presets, temporary Hide HUD state, pause ed
 - `apps/frontend/client/src/lib/views/app/app_view_model.svelte.ts`
 - `apps/frontend/client/src/lib/views/game/ui/game_ui_view_model.svelte.ts`
 - `apps/frontend/client/src/lib/views/game/ui/hud/onboarding_hint.svelte`
+- `apps/frontend/client/src/lib/views/game/ui/overlays/pause_menu/pause_menu_view_model.svelte.ts`
 - `apps/frontend/client/src/lib/views/game/ui/overlays/pause_menu/pause_menu_view_model.test.ts`
 - `apps/frontend/client/src/lib/views/inventory/inventory_presentation.svelte.ts`
 - `apps/frontend/client/src/lib/views/inventory/inventory_presentation.test.ts`
@@ -76,12 +80,13 @@ The existing HUD preference service, presets, temporary Hide HUD state, pause ed
 
 ## Risks / follow-ups
 
-- The evidence evaluator scored the contact sheet 85 rather than higher because the 200% and save-confirmation details are visually subtle at montage scale; individual PNGs are the authoritative captures.
-- E2E inventory proof uses the production empty state because the production preview intentionally does not expose a state-seeding shortcut. The populated icon path is covered by inventory ViewModel tests and the evidence capture uses the real non-production test seam against the production bundle.
-- `PUBLIC_ERUDA_ENABLED` remains a supported development override; it is now intentionally ignored in `import.meta.env.DEV === false` production output.
+- The evidence evaluator scored the final contact sheet 95/100; individual PNGs remain authoritative captures.
+- Evidence index records the failed credentialed snapshot attempt, ignored local-origin setup, WebGL requirement, and exact map registry path. Final contact sheet labels are visible and VLM validation scored 95/100.
+- The evidence origin remains an ignored local setup; no generated map, atlas, manifest, snapshot, or content-pack source is tracked as a C-555 change.
+- Final validation: `validate` passed; `env -u CI bun moon ci --base=origin/feat/emberwatch-polish-batch` passed with 53 completed, 2 skipped, and client unit lane 4100 passed / 0 failed / 7 skipped / 2 todo.
 
 ## Execution report
 
-Implemented C-555 across the existing HUD resolver, theme roles, inventory projection, save regression coverage, production build guard, and E2E/axe coverage. Default exploration now has grouped vitals/guidance, a quiet clock/menu composition, contextual interaction placement, and dialogue-safe widget priority. Inventory uses LPC art with category fallbacks instead of letters. Production builds cannot mount Eruda, and generated-map production screenshots plus labeled evidence sheet are saved under `/tmp/opencode/c555-evidence/`.
+Implemented C-555 across the existing HUD resolver, theme roles, inventory projection, save regression coverage, production build guard, and E2E/axe coverage. Default exploration now has grouped vitals/guidance, a quiet clock/menu composition, contextual interaction placement, and dialogue-safe widget priority. Inventory uses LPC art with category fallbacks instead of letters. Successful manual saves retain both `Game Saved!` and the latest `Last saved` timestamp. The global autosave snackbar is moved away from the dialogue stage while dialogue is active, with an 800×600 geometric regression assertion. Production builds cannot mount Eruda, and generated-map production screenshots plus labeled evidence sheet are saved under `/tmp/opencode/c555-evidence/`.
 
 **Status:** implemented; ready for independent verification.
