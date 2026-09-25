@@ -115,6 +115,7 @@ tasks:
       - 'scripts/gate_dev_routes.ts'
       - 'scripts/dev_routes_gate.ts'
       - 'scripts/check_bundle.ts'
+      - 'scripts/check_no_eruda.ts'
       - 'scripts/check_service_worker.ts'
       - 'scripts/service_worker_registration.ts'
       - 'scripts/check_deploy_assets.ts'
@@ -181,27 +182,61 @@ tasks:
       # `files.routes` at `.svelte-kit/routes-prod` and make `./$types`
       # unresolvable from `src/routes`. Opt in exactly as `dev`/`test` do.
       AIKAMI_INCLUDE_DEV_ROUTES: 'true'
+  # Build and both test entry points share `.svelte-kit`. Complete the build
+  # before test preparation so both test runs read the test-generated files
+  # after the last build writer has finished.
+  test-prepare:
+    command: 'bun run test:prepare'
+    deps:
+      - '~:build'
+    inputs:
+      - '@group(sources)'
+      - '@group(configs)'
+      - 'scripts/write_test_tsconfig.ts'
+    outputs:
+      - '.svelte-kit'
+    options:
+      cache: true
+      timeout: 300
+      runInCI: true
+    env:
+      AIKAMI_INCLUDE_DEV_ROUTES: 'true'
   test:
-    command: 'bun run test:unit'
+    command: 'bun run test:unit:run'
+    deps:
+      - '~:test-prepare'
     inputs:
       - '@group(unitTests)'
       - '@group(sources)'
       - '@group(configs)'
+      - 'tsconfig.test.json'
+      - '/packages/shared/*/src/**/*'
+      - '/packages/frontend/*/src/**/*'
+      - '/packages/backend/*/src/**/*'
     options:
       cache: true
-      timeout: 240
+      # `test` and `test-unit` intentionally run together in CI. The full
+      # client suite can exceed five minutes when both Bun processes compete
+      # for CPU, so leave explicit headroom above that measured ceiling.
+      timeout: 600
       runInCI: true
     env:
       AIKAMI_INCLUDE_DEV_ROUTES: 'true'
   test-unit:
-    command: 'bun run test:unit'
+    command: 'bun run test:unit:run'
+    deps:
+      - '~:test-prepare'
     inputs:
       - '@group(unitTests)'
       - '@group(sources)'
       - '@group(configs)'
+      - 'tsconfig.test.json'
+      - '/packages/shared/*/src/**/*'
+      - '/packages/frontend/*/src/**/*'
+      - '/packages/backend/*/src/**/*'
     options:
       cache: true
-      timeout: 240
+      timeout: 600
       runInCI: true
     env:
       AIKAMI_INCLUDE_DEV_ROUTES: 'true'

@@ -4,7 +4,18 @@
 // Extracted from inventory_service.svelte.ts so the service only exports
 // its singleton instance (guard S9).
 
-import type { ItemDefinition } from '@aikami/types';
+import type { ItemDefinition, ItemType } from '@aikami/types';
+
+const ITEM_CATEGORY_ICONS: Readonly<Record<ItemType, string>> = {
+  weapon: '⚔️',
+  armor: '🛡️',
+  consumable: '🧪',
+  key: '🗝️',
+  misc: '📦',
+};
+
+/** Returns the shared inventory fallback icon for an item category. */
+export const getItemCategoryIcon = (itemType: ItemType): string => ITEM_CATEGORY_ICONS[itemType];
 
 // ---------------------------------------------------------------------------
 // Item catalog — maps itemId strings to stat bonuses and metadata.

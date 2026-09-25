@@ -13,13 +13,22 @@
 type Props = {
   label: string;
   visible: boolean;
+  screenX: number | undefined;
+  screenY: number | undefined;
 };
 
-const { label, visible }: Props = $props();
+const { label, visible, screenX, screenY }: Props = $props();
 </script>
 
 {#if visible}
-  <div class="hud-prompt" role="status" aria-live="polite" data-testid="interaction-prompt">
+  <div
+    class="hud-prompt"
+    class:hud-prompt--target={screenX !== undefined && screenY !== undefined}
+    style={`--prompt-x: ${screenX ?? 0}px; --prompt-y: ${screenY ?? 0}px;`}
+    role="status"
+    aria-live="polite"
+    data-testid="interaction-prompt"
+  >
     <span>{label}</span>
   </div>
 {/if}

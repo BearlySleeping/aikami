@@ -12,7 +12,7 @@
 //   - a pi session running in the worktree's root pane
 //
 // Usage:
-//   bun herdr:task new <slug> [--base main] [--join] [--no-install]
+//   bun herdr:task new <slug> [--base main] [--join] [--no-install] [--no-content]
 //   bun herdr:task list
 //   bun herdr:task pr   [<slug>] [--base main] [--title T] [--body B] [--draft]
 //   bun herdr:task rm   <slug>   [--keep-branch] [--force]
@@ -178,13 +178,16 @@ const cmdNew = async (args: string[]): Promise<void> => {
   const positional = positionalArgs(args);
   const slug = positional.length > 0 ? sanitizeBranchName(positional[0]) : undefined;
   if (!slug) {
-    throw new Error('Usage: bun herdr:task new <slug> [--base main] [--join] [--no-install]');
+    throw new Error(
+      'Usage: bun herdr:task new <slug> [--base main] [--join] [--no-install] [--no-content]',
+    );
   }
 
   const repoRoot = resolveRepoRoot();
   const base = argValue(args, '--base') ?? DEFAULT_BASE;
   const doJoin = hasFlag(args, '--join');
   const doInstall = !hasFlag(args, '--no-install');
+  const doContent = !hasFlag(args, '--no-content');
   const withServices = hasFlag(args, '--with-services');
 
   // Guard: reject if a worktree for this slug already exists.
@@ -196,19 +199,21 @@ const cmdNew = async (args: string[]): Promise<void> => {
   }
 
   console.log(`🚀 Creating task worktree "${slug}" (base: ${base})...`);
-  // createWorktree bootstraps by default (seeds + install) — the same one
-  // function every creation path shares, so a task worktree can never be
+  // createWorktree bootstraps by default (direnv, seeds, install, content) — the
+  // same function every creation path shares, so a task worktree can never be
   // half-provisioned. Read the outcome back instead of bootstrapping twice.
-  const w = await createWorktree({ slug, base, repoRoot, install: doInstall });
+  const w = await createWorktree({ slug, base, repoRoot, install: doInstall, content: doContent });
   ok(`worktree: ${w.checkoutPath} (branch ${w.branch})`);
   ok(`workspace: ${w.workspaceId} (label ${TASK_WORKSPACE_PREFIX}${slug})`);
 
   try {
     console.log(
-      `\n🔧 Bootstrapped worktree (direnv, seeds, ${doInstall ? 'bun install' : 'skipping install'})...`,
+      `\n🔧 Bootstrapped worktree (direnv, seeds, ${doInstall ? 'bun install' : 'skipping install'}, ` +
+        `${doContent ? 'content' : 'skipping content'})...`,
     );
     const installed = w.bootstrap?.installed ?? false;
     const missingSeeds = w.bootstrap?.missingSeeds ?? [];
+    const contentComplete = !doContent || w.bootstrap?.content !== undefined;
     if (missingSeeds.length > 0) {
       warn(
         `env seeds missing in worktree: ${missingSeeds.join(', ')} — ` +
@@ -218,7 +223,13 @@ const cmdNew = async (args: string[]): Promise<void> => {
     if (doInstall && !installed) {
       warn(`bun install failed — run it manually: cd ${w.checkoutPath} && bun install`);
     }
-    const bootstrapComplete = missingSeeds.length === 0 && (!doInstall || installed);
+    if (!contentComplete) {
+      warn(
+        `content generation failed — re-run: bun run worktree:bootstrap -- --cwd ${w.checkoutPath}`,
+      );
+    }
+    const bootstrapComplete =
+      missingSeeds.length === 0 && (!doInstall || installed) && contentComplete;
     if (!bootstrapComplete) {
       throw new Error(
         'Worktree bootstrap incomplete; resolve the warnings above before continuing.',

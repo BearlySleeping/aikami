@@ -14,9 +14,9 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from '@playwright/test';
 import { MapSandboxPage } from '$pom';
+import { EMULATOR_PORTS } from '../../src/config';
 
-const CLIENT_PORT = 5274 + Number(process.env.PUBLIC_EMULATOR_PORT_OFFSET || 0);
-const BASE_URL = `http://localhost:${CLIENT_PORT}`;
+const BASE_URL = `http://localhost:${EMULATOR_PORTS.client}`;
 
 type DebugPosition = {
   playerX: number;

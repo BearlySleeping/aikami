@@ -8,20 +8,11 @@
 // `--project` selection — replacing Playwright's single global `webServer`
 // array, which could only ever be all-or-nothing.
 //
-// Port numbers are hardcoded here (not imported from @aikami/constants)
-// because Playwright loads the config tree with its own Node ESM loader and
-// the monorepo packages are CJS/TS modules incompatible with it. They must
-// stay in sync with packages/shared/constants/src/lib/development_ports.ts.
+// Port values come from ../config.ts, which owns checkout-scoped allocation.
+// Keeping the effective CI hub port in that same object prevents auth,
+// Playwright, and preflight from disagreeing.
 
-// ── Emulator port offset ─────────────────────────────────────
-
-// Same offset formula as development_ports.ts's contractPortOffset(): set by
-// scripts/src/lib/herdr for contract-scoped pipeline runs, 0 for manual runs.
-const EMULATOR_PORT_OFFSET = Number(process.env.PUBLIC_EMULATOR_PORT_OFFSET || 0);
-
-const isCI = Boolean(process.env.CI);
-
-const offsetPort = (base: number): number => base + EMULATOR_PORT_OFFSET;
+import { E2E_PORT_OFFSET, EMULATOR_PORTS, IS_E2E_CI } from '../config';
 
 // ── Service catalog ──────────────────────────────────────────
 
@@ -64,23 +55,36 @@ export type ServiceDef = {
   /** Fallback serve command, used when herdr is unavailable (e.g. CI). */
   serve: ServeCommand;
   readyTimeoutMs: number;
+  /**
+   * How a reachable listener is proven to belong to this checkout.
+   * Vite dev servers expose the identity endpoint; preview and Wrangler
+   * processes use listener ownership instead.
+   */
+  listenerIdentity: 'endpoint' | 'ownership';
+  /**
+   * Canonical service name reported by the dev identity endpoint. The
+   * client-llm lane is a second client process, so it reports `client` there.
+   */
+  identityService?: string;
+  /** Service key used in the durable listener ownership registry. */
+  ownershipService?: string;
 };
 
-// Ports — see the sync warning in the file header.
-const CLIENT_PORT = offsetPort(5274);
+// Ports — resolved once by ../config.ts, including the linked-worktree offset.
+const CLIENT_PORT = EMULATOR_PORTS.client;
 // C-526 AC-10: a SECOND client server, started with `PUBLIC_COMBAT_LLM_AGENTS=1`
 // so the flag-off and enabled-agent lanes can run in one suite.
-const CLIENT_LLM_PORT = offsetPort(5275);
-const SITE_PORT = offsetPort(5280);
-const HUB_PORT = offsetPort(5276);
-const HUB_WORKER_PORT = offsetPort(5278);
+const CLIENT_LLM_PORT = EMULATOR_PORTS.clientLlm;
+const SITE_PORT = EMULATOR_PORTS.site;
+const HUB_PORT = EMULATOR_PORTS.hubBase;
+const HUB_WORKER_PORT = EMULATOR_PORTS.hubWorker;
 
 // 🔴 The hub is served from a different port in CI than locally, deliberately.
 // Locally (herdr tab or `vite dev`) SvelteKit's platform proxy supplies the D1
 // and R2 bindings the /api routes need. `vite preview` does NOT set up the
 // platform proxy, so CI serves the built hub through `wrangler dev --local`
 // (dev:worker → run_hub_worker.ts) on its own port with genuine local D1/R2.
-const HUB_SERVE_PORT = isCI ? HUB_WORKER_PORT : HUB_PORT;
+const HUB_SERVE_PORT = IS_E2E_CI ? HUB_WORKER_PORT : HUB_PORT;
 
 // Env for the fallback builds (mirrors the "Build apps under test" step in
 // .github/workflows/pr-checks.yml — the fallback must be exactly the CI recipe).
@@ -95,6 +99,7 @@ export const FALLBACK_BUILD_ENV: Record<string, string> = {
 // AudioService's master gain to silence (browser --mute-audio covers the rest).
 const CLIENT_SERVE_ENV = {
   PORT: String(CLIENT_PORT),
+  PUBLIC_EMULATOR_PORT_OFFSET: String(E2E_PORT_OFFSET),
   PUBLIC_MUTE_AUDIO: '1',
   PUBLIC_MODE: 'emulator',
 };
@@ -112,14 +117,17 @@ export const SERVICE_DEFS: Record<ServiceId, ServiceDef> = {
     // pr-checks recipe.
     serve: {
       command: 'bun',
-      args: ['run', isCI ? 'preview' : 'dev:emulator'],
+      args: ['run', IS_E2E_CI ? 'preview' : 'dev:emulator'],
       cwd: 'apps/frontend/client',
       env: CLIENT_SERVE_ENV,
     },
-    buildTasks: isCI ? ['client:build'] : [],
+    buildTasks: IS_E2E_CI ? ['client:build'] : [],
     artifactPath: 'apps/frontend/client/build',
-    servesBuild: isCI,
+    servesBuild: IS_E2E_CI,
     readyTimeoutMs: 120_000,
+    listenerIdentity: IS_E2E_CI ? 'ownership' : 'endpoint',
+    identityService: 'client',
+    ownershipService: 'client',
   },
   'client-llm': {
     id: 'client-llm',
@@ -134,6 +142,7 @@ export const SERVICE_DEFS: Record<ServiceId, ServiceDef> = {
       cwd: 'apps/frontend/client',
       env: {
         PORT: String(CLIENT_LLM_PORT),
+        PUBLIC_EMULATOR_PORT_OFFSET: String(E2E_PORT_OFFSET),
         PUBLIC_MUTE_AUDIO: '1',
         PUBLIC_MODE: 'emulator',
         PUBLIC_COMBAT_LLM_AGENTS: '1',
@@ -144,6 +153,9 @@ export const SERVICE_DEFS: Record<ServiceId, ServiceDef> = {
     // import.meta.env.PUBLIC_COMBAT_LLM_AGENTS was already inlined (off).
     servesBuild: false,
     readyTimeoutMs: 120_000,
+    listenerIdentity: 'endpoint',
+    identityService: 'client',
+    ownershipService: 'client',
   },
   site: {
     id: 'site',
@@ -156,32 +168,42 @@ export const SERVICE_DEFS: Record<ServiceId, ServiceDef> = {
       command: 'bun',
       args: ['run', 'preview'],
       cwd: 'apps/frontend/site',
-      env: { PORT: String(SITE_PORT) },
+      env: {
+        PORT: String(SITE_PORT),
+        PUBLIC_EMULATOR_PORT_OFFSET: String(E2E_PORT_OFFSET),
+      },
     },
     buildTasks: ['site:build'],
     artifactPath: 'apps/frontend/site/dist',
     servesBuild: true,
     readyTimeoutMs: 120_000,
+    listenerIdentity: 'ownership',
+    ownershipService: 'site',
   },
   hub: {
     id: 'hub',
     label: 'hub (SSR + API)',
     port: HUB_SERVE_PORT,
     baseUrl: `http://localhost:${HUB_SERVE_PORT}`,
-    herdrService: 'hub',
+    herdrService: IS_E2E_CI ? 'hub-worker' : 'hub',
     serve: {
       // See HUB_SERVE_PORT above for why CI and local differ here.
       command: 'bun',
-      args: ['run', isCI ? 'dev:worker' : 'dev'],
+      args: ['run', IS_E2E_CI ? 'dev:worker' : 'dev'],
       cwd: 'apps/frontend/hub',
-      env: { PORT: String(HUB_SERVE_PORT) },
+      env: {
+        PORT: String(HUB_SERVE_PORT),
+        PUBLIC_EMULATOR_PORT_OFFSET: String(E2E_PORT_OFFSET),
+      },
     },
     // hub:db-migrate-local creates the local D1 the hub worker binds to —
     // without it every hub /api route 500s (pr-checks.yml).
-    buildTasks: isCI ? ['hub:build', 'hub:db-migrate-local'] : [],
-    artifactPath: isCI ? 'apps/frontend/hub/build/_worker.js' : undefined,
-    servesBuild: isCI,
+    buildTasks: IS_E2E_CI ? ['hub:build', 'hub:db-migrate-local'] : [],
+    artifactPath: IS_E2E_CI ? 'apps/frontend/hub/build/_worker.js' : undefined,
+    servesBuild: IS_E2E_CI,
     readyTimeoutMs: 180_000,
+    listenerIdentity: IS_E2E_CI ? 'ownership' : 'endpoint',
+    ...(IS_E2E_CI ? { ownershipService: 'hub-worker' } : {}),
   },
 };
 

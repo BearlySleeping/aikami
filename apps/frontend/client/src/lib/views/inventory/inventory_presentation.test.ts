@@ -24,7 +24,7 @@ describe('inventory presentation state', () => {
     expect(state.selectedItem?.label).toBe(getItemDefinition('ironSword').label);
     expect(state.selectedItem?.quantity).toBe(1);
     expect(state.selectedItem?.compareLabel).toBe('+2 ATK');
-    expect(state.selectedItemInitial).toBe(getItemDefinition('ironSword').label.charAt(0));
+    expect(state.selectedItemIcon).toBe('⚔️');
     expect(state.detailEmptyHint).toContain('Choose a bag item');
   });
 
@@ -43,7 +43,7 @@ describe('inventory presentation state', () => {
     const state = createInventoryPresentationState({ ...createSource(), items: [] });
 
     expect(state.selectedItem).toBeUndefined();
-    expect(state.selectedItemInitial).toBe('');
+    expect(state.selectedItemIcon).toBe('');
     expect(state.detailEmptyHint).toContain('Collect equipment');
   });
 });

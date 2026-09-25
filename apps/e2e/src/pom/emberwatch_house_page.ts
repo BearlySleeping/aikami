@@ -1,6 +1,6 @@
 // apps/e2e/src/pom/emberwatch_house_page.ts
 //
-// Page Object Model for the C-550 Emberwatch house evidence lane. It keeps
+// Page Object Model for Emberwatch production evidence. It keeps
 // production-route navigation, map loading, renderer checks, and position
 // probes behind one small object so the capture script never reaches into
 // page globals or DOM selectors directly.

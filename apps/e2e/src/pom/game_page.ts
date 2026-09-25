@@ -97,7 +97,9 @@ export class GamePage {
     // Wait for canvas container
     await this.page.waitForSelector('#game-canvas-container', {
       state: 'attached',
-      timeout: 15_000,
+      // Fresh worktrees compile and load the first Emberwatch atlas in Vite;
+      // allow the cold boot to finish before declaring the engine absent.
+      timeout: 60_000,
     });
 
     // Wait for canvas element

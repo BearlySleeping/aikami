@@ -10,11 +10,10 @@
 
 import { existsSync, mkdirSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { EMULATOR_PORTS } from '@aikami/constants';
-
 import { DEFAULT_LANCZOS_SIZE, optimizePng, resizeLanczos, toBase64DataUri } from '@scripts/ai';
 import { chromium, type Locator, type Page } from 'playwright';
 import type { TSchema } from 'typebox';
+import { EMULATOR_PORTS } from '../../config';
 import { assertGpuRendererName, resolveCaptureRendererMode } from './gpu_renderer_guard.ts';
 
 // ── Types ─────────────────────────────────────────────────────
@@ -416,7 +415,6 @@ const _captureClippedScreenshot = async (options: {
 
 /**
  * Builds the full URL for a suite route using EMULATOR_PORTS.
- * Builds the full URL for a suite route using EMULATOR_PORTS.
  *
  * Always includes `screenshot=true` as a default query param.
  * Case-level `searchParams` are merged on top and can override defaults.
@@ -428,7 +426,7 @@ const _buildUrl = (suites: {
 }): string => {
   const app = suites.app ?? 'client';
   const port = app === 'hub' ? EMULATOR_PORTS.hub : EMULATOR_PORTS.client;
-  const base = `http://localhost:${port + Number(process.env.PUBLIC_EMULATOR_PORT_OFFSET || 0)}${suites.route}`;
+  const base = `http://localhost:${port}${suites.route}`;
 
   // Default: always request screenshot mode so the page suppresses
   // overlays, HUD, and extraneous UI that would contaminate visual diffs.

@@ -373,12 +373,16 @@ export const setupBridgeListeners = async (params: SetupBridgeListenersParams): 
         label: `${keyLabel} — ${verb} ${event.targetName}`,
         visible: gameOverlayService.activeOverlay === 'NONE',
         targetMetadata: { verb, targetName: event.targetName },
+        targetScreenX: event.targetScreenX,
+        targetScreenY: event.targetScreenY,
       });
     } else {
       gameOverlayService.setInteractionPrompt({
         label: '',
         visible: false,
         targetMetadata: undefined,
+        targetScreenX: undefined,
+        targetScreenY: undefined,
       });
     }
 
@@ -391,6 +395,10 @@ export const setupBridgeListeners = async (params: SetupBridgeListenersParams): 
     if (event.targetType === 'npc' && event.targetName) {
       npcMemoryService.prefetchByName(event.targetName);
     }
+  });
+
+  bridge.on('INTERACTION_TARGET_POSITION_UPDATED', (event) => {
+    gameOverlayService.setInteractionPromptPosition(event);
   });
 
   // ── C-327 AC-5: Gamepad polling via UI rAF ──

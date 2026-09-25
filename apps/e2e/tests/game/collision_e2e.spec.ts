@@ -18,11 +18,9 @@
 // straight down from the door through column 3.
 
 import { expect, test } from '@playwright/test';
+import { EMULATOR_PORTS } from '../../src/config';
 
-// Contract-scoped pipeline runs shift the client port (same offset formula
-// as playwright.config.ts). 0 for a manual, non-contract run.
-const CLIENT_PORT = 5274 + Number(process.env.PUBLIC_EMULATOR_PORT_OFFSET || 0);
-const BASE_URL = `http://localhost:${CLIENT_PORT}`;
+const BASE_URL = `http://localhost:${EMULATOR_PORTS.client}`;
 
 /**
  * Debug position shape exposed by GameWorld._updateRenderFromBuffer

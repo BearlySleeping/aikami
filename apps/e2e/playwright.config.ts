@@ -5,37 +5,24 @@
 // C-054: Adds setup project for auth state caching (AC-1), custom fixtures,
 // and emulator lifecycle hooks.
 //
-// Port numbers are hardcoded here (not imported from @aikami/constants)
-// because the config is loaded by Node.js directly as ESM, and the
-// monorepo packages are CJS modules incompatible with ESM imports.
+// Port numbers are resolved by the local E2E config module. Keeping that
+// module in the Node-loaded config tree avoids importing incompatible
+// monorepo package barrels while still sharing one checkout-scoped offset.
 
 import type { PlaywrightTestConfig } from '@playwright/test';
 import { defineConfig, devices } from '@playwright/test';
 
-// ── Emulator Ports ────────────────────────────────────────────
-//
-// 🔴 HARDCODED — Must stay in sync with:
-//    packages/shared/constants/src/lib/development_ports.ts
-//
-// Not imported because the config is loaded by Node.js ESM loader
-// and monorepo packages are CJS/TS modules incompatible with
-// Node.js native ESM imports.
-// ──────────────────────────────────────────────────────────────
+import { EMULATOR_PORTS, IS_E2E_CI } from './src/config';
 
-// Set by scripts/src/lib/herdr/session.ts / herdr_adapter.ts for
-// contract-scoped pipeline runs — same offset formula as
-// packages/shared/constants/src/lib/development_ports.ts's
-// contractPortOffset(), so this lands on the identical value independently
-// (can't import that helper here either, same ESM-loader constraint above).
-// 0 for a manual, non-contract test run.
-const EMULATOR_PORT_OFFSET = Number(process.env.PUBLIC_EMULATOR_PORT_OFFSET || 0);
-
-const CLIENT_PORT = 5274 + EMULATOR_PORT_OFFSET;
+// Ports are resolved by the E2E checkout allocator in src/config.ts. The
+// config imports the same effective values as preflight, auth, and visual
+// capture, so CI's hub-worker port cannot drift from the local SSR port.
+const CLIENT_PORT = EMULATOR_PORTS.client;
 // C-526 AC-10: a SECOND client server, started with `PUBLIC_COMBAT_LLM_AGENTS=1`.
 // The flag is `static: true`, so it must be set on the server that serves the
 // app — a separate port with its own env is the only way to run both the flag-off
 // and the enabled-agent lanes in one suite.
-const CLIENT_LLM_PORT = 5275 + EMULATOR_PORT_OFFSET;
+const CLIENT_LLM_PORT = EMULATOR_PORTS.clientLlm;
 
 // The second client server AND the `client-llm-on` project exist ONLY when the
 // enabled-agent lane is selected. Playwright has one global `webServer` array, so
@@ -85,24 +72,10 @@ if (projectArgValues.length > 0 && !process.env.E2E_SELECTED_PROJECTS) {
   process.env.E2E_SELECTED_PROJECTS = projectArgValues.join(',');
 }
 
-const SITE_PORT = 5280 + EMULATOR_PORT_OFFSET;
-const HUB_PORT = 5276 + EMULATOR_PORT_OFFSET;
-const HUB_WORKER_PORT = 5278 + EMULATOR_PORT_OFFSET;
-
-// 🔴 The hub is served from a different port in CI than it is locally, and
-// that is deliberate rather than an inconsistency.
-//
-// The hub is an SSR app on adapter-cloudflare whose /api routes need D1 and
-// R2 bindings. Locally the herdr `hub` tab is `vite dev` on HUB_PORT, and
-// SvelteKit's platform proxy supplies those bindings. In CI we serve BUILT
-// output, and `vite preview` deliberately does NOT set up the platform proxy
-// — the built hub's real equivalent is `wrangler dev --local` against
-// build/_worker.js, which run_hub_worker.ts starts on HUB_WORKER_PORT with
-// genuine local D1/R2.
-//
-// Client and site have no such split: both are static builds (adapter-static
-// / Astro `output: 'static'`), so previewing them is just serving files.
-const HUB_SERVER_PORT = process.env.CI ? HUB_WORKER_PORT : HUB_PORT;
+const SITE_PORT = EMULATOR_PORTS.site;
+// EMULATOR_PORTS.hub is already the CI worker port when CI is set; using it
+// directly keeps Playwright and the service map on the same endpoint.
+const HUB_SERVER_PORT = EMULATOR_PORTS.hub;
 
 // ── Dev server base URLs ──────────────────────────────────────
 
@@ -152,13 +125,13 @@ export default defineConfig({
   fullyParallel: true,
 
   // Fail CI on test.only()
-  forbidOnly: !!process.env.CI,
+  forbidOnly: IS_E2E_CI,
 
   // Retry on CI (flake guard), no retries locally
-  retries: process.env.CI ? 2 : 0,
+  retries: IS_E2E_CI ? 2 : 0,
 
   // Single worker in CI (deterministic), auto locally
-  workers: process.env.CI ? 1 : undefined,
+  workers: IS_E2E_CI ? 1 : undefined,
 
   // Reporter: `list` everywhere, plus an HTML report in CI.
   //
@@ -169,7 +142,7 @@ export default defineConfig({
   // failure. The report script is the single annotator by design; it parses
   // this exact `list` failure format. The HTML report is uploaded as a
   // workflow artifact, which is where traces, screenshots and video live.
-  reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : [['list']],
+  reporter: IS_E2E_CI ? [['list'], ['html', { open: 'never' }]] : [['list']],
 
   // Shared settings for all projects
   use: {

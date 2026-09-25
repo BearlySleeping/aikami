@@ -17,7 +17,7 @@
 
 import { readdirSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
-import { EMULATOR_PORTS } from '@aikami/constants';
+import { EMULATOR_PORTS } from '../config';
 import type { CaptureResult, VisualTestSuite } from './core/capture';
 import { captureSuite } from './core/capture';
 import { type EvaluateResult, evaluateImage } from './core/evaluate';
@@ -117,7 +117,7 @@ const loadSuites = async (): Promise<VisualTestSuite[]> => {
  * instructions on how to start it.
  */
 const checkClientRunning = async (): Promise<void> => {
-  const url = `http://localhost:${EMULATOR_PORTS.client + Number(process.env.PUBLIC_EMULATOR_PORT_OFFSET || 0)}`;
+  const url = `http://localhost:${EMULATOR_PORTS.client}`;
 
   try {
     const response = await fetch(url, { signal: AbortSignal.timeout(5000) });

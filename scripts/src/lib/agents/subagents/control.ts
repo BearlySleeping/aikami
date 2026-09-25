@@ -9,8 +9,10 @@ import { herdr } from '../../herdr/session.ts';
 import { removeWorktree } from '../../herdr/worktree.ts';
 import { launchSupervisor, openTab } from './spawn.ts';
 import {
+  enqueueSteeringMessage,
   isTerminal,
   listRunIds,
+  listSteeringMessages,
   patchState,
   pidAlive,
   readLiveState,
@@ -21,7 +23,7 @@ import {
   updateState,
   writeText,
 } from './store.ts';
-import type { SubagentSpec, SubagentState } from './types.ts';
+import type { SteeringDelivery, SubagentSpec, SubagentState } from './types.ts';
 
 export type RunView = { spec: SubagentSpec; state: SubagentState };
 
@@ -73,22 +75,64 @@ export const killRun = (repoRoot: string, id: string): SubagentState => {
   return next;
 };
 
-/** Send a follow-up turn to a finished run; resumes the same pi session. */
-export const messageRun = async (
-  repoRoot: string,
-  id: string,
-  text: string,
-): Promise<SubagentState> => {
+/**
+ * Queue a captain message for a running subagent, or resume a finished one.
+ *
+ * The supervised Pi process is one-shot JSON mode, so a running child cannot
+ * consume stdin safely. Messages accepted while `queued`/`starting`/`running`
+ * are therefore durable and delivered at the next safe process boundary in the
+ * same Pi session. The supervisor drains the inbox before publication and before
+ * marking the run terminal.
+ */
+export const messageRun = async (options: {
+  repoRoot: string;
+  id: string;
+  text: string;
+  delivery?: SteeringDelivery;
+  messageId?: string;
+}): Promise<SubagentState> => {
+  const { repoRoot, id } = options;
   const { spec, state } = requireRun(repoRoot, id);
+  const delivery = options.delivery ?? 'steer';
+
   if (!isTerminal(state)) {
-    throw new Error(`${id} is still ${state.status} — wait for it (or kill it) before messaging.`);
+    if (state.status === 'publishing' || state.status === 'reviewing') {
+      throw new Error(
+        `${id} has finished computing and is ${state.status}; wait for its terminal state before messaging.`,
+      );
+    }
+    // Serialize the status check + inbox write with the supervisor's completion
+    // claim. A message racing final settlement is either queued and drained, or
+    // observes publishing/reviewing and receives an accurate refusal.
+    const next = updateState(repoRoot, id, (current) => {
+      if (current.status === 'publishing' || current.status === 'reviewing') {
+        throw new Error(
+          `${id} entered ${current.status} while the message was being queued; retry after it settles.`,
+        );
+      }
+      enqueueSteeringMessage({
+        repoRoot,
+        id,
+        text: options.text,
+        delivery,
+        ...(options.messageId === undefined ? {} : { messageId: options.messageId }),
+      });
+      const queuedMessages = listSteeringMessages(repoRoot, id).length;
+      return {
+        ...current,
+        queuedMessages,
+        activity: `${delivery === 'steer' ? 'steering' : 'follow-up'} queued (${queuedMessages})`,
+      };
+    });
+    return next;
   }
+
   if (!state.piSessionId) {
     throw new Error(`${id} has no pi session to resume.`);
   }
   writeText(
     runFile(repoRoot, id, 'task.md'),
-    `${text.trim()}\n\nWhen done, end with the final answer described in your brief.`,
+    `${options.text.trim()}\n\nWhen done, end with the final answer described in your brief.`,
   );
   // The old pane sits on the keep-open trailer ("Press Enter to close"), so a
   // follow-up gets a fresh tab in the same workspace rather than reusing it.
@@ -104,6 +148,7 @@ export const messageRun = async (
     tabId: placement?.tabId ?? state.tabId,
     status: 'queued',
     activity: 'follow-up queued',
+    queuedMessages: 0,
     error: undefined,
     finishedAt: undefined,
     supervisorPid: undefined,

@@ -106,6 +106,14 @@
       "class": "pi_extensions",
       "active": true
     },
+    ".pi/extensions/lib/budget_state.test.ts": {
+      "class": "pi_extensions",
+      "active": true
+    },
+    ".pi/extensions/lib/budget_state.ts": {
+      "class": "pi_extensions",
+      "active": true
+    },
     ".pi/extensions/lib/cost_accounting.ts": {
       "class": "pi_extensions",
       "active": true

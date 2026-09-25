@@ -118,7 +118,12 @@ const ANCHORS: readonly HudSlot[] = HUD_ANCHOR_ORDER;
                 <QuestTrackerView viewModel={viewModel.questTrackerViewModel} />
               {/if}
             {:else if widget.widgetId === 'interaction'}
-              <InteractionPrompt label={viewModel.interactionPromptLabel} visible={true} />
+              <InteractionPrompt
+                label={viewModel.interactionPromptLabel}
+                visible={true}
+                screenX={viewModel.interactionPromptScreenX}
+                screenY={viewModel.interactionPromptScreenY}
+              />
             {:else if widget.widgetId === 'hotbar'}
               <HotbarView />
             {:else if widget.widgetId === 'music-player'}

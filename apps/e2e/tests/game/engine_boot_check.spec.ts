@@ -14,10 +14,10 @@
 
 import { expect, test } from '@playwright/test';
 import { GamePage } from '$pom';
+import { EMULATOR_PORTS } from '../../src/config';
 import { setupErrorCollection } from '../../src/error_allowlist';
 
-const CLIENT_PORT = 5274 + Number(process.env.PUBLIC_EMULATOR_PORT_OFFSET || 0);
-const BASE_URL = `http://localhost:${CLIENT_PORT}`;
+const BASE_URL = `http://localhost:${EMULATOR_PORTS.client}`;
 
 test.describe('Engine boot check', () => {
   test('boots /game and starts the render loop', async ({ page }) => {
