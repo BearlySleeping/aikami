@@ -37,7 +37,8 @@ export type LocalModelBundle = {
 // Kokoro-82M (TTS voice model, C-389)
 // ---------------------------------------------------------------------------
 
-const KOKORO_MODEL_ID = 'onnx-community/Kokoro-82M-ONNX';
+/** Canonical Kokoro model repo — the worker resolves URLs against this id. */
+export const KOKORO_MODEL_ID = 'onnx-community/Kokoro-82M-ONNX';
 /** Pinned Kokoro revision — the worker and the cache keys must agree. */
 export const KOKORO_REVISION = 'f46687f7e41512228ae953af24a11b2640ea0f22';
 const KOKORO_VOICE_REPO = 'onnx-community/Kokoro-82M-v1.0-ONNX';
