@@ -297,6 +297,17 @@
       "licenseNote": "Project-authored NPC portrait (Orc neutral), committed in-repo under the repo's MIT license.",
       "source": "project"
     },
+    "portraits:npc:orc:happy": {
+      "licenses": [
+        "MIT"
+      ],
+      "authors": [
+        "Aikami Studio"
+      ],
+      "sourceUrls": [],
+      "licenseNote": "Project-authored NPC portrait (Orc happy), committed in-repo under the repo's MIT license.",
+      "source": "project"
+    },
     "portraits:npc:troll:neutral": {
       "licenses": [
         "MIT"
@@ -306,6 +317,17 @@
       ],
       "sourceUrls": [],
       "licenseNote": "Project-authored NPC portrait (Troll neutral), committed in-repo under the repo's MIT license.",
+      "source": "project"
+    },
+    "portraits:npc:troll:happy": {
+      "licenses": [
+        "MIT"
+      ],
+      "authors": [
+        "Aikami Studio"
+      ],
+      "sourceUrls": [],
+      "licenseNote": "Project-authored NPC portrait (Troll happy), committed in-repo under the repo's MIT license.",
       "source": "project"
     },
     "portraits:npc:placeholder": {
