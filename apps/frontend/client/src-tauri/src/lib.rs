@@ -386,22 +386,26 @@ fn safe_asset_path(dir: &Path, file_name: &str) -> Result<PathBuf, String> {
 }
 
 /// Reads `models.originUrl` from the runtime config in the app data dir.
-/// The Rust-side download is only allowed to fetch from this origin.
+/// The Rust-side download is only allowed to fetch from this origin. Older
+/// configs did not persist the model origin, so retain the canonical resolver
+/// origin as a safe fallback for those installations.
 fn configured_model_origin(app: &tauri::AppHandle) -> Result<String, String> {
+    const DEFAULT_MODEL_ORIGIN: &str = "https://huggingface.co";
+
     let dir = assets_dir(app)?;
     let path = dir.join(CONFIG_FILE);
     if !path.exists() {
-        return Err("No runtime config — model origin is not configured".to_string());
+        return Ok(DEFAULT_MODEL_ORIGIN.to_string());
     }
     let raw = fs::read_to_string(&path).map_err(|e| format!("Cannot read config: {e}"))?;
     let parsed: serde_json::Value =
         serde_json::from_str(&raw).map_err(|e| format!("Cannot parse config: {e}"))?;
-    parsed
+    Ok(parsed
         .get("models")
         .and_then(|m| m.get("originUrl"))
         .and_then(|u| u.as_str())
         .map(|s| s.trim_end_matches('/').to_string())
-        .ok_or_else(|| "models.originUrl is missing from config".to_string())
+        .unwrap_or_else(|| DEFAULT_MODEL_ORIGIN.to_string()))
 }
 
 /// Validates a download URL against the configured model origin: same scheme
@@ -460,7 +464,20 @@ async fn download_model_file(
     validate_model_download_url(&origin, &url)?;
 
     let client = reqwest::Client::builder()
-        .redirect(reqwest::redirect::Policy::none())
+        .redirect(reqwest::redirect::Policy::custom(|attempt| {
+            let previous = attempt.previous();
+            let Some(first) = previous.first() else {
+                return attempt.error("missing redirect origin");
+            };
+            if previous.len() >= 5 {
+                return attempt.error("too many model-download redirects");
+            }
+            let next = attempt.url();
+            if next.scheme() != first.scheme() || next.host_str() != first.host_str() {
+                return attempt.error("model-download redirect changed origin");
+            }
+            attempt.follow()
+        }))
         .build()
         .map_err(|e| format!("Cannot build HTTP client: {e}"))?;
     let response = client
