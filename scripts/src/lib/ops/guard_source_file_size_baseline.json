@@ -22,7 +22,7 @@
   "packages/frontend/engine/src/assets/map_loader.test.ts": 2256,
   "packages/frontend/engine/src/assets/map_loader.ts": 1272,
   "packages/frontend/engine/src/rendering/texture_manager.ts": 923,
-  "packages/frontend/engine/src/systems/entity_spawner.ts": 995,
+  "packages/frontend/engine/src/systems/entity_spawner.ts": 925,
   "packages/frontend/engine/src/systems/render_system.ts": 1509,
   "packages/frontend/engine/src/systems/render_worker.ts": 913,
   "packages/frontend/preview/src/lib/lpc/lpc_preview_view_model.svelte.ts": 939,

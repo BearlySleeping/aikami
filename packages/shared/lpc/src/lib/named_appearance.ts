@@ -21,7 +21,13 @@
 // Migration is idempotent: an already-named appearance is returned unchanged
 // (status 'named'); re-running over the same input yields the same output.
 
-import { LPC_SLOT_ORDER } from './appearance.ts';
+import {
+  isLpcExtraSlot,
+  LPC_EXTRA_SLOT_ORDER,
+  LPC_MAX_LAYERS,
+  LPC_SLOT_ORDER,
+  type LpcLayerRecipe,
+} from './appearance.ts';
 import { LEGACY_CATALOG_SNAPSHOT, LEGACY_CATALOG_SNAPSHOT_ID } from './legacy_catalog_snapshot.ts';
 import type { LpcLayerRole } from './slot_model.ts';
 
@@ -63,7 +69,12 @@ export type NamedAppearance = {
  */
 export type AppearanceCatalogSlot = {
   slot: string;
-  variants: readonly { assetId: string }[];
+  /**
+   * `licenses` is optional so the structural projection stays assignable from
+   * a plain assetId list, while a caller holding the richer catalog can carry
+   * attribution through to the rendered layer.
+   */
+  variants: readonly { assetId: string; licenses?: readonly string[] }[];
 };
 export type AppearanceCatalog = readonly AppearanceCatalogSlot[];
 
@@ -106,6 +117,11 @@ export type ResolveNpcAppearanceOptions = {
 export type ResolveNpcAppearanceResult = {
   /** Derived engine layer IDs (0 = intentionally empty), when resolvable. */
   layerIds?: readonly number[];
+  /**
+   * Extra-slot layers (hat, shield, weapon, …), already resolved to renderable
+   * recipes. Empty for a legacy array or an appearance with no extras.
+   */
+  extraLayers?: readonly LpcLayerRecipe[];
   /** The normalized named appearance, when established. */
   appearance?: NamedAppearance;
   status: AppearanceNormalizationStatus | 'empty';
@@ -271,7 +287,14 @@ export const normalizeNamed = (
 
   const seenSlots = new Set<string>();
   for (const component of components) {
-    if (!LPC_SLOT_ORDER.some((slot) => slot === component.slot)) {
+    // A slot is supported when it is one of the six positional base slots OR
+    // one of the addable extras. An extra is NOT part of the positional
+    // contract — it is drawn as an additional layer on top of the base six —
+    // so it must not be reported as unsupported.
+    if (
+      !LPC_SLOT_ORDER.some((slot) => slot === component.slot) &&
+      !isLpcExtraSlot(component.slot)
+    ) {
       diagnostics.push({
         entityId: options.entityId,
         slot: component.slot,
@@ -288,6 +311,19 @@ export const normalizeNamed = (
       });
     }
     seenSlots.add(component.slot);
+  }
+
+  // The composer draws a fixed number of layers per entity and silently drops
+  // the rest, so an over-budget appearance would render a half-dressed
+  // character with no error anywhere. Refuse it here instead.
+  const extraCount = components.filter((c) => isLpcExtraSlot(c.slot)).length;
+  if (extraCount + LPC_SLOT_ORDER.length > LPC_MAX_LAYERS) {
+    diagnostics.push({
+      entityId: options.entityId,
+      detail:
+        `Named appearance asks for ${extraCount} extra layer(s) on top of the ${LPC_SLOT_ORDER.length} base layers, ` +
+        `which exceeds the ${LPC_MAX_LAYERS}-layer per-entity budget. Fewer extras render; this many cannot.`,
+    });
   }
 
   if (options.catalog) {
@@ -390,6 +426,54 @@ export const namedToLayerIds = (
 };
 
 // ---------------------------------------------------------------------------
+// Named → extra (non-positional) layer recipes
+// ---------------------------------------------------------------------------
+
+/**
+ * Projects the extra-slot components of a named appearance into renderable
+ * recipes, in {@link LPC_EXTRA_SLOT_ORDER} order.
+ *
+ * Licenses are carried through from the catalog so a published weapon or
+ * shield keeps its attribution all the way to the credits row, exactly as a
+ * base-slot layer does. An extra naming an empty asset id is skipped (there is
+ * no layer to draw); a missing asset has already been reported as a
+ * diagnostic by `normalizeNamed`, so it is skipped here rather than drawn as a
+ * broken sheet.
+ */
+export const extrasToRecipes = (
+  appearance: NamedAppearance,
+  catalog: AppearanceCatalog,
+): LpcLayerRecipe[] => {
+  const bySlot = new Map<string, NamedAppearanceComponent>();
+  for (const c of appearance.components) {
+    if (isLpcExtraSlot(c.slot) && !bySlot.has(c.slot)) {
+      bySlot.set(c.slot, c);
+    }
+  }
+  const recipes: LpcLayerRecipe[] = [];
+  for (const slot of LPC_EXTRA_SLOT_ORDER) {
+    const component = bySlot.get(slot);
+    if (component === undefined || component.assetId === '') {
+      continue;
+    }
+    const variant = catalog
+      .find((s) => s.slot === slot)
+      ?.variants.find((v) => v.assetId === component.assetId);
+    if (variant === undefined) {
+      continue;
+    }
+    recipes.push({
+      slot,
+      assetId: component.assetId,
+      hexPalette: new Uint8Array(1024),
+      layerRole: component.layerRole ?? 'front',
+      ...(variant.licenses ? { licenses: variant.licenses } : {}),
+    });
+  }
+  return recipes;
+};
+
+// ---------------------------------------------------------------------------
 // Unified entry — one normalization function for all readers/writers
 // ---------------------------------------------------------------------------
 
@@ -400,6 +484,12 @@ export const namedToLayerIds = (
  * identified failure the caller maps to a whole-character safe preset.
  *
  * Idempotent: named input passes through unchanged (status 'named').
+ *
+ * Extra slots (hat, shield, weapon, …) are returned SEPARATELY as ready-made
+ * `extraLayers` recipes. They are deliberately not folded into `layerIds`:
+ * that array is positional and six wide, and every saved appearance depends
+ * on it. The caller draws the base six and the extras as one combined recipe
+ * list, which the composer orders by its own depth table.
  */
 export const resolveNpcAppearance = (
   options: ResolveNpcAppearanceOptions,
@@ -492,6 +582,7 @@ export const resolveNpcAppearance = (
   return {
     status: 'named',
     layerIds,
+    extraLayers: extrasToRecipes(normalized.appearance, catalog),
     appearance: normalized.appearance,
     diagnostics: normalized.diagnostics,
   };

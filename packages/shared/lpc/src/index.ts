@@ -12,6 +12,9 @@ export {
 // LpcLayerRole is defined in slot_model.ts; layer_order.ts imports it from there.
 export {
   DEFAULT_LPC_SLOT_FALLBACKS,
+  isLpcExtraSlot,
+  LPC_EXTRA_SLOT_ORDER,
+  LPC_MAX_LAYERS,
   LPC_SLOT_ORDER,
   type LpcAppearanceResult,
   type LpcLayerRecipe,
@@ -52,6 +55,7 @@ export {
   type AppearanceCatalogSlot,
   type AppearanceDiagnostic,
   type AppearanceNormalizationStatus,
+  extrasToRecipes,
   isNamedAppearance,
   legacyToNamed,
   type NamedAppearance,

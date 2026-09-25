@@ -21,14 +21,19 @@
 // explicit `_female` suffix and heads carry `human/female`. Naming a
 // non-existent `*_female` leg sheet is exactly the silent-miss failure above.
 //
-// SLOT LIMIT: a named NPC appearance resolves through `LPC_SLOT_ORDER`, which is
-// exactly six slots — body, hair, torso, legs, feet, head. `hat`, `shoulders`,
-// `weapon` and `shield` are NOT part of that contract: the normalizer reports
-// them as unsupported slots, and widening the order would change the shape of
-// every serialized appearance (the legacy array is six wide). So the kit a
-// guard or a woodcutter carries cannot be authored here yet — see
-// `EMBERWATCH_PENDING_KIT` below, which records the intent without pretending
-// the renderer supports it.
+// SLOT MODEL: the six base slots (body, hair, head, torso, legs, feet) are
+// positional — they are the entries of a six-element serialized array — and
+// therefore resolved into `appearanceLayers`. Everything an outfit may add on
+// top (hat, shield, weapon, cape, …) is an EXTRA slot: it is drawn as an
+// additional layer beside the base six and ordered by the renderer's own depth
+// table, never folded into that array.
+//
+// The per-entity layer budget is 8, and the base six already spend six of
+// them, so an outfit gets exactly TWO extras. That is why Bram carries a sword
+// and a shield (the two things that make him read as a guard) and not also a
+// helm and pauldrons: those would need a tenth layer and the composer would
+// drop them without any error. The rejected kit is recorded below rather than
+// quietly deleted, so raising the budget later is a one-line change here.
 //
 // Only layers that exist in the published catalog are named here, so an outfit
 // always draws. Run: bun scripts/src/lib/ops/sync_emberwatch_npc_outfits.ts [--check]
@@ -48,18 +53,37 @@ const manifestPath = join(repository, 'content/packs/emberwatch/manifest.json');
  * keeps the serialized manifest byte-identical across runs, which is what makes
  * a rebuild a no-op instead of an endless diff.
  */
-const SLOT_ORDER = ['body', 'hair', 'head', 'torso', 'legs', 'feet'] as const;
+const SLOT_ORDER = [
+  'body',
+  'hair',
+  'head',
+  'torso',
+  'legs',
+  'feet',
+  'cape',
+  'shoulders',
+  'hat',
+  'accessory',
+  'accessories',
+  'headAccessories',
+  'arms',
+  'belt',
+  'quiver',
+  'weapon',
+  'shield',
+] as const;
 
 /**
- * The kit each NPC should carry, recorded but NOT written.
+ * Kit that would round out an outfit but does not fit the per-entity layer
+ * budget alongside the base six.
  *
- * `weapon`, `shield`, `hat` and `shoulders` have published LPC art and the
- * renderer can order those layers (`layer_order.ts` gives each a depth and a
- * behind/front role), but the named-appearance contract resolves six base slots
- * only. This table is the acceptance target for the slot work, not a second
- * source of truth for rendering.
+ * Recorded, not written. Bram's helm and pauldrons are the obvious next
+ * additions: they need a tenth and eleventh layer, so authoring them today
+ * would produce a character the composer silently truncates. Raise
+ * `LPC_MAX_LAYERS` (and the composer's uniform block) first, then move them
+ * into {@link EMBERWATCH_NPC_OUTFITS}.
  */
-export const EMBERWATCH_PENDING_KIT: readonly {
+export const EMBERWATCH_OVER_BUDGET_KIT: readonly {
   readonly npcId: string;
   readonly layers: readonly OutfitLayer[];
 }[] = [
@@ -68,11 +92,8 @@ export const EMBERWATCH_PENDING_KIT: readonly {
     layers: [
       { slot: 'shoulders', assetId: 'shoulders/pauldrons_male' },
       { slot: 'hat', assetId: 'hat/helmet/barbuta_male' },
-      { slot: 'weapon', assetId: 'weapon/sword/longsword' },
-      { slot: 'shield', assetId: 'shield/heater/original/wood_fg' },
     ],
   },
-  { npcId: 'woodcutter_ada', layers: [{ slot: 'weapon', assetId: 'weapon/blunt/waraxe' }] },
 ];
 
 /** One authored garment/hair layer: a slot and a published LPC asset id. */
@@ -93,9 +114,9 @@ const outfit = (npcId: string, layers: readonly OutfitLayer[]): NpcOutfit => ({ 
  */
 export const EMBERWATCH_NPC_OUTFITS: readonly NpcOutfit[] = [
   // Bram the Guard — the village's only defender. Leather armour over plate leg
-  // and foot pieces: a guard who reads as armoured at a glance, from any
-  // distance, without needing a weapon layer to sell it. His helm, pauldrons,
-  // sword and shield are recorded in {@link EMBERWATCH_PENDING_KIT}.
+  // and foot pieces, plus the two extras that make him read as a guard from
+  // across the map: a longsword and a wooden heater shield. His helm and
+  // pauldrons are in {@link EMBERWATCH_OVER_BUDGET_KIT}.
   outfit('village_guard', [
     { slot: 'body', assetId: 'body/bodies_male' },
     { slot: 'hair', assetId: 'hair/plain_adult' },
@@ -103,10 +124,12 @@ export const EMBERWATCH_NPC_OUTFITS: readonly NpcOutfit[] = [
     { slot: 'torso', assetId: 'torso/armour/leather_male' },
     { slot: 'legs', assetId: 'legs/armour/plate_male' },
     { slot: 'feet', assetId: 'feet/armour/plate_male' },
+    { slot: 'weapon', assetId: 'weapon/sword/longsword' },
+    { slot: 'shield', assetId: 'shield/heater/original/wood_fg' },
   ]),
-  // Ada the Woodcutter — cuffed work shirt, trousers and boots. Her war axe is
-  // recorded in {@link EMBERWATCH_PENDING_KIT}: it is the one published axe in
-  // the collection, and there is no wood-cutting axe sheet.
+  // Ada the Woodcutter — cuffed work shirt, trousers and boots, and a war axe.
+  // It is the one published axe in the collection; there is no wood-cutting
+  // axe sheet, so this is the closest thing the library can honestly draw.
   outfit('woodcutter_ada', [
     { slot: 'body', assetId: 'body/bodies_female' },
     { slot: 'hair', assetId: 'hair/high_ponytail/fg_adult' },
@@ -114,6 +137,7 @@ export const EMBERWATCH_NPC_OUTFITS: readonly NpcOutfit[] = [
     { slot: 'torso', assetId: 'torso/clothes/longsleeve/longsleeves_cuffed_female' },
     { slot: 'legs', assetId: 'legs/pants_thin' },
     { slot: 'feet', assetId: 'feet/boots/basic_thin' },
+    { slot: 'weapon', assetId: 'weapon/blunt/waraxe' },
   ]),
   // Elder Thalia — long robe over a straight skirt.
   outfit('village_elder', [

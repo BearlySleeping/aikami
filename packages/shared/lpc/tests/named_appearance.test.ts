@@ -220,11 +220,11 @@ describe('C-504 named appearance', () => {
     expect(named.appearance.components[0]?.layerRole).toBe('front');
   });
 
-  test('rejects unsupported component slots', () => {
+  test('rejects component slots that are neither base nor extra', () => {
     const result = resolveNpcAppearance({
       input: {
         formatVersion: 1,
-        components: [{ slot: 'cape', assetId: 'torso/chainmail_male' }],
+        components: [{ slot: 'eyebrows', assetId: 'torso/chainmail_male' }],
       },
       catalog,
     });
@@ -233,6 +233,47 @@ describe('C-504 named appearance', () => {
     expect(result.diagnostics.some((diagnostic) => diagnostic.detail.includes('unsupported'))).toBe(
       true,
     );
+  });
+
+  test('accepts an extra-slot component and returns it as a separate recipe', () => {
+    const result = resolveNpcAppearance({
+      input: {
+        formatVersion: 1,
+        components: [
+          { slot: 'body', assetId: 'body/bodies_male' },
+          { slot: 'weapon', assetId: 'weapon/sword/longsword' },
+        ],
+      },
+      catalog: [...catalog, { slot: 'weapon', variants: [{ assetId: 'weapon/sword/longsword' }] }],
+    });
+
+    expect(result.status).toBe('named');
+    expect(result.diagnostics).toEqual([]);
+    // The positional array stays six wide: the weapon must NOT be folded in.
+    expect(result.layerIds).toHaveLength(6);
+    expect(result.extraLayers).toEqual([
+      expect.objectContaining({ slot: 'weapon', assetId: 'weapon/sword/longsword' }),
+    ]);
+  });
+
+  test('refuses an outfit that exceeds the per-entity layer budget', () => {
+    const tooMany = ['weapon', 'shield', 'hat', 'shoulders'].map((slot) => ({
+      slot,
+      assetId: 'weapon/sword/longsword',
+    }));
+    const result = resolveNpcAppearance({
+      input: {
+        formatVersion: 1,
+        components: [
+          { slot: 'body', assetId: 'body/bodies_male' },
+          ...tooMany.map((component) => ({ ...component })),
+        ],
+      },
+      catalog,
+    });
+
+    expect(result.status).toBe('invalid');
+    expect(result.diagnostics.some((d) => d.detail.includes('per-entity budget'))).toBe(true);
   });
 
   test('rejects duplicate component slots', () => {

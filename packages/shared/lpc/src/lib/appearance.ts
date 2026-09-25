@@ -147,6 +147,50 @@ export const LPC_SLOT_ORDER: readonly LpcSlotName[] = [
   'head',
 ] as const;
 
+/**
+ * How many LPC layers ONE entity may draw.
+ *
+ * The GPU path packs a fixed-width uniform block per entity
+ * (`LPC_UBO_BYTE_SIZE` in the sprite composer), and the composer silently
+ * drops anything past this. It is therefore a HARD budget, not a tuning
+ * knob: an appearance that resolves to more layers than this renders a
+ * truncated character. Authoring must fit inside it, and the normalizer
+ * rejects an over-budget appearance rather than letting it half-draw.
+ */
+export const LPC_MAX_LAYERS = 8;
+
+/**
+ * Slots a named appearance may use BEYOND the six base slots.
+ *
+ * `LPC_SLOT_ORDER` is a positional contract — the index of each base slot in a
+ * six-element, serialized layer array — so it cannot grow without breaking
+ * every saved appearance. These slots are different: the renderer already
+ * orders them (`LPC_LAYER_ORDER` gives each a depth and a behind/front role),
+ * and nothing about them is positional. A hat, a shield or a sword is
+ * therefore an ADDITIONAL layer drawn on top of the base six, never a seventh
+ * entry in the base array.
+ *
+ * Order is canonical, not cosmetic: it fixes the order extras are handed to
+ * the composer in, which keeps rendering deterministic when two extras share
+ * a depth.
+ */
+export const LPC_EXTRA_SLOT_ORDER: readonly string[] = [
+  'cape',
+  'shoulders',
+  'hat',
+  'accessory',
+  'accessories',
+  'headAccessories',
+  'arms',
+  'belt',
+  'quiver',
+  'weapon',
+  'shield',
+] as const;
+
+/** True when a named-appearance slot is one of the addable extra slots. */
+export const isLpcExtraSlot = (slot: string): boolean => LPC_EXTRA_SLOT_ORDER.includes(slot);
+
 // ---------------------------------------------------------------------------
 // Dedup of fallback warnings
 // ---------------------------------------------------------------------------

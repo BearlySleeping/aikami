@@ -80,6 +80,45 @@ export type AppearanceData = {
 };
 
 /**
+ * Extra-slot LPC layers per entity — hat, shield, weapon, cape and the rest
+ * that the renderer can order but the six-slot positional array cannot hold.
+ *
+ * Deliberately NOT a field on {@link Appearance}: that component is walked by
+ * the ECS serializer, and extras are re-derived from the content pack every
+ * time an NPC spawns, so persisting them would add a second, redundant
+ * representation of an authored outfit to every save.
+ */
+const _appearanceExtras = new Map<number, readonly LpcLayerRecipe[]>();
+
+/**
+ * Replaces an entity's extra layers.
+ *
+ * @param eid - The entity ID.
+ * @param recipes - Resolved extra recipes, or undefined/empty to clear.
+ */
+export const setAppearanceExtras = (eid: number, recipes?: readonly LpcLayerRecipe[]): void => {
+  if (recipes === undefined || recipes.length === 0) {
+    _appearanceExtras.delete(eid);
+    return;
+  }
+  _appearanceExtras.set(eid, recipes);
+};
+
+/**
+ * Reads an entity's extra layers.
+ *
+ * @param eid - The entity ID.
+ * @returns The extra recipes, or an empty array when the entity has none.
+ */
+export const getAppearanceExtras = (eid: number): readonly LpcLayerRecipe[] =>
+  _appearanceExtras.get(eid) ?? [];
+
+/** Drops every entity's extra layers. Call on world teardown. */
+export const clearAppearanceExtras = (): void => {
+  _appearanceExtras.clear();
+};
+
+/**
  * Returns all layer IDs for a given entity.
  *
  * Reads from the variable-length `layers` Map if available, falling back

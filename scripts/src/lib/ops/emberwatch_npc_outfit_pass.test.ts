@@ -3,12 +3,12 @@
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { LEGACY_CATALOG_SNAPSHOT } from '@aikami/lpc';
+import { LEGACY_CATALOG_SNAPSHOT, LPC_EXTRA_SLOT_ORDER, LPC_MAX_LAYERS } from '@aikami/lpc';
 import { packRoot } from './emberwatch_map_validation_context.ts';
 import {
   appearanceFor,
   EMBERWATCH_NPC_OUTFITS,
-  EMBERWATCH_PENDING_KIT,
+  EMBERWATCH_OVER_BUDGET_KIT,
   lpcDrawnNpcIds,
 } from './sync_emberwatch_npc_outfits.ts';
 
@@ -37,7 +37,7 @@ const assetFor = (npcId: string, slot: string): string | undefined =>
   )?.assetId;
 
 const pendingSlotFor = (npcId: string, slot: string): string | undefined =>
-  EMBERWATCH_PENDING_KIT.find((entry) => entry.npcId === npcId)?.layers.find(
+  EMBERWATCH_OVER_BUDGET_KIT.find((entry) => entry.npcId === npcId)?.layers.find(
     (layer) => layer.slot === slot,
   )?.assetId;
 
@@ -49,22 +49,46 @@ describe('Emberwatch NPC outfit pass', () => {
     }
   });
 
+  test('the helm and pauldrons are recorded, not silently dropped', () => {
+    expect(pendingSlotFor('village_guard', 'hat')).toBe('hat/helmet/barbuta_male');
+    expect(pendingSlotFor('village_guard', 'shoulders')).toBe('shoulders/pauldrons_male');
+  });
+
   test('the guard wears armour', () => {
     expect(assetFor('village_guard', 'torso')).toBe('torso/armour/leather_male');
     expect(assetFor('village_guard', 'legs')).toBe('legs/armour/plate_male');
     expect(assetFor('village_guard', 'feet')).toBe('feet/armour/plate_male');
   });
 
-  test('the guard kit and the woodcutter axe are recorded, not silently dropped', () => {
-    expect(pendingSlotFor('village_guard', 'weapon')).toBe('weapon/sword/longsword');
-    expect(pendingSlotFor('village_guard', 'shield')).toBe('shield/heater/original/wood_fg');
-    expect(pendingSlotFor('village_guard', 'hat')).toBe('hat/helmet/barbuta_male');
-    expect(pendingSlotFor('village_guard', 'shoulders')).toBe('shoulders/pauldrons_male');
-    expect(pendingSlotFor('woodcutter_ada', 'weapon')).toBe('weapon/blunt/waraxe');
+  test('the guard is armed and shielded', () => {
+    expect(assetFor('village_guard', 'weapon')).toBe('weapon/sword/longsword');
+    expect(assetFor('village_guard', 'shield')).toBe('shield/heater/original/wood_fg');
   });
 
-  test('pending kit stays out of the written appearance until the slots are supported', () => {
-    for (const { npcId, layers } of EMBERWATCH_PENDING_KIT) {
+  test('the woodcutter carries an axe', () => {
+    expect(assetFor('woodcutter_ada', 'weapon')).toBe('weapon/blunt/waraxe');
+  });
+
+  test('every outfit fits the per-entity layer budget', () => {
+    for (const { npcId, layers } of EMBERWATCH_NPC_OUTFITS) {
+      expect(layers.length, `${npcId} layer count`).toBeLessThanOrEqual(LPC_MAX_LAYERS);
+    }
+  });
+
+  test('every authored kit layer uses a supported extra slot', () => {
+    for (const { npcId, layers } of EMBERWATCH_NPC_OUTFITS) {
+      for (const { slot } of layers) {
+        const isBase = ['body', 'hair', 'head', 'torso', 'legs', 'feet'].includes(slot);
+        expect(
+          isBase || LPC_EXTRA_SLOT_ORDER.includes(slot),
+          `${npcId}/${slot} is neither a base nor an extra slot`,
+        ).toBe(true);
+      }
+    }
+  });
+
+  test('over-budget kit stays out of the written appearance', () => {
+    for (const { npcId, layers } of EMBERWATCH_OVER_BUDGET_KIT) {
       for (const { slot } of layers) {
         expect(slotsFor(npcId), `${npcId}/${slot} must not be written yet`).not.toContain(slot);
       }
