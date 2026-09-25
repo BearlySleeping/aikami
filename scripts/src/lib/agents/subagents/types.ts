@@ -15,6 +15,21 @@
 /** `read` never gets a worktree and has mutation tools removed; `write` does. */
 export type SubagentKind = 'read' | 'write';
 
+/**
+ * Captain message semantics. JSON-mode Pi has no live input channel, so both
+ * values are delivered at the next safe process boundary in the same Pi
+ * session; `steer` is the default and `followUp` documents caller intent.
+ */
+export type SteeringDelivery = 'steer' | 'followUp';
+
+/** One durable captain message waiting for the next safe Pi round. */
+export type SteeringMessage = {
+  id: string;
+  text: string;
+  delivery: SteeringDelivery;
+  createdAt: string;
+};
+
 /** Thinking levels accepted by `pi --thinking`. */
 export type SubagentThinking = 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
@@ -136,6 +151,8 @@ export type SubagentState = {
   strayWrites?: string[];
   /** Follow-up message rounds delivered via `message`. */
   rounds: number;
+  /** Captain messages accepted while Pi is still running. */
+  queuedMessages?: number;
 };
 
 /** What a caller gets back from spawn. */

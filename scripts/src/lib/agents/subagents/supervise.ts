@@ -18,10 +18,12 @@ import { parseLine, reduceEvent, type StreamState } from './events.ts';
 import { splitTitle } from './prompt.ts';
 import { publishRun } from './publish.ts';
 import {
+  listSteeringMessages,
   patchState,
   readSpec,
   readState,
   readText,
+  removeSteeringMessage,
   runFile,
   updateState,
   writeText,
@@ -321,6 +323,185 @@ const begin = (spec: SubagentSpec, cwd: string, task: string): boolean => {
   return true;
 };
 
+const buildSteeringTask = (options: {
+  previousResult: string;
+  messages: NonNullable<ReturnType<typeof listSteeringMessages>>;
+}): string =>
+  [
+    'The captain queued steering while your previous turn was running.',
+    '',
+    'Previous turn result:',
+    options.previousResult || '(no final text)',
+    '',
+    'Queued steering:',
+    ...options.messages.map((message, index) => `${index + 1}. ${message.text}`),
+    '',
+    'Apply the steering in the same worktree and session. End with the final answer described in your brief.',
+  ].join('\n');
+
+type RoundContext = {
+  spec: SubagentSpec;
+  state: SubagentState;
+  cwd: string;
+  task: string;
+  result: string;
+  rounds: number;
+  deliveredMessageIds: string[];
+};
+
+type RoundBoundary =
+  | { kind: 'failed' }
+  | { kind: 'continue'; context: RoundContext }
+  | { kind: 'complete'; state: SubagentState; outcome: PiOutcome; result: string; rounds: number };
+
+const removeDeliveredSteering = (options: {
+  repoRoot: string;
+  id: string;
+  messageIds: readonly string[];
+}): void => {
+  for (const messageId of options.messageIds) {
+    removeSteeringMessage({ repoRoot: options.repoRoot, id: options.id, messageId });
+  }
+};
+
+const claimCompletion = (spec: SubagentSpec): SubagentState =>
+  updateState(spec.repoRoot, spec.id, (current) => {
+    const pending = listSteeringMessages(spec.repoRoot, spec.id);
+    if (pending.length > 0 || current.status === 'killed') {
+      return current;
+    }
+    return {
+      ...current,
+      status: 'publishing',
+      activity: 'finalizing',
+      queuedMessages: 0,
+    };
+  });
+
+const runRound = async (context: RoundContext): Promise<RoundBoundary> => {
+  const outcome = await runPi({
+    spec: context.spec,
+    state: context.state,
+    cwd: context.cwd,
+    task: context.task,
+  });
+  const result = outcome.stream.lastText || '(the subagent produced no final text)';
+  const state = readState(context.spec.repoRoot, context.spec.id) ?? context.state;
+  const rounds = context.rounds + 1;
+
+  if (state.status === 'killed') {
+    print('\n🛑 killed');
+    finish(context.spec, {});
+    return { kind: 'failed' };
+  }
+  const roundError = failureOf(context.spec, outcome);
+  if (roundError) {
+    print(`\n❌ ${roundError}`);
+    finish(context.spec, { status: 'failed', error: roundError });
+    return { kind: 'failed' };
+  }
+
+  removeDeliveredSteering({
+    repoRoot: context.spec.repoRoot,
+    id: context.spec.id,
+    messageIds: context.deliveredMessageIds,
+  });
+  const queued = listSteeringMessages(context.spec.repoRoot, context.spec.id);
+  if (queued.length > 0) {
+    const task = buildSteeringTask({ previousResult: result, messages: queued });
+    writeText(runFile(context.spec.repoRoot, context.spec.id, 'task.md'), `${task}\n`);
+    patchState(context.spec.repoRoot, context.spec.id, {
+      status: 'running',
+      activity: `delivering ${queued.length} queued message(s)`,
+      queuedMessages: queued.length,
+    });
+    return {
+      kind: 'continue',
+      context: {
+        ...context,
+        state,
+        task,
+        result,
+        rounds,
+        deliveredMessageIds: queued.map((message) => message.id),
+      },
+    };
+  }
+
+  const claimed = claimCompletion(context.spec);
+  if (claimed.status === 'killed') {
+    print('\n🛑 killed');
+    finish(context.spec, {});
+    return { kind: 'failed' };
+  }
+  const lateMessages = listSteeringMessages(context.spec.repoRoot, context.spec.id);
+  if (lateMessages.length > 0) {
+    const task = buildSteeringTask({ previousResult: result, messages: lateMessages });
+    writeText(runFile(context.spec.repoRoot, context.spec.id, 'task.md'), `${task}\n`);
+    const running = patchState(context.spec.repoRoot, context.spec.id, {
+      status: 'running',
+      activity: `delivering ${lateMessages.length} queued message(s)`,
+      queuedMessages: lateMessages.length,
+    });
+    return {
+      kind: 'continue',
+      context: {
+        ...context,
+        state: running,
+        task,
+        result,
+        rounds,
+        deliveredMessageIds: lateMessages.map((message) => message.id),
+      },
+    };
+  }
+  return { kind: 'complete', state: claimed, outcome, result, rounds };
+};
+
+const finishSupervision = async (options: {
+  spec: SubagentSpec;
+  initial: SubagentState;
+  before: Set<string> | undefined;
+  boundary: Extract<RoundBoundary, { kind: 'complete' }>;
+}): Promise<number> => {
+  const { spec, initial, before, boundary } = options;
+  writeText(runFile(spec.repoRoot, spec.id, 'result.md'), `${boundary.result}\n`);
+  const base: Partial<SubagentState> = {
+    exitCode: boundary.outcome.code,
+    summary: boundary.result.slice(0, SUMMARY_CHARS),
+    strayWrites: before
+      ? [...porcelain(spec.repoRoot)].filter((line) => !before.has(line))
+      : undefined,
+  };
+  const after = updateState(spec.repoRoot, spec.id, (current) => ({
+    ...current,
+    ...base,
+    rounds: current.rounds + boundary.rounds,
+  }));
+  if (after.status === 'killed') {
+    print('\n🛑 killed');
+    finish(spec, {});
+    return 1;
+  }
+  const error =
+    failureOf(spec, boundary.outcome) ??
+    (await publishIfWanted(spec, initial.checkoutPath, boundary.result));
+  if (error) {
+    print(`\n❌ ${error}`);
+    finish(spec, { status: 'failed', error });
+    return 1;
+  }
+  const finished = finish(spec, { status: 'succeeded' });
+  if (finished.status === 'killed') {
+    print('\n🛑 killed');
+    return 1;
+  }
+  print(
+    `\n✅ done · ${boundary.outcome.stream.usage.turns} turns · $${boundary.outcome.stream.usage.cost.toFixed(4)}`,
+  );
+  return 0;
+};
+
 export const supervise = async (options: { repoRoot: string; id: string }): Promise<number> => {
   const spec = readSpec(options.repoRoot, options.id);
   const initial = readState(options.repoRoot, options.id);
@@ -335,40 +516,28 @@ export const supervise = async (options: { repoRoot: string; id: string }): Prom
   }
 
   const before = spec.kind === 'read' ? porcelain(spec.repoRoot) : undefined;
-  const outcome = await runPi({ spec, state: initial, cwd, task });
-
-  const result = outcome.stream.lastText || '(the subagent produced no final text)';
-  writeText(runFile(spec.repoRoot, spec.id, 'result.md'), `${result}\n`);
-  const base: Partial<SubagentState> = {
-    exitCode: outcome.code,
-    summary: result.slice(0, SUMMARY_CHARS),
-    strayWrites: before ? [...porcelain(spec.repoRoot)].filter((l) => !before.has(l)) : undefined,
+  let context: RoundContext = {
+    spec,
+    state: initial,
+    cwd,
+    task,
+    result: '',
+    rounds: 0,
+    deliveredMessageIds: [],
   };
 
-  const after = updateState(spec.repoRoot, spec.id, (current) => ({
-    ...current,
-    ...base,
-    rounds: current.rounds + 1,
-  }));
-  if (after.status === 'killed') {
-    print('\n🛑 killed');
-    finish(spec, {});
-    return 1;
+  // JSON mode is intentionally one prompt per process. A message accepted
+  // while Pi is running is therefore handled at the next safe boundary, using
+  // the persisted session id and the same checkout. This is queued steering,
+  // not a claim that an in-flight model/tool call can be interrupted.
+  for (;;) {
+    const boundary = await runRound(context);
+    if (boundary.kind === 'failed') {
+      return 1;
+    }
+    if (boundary.kind === 'complete') {
+      return finishSupervision({ spec, initial, before, boundary });
+    }
+    context = boundary.context;
   }
-  const error =
-    failureOf(spec, outcome) ?? (await publishIfWanted(spec, initial.checkoutPath, result));
-  if (error) {
-    print(`\n❌ ${error}`);
-    finish(spec, { status: 'failed', error });
-    return 1;
-  }
-  const finished = finish(spec, { status: 'succeeded' });
-  if (finished.status === 'killed') {
-    print('\n🛑 killed');
-    return 1;
-  }
-  print(
-    `\n✅ done · ${outcome.stream.usage.turns} turns · $${outcome.stream.usage.cost.toFixed(4)}`,
-  );
-  return 0;
 };

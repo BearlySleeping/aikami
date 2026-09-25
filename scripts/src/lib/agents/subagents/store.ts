@@ -23,7 +23,13 @@ import {
 } from 'node:fs';
 import { join } from 'node:path';
 import { TERMINAL_STATUSES } from './constants.ts';
-import type { SubagentSpec, SubagentState, SubagentUsage } from './types.ts';
+import type {
+  SteeringDelivery,
+  SteeringMessage,
+  SubagentSpec,
+  SubagentState,
+  SubagentUsage,
+} from './types.ts';
 
 export const RUNS_DIR = '.pi/subagent-runs';
 
@@ -235,3 +241,90 @@ export const writeText = (path: string, content: string): void => atomicWrite(pa
 
 export const readText = (path: string): string | undefined =>
   existsSync(path) ? readFileSync(path, 'utf8') : undefined;
+
+// ── Durable steering inbox ─────────────────────────────────────
+
+const STEERING_DIR = 'steering';
+
+/** Directory holding one atomically-written file per queued captain message. */
+export const steeringDir = (repoRoot: string, id: string): string =>
+  join(runDir(repoRoot, id), STEERING_DIR);
+
+const steeringFile = (repoRoot: string, id: string, messageId: string): string =>
+  join(steeringDir(repoRoot, id), `${messageId}.json`);
+
+const isSteeringMessage = (value: unknown): value is SteeringMessage => {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+  const record = value as Record<string, unknown>;
+  return (
+    typeof record.id === 'string' &&
+    typeof record.text === 'string' &&
+    (record.delivery === 'steer' || record.delivery === 'followUp') &&
+    typeof record.createdAt === 'string'
+  );
+};
+
+/** Persist one queued message. A caller-supplied stable ID makes retries idempotent. */
+export const enqueueSteeringMessage = (options: {
+  repoRoot: string;
+  id: string;
+  text: string;
+  delivery?: SteeringDelivery;
+  messageId?: string;
+}): SteeringMessage => {
+  const message: SteeringMessage = {
+    id: options.messageId ?? `msg-${Date.now().toString(36)}-${randomBytes(4).toString('hex')}`,
+    text: options.text.trim(),
+    delivery: options.delivery ?? 'steer',
+    createdAt: new Date().toISOString(),
+  };
+  if (!message.text) {
+    throw new Error('Subagent message text must not be empty.');
+  }
+  const dir = steeringDir(options.repoRoot, options.id);
+  mkdirSync(dir, { recursive: true });
+  const path = steeringFile(options.repoRoot, options.id, message.id);
+  // Message IDs are generated from URL-safe characters, but a bridge caller
+  // controls the stable retry ID. Refuse separators rather than writing
+  // outside the run directory.
+  if (!/^[a-zA-Z0-9._-]+$/.test(message.id)) {
+    throw new Error('Subagent messageId may contain only letters, numbers, dot, underscore, dash.');
+  }
+  atomicWrite(path, JSON.stringify(message, undefined, 2));
+  return message;
+};
+
+/** Read queued messages in captain enqueue order; malformed files are ignored. */
+export const listSteeringMessages = (repoRoot: string, id: string): SteeringMessage[] => {
+  const dir = steeringDir(repoRoot, id);
+  let names: string[];
+  try {
+    names = readdirSync(dir).filter((name) => name.endsWith('.json'));
+  } catch {
+    return [];
+  }
+  return names
+    .sort()
+    .flatMap((name) => {
+      try {
+        const parsed: unknown = JSON.parse(readFileSync(join(dir, name), 'utf8'));
+        return isSteeringMessage(parsed) ? [parsed] : [];
+      } catch {
+        return [];
+      }
+    })
+    .sort((left, right) =>
+      `${left.createdAt}:${left.id}`.localeCompare(`${right.createdAt}:${right.id}`),
+    );
+};
+
+/** Remove a delivered message by its stable ID. */
+export const removeSteeringMessage = (options: {
+  repoRoot: string;
+  id: string;
+  messageId: string;
+}): void => {
+  unlinkSync(steeringFile(options.repoRoot, options.id, options.messageId));
+};

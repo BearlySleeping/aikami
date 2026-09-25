@@ -24,15 +24,28 @@
 //
 // Usage:
 //   bun scripts/src/lib/ops/local_asset_origin.ts [--port 8788] [--no-serve]
+//   bun scripts/src/lib/ops/local_asset_origin.ts --published-only --port 8788
+//
+// The default mode overlays the local candidate plane on a read-only published
+// seed. `--published-only` fetches and pins the public seed locally but applies
+// zero candidate overrides, giving before/after evidence a truthful baseline.
+// Neither mode ever sends a write request to the published origin.
 //
 // The override set is deliberately small and explicit — a file only differs
 // from the published CDN when it is listed here.
 
 import { createHash } from 'node:crypto';
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, join, resolve, sep } from 'node:path';
+import {
+  appendFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ContentPackManifestSchema } from '@aikami/schemas';
+import { type ContentPackManifest, ContentPackManifestSchema } from '@aikami/schemas';
 import { Value } from 'typebox/value';
 import { logger } from '$logger';
 import type { CatalogEntry } from '../catalog/catalog_entries.ts';
@@ -79,6 +92,9 @@ type SeedRow = {
 };
 type Seed = { sv: number; g: string; o: string; r: SeedRow[] };
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
 /**
  * Converts seed rows into catalog entries for local index generation.
  *
@@ -121,6 +137,8 @@ const buildOrigin = (options: {
   seedPath: string;
   outDir: string;
   originUrl: string;
+  manifestPath: string;
+  overrides: readonly CandidateOverride[];
 }): {
   overrides: { tag: string; hash: string; bytes: number }[];
   seed: Seed;
@@ -129,12 +147,7 @@ const buildOrigin = (options: {
   const seed = JSON.parse(readFileSync(options.seedPath, 'utf8')) as Seed;
   seed.o = options.originUrl;
 
-  // The published rows in the snapshot seed are the authority for "what the
-  // origin would proxy", so the terrain-atlas rule (C-548) is decided here.
-  const publishedHashes = new Map<string, string>(
-    seed.r.filter((row) => row.t && row.h).map((row) => [row.t, row.h]),
-  );
-  const overrides = emberwatchOverrides(publishedHashes);
+  const overrides = [...options.overrides];
 
   // The registry is (re)seeded only when the seed's fingerprint changes. That
   // fingerprint is now content-derived (`generatedAt` + derivation revision +
@@ -222,7 +235,12 @@ const buildOrigin = (options: {
   // C-523 AC-5: the installed pack lock. Its `audioAssets` pins are what the
   // client hash-verifies an authored cue against before it plays, so the local
   // origin has to publish it or that verification never runs.
-  const lock = writePackLock({ seed, applied, outDir: options.outDir });
+  const lock = writePackLock({
+    seed,
+    applied,
+    outDir: options.outDir,
+    manifestPath: options.manifestPath,
+  });
   if (!lock) {
     throw new Error('Local asset origin requires a valid Emberwatch pack lock');
   }
@@ -277,24 +295,34 @@ const writePackLock = (options: {
   seed: Seed;
   applied: readonly { tag: string; hash: string }[];
   outDir: string;
+  manifestPath: string;
 }): { key: string; hash: string } | undefined => {
-  const manifestHash = options.applied.find(
-    (override) => override.tag === 'emberwatch:manifest',
-  )?.hash;
+  const manifestHash =
+    options.applied.find((override) => override.tag === 'emberwatch:manifest')?.hash ??
+    options.seed.r.find((row) => row.t === 'emberwatch:manifest')?.h;
   if (!manifestHash) {
     return undefined;
   }
 
-  const manifestPath = join(repository, 'content/packs/emberwatch/manifest.json');
-  const raw: unknown = JSON.parse(readFileSync(manifestPath, 'utf8'));
-  if (!Value.Check(ContentPackManifestSchema, raw)) {
-    logger.warn('localAssetOrigin:pack-lock-manifest-invalid', { manifestPath });
+  const parsed: unknown = JSON.parse(readFileSync(options.manifestPath, 'utf8'));
+  const manifestCandidate = isRecord(parsed) ? { ...parsed } : undefined;
+  // Published Emberwatch manifests predate the current onboarding action union.
+  // Onboarding is irrelevant to lock pins; omit only that legacy optional
+  // section so the published bytes can still be used as a truthful baseline.
+  if (manifestCandidate) {
+    delete manifestCandidate.onboarding;
+  }
+  if (!manifestCandidate || !Value.Check(ContentPackManifestSchema, manifestCandidate)) {
+    logger.warn('localAssetOrigin:pack-lock-manifest-invalid', {
+      manifestPath: options.manifestPath,
+    });
     return undefined;
   }
+  const manifest = manifestCandidate as ContentPackManifest;
 
   const lock = buildPackLock({
     releaseId: options.seed.g,
-    manifest: raw,
+    manifest,
     manifestHash,
     seedRows: options.seed.r.map((row) => ({ tag: row.t, hash: row.h })),
   });
@@ -316,14 +344,96 @@ const writePackLock = (options: {
   return { key, hash };
 };
 
-/** Serves the local origin, proxying anything not overridden to the upstream. */
-const serve = (options: {
+type OriginServeOptions = {
   outDir: string;
   upstream: string;
   port: number;
   logPath?: string;
-}): void => {
-  const logLine = (entry: Record<string, unknown>): void => {
+};
+
+type LogLine = (entry: Record<string, unknown>) => void;
+
+const localFileResponse = (options: {
+  originRoot: string;
+  requestPath: string;
+  localPath: string;
+  logLine: LogLine;
+}): Response | undefined => {
+  // Never serve outside the origin dir. Compare with a trailing separator so a
+  // sibling like `<outDir>-secret` cannot pass a bare prefix test.
+  const withinOrigin =
+    options.localPath === options.originRoot ||
+    options.localPath.startsWith(`${options.originRoot}${sep}`);
+  if (!withinOrigin || !existsSync(options.localPath)) {
+    return undefined;
+  }
+  const file = Bun.file(options.localPath);
+  options.logLine({ kind: 'local', path: options.requestPath, bytes: file.size });
+  return new Response(file, {
+    headers: {
+      'content-type': options.requestPath.endsWith('.json')
+        ? 'application/json'
+        : file.type || 'application/octet-stream',
+      'access-control-allow-origin': '*',
+      'cache-control': 'no-store',
+    },
+  });
+};
+
+const proxyResponse = async (options: {
+  url: URL;
+  upstream: string;
+  logLine: LogLine;
+}): Promise<Response> => {
+  const upstreamUrl = new URL(options.url.pathname + options.url.search, options.upstream);
+  try {
+    const response = await fetch(upstreamUrl, { method: 'GET' });
+    options.logLine({ kind: 'proxy', path: options.url.pathname, status: response.status });
+    return new Response(response.body, {
+      status: response.status,
+      headers: {
+        'content-type': response.headers.get('content-type') ?? 'application/octet-stream',
+        'access-control-allow-origin': '*',
+        'cache-control': 'no-store',
+      },
+    });
+  } catch (error) {
+    logger.warn('localAssetOrigin:proxy-failed', {
+      path: options.url.pathname,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return new Response('upstream fetch failed', { status: 502 });
+  }
+};
+
+const handleOriginRequest = async (
+  options: OriginServeOptions,
+  request: Request,
+  logLine: LogLine,
+): Promise<Response> => {
+  if (request.method !== 'GET' && request.method !== 'HEAD') {
+    return new Response('read-only origin', {
+      status: 405,
+      headers: { allow: 'GET, HEAD' },
+    });
+  }
+  const url = new URL(request.url);
+  const localPath = join(options.outDir, decodeURIComponent(url.pathname));
+  const local = localFileResponse({
+    originRoot: options.outDir,
+    requestPath: url.pathname,
+    localPath,
+    logLine,
+  });
+  if (local) {
+    return local;
+  }
+  return proxyResponse({ url, upstream: options.upstream, logLine });
+};
+
+/** Serves the local origin, proxying anything not overridden to the upstream. */
+const serve = (options: OriginServeOptions): void => {
+  const logLine: LogLine = (entry) => {
     if (!options.logPath) {
       return;
     }
@@ -339,47 +449,7 @@ const serve = (options: {
     // with no auth, so it must never be reachable from the network.
     hostname: '127.0.0.1',
     port: options.port,
-    async fetch(request) {
-      const url = new URL(request.url);
-      const localPath = join(options.outDir, decodeURIComponent(url.pathname));
-      // Never serve outside the origin dir. Compare with a trailing separator
-      // so a sibling like `<outDir>-secret` cannot pass a bare prefix test.
-      const withinOrigin =
-        localPath === options.outDir || localPath.startsWith(`${options.outDir}${sep}`);
-      if (withinOrigin && existsSync(localPath)) {
-        const file = Bun.file(localPath);
-        logLine({ kind: 'local', path: url.pathname, bytes: file.size });
-        return new Response(file, {
-          headers: {
-            'content-type': url.pathname.endsWith('.json')
-              ? 'application/json'
-              : file.type || 'application/octet-stream',
-            'access-control-allow-origin': '*',
-            'cache-control': 'no-store',
-          },
-        });
-      }
-      // Not overridden — proxy read-only to the published origin.
-      const upstream = new URL(url.pathname + url.search, options.upstream);
-      try {
-        const response = await fetch(upstream, { method: 'GET' });
-        logLine({ kind: 'proxy', path: url.pathname, status: response.status });
-        return new Response(response.body, {
-          status: response.status,
-          headers: {
-            'content-type': response.headers.get('content-type') ?? 'application/octet-stream',
-            'access-control-allow-origin': '*',
-            'cache-control': 'no-store',
-          },
-        });
-      } catch (error) {
-        logger.warn('localAssetOrigin:proxy-failed', {
-          path: url.pathname,
-          error: error instanceof Error ? error.message : String(error),
-        });
-        return new Response('upstream fetch failed', { status: 502 });
-      }
-    },
+    fetch: (request) => handleOriginRequest(options, request, logLine),
   });
   logger.info('localAssetOrigin:serving', {
     url: `http://localhost:${server.port}`,
@@ -388,54 +458,178 @@ const serve = (options: {
   });
 };
 
-const main = (): void => {
-  const args = process.argv.slice(2);
-  const portFlag = args.indexOf('--port');
-  const port = portFlag >= 0 ? Number(args[portFlag + 1]) : DEFAULT_PORT;
+const argValue = (args: string[], flag: string): string | undefined => {
+  const index = args.indexOf(flag);
+  return index === -1 ? undefined : args[index + 1];
+};
+
+/** Download the public mutable seed and its exact Emberwatch manifest once. */
+const downloadPublishedSeed = async (options: {
+  upstream: string;
+  outDir: string;
+}): Promise<{ seedPath: string; manifestPath: string }> => {
+  const seedUrl = new URL('seed/asset_seed.json', `${options.upstream}/`);
+  const seedResponse = await fetch(seedUrl, { method: 'GET' });
+  if (!seedResponse.ok) {
+    throw new Error(`Could not read published seed ${seedUrl}: HTTP ${seedResponse.status}`);
+  }
+  const seedBytes = Buffer.from(await seedResponse.arrayBuffer());
+  const seedDir = join(options.outDir, 'published-seed');
+  const seedPath = join(seedDir, 'asset_seed.json');
+  mkdirSync(seedDir, { recursive: true });
+  writeFileSync(seedPath, seedBytes);
+
+  const seed = JSON.parse(seedBytes.toString('utf8')) as Seed;
+  const manifestRow = seed.r.find((row) => row.t === 'emberwatch:manifest');
+  if (!manifestRow) {
+    throw new Error(
+      'Published seed has no emberwatch:manifest row; cannot build a truthful before lane.',
+    );
+  }
+  const manifestKey = objectKey(manifestRow.h, '.json');
+  const manifestUrl = new URL(manifestKey, `${options.upstream}/`);
+  const manifestResponse = await fetch(manifestUrl, { method: 'GET' });
+  if (!manifestResponse.ok) {
+    throw new Error(
+      `Could not read published Emberwatch manifest: HTTP ${manifestResponse.status}`,
+    );
+  }
+  const manifestPath = join(options.outDir, manifestKey);
+  const manifestBytes = Buffer.from(await manifestResponse.arrayBuffer());
+  if (sha256(manifestBytes) !== manifestRow.h) {
+    throw new Error(`Published Emberwatch manifest hash mismatch: ${manifestUrl}`);
+  }
+  mkdirSync(dirname(manifestPath), { recursive: true });
+  writeFileSync(manifestPath, manifestBytes);
+
+  // Optional, but when published the client should receive the same offline-core
+  // declaration from the local origin rather than reaching around it.
+  const coreUrl = new URL('seed/offline_core.json', `${options.upstream}/`);
+  const coreResponse = await fetch(coreUrl, { method: 'GET' });
+  if (coreResponse.ok) {
+    writeFileSync(
+      join(seedDir, 'offline_core.json'),
+      Buffer.from(await coreResponse.arrayBuffer()),
+    );
+  }
+  return { seedPath, manifestPath };
+};
+
+type OriginOptions = {
+  port: number;
+  shouldServe: boolean;
+  publishedOnly: boolean;
+  checkPlane: boolean;
+  upstream: string;
+  outDir: string;
+};
+
+const parseOriginOptions = (args: string[]): OriginOptions => {
+  const rawPort = argValue(args, '--port');
+  const port = Number(rawPort ?? DEFAULT_PORT);
   if (!Number.isInteger(port) || port <= 0 || port > 65_535) {
     throw new Error(
-      `local-asset-origin: --port must be an integer in 1..65535 (got ${String(args[portFlag + 1])})`,
+      `local-asset-origin: --port must be an integer in 1..65535 (got ${String(rawPort)})`,
     );
   }
-  const shouldServe = !args.includes('--no-serve');
+  const publishedOnly = args.includes('--published-only');
+  return {
+    port,
+    shouldServe: !args.includes('--no-serve'),
+    publishedOnly,
+    checkPlane: args.includes('--check-plane'),
+    upstream: (argValue(args, '--upstream') ?? 'https://assets.bearlysleeping.com').replace(
+      /\/$/,
+      '',
+    ),
+    outDir: resolve(
+      argValue(args, '--out-dir') ??
+        join(repository, '.local/catalog', publishedOnly ? 'published-origin' : 'local-origin'),
+    ),
+  };
+};
 
-  // The published rows drive the terrain-atlas rule (C-548): a candidate whose
-  // atlas matches published is legitimately complete without an atlas override.
-  // `findPublishedSeedPath` returns undefined (rather than throwing) when no
-  // snapshot exists, so `--check-plane` still reports the plane instead of dying.
-  const publishedHashes = readPublishedSeedHashes(findPublishedSeedPath(repository) ?? '');
-
-  // C-529: prove the local origin serves the COMPLETE candidate plane before
-  // booting it. A missing portrait/enemy/map/audio tag would silently fall back
-  // to the stale published origin — exactly the failure the first human gate hit.
-  if (args.includes('--check-plane')) {
-    const missing = missingCandidateOverrides(repository, publishedHashes);
-    if (missing.length > 0) {
-      console.error(
-        `local-asset-origin: candidate plane is INCOMPLETE — the human gate would render stale published rows for:\n  ${missing.join('\n  ')}`,
-      );
-      process.exit(1);
+const prepareOutputDirectory = (options: OriginOptions): void => {
+  if (options.publishedOnly) {
+    const localRoot = resolve(repository, '.local');
+    const relativeOutDir = relative(localRoot, resolve(options.outDir));
+    if (
+      relativeOutDir === '' ||
+      relativeOutDir === '..' ||
+      relativeOutDir.startsWith(`..${sep}`) ||
+      isAbsolute(relativeOutDir)
+    ) {
+      throw new Error('Published-only output directory must be strictly inside repository .local');
     }
-    console.log(
-      `local-asset-origin: candidate plane complete (${emberwatchOverrides(publishedHashes).length} overrides serve every required Emberwatch tag)`,
-    );
-    return;
+    // Never let a previous candidate run leak into the published baseline.
+    rmSync(options.outDir, { recursive: true, force: true });
   }
+  mkdirSync(options.outDir, { recursive: true });
+};
 
-  const seedPath = findPublishedSeedPath(repository);
+const checkCandidatePlane = (
+  options: OriginOptions,
+  publishedHashes: ReadonlyMap<string, string>,
+): boolean => {
+  if (!options.checkPlane) {
+    return false;
+  }
+  const missing = missingCandidateOverrides(repository, publishedHashes);
+  if (missing.length > 0) {
+    console.error(
+      `local-asset-origin: candidate plane is INCOMPLETE — the human gate would render stale published rows for:\n  ${missing.join('\n  ')}`,
+    );
+    process.exit(1);
+  }
+  console.log(
+    `local-asset-origin: candidate plane complete (${emberwatchOverrides(publishedHashes).length} overrides serve every required Emberwatch tag)`,
+  );
+  return true;
+};
+
+const resolvePublishedInputs = async (
+  options: OriginOptions,
+  snapshotSeedPath: string | undefined,
+): Promise<{ seedPath: string; manifestPath: string }> => {
+  const downloaded =
+    options.publishedOnly || snapshotSeedPath === undefined
+      ? await downloadPublishedSeed({ upstream: options.upstream, outDir: options.outDir })
+      : undefined;
+  const seedPath = options.publishedOnly
+    ? downloaded?.seedPath
+    : (snapshotSeedPath ?? downloaded?.seedPath);
   if (!seedPath) {
-    throw new Error(
-      `No catalog snapshot found under ${join(repository, '.local/catalog/production/snapshots')} — run a catalog snapshot first.`,
-    );
+    throw new Error('Could not resolve a published catalog seed.');
   }
-  const outDir = join(repository, '.local/catalog/local-origin');
-  mkdirSync(outDir, { recursive: true });
+  return {
+    seedPath,
+    manifestPath: options.publishedOnly
+      ? (downloaded?.manifestPath ?? join(repository, 'content/packs/emberwatch/manifest.json'))
+      : join(repository, 'content/packs/emberwatch/manifest.json'),
+  };
+};
 
-  const built = buildOrigin({ seedPath, outDir, originUrl: `http://localhost:${port}` });
+const buildAndServe = (options: {
+  origin: OriginOptions;
+  seedPath: string;
+  manifestPath: string;
+  publishedHashes: ReadonlyMap<string, string>;
+}): void => {
+  const overrides = options.origin.publishedOnly
+    ? []
+    : emberwatchOverrides(options.publishedHashes);
+  const built = buildOrigin({
+    seedPath: options.seedPath,
+    outDir: options.origin.outDir,
+    originUrl: `http://localhost:${options.origin.port}`,
+    manifestPath: options.manifestPath,
+    overrides,
+  });
 
   logger.info('localAssetOrigin:built', {
-    seedPath,
-    outDir,
+    seedPath: options.seedPath,
+    outDir: options.origin.outDir,
+    publishedOnly: options.origin.publishedOnly,
     overrides: built.overrides.length,
     totalRows: built.seed.r.length,
     indexShards: built.indexShards,
@@ -447,15 +641,29 @@ const main = (): void => {
       bytes: override.bytes,
     });
   }
-
-  if (shouldServe) {
-    serve({
-      outDir,
-      upstream: 'https://assets.bearlysleeping.com',
-      port,
-      logPath: join(outDir, 'requests.log'),
-    });
+  if (!options.origin.shouldServe) {
+    return;
   }
+  serve({
+    outDir: options.origin.outDir,
+    upstream: options.origin.upstream,
+    port: options.origin.port,
+    logPath: join(options.origin.outDir, 'requests.log'),
+  });
 };
 
-main();
+const main = async (): Promise<void> => {
+  const origin = parseOriginOptions(process.argv.slice(2));
+  prepareOutputDirectory(origin);
+  // The published rows drive the terrain-atlas rule (C-548). A missing
+  // snapshot is handled by the downloaded public seed below.
+  const snapshotSeedPath = findPublishedSeedPath(repository);
+  const inputs = await resolvePublishedInputs(origin, snapshotSeedPath);
+  const publishedHashes = readPublishedSeedHashes(inputs.seedPath);
+  if (checkCandidatePlane(origin, publishedHashes)) {
+    return;
+  }
+  buildAndServe({ origin, ...inputs, publishedHashes });
+};
+
+await main();

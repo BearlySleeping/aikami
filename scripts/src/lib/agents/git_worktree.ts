@@ -17,6 +17,14 @@ import { reportInfraIssue } from '../ops/infra_report.ts';
 
 export const MAX_BRANCH_NAME_LENGTH = 80;
 
+const DEFAULT_REMOTE = 'origin';
+const SHA_REF_PATTERN = /^[0-9a-f]{4,64}$/i;
+const FORBIDDEN_BRANCH_CHARACTERS = new Set(['~', '^', ':', '?', '*', '[', '\\']);
+const SIMPLE_GIT_ARGUMENT_PATTERN = /^[A-Za-z0-9._/:@^~+-]+$/;
+const REMOTE_REF_PATTERN = /^refs\/remotes\/([^/]+)\/(.+)$/;
+const LOCAL_REF_PREFIX = 'refs/heads/';
+const REMOTE_REF_PREFIX = 'refs/remotes/';
+
 // ── Helpers ──────────────────────────────────────────────────
 
 interface GitExecError extends Error {
@@ -24,6 +32,254 @@ interface GitExecError extends Error {
 }
 
 const isGitExecError = (err: unknown): err is GitExecError => err instanceof Error;
+
+const SYMBOLIC_REF_PATTERN = /^HEAD(?:~[0-9]+|\^[0-9]*)?$/;
+
+type ParsedBaseRef = {
+  kind: 'branch' | 'commit' | 'symbolic';
+  name: string;
+  remoteName?: string;
+  candidates: string[];
+};
+
+type RefPrefixState = {
+  name: string;
+  remoteName?: string;
+};
+
+const invalidBaseRef = (raw: string, reason: string): never => {
+  throw new Error(`Invalid base ref "${raw}": ${reason}.`);
+};
+
+const hasForbiddenBranchCharacter = (value: string): boolean =>
+  [...value].some((character) => {
+    const codePoint = character.codePointAt(0) ?? 0;
+    return codePoint <= 0x20 || codePoint === 0x7f || FORBIDDEN_BRANCH_CHARACTERS.has(character);
+  });
+
+const formatGitArgument = (value: string): string => {
+  if (SIMPLE_GIT_ARGUMENT_PATTERN.test(value)) {
+    return value;
+  }
+  return `'${value.replaceAll("'", "'\\''")}'`;
+};
+
+const assertValidBranchName = (raw: string, name: string): void => {
+  if (
+    name.length === 0 ||
+    name === '@' ||
+    name.startsWith('-') ||
+    name.startsWith('/') ||
+    name.endsWith('/') ||
+    name.endsWith('.') ||
+    name.split('/').some((component) => component.startsWith('.') || component.endsWith('.lock')) ||
+    name.includes('..') ||
+    name.includes('//') ||
+    name.includes('@{') ||
+    name.startsWith('origin/') ||
+    name.startsWith('refs/') ||
+    hasForbiddenBranchCharacter(name)
+  ) {
+    invalidBaseRef(raw, 'use a valid branch name, an origin/<branch>, or a commit SHA');
+  }
+};
+
+const consumeRefPrefix = (raw: string, state: RefPrefixState): RefPrefixState => {
+  if (state.name.startsWith(`${DEFAULT_REMOTE}/`)) {
+    if (state.remoteName && state.remoteName !== DEFAULT_REMOTE) {
+      invalidBaseRef(raw, 'remote prefixes must be consistent');
+    }
+    const remainder = state.name.slice(DEFAULT_REMOTE.length + 1);
+    if (
+      state.remoteName === DEFAULT_REMOTE &&
+      !remainder.startsWith(LOCAL_REF_PREFIX) &&
+      !remainder.startsWith(REMOTE_REF_PREFIX)
+    ) {
+      invalidBaseRef(raw, 'a remote cannot be prefixed twice');
+    }
+    return {
+      name: remainder,
+      remoteName: DEFAULT_REMOTE,
+    };
+  }
+  if (state.name.startsWith(LOCAL_REF_PREFIX)) {
+    return { name: state.name.slice(LOCAL_REF_PREFIX.length), remoteName: state.remoteName };
+  }
+  if (!state.name.startsWith(REMOTE_REF_PREFIX)) {
+    return state;
+  }
+
+  const match = state.name.match(REMOTE_REF_PATTERN);
+  const nextRemoteName = match?.[1] ?? '';
+  const nextName = match?.[2] ?? '';
+  if (!nextRemoteName || !nextName) {
+    invalidBaseRef(raw, 'remote ref must include a remote and branch name');
+  }
+  if (state.remoteName && state.remoteName !== nextRemoteName) {
+    invalidBaseRef(raw, 'remote prefixes must be consistent');
+  }
+  return { name: nextName, remoteName: nextRemoteName };
+};
+
+const stripRefPrefixes = (raw: string): RefPrefixState => {
+  let state: RefPrefixState = { name: raw };
+  while (true) {
+    const next = consumeRefPrefix(raw, state);
+    if (next.name === state.name && next.remoteName === state.remoteName) {
+      return next;
+    }
+    state = next;
+  }
+};
+
+const parseBaseRef = (raw: string): ParsedBaseRef => {
+  const input = raw.trim();
+  if (input.length === 0) {
+    invalidBaseRef(raw, 'ref must not be empty');
+  }
+  if (SYMBOLIC_REF_PATTERN.test(input)) {
+    return { kind: 'symbolic', name: input, candidates: [input] };
+  }
+  if (SHA_REF_PATTERN.test(input)) {
+    return { kind: 'commit', name: input, candidates: [input] };
+  }
+
+  const { name, remoteName } = stripRefPrefixes(input);
+  assertValidBranchName(raw, name);
+  if (!remoteName) {
+    return {
+      kind: 'branch',
+      name,
+      candidates: [name, `${DEFAULT_REMOTE}/${name}`],
+    };
+  }
+  assertValidBranchName(raw, remoteName);
+  if (remoteName === DEFAULT_REMOTE && name === DEFAULT_REMOTE) {
+    invalidBaseRef(raw, 'a remote cannot target a branch named origin');
+  }
+  return {
+    kind: 'branch',
+    name,
+    remoteName,
+    candidates: [
+      remoteName === DEFAULT_REMOTE
+        ? `${remoteName}/${name}`
+        : `refs/remotes/${remoteName}/${name}`,
+      name,
+    ],
+  };
+};
+
+const fullRefForCandidate = (ref: string, parsed: ParsedBaseRef): string => {
+  if (parsed.kind !== 'branch') {
+    return ref;
+  }
+  return ref === parsed.name
+    ? `refs/heads/${parsed.name}`
+    : `refs/remotes/${parsed.remoteName ?? DEFAULT_REMOTE}/${parsed.name}`;
+};
+
+/** Check whether a normalized branch, remote ref, symbolic ref, or SHA exists. */
+export const gitRefExists = (ref: string, options: { cwd?: string } = {}): boolean => {
+  if (!options.cwd) {
+    return false;
+  }
+  try {
+    const parsed = parseBaseRef(ref);
+    if (parsed.kind === 'branch') {
+      const fullRef = formatGitArgument(fullRefForCandidate(parsed.candidates[0], parsed));
+      runGit(`show-ref --verify --quiet ${fullRef}`, { cwd: options.cwd });
+    } else {
+      const revision =
+        parsed.kind === 'commit' ? `${parsed.candidates[0]}^{commit}` : parsed.candidates[0];
+      runGit(`rev-parse --verify --quiet ${formatGitArgument(revision)}`, { cwd: options.cwd });
+    }
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+/** Injectable existence probe used by base-ref resolution. */
+export type RefExists = (ref: string) => boolean;
+
+/** Options controlling Git-aware base-ref resolution. */
+export type ResolveBaseRefOptions = {
+  /** Working directory used by the default Git existence probe. */
+  cwd?: string;
+  /** Override the existence probe, primarily for deterministic tests. */
+  refExists?: RefExists;
+};
+
+/**
+ * Normalize a base ref without consulting Git.
+ *
+ * Local names and SHA values remain local, while `origin/<name>` and
+ * `refs/remotes/origin/<name>` remain explicitly remote. Namespace wrappers
+ * such as `refs/heads/` and `refs/remotes/origin/` are removed so callers
+ * never manufacture `origin/origin/...`. Non-origin remote refs retain their
+ * full namespace so subsequent resolution cannot confuse them with local branches.
+ */
+export const normalizeBaseRef = (raw: string): string => parseBaseRef(raw).candidates[0];
+
+/** Return the unqualified branch/name portion for APIs that require a branch name. */
+export const baseRefName = (raw: string): string => parseBaseRef(raw).name;
+
+/** Return a branch name for GitHub's PR API, rejecting commits and symbolic refs. */
+export const branchBaseRefName = (raw: string): string => {
+  const parsed = parseBaseRef(raw);
+  if (parsed.kind !== 'branch') {
+    invalidBaseRef(raw, 'pull request bases must be branch refs');
+  }
+  return parsed.name;
+};
+
+/** Resolve a branch against its remote-tracking ref for GitHub-style comparisons. */
+export const resolveRemoteBaseRef = (raw: string, options: ResolveBaseRefOptions = {}): string => {
+  const parsed = parseBaseRef(raw);
+  if (parsed.kind !== 'branch') {
+    invalidBaseRef(raw, 'comparison bases must be branch refs');
+  }
+  return resolveBaseRef(
+    `refs/remotes/${parsed.remoteName ?? DEFAULT_REMOTE}/${parsed.name}`,
+    options,
+  );
+};
+
+/**
+ * Resolve a base ref with local-first semantics for an unqualified name.
+ * An explicit `origin/<name>` (or `refs/remotes/origin/<name>`) tries the
+ * remote first; a bare name tries the local branch first and then origin. SHA
+ * values are resolved only as commits. Without an injected probe, the current
+ * working directory is used for the default Git existence check.
+ */
+export const resolveBaseRef = (raw: string, options: ResolveBaseRefOptions = {}): string => {
+  const parsed = parseBaseRef(raw);
+  const probe =
+    options.refExists ??
+    ((ref: string) =>
+      gitRefExists(fullRefForCandidate(ref, parsed), { cwd: options.cwd ?? process.cwd() }));
+  for (const candidate of parsed.candidates) {
+    if (probe(candidate)) {
+      return candidate;
+    }
+  }
+  throw new Error(`Unable to resolve base ref "${raw}": tried ${parsed.candidates.join(', ')}.`);
+};
+
+/** Inputs for a validated two-dot or three-dot Git range. */
+export type RefRangeOptions = {
+  base: string;
+  head?: string;
+  operator?: '..' | '...';
+};
+
+/** Build a validated Git comparison range without re-prefixing a remote ref. */
+export const buildRefRange = (options: RefRangeOptions): string => {
+  const base = normalizeBaseRef(options.base);
+  const head = normalizeBaseRef(options.head ?? 'HEAD');
+  return formatGitArgument(`${base}${options.operator ?? '...'}${head}`);
+};
 
 /**
  * Split a git command string into an argv array, honoring the quoting style

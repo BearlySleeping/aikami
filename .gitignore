@@ -169,6 +169,8 @@ playwright/.cache/
 .vitest/
 .auth/
 .vscode-test/
+# Persistent C-560 before/after evidence lane (regenerable, never committed)
+/.evidence/
 ## Ad-hoc debug scripts (not part of the suite)
 *.tmp.js
 *.tmp.cjs

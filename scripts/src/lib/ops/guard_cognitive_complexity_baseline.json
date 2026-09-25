@@ -269,12 +269,6 @@
       "worst": 27
     }
   },
-  "apps/e2e/src/services/preflight.ts": {
-    "counts": {
-      "excessive": 1,
-      "worst": 16
-    }
-  },
   "apps/e2e/src/visual/core/capture.ts": {
     "counts": {
       "excessive": 2,
@@ -2042,7 +2036,7 @@
   "scripts/src/lib/herdr/worktree.ts": {
     "counts": {
       "excessive": 4,
-      "worst": 133
+      "worst": 130
     }
   },
   "scripts/src/lib/ops/audit_lpc_coverage.ts": {

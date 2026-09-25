@@ -14,6 +14,15 @@
  *   the agent to stop tool calls and deliver a final summary.
  *   Hard cap (PI_HARD_SPEND, default $15): escalates as above.
  *
+ * Live interactive controls:
+ *   `/budget` shows the current run. `/budget soft|hard <usd>`, `/budget +<usd>`,
+ *   and `/budget reset` change the session caps. The command is human-only and
+ *   is not registered in unattended pipeline workers. Overrides persist as
+ *   non-context custom session entries and are restored on reload/resume.
+ *   Resume/reload restores spend by summing persisted usage totals on the
+ *   active branch, so restarting cannot reset the spend guard. Run-turn, loop,
+ *   cycle, and repetition counters still reset with the new run.
+ *
  * Turns / wall-clock / repetition:
  *   Spend alone cannot catch a cheap runaway. A 2.5h, 308-turn session on a
  *   97%-cached model reached only ~$5 — well under both caps — while making
@@ -23,8 +32,9 @@
  * No hardcoded prices — always reflects the user's model catalog.
  *
  * Environment variables:
- *   PI_SOFT_SPEND            — Soft spend cap in USD (default: 10.00)
- *   PI_HARD_SPEND            — Hard spend cap in USD (default: 15.00)
+ *   PI_SOFT_SPEND            — Initial soft spend cap in USD (default: 10.00)
+ *   PI_HARD_SPEND            — Initial hard spend cap in USD (default: 15.00)
+ *   PI_MAX_SPEND_CEILING     — Interactive hard-cap ceiling; override with --force (default: 200.00)
  *   PI_MAX_TURNS             — Turns per prompt before a wrap-up steer (default: 1000)
  *   PI_MAX_RUN_MINUTES       — Minutes of one run before a wrap-up steer (default: 240)
  *   PI_REPETITION_GUARD      — Enable repetition collapse detection (default: 1)
@@ -38,6 +48,18 @@
 import type { ExtensionAPI, ExtensionContext } from '@earendil-works/pi-coding-agent';
 import type { ContractWorkerRole } from '../../scripts/src/lib/agents/contract_pipeline/types';
 import { runPiScript } from './lib/bridge.ts';
+import type { BudgetCaps, BudgetChange } from './lib/budget_state.ts';
+import {
+  applyBudgetCommand,
+  BUDGET_ENTRY_TYPE,
+  createPersistedBudget,
+  DEFAULT_HARD_CAP,
+  DEFAULT_SOFT_CAP,
+  DEFAULT_SPEND_CEILING,
+  findPersistedBudget,
+  parseBudgetCommand,
+  restoreSessionSpend,
+} from './lib/budget_state.ts';
 import {
   assistantText,
   assistantThinking,
@@ -109,6 +131,16 @@ const _pipelineExitInstruction = (): string =>
       'instead; nothing reads it.'
     : '';
 
+const _formatUsd = (amount: number): string =>
+  `${amount < 0 ? '-' : ''}$${Math.abs(amount).toFixed(2)}`;
+
+/** Interactive recovery instruction for a spend trip. */
+const _hardLimitSteer = (spend: number, hardCap: number): string =>
+  `[BUDGET HARD LIMIT] This session has spent ${_formatUsd(spend)}, over the ` +
+  `${_formatUsd(hardCap)} cap.\n\n` +
+  `Do not start new work. Summarise what you have done and what remains, then stop ` +
+  `and wait. Run /budget +10 (or /budget hard <usd>) to continue.`;
+
 export default function (pi: ExtensionAPI) {
   let sessionCost = 0;
   // 🔴 Two flags, not one. These guard unrelated conditions, and sharing a
@@ -120,12 +152,17 @@ export default function (pi: ExtensionAPI) {
   let turnsSincePrompt = 0;
   let runStartedAt = Date.now();
   let halted = false;
+  let haltedForHardLimit = false;
   let repetitionStrikes = 0;
   const loopTracker = createLoopTracker();
   const cycleTracker = createCycleTracker();
 
-  const softCap = envNumber('PI_SOFT_SPEND', 10.0);
-  const hardCap = envNumber('PI_HARD_SPEND', 15.0);
+  const defaultCaps: BudgetCaps = {
+    softCap: envNumber('PI_SOFT_SPEND', DEFAULT_SOFT_CAP),
+    hardCap: envNumber('PI_HARD_SPEND', DEFAULT_HARD_CAP),
+  };
+  let budgetCaps: BudgetCaps = { ...defaultCaps };
+  const spendCeiling = envNumber('PI_MAX_SPEND_CEILING', DEFAULT_SPEND_CEILING);
   const maxTurns = envNumber('PI_MAX_TURNS', 1000);
   const maxRunMs = envNumber('PI_MAX_RUN_MINUTES', 240) * 60_000;
   const repetitionGuard = envBool('PI_REPETITION_GUARD', true);
@@ -161,7 +198,7 @@ export default function (pi: ExtensionAPI) {
    */
   const _intervene = async (
     ctx: ExtensionContext,
-    options: { summary: string; finding: string; steer: string },
+    options: { summary: string; finding: string; steer: string; hardLimit?: boolean },
   ): Promise<void> => {
     // 🔴 Latch. Without this the trip condition (turns/time/spend stay over
     // their cap) is still true on the NEXT turn, so the guard re-fires every
@@ -171,6 +208,7 @@ export default function (pi: ExtensionAPI) {
       return;
     }
     halted = true;
+    haltedForHardLimit = options.hardLimit === true;
 
     ctx.ui.notify(`[COST GUARD] ${options.summary}`, 'error');
 
@@ -282,6 +320,96 @@ export default function (pi: ExtensionAPI) {
     );
   };
 
+  const _updateBudgetStatus = (ctx: ExtensionContext): void => {
+    ctx.ui.setStatus(
+      'cost-guard',
+      `$${sessionCost.toFixed(1)} / $${budgetCaps.hardCap.toFixed(1)}`,
+    );
+  };
+
+  const _showBudget = (ctx: ExtensionContext): void => {
+    const runMinutes = Math.round((Date.now() - runStartedAt) / 60_000);
+    ctx.ui.notify(
+      `[BUDGET] Spent ${_formatUsd(sessionCost)} | Soft ${_formatUsd(budgetCaps.softCap)} | ` +
+        `Hard ${_formatUsd(budgetCaps.hardCap)} | Remaining ${_formatUsd(budgetCaps.hardCap - sessionCost)} | ` +
+        `Turns ${turnsSincePrompt} | Run ${runMinutes}m`,
+      'info',
+    );
+    _updateBudgetStatus(ctx);
+  };
+
+  const _budgetChangeMessage = (change: BudgetChange): string => {
+    const notices = [
+      change.hardAutoRaised ? 'Hard cap auto-raised to match soft.' : '',
+      change.hardAtOrBelowSpend
+        ? 'Hard cap is still at or below spend; the next prompt remains blocked.'
+        : '',
+    ].filter(Boolean);
+    const summary =
+      `[BUDGET] Soft ${_formatUsd(change.before.softCap)} → ${_formatUsd(change.after.softCap)}; ` +
+      `hard ${_formatUsd(change.before.hardCap)} → ${_formatUsd(change.after.hardCap)}; ` +
+      `remaining ${_formatUsd(change.remainingHeadroom)}.`;
+    return notices.length ? `${summary} ${notices.join(' ')}` : summary;
+  };
+
+  const _runBudgetCommand = async (rawArgs: string, ctx: ExtensionContext): Promise<void> => {
+    if (_isUnattended()) {
+      ctx.ui.notify('[BUDGET] Overrides are disabled in unattended pipeline workers.', 'warning');
+      return;
+    }
+    const parsed = parseBudgetCommand(rawArgs);
+    if (!parsed.ok) {
+      ctx.ui.notify(`[BUDGET] ${parsed.error}`, 'error');
+      return;
+    }
+    if (parsed.command.action === 'show') {
+      _showBudget(ctx);
+      return;
+    }
+
+    const result = applyBudgetCommand({
+      command: parsed.command,
+      current: budgetCaps,
+      defaults: defaultCaps,
+      ceiling: spendCeiling,
+      spend: sessionCost,
+    });
+    if (!result.ok) {
+      ctx.ui.notify(`[BUDGET] ${result.error}`, 'error');
+      return;
+    }
+
+    budgetCaps = result.change.after;
+    if (result.change.rearmHard && haltedForHardLimit) {
+      halted = false;
+      haltedForHardLimit = false;
+    }
+    if (result.change.rearmSoft) {
+      hasSpendWarned = false;
+    }
+    pi.appendEntry(BUDGET_ENTRY_TYPE, createPersistedBudget(budgetCaps));
+    _updateBudgetStatus(ctx);
+    ctx.ui.notify(
+      _budgetChangeMessage(result.change),
+      result.change.hardAtOrBelowSpend ? 'warning' : 'info',
+    );
+  };
+
+  // A slash command is dispatched only from user input. Model output is never
+  // parsed as budget syntax, and no model-callable tool is registered.
+  if (!_isUnattended()) {
+    pi.registerCommand('budget', {
+      description: 'Show or change this session spend caps',
+      getArgumentCompletions: (prefix) => {
+        const completions = ['soft', 'hard', 'reset', '+10'].filter((value) =>
+          value.startsWith(prefix),
+        );
+        return completions.length ? completions.map((value) => ({ value, label: value })) : null;
+      },
+      handler: async (args, ctx) => _runBudgetCommand(args, ctx),
+    });
+  }
+
   // ── Mid-stream collapse detection ───────────────────────────────────
   //
   // 🔴 `turn_end` fires only once the turn is COMPLETE. A collapsing turn
@@ -328,17 +456,21 @@ export default function (pi: ExtensionAPI) {
     streamStruck = false;
   });
 
-  // ── Reset on session start ──────────────────────────────────
-  pi.on('session_start', () => {
-    sessionCost = 0;
+  // ── Reset run state and restore session-scoped budget ───────────────
+  pi.on('session_start', (_event, ctx) => {
+    const branch = ctx.sessionManager.getBranch();
+    budgetCaps = findPersistedBudget(branch) ?? { ...defaultCaps };
+    sessionCost = restoreSessionSpend(branch);
     hasSpendWarned = false;
     hasBudgetWarned = false;
     turnsSincePrompt = 0;
     runStartedAt = Date.now();
     halted = false;
+    haltedForHardLimit = false;
     repetitionStrikes = 0;
     loopTracker.reset();
     cycleTracker.reset();
+    _updateBudgetStatus(ctx);
   });
 
   // ── Block new agent runs past hard cap ──────────────────────
@@ -353,16 +485,15 @@ export default function (pi: ExtensionAPI) {
     // Re-arm: a fresh human prompt is a new run with a new budget, so a guard
     // that tripped on the previous run must be able to trip again on this one.
     halted = false;
+    haltedForHardLimit = false;
+    _updateBudgetStatus(ctx);
 
-    if (sessionCost >= hardCap) {
+    if (sessionCost >= budgetCaps.hardCap) {
       await _intervene(ctx, {
-        summary: `Hard limit $${hardCap.toFixed(2)} reached. Spend: $${sessionCost.toFixed(2)}.`,
+        summary: `Hard limit ${_formatUsd(budgetCaps.hardCap)} reached. Spend: ${_formatUsd(sessionCost)}.`,
         finding: 'Cost limit exceeded before stage completion.',
-        steer:
-          `[BUDGET HARD LIMIT] This session has spent $${sessionCost.toFixed(2)}, over the ` +
-          `$${hardCap.toFixed(2)} cap.\n\n` +
-          `Do not start new work. Summarise what you have done and what remains, then stop ` +
-          `and wait. Raise PI_HARD_SPEND if the user wants to keep going.`,
+        steer: _hardLimitSteer(sessionCost, budgetCaps.hardCap),
+        hardLimit: true,
       });
     }
   });
@@ -396,19 +527,17 @@ export default function (pi: ExtensionAPI) {
     if (usage?.input && pricing) {
       sessionCost += computeTurnCost(usage, pricing);
     }
+    _updateBudgetStatus(ctx);
 
     // ── Hard cap: abort ───────────────────────────────────
     // Accounted before the repetition branches so repeated turns still update
     // sessionCost and are checked against the cap before steering or halting.
-    if (sessionCost >= hardCap) {
+    if (sessionCost >= budgetCaps.hardCap) {
       await _intervene(ctx, {
-        summary: `Hard limit $${hardCap.toFixed(2)} hit ($${sessionCost.toFixed(2)} spent).`,
+        summary: `Hard limit ${_formatUsd(budgetCaps.hardCap)} hit (${_formatUsd(sessionCost)} spent).`,
         finding: 'Cost limit exceeded before stage completion.',
-        steer:
-          `[BUDGET HARD LIMIT] This session has spent $${sessionCost.toFixed(2)}, over the ` +
-          `$${hardCap.toFixed(2)} cap.\n\n` +
-          `Do not start new work. Summarise what you have done and what remains, then stop ` +
-          `and wait. Raise PI_HARD_SPEND if the user wants to keep going.`,
+        steer: _hardLimitSteer(sessionCost, budgetCaps.hardCap),
+        hardLimit: true,
       });
       return;
     }
@@ -554,20 +683,20 @@ export default function (pi: ExtensionAPI) {
     }
 
     // ── Soft cap: graceful wrap-up ────────────────────────
-    if (sessionCost >= softCap && !hasSpendWarned) {
+    if (sessionCost >= budgetCaps.softCap && !hasSpendWarned) {
       hasSpendWarned = true;
 
       ctx.ui.notify(
-        `[COST GUARD] Soft cap $${softCap.toFixed(2)} reached ($${sessionCost.toFixed(2)} spent). Wrapping up…`,
+        `[COST GUARD] Soft cap ${_formatUsd(budgetCaps.softCap)} reached (${_formatUsd(sessionCost)} spent). Wrapping up…`,
         'warning',
       );
 
       const role = process.env.CONTRACT_PIPELINE_ROLE;
       const softLimitMsg = role
-        ? `[BUDGET SOFT LIMIT — $${softCap.toFixed(2)} reached — $${sessionCost.toFixed(2)} spent]\n\n` +
+        ? `[BUDGET SOFT LIMIT — ${_formatUsd(budgetCaps.softCap)} reached — ${_formatUsd(sessionCost)} spent]\n\n` +
           `🔴 Contract pipeline ${role}: CALL contract_stage_complete NOW with your current status.\n` +
           `Do not start new work. Summarize what you have and call the completion tool.`
-        : `[BUDGET SOFT LIMIT — $${softCap.toFixed(2)} reached — $${sessionCost.toFixed(2)} spent]\n\n` +
+        : `[BUDGET SOFT LIMIT — ${_formatUsd(budgetCaps.softCap)} reached — ${_formatUsd(sessionCost)} spent]\n\n` +
           `Wrap up IMMEDIATELY:\n` +
           `1. Stop invoking tools — no more reads, searches, or shell commands.\n` +
           `2. Deliver your final analysis based on what you have.\n` +

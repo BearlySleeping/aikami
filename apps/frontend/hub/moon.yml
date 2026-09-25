@@ -122,8 +122,28 @@ tasks:
       cache: false
       runInCI: false
 
+  # `svelte-kit sync` and the Bun-only alias config share `.svelte-kit` across
+  # the duplicate test entry points. Keep their combined writer behind one
+  # cached task so `test` and `test-unit` can run concurrently without racing.
+  test-prepare:
+    command: 'bun run test:prepare'
+    inputs:
+      - '@group(sources)'
+      - 'package.json'
+      - 'vite.config.ts'
+      - 'scripts/write_test_tsconfig.ts'
+      - 'scripts/svelte_aliases.ts'
+    outputs:
+      - '.svelte-kit'
+    options:
+      cache: true
+      timeout: 300
+      runInCI: true
+
   test:
-    command: 'bun run test'
+    command: 'bun run test:unit:run'
+    deps:
+      - '~:test-prepare'
     inputs:
       - '@group(sources)'
       # 🔴 Load-bearing, same reason as `build` above. The Worker boundary
@@ -135,14 +155,28 @@ tasks:
       - '/packages/frontend/*/src/**/*'
       - '/packages/backend/*/src/**/*'
       - '@group(migrations)'
+      - 'package.json'
       - 'vite.config.ts'
+      - 'tsconfig.test.json'
+    options:
+      cache: true
+      timeout: 300
+      runInCI: true
 
   test-unit:
-    command: 'bun run test:unit'
+    command: 'bun run test:unit:run'
+    deps:
+      - '~:test-prepare'
     inputs:
       - '@group(sources)'
       - '/packages/shared/*/src/**/*'
       - '/packages/frontend/*/src/**/*'
       - '/packages/backend/*/src/**/*'
       - '@group(migrations)'
+      - 'package.json'
       - 'vite.config.ts'
+      - 'tsconfig.test.json'
+    options:
+      cache: true
+      timeout: 300
+      runInCI: true

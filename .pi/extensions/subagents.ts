@@ -200,6 +200,12 @@ export default function (pi: ExtensionAPI) {
       for (const r of runs.filter((x) => isTerminalStatus(x.state.status))) {
         watched.delete(r.spec.id);
       }
+      // An explicit wait is an implicit request for completion notification.
+      // This matters for notify:false runs and wait_all, whose ids were not
+      // registered in `watched` at spawn time.
+      for (const r of runs.filter((x) => !isTerminalStatus(x.state.status))) {
+        watch(r.spec.id);
+      }
       return { runs, outcome };
     } finally {
       hold(options.ids, -1);
@@ -470,18 +476,32 @@ export default function (pi: ExtensionAPI) {
 
       defineAction({
         action: 'message',
-        summary: 'Send a follow-up to a FINISHED subagent (resumes its session, same worktree)',
+        summary:
+          'Queue steering for a running subagent, or resume a finished one in the same session/worktree',
         parameters: Type.Object({
           id: Type.String(),
           text: Type.String(),
+          delivery: Type.Optional(
+            Type.Union([Type.Literal('steer'), Type.Literal('followUp')], {
+              description: 'Queued at the next safe JSON-mode process boundary; defaults to steer',
+            }),
+          ),
           wait: Type.Optional(Type.Boolean()),
         }),
         async execute(_id, params, signal, onUpdate) {
-          await runPiScript<SubagentState>(
+          const before = readRun(repoRoot, params.id);
+          const next = await runPiScript<SubagentState>(
             'subagent.message',
-            { repoRoot, id: params.id, text: params.text },
+            {
+              repoRoot,
+              id: params.id,
+              text: params.text,
+              delivery: params.delivery ?? 'steer',
+            },
             { signal },
           );
+          // Explicit interaction re-attaches completion notification even when
+          // the run was originally spawned with notify:false.
           watch(params.id);
           if (params.wait) {
             const { runs, outcome } = await waitFor({
@@ -493,9 +513,13 @@ export default function (pi: ExtensionAPI) {
             });
             return waitResult(runs, outcome, 'all');
           }
+          const action =
+            before && !isTerminalStatus(before.state.status)
+              ? `📨 queued ${params.delivery ?? 'steer'} (${next.queuedMessages ?? 1} pending)`
+              : `📨 resumed ${params.delivery ?? 'follow-up'}`;
           return {
-            content: text(`📨 ${params.id} resumed with your follow-up — you will be notified.`),
-            details: {},
+            content: text(`${action} for ${params.id} — you will be notified.`),
+            details: next,
           };
         },
       }),

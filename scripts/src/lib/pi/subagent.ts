@@ -83,11 +83,18 @@ export const handlers: PiHandlers = {
 
   'subagent.message': (payload) => {
     const args = toArgs(payload);
-    return messageRun(
-      requireString(args, 'repoRoot'),
-      requireString(args, 'id'),
-      requireString(args, 'text'),
-    );
+    const delivery = optionalString(args, 'delivery');
+    if (delivery !== undefined && delivery !== 'steer' && delivery !== 'followUp') {
+      throw new Error('subagent.message delivery must be steer or followUp');
+    }
+    const messageId = optionalString(args, 'messageId');
+    return messageRun({
+      repoRoot: requireString(args, 'repoRoot'),
+      id: requireString(args, 'id'),
+      text: requireString(args, 'text'),
+      delivery: delivery === 'followUp' ? 'followUp' : 'steer',
+      ...(messageId === undefined ? {} : { messageId }),
+    });
   },
 
   'subagent.kill': (payload) => {
