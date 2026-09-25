@@ -66,8 +66,6 @@ export type TalkToPartyViewModelInterface = BaseViewModelInterface & {
   readonly messages: Array<{ id: string; content: string; role: 'player' | 'npc' }>;
   /** Messages projected into the shared RichMessageList shape. */
   readonly richMessages: RichMessage[];
-  /** Scroll container, bound by RichMessageList for anchoring. */
-  messageContainerElement: HTMLDivElement | undefined;
   readonly isStreaming: boolean;
   inputText: string;
 
@@ -95,7 +93,6 @@ class TalkToPartyViewModel
   private _activeController: AbortController | undefined;
 
   messages = $state<Array<{ id: string; content: string; role: 'player' | 'npc' }>>([]);
-  messageContainerElement = $state.raw<HTMLDivElement | undefined>(undefined);
   isStreaming = $state<boolean>(false);
   inputText = $state<string>('');
 

@@ -517,14 +517,8 @@
   },
   "apps/frontend/client/src/lib/services/game/game_boot_service.svelte.ts": {
     "counts": {
-      "excessive": 6,
+      "excessive": 5,
       "worst": 41
-    }
-  },
-  "apps/frontend/client/src/lib/services/game/game_engine_service.svelte.ts": {
-    "counts": {
-      "excessive": 1,
-      "worst": 20
     }
   },
   "apps/frontend/client/src/lib/services/game/game_overlay_service.svelte.ts": {

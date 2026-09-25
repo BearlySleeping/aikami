@@ -6,6 +6,7 @@
 
 import { describe, expect, test } from 'bun:test';
 import { DEFAULT_LPC_RECIPE } from '@aikami/constants';
+import { isPartialLayerInGarmentSlot } from '@aikami/lpc';
 import {
   getItemDefinition,
   getResolvableItemCatalog,
@@ -63,6 +64,32 @@ describe('real item catalog', () => {
     } finally {
       setActiveCatalog({});
     }
+  });
+
+  test('DEFAULT_LPC_RECIPE never wears a PARTIAL garment layer', () => {
+    // A garment slot whose sheet only paints a collar/yoke (or the two
+    // detached sleeves of a `sleeves` overlay) renders a BARE CHEST while
+    // every catalog check still passes — the asset id genuinely is in the
+    // catalog. The base outfit is what the player sees with nothing equipped,
+    // so a partial layer here is a permanent, unrecoverable visual defect.
+    //
+    // This is the regression guard for the default torso having been
+    // `torso/clothes/longsleeve/longsleeve_male`, whose upstream sheet ships
+    // only the collar and shoulder yoke.
+    const partial: string[] = [];
+    for (const [slot, assetId] of Object.entries(DEFAULT_LPC_RECIPE)) {
+      if (isPartialLayerInGarmentSlot(slot, assetId)) {
+        partial.push(`${slot}:${assetId}`);
+      }
+    }
+    expect(partial).toEqual([]);
+  });
+
+  test('the base torso is a COMPLETE garment, not a collar-only sheet', () => {
+    // Guards against a future swap of the base torso to a sheet that only paints
+    // a collar/yoke. A partial sheet renders a bare chest while every catalog
+    // check still passes, because the asset id genuinely IS in the catalog.
+    expect(isPartialLayerInGarmentSlot('torso', DEFAULT_LPC_RECIPE.torso ?? '')).toBe(false);
   });
 
   test('DEFAULT_LPC_RECIPE never wears an asset an equippable item provides', () => {

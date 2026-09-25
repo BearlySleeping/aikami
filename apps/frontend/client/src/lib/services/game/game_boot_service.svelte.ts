@@ -19,6 +19,7 @@ import { type LpcAnimationState, resolveBaseAppearanceRecipe } from '@aikami/lpc
 import type { Campaign, PersonaData } from '@aikami/types';
 import { isTauri } from '$lib/views/utils/is_tauri';
 import type { GameBootInput, GameBootProgress, GameBootResult, GameBootStage } from '$types';
+import { buildAppearanceLayerIndices } from '$utils/appearance_layers';
 import { buildEffectiveAppearanceRecipe } from '$utils/appearance_recipe';
 import { resetAudioCueAuthority } from '../audio/audio_asset_resolver.ts';
 import { transition } from '../campaign/boot_state_machine.ts';
@@ -898,13 +899,18 @@ class GameBootService
     const textureManager = new TextureManager();
 
     // Build LPC pipeline
-    const { getLpcAssetPath, wireLpcUrlResolver } = await import('$lib/data/lpc_asset_catalog');
-    // C-372: ensure the manifest-backed LPC resolver is wired and the manifest
-    // is loaded before the engine boots (idempotent — catalog module scope
-    // also wires it).
-    await wireLpcUrlResolver();
-    const { getLpcCatalog } = await import('$lib/data/lpc_asset_catalog');
-    const lpcCatalog = getLpcCatalog();
+    // C-372: ensure the manifest-backed LPC resolver is wired before the engine
+    // boots (idempotent — catalog module scope also wires it).
+    //
+    // The catalog itself is built from the asset-store SEED, which is a
+    // different fact from the manifest being wired: awaiting the manifest
+    // resolver is not evidence the seed landed, and the registry stage runs in
+    // the background. Reading `getLpcCatalog()` here made appearance resolution
+    // a RACE — an empty catalog produced fallback indices instead of real ones.
+    // `ensureLpcCatalogReady` awaits a populated catalog (retrying a load that
+    // resolved empty), so `creating_engine` sees exactly one world.
+    const { ensureLpcCatalogReady, getLpcAssetPath } = await import('$lib/data/lpc_asset_catalog');
+    const lpcCatalog = await ensureLpcCatalogReady();
     // Check generation after async imports
     if (generation !== this._bootGeneration) {
       return;
@@ -1274,8 +1280,12 @@ class GameBootService
     const lpcRecipe = (this._persona.appearance as Record<string, unknown> | undefined)
       ?.lpcRecipe as Record<string, string> | undefined;
 
-    const { generatedLpcSlots } = this._getLpcCatalogSync();
-    if (!generatedLpcSlots) {
+    const generatedLpcSlots = this._getLpcCatalogSync();
+    // An EMPTY catalog is a failure, not a valid state: every slot lookup below
+    // would miss and every layer would be invented. Bail loudly and let the
+    // engine fall back to its own defaults rather than rendering a guessed
+    // child body.
+    if (!generatedLpcSlots || generatedLpcSlots.length === 0) {
       this.warn('lpc.boot.noCatalog', { personaId: this._persona.id });
       return playerData;
     }
@@ -1341,55 +1351,46 @@ class GameBootService
     });
     const resolvedRecipe = resolvedBase.recipe;
 
-    const EngineSlots = ['body', 'hair', 'torso', 'legs', 'feet', 'head'] as const;
-
-    // Map the resolved recipe to engine variant indices.
-    // The torso/feet layers are part of the BASE appearance again — unequip
-    // reveals the persona's own clothing (tunic/sandals), never a bare body.
-    const SLOT_FALLBACKS: Record<string, number> = {
-      body: 3,
-      hair: 3,
-      legs: 22,
-      head: 95,
-    };
-
-    const appearanceLayers: number[] = [];
-    for (const slotName of EngineSlots) {
-      const assetId = resolvedRecipe[slotName];
-      if (!assetId) {
-        appearanceLayers.push(SLOT_FALLBACKS[slotName] ?? 0);
-        continue;
-      }
-      const catalogIdx = slotIndexMap.get(slotName);
-      if (catalogIdx === undefined) {
-        appearanceLayers.push(SLOT_FALLBACKS[slotName] ?? 0);
-        continue;
-      }
-      const slotDef = generatedLpcSlots[catalogIdx];
-      if (!slotDef) {
-        appearanceLayers.push(SLOT_FALLBACKS[slotName] ?? 0);
-        continue;
-      }
-      const variantIdx = slotDef.variants.findIndex((v) => v.assetId === assetId);
-      appearanceLayers.push(variantIdx >= 0 ? variantIdx + 1 : (SLOT_FALLBACKS[slotName] ?? 0));
-    }
-
     // C-430: zeroEquipmentOwnedAppearanceSlots removed — variable-length slots
     // replace the fixed six-slot ceiling. Equipment adds its own layers.
-    playerData.appearanceLayers = appearanceLayers;
+    //
+    // The torso/feet layers are part of the BASE appearance again — unequip
+    // reveals the persona's own clothing (shirt/shoes), never a bare body.
+    // Indices are derived from assets the catalog actually serves; an
+    // unresolvable slot is omitted and reported, never filled with a literal
+    // index that happens to mean `*_child` in one catalog snapshot.
+    const { layers: appearanceLayers, unresolved } = buildAppearanceLayerIndices({
+      slots: generatedLpcSlots,
+      recipe: resolvedRecipe,
+    });
+    for (const miss of unresolved) {
+      this.warn('lpc.boot.unresolvedLayer', {
+        personaId: this._persona.id,
+        slot: miss.slot,
+        requestedAssetId: miss.requestedAssetId,
+        reason: miss.reason,
+      });
+    }
+
+    playerData.appearanceLayers = [...appearanceLayers];
 
     this.debug('lpc.boot.appearanceLayers', { appearanceLayers: JSON.stringify(appearanceLayers) });
 
     return playerData;
   }
 
-  private _getLpcCatalogSync(): {
-    generatedLpcSlots: readonly { slot: string; variants: readonly { assetId: string }[] }[];
-  } {
-    if (this._cachedLpcSlots) {
-      return { generatedLpcSlots: this._cachedLpcSlots };
-    }
-    return { generatedLpcSlots: [] };
+  /**
+   * The catalog slots cached by {@link _buildLpcPipeline}, or `undefined` when
+   * no pipeline has been built yet.
+   *
+   * `undefined` and `[]` are deliberately different answers: the former means
+   * "not built", the latter is still reported as a missing catalog by
+   * `_buildPlayerData`, so an empty catalog can never masquerade as a ready one.
+   */
+  private _getLpcCatalogSync():
+    | readonly { slot: string; variants: readonly { assetId: string }[] }[]
+    | undefined {
+    return this._cachedLpcSlots;
   }
 
   // ── Asset preloading ──

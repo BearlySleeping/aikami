@@ -59,7 +59,6 @@ const approvalBadgeClass = $derived.by(() => {
         messages={viewModel.richMessages}
         containerClass="flex-1 space-y-2 overflow-y-auto px-4 py-3"
         isStreaming={viewModel.isStreaming}
-        bind:containerElement={viewModel.messageContainerElement}
       >
         {#snippet renderRow(
   message,

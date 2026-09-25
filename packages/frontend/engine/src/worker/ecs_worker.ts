@@ -272,6 +272,42 @@ let _packConfig: PackConfig | undefined;
 let playerEntityId = 0;
 
 /**
+ * The persona's authoritative base appearance layers, captured at
+ * `INITIALIZE_ENGINE` and replayed on every `RESTORE_PLAYER`.
+ *
+ * `Appearance.layers` persists POSITIONAL catalog indices, so a snapshot taken
+ * while gear was equipped bakes the equipped torso/feet into the base array
+ * (e.g. `[5,3,23,24,7,102]` — torso 23 is chainmail, feet 7 are boots). A
+ * restore that trusts those indices reinstalls the equipped look as the BASE
+ * outfit, and the equip/unequip toggle becomes a visual no-op: the main thread
+ * drops the equipment recipe, but the base layer underneath is the same
+ * garment.
+ *
+ * The persona — not the save — owns the base look (equipment is merged on top
+ * by the main thread's `equipmentRecipeProvider`). Retaining the boot-time
+ * layers here is what lets `RESTORE_PLAYER` re-assert them, exactly as
+ * `initializeEngine` does on a fresh boot. See `resolvePlayerBaseLayers`.
+ */
+let _personaBaseLayers: readonly number[] | undefined;
+
+/**
+ * Reads the persona's base layers out of the boot payload, or `undefined` when
+ * the boot supplied none (a sandbox avatar, or a caller that omits them).
+ *
+ * Extracted so `INITIALIZE_ENGINE` keeps a single statement here — the restore
+ * path is the one that must not silently inherit a snapshot's layers.
+ */
+const readPersonaBaseLayers = (
+  playerData: PlayerCreateOptions | undefined,
+): readonly number[] | undefined => {
+  const layers = playerData?.appearanceLayers;
+  if (!Array.isArray(layers) || layers.length === 0) {
+    return undefined;
+  }
+  return [...layers];
+};
+
+/**
  * Per-combatant ability grants for the running v2 encounter (C-516 AC-2).
  *
  * Populated by `COMBAT_START_ENCOUNTER` and cleared on `RETRY_ENCOUNTER`, so
@@ -1518,6 +1554,10 @@ self.onmessage = (event: MessageEvent): void => {
           ? (lpcCatalog as LpcSlotCatalog[])
           : undefined;
 
+        // Retain the persona's base layers so RESTORE_PLAYER can re-assert them
+        // over a snapshot's stale positional indices (see _personaBaseLayers).
+        _personaBaseLayers = readPersonaBaseLayers(playerData);
+
         // Reset camera state for fresh engine
         resetCameraTracking();
 
@@ -1684,16 +1724,37 @@ self.onmessage = (event: MessageEvent): void => {
             copyComponentSoA(Position, restoredEid, playerEntityId);
             // C-430: Appearance has a Map field — use setAppearanceLayers to
             // properly copy both the Map and legacy arrays
-            const restoredLayers = getAppearanceLayers(restoredEid);
+            //
+            // The persona owns the base look, NOT the snapshot: `layers` holds
+            // positional catalog indices, so a save written while gear was
+            // equipped carries the equipped torso/feet as its base. Replaying
+            // them would make equip/unequip a no-op, because the base layer
+            // would already BE the item's asset. Mirrors the fresh-boot
+            // re-seed in `initializeEngine`.
+            const restoredLayers = resolvePlayerBaseLayers({
+              restored: getAppearanceLayers(restoredEid),
+              fromPersona: _personaBaseLayers,
+            });
             setAppearanceLayers(world, playerEntityId, restoredLayers);
             copyComponentSoA(CombatStats, restoredEid, playerEntityId);
             copyComponentSoA(Visual, restoredEid, playerEntityId);
             incrementEntityGeneration(restoredEid);
             removeEntity(world, restoredEid);
           } else {
-            // No player yet — adopt the restored entity as the player.
+            // No player yet — adopt the restored entity as the player, then
+            // re-assert the persona's base layers for the same reason as the
+            // branch above: the snapshot's positional indices may have the
+            // equipped outfit baked in as the base.
             playerEntityId = restoredEid;
             addComponent(world, restoredEid, CameraFocus);
+            setAppearanceLayers(
+              world,
+              playerEntityId,
+              resolvePlayerBaseLayers({
+                restored: getAppearanceLayers(restoredEid),
+                fromPersona: _personaBaseLayers,
+              }),
+            );
           }
 
           relocateRestoredEntities({
