@@ -55,6 +55,7 @@ function isIgnoredWarning(msg: string): boolean {
 
 const projectDirectory = dirname(fileURLToPath(import.meta.url));
 const rootDirectory = resolve(projectDirectory, '../../..');
+const isDesktopBuild = process.env.AIKAMI_DESKTOP_BUILD === 'true';
 const packagesDirectory = resolve(projectDirectory, '../../../packages');
 
 /**
@@ -319,17 +320,17 @@ export default defineConfig(({ command, mode }) => {
     envPrefix: ['PUBLIC_'],
 
     resolve: {
-      alias: [
-        {
-          // Tauri native modules are never available in the browser — the code
-          // paths that reach them are guarded by `__TAURI__ in window`. In
-          // production builds the rolldown `external` config handles this; in
-          // dev mode Vite serves native ESM and tries to resolve every import,
-          // so we alias them to a stub module.
-          find: /^@tauri-apps\/.*$/,
-          replacement: toSrcPath('lib/stubs/tauri_stub.ts'),
-        },
-      ],
+      alias: isDesktopBuild
+        ? []
+        : [
+            {
+              // Browser builds must never resolve native Tauri modules. The
+              // guarded code paths never call the stub, while desktop builds
+              // skip this alias so the real @tauri-apps packages are bundled.
+              find: /^@tauri-apps\/.*$/,
+              replacement: toSrcPath('lib/stubs/tauri_stub.ts'),
+            },
+          ],
     },
 
     customLogger: {
@@ -361,10 +362,10 @@ export default defineConfig(({ command, mode }) => {
       // build.rollupOptions is a deprecated alias for rolldownOptions in
       // Vite 8 — use the current option directly.
       rolldownOptions: {
-        // Tauri APIs are only available at runtime in a Tauri context —
-        // externalize them so the web build doesn't fail on dynamic imports
-        // like `import('@tauri-apps/api/path')`.
-        external: [/^@tauri-apps\//],
+        // Browser builds resolve Tauri imports to the local stub above. A
+        // desktop build must bundle the real packages into the webview; leaving
+        // them external produces unresolved module specifiers at runtime.
+        external: [],
         // Mute unavoidable warnings from third-party dependencies
         onwarn(warning, warn) {
           // Silence all eval warnings

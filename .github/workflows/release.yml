@@ -496,6 +496,7 @@ jobs:
         env:
           MODE: ${{ needs.resolve-plan.outputs.mode }}
           PUBLIC_APP_VERSION: ${{ needs.plan-desktop.outputs.version }}
+          AIKAMI_DESKTOP_BUILD: "true"
           # MOON_TOOLCHAIN_FORCE_GLOBALS is set by setup-environment composite action.
         run: |
           bun moon run client:build -- --mode "$MODE"

@@ -24,6 +24,7 @@ import { dirname, resolve } from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { logger } from '@aikami/logger';
+import { loadEnv } from 'vite';
 import { DEV_ROUTES_ENV_VAR, resolveIncludeDevRoutes } from './dev_routes_gate.ts';
 
 const CLIENT_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -67,16 +68,18 @@ const run = (label: string, cmd: string, args: string[], opts: SpawnSyncOptions 
 };
 
 const modeArgs = mode ? ['--mode', mode] : [];
+const fileEnv = loadEnv(mode ?? 'production', CLIENT_DIR, ['AIKAMI_', 'PUBLIC_']);
+const buildEnv = { ...process.env, ...fileEnv };
 
-// 1. Dev-route gate — must see the same mode vite.config.ts will.
-run('gate dev routes', 'bun', ['scripts/gate_dev_routes.ts', ...modeArgs]);
+// 1. Dev-route gate — must see the same mode and .env file vite.config.ts will.
+run('gate dev routes', 'bun', ['scripts/gate_dev_routes.ts', ...modeArgs], { env: buildEnv });
 
 // 2. Web bundle. Extra args are forwarded here, where they were aimed.
 //    AIKAMI_BUILD_MODE is exported so vite.config.ts sees the real mode:
 //    SvelteKit loads it during a config probe that runs before vite resolves
 //    `--mode`, and without this it falls back to production and demands the
 //    filtered routes copy a non-production build never creates.
-const viteEnv = { ...process.env };
+const viteEnv = { ...buildEnv };
 if (mode) {
   viteEnv.AIKAMI_BUILD_MODE = mode;
 }
