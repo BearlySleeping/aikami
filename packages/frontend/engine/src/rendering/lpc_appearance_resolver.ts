@@ -13,6 +13,7 @@ import {
   LPC_SLOT_ORDER,
   type LpcSlotCatalog,
   type LpcSlotName,
+  projectAppearanceCatalog,
   projectLpcCatalog,
   resetLpcFallbackWarnings,
   resolveLpcAppearance,
@@ -50,7 +51,7 @@ export type CreateLpcPipelineOptions = {
 export const createLpcPipeline = (
   options: CreateLpcPipelineOptions,
 ): {
-  catalog: readonly LpcSlotCatalog[];
+  catalog: ReturnType<typeof projectAppearanceCatalog>;
   recipeResolver: (layerIds: readonly number[]) => LpcLayerRecipe[];
   assetUrlResolver: (slot: string, assetId: string, state: string) => string | null;
 } => {
@@ -63,7 +64,15 @@ export const createLpcPipeline = (
   const assetUrlResolver = (slot: string, assetId: string, state: string): string | null =>
     getLpcAssetPath(slot, assetId, state);
 
-  return { catalog, recipeResolver, assetUrlResolver };
+  // The returned catalog is what the WORKER resolves appearances against, and
+  // it must include the addable extra slots (hat, shield, weapon, …) or every
+  // extra an outfit names reads as "not in the catalog" and is dropped. The
+  // rendering resolver above is unaffected: it only ever looks up base slots.
+  return {
+    catalog: projectAppearanceCatalog(catalog),
+    recipeResolver,
+    assetUrlResolver,
+  };
 };
 
 /**

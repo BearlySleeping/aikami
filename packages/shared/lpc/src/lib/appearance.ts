@@ -345,3 +345,48 @@ export const projectLpcCatalog = (
   }
   return projected;
 };
+
+/**
+ * Projects the catalog for APPEARANCE RESOLUTION, including the addable
+ * extra slots.
+ *
+ * `projectLpcCatalog` deliberately returns only the six positional base slots
+ * because that is what the rendering resolver consumes. An appearance that
+ * names a hat, shield or weapon is resolved through a DIFFERENT boundary
+ * (`resolveNpcAppearance`), and that boundary needs the extra slots present or
+ * every extra is reported as "not in the catalog" and silently dropped.
+ *
+ * Passing this combined catalog where the base one was is safe: the rendering
+ * resolver only ever looks up base slots, so the extra entries are inert there.
+ */
+export const projectAppearanceCatalog = (
+  catalog: readonly {
+    readonly slot: string;
+    readonly variants: readonly {
+      readonly assetId: string;
+      readonly licenses?: readonly string[];
+    }[];
+  }[],
+): readonly {
+  slot: string;
+  variants: readonly { assetId: string; licenses?: readonly string[] }[];
+}[] => {
+  const wanted = [...LPC_SLOT_ORDER, ...LPC_EXTRA_SLOT_ORDER];
+  const projected: {
+    slot: string;
+    variants: { assetId: string; licenses?: readonly string[] }[];
+  }[] = [];
+  for (const slot of wanted) {
+    const found = catalog.find((s) => s.slot === slot);
+    if (found) {
+      projected.push({
+        slot,
+        variants: found.variants.map((variant) => ({
+          assetId: variant.assetId,
+          licenses: variant.licenses,
+        })),
+      });
+    }
+  }
+  return projected;
+};

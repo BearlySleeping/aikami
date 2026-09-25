@@ -22,6 +22,7 @@ export {
   type LpcSlotFallbacks,
   type LpcSlotName,
   type LpcSlotResolution,
+  projectAppearanceCatalog,
   projectLpcCatalog,
   type ResolveLpcAppearanceOptions,
   resetLpcFallbackWarnings,
