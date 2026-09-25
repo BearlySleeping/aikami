@@ -328,9 +328,9 @@ const paintSecondaryRoutes = (m: MapData): void => {
   fillRect(m, 39, 33, 53, 34, G.DIRT);
   fillRect(m, 50, 33, 51, 34, G.STONE_FLOOR);
   // Notice-board approach: north from the road to the crossing's south bank.
-  // The short spurs onto each bank are painted after the stream so the bank
-  // sand cannot overwrite them (see paintNoticeBoardApproach).
-  fillRect(m, 39, 9, 40, 22, G.DIRT);
+  // The short bend is painted after the stream so the bank sand cannot
+  // overwrite it (see paintNoticeBoardApproach).
+  fillRect(m, 39, 13, 40, 22, G.DIRT);
   // Well approach: west from the square.
   fillRect(m, 23, 22, 26, 23, G.DIRT);
   // A worn spur down to the south shed, so the south-west is not dead grass.
@@ -354,14 +354,14 @@ const paintPads = (m: MapData): void => {
  * shared corner16 painter never gets a broad slab to turn into a sawtooth.
  */
 const paintNoticeBoardApproach = (m: MapData): void => {
-  // Reassert the authored trunk after the symmetric bank pass.
-  fillRect(m, 39, 9, 40, 22, G.DIRT);
-  fillRect(m, 35, 9, 38, 9, G.DIRT);
-  fillRect(m, 36, 10, 38, 10, G.DIRT);
-  fillRect(m, 37, 11, 38, 11, G.DIRT);
-  setTile(m, 40, 11, G.DIRT);
-  setTile(m, 39, 11, G.GRASS);
-  setTile(m, 38, 12, G.DIRT);
+  // Reassert the authored trunk after the symmetric bank pass. The four-row
+  // bend shifts east by one cell at a time: three cells at the bridge foot,
+  // then a narrow two/three-cell trail. No repeated span creates a broad slab.
+  fillRect(m, 39, 13, 40, 22, G.DIRT);
+  fillRect(m, 36, 9, 38, 9, G.DIRT);
+  fillRect(m, 37, 10, 39, 10, G.DIRT);
+  fillRect(m, 38, 11, 39, 11, G.DIRT);
+  fillRect(m, 39, 12, 40, 12, G.DIRT);
   fillRect(m, 36, 5, 38, 5, G.DIRT); // short worn landing below the board
   fillRect(m, 36, 6, 38, 6, G.DIRT); // north landing → board walk
 };

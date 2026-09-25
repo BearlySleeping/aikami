@@ -109,14 +109,7 @@ describe('C-378 AC-5 — atlas packer', () => {
     const cornerTerrains = readManifestTerrains().filter((t) => t.wang === 'corner16');
     // The originally hardcoded pair plus the integrated material sets.
     expect(cornerTerrains.map((t) => t.name)).toEqual(
-      expect.arrayContaining([
-        'dirt',
-        'water',
-        'gravel',
-        'earth',
-        'cobblestone',
-        'path',
-      ]),
+      expect.arrayContaining(['dirt', 'water', 'gravel', 'earth', 'cobblestone', 'path']),
     );
     for (const terrain of cornerTerrains) {
       for (let mask = 0; mask < 16; mask++) {

@@ -7,7 +7,7 @@
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { readFileSync, realpathSync } from 'node:fs';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { chromium, type Page } from 'playwright';
 import {
@@ -39,12 +39,14 @@ type CaptureRecord = {
   cameraSource: 'worldTransform' | 'engine' | 'playerFallback';
   renderer: string;
   viewport: Viewport;
+  pixelWidth: number;
+  pixelHeight: number;
   entityTextureFingerprint: string;
   sha256: string;
 };
 
 const ROOT = resolve(import.meta.dirname, '../../..');
-const EVIDENCE_DIR = resolve(process.env.C559_EVIDENCE_DIR ?? '/tmp/opencode/c559-evidence');
+const EVIDENCE_DIR = resolve(process.env.C559_EVIDENCE_DIR ?? resolve(ROOT, '.evidence/C-559'));
 const CLIENT_URL = process.env.C559_CLIENT_URL ?? 'http://127.0.0.1:5399';
 const LANE = (process.env.C559_LANE ?? 'after') as Lane;
 const LANE_ROOT = resolve(process.env.C559_LANE_ROOT ?? ROOT);
@@ -58,7 +60,8 @@ const PAIR_SUMMARIES: Readonly<Record<string, string>> = {
     'Interior terrain channel omitted; C-552 indoor wood/threshold materials remain baked.',
   'merchant-floor':
     'Interior terrain channel omitted; C-552 indoor flagstone and navy base remain baked.',
-  'old-road': 'Outdoor path/earth/gravel semantic transitions; water and bridge visuals remain origin/main.',
+  'old-road':
+    'Outdoor path/earth/gravel semantic transitions; water and bridge visuals remain origin/main.',
   'ruined-shrine':
     'Outdoor sand/stone/dirt semantic transitions; no grass or placeholder floor leakage.',
 };
@@ -107,6 +110,35 @@ const hashBytes = (bytes: Uint8Array | string): string =>
   createHash('sha256').update(bytes).digest('hex');
 const hashFile = (path: string): string => hashBytes(readFileSync(path));
 const formatCell = (cell: EmberwatchHouseCell): string => `${cell.c},${cell.r}`;
+const imageDimensions = (path: string): Viewport => {
+  const dimensions = execFileSync('magick', ['identify', '-format', '%w %h', path], {
+    encoding: 'utf8',
+  })
+    .trim()
+    .split(/\s+/);
+  const width = Number(dimensions[0]);
+  const height = Number(dimensions[1]);
+  if (!Number.isInteger(width) || !Number.isInteger(height)) {
+    throw new Error(`C-559 could not read image dimensions for ${path}`);
+  }
+  return { width, height };
+};
+
+const worktreeState = (): {
+  dirty: boolean;
+  diffSha256: string;
+  status: string[];
+} => {
+  const status = execFileSync('git', ['status', '--porcelain=v1', '--untracked-files=all'], {
+    cwd: LANE_ROOT,
+    encoding: 'utf8',
+  })
+    .trim()
+    .split('\n')
+    .filter((line) => line.length > 0);
+  const diff = execFileSync('git', ['diff', '--binary', 'HEAD'], { cwd: LANE_ROOT });
+  return { dirty: status.length > 0, diffSha256: hashBytes(diff), status };
+};
 
 const artifactHashes = (): Record<string, string> => {
   const paths = [
@@ -134,6 +166,12 @@ const captureCases = async (page: Page): Promise<CaptureRecord[]> => {
     const file = `${LANE}-${definition.id}.png`;
     const path = join(EVIDENCE_DIR, LANE, file);
     const snapshot = await game.capture(path);
+    const pixels = imageDimensions(path);
+    if (pixels.width !== viewport.width || pixels.height !== viewport.height) {
+      throw new Error(
+        `C559 ${LANE}/${definition.id} expected ${viewport.width}x${viewport.height}, got ${pixels.width}x${pixels.height}`,
+      );
+    }
     if (snapshot.renderer !== 'webgl') {
       throw new Error(`C559 ${LANE}/${definition.id} renderer is ${snapshot.renderer}`);
     }
@@ -155,6 +193,8 @@ const captureCases = async (page: Page): Promise<CaptureRecord[]> => {
       cameraSource: snapshot.cameraSource,
       renderer: snapshot.renderer,
       viewport,
+      pixelWidth: pixels.width,
+      pixelHeight: pixels.height,
       entityTextureFingerprint: hashBytes(Buffer.from(JSON.stringify(textures))),
       sha256: hashFile(path),
     });
@@ -172,6 +212,14 @@ const writeAfterEvidence = async (records: readonly CaptureRecord[]): Promise<vo
     const afterRecord = records.find((record) => record.id === definition.id);
     if (!beforeRecord || !afterRecord) {
       throw new Error(`C-559 missing before/after record for ${definition.id}`);
+    }
+    if (
+      beforeRecord.viewport.width !== afterRecord.viewport.width ||
+      beforeRecord.viewport.height !== afterRecord.viewport.height ||
+      beforeRecord.pixelWidth !== afterRecord.pixelWidth ||
+      beforeRecord.pixelHeight !== afterRecord.pixelHeight
+    ) {
+      throw new Error(`C-559 before/after capture sizes differ for ${definition.id}`);
     }
     execFileSync(
       'magick',
@@ -212,27 +260,28 @@ const writeAfterEvidence = async (records: readonly CaptureRecord[]): Promise<vo
   ].join('\n');
   await writeFile(join(EVIDENCE_DIR, 'index.md'), index);
   const images = byLane.map((record) => join(EVIDENCE_DIR, record.lane, record.file));
+  const sheetPath = join(EVIDENCE_DIR, 'sheet.png');
   execFileSync(
     'magick',
-    [
-      'montage',
-      '-label',
-      '%t',
-      '-tile',
-      '3x4',
-      '-geometry',
-      '640x360+12+24',
-      ...images,
-      join(EVIDENCE_DIR, 'sheet.png'),
-    ],
+    ['montage', '-label', '%t', '-tile', '3x4', '-geometry', '640x360+12+24', ...images, sheetPath],
     { stdio: 'inherit' },
   );
+  const evidenceFiles = [
+    ...images,
+    ...CASES.map((definition) => join(EVIDENCE_DIR, `pair-${definition.id}.png`)),
+    sheetPath,
+  ];
+  const checksums = evidenceFiles
+    .map((path) => `${hashFile(path)}  ${path.slice(EVIDENCE_DIR.length + 1)}`)
+    .join('\n');
+  await writeFile(join(EVIDENCE_DIR, 'checksums.sha256'), `${checksums}\n`);
 };
 
 const main = async (): Promise<void> => {
   if (LANE !== 'before' && LANE !== 'after') {
     throw new Error(`C559_LANE must be before or after, got ${LANE}`);
   }
+  await rm(join(EVIDENCE_DIR, LANE), { force: true, recursive: true });
   await mkdir(join(EVIDENCE_DIR, LANE), { recursive: true });
   const browser = await chromium.launch({
     headless: true,
@@ -264,11 +313,12 @@ const main = async (): Promise<void> => {
   }
   const graphics = { renderer: 'webgl', entityTextureGuard: ENTITY_TEXTURE_GUARD_POLICY };
   const manifest = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     lane: LANE,
     command: `C559_LANE=${LANE} C559_LANE_ROOT=${LANE_ROOT} C559_CLIENT_URL=${CLIENT_URL} bun run --cwd apps/e2e scripts/capture_c559_semantic_terrain.ts`,
     artifactRoot: LANE_ROOT,
     commit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: LANE_ROOT, encoding: 'utf8' }).trim(),
+    worktree: worktreeState(),
     graphics,
     artifacts: artifactHashes(),
     captures: records,

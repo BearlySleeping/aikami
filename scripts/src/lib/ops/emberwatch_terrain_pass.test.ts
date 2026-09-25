@@ -432,9 +432,7 @@ const readLayer = (value: unknown, name: string): Record<string, unknown> => {
   if (!isRecord(value) || !Array.isArray(value.layers)) {
     throw new Error('Map JSON has no layers array');
   }
-  const layer = value.layers.find(
-    (candidate) => isRecord(candidate) && candidate.name === name,
-  );
+  const layer = value.layers.find((candidate) => isRecord(candidate) && candidate.name === name);
   if (!isRecord(layer)) {
     throw new Error(`Map JSON has no ${name} layer`);
   }
@@ -834,10 +832,10 @@ describe('C-559 semantic terrain edges', () => {
   test('crossing approach is asymmetric, bridge-aligned, and not the rejected 5x2 slab', () => {
     const { map } = EMBERWATCH_MAP_BUILDERS.village();
     const expectedDirtColumnsByRow = new Map<number, number[]>([
-      [9, [35, 36, 37, 38, 39, 40]],
-      [10, [36, 37, 38, 39, 40]],
-      [11, [37, 38, 40]],
-      [12, [38, 39, 40]],
+      [9, [36, 37, 38]],
+      [10, [37, 38, 39]],
+      [11, [38, 39]],
+      [12, [39, 40]],
       [13, [39, 40]],
     ]);
     for (const [row, expectedColumns] of expectedDirtColumnsByRow) {
@@ -854,7 +852,8 @@ describe('C-559 semantic terrain edges', () => {
         G.DIRT,
       );
     }
-    expect(expectedDirtColumnsByRow.get(11)).not.toContain(39);
+    expect(expectedDirtColumnsByRow.get(9)).not.toContain(35);
+    expect(expectedDirtColumnsByRow.get(9)).not.toContain(40);
   });
 
   test('placed ward-square composites keep the C-552 perceptual boundary bound', () => {

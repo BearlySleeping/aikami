@@ -8828,6 +8828,56 @@
           ]
         },
         {
+          "id": 35,
+          "type": "prop",
+          "x": 416,
+          "y": 512,
+          "width": 0,
+          "height": 0,
+          "properties": [
+            {
+              "name": "propId",
+              "type": "string",
+              "value": "shrine_perimeter_post_w"
+            },
+            {
+              "name": "propName",
+              "type": "string",
+              "value": "Perimeter Post"
+            },
+            {
+              "name": "frame",
+              "type": "string",
+              "value": "prop_support.png"
+            }
+          ]
+        },
+        {
+          "id": 36,
+          "type": "prop",
+          "x": 832,
+          "y": 512,
+          "width": 0,
+          "height": 0,
+          "properties": [
+            {
+              "name": "propId",
+              "type": "string",
+              "value": "shrine_perimeter_post_e"
+            },
+            {
+              "name": "propName",
+              "type": "string",
+              "value": "Perimeter Post"
+            },
+            {
+              "name": "frame",
+              "type": "string",
+              "value": "prop_support.png"
+            }
+          ]
+        },
+        {
           "id": 30,
           "type": "prop",
           "x": 544,

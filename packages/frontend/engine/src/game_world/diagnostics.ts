@@ -11,6 +11,9 @@
 // leaf collaborator the facade can call from any scope.
 // ---------------------------------------------------------------------------
 
+import { ContentIdentitySnapshotSchema } from '@aikami/schemas';
+import type { ContentIdentitySnapshot } from '@aikami/types';
+import { Value } from 'typebox/value';
 import { isDevelopmentModePublic } from '../../../configs/src/lib/public_mode.ts';
 // Type-only: erased at build time, so this module stays runtime-free of the
 // rendering layer while keeping the published shape in lockstep with it.
@@ -20,6 +23,7 @@ import { AUTHORING_OVERLAY_LAYERS, type AuthoringOverlayLayer } from './authorin
 /** Keys the engine owns on `window` for E2E/devtools inspection. */
 const DEBUG_GLOBAL_KEY = '__AIKAMI_DEBUG__';
 const ENGINE_STATE_GLOBAL_KEY = '__AIKAMI_ENGINE_STATE__';
+const CONTENT_IDENTITY_GLOBAL_KEY = '__AIKAMI_CONTENT_IDENTITY__';
 
 /** Shape of `window.__AIKAMI_ENGINE_STATE__` consumed by Playwright. */
 export type EngineStateSnapshot = {
@@ -139,6 +143,35 @@ export const resetVisualScreenshotModeCache = (): void => {
  */
 export const isAuthoringOverlayMode = (): boolean =>
   isDevelopmentModePublic() && readSearchParam('authoring') === 'true';
+
+/** True only for an explicit content-identity request in a recognized dev mode. */
+export const isContentIdentityOverlayMode = (): boolean =>
+  isDevelopmentModePublic() && readSearchParam('contentIdentity') === 'true';
+
+/** Publishes the exact manifest/release identity observed by the running client. */
+export const publishContentIdentity = (identity: ContentIdentitySnapshot): void => {
+  const target = windowRecord();
+  if (!target || !Value.Check(ContentIdentitySnapshotSchema, identity)) {
+    return;
+  }
+  target[CONTENT_IDENTITY_GLOBAL_KEY] = identity;
+};
+
+/** Reads the validated loaded-content identity for overlays and evidence. */
+export const readContentIdentity = (): ContentIdentitySnapshot | undefined => {
+  const value = windowRecord()?.[CONTENT_IDENTITY_GLOBAL_KEY];
+  return Value.Check(ContentIdentitySnapshotSchema, value)
+    ? (value as ContentIdentitySnapshot)
+    : undefined;
+};
+
+/** Removes the process-global content identity when the engine owner is destroyed. */
+export const clearContentIdentity = (): void => {
+  const target = windowRecord();
+  if (target) {
+    delete target[CONTENT_IDENTITY_GLOBAL_KEY];
+  }
+};
 
 /**
  * The authoring overlay layers to draw.

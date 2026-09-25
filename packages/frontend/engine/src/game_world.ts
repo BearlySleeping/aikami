@@ -14,6 +14,7 @@ import { unprojectScreenPoint } from './frame_pacing.ts';
 import { loadStaticVisual } from './game_world/actor_visual_transport.ts';
 import { CombatSelectionHighlights } from './game_world/combat_selection_highlights.ts';
 import { setupGameCommandForwarding } from './game_world/command_forwarding.ts';
+import { syncContentIdentityOverlay } from './game_world/content_identity_overlay.ts';
 import { DebugSceneController } from './game_world/debug_scene_controller.ts';
 import {
   exposeEngineState,
@@ -1997,6 +1998,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         debugGrid: this._isE2ETestMode(),
       });
     }
+    this._app && syncContentIdentityOverlay({ stage: this._app.stage });
 
     return true;
   }

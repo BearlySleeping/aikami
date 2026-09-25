@@ -7,8 +7,11 @@ import { randomUUID } from 'node:crypto';
 import { existsSync, realpathSync } from 'node:fs';
 import { mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, join, relative, resolve, sep } from 'node:path';
+import { ContentIdentitySnapshotSchema } from '@aikami/schemas';
+import type { ContentIdentitySnapshot } from '@aikami/types';
 import { type BrowserContext, chromium, type Page } from 'playwright';
 import sharp from 'sharp';
+import { Value } from 'typebox/value';
 import {
   type EmberwatchHouseCell,
   type EmberwatchHouseMapId,
@@ -99,7 +102,7 @@ const VALUE_FLAGS = new Set([
   ...ASSET_FLAGS,
   ...ROOT_FLAGS,
 ]);
-const BOOLEAN_FLAGS = new Set(['allow-remote-origin', 'help']);
+const BOOLEAN_FLAGS = new Set(['allow-remote-origin', 'content-identity-overlay', 'help']);
 
 type CliOptions = {
   contract: string;
@@ -115,6 +118,7 @@ type CliOptions = {
   cell: EmberwatchHouseCell;
   viewport: EvidenceViewport;
   allowRemoteOrigin: boolean;
+  contentIdentityOverlay: boolean;
 };
 
 type ParsedArguments = {
@@ -143,10 +147,12 @@ type CaptureLaneOptions = {
   label: string;
   stageDir: string;
   context: BrowserContext;
+  contentIdentityOverlay: boolean;
 };
 
 type CaptureLaneResult = {
   record: EvidenceCaptureRecord;
+  loadedContent: ContentIdentitySnapshot | undefined;
   pageErrors: readonly string[];
 };
 
@@ -158,7 +164,7 @@ const usage = (): string => `Usage:
     [--before-root <path>] [--after-root <path>] \\
     [--id <id>] [--label <label>] [--map <map-id>] \\
     [--cell <column,row>] [--viewport <width>x<height>] \\
-    [--allow-remote-origin]
+    [--content-identity-overlay] [--allow-remote-origin]
 
 The asset origins must be loopback by default. They are inputs to the existing
 read-only local_asset_origin published/candidate plane; this command never
@@ -403,6 +409,7 @@ const buildCliOptions = (args: readonly string[]): CliOptions | undefined => {
       height: firstValue(values, ['height']),
     }),
     allowRemoteOrigin: booleans.has('allow-remote-origin'),
+    contentIdentityOverlay: booleans.has('content-identity-overlay'),
   };
 };
 
@@ -523,7 +530,7 @@ const captureLane = async (options: CaptureLaneOptions): Promise<CaptureLaneResu
   try {
     await page.setViewportSize(options.viewport);
     const house = new EmberwatchHousePage(page, options.clientUrl);
-    await house.goto({ gameHour: 12 });
+    await house.goto({ gameHour: 12, contentIdentity: options.contentIdentityOverlay });
     await house.loadMapAt(options.mapId, options.cell);
     await page.waitForTimeout(300);
     await mkdir(dirname(path), { recursive: true });
@@ -531,9 +538,20 @@ const captureLane = async (options: CaptureLaneOptions): Promise<CaptureLaneResu
     // capture method repeats both checks as a final fail-closed boundary.
     await house.requireWebGL();
     const entityTextures = await house.requireResolvedEntityTextures();
-    const snapshot = await house.capture(path);
+    const snapshot = await house.capture(path, {
+      clip: { x: 0, y: 0, width: options.viewport.width, height: options.viewport.height },
+    });
     if (snapshot.renderer !== 'webgl') {
       throw new Error(`Evidence renderer was ${snapshot.renderer}, expected webgl`);
+    }
+    const imageMetadata = await sharp(path).metadata();
+    if (
+      imageMetadata.width !== options.viewport.width ||
+      imageMetadata.height !== options.viewport.height
+    ) {
+      throw new Error(
+        `Evidence ${options.lane} pixels ${imageMetadata.width ?? 0}x${imageMetadata.height ?? 0} do not match viewport ${options.viewport.width}x${options.viewport.height}`,
+      );
     }
     if (snapshot.mapId !== options.mapId) {
       throw new Error(`Evidence loaded ${snapshot.mapId}, expected ${options.mapId}`);
@@ -544,6 +562,21 @@ const captureLane = async (options: CaptureLaneOptions): Promise<CaptureLaneResu
       otherAssetOrigin: options.otherAssetOrigin,
       requestUrls,
     });
+    const loadedContentValue = await page.evaluate(() => {
+      const globals = window as unknown as Record<string, unknown>;
+      return globals.__AIKAMI_CONTENT_IDENTITY__;
+    });
+    if (
+      loadedContentValue !== undefined &&
+      !Value.Check(ContentIdentitySnapshotSchema, loadedContentValue)
+    ) {
+      throw new Error(`Evidence ${options.lane} loaded-content identity is invalid`);
+    }
+    if (options.contentIdentityOverlay && loadedContentValue === undefined) {
+      throw new Error(
+        `Evidence ${options.lane} requested the content identity overlay but none was published`,
+      );
+    }
     const record = createEvidenceCaptureRecord({
       lane: options.lane,
       id: options.id,
@@ -562,10 +595,16 @@ const captureLane = async (options: CaptureLaneOptions): Promise<CaptureLaneResu
       actualCameraCell: formatEvidenceCell(snapshot.camera),
       renderer: 'webgl',
       viewport: options.viewport,
+      pixelWidth: imageMetadata.width ?? 0,
+      pixelHeight: imageMetadata.height ?? 0,
       entityTextureFingerprint: sha256Hex(JSON.stringify(entityTextures)),
       sha256: sha256Hex(await readFile(path)),
     });
-    return { record, pageErrors };
+    return {
+      record,
+      loadedContent: loadedContentValue as ContentIdentitySnapshot | undefined,
+      pageErrors,
+    };
   } finally {
     await page.close();
   }
@@ -649,6 +688,7 @@ const publishEvidence = async (options: {
       ],
     });
     const records: EvidenceCaptureRecord[] = [];
+    const loadedContent: Partial<Record<EvidenceLane, ContentIdentitySnapshot | undefined>> = {};
     const pageErrors: string[] = [];
     try {
       const context = await browser.newContext({
@@ -670,8 +710,10 @@ const publishEvidence = async (options: {
           label: options.options.label,
           stageDir,
           context,
+          contentIdentityOverlay: false,
         });
         records.push(before.record);
+        loadedContent.before = before.loadedContent;
         pageErrors.push(...before.pageErrors);
         const after = await captureLane({
           lane: 'after',
@@ -687,8 +729,10 @@ const publishEvidence = async (options: {
           label: options.options.label,
           stageDir,
           context,
+          contentIdentityOverlay: options.options.contentIdentityOverlay,
         });
         records.push(after.record);
+        loadedContent.after = after.loadedContent;
         pageErrors.push(...after.pageErrors);
       } finally {
         await context.close();
@@ -723,6 +767,10 @@ const publishEvidence = async (options: {
         },
       },
       captures: records,
+      loadedContent: {
+        before: loadedContent.before,
+        after: loadedContent.after,
+      },
       entityTexturePolicy: ENTITY_TEXTURE_GUARD_POLICY,
       remoteOriginAllowed: options.options.allowRemoteOrigin,
     });

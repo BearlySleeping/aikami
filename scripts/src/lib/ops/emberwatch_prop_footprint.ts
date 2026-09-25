@@ -16,11 +16,19 @@ const MANIFEST_PATH = resolve(
 
 type UnknownRecord = Record<string, unknown>;
 
-type PropFootprint = {
+export type PropFootprint = {
   width: number;
   height: number;
   anchorX: number;
   anchorY: number;
+};
+
+export type PropFootprintAudit = PropFootprint & {
+  collision: { width: number; height: number } | undefined;
+  visualCellCount: number;
+  collisionCellCount: number;
+  originCovered: boolean;
+  styleClass: string;
 };
 
 const isRecord = (value: unknown): value is UnknownRecord => value instanceof Object;
@@ -71,6 +79,32 @@ export const readPropFootprint = (propId: string): PropFootprint => {
  * Origins use the same world-pixel convention as `placeProp`; the rectangle is
  * anchored at the prop's declared point and expanded toward its top-left.
  */
+/** Read a prop's visual and collision footprints for authoring/evidence review. */
+export const readPropFootprintAudit = (propId: string): PropFootprintAudit => {
+  const definition = readManifestProps()[propId];
+  if (definition === undefined) {
+    throw new Error(`emberwatch_prop_footprint: missing prop "${propId}"`);
+  }
+  const footprint = readPropFootprint(propId);
+  const collisionValue = isRecord(definition.collision) ? definition.collision : undefined;
+  const collisionWidth = positiveNumber(collisionValue?.width);
+  const collisionHeight = positiveNumber(collisionValue?.height);
+  const collision =
+    collisionWidth === undefined || collisionHeight === undefined
+      ? undefined
+      : { width: collisionWidth, height: collisionHeight };
+  const cellCount = (width: number, height: number): number =>
+    Math.ceil(width / 32) * Math.ceil(height / 32);
+  return {
+    ...footprint,
+    collision,
+    visualCellCount: cellCount(footprint.width, footprint.height),
+    collisionCellCount: collision === undefined ? 0 : cellCount(collision.width, collision.height),
+    originCovered: collision !== undefined,
+    styleClass: typeof definition.styleClass === 'string' ? definition.styleClass : 'unclassified',
+  };
+};
+
 export const propFootprintCells = (options: {
   propId: string;
   x: number;

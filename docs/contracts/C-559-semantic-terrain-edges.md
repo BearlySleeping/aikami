@@ -7,7 +7,7 @@ github:
   issue_number: null
   issue_url: null
   project_item_id: null
-  pr_url: null
+  pr_url: "https://github.com/BearlySleeping/aikami/pull/403"
 created_at: "2026-09-24T20:50:00Z"
 ---
 
@@ -18,6 +18,15 @@ created_at: "2026-09-24T20:50:00Z"
 Close the C-552 report-only gap where baked outdoor path, stone, and sand cells had no semantic terrain identity. Resolve those authored material boundaries through corner16 terrain while preserving origin/main water, bridge visuals, interior output, collision, locked identities, and save-clamp behavior.
 
 C-559 was unused at implementation start: no `docs/contracts/C-559-*` file existed.
+
+## Metadata
+
+| Field | Value |
+|---|---|
+| **Status** | in_progress |
+| **Promotion** | — |
+| **Docs Impact** | internal — terrain authoring and evidence. |
+| **Production Surface** | production `/game`; Emberwatch content generation. |
 
 ## Scope and constraints
 
@@ -122,8 +131,8 @@ Review identified three failures:
 | `bun run validate:content` | pass — all NPC appearances valid and in runtime parity |
 | `bun run emberwatch:validate` | pass — five maps, 0 warnings, 0 blockers |
 | `bun run emberwatch:locked-ids` | pass — locked identities unchanged |
-| `validate` (`test: false`) | pass — constants, e2e, frontend-engine, scripts fix/typecheck/guards |
-| same-camera capture | pass technically — six WebGL captures under `/tmp/opencode/c559-evidence/after/`; crossing screenshot VLM support score 90/100, with the kink noted as subtle; not human acceptance |
+| Moon validation | pass — `scripts:validate`, `e2e:validate`, `constants:validate`, `frontend-engine:validate` |
+| same-camera capture | pass technically — six before/after pairs under `.evidence/C-559/`; every PNG is WebGL/entity-texture guarded, dimensions match the requested viewport, all 19 checksums verify, and manifests pin app/content/atlas hashes plus the dirty diff; not human acceptance |
 
 Additional origin/main comparisons:
 
@@ -166,3 +175,52 @@ Additional origin/main comparisons:
 - Human review must decide whether the amended crossing contour is visibly better in the same-camera capture. This report does not claim acceptance.
 - The path family intentionally shares the calm cobble material; a later contract may introduce a distinct path material without changing this pass.
 - Local evidence generation and validation do not publish a release.
+
+## Execution Report
+
+### Summary
+
+The rejected first pass was reduced to its actual scope: outdoor path, stone, and sand semantic transitions. Water and bridge rendering are restored to origin/main, interiors are fingerprinted against origin/main, and the dedicated landing terrain family was removed. The crossing now uses a narrow asymmetric dirt contour that begins under the three bridge columns and shifts into the existing path. Same-camera evidence is complete and machine-verifiable; human visual acceptance remains open.
+
+### AC Status
+
+| AC | Status | Notes |
+|---|---|---|
+| AC-1 | ✅ | Outdoor path/stone/sand semantics added; water and bridge remain outside C-559 and match main behavior. |
+| AC-2 | ✅ | Inn and merchant semantic/layer fingerprints match main; only atlas dimensions differ. |
+| AC-3 | ⚠️ | Existing dirt contour and guarded same-camera evidence are ready; human acceptance pending. |
+| AC-4 | ✅ | All five collision layers and locked identities remain unchanged. |
+| AC-5 | ✅ | Canonical seven-step generation, focused tests/typechecks, content validation, and locked-ID validation pass. |
+
+### Files Created
+
+| File | Purpose |
+|---|---|
+| `docs/contracts/C-559-semantic-terrain-edges.md` | Contract, rejected-pass amendment, and execution evidence. |
+| `apps/e2e/scripts/capture_c559_semantic_terrain.ts` | Repeatable WebGL/entity-guarded before/after capture lane. |
+
+### Files Modified
+
+| File | Change |
+|---|---|
+| `scripts/src/lib/ops/generate_emberwatch_maps.ts` | Applies C-559 semantic mappings only to canonical outdoor maps. |
+| `scripts/src/lib/ops/emberwatch_map_village.ts` | Authors the narrow asymmetric bridge-to-path dirt contour. |
+| `scripts/src/lib/ops/generate_emberwatch_{tables,corner_painters,terrain_frames}.ts` | Appends the path family and keeps water/bridge output unchanged. |
+| `content/packs/emberwatch/{manifest.json,maps/*.json}` | Regenerated canonical path-aware outdoor maps. |
+| `scripts/src/lib/ops/*test.ts` | Pins interior exactness, bridge ownership, crossing geometry, and generated output. |
+| `apps/e2e/src/pom/emberwatch_house_page.ts` | Supports all five production-route evidence maps. |
+| `.gitignore` | Keeps the local `.evidence/<contract>/` lane untracked. |
+
+### Deviations from Spec
+
+- The first pass's `implemented` status and visual claims were rejected and superseded. Water tuning, bridge semantic ownership, and the dedicated landing family are removed rather than iterated.
+- VLM output is supporting diagnosis only. Conflicting crossing scores are not treated as acceptance; the side-by-side capture is the human review artifact.
+
+### Test Results
+
+- Focused scripts: 58 passed, 0 failed, 14,265 assertions.
+- Frontend engine content audit: 48 passed, 0 failed, 59,001 assertions.
+- Typecheck: scripts, e2e, constants, and frontend-engine passed.
+- Content: canonical seven-step generation passed; five-map validation passed with 0 warnings and 0 blockers; locked identities unchanged.
+- Full gate: `bun moon ci --base=origin/main` — 81 completed, 2 skipped, 0 failed.
+- Visual: 6 same-camera before/after pairs; WebGL and visible-entity guards passed; 19/19 evidence checksums valid; candidate manifest SHA-256 is recorded in the after manifest. Merchant and inn preserve interior materials; crossing remains explicitly pending human review.

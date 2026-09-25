@@ -53,6 +53,7 @@ type PropDef = {
   anchor?: { x: number; y: number };
   collision?: { type: string; width?: number; height?: number; radius?: number };
   shadow?: { kind: string; width?: number; height?: number };
+  styleClass?: string;
 };
 
 type ManifestShape = { props?: Record<string, PropDef> };
@@ -70,6 +71,7 @@ type Row = {
   anchor: { x: number; y: number };
   collision: PropDef['collision'] | null;
   shadow: PropDef['shadow'] | null;
+  styleClass: string;
 };
 
 type SpawnObject = {
@@ -178,6 +180,7 @@ const buildRow = async (
     anchor: propDef?.anchor ?? { x: 0.5, y: 1 },
     collision: propDef?.collision ?? null,
     shadow: propDef?.shadow ?? null,
+    styleClass: propDef?.styleClass ?? 'unclassified',
   };
 };
 
@@ -216,11 +219,12 @@ const renderRow = async (row: Row): Promise<{ input: Buffer; top: number; left: 
   const labelHeight = 20;
   const propW = Math.max(1, Math.round(row.worldWidth)) * ZOOM;
   const propH = Math.max(1, Math.round(row.worldHeight)) * ZOOM;
+  const surfacesW = propW * 3 + gap * 2;
   const tileW = TILE_SIZE * ZOOM;
   const charW = CHARACTER_WIDTH * ZOOM;
   const charH = CHARACTER_HEIGHT * ZOOM;
   const contentH = Math.max(propH, charH);
-  const rowW = propW + gap + tileW + gap + charW;
+  const rowW = surfacesW + gap + tileW + gap + charW;
   const rowH = contentH + labelHeight;
 
   const propImage = await sharp(join(sourceDir, row.frame))
@@ -230,7 +234,7 @@ const renderRow = async (row: Row): Promise<{ input: Buffer; top: number; left: 
 
   // A neutral checkerboard so transparent art is visible.
   const checker = Buffer.from(
-    `<svg width="${rowW}" height="${rowH}" xmlns="http://www.w3.org/2000/svg"><rect width="${rowW}" height="${rowH}" fill="#20242a"/></svg>`,
+    `<svg width="${rowW}" height="${rowH}" xmlns="http://www.w3.org/2000/svg"><rect width="${rowW}" height="${rowH}" fill="#20242a"/><rect width="${propW}" height="${rowH}" fill="#20242a"/><rect x="${propW + gap}" width="${propW}" height="${rowH}" fill="#f8fafc"/><rect x="${(propW + gap) * 2}" width="${propW}" height="${rowH}" fill="#111827"/></svg>`,
   );
   const tile = Buffer.from(
     `<svg width="${tileW}" height="${tileW}" xmlns="http://www.w3.org/2000/svg"><rect width="${tileW}" height="${tileW}" fill="#4a8f3c" stroke="#2c5a24" stroke-width="2"/></svg>`,
@@ -241,12 +245,14 @@ const renderRow = async (row: Row): Promise<{ input: Buffer; top: number; left: 
 
   const composited = await sharp(checker)
     .composite([
-      { input: tile, top: contentH - tileW, left: propW + gap },
-      { input: character, top: contentH - charH, left: propW + gap + tileW + gap },
+      { input: tile, top: contentH - tileW, left: surfacesW + gap },
+      { input: character, top: contentH - charH, left: surfacesW + gap + tileW + gap },
       { input: propImage, top: contentH - propH, left: 0 },
+      { input: propImage, top: contentH - propH, left: propW + gap },
+      { input: propImage, top: contentH - propH, left: (propW + gap) * 2 },
       {
         input: svgLabel(
-          `${row.frame}  src ${row.sourceWidth}×${row.sourceHeight}  world ${Math.round(row.worldWidth)}×${Math.round(row.worldHeight)}`,
+          `${row.frame}  [${row.styleClass}]  src ${row.sourceWidth}×${row.sourceHeight}  world ${Math.round(row.worldWidth)}×${Math.round(row.worldHeight)}`,
           rowW,
         ),
         top: 2,

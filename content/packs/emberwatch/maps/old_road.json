@@ -15885,6 +15885,56 @@
           ]
         },
         {
+          "id": 30,
+          "type": "prop",
+          "x": 1696,
+          "y": 224,
+          "width": 0,
+          "height": 0,
+          "properties": [
+            {
+              "name": "propId",
+              "type": "string",
+              "value": "waystation_perimeter_post_w"
+            },
+            {
+              "name": "propName",
+              "type": "string",
+              "value": "Perimeter Post"
+            },
+            {
+              "name": "frame",
+              "type": "string",
+              "value": "prop_support.png"
+            }
+          ]
+        },
+        {
+          "id": 31,
+          "type": "prop",
+          "x": 2048,
+          "y": 448,
+          "width": 0,
+          "height": 0,
+          "properties": [
+            {
+              "name": "propId",
+              "type": "string",
+              "value": "waystation_perimeter_post_e"
+            },
+            {
+              "name": "propName",
+              "type": "string",
+              "value": "Perimeter Post"
+            },
+            {
+              "name": "frame",
+              "type": "string",
+              "value": "prop_support.png"
+            }
+          ]
+        },
+        {
           "id": 23,
           "type": "prop",
           "x": 1024,
