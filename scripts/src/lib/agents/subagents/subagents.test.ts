@@ -4,12 +4,20 @@ import { describe, expect, it } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { messageRun } from './control.ts';
 import { parseLine, reduceEvent, type StreamState } from './events.ts';
 import { parseModelCatalog, pickStealthModel, resolveModel } from './models.ts';
 import { splitTitle } from './prompt.ts';
 import { decideReview, parseNumstat } from './review_policy.ts';
 import { buildSpec } from './spawn.ts';
-import { emptyUsage, patchState, runDir, writeState } from './store.ts';
+import {
+  emptyUsage,
+  listSteeringMessages,
+  patchState,
+  runDir,
+  writeSpec,
+  writeState,
+} from './store.ts';
 import { buildPiArgs } from './supervise.ts';
 import type { SubagentSpec } from './types.ts';
 
@@ -235,6 +243,76 @@ describe('run state and timeout', () => {
       const next = patchState(repoRoot, id, { status: 'succeeded', error: undefined });
       expect(next.status).toBe('killed');
       expect(next.error).toBe('killed by captain');
+    } finally {
+      rmSync(repoRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('durably queues steering for a running subagent without launching another process', async () => {
+    const repoRoot = mkdtempSync(join(tmpdir(), 'subagent-steering-'));
+    const id = 'sa-steer-0000';
+    const spec: SubagentSpec = {
+      id,
+      name: 'steer',
+      kind: 'read',
+      task: 'inspect',
+      model: 'openrouter/stealth/space-bunny-alpha',
+      modelSource: 'explicit',
+      skills: [],
+      noSkillDiscovery: false,
+      excludeTools: [],
+      base: 'main',
+      install: false,
+      pr: {
+        enabled: false,
+        base: 'main',
+        draft: false,
+        review: 'never',
+        autofix: false,
+        reviewTimeoutMs: 1000,
+      },
+      timeoutMs: 1000,
+      herdr: false,
+      repoRoot,
+      createdAt: new Date().toISOString(),
+    };
+    try {
+      writeSpec(spec);
+      writeState(repoRoot, {
+        id,
+        status: 'running',
+        updatedAt: '',
+        usage: emptyUsage(),
+        rounds: 0,
+        piSessionId: 'session-1',
+      });
+
+      const state = await messageRun({
+        repoRoot,
+        id,
+        text: 'Also inspect the failure path.',
+        messageId: 'message-1',
+      });
+
+      expect(state.status).toBe('running');
+      expect(state.queuedMessages).toBe(1);
+      expect(state.activity).toContain('steering queued');
+      expect(listSteeringMessages(repoRoot, id)).toEqual([
+        expect.objectContaining({
+          id: 'message-1',
+          text: 'Also inspect the failure path.',
+          delivery: 'steer',
+        }),
+      ]);
+
+      const retried = await messageRun({
+        repoRoot,
+        id,
+        text: 'Also inspect the failure path.',
+        messageId: 'message-1',
+      });
+      expect(retried.queuedMessages).toBe(1);
+      expect(listSteeringMessages(repoRoot, id)).toHaveLength(1);
     } finally {
       rmSync(repoRoot, { recursive: true, force: true });
     }

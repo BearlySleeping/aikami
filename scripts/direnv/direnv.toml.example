@@ -1,0 +1,9 @@
+# Copy to ~/.config/direnv/direnv.toml on a contributor machine that wants
+# every AiKami Herdr worktree to be trusted automatically.
+#
+# `prefix` is intentionally limited to AiKami's managed worktree hierarchy.
+# Anyone able to write below this directory can execute code through direnv, so
+# do not widen it to all of ~/.herdr or a repository parent that contains
+# unrelated projects.
+[whitelist]
+prefix = ["~/.herdr/worktrees/aikami"]

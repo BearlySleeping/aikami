@@ -32,19 +32,22 @@ import {
   realpathSync,
   rmSync,
   symlinkSync,
-  writeFileSync,
 } from 'node:fs';
 import { join, resolve } from 'node:path';
 import {
+  baseRefName,
   commitAll,
+  normalizeBaseRef,
   pushBranch,
   remoteBranchExists,
+  resolveBaseRef,
   runGit,
   sanitizeBranchName,
 } from '../agents/git_worktree.ts';
-import { hasDirenv } from '../env/direnv_detect';
 import { reportInfraIssue } from '../ops/infra_report.ts';
 import { findWorkspace, herdr, herdrJson, TASK_WORKSPACE_PREFIX } from './session.ts';
+import { bootstrapWorktreeContent, type ContentBootstrapResult } from './worktree_content.ts';
+import { prepareWorktreeEnvironment } from './worktree_environment.ts';
 import { missingWorktreeSeeds, seedWorktreeFiles } from './worktree_seeds.ts';
 import {
   assertManagedWorktreeTarget,
@@ -104,6 +107,8 @@ export type BootstrapOptions = {
   seed?: boolean;
   /** Install timeout in ms (default 180_000 — cold worktrees are slow). */
   installTimeoutMs?: number;
+  /** Generate the canonical Emberwatch content plane (default true). */
+  content?: boolean;
 };
 
 export type BootstrapResult = {
@@ -115,6 +120,8 @@ export type BootstrapResult = {
    * servers / E2E lanes will boot without required environment.
    */
   missingSeeds: string[];
+  /** Content phase outcome when the canonical generators were requested. */
+  content?: ContentBootstrapResult;
 };
 
 /** Reject a created worktree before callers store or launch from incomplete state. */
@@ -170,6 +177,8 @@ export type PullRequestOptions = {
   title: string;
   body?: string;
   draft?: boolean;
+  /** Repository root used to resolve a local/remote base before invoking gh. */
+  repoRoot?: string;
 };
 
 // ── Constants ──────────────────────────────────────────────
@@ -296,19 +305,21 @@ const ensureGitRepo = (repoRoot: string): void => {
 /**
  * Create a herdr-native Git Worktree.
  *
- * Branches from `origin/<base>` (fetched fresh) so the worktree NEVER
- * includes uncommitted work or unpushed commits from the root checkout —
- * critical when another session is refactoring on main concurrently.
+ * Branches from the resolved base ref (local first for a bare name, or an
+ * explicitly requested `origin/<base>`) after fetching origin. A local base
+ * intentionally honors the caller's existing branch; callers that need a
+ * clean remote baseline can pass `origin/<base>` explicitly. The worktree
+ * never carries uncommitted root-checkout changes.
  *
  * The worktree is automatically opened as a herdr workspace grouped with
  * the parent repo. Returns workspace id + checkout path + root pane id.
  *
- * 🔴 Bootstraps by default (seed files + `bun install`). A raw herdr checkout
- * has none of the gitignored env files, so a worktree that skips bootstrap
- * silently boots in the wrong mode (or fails site build / the visual runner)
- * — see worktree_seeds.ts. Pass `bootstrap: false` only when the caller
- * bootstraps itself, and prefer the default so no creation path can produce a
- * half-provisioned worktree.
+ * 🔴 Bootstraps by default (direnv, seed files, `bun install`, and canonical
+ * content). A raw herdr checkout has none of the gitignored env files, so a
+ * worktree that skips bootstrap silently boots in the wrong mode (or fails
+ * site build / the visual runner) — see worktree_seeds.ts. Pass `bootstrap:
+ * false` only when the caller bootstraps itself, and prefer the default so no
+ * creation path can produce a half-provisioned worktree.
  */
 export const createWorktree = async (options: {
   slug: string;
@@ -328,6 +339,8 @@ export const createWorktree = async (options: {
   seed?: boolean;
   /** Passed to bootstrapWorktree: install timeout in ms. */
   installTimeoutMs?: number;
+  /** Passed to bootstrapWorktree: generate the canonical content plane. */
+  content?: boolean;
 }): Promise<TaskWorktree> => {
   ensureGitRepo(options.repoRoot);
   const slug = sanitizeBranchName(options.slug);
@@ -337,21 +350,17 @@ export const createWorktree = async (options: {
 
   const currentBranch = runGit('rev-parse --abbrev-ref HEAD', { cwd: options.repoRoot });
   const base = options.base ?? (currentBranch === 'HEAD' ? 'main' : currentBranch);
+  const normalizedBase = normalizeBaseRef(base);
 
-  // Fetch the base ref so the worktree starts from origin, not a dirty local.
+  // Fetch remote refs before resolution so an explicit origin/base can use a
+  // fresh value, while a bare branch still prefers an existing local branch.
   try {
     runGit('fetch origin', { cwd: options.repoRoot });
   } catch {
     // Non-fatal — may not have a remote configured.
   }
 
-  // Resolve origin/<base> first; fall back to the local ref.
-  let baseRef = `origin/${base}`;
-  try {
-    runGit(`rev-parse --verify ${baseRef}`, { cwd: options.repoRoot });
-  } catch {
-    baseRef = base;
-  }
+  const baseRef = resolveBaseRef(normalizedBase, { cwd: options.repoRoot });
 
   const branch = options.branch ?? `${TASK_BRANCH_PREFIX}${slug}`;
   const label = options.label ?? `${TASK_WORKSPACE_PREFIX}${slug}`;
@@ -408,6 +417,7 @@ export const createWorktree = async (options: {
         ...(options.installTimeoutMs === undefined
           ? {}
           : { installTimeoutMs: options.installTimeoutMs }),
+        ...(options.content === undefined ? {} : { content: options.content }),
       });
     } catch (error: unknown) {
       await removeWorktree({
@@ -510,16 +520,17 @@ export const findWorktreeByBranch = async (
  * Bootstrap a worktree checkout so pi, moon, bun, and dev servers work:
  *   1. skip-worktree for workspace-local tracked files (never in PRs) —
  *      applied FIRST, before anything writes to those paths
- *   2. .envrc delegating to the repo root (flake.nix is git-tracked there)
+ *   2. .envrc delegating to the repo root, followed by `direnv allow`
  *   3. .pi/npm/node_modules symlink (pi extensions deps)
  *   4. seed gitignored-but-required files (.env*, paraglide, .secrets)
  *   5. bun install --frozen-lockfile
+ *   6. verify dependencies and generate the canonical cached content plane
  *
  * Refuses to run when checkoutPath === repoRoot (see the guard below) —
  * this is a worktree-only bootstrap, never valid against the root checkout.
  */
 export const bootstrapWorktree = async (options: BootstrapOptions): Promise<BootstrapResult> => {
-  const { checkoutPath, repoRoot, seed = true } = options;
+  const { checkoutPath, repoRoot, seed = true, content: contentEnabled = true } = options;
   if (!existsSync(checkoutPath)) {
     throw new Error(`Cannot bootstrap missing checkout: ${checkoutPath}`);
   }
@@ -580,45 +591,7 @@ export const bootstrapWorktree = async (options: BootstrapOptions): Promise<Boot
   }
 
   // ── 2. .envrc — delegate to repo root where flake.nix is git-tracked ──
-  writeFileSync(
-    join(checkoutPath, '.envrc'),
-    `# Worktree direnv — delegate to repo root where flake.nix is Git-tracked
-source_env ${repoRoot}
-export CONTRACT_PIPELINE_WORKTREE=1
-`,
-  );
-  try {
-    execSync('direnv allow', {
-      encoding: 'utf-8',
-      stdio: ['pipe', 'pipe', 'pipe'],
-      cwd: checkoutPath,
-      timeout: 5000,
-      // Windows: hide the cmd.exe console window this spawn would otherwise flash.
-      windowsHide: true,
-    });
-  } catch (err: unknown) {
-    // direnv may not be installed — not fatal. The .envrc stays in place
-    // for machines that DO use direnv; everyone else runs on their own
-    // shell env (manual tool installs + .env.local fallback).
-    if (hasDirenv()) {
-      // direnv IS installed but `direnv allow` still failed — that's a real
-      // degradation (the worktree won't get the flake devShell env even
-      // though the tool is present), worth surfacing.
-      reportInfraIssue({
-        component: 'worktree_bootstrap',
-        operation: 'direnv allow',
-        error: err,
-        context: { checkoutPath },
-        cwd: repoRoot,
-      });
-    }
-  }
-  if (!hasDirenv()) {
-    console.log(
-      `ℹ️  direnv not installed — worktree runs with your shell env (no flake devShell). ` +
-        'Install tools manually or set up direnv + nix (`bun run setup`).',
-    );
-  }
+  prepareWorktreeEnvironment({ checkoutPath, repoRoot });
 
   // ── 3. .pi deps — symlink node_modules so pi + extensions resolve deps ──
   // `.pi/node_modules` is bun's resolution path when loading extension files
@@ -868,7 +841,13 @@ export CONTRACT_PIPELINE_WORKTREE=1
     }
   }
 
-  return { installed, missingSeeds };
+  // ── 7. Canonical local content plane ────────────────────────────────
+  // Content is generated after install so every generator sees the complete
+  // dependency tree. The helper owns the fingerprint/cache and refuses to
+  // publish a marker when generation changes Git status.
+  const content = contentEnabled ? await bootstrapWorktreeContent({ checkoutPath }) : undefined;
+
+  return { installed, missingSeeds, ...(content === undefined ? {} : { content }) };
 };
 
 /**
@@ -1083,8 +1062,9 @@ export const publishWorktree = async (
       // Non-fatal — ref may already be present locally.
     }
     let isAncestor = false;
+    const remoteHeadRef = `origin/${baseRefName(headBranch)}`;
     try {
-      runGit(`merge-base --is-ancestor origin/${headBranch} HEAD`, { cwd: checkoutPath });
+      runGit(`merge-base --is-ancestor ${remoteHeadRef} HEAD`, { cwd: checkoutPath });
       isAncestor = true;
     } catch {
       // Not an ancestor → divergence.
@@ -1123,13 +1103,20 @@ export const publishWorktree = async (
 export const openPullRequest = async (
   options: PullRequestOptions,
 ): Promise<{ prUrl: string; prNumber: string }> => {
+  const resolvedBase = options.repoRoot
+    ? resolveBaseRef(options.base, { cwd: options.repoRoot })
+    : normalizeBaseRef(options.base);
+  // gh's --base is a branch name. Passing a remote-qualified name makes its
+  // own remote-tracking lookup duplicate the remote; keep the Git resolution
+  // above, then remove only the remote qualifier for the API boundary.
+  const base = baseRefName(resolvedBase);
   const args = [
     'pr',
     'create',
     '--head',
     options.headBranch,
     '--base',
-    options.base,
+    base,
     '--title',
     options.title,
   ];
@@ -1173,6 +1160,7 @@ export const publishAndOpenPr = async (
     title: options.title,
     body: options.body,
     draft: options.draft,
+    repoRoot: options.repoRoot,
   });
   return { headBranch, headCommit, prUrl, prNumber };
 };

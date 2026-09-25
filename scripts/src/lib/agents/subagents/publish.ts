@@ -8,7 +8,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { openPullRequest, publishWorktree } from '../../herdr/worktree.ts';
-import { runGit } from '../git_worktree.ts';
+import { buildRefRange, resolveBaseRef, runGit } from '../git_worktree.ts';
 import { runAutofix, waitForReview } from './coderabbit.ts';
 import { splitTitle } from './prompt.ts';
 import { CODERABBIT_IGNORE, decideReview, parseNumstat } from './review_policy.ts';
@@ -37,15 +37,13 @@ const recordReview = (repoRoot: string, at: number): void => {
   writeText(ledgerPath(repoRoot), JSON.stringify({ lastReviewAt: at }));
 };
 
-const hasChanges = (checkoutPath: string, base: string): boolean => {
+const hasChanges = (checkoutPath: string, baseRef: string): boolean => {
   if (runGit('status --porcelain', { cwd: checkoutPath }).length > 0) {
     return true;
   }
   try {
-    return (
-      Number.parseInt(runGit(`rev-list --count origin/${base}..HEAD`, { cwd: checkoutPath }), 10) >
-      0
-    );
+    const range = buildRefRange({ base: baseRef, operator: '..' });
+    return Number.parseInt(runGit(`rev-list --count ${range}`, { cwd: checkoutPath }), 10) > 0;
   } catch {
     return false;
   }
@@ -64,8 +62,9 @@ export const publishRun = async (options: {
 }): Promise<void> => {
   const { spec, checkoutPath, report } = options;
   const { repoRoot, id } = spec;
+  const baseRef = resolveBaseRef(spec.pr.base, { cwd: checkoutPath });
 
-  if (!hasChanges(checkoutPath, spec.pr.base)) {
+  if (!hasChanges(checkoutPath, baseRef)) {
     report('No changes to publish — skipping PR');
     patchState(repoRoot, id, { activity: 'no changes — PR skipped' });
     return;
@@ -78,7 +77,7 @@ export const publishRun = async (options: {
   const { headBranch, headCommit } = await publishWorktree({
     checkoutPath,
     repoRoot,
-    base: spec.pr.base,
+    base: baseRef,
     message: title,
     authorName: 'Pi Subagent',
     authorEmail: 'agent@pi.internal',
@@ -86,7 +85,7 @@ export const publishRun = async (options: {
   report(`Pushed ${headBranch} @ ${headCommit.slice(0, 7)}`);
 
   const files = parseNumstat(
-    runGit(`diff --numstat origin/${spec.pr.base}...HEAD`, { cwd: checkoutPath }),
+    runGit(`diff --numstat ${buildRefRange({ base: baseRef })}`, { cwd: checkoutPath }),
   );
   const decision = decideReview({
     mode: spec.pr.review,
@@ -109,10 +108,11 @@ export const publishRun = async (options: {
   const openedAt = Date.now();
   const { prUrl, prNumber } = await openPullRequest({
     headBranch,
-    base: spec.pr.base,
+    base: baseRef,
     title,
     body,
     draft: spec.pr.draft,
+    repoRoot,
   });
   report(`PR #${prNumber}: ${prUrl}`);
   const review: ReviewOutcome = {

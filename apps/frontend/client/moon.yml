@@ -182,27 +182,59 @@ tasks:
       # `files.routes` at `.svelte-kit/routes-prod` and make `./$types`
       # unresolvable from `src/routes`. Opt in exactly as `dev`/`test` do.
       AIKAMI_INCLUDE_DEV_ROUTES: 'true'
+  # `svelte-kit sync` and the Bun-only alias config share `.svelte-kit` across
+  # the duplicate test entry points. Keep their combined writer behind one
+  # cached task so `test` and `test-unit` can run concurrently without racing.
+  test-prepare:
+    command: 'bun run test:prepare'
+    inputs:
+      - '@group(sources)'
+      - '@group(configs)'
+      - 'scripts/write_test_tsconfig.ts'
+    outputs:
+      - '.svelte-kit'
+    options:
+      cache: true
+      timeout: 300
+      runInCI: true
+    env:
+      AIKAMI_INCLUDE_DEV_ROUTES: 'true'
   test:
-    command: 'bun run test:unit'
+    command: 'bun run test:unit:run'
+    deps:
+      - '~:test-prepare'
     inputs:
       - '@group(unitTests)'
       - '@group(sources)'
       - '@group(configs)'
+      - 'tsconfig.test.json'
+      - '/packages/shared/*/src/**/*'
+      - '/packages/frontend/*/src/**/*'
+      - '/packages/backend/*/src/**/*'
     options:
       cache: true
-      timeout: 240
+      # `test` and `test-unit` intentionally run together in CI. The full
+      # client suite can exceed five minutes when both Bun processes compete
+      # for CPU, so leave explicit headroom above that measured ceiling.
+      timeout: 600
       runInCI: true
     env:
       AIKAMI_INCLUDE_DEV_ROUTES: 'true'
   test-unit:
-    command: 'bun run test:unit'
+    command: 'bun run test:unit:run'
+    deps:
+      - '~:test-prepare'
     inputs:
       - '@group(unitTests)'
       - '@group(sources)'
       - '@group(configs)'
+      - 'tsconfig.test.json'
+      - '/packages/shared/*/src/**/*'
+      - '/packages/frontend/*/src/**/*'
+      - '/packages/backend/*/src/**/*'
     options:
       cache: true
-      timeout: 240
+      timeout: 600
       runInCI: true
     env:
       AIKAMI_INCLUDE_DEV_ROUTES: 'true'

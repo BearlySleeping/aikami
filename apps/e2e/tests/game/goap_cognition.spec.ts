@@ -8,7 +8,9 @@
 
 import { expect, test } from '@playwright/test';
 
-const BASE_URL = 'http://localhost:5274';
+import { EMULATOR_PORTS } from '../../src/config';
+
+const BASE_URL = `http://localhost:${EMULATOR_PORTS.client}`;
 
 // ---------------------------------------------------------------------------
 // Tests

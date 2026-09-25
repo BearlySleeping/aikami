@@ -8,7 +8,7 @@ import {
   listWorktrees,
   removeWorktree,
 } from '../herdr/worktree.ts';
-import { optionalBoolean, optionalString, requireString, toArgs } from './args.ts';
+import { optionalBoolean, optionalNumber, optionalString, requireString, toArgs } from './args.ts';
 import type { PiHandlers } from './types.ts';
 
 export const handlers: PiHandlers = {
@@ -23,6 +23,7 @@ export const handlers: PiHandlers = {
       base: optionalString(args, 'base'),
       label: optionalString(args, 'label'),
       focus: optionalBoolean(args, 'focus'),
+      content: optionalBoolean(args, 'content'),
     });
   },
 
@@ -32,6 +33,8 @@ export const handlers: PiHandlers = {
       repoRoot: requireString(toArgs(payload), 'repoRoot'),
       install: optionalBoolean(toArgs(payload), 'install'),
       seed: optionalBoolean(toArgs(payload), 'seed'),
+      content: optionalBoolean(toArgs(payload), 'content'),
+      installTimeoutMs: optionalNumber(toArgs(payload), 'installTimeoutMs'),
     }),
 
   'worktree.remove': (payload) => {

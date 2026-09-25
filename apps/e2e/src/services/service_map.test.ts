@@ -3,6 +3,7 @@
 
 import { beforeEach, expect, test } from 'bun:test';
 
+import { E2E_PORT_OFFSET, EMULATOR_PORTS, IS_E2E_CI } from '../config';
 import {
   defaultProjectSelection,
   FALLBACK_BUILD_ENV,
@@ -77,12 +78,19 @@ test('default selection includes webgpu only when opted in', () => {
   expect(defaultProjectSelection()).toContain('client-webgpu');
 });
 
-test('service defs sit on the documented emulator ports', () => {
-  expect(SERVICE_DEFS.client.port).toBe(5274);
-  expect(SERVICE_DEFS['client-llm'].port).toBe(5275);
-  expect(SERVICE_DEFS.hub.port).toBe(5276);
-  expect(SERVICE_DEFS.site.port).toBe(5280);
-  expect(SERVICE_DEFS.client.baseUrl).toBe('http://localhost:5274');
+test('service defs sit on the allocated emulator ports', () => {
+  expect(SERVICE_DEFS.client.port).toBe(EMULATOR_PORTS.client);
+  expect(SERVICE_DEFS['client-llm'].port).toBe(EMULATOR_PORTS.clientLlm);
+  expect(SERVICE_DEFS.hub.port).toBe(EMULATOR_PORTS.hub);
+  expect(SERVICE_DEFS.site.port).toBe(EMULATOR_PORTS.site);
+  expect(SERVICE_DEFS.client.baseUrl).toBe(`http://localhost:${EMULATOR_PORTS.client}`);
+  expect(SERVICE_DEFS.client.serve.env.PUBLIC_EMULATOR_PORT_OFFSET).toBe(String(E2E_PORT_OFFSET));
+});
+
+test('CI hub parity uses the worker endpoint selected by config', () => {
+  const expectedHubPort = IS_E2E_CI ? EMULATOR_PORTS.hubWorker : EMULATOR_PORTS.hubBase;
+  expect(SERVICE_DEFS.hub.port).toBe(expectedHubPort);
+  expect(SERVICE_DEFS.hub.baseUrl).toBe(`http://localhost:${expectedHubPort}`);
 });
 
 test('client-llm is a dev-server-only lane that must never be built', () => {

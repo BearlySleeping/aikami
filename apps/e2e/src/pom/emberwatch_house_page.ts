@@ -1,6 +1,6 @@
 // apps/e2e/src/pom/emberwatch_house_page.ts
 //
-// Page Object Model for the C-550 Emberwatch house evidence lane. It keeps
+// Page Object Model for Emberwatch production evidence. It keeps
 // production-route navigation, map loading, renderer checks, and position
 // probes behind one small object so the capture script never reaches into
 // page globals or DOM selectors directly.
@@ -15,7 +15,12 @@ import { assertGpuRendererName } from '../visual/core/gpu_renderer_guard.ts';
 import { GamePage } from './game_page';
 
 export type EmberwatchHouseCell = { c: number; r: number };
-export type EmberwatchHouseMapId = 'village' | 'inn' | 'merchant_shop';
+export type EmberwatchHouseMapId =
+  | 'village'
+  | 'inn'
+  | 'merchant_shop'
+  | 'old_road'
+  | 'ruined_shrine';
 export type EmberwatchHouseClip = { x: number; y: number; width: number; height: number };
 
 export type EmberwatchHouseWorldSnapshot = {

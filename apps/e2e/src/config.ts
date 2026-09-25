@@ -1,28 +1,40 @@
 // apps/e2e/src/config.ts
-// Hardcoded emulator port constants for Playwright runtime files.
+// E2E runtime port configuration.
 //
-// These values mirror packages/shared/constants/src/lib/development_ports.ts
-// but are duplicated here because Playwright loads source files as ESM via
-// its bundled Bun loader, which cannot import CJS monorepo packages.
-//
-// Update both files together if port allocations change.
+// Keep this module the single E2E consumer of port allocation. The Playwright
+// config, service map, visual runner, and tests all read the resulting values;
+// adding a second offset calculation here would reintroduce cross-process
+// double-shifts.
 
-// Set by scripts/src/lib/herdr/session.ts / herdr_adapter.ts for
-// contract-scoped pipeline runs — same offset formula as
-// packages/shared/constants/src/lib/development_ports.ts's
-// contractPortOffset(), so this lands on the identical value independently
-// (can't import that helper here either, same CJS-loader constraint above).
-// 0 for a manual, non-contract test run.
-const emulatorPortOffset = Number(process.env.PUBLIC_EMULATOR_PORT_OFFSET || 0);
+import { E2E_PORT_BASES, E2E_PORT_OFFSETS, getE2EPortOffset } from './services/port_allocation';
 
-/** Dev server ports for Aikami (must match development_ports.ts).
- *  `voice` stays on its shared base port — it's a singleton backend, never
- *  duplicated per contract (see OFFSET_AWARE_SERVICES in session.ts). */
+export const IS_E2E_CI = process.env.CI === 'true' || process.env.CI === '1';
+
+/** Stable checkout offset selected by the E2E port allocator. */
+export const E2E_PORT_OFFSET = getE2EPortOffset();
+
+const offsetPort = (base: number): number => base + E2E_PORT_OFFSET;
+
+const HUB_BASE_PORT = offsetPort(E2E_PORT_BASES.hub);
+const HUB_WORKER_PORT = offsetPort(E2E_PORT_BASES.hubWorker);
+
+/**
+ * Effective E2E ports.
+ *
+ * CI serves the hub through Wrangler's local Worker runtime, so `hub` is the
+ * worker port there. Local development uses the Vite SSR port. Keeping that
+ * choice here makes auth fixtures, Playwright, and preflight agree in CI.
+ */
 export const EMULATOR_PORTS = {
-  client: 5274 + emulatorPortOffset,
-  /** C-526 AC-10: the client dev server started with `PUBLIC_COMBAT_LLM_AGENTS=1`. */
-  clientLlm: 5275 + emulatorPortOffset,
-  hub: 5276 + emulatorPortOffset,
-  site: 5280 + emulatorPortOffset,
+  client: offsetPort(E2E_PORT_BASES.client),
+  /** A second client with PUBLIC_COMBAT_LLM_AGENTS=1. */
+  clientLlm: offsetPort(E2E_PORT_BASES.clientLlm),
+  hub: IS_E2E_CI ? HUB_WORKER_PORT : HUB_BASE_PORT,
+  hubBase: HUB_BASE_PORT,
+  hubWorker: HUB_WORKER_PORT,
+  site: offsetPort(E2E_PORT_BASES.site),
   voice: 8089,
 } as const;
+
+/** The complete non-zero slot space used by linked worktrees. */
+export { E2E_PORT_OFFSETS };

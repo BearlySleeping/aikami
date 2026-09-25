@@ -71,12 +71,34 @@ describe('runCommand', () => {
     expect(result.stderr).toContain('Failed to start process');
   });
 
-  test('injects CI env guards', async () => {
-    const result = await runCommand('sh', ['-c', 'echo "$CI:$GIT_TERMINAL_PROMPT"']);
-    expect(result.stdout).toBe('true:0');
+  test('injects non-interactive defaults without synthesizing CI', async () => {
+    const result = await runCommand('sh', ['-c', 'echo "$FORCE_COLOR:$GIT_TERMINAL_PROMPT"']);
+    expect(result.stdout).toBe('1:0');
   });
 
-  test('merges caller env on top of the defaults', async () => {
+  test.serial('preserves the ambient CI value', async () => {
+    const previousCi = process.env.CI;
+    process.env.CI = 'worktree-local';
+    try {
+      const result = await runCommand('sh', ['-c', 'echo "$CI"']);
+      expect(result.stdout).toBe('worktree-local');
+    } finally {
+      if (previousCi === undefined) {
+        delete process.env.CI;
+      } else {
+        process.env.CI = previousCi;
+      }
+    }
+  });
+
+  test('lets caller env override CI and non-interactive defaults', async () => {
+    const result = await runCommand('sh', ['-c', 'echo "$CI:$FORCE_COLOR:$GIT_TERMINAL_PROMPT"'], {
+      env: { CI: 'caller-local', FORCE_COLOR: '0', GIT_TERMINAL_PROMPT: '1' },
+    });
+    expect(result.stdout).toBe('caller-local:0:1');
+  });
+
+  test('merges unrelated caller env on top of the defaults', async () => {
     const result = await runCommand('sh', ['-c', 'echo "$MY_VAR"'], {
       env: { MY_VAR: 'set' },
     });
@@ -183,6 +205,13 @@ describe('runSync', () => {
 
   test('reports a non-zero exit code without throwing', () => {
     expect(runSync('false').code).toBe(1);
+  });
+
+  test('preserves CI and applies caller env overrides', () => {
+    const result = runSync('sh', ['-c', 'echo "$CI:$FORCE_COLOR:$GIT_TERMINAL_PROMPT"'], {
+      env: { CI: 'sync-local', FORCE_COLOR: '0', GIT_TERMINAL_PROMPT: '1' },
+    });
+    expect(result.stdout).toBe('sync-local:0:1');
   });
 });
 

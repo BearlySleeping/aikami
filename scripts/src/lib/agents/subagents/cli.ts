@@ -13,7 +13,7 @@
 //   bun run subagent status <id>
 //   bun run subagent result <id>
 //   bun run subagent wait <id> [--timeout-min 30]
-//   bun run subagent message <id> "<text>"
+//   bun run subagent message <id> "<text>" [--delivery steer|followUp]
 //   bun run subagent kill <id>
 //   bun run subagent cleanup <id> [--keep-worktree] [--purge] [--force]
 //   bun run subagent supervise <id> --repo <root>     (internal)
@@ -42,6 +42,8 @@ const VALUE_FLAGS = new Set([
   '--repo',
   '--timeout-min',
   '--context',
+  '--delivery',
+  '--message-id',
 ]);
 
 const parse = (argv: string[]): { positional: string[]; flags: Map<string, string | true> } => {
@@ -155,7 +157,19 @@ const COMMANDS: Record<string, (c: Ctx) => Promise<number> | number> = {
     if (!text) {
       throw new Error('Usage: bun run subagent message <id> "<text>"');
     }
-    console.log(line(await messageRun(c.repoRoot, c.id, text), nameOf(c)));
+    const delivery = str(c.flags, '--delivery');
+    if (delivery !== undefined && delivery !== 'steer' && delivery !== 'followUp') {
+      throw new Error('--delivery must be steer or followUp');
+    }
+    const messageId = str(c.flags, '--message-id');
+    const state = await messageRun({
+      repoRoot: c.repoRoot,
+      id: c.id,
+      text,
+      delivery: delivery === 'followUp' ? 'followUp' : 'steer',
+      ...(messageId === undefined ? {} : { messageId }),
+    });
+    console.log(line(state, nameOf(c)));
     return 0;
   },
   kill: (c) => {
