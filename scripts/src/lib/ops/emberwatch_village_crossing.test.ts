@@ -108,15 +108,25 @@ describe('C-549 — the crossing sits on the straight E–W reach', () => {
 });
 
 describe('C-549 — the notice-board approach meets the crossing on both banks', () => {
-  test('the south approach links the existing path at cols 39–40 to the span', () => {
-    // The existing dirt path runs north at cols 39–40; the three-cell landing
-    // ties it to the span's south end, leaving the sand bank continuous around
-    // the landing.
-    expect(groundAt(39, 9), '(39,9) is the existing path').toBe(G.DIRT);
+  test('the south approach links the existing path to the span with an organic contour', () => {
+    // The dirt contour widens under the three bridge columns, then narrows
+    // asymmetrically toward the existing cols 39–40 path. It is not the
+    // rejected five-by-two slab.
+    expect(groundAt(35, 9), '(35,9) organic west approach').toBe(G.DIRT);
     for (const c of [36, 37, 38]) {
       expect(groundAt(c, 9), `(${c},9) south-bank approach is dirt`).toBe(G.DIRT);
     }
-    expect(groundAt(35, 9), '(35,9) west bank remains sand').toBe(G.SAND);
+    for (const [row, columns] of [
+      [9, [35, 36, 37, 38, 39, 40]],
+      [10, [36, 37, 38, 39, 40]],
+      [11, [37, 38, 40]],
+      [12, [38, 39, 40]],
+      [13, [39, 40]],
+    ] as const) {
+      const actual = Array.from({ length: 6 }, (_, index) => index + 35)
+        .filter((column) => groundAt(column, row) === G.DIRT);
+      expect(actual, `crossing approach row ${row}`).toEqual([...columns]);
+    }
     expect(groundAt(39, 8), '(39,8) east bank remains river').toBe(G.WATER);
   });
 

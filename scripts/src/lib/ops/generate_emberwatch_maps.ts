@@ -35,6 +35,8 @@ export type { MapData, MapObjectLayer, SpawnObject } from './emberwatch_map_shar
 
 const G = buildG();
 
+const INTERIOR_MAP_IDS: ReadonlySet<string> = new Set(['inn', 'merchant_shop']);
+
 const SEMANTIC_TERRAIN_BY_TILE_NAME: Readonly<Record<string, string>> = {
   path_tough: 'path',
   path_tough_variant: 'path',
@@ -42,21 +44,10 @@ const SEMANTIC_TERRAIN_BY_TILE_NAME: Readonly<Record<string, string>> = {
   stone_floor_variant: 'earth',
   flagstone: 'earth',
   sand: 'gravel',
-  bridge: 'earth',
 };
 
-const semanticTerrainForTileName = (tileName: string | undefined): string | undefined => {
-  if (!tileName) {
-    return undefined;
-  }
-  if (tileName.startsWith('bridge_')) {
-    return 'earth';
-  }
-  return SEMANTIC_TERRAIN_BY_TILE_NAME[tileName];
-};
-
-const keepsSemanticTerrainVisual = (tileName: string | undefined): boolean =>
-  tileName === 'bridge' || (tileName?.startsWith('bridge_') ?? false);
+const semanticTerrainForTileName = (tileName: string): string | undefined =>
+  SEMANTIC_TERRAIN_BY_TILE_NAME[tileName];
 
 /**
  * GID → manifest tile name, derived from the manifest (C-378 terrain
@@ -116,11 +107,11 @@ const applyGroundContributions = (options: {
       continue;
     }
     const index = idx(map, c, r);
-    const tileName = GID_TO_NAME.get(gid);
-    layers.ground[index] = keepsSemanticTerrainVisual(tileName) ? 0 : gid;
-    layers.decor[index] = keepsSemanticTerrainVisual(tileName) ? gid : 0;
+    layers.ground[index] = gid;
+    layers.decor[index] = 0;
     layers.overhead[index] = 0;
     cells.add(cellKey(c, r));
+    const tileName = GID_TO_NAME.get(gid);
     layers.terrainChannel[index] = tileName ? (terrainNameToId.get(tileName) ?? '') : '';
   }
   return cells;
@@ -202,51 +193,71 @@ const applyTerrainOverrides = (options: {
 // Build map JSON
 // ---------------------------------------------------------------------------
 
-type ResolvedGroundCell = {
-  ground: number;
-  decor: number;
-  overhead: number;
-  terrain: string;
-};
-
-const resolveGroundCell = (options: {
-  gid: number;
-  tileName: string | undefined;
-  terrainId: string | undefined;
-  overheadGids: ReadonlySet<number>;
-}): ResolvedGroundCell => {
-  const { gid, tileName, terrainId, overheadGids } = options;
-  if (terrainId) {
-    return {
-      ground: keepsSemanticTerrainVisual(tileName) ? 0 : gid,
-      decor: keepsSemanticTerrainVisual(tileName) ? gid : 0,
-      overhead: 0,
-      terrain: terrainId,
-    };
-  }
-  if (gid === 0) {
-    return { ground: 0, decor: 0, overhead: 0, terrain: '' };
-  }
-  if (overheadGids.has(gid)) {
-    return { ground: 0, decor: 0, overhead: gid, terrain: '' };
-  }
-  return { ground: gid, decor: gid, overhead: 0, terrain: '' };
-};
-
-const addOutdoorSemanticMappings = (options: {
-  terrainNameToId: Map<string, string>;
-  ground: readonly number[];
-}): void => {
-  const hasOutdoorBase = options.ground.some((gid) => GID_TO_NAME.get(gid) === 'grass');
-  if (!hasOutdoorBase) {
-    return;
-  }
+const addOutdoorSemanticMappings = (terrainNameToId: Map<string, string>): void => {
   for (const tile of Object.values(readManifestTiles())) {
     const semanticTerrain = semanticTerrainForTileName(tile.name);
     if (semanticTerrain) {
-      options.terrainNameToId.set(tile.name, semanticTerrain);
+      terrainNameToId.set(tile.name, semanticTerrain);
     }
   }
+};
+
+const buildTerrainNameMap = (): Map<string, string> => {
+  const frameToTileName = new Map<string, string>();
+  for (const def of Object.values(readManifestTiles())) {
+    frameToTileName.set(def.frame, def.name);
+  }
+  const terrainNameToId = new Map<string, string>();
+  for (const terrain of readManifestTerrains()) {
+    terrainNameToId.set(terrain.name, terrain.name);
+    for (const variantFrame of terrain.variants ?? []) {
+      const variantTileName = frameToTileName.get(variantFrame);
+      if (variantTileName) {
+        terrainNameToId.set(variantTileName, terrain.name);
+      }
+    }
+  }
+  return terrainNameToId;
+};
+
+const applyCanonicalSemanticMappings = (options: {
+  mapId: string | undefined;
+  terrainNameToId: Map<string, string>;
+}): void => {
+  if (!options.mapId || INTERIOR_MAP_IDS.has(options.mapId)) {
+    return;
+  }
+  addOutdoorSemanticMappings(options.terrainNameToId);
+};
+
+const resolveLayerBuffers = (options: {
+  map: MapData;
+  terrainNameToId: ReadonlyMap<string, string>;
+}): LayerBuffers => {
+  const ground = [...options.map.ground];
+  const decor: number[] = [];
+  const overhead: number[] = [];
+  const terrainChannel: string[] = [];
+  const overheadGids = new Set([G.ROOF]);
+  for (const gid of options.map.ground) {
+    const tileName = gid === 0 ? undefined : GID_TO_NAME.get(gid);
+    const terrainId = tileName ? options.terrainNameToId.get(tileName) : undefined;
+    terrainChannel.push(terrainId ?? '');
+    if (terrainId) {
+      decor.push(0);
+      overhead.push(0);
+    } else if (gid === 0) {
+      decor.push(0);
+      overhead.push(0);
+    } else if (overheadGids.has(gid)) {
+      decor.push(0);
+      overhead.push(gid);
+    } else {
+      decor.push(gid);
+      overhead.push(0);
+    }
+  }
+  return { ground, decor, overhead, terrainChannel };
 };
 
 /**
@@ -255,48 +266,24 @@ const addOutdoorSemanticMappings = (options: {
  * committed maps without writing to the repository.
  */
 export const buildMapJson = ({
+  mapId,
   map: m,
   objectLayers,
 }: {
+  /** Canonical map identity; omitted by synthetic authoring tests. */
+  mapId?: string;
   map: MapData;
   objectLayers: MapObjectLayer[];
 }): { json: unknown; width: number; height: number } => {
   // C-378: derive the semantic terrain channel from the ground layer by
   // inverting `tiles[gid].name` → terrain id. Cells whose GID is not a
   // declared terrain (walls, roofs, furniture) stay hand-placed GIDs.
-  const terrains = readManifestTerrains();
-  const frameToTileName = new Map<string, string>();
-  for (const def of Object.values(readManifestTiles())) {
-    frameToTileName.set(def.frame, def.name);
-  }
-  const terrainNameToId = new Map<string, string>();
-  for (const t of terrains) {
-    terrainNameToId.set(t.name, t.name);
-    for (const variantFrame of t.variants ?? []) {
-      const variantTileName = frameToTileName.get(variantFrame);
-      if (variantTileName) {
-        terrainNameToId.set(variantTileName, t.name);
-      }
-    }
-  }
-  // Interior maps intentionally have no grass base. Their stone/wood floors
-  // stay on the baked indoor/outdoor split; applying outdoor corner16 terrain
-  // here would reveal the engine's grass base around walls and thresholds.
-  addOutdoorSemanticMappings({ terrainNameToId, ground: m.ground });
-  const ground: number[] = [];
-  const decor: number[] = [];
-  const overhead: number[] = [];
-  const terrainChannel: string[] = [];
-  const overheadGids = new Set([G.ROOF]);
-  for (const gid of m.ground) {
-    const tileName = gid === 0 ? undefined : GID_TO_NAME.get(gid);
-    const terrainId = tileName ? terrainNameToId.get(tileName) : undefined;
-    const resolved = resolveGroundCell({ gid, tileName, terrainId, overheadGids });
-    ground.push(resolved.ground);
-    decor.push(resolved.decor);
-    overhead.push(resolved.overhead);
-    terrainChannel.push(resolved.terrain);
-  }
+  const terrainNameToId = buildTerrainNameMap();
+  applyCanonicalSemanticMappings({ mapId, terrainNameToId });
+  const { ground, decor, overhead, terrainChannel } = resolveLayerBuffers({
+    map: m,
+    terrainNameToId,
+  });
 
   // Explicit contributions are authored after the baked layer split. Ground
   // owns architectural silhouettes; decor owns contact decals; overhead owns
@@ -417,7 +404,7 @@ const emit = (mapName: string): void => {
   if (!builder) {
     throw new Error(`generate_emberwatch_maps: no builder for map "${mapName}"`);
   }
-  const { json, width, height } = buildMapJson(builder());
+  const { json, width, height } = buildMapJson({ mapId: mapName, ...builder() });
   const outPath = join(mapOutDir(), `${mapName}.json`);
   mkdirSync(dirname(outPath), { recursive: true });
   writeFileSync(outPath, `${JSON.stringify(json, null, 2)}\n`);

@@ -9,7 +9,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync, realpathSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
-import { chromium } from 'playwright';
+import { chromium, type Page } from 'playwright';
 import {
   type EmberwatchHouseCell,
   type EmberwatchHouseMapId,
@@ -53,12 +53,12 @@ const PAIR_SUMMARIES: Readonly<Record<string, string>> = {
   'ward-square':
     'Asymmetric dirt spans/spurs plus path/stone semantic transitions; indoor floor split unchanged.',
   'crossing-landing':
-    'Landing dirt transition family, tapered lower silhouette, and water ripple cleanup.',
+    'Existing dirt terrain with an asymmetric bridge-aligned organic approach; water remains origin/main.',
   'inn-floor':
     'Interior terrain channel omitted; C-552 indoor wood/threshold materials remain baked.',
   'merchant-floor':
     'Interior terrain channel omitted; C-552 indoor flagstone and navy base remain baked.',
-  'old-road': 'Outdoor path/earth/gravel semantic transitions; water remains a continuous surface.',
+  'old-road': 'Outdoor path/earth/gravel semantic transitions; water and bridge visuals remain origin/main.',
   'ruined-shrine':
     'Outdoor sand/stone/dirt semantic transitions; no grass or placeholder floor leakage.',
 };

@@ -116,7 +116,6 @@ describe('C-378 AC-5 — atlas packer', () => {
         'earth',
         'cobblestone',
         'path',
-        'landing',
       ]),
     );
     for (const terrain of cornerTerrains) {
@@ -149,7 +148,7 @@ describe('C-378 AC-5 — atlas packer', () => {
       water: {
         mask0Base: [44, 88, 116, 255],
         mask0Overlay: [46, 111, 176, 255],
-        mask15Overlay: [46, 112, 176, 255],
+        mask15Overlay: [47, 113, 177, 255],
       },
       gravel: {
         mask0Base: [71, 144, 59, 255],
@@ -170,11 +169,6 @@ describe('C-378 AC-5 — atlas packer', () => {
         mask0Base: [71, 144, 59, 255],
         mask0Overlay: [128, 132, 126, 255],
         mask15Overlay: [141, 144, 138, 255],
-      },
-      landing: {
-        mask0Base: [71, 144, 59, 255],
-        mask0Overlay: [138, 90, 51, 255],
-        mask15Overlay: [138, 90, 51, 255],
       },
     };
 

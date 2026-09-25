@@ -13,11 +13,11 @@
       "name": "atlas",
       "image": "/game-data/sprites/tilesets/atlas.webp",
       "imagewidth": 544,
-      "imageheight": 442,
+      "imageheight": 408,
       "tilewidth": 32,
       "tileheight": 32,
       "columns": 16,
-      "tilecount": 208,
+      "tilecount": 192,
       "spacing": 2,
       "margin": 1
     }

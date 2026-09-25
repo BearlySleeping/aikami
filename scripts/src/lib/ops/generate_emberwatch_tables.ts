@@ -27,9 +27,9 @@ import { fileURLToPath } from 'node:url';
  */
 export const ATLAS_COLS = 16;
 // C-546 grew 8→10 for bridge frames; C-553 grows 10→11 for house frames;
-// C-559 grows 11→13 for append-only pinned path and landing families. Existing
-// GIDs and the original corner16 terrain block never move.
-export const ATLAS_ROWS = 13;
+// C-559 grows 11→12 for the append-only pinned path family. Existing GIDs and
+// the original corner16 terrain block never move.
+export const ATLAS_ROWS = 12;
 export const ATLAS_TILE_SIZE = 32;
 
 /** 1px edge extrusion around every frame (C-378 AC-5). */
@@ -40,8 +40,8 @@ export const ATLAS_CELL = ATLAS_TILE_SIZE + ATLAS_PADDING * 2;
 
 export const ATLAS_WIDTH = ATLAS_COLS * ATLAS_CELL; // 544
 
-export const ATLAS_HEIGHT = ATLAS_ROWS * ATLAS_CELL; // 442
-export const ATLAS_TILE_COUNT = ATLAS_COLS * ATLAS_ROWS; // 208
+export const ATLAS_HEIGHT = ATLAS_ROWS * ATLAS_CELL; // 408
+export const ATLAS_TILE_COUNT = ATLAS_COLS * ATLAS_ROWS; // 192
 
 /**
  * First atlas cell (0-based) reserved for the corner16 terrain block.

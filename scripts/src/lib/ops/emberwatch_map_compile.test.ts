@@ -28,7 +28,7 @@ describe('emberwatch map compile stability', () => {
       if (!built) {
         continue;
       }
-      const { json } = buildMapJson(built());
+      const { json } = buildMapJson({ mapId, ...built() });
       const committed = readFileSync(join(committedDir, `${mapId}.json`), 'utf8');
       expect(`${JSON.stringify(json, null, 2)}\n`, mapId).toBe(committed);
     }

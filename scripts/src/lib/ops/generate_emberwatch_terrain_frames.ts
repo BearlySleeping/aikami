@@ -59,11 +59,6 @@ export const paintDirt: TerrainPaint = (col, row) => {
   }
 };
 
-/** Tiled landing material stays flat at cell seams so adjacent masks cannot form a line. */
-export const paintLanding: TerrainPaint = (col, row) => {
-  fillCell(col, row, 138, 90, 51);
-};
-
 /** Low-contrast dirt fringe keeps the grass/dirt handoff soft at cell scale. */
 export const paintDirtFringe: TerrainPaint = (col, row) => {
   fillCell(col, row, 106, 116, 55);
@@ -279,12 +274,16 @@ export const paintInteriorFlagstone: TerrainPaint = (col, row) => {
 /** Blue water material shared by the standalone and corner16 frames. */
 export const paintWater: TerrainPaint = (col, row) => {
   fillCell(col, row, 46, 111, 176);
-  // Keep the water read as a continuous surface with short ripple marks. Do
-  // not add isolated bright pixels: at bridge scale they read as blue polka
-  // dots rather than water.
+  const rng = makeRng(0x5be0cd19);
+  for (let index = 0; index < 30; index++) {
+    const x = Math.floor(rng() * TILE);
+    const y = Math.floor(rng() * TILE);
+    const color = rng() < 0.5 ? ([63, 132, 196] as const) : ([39, 97, 156] as const);
+    setPx(col * TILE + x, row * TILE + y, color[0], color[1], color[2]);
+  }
   for (let y = 4; y < TILE; y += 8) {
     for (let x = 2; x < TILE - 4; x += 3) {
-      setPx(col * TILE + x, row * TILE + y, 58, 128, 188);
+      setPx(col * TILE + x, row * TILE + y, 82, 158, 214);
     }
   }
 };
@@ -330,7 +329,6 @@ export const CORNER_TERRAIN_SEEDS = {
   earth: 120,
   cobblestone: 128,
   path: 131,
-  landing: 137,
 } as const;
 
 const isOuterEdge = (x: number, y: number): boolean =>
@@ -376,7 +374,7 @@ const edgeCoverage = (options: { mask: number; x: number; y: number; seed: numbe
  *
  * The missing corner owns the low-distance side of the field; the other three
  * corners own the high-distance side. This replaces four repeated radial lobes
- * at the real landing masks (13/14) with one coherent noisy contour.
+ * at real three-corner masks (13/14) with one coherent noisy contour.
  */
 const diagonalCornerField = (options: {
   mask: number;
