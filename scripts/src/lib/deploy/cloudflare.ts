@@ -30,6 +30,7 @@ import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
+import { DEV_ROUTES_BUILD_MARKER_FILE } from '@aikami/constants';
 import type { AppId } from '@aikami/types';
 import { toMode } from '@aikami/utils';
 import {
@@ -253,11 +254,13 @@ export function ensureHeadersFile(config: AppConfig, appRoot: string): void {
  * limit, so it runs unconditionally for apps that provide one.
  *
  * A dev-route build is the one case where the guard's `(dev)` assertion must be
- * relaxed, because the output is exactly what the caller asked for. The
- * decision comes from the same resolver `build_client.ts` and
- * `vite.config.ts` use, so this last gate cannot disagree with the build that
- * actually ran — an opt-in build that passes its own guard must not then be
- * rejected here.
+ * relaxed, because the output is exactly what the caller asked for. The build
+ * records its own decision in `<buildDir>/.aikami-include-dev-routes`; reading
+ * that marker first is what makes this last gate unable to disagree with the
+ * build that actually ran. Re-deriving the value from `process.env` here
+ * cannot work in CI — the mode env file is loaded by the build, not exported
+ * into this process — and used to reject opt-in builds the build had already
+ * accepted. The env resolver stays as the fallback for older artifacts.
  *
  * @returns true when a guard ran (and passed); false when the app has none.
  */
@@ -268,7 +271,9 @@ export function runDeployAssetGuard(config: AppConfig, appRoot: string): boolean
   }
   const buildDir = config.cloudflare?.buildOutputDir ?? 'build';
 
-  const allowDevRoutes = resolveIncludeDevRoutes('build');
+  const markerPath = join(appRoot, buildDir, DEV_ROUTES_BUILD_MARKER_FILE);
+  const marker = existsSync(markerPath) ? readFileSync(markerPath, 'utf8').trim() : null;
+  const allowDevRoutes = marker === null ? resolveIncludeDevRoutes('build') : marker === 'true';
   if (allowDevRoutes) {
     warn(`  ⚠️  ${DEV_ROUTES_ENV_VAR}=true — this deploy SHIPS the (dev) sandbox routes.`);
   }
