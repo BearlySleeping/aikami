@@ -425,6 +425,27 @@ fn validate_model_download_url(origin: &str, url: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// Whether a redirect target stays inside Hugging Face's trusted HTTPS estate.
+///
+/// Small metadata files are served from `huggingface.co` after a same-origin
+/// 307, but LFS/Xet assets (notably `onnx/model_quantized.onnx`) redirect
+/// straight to a regional CDN such as `us.aws.cdn.hf.co`. Refusing those
+/// cross-host hops makes every browser-mode Kokoro download fail on desktop
+/// while the same URL works in a normal browser, so the CDN suffix is
+/// allowlisted explicitly rather than permitting arbitrary redirects.
+fn is_allowed_model_redirect(url: &Url, first: &Url) -> bool {
+    if url.scheme() != "https" {
+        return false;
+    }
+    let Some(host) = url.host_str() else {
+        return false;
+    };
+    if url.scheme() == first.scheme() && Some(host) == first.host_str() {
+        return true;
+    }
+    host == "hf.co" || host.ends_with(".hf.co")
+}
+
 /// Returns the runtime `config.json` from the app data directory, or `None`
 /// when it has not been written yet. C-389 rung 2 of the precedence chain.
 #[tauri::command]
@@ -473,8 +494,8 @@ async fn download_model_file(
                 return attempt.error("too many model-download redirects");
             }
             let next = attempt.url();
-            if next.scheme() != first.scheme() || next.host_str() != first.host_str() {
-                return attempt.error("model-download redirect changed origin");
+            if !is_allowed_model_redirect(next, first) {
+                return attempt.error("model-download redirect left the trusted model origins");
             }
             attempt.follow()
         }))
@@ -730,4 +751,35 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{is_allowed_model_redirect, Url};
+
+    fn allowed(candidate: &str) -> bool {
+        let first = Url::parse("https://huggingface.co/onnx-community/Kokoro-82M-ONNX/resolve/rev/config.json")
+            .expect("first URL parses");
+        let next = Url::parse(candidate).expect("candidate URL parses");
+        is_allowed_model_redirect(&next, &first)
+    }
+
+    #[test]
+    fn allows_same_origin_metadata_redirect() {
+        assert!(allowed(
+            "https://huggingface.co/api/resolve-cache/models/onnx-community/Kokoro-82M-ONNX/config.json"
+        ));
+    }
+
+    #[test]
+    fn allows_hugging_face_cdn_for_lfs_assets() {
+        assert!(allowed("https://us.aws.cdn.hf.co/xet-bridge-us/asset"));
+    }
+
+    #[test]
+    fn rejects_untrusted_or_downgraded_redirects() {
+        assert!(!allowed("https://cdn.example.com/asset"));
+        assert!(!allowed("http://huggingface.co/api/resolve-cache/asset"));
+        assert!(!allowed("https://huggingface.co.evil.test/asset"));
+    }
 }
