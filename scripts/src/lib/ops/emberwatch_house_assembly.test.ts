@@ -423,7 +423,7 @@ describe('C-550 — compiled map layers', () => {
     map.groundExtra = [[3, 6, HOUSE_FRAMES.facadeWall]];
     map.collision[at(map, 3, 6)] = 1;
     map.terrainOverrides = [[3, 6, 'dirt']];
-    expect(() => buildMapJson({ map, objectLayers: [] })).toThrow(
+    expect(() => buildMapJson({ map, objectLayers: [], semanticMapping: 'none' })).toThrow(
       /cell \(3,6\) has both a blocked non-terrain ground contribution and terrain override "dirt"/,
     );
   });
@@ -432,21 +432,29 @@ describe('C-550 — compiled map layers', () => {
     const walkableMap = makeHouseMap();
     walkableMap.groundExtra = [[3, 6, HOUSE_FRAMES.doorLowerClosed]];
     walkableMap.terrainOverrides = [[3, 6, 'dirt']];
-    const walkableJson = buildMapJson({ map: walkableMap, objectLayers: [] }).json;
+    const walkableJson = buildMapJson({
+      map: walkableMap,
+      objectLayers: [],
+      semanticMapping: 'none',
+    }).json;
     expect(readTerrain(walkableJson)[at(walkableMap, 3, 6)]).toBe('dirt');
 
     const terrainOwnedMap = makeHouseMap();
     terrainOwnedMap.groundExtra = [[3, 6, G.DIRT]];
     terrainOwnedMap.collision[at(terrainOwnedMap, 3, 6)] = 1;
     terrainOwnedMap.terrainOverrides = [[3, 6, 'gravel']];
-    const terrainOwnedJson = buildMapJson({ map: terrainOwnedMap, objectLayers: [] }).json;
+    const terrainOwnedJson = buildMapJson({
+      map: terrainOwnedMap,
+      objectLayers: [],
+      semanticMapping: 'none',
+    }).json;
     expect(readTerrain(terrainOwnedJson)[at(terrainOwnedMap, 3, 6)]).toBe('gravel');
   });
 
   test('facade/foundation use ground, contact shadow uses decor, and upper roof uses overhead', () => {
     const map = makeHouseMap();
     placeTestHouse(map);
-    const json = buildMapJson({ map, objectLayers: [] }).json;
+    const json = buildMapJson({ map, objectLayers: [], semanticMapping: 'none' }).json;
     const ground = readLayer(json, 'ground');
     const decor = readLayer(json, 'decor');
     const overhead = readLayer(json, 'overhead');

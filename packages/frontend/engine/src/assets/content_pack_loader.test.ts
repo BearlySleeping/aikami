@@ -111,6 +111,9 @@ describe('ContentPackLoader', () => {
     expect(loader.manifest.id).toBe('test-pack');
     expect(loader.manifest.version).toBe('1.0.0');
     expect(loader.manifest.startingMapId).toBe('village');
+    expect(loader.identity.packId).toBe('test-pack');
+    expect(loader.identity.version).toBe('1.0.0');
+    expect(loader.identity.manifestSha256).toMatch(/^[a-f0-9]{64}$/);
   });
 
   test('loadContentPack throws when manifest returns 404', async () => {

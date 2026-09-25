@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, test } from 'bun:test';
 import { existsSync, mkdtempSync, readdirSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import type { ContentIdentitySnapshot } from '@aikami/types';
 
 import { E2E_PORT_OFFSET, IS_E2E_CI } from '../config';
 import {
@@ -719,7 +720,11 @@ describe('persistent port allocation', () => {
     const { records, store } = makeMemoryPortStore();
     const checkout = '/tmp/current-checkout';
     const preferred = portOffsetsForSlots()[preferredPortSlot(checkout)];
-    records.push({ checkout: '/tmp/removed-checkout', offset: preferred, allocatedAt: '2026-01-01' });
+    records.push({
+      checkout: '/tmp/removed-checkout',
+      offset: preferred,
+      allocatedAt: '2026-01-01',
+    });
     store.checkoutExists = (path) => path !== '/tmp/removed-checkout';
 
     expect(allocatePortOffset({ checkout, store })).toBe(preferred);
@@ -875,6 +880,21 @@ const evidenceOrigin = (role: EvidenceOrigin['role'], port: number): EvidenceOri
   assetOrigin: `http://127.0.0.1:${port + 100}`,
 });
 
+const loadedContentIdentity = (
+  version: string,
+  digestCharacter: string,
+): ContentIdentitySnapshot => ({
+  packId: 'emberwatch',
+  packName: 'Emberwatch: The Fading Ward',
+  version,
+  updatedAt: '2026-09-18T00:00:00.000Z',
+  manifestSha256: digestCharacter.repeat(64),
+  atlasTextureUrl: '/game-data/sprites/tilesets/atlas.webp',
+  atlasSpritesheetUrl: '/game-data/sprites/tilesets/atlas.json',
+  propAtlases: [],
+  provenanceSource: 'generated:gpt',
+});
+
 const evidenceCapture = (lane: 'before' | 'after'): EvidenceCaptureRecord => ({
   lane,
   id: 'hut-front',
@@ -893,6 +913,8 @@ const evidenceCapture = (lane: 'before' | 'after'): EvidenceCaptureRecord => ({
   actualCameraCell: '54,11',
   renderer: 'webgl',
   viewport: { width: 1280, height: 720 },
+  pixelWidth: 1280,
+  pixelHeight: 720,
   entityTextureFingerprint: sha256Hex(`${lane}:textures`),
   sha256: sha256Hex(`${lane}:png`),
 });
@@ -986,6 +1008,10 @@ describe('persistent evidence records', () => {
         after: evidenceOrigin('candidate', 5275),
       },
       captures: [before, after],
+      loadedContent: {
+        before: loadedContentIdentity('5.0.0', 'a'),
+        after: loadedContentIdentity('5.0.1', 'b'),
+      },
       entityTexturePolicy: 'visible-entity-textures-v2',
     });
     expect(manifest.status).toBe('complete');
@@ -996,12 +1022,16 @@ describe('persistent evidence records', () => {
     });
     expect(manifest.published.root).toBe('/before');
     expect(manifest.candidate.root).toBe('/after');
+    expect(manifest.loadedContent.after?.manifestSha256).toBe('b'.repeat(64));
     const index = renderEvidenceIndex(manifest);
     expect(index).toContain('# C-560 evidence');
     expect(index).toContain('before/hut-front.png');
     expect(index).toContain('after/hut-front.png');
     expect(index).toContain('montage.png');
     expect(index).toContain('checksums.sha256');
+    expect(index).toContain('Loaded content identity');
+    expect(index).toContain('5.0.1');
+    expect(index).toContain('b'.repeat(64));
   });
 
   test('computes a deterministic two-cell montage layout', () => {

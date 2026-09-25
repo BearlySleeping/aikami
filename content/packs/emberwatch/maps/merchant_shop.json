@@ -13,11 +13,11 @@
       "name": "atlas",
       "image": "/game-data/sprites/tilesets/atlas.webp",
       "imagewidth": 544,
-      "imageheight": 374,
+      "imageheight": 408,
       "tilewidth": 32,
       "tileheight": 32,
       "columns": 16,
-      "tilecount": 176,
+      "tilecount": 192,
       "spacing": 2,
       "margin": 1
     }
@@ -2562,6 +2562,56 @@
               "name": "frame",
               "type": "string",
               "value": "prop_barrel.png"
+            }
+          ]
+        },
+        {
+          "id": 60,
+          "type": "prop",
+          "x": 64,
+          "y": 64,
+          "width": 0,
+          "height": 0,
+          "properties": [
+            {
+              "name": "propId",
+              "type": "string",
+              "value": "shop_perimeter_post_w"
+            },
+            {
+              "name": "propName",
+              "type": "string",
+              "value": "Perimeter Post"
+            },
+            {
+              "name": "frame",
+              "type": "string",
+              "value": "prop_support.png"
+            }
+          ]
+        },
+        {
+          "id": 61,
+          "type": "prop",
+          "x": 672,
+          "y": 64,
+          "width": 0,
+          "height": 0,
+          "properties": [
+            {
+              "name": "propId",
+              "type": "string",
+              "value": "shop_perimeter_post_e"
+            },
+            {
+              "name": "propName",
+              "type": "string",
+              "value": "Perimeter Post"
+            },
+            {
+              "name": "frame",
+              "type": "string",
+              "value": "prop_support.png"
             }
           ]
         },

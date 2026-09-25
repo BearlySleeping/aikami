@@ -2,6 +2,7 @@
 // Pure, dependency-light builders for persistent before/after evidence lanes.
 
 import { createHash } from 'node:crypto';
+import type { ContentIdentitySnapshot } from '@aikami/types';
 
 /** A lane in a paired evidence capture. */
 export type EvidenceLane = 'before' | 'after';
@@ -28,7 +29,9 @@ export const validateEvidenceLaneRequests = (options: {
           request.pathname.startsWith('/index/')),
     )
   ) {
-    throw new Error(`Evidence lane ${options.lane} requested seed or assets from ${otherAssetOrigin}`);
+    throw new Error(
+      `Evidence lane ${options.lane} requested seed or assets from ${otherAssetOrigin}`,
+    );
   }
 };
 
@@ -85,6 +88,8 @@ export type EvidenceCaptureRecord = {
   actualCameraCell: string;
   renderer: EvidenceRenderer;
   viewport: EvidenceViewport;
+  pixelWidth: number;
+  pixelHeight: number;
   entityTextureFingerprint: string;
   sha256: string;
 };
@@ -121,6 +126,7 @@ export type EvidenceManifestInput = {
   identities: Readonly<Record<EvidenceLane, EvidenceIdentity>>;
   origins: Readonly<Record<EvidenceLane, EvidenceOrigin>>;
   captures: readonly EvidenceCaptureRecord[];
+  loadedContent: Readonly<Record<EvidenceLane, ContentIdentitySnapshot | undefined>>;
   entityTexturePolicy: string;
   remoteOriginAllowed?: boolean;
   pageErrors?: readonly string[];
@@ -145,6 +151,7 @@ export type EvidenceManifest = {
   };
   origins: Readonly<Record<EvidenceLane, EvidenceOrigin>>;
   roots: Readonly<Record<EvidenceLane, EvidenceIdentity>>;
+  loadedContent: Readonly<Record<EvidenceLane, ContentIdentitySnapshot | undefined>>;
   /** The after lane is the candidate identity; the before lane is the baseline. */
   candidate: EvidenceIdentity;
   published: EvidenceIdentity;
@@ -341,6 +348,14 @@ export const createEvidenceCaptureRecord = (
   if (!HEX_SHA256.test(record.entityTextureFingerprint)) {
     throw new Error(`Invalid entity-texture fingerprint for ${record.id}/${record.lane}`);
   }
+  if (
+    record.pixelWidth !== record.viewport.width ||
+    record.pixelHeight !== record.viewport.height
+  ) {
+    throw new Error(
+      `Evidence ${record.id}/${record.lane} pixels ${record.pixelWidth}x${record.pixelHeight} do not match viewport ${record.viewport.width}x${record.viewport.height}`,
+    );
+  }
   return {
     ...record,
     requestedCell: formatEvidenceCell(parseEvidenceCell(record.requestedCell)),
@@ -415,6 +430,10 @@ export const createEvidenceManifest = (input: EvidenceManifestInput): EvidenceMa
     before: { ...input.origins.before },
     after: { ...input.origins.after },
   };
+  const loadedContent = {
+    before: input.loadedContent.before ? { ...input.loadedContent.before } : undefined,
+    after: input.loadedContent.after ? { ...input.loadedContent.after } : undefined,
+  };
   const before = pairs.map((pair) => pair.before);
   const after = pairs.map((pair) => pair.after);
   return {
@@ -435,6 +454,7 @@ export const createEvidenceManifest = (input: EvidenceManifestInput): EvidenceMa
     },
     origins,
     roots: identities,
+    loadedContent,
     candidate: identities.after,
     published: identities.before,
     pairs,
@@ -465,6 +485,19 @@ const renderOriginTable = (origins: EvidenceManifest['origins']): string[] => [
   '|---|---|---|---|',
   `| before | ${origins.before.role} | \`${escapeMarkdownCell(origins.before.clientUrl)}\` | \`${escapeMarkdownCell(origins.before.assetOrigin)}\` |`,
   `| after | ${origins.after.role} | \`${escapeMarkdownCell(origins.after.clientUrl)}\` | \`${escapeMarkdownCell(origins.after.assetOrigin)}\` |`,
+];
+
+const renderLoadedContentRow = (
+  lane: EvidenceLane,
+  identity: ContentIdentitySnapshot | undefined,
+): string =>
+  `| ${lane} | ${escapeMarkdownCell(identity?.packId ?? 'unavailable')} | ${escapeMarkdownCell(identity?.version ?? 'unavailable')} | \`${escapeMarkdownCell(identity?.manifestSha256 ?? 'unavailable')}\` | ${escapeMarkdownCell(identity?.releaseId ?? 'unavailable')} | ${escapeMarkdownCell(identity?.packLockSource ?? 'absent')} |`;
+
+const renderLoadedContentTable = (identities: EvidenceManifest['loadedContent']): string[] => [
+  '| Lane | Pack | Version | Manifest SHA-256 | Release | Pack lock |',
+  '|---|---|---|---|---|---|',
+  renderLoadedContentRow('before', identities.before),
+  renderLoadedContentRow('after', identities.after),
 ];
 
 const renderPairTable = (pairs: readonly EvidencePair[]): string[] => [
@@ -510,6 +543,12 @@ export const renderEvidenceIndex = (manifest: EvidenceManifest): string => {
     '## Git identities',
     '',
     ...renderIdentityTable(manifest.roots),
+    '',
+    '## Loaded content identity',
+    '',
+    ...renderLoadedContentTable(manifest.loadedContent),
+    '',
+    'These values are read from the running browser after the production `/game` route loads the pack; Git and catalog identities above do not substitute for them.',
     '',
     '## Paired captures',
     '',

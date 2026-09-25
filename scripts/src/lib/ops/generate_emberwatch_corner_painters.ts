@@ -10,8 +10,8 @@ import {
   paintCornerFrame,
   paintDirt,
   paintDirtFringe,
-  paintEarth,
-  paintGravel,
+  paintSand,
+  paintStoneFloor,
   paintWater,
   paintWaterUnderlay,
   paintWoodFloor,
@@ -40,14 +40,14 @@ const CORNER_PAINTERS: Readonly<Record<string, CornerPainters>> = {
   },
   gravel: {
     base: paintGrass,
-    overlay: paintGravel,
-    fringe: paintGravel,
+    overlay: paintSand,
+    fringe: paintSand,
     seed: CORNER_TERRAIN_SEEDS.gravel,
   },
   earth: {
-    base: paintGravel,
-    overlay: paintEarth,
-    fringe: paintEarth,
+    base: paintGrass,
+    overlay: paintStoneFloor,
+    fringe: paintStoneFloor,
     seed: CORNER_TERRAIN_SEEDS.earth,
   },
   cobblestone: {
@@ -55,6 +55,12 @@ const CORNER_PAINTERS: Readonly<Record<string, CornerPainters>> = {
     overlay: paintCobble,
     fringe: paintCobble,
     seed: CORNER_TERRAIN_SEEDS.cobblestone,
+  },
+  path: {
+    base: paintGrass,
+    overlay: paintCobble,
+    fringe: paintCobble,
+    seed: CORNER_TERRAIN_SEEDS.path,
   },
 };
 

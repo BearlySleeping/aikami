@@ -176,6 +176,13 @@ describe('generate_emberwatch G/FRAMES derivation (C-376 AC-6)', () => {
     expect(() => registerTerrainFrames(frames)).toThrow(/terrain cell 48.*occupied/);
   });
 
+  test('registerTerrainFrames rejects a pinned family past the atlas boundary', () => {
+    const frames: Record<string, [number, number]> = {
+      'dirt_0.png': [ATLAS_COLS - 1, ATLAS_ROWS - 1],
+    };
+    expect(() => registerTerrainFrames(frames)).toThrow(/extends past the final atlas cell/);
+  });
+
   test('buildFrames skips tiles without a declared frame', () => {
     try {
       setManifestTilesForTest({

@@ -131,6 +131,10 @@ export const buildInn = (): { map: MapData; objectLayers: MapObjectLayer[] } => 
         placeProp(44, 'inn_brazier', 'Brazier', 'prop_brazier.png', 16, 16),
         placeProp(45, 'inn_support', 'Rotting Support', 'prop_support.png', 23, 9),
 
+        // ── Perimeter posts: quiet structural markers at the room corners ──
+        placeProp(60, 'inn_perimeter_post_w', 'Perimeter Post', 'prop_support.png', 2, 2),
+        placeProp(61, 'inn_perimeter_post_e', 'Perimeter Post', 'prop_support.png', 25, 2),
+
         // ── Arrival marker ─────────────────────────────────────────────────
         placeSpawn(6, 'inn_entrance', 14, 17),
       ],
@@ -239,6 +243,10 @@ export const buildShop = (): { map: MapData; objectLayers: MapObjectLayer[] } =>
         // Merchant-side stool and a customer-side display barrel.
         placeProp(56, 'shop_chair', 'Chair', 'chair.png', 4, 8),
         placeProp(57, 'shop_barrel_2', 'Barrel', 'prop_barrel.png', 3, 14),
+
+        // ── Perimeter posts: frame storage without closing the public aisle ──
+        placeProp(60, 'shop_perimeter_post_w', 'Perimeter Post', 'prop_support.png', 2, 2),
+        placeProp(61, 'shop_perimeter_post_e', 'Perimeter Post', 'prop_support.png', 21, 2),
 
         placeSpawn(6, 'shop_entrance', 12, 15),
       ],

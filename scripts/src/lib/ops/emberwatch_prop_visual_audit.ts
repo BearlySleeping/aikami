@@ -53,6 +53,7 @@ type PropDef = {
   anchor?: { x: number; y: number };
   collision?: { type: string; width?: number; height?: number; radius?: number };
   shadow?: { kind: string; width?: number; height?: number };
+  styleClass?: string;
 };
 
 type ManifestShape = { props?: Record<string, PropDef> };
@@ -70,6 +71,7 @@ type Row = {
   anchor: { x: number; y: number };
   collision: PropDef['collision'] | null;
   shadow: PropDef['shadow'] | null;
+  styleClass: string;
 };
 
 type SpawnObject = {
@@ -178,6 +180,7 @@ const buildRow = async (
     anchor: propDef?.anchor ?? { x: 0.5, y: 1 },
     collision: propDef?.collision ?? null,
     shadow: propDef?.shadow ?? null,
+    styleClass: propDef?.styleClass ?? 'unclassified',
   };
 };
 
@@ -205,22 +208,33 @@ const buildRows = async (): Promise<Row[]> => {
   return rows;
 };
 
-const svgLabel = (text: string, width: number): Buffer =>
-  Buffer.from(
-    `<svg width="${width}" height="18" xmlns="http://www.w3.org/2000/svg"><text x="1" y="13" font-family="monospace" font-size="11" fill="#e8e8e8">${text}</text></svg>`,
+const svgLabel = (lines: readonly string[], width: number): Buffer => {
+  const escapeXml = (value: string): string =>
+    value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+  return Buffer.from(
+    `<svg width="${width}" height="36" xmlns="http://www.w3.org/2000/svg">${lines.map((line, index) => `<text x="1" y="${13 + index * 17}" font-family="monospace" font-size="11" fill="#e8e8e8">${escapeXml(line)}</text>`).join('')}</svg>`,
   );
+};
 
 /** One contact-sheet row: prop @ world size ×ZOOM, a 32px tile, a 48×64 char. */
 const renderRow = async (row: Row): Promise<{ input: Buffer; top: number; left: number }> => {
   const gap = 8;
-  const labelHeight = 20;
+  const labelHeight = 40;
+  const labelLines = [
+    `${row.frame}  [${row.styleClass}]  src ${row.sourceWidth}×${row.sourceHeight}  world ${Math.round(row.worldWidth)}×${Math.round(row.worldHeight)}`,
+    `shadow ${row.shadow?.kind ?? 'none'}  maps ${row.maps.join(',') || '(unplaced)'}`,
+  ];
   const propW = Math.max(1, Math.round(row.worldWidth)) * ZOOM;
   const propH = Math.max(1, Math.round(row.worldHeight)) * ZOOM;
+  const surfacesW = propW * 3 + gap * 2;
   const tileW = TILE_SIZE * ZOOM;
   const charW = CHARACTER_WIDTH * ZOOM;
   const charH = CHARACTER_HEIGHT * ZOOM;
   const contentH = Math.max(propH, charH);
-  const rowW = propW + gap + tileW + gap + charW;
+  const rowW = Math.max(
+    surfacesW + gap + tileW + gap + charW,
+    ...labelLines.map((line) => line.length * 7 + 4),
+  );
   const rowH = contentH + labelHeight;
 
   const propImage = await sharp(join(sourceDir, row.frame))
@@ -230,7 +244,7 @@ const renderRow = async (row: Row): Promise<{ input: Buffer; top: number; left: 
 
   // A neutral checkerboard so transparent art is visible.
   const checker = Buffer.from(
-    `<svg width="${rowW}" height="${rowH}" xmlns="http://www.w3.org/2000/svg"><rect width="${rowW}" height="${rowH}" fill="#20242a"/></svg>`,
+    `<svg width="${rowW}" height="${rowH}" xmlns="http://www.w3.org/2000/svg"><defs><pattern id="checker" width="16" height="16" patternUnits="userSpaceOnUse"><rect width="16" height="16" fill="#111827"/><rect width="8" height="8" fill="#374151"/><rect x="8" y="8" width="8" height="8" fill="#374151"/></pattern></defs><rect width="${rowW}" height="${rowH}" fill="#20242a"/><rect width="${propW}" height="${rowH}" fill="#20242a"/><rect x="${propW + gap}" width="${propW}" height="${rowH}" fill="#f8fafc"/><rect x="${(propW + gap) * 2}" width="${propW}" height="${rowH}" fill="url(#checker)"/></svg>`,
   );
   const tile = Buffer.from(
     `<svg width="${tileW}" height="${tileW}" xmlns="http://www.w3.org/2000/svg"><rect width="${tileW}" height="${tileW}" fill="#4a8f3c" stroke="#2c5a24" stroke-width="2"/></svg>`,
@@ -241,15 +255,14 @@ const renderRow = async (row: Row): Promise<{ input: Buffer; top: number; left: 
 
   const composited = await sharp(checker)
     .composite([
-      { input: tile, top: contentH - tileW, left: propW + gap },
-      { input: character, top: contentH - charH, left: propW + gap + tileW + gap },
+      { input: tile, top: contentH - tileW, left: surfacesW + gap },
+      { input: character, top: contentH - charH, left: surfacesW + gap + tileW + gap },
       { input: propImage, top: contentH - propH, left: 0 },
+      { input: propImage, top: contentH - propH, left: propW + gap },
+      { input: propImage, top: contentH - propH, left: (propW + gap) * 2 },
       {
-        input: svgLabel(
-          `${row.frame}  src ${row.sourceWidth}×${row.sourceHeight}  world ${Math.round(row.worldWidth)}×${Math.round(row.worldHeight)}`,
-          rowW,
-        ),
-        top: 2,
+        input: svgLabel(labelLines, rowW),
+        top: contentH + 2,
         left: 2,
       },
     ])

@@ -269,6 +269,10 @@ export const buildOldRoad = (): { map: MapData; objectLayers: MapObjectLayer[] }
         placeProp(20, 'waystation_crate', 'Crate', 'prop_crate.png', 56, 12),
         placeProp(21, 'waystation_crate_2', 'Crate', 'prop_crate.png', 60, 8),
         placeProp(22, 'waystation_support', 'Rotting Support', 'prop_support.png', 59, 12),
+        // Perimeter posts make the ruin's remaining structure legible without
+        // narrowing either the direct road or the woodland trail.
+        placeProp(30, 'waystation_perimeter_post_w', 'Perimeter Post', 'prop_support.png', 53, 7),
+        placeProp(31, 'waystation_perimeter_post_e', 'Perimeter Post', 'prop_support.png', 64, 14),
         placeLandmark(23, 'road_notice', 'Road Marker', 'prop_notice_board.png', 32, 20),
 
         // ── Woodland trail tree stands ─────────────────────────────────────
@@ -488,6 +492,10 @@ export const buildRuinedShrine = (): { map: MapData; objectLayers: MapObjectLaye
         // The focal socket and the arch that frames it.
         placeLandmark(4, 'ward_socket', 'Ward Socket', 'prop_ward_socket.png', 20, 20),
         placeLandmark(3, 'shrine_arch', 'Shrine Arch', 'shrine_arch.png', 19, 18),
+        // Perimeter posts flank the ritual approach; they leave the center
+        // aisle and both side routes open.
+        placeProp(35, 'shrine_perimeter_post_w', 'Perimeter Post', 'prop_support.png', 13, 16),
+        placeProp(36, 'shrine_perimeter_post_e', 'Perimeter Post', 'prop_support.png', 26, 16),
         // Clutter: fallen masonry and the remains of the cloister garden.
         placeProp(30, 'shrine_brazier', 'Brazier', 'prop_brazier.png', 17, 23),
         placeProp(31, 'shrine_barrel', 'Barrel', 'prop_barrel.png', 27, 11),

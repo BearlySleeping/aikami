@@ -35,6 +35,18 @@ export type { MapData, MapObjectLayer, SpawnObject } from './emberwatch_map_shar
 
 const G = buildG();
 
+const SEMANTIC_TERRAIN_BY_TILE_NAME: Readonly<Record<string, string>> = {
+  path_tough: 'path',
+  path_tough_variant: 'path',
+  stone_floor: 'earth',
+  stone_floor_variant: 'earth',
+  flagstone: 'earth',
+  sand: 'gravel',
+};
+
+const semanticTerrainForTileName = (tileName: string): string | undefined =>
+  SEMANTIC_TERRAIN_BY_TILE_NAME[tileName];
+
 /**
  * GID → manifest tile name, derived from the manifest (C-378 terrain
  * channel derivation). Inverse of the `buildG` alias map — GIDs that are
@@ -179,44 +191,54 @@ const applyTerrainOverrides = (options: {
 // Build map JSON
 // ---------------------------------------------------------------------------
 
-/**
- * Builds the runtime Tiled JSON for one map, deterministically. Exported (and
- * pure) so the map-compile-stability test can compare the builder output to the
- * committed maps without writing to the repository.
- */
-export const buildMapJson = ({
-  map: m,
-  objectLayers,
-}: {
-  map: MapData;
-  objectLayers: MapObjectLayer[];
-}): { json: unknown; width: number; height: number } => {
-  // C-378: derive the semantic terrain channel from the ground layer by
-  // inverting `tiles[gid].name` → terrain id. Cells whose GID is not a
-  // declared terrain (walls, roofs, furniture) stay hand-placed GIDs.
-  const terrains = readManifestTerrains();
+const addOutdoorSemanticMappings = (terrainNameToId: Map<string, string>): void => {
+  for (const tile of Object.values(readManifestTiles())) {
+    const semanticTerrain = semanticTerrainForTileName(tile.name);
+    if (semanticTerrain) {
+      terrainNameToId.set(tile.name, semanticTerrain);
+    }
+  }
+};
+
+const buildTerrainNameMap = (): Map<string, string> => {
   const frameToTileName = new Map<string, string>();
   for (const def of Object.values(readManifestTiles())) {
     frameToTileName.set(def.frame, def.name);
   }
   const terrainNameToId = new Map<string, string>();
-  for (const t of terrains) {
-    terrainNameToId.set(t.name, t.name);
-    for (const variantFrame of t.variants ?? []) {
+  for (const terrain of readManifestTerrains()) {
+    terrainNameToId.set(terrain.name, terrain.name);
+    for (const variantFrame of terrain.variants ?? []) {
       const variantTileName = frameToTileName.get(variantFrame);
       if (variantTileName) {
-        terrainNameToId.set(variantTileName, t.name);
+        terrainNameToId.set(variantTileName, terrain.name);
       }
     }
   }
-  const ground = [...m.ground];
+  return terrainNameToId;
+};
+
+const applyCanonicalSemanticMappings = (options: {
+  mode: 'outdoor' | 'none';
+  terrainNameToId: Map<string, string>;
+}): void => {
+  if (options.mode === 'outdoor') {
+    addOutdoorSemanticMappings(options.terrainNameToId);
+  }
+};
+
+const resolveLayerBuffers = (options: {
+  map: MapData;
+  terrainNameToId: ReadonlyMap<string, string>;
+}): LayerBuffers => {
+  const ground = [...options.map.ground];
   const decor: number[] = [];
   const overhead: number[] = [];
   const terrainChannel: string[] = [];
   const overheadGids = new Set([G.ROOF]);
-  for (const gid of m.ground) {
+  for (const gid of options.map.ground) {
     const tileName = gid === 0 ? undefined : GID_TO_NAME.get(gid);
-    const terrainId = tileName ? terrainNameToId.get(tileName) : undefined;
+    const terrainId = tileName ? options.terrainNameToId.get(tileName) : undefined;
     terrainChannel.push(terrainId ?? '');
     if (terrainId) {
       decor.push(0);
@@ -232,6 +254,32 @@ export const buildMapJson = ({
       overhead.push(0);
     }
   }
+  return { ground, decor, overhead, terrainChannel };
+};
+
+/**
+ * Builds the runtime Tiled JSON for one map, deterministically. Exported (and
+ * pure) so the map-compile-stability test can compare the builder output to the
+ * committed maps without writing to the repository.
+ */
+export const buildMapJson = ({
+  semanticMapping,
+  map: m,
+  objectLayers,
+}: {
+  semanticMapping: 'outdoor' | 'none';
+  map: MapData;
+  objectLayers: MapObjectLayer[];
+}): { json: unknown; width: number; height: number } => {
+  // C-378: derive the semantic terrain channel from the ground layer by
+  // inverting `tiles[gid].name` → terrain id. Cells whose GID is not a
+  // declared terrain (walls, roofs, furniture) stay hand-placed GIDs.
+  const terrainNameToId = buildTerrainNameMap();
+  applyCanonicalSemanticMappings({ mode: semanticMapping, terrainNameToId });
+  const { ground, decor, overhead, terrainChannel } = resolveLayerBuffers({
+    map: m,
+    terrainNameToId,
+  });
 
   // Explicit contributions are authored after the baked layer split. Ground
   // owns architectural silhouettes; decor owns contact decals; overhead owns
@@ -352,7 +400,10 @@ const emit = (mapName: string): void => {
   if (!builder) {
     throw new Error(`generate_emberwatch_maps: no builder for map "${mapName}"`);
   }
-  const { json, width, height } = buildMapJson(builder());
+  const { json, width, height } = buildMapJson({
+    semanticMapping: mapName === 'inn' || mapName === 'merchant_shop' ? 'none' : 'outdoor',
+    ...builder(),
+  });
   const outPath = join(mapOutDir(), `${mapName}.json`);
   mkdirSync(dirname(outPath), { recursive: true });
   writeFileSync(outPath, `${JSON.stringify(json, null, 2)}\n`);
