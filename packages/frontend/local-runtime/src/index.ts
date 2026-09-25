@@ -38,6 +38,7 @@ export {
 export {
   configureLocalModelResolution,
   configureOrtRuntime,
+  configurePinnedRemoteModelResolution,
   DEFAULT_ORT_DIST_ORIGIN,
   ORT_DIST_PATH,
   ORT_RUNTIME_VERSION,
