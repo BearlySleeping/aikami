@@ -17,6 +17,7 @@ import { setupGameCommandForwarding } from './game_world/command_forwarding.ts';
 import { syncContentIdentityOverlay } from './game_world/content_identity_overlay.ts';
 import { DebugSceneController } from './game_world/debug_scene_controller.ts';
 import {
+  clearContentIdentity,
   exposeEngineState,
   isE2ETestMode,
   isVisualScreenshotMode,
@@ -964,6 +965,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     }
 
     this._worldContainer = undefined;
+    clearContentIdentity();
     this.debugScene.clear();
   }
 

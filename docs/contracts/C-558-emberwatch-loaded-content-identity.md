@@ -116,7 +116,7 @@ The production content-pack loader now derives a canonical SHA-256 identity from
 | AC-1 | ✅ | Canonical key-sorted SHA-256, atlas/provenance extraction, loader cache identity, and order/field regressions pass. |
 | AC-2 | ✅ | Diagnostics fail closed for missing/unknown/production mode; overlay replacement/clear behavior and screen-fixed stage ownership are tested; production `/game` no-overlay capture passed. |
 | AC-3 | ✅ | `capture:evidence` records before/after loaded identity, rejects malformed snapshots, renders the identity table, and published `.evidence/C-558/`. |
-| AC-4 | ✅ | C-506 append-only reconciliation added; `knowledge:sync`/contract lint pending final bundle run. |
+| AC-4 | ✅ | C-506 append-only reconciliation added; `knowledge:sync` and contract lint completed with no new-contract diagnostics. |
 
 ### Files Created
 

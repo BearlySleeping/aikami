@@ -285,6 +285,9 @@ export class GameCompositionRoot
     publishLoadedContentIdentity({
       identity: contentPack.identity,
       metadata: {
+        manifestAssetSha256: assetStore.seed?.rows.find(
+          (row) => row.tag === `${contentPackId}:manifest`,
+        )?.hash,
         releaseId: assetStore.releaseId ?? undefined,
         releaseSource: assetStore.releaseSource ?? undefined,
         packLockSource: assetStore.packLockSource ?? undefined,

@@ -76,6 +76,15 @@ describe('content identity', () => {
     expect(first.manifestSha256).not.toBe(second.manifestSha256);
   });
 
+  test('omits unavailable atlas URLs instead of emitting undefined properties', async () => {
+    const withoutAtlas = manifest();
+    delete withoutAtlas.atlas;
+    const identity = await resolveContentIdentity(withoutAtlas, 'emberwatch');
+
+    expect('atlasTextureUrl' in identity).toBe(false);
+    expect('atlasSpritesheetUrl' in identity).toBe(false);
+  });
+
   test('rejects manifests missing identity fields', async () => {
     await expect(resolveContentIdentity({ id: 'incomplete' }, 'incomplete')).rejects.toThrow(
       'Content identity manifest is missing required fields',

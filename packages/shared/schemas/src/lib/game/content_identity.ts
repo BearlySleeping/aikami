@@ -10,6 +10,7 @@ export const ContentIdentitySnapshotSchema = Type.Object(
     version: Type.String({ minLength: 1 }),
     updatedAt: Type.String({ minLength: 1 }),
     manifestSha256: Type.String({ pattern: '^[a-f0-9]{64}$' }),
+    manifestAssetSha256: Type.Optional(Type.String({ pattern: '^[a-f0-9]{64}$' })),
     atlasTextureUrl: Type.Optional(Type.String({ minLength: 1 })),
     atlasSpritesheetUrl: Type.Optional(Type.String({ minLength: 1 })),
     propAtlases: Type.Array(

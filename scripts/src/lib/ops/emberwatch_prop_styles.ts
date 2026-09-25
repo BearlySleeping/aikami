@@ -1,6 +1,8 @@
 // scripts/src/lib/ops/emberwatch_prop_styles.ts
 
-export type PropStyleClass = 'structural' | 'furniture' | 'clutter' | 'landmark' | 'vegetation';
+import type { PropStyleClass } from '@aikami/types';
+
+export type { PropStyleClass } from '@aikami/types';
 
 /** Shared frame-to-style classification for the Emberwatch prop registry. */
 export const PROP_STYLE_CLASSES: Readonly<Record<string, PropStyleClass>> = {

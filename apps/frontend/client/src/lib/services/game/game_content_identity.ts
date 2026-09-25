@@ -3,6 +3,7 @@
 import type { ContentIdentitySnapshot } from '@aikami/types';
 
 type LoadedContentMetadata = {
+  manifestAssetSha256?: string;
   releaseId?: string;
   releaseSource?: string;
   packLockSource?: string;
@@ -17,6 +18,9 @@ export const publishLoadedContentIdentity = (options: {
 }): void => {
   options.publish({
     ...options.identity,
+    ...(options.metadata.manifestAssetSha256 === undefined
+      ? {}
+      : { manifestAssetSha256: options.metadata.manifestAssetSha256 }),
     ...(options.metadata.releaseId === undefined ? {} : { releaseId: options.metadata.releaseId }),
     ...(options.metadata.releaseSource === undefined
       ? {}

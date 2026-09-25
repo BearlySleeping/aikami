@@ -79,6 +79,8 @@ export const resolveContentIdentity = async (
   const provenanceSource = isRecord(provenanceValue)
     ? optionalString(provenanceValue, 'source')
     : undefined;
+  const atlasTextureUrl = atlasValue ? optionalString(atlasValue, 'textureUrl') : undefined;
+  const atlasSpritesheetUrl = atlasValue ? optionalString(atlasValue, 'spritesheetUrl') : undefined;
   const canonicalManifest = JSON.stringify(canonicalize(manifest));
   if (canonicalManifest === undefined) {
     throw new Error('Content identity manifest is not serializable');
@@ -90,12 +92,8 @@ export const resolveContentIdentity = async (
     version: requiredString(manifest, 'version'),
     updatedAt: requiredString(manifest, 'updatedAt'),
     manifestSha256: await sha256Hex(canonicalManifest),
-    ...(atlasValue
-      ? {
-          atlasTextureUrl: optionalString(atlasValue, 'textureUrl'),
-          atlasSpritesheetUrl: optionalString(atlasValue, 'spritesheetUrl'),
-        }
-      : {}),
+    ...(atlasTextureUrl === undefined ? {} : { atlasTextureUrl }),
+    ...(atlasSpritesheetUrl === undefined ? {} : { atlasSpritesheetUrl }),
     propAtlases: readPropAtlases(manifest),
     provenanceSource: provenanceSource ?? 'unknown',
   };

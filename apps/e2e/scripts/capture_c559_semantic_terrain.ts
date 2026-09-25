@@ -41,6 +41,9 @@ type CaptureRecord = {
   viewport: Viewport;
   pixelWidth: number;
   pixelHeight: number;
+  expectedManifestAssetSha256: string;
+  loadedManifestAssetSha256: string | undefined;
+  contentIdentityVerified: boolean;
   entityTextureFingerprint: string;
   sha256: string;
 };
@@ -156,6 +159,9 @@ const artifactHashes = (): Record<string, string> => {
 
 const captureCases = async (page: Page): Promise<CaptureRecord[]> => {
   const records: CaptureRecord[] = [];
+  const expectedManifestAssetSha256 = hashFile(
+    resolve(LANE_ROOT, 'content/packs/emberwatch/manifest.json'),
+  );
   for (const definition of CASES) {
     const viewport = definition.viewport ?? DEFAULT_VIEWPORT;
     await page.setViewportSize(viewport);
@@ -180,6 +186,24 @@ const captureCases = async (page: Page): Promise<CaptureRecord[]> => {
         `C559 ${LANE}/${definition.id} expected player ${formatCell(definition.target)}, got ${formatCell(snapshot.player)}`,
       );
     }
+    const loadedIdentity = await page.evaluate(() => {
+      const identity: unknown = Reflect.get(window, '__AIKAMI_CONTENT_IDENTITY__');
+      if (
+        typeof identity !== 'object' ||
+        identity === null ||
+        !('manifestAssetSha256' in identity)
+      ) {
+        return undefined;
+      }
+      const digest = identity.manifestAssetSha256;
+      return typeof digest === 'string' ? digest : undefined;
+    });
+    const contentIdentityVerified = loadedIdentity === expectedManifestAssetSha256;
+    if (LANE === 'after' && !contentIdentityVerified) {
+      throw new Error(
+        `C559 after/${definition.id} loaded manifest ${loadedIdentity ?? 'unavailable'} does not match ${expectedManifestAssetSha256}`,
+      );
+    }
     records.push({
       lane: LANE,
       id: definition.id,
@@ -195,6 +219,9 @@ const captureCases = async (page: Page): Promise<CaptureRecord[]> => {
       viewport,
       pixelWidth: pixels.width,
       pixelHeight: pixels.height,
+      expectedManifestAssetSha256,
+      loadedManifestAssetSha256: loadedIdentity,
+      contentIdentityVerified,
       entityTextureFingerprint: hashBytes(Buffer.from(JSON.stringify(textures))),
       sha256: hashFile(path),
     });
@@ -214,12 +241,19 @@ const writeAfterEvidence = async (records: readonly CaptureRecord[]): Promise<vo
       throw new Error(`C-559 missing before/after record for ${definition.id}`);
     }
     if (
+      beforeRecord.mapId !== afterRecord.mapId ||
+      beforeRecord.requestedCell !== afterRecord.requestedCell ||
+      beforeRecord.actualPlayerCell !== afterRecord.actualPlayerCell ||
+      beforeRecord.renderer !== afterRecord.renderer ||
       beforeRecord.viewport.width !== afterRecord.viewport.width ||
       beforeRecord.viewport.height !== afterRecord.viewport.height ||
       beforeRecord.pixelWidth !== afterRecord.pixelWidth ||
       beforeRecord.pixelHeight !== afterRecord.pixelHeight
     ) {
-      throw new Error(`C-559 before/after capture sizes differ for ${definition.id}`);
+      throw new Error(`C-559 before/after capture identity differs for ${definition.id}`);
+    }
+    if (!afterRecord.contentIdentityVerified) {
+      throw new Error(`C-559 after/${definition.id} has unverified loaded content identity`);
     }
     execFileSync(
       'magick',
