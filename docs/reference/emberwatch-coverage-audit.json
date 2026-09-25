@@ -890,7 +890,7 @@
       "id": "npc-appearance:village_guard",
       "surface": "npc-appearance",
       "classification": "accepted/current",
-      "detail": "6 LPC components: body/bodies_male, hair/plain_adult, head/heads/human_male, torso/armour/leather_male, legs/armour/plate_male, feet/armour/plate_male"
+      "detail": "8 LPC components: body/bodies_male, hair/plain_adult, head/heads/human_male, torso/armour/leather_male, legs/armour/plate_male, feet/armour/plate_male, weapon/sword/longsword, shield/heater/original/wood_fg"
     },
     {
       "id": "portrait:village_guard",
@@ -998,7 +998,7 @@
       "id": "npc-appearance:woodcutter_ada",
       "surface": "npc-appearance",
       "classification": "accepted/current",
-      "detail": "6 LPC components: body/bodies_female, hair/high_ponytail/fg_adult, head/heads/human_female, torso/clothes/longsleeve/longsleeves_cuffed_female, legs/pants_thin, feet/boots/basic_thin"
+      "detail": "7 LPC components: body/bodies_female, hair/high_ponytail/fg_adult, head/heads/human_female, torso/clothes/longsleeve/longsleeve2_female, legs/pants_thin, feet/boots/basic_thin, weapon/blunt/waraxe"
     },
     {
       "id": "portrait:woodcutter_ada",
