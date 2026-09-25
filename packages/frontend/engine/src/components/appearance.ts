@@ -113,6 +113,56 @@ export const setAppearanceExtras = (eid: number, recipes?: readonly LpcLayerReci
 export const getAppearanceExtras = (eid: number): readonly LpcLayerRecipe[] =>
   _appearanceExtras.get(eid) ?? [];
 
+/**
+ * Appends extra-slot layers to a resolved base recipe list.
+ *
+ * Extras are appended rather than merged: the composer's depth table owns the
+ * draw order, so a shield listed after a body layer still draws behind it.
+ * Only the base six can be REPLACED by a slot; an extra is additive, and the
+ * normalizer refuses two components for the same extra slot.
+ *
+ * @param base - Recipes for the six positional base slots.
+ * @param extras - Resolved extra-slot recipes, if any.
+ * @returns The combined recipe list.
+ */
+export const withExtraLayers = (
+  base: LpcLayerRecipe[],
+  extras: readonly LpcLayerRecipe[] | undefined,
+): LpcLayerRecipe[] => (extras === undefined || extras.length === 0 ? base : [...base, ...extras]);
+
+/**
+ * Everything a render path needs to draw one entity this frame.
+ *
+ * One call rather than three, so each render path cannot forget one of them —
+ * a path that composes the base six but forgets the extras draws a
+ * half-dressed character with nothing in the logs to say why.
+ *
+ * @param eid - The entity ID.
+ * @param resolveBase - Resolves the six base slots from their layer IDs.
+ * @returns The base layer IDs, the combined recipes, the extras alone, and a change key.
+ */
+export const appearanceState = (
+  eid: number,
+  resolveBase: (layerIds: readonly number[]) => LpcLayerRecipe[],
+): {
+  layerIds: readonly number[];
+  recipes: LpcLayerRecipe[];
+  extras: readonly LpcLayerRecipe[];
+  key: string;
+} => {
+  const layerIds = getAppearanceLayers(eid);
+  const extras = getAppearanceExtras(eid);
+  return {
+    layerIds,
+    recipes: withExtraLayers(resolveBase(layerIds), extras),
+    extras,
+    // The extras are part of the entity's identity for change detection: an
+    // outfit that swaps its shield must re-emit even when the positional
+    // layer IDs are unchanged.
+    key: `${layerIds.join(',')}|${extras.map((recipe) => recipe.assetId).join(',')}`,
+  };
+};
+
 /** Drops every entity's extra layers. Call on world teardown. */
 export const clearAppearanceExtras = (): void => {
   _appearanceExtras.clear();

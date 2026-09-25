@@ -7,10 +7,11 @@ import { Container, type UniformGroup } from 'pixi.js';
 import { autotileLayers, type TerrainLayerEmission } from './assets/autotile.ts';
 import type { AssetTagResolver } from './assets/map_loader.ts';
 import { BaseEngineClass, type BaseEngineClassOptions } from './base_engine_class.ts';
-import type { LpcLayerRecipe } from './components/appearance.ts';
+import { type LpcLayerRecipe, withExtraLayers } from './components/appearance.ts';
 import { COMPONENT_STRIDE } from './config/memory_config.ts';
 import type { EngineBridge } from './engine_bridge.ts';
 import { unprojectScreenPoint } from './frame_pacing.ts';
+import { toAppearanceIdentity } from './game_events/appearance_changed.ts';
 import { loadStaticVisual } from './game_world/actor_visual_transport.ts';
 import { CombatSelectionHighlights } from './game_world/combat_selection_highlights.ts';
 import { setupGameCommandForwarding } from './game_world/command_forwarding.ts';
@@ -1251,7 +1252,10 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
           });
           const entry = this._renderEntries.get(gameEvent.eid);
           if (entry && this._recipeResolver) {
-            let recipes = this._recipeResolver(gameEvent.layerIds);
+            let recipes = withExtraLayers(
+              this._recipeResolver(gameEvent.layerIds),
+              gameEvent.extraLayers,
+            );
             // C-374: merge equipped items into the player's recipe so the
             // sprite reflects current gear (torso/feet replace the base
             // layer; hat/shoulders/weapon/shield are appended).
@@ -1259,13 +1263,9 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
               recipes = this._mergeEquipmentRecipes(recipes, this._equipmentRecipeProvider());
             }
             entry.recipes = recipes;
-            // C-504 AC-5: record the RESOLVED per-NPC appearance (slot →
-            // assetId) so E2E can assert named identities in the live game.
             const npcId = this._npcMeta.get(gameEvent.eid)?.npcId;
             if (npcId) {
-              this._debugNpcAppearance[npcId] = Object.fromEntries(
-                recipes.filter((r) => r.assetId).map((r) => [r.slot, r.assetId]),
-              );
+              this._debugNpcAppearance[npcId] = toAppearanceIdentity(recipes);
             }
             // Bump revision to invalidate any in-flight loads for this entity.
             const nextRevision = (this._entityLoadRevisions.get(gameEvent.eid) ?? 0) + 1;

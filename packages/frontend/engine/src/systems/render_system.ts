@@ -4,7 +4,7 @@ import { getComponent, hasComponent, observe, onAdd, onRemove, query } from 'bit
 import { Buffer, BufferUsage, type Container, Graphics, Rectangle } from 'pixi.js';
 import { logger } from '$logger';
 import type { LpcLayerRecipe } from '../components/appearance.ts';
-import { Appearance } from '../components/appearance.ts';
+import { Appearance, appearanceState } from '../components/appearance.ts';
 import type { PositionData } from '../components/position.ts';
 import { Position } from '../components/position.ts';
 import { Velocity } from '../components/velocity.ts';
@@ -16,7 +16,6 @@ import {
   LpcAnimationState,
   velocityToDirection,
 } from '../rendering/animation_controller.ts';
-import { appearanceRecipes } from '../rendering/appearance_recipes.ts';
 import type { SpriteComposer } from '../rendering/sprite_composer.ts';
 import { packRecipeToUboBuffer } from '../rendering/sprite_composer.ts';
 
@@ -734,7 +733,7 @@ const syncAppearanceSystem = (options: {
 
   // Detect enters + process existing entities
   for (const eid of entities) {
-    const recipes = appearanceRecipes(eid, recipeResolver);
+    const { recipes } = appearanceState(eid, recipeResolver);
 
     if (!tracked.has(eid)) {
       // Enter: new entity — register in batch pool

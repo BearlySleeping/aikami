@@ -6,6 +6,7 @@
 
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
+import { projectAppearanceCatalog, projectLpcCatalog } from '../src/lib/appearance.ts';
 import { buildLpcCatalog } from '../src/lib/build_catalog.ts';
 import {
   LEGACY_CATALOG_SNAPSHOT,
@@ -309,5 +310,69 @@ describe('C-504 named appearance', () => {
     expect(a.layerIds[0]).toBeGreaterThan(0);
     expect(a.layerIds[2]).toBe(0); // torso
     expect(a.layerIds[4]).toBe(0); // feet
+  });
+});
+
+describe('extra slots resolve against the real published catalog', () => {
+  /** Catalog rebuilt from the committed snapshot the runtime resolves against. */
+  const realCatalog = (): readonly { slot: string; variants: { assetId: string }[] }[] => {
+    const slots = new Map<string, { assetId: string }[]>();
+    for (const assetIds of Object.values(LEGACY_CATALOG_SNAPSHOT)) {
+      for (const assetId of assetIds) {
+        const slot = assetId.split('/')[0];
+        if (slot === undefined) {
+          continue;
+        }
+        const list = slots.get(slot) ?? [];
+        list.push({ assetId });
+        slots.set(slot, list);
+      }
+    }
+    return [...slots].map(([slot, variants]) => ({ slot, variants }));
+  };
+
+  const guardAppearance = {
+    formatVersion: 1 as const,
+    components: [
+      { slot: 'body', assetId: 'body/bodies_male' },
+      { slot: 'torso', assetId: 'torso/armour/leather_male' },
+      { slot: 'legs', assetId: 'legs/armour/plate_male' },
+      { slot: 'feet', assetId: 'feet/armour/plate_male' },
+      { slot: 'weapon', assetId: 'weapon/sword/longsword' },
+      { slot: 'shield', assetId: 'shield/heater/original/wood_fg' },
+    ],
+  };
+
+  test('the appearance catalog projection keeps the extra slots', () => {
+    const projected = projectAppearanceCatalog(realCatalog());
+    const slots = projected.map((entry) => entry.slot);
+    expect(slots).toContain('weapon');
+    expect(slots).toContain('shield');
+  });
+
+  test('the guard resolves to a six-slot body plus a sword and a shield', () => {
+    const result = resolveNpcAppearance({
+      input: guardAppearance,
+      catalog: projectAppearanceCatalog(realCatalog()),
+    });
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.status).toBe('named');
+    expect(result.layerIds).toHaveLength(6);
+    expect(result.extraLayers?.map((layer) => [layer.slot, layer.assetId])).toEqual([
+      ['weapon', 'weapon/sword/longsword'],
+      ['shield', 'shield/heater/original/wood_fg'],
+    ]);
+  });
+
+  test('the base projection alone would have dropped both extras', () => {
+    // The regression this guards: the rendering projection covers base slots
+    // only, so resolving against it makes every extra read as "not in the
+    // catalog" and silently strips the kit.
+    const result = resolveNpcAppearance({
+      input: guardAppearance,
+      catalog: projectLpcCatalog(realCatalog()),
+    });
+    expect(result.status).toBe('invalid');
   });
 });
