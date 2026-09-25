@@ -112,8 +112,11 @@ run('check service worker', 'bun', ['scripts/check_service_worker.ts', 'build'])
 //
 //    The decision comes from the same resolver the gate itself uses, so the
 //    guard can never disagree with the route graph that was actually built.
+//    `buildEnv` — not `process.env` — is the authority: the override usually
+//    arrives from `.env.<mode>`, which is loaded here and is not otherwise
+//    exported into this process.
 const allowDevRoutes =
-  resolveIncludeDevRoutes('build') || process.env.AIKAMI_DESKTOP_BUILD === 'true';
+  resolveIncludeDevRoutes('build', buildEnv) || process.env.AIKAMI_DESKTOP_BUILD === 'true';
 if (allowDevRoutes) {
   logger.info(`[build-client] ${DEV_ROUTES_ENV_VAR}=true — dev routes are expected in this build.`);
 }
