@@ -35,6 +35,20 @@ const recordingBackend = (
   };
 };
 
+const chunkedResponse = (...chunks: string[]): Response => {
+  const encoder = new TextEncoder();
+  return new Response(
+    new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (const chunk of chunks) {
+          controller.enqueue(encoder.encode(chunk));
+        }
+        controller.close();
+      },
+    }),
+  );
+};
+
 describe('isCanonicalModelUrl', () => {
   test('accepts a pinned, absolute model URL', () => {
     expect(
@@ -139,6 +153,33 @@ describe('createPinnedModelCache', () => {
     expect(backend.stored).toEqual([]);
   });
 
+  test('refuses HTML when the content type has mixed case', async () => {
+    const backend = recordingBackend();
+    const cache = createPinnedModelCache(backend, OPTIONS);
+    const url =
+      'https://huggingface.co/onnx-community/Kokoro-82M-ONNX/resolve/f46687f7e41512228ae953af24a11b2640ea0f22/config.json';
+
+    await expect(
+      cache.put(url, new Response('fallback', { headers: { 'content-type': 'Text/HTML' } })),
+    ).rejects.toThrow(/HTML response/);
+    expect(backend.stored).toEqual([]);
+  });
+
+  test('refuses mixed-case HTML prefixes split across chunks', async () => {
+    const backend = recordingBackend();
+    const cache = createPinnedModelCache(backend, OPTIONS);
+    const url =
+      'https://huggingface.co/onnx-community/Kokoro-82M-ONNX/resolve/f46687f7e41512228ae953af24a11b2640ea0f22/config.json';
+
+    await expect(cache.put(url, chunkedResponse('  <!Do', 'CtYpE html>'))).rejects.toThrow(
+      /HTML response/,
+    );
+    await expect(cache.put(url, chunkedResponse('\n<HT', 'ML>fallback'))).rejects.toThrow(
+      /HTML response/,
+    );
+    expect(backend.stored).toEqual([]);
+  });
+
   test('stores a real JSON response', async () => {
     const backend = recordingBackend();
     const cache = createPinnedModelCache(backend, OPTIONS);
@@ -150,6 +191,24 @@ describe('createPinnedModelCache', () => {
       new Response('{"ok":true}', { headers: { 'content-type': 'application/json' } }),
     );
     expect(backend.stored).toEqual([url]);
+  });
+
+  test('stores a multi-chunk response without blocking its original body', async () => {
+    const stored: string[] = [];
+    const backend: ModelCacheBackend = {
+      async match() {
+        return undefined;
+      },
+      async put(_url, response) {
+        stored.push(await response.text());
+      },
+    };
+    const cache = createPinnedModelCache(backend, OPTIONS);
+    const url =
+      'https://huggingface.co/onnx-community/Kokoro-82M-ONNX/resolve/f46687f7e41512228ae953af24a11b2640ea0f22/config.json';
+
+    await cache.put(url, chunkedResponse('  <ht', 'tp>model', ' bytes'));
+    expect(stored).toEqual(['  <http>model bytes']);
   });
 
   test('never stores a non-canonical key', async () => {
