@@ -108,11 +108,13 @@ run('vite build', 'bunx', ['vite', 'build', ...modeArgs, ...passthrough], { env:
 //     orchestrator runs its own `check_deploy_assets` pass in a different
 //     process, where the mode env file is not loaded — so re-deriving the
 //     decision from `process.env` there silently disagreed with this build and
-//     rejected a dev-route output the build had explicitly produced. The marker
+//     rejected a dev-route output the build had explicitly produced. The record
 //     travels with the artifact (including checksum-cache and CI reuse), which
 //     makes "the guard cannot disagree with the build" true by construction.
-const includeDevRoutes = allowDevRoutesForBuild;
-await Bun.write(join(CLIENT_DIR, 'build', DEV_ROUTES_BUILD_MARKER_FILE), `${includeDevRoutes}\n`);
+await Bun.write(
+  join(CLIENT_DIR, 'build', DEV_ROUTES_BUILD_MARKER_FILE),
+  `${JSON.stringify({ includeDevRoutes: allowDevRoutesForBuild }, null, 2)}\n`,
+);
 
 // 3. Guard the emitted chunk graph. A static-import cycle between chunks
 //    breaks module evaluation order and only surfaces at runtime.

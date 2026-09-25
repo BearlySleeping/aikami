@@ -119,24 +119,40 @@ describe('runDeployAssetGuard', () => {
     expect(runDeployAssetGuard({} as AppConfig, appRoot)).toBe(false);
   });
 
-  test("honors the build's own marker when the env is not loaded", () => {
+  test("honors the build's own record when the env is not loaded", () => {
     // The real CI shape: the build read `.env.<mode>`, this process did not,
     // so `process.env` says nothing about the route graph that was produced.
     const { appRoot, argvPath, config } = guardFixture();
     mkdirSync(join(appRoot, 'build'), { recursive: true });
-    writeFileSync(join(appRoot, 'build', DEV_ROUTES_BUILD_MARKER_FILE), 'true\n');
+    writeFileSync(
+      join(appRoot, 'build', DEV_ROUTES_BUILD_MARKER_FILE),
+      JSON.stringify({ includeDevRoutes: true }),
+    );
 
     expect(runDeployAssetGuard(config, appRoot)).toBe(true);
     expect(readFileSync(argvPath, 'utf-8')).toContain('--allow-dev-routes');
   });
 
-  test('an explicit false marker overrides a stale opt-in env', () => {
+  test('an explicit false record overrides a stale opt-in env', () => {
     const { appRoot, argvPath, config } = guardFixture();
     mkdirSync(join(appRoot, 'build'), { recursive: true });
-    writeFileSync(join(appRoot, 'build', DEV_ROUTES_BUILD_MARKER_FILE), 'false\n');
+    writeFileSync(
+      join(appRoot, 'build', DEV_ROUTES_BUILD_MARKER_FILE),
+      JSON.stringify({ includeDevRoutes: false }),
+    );
     process.env.AIKAMI_INCLUDE_DEV_ROUTES = 'true';
 
     expect(runDeployAssetGuard(config, appRoot)).toBe(true);
     expect(readFileSync(argvPath, 'utf-8')).not.toContain('--allow-dev-routes');
+  });
+
+  test('an unreadable record falls back to the env rather than guessing', () => {
+    const { appRoot, argvPath, config } = guardFixture();
+    mkdirSync(join(appRoot, 'build'), { recursive: true });
+    writeFileSync(join(appRoot, 'build', DEV_ROUTES_BUILD_MARKER_FILE), 'not json');
+    process.env.AIKAMI_INCLUDE_DEV_ROUTES = 'true';
+
+    expect(runDeployAssetGuard(config, appRoot)).toBe(true);
+    expect(readFileSync(argvPath, 'utf-8')).toContain('--allow-dev-routes');
   });
 });
