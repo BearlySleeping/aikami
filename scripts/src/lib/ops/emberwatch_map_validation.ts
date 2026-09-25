@@ -14,8 +14,14 @@
 
 import { existsSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { missingCandidateOverrides } from './emberwatch_candidate_plane.ts';
+import { scanPackGidAtlasCoverage } from './emberwatch_atlas_coverage.ts';
+import {
+  findPublishedSeedPath,
+  missingCandidateOverrides,
+  readPublishedSeedHashes,
+} from './emberwatch_candidate_plane.ts';
 import { checkLockedIdentities } from './emberwatch_locked_identity.ts';
+import { validateBridgeRoutes } from './emberwatch_map_bridge_route.ts';
 import {
   buildContexts,
   type Manifest,
@@ -66,6 +72,87 @@ const finding = (
   detail: string,
 ): ValidationFinding => ({ rule, severity: 'error', map, subject, detail });
 
+/** The candidate-plane completeness finding, when a required override is missing. */
+const candidatePlaneFindings = (): ValidationFinding[] => {
+  const seedPath = findPublishedSeedPath(repository);
+  const missing = missingCandidateOverrides(
+    repository,
+    seedPath ? readPublishedSeedHashes(seedPath) : undefined,
+  );
+  if (missing.length === 0) {
+    return [];
+  }
+  return [
+    finding(
+      'candidate-plane-incomplete',
+      '*',
+      'candidate-plane',
+      `local candidate origin would serve stale rows for: ${missing.join(', ')}`,
+    ),
+  ];
+};
+
+/**
+ * C-548: every GID a map paints must resolve to a frame the atlas carries. A
+ * stale atlas build (or a map committed against a newer frame table) would
+ * otherwise ship a crossing drawn from the fallback tile. See
+ * `emberwatch_atlas_coverage.ts`.
+ */
+const atlasCoverageFindings = (manifest: Manifest): ValidationFinding[] => {
+  const scan = scanPackGidAtlasCoverage({
+    packRoot,
+    gameDataRoot: join(repository, 'apps/frontend/client/static/game-data'),
+    manifest: { tiles: manifest.tiles ?? {} },
+  });
+  const out: ValidationFinding[] = [];
+  if (!scan.atlasBuilt && scan.findings.length === 0) {
+    out.push(
+      finding(
+        'atlas-not-built',
+        '*',
+        'atlas',
+        'the terrain atlas descriptor is not built — run generate_emberwatch_atlas.ts before a candidate can resolve map GIDs',
+      ),
+    );
+  }
+  for (const gap of scan.findings) {
+    out.push(
+      finding(
+        gap.reason === 'maps-not-built' ? 'maps-not-built' : 'map-gid-frame-missing',
+        gap.mapId,
+        gap.reason === 'maps-not-built' ? gap.layer : `${gap.layer}/gid${gap.gid}`,
+        gap.detail,
+      ),
+    );
+  }
+  return out;
+};
+
+/**
+ * A visual-polish edit must never silently move a save/quest/transition
+ * reference. The golden is the deliberate-change gate; see
+ * `emberwatch_locked_identity.ts`.
+ */
+const lockedIdentityFindings = (): ValidationFinding[] => {
+  const identities = checkLockedIdentities();
+  if (identities.ok) {
+    return [];
+  }
+  return identities.drift.map((drift) =>
+    finding(
+      'locked-identity-drift',
+      '*',
+      drift.path,
+      [
+        drift.removed.length > 0 ? `removed: ${drift.removed.join(', ')}` : '',
+        drift.added.length > 0 ? `added: ${drift.added.join(', ')}` : '',
+      ]
+        .filter((part) => part.length > 0)
+        .join('; ') || 'locked identities differ from the golden',
+    ),
+  );
+};
+
 /** Runs every validation rule over the committed pack. Pure + read-only. */
 export const validateEmberwatchMaps = (): EmberwatchMapValidation => {
   const manifest = readJson<Manifest>(join(packRoot, 'manifest.json'));
@@ -79,42 +166,14 @@ export const validateEmberwatchMaps = (): EmberwatchMapValidation => {
     validateNpcAndEvidence({ context, manifest, findings });
     validateConnectivity({ context, manifest, findings });
     validateRouteWidth(context, findings);
+    // C-549: a crossing must lie ON the shortest path to the place it serves,
+    // not merely be reachable somewhere.
+    validateBridgeRoutes(context, findings);
   }
   validateTransitions(contexts, findings);
-
-  const missingPlane = missingCandidateOverrides(repository);
-  if (missingPlane.length > 0) {
-    findings.push(
-      finding(
-        'candidate-plane-incomplete',
-        '*',
-        'candidate-plane',
-        `local candidate origin would serve stale rows for: ${missingPlane.join(', ')}`,
-      ),
-    );
-  }
-
-  // A visual-polish edit must never silently move a save/quest/transition
-  // reference. The golden is the deliberate-change gate; see
-  // `emberwatch_locked_identity.ts`.
-  const identities = checkLockedIdentities();
-  if (!identities.ok) {
-    for (const drift of identities.drift) {
-      findings.push(
-        finding(
-          'locked-identity-drift',
-          '*',
-          drift.path,
-          [
-            drift.removed.length > 0 ? `removed: ${drift.removed.join(', ')}` : '',
-            drift.added.length > 0 ? `added: ${drift.added.join(', ')}` : '',
-          ]
-            .filter((part) => part.length > 0)
-            .join('; ') || 'locked identities differ from the golden',
-        ),
-      );
-    }
-  }
+  findings.push(...candidatePlaneFindings());
+  findings.push(...atlasCoverageFindings(manifest));
+  findings.push(...lockedIdentityFindings());
 
   return {
     schemaVersion: 1,

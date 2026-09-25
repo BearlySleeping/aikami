@@ -15,7 +15,9 @@ import {
   hudPreferenceService,
   inputActionService,
   motionPreferenceService,
+  musicPlayerService,
   npcDialogueService,
+  npcMemoryService,
   onboardingHintService,
   partyRosterService,
   playerStateService,
@@ -38,7 +40,6 @@ import { getTalkToPartyViewModel } from '$views/game/ui/overlays/talk_to_party/t
 import { getQuestTrackerViewModel } from '$views/game/ui/quest_tracker_composition.ts';
 import { getInventoryViewModel } from '$views/inventory/inventory_composition.ts';
 import { getJournalViewModel } from '$views/journal/journal_composition.ts';
-import { getQuestViewModel } from '$views/quest/quest_composition.ts';
 import { getVendorViewModel } from '$views/vendor/vendor_composition.ts';
 import { getWorldViewModel } from '$views/world/world_composition.ts';
 import { createGameUIViewModel, type GameUIViewModelInterface } from './game_ui_view_model.svelte';
@@ -49,8 +50,9 @@ import { hudViewState } from './hud_view_state.svelte.ts';
  * Builds the game-UI ViewModel wired to the production service singletons and
  * child overlay compositions.
  */
-export const getGameUIViewModel = (options: BaseViewModelOptions): GameUIViewModelInterface =>
-  createGameUIViewModel({
+export const getGameUIViewModel = (options: BaseViewModelOptions): GameUIViewModelInterface => {
+  inputActionService.setHudShortcutCapability(hudPreferenceService);
+  return createGameUIViewModel({
     ...options,
     chat: chatService,
     combat: combatService,
@@ -59,6 +61,7 @@ export const getGameUIViewModel = (options: BaseViewModelOptions): GameUIViewMod
     overlays: gameOverlayService,
     inputAction: inputActionService,
     npcDialogue: npcDialogueService,
+    npcMemory: npcMemoryService,
     onboarding: onboardingHintService,
     playerState: playerStateService,
     party: partyRosterService,
@@ -67,13 +70,13 @@ export const getGameUIViewModel = (options: BaseViewModelOptions): GameUIViewMod
     session: sessionService,
     time: timeService,
     motion: motionPreferenceService,
+    music: musicPlayerService,
     hud: hudPreferenceService,
     hudView: hudViewState,
     engine: gameEngineService as GameEngineServiceInterface,
     createCombatViewModel: getCombatViewModel,
     createDialogueOverlayViewModel: getDialogueOverlayViewModel,
     createInventoryViewModel: getInventoryViewModel,
-    createQuestViewModel: getQuestViewModel,
     createJournalViewModel: getJournalViewModel,
     createCharacterSheetViewModel: getCharacterSheetViewModel,
     createVendorViewModel: getVendorViewModel,
@@ -88,3 +91,4 @@ export const getGameUIViewModel = (options: BaseViewModelOptions): GameUIViewMod
     createTalkToPartyViewModel: getTalkToPartyViewModel,
     createQuestTrackerViewModel: getQuestTrackerViewModel,
   });
+};

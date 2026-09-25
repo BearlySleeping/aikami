@@ -103,39 +103,12 @@ const transitionCalls = (): unknown[][] =>
   (audioService.transitionToBgm as ReturnType<typeof mock>).mock.calls;
 
 afterEach(() => {
-  musicPlayerService.setVisible(false);
   musicPlayerService.stop();
 });
 
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
-
-describe('MusicPlayerService — visibility', () => {
-  test('visible defaults to false', () => {
-    expect(musicPlayerService.visible).toBe(false);
-  });
-
-  test('setVisible / toggleVisible flip the persisted flag', () => {
-    musicPlayerService.setVisible(true);
-    expect(musicPlayerService.visible).toBe(true);
-
-    musicPlayerService.toggleVisible();
-    expect(musicPlayerService.visible).toBe(false);
-
-    musicPlayerService.toggleVisible();
-    expect(musicPlayerService.visible).toBe(true);
-  });
-
-  test('initialize restores visible state from storage', () => {
-    // Key renamed to aikami:music-player:visible in commit 9ab4cae5.
-    const MusicPlayerVisibleKey = 'aikami:music-player:visible';
-    localStorage.setItem(MusicPlayerVisibleKey, '1');
-    musicPlayerService.initialize();
-    expect(musicPlayerService.visible).toBe(true);
-    localStorage.removeItem(MusicPlayerVisibleKey);
-  });
-});
 
 describe('MusicPlayerService — derived playback state', () => {
   test('vibeLabel reflects the current scene context', () => {

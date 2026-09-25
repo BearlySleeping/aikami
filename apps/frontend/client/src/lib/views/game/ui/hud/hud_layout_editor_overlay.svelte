@@ -23,52 +23,42 @@ const { viewModel }: Props = $props();
 
 /** Drop targets, in layout order. */
 const DROP_ANCHORS: readonly HudSlot[] = HUD_ANCHOR_ORDER;
-
-/**
- * Pointer drag.
- *
- * Deliberately pointer events, not HTML5 drag-and-drop: `draggable` + `drop`
- * needs a `dataTransfer` payload the browser only produces for a native drag,
- * which touch and some embedded webviews never start. Pointer events give the
- * same affordance to mouse, touch and pen, and the keyboard/controller paths
- * already cover the rest.
- */
-const onPointerDown = (event: PointerEvent, widgetId: string): void => {
-  event.preventDefault();
-  viewModel.beginDrag(widgetId as Parameters<typeof viewModel.beginDrag>[0]);
-};
-
-const onPointerUp = (anchor: HudSlot): void => {
-  if (!viewModel.isDragging) {
-    return;
-  }
-  viewModel.dropOnAnchor(anchor);
-};
 </script>
 
 <BaseViewModelContainer {viewModel}>
   <div
-    class="modal modal-open backdrop-blur-sm bg-black/70"
+    class="modal modal-open backdrop-blur-sm bg-black/70 group"
     role="dialog"
     aria-modal="true"
     aria-label="Customize HUD"
     tabindex="-1"
     data-testid="hud-editor"
     data-hud-dragging={viewModel.isDragging ? 'true' : 'false'}
-    onkeydown={(event: KeyboardEvent) => viewModel.handleKeyDown(event)}
+    onkeydown={(event: KeyboardEvent) => viewModel.handleEditorKeyDown(event)}
   >
     <div class="modal-box w-full max-w-4xl max-h-[90vh] overflow-y-auto">
       <div class="flex items-center justify-between mb-3">
         <h2 class="text-lg font-bold">Customize HUD</h2>
-        <button
-          type="button"
-          class="btn btn-ghost btn-sm btn-circle"
-          aria-label="Close HUD editor"
-          data-testid="hud-editor-close"
-          onclick={() => viewModel.requestClose()}
-        >
-          ✕
-        </button>
+        <div class="flex items-center gap-2">
+          <button
+            type="button"
+            class="btn btn-ghost btn-sm"
+            aria-pressed={viewModel.isHudTemporarilyHidden}
+            data-testid="hud-editor-toggle-visibility"
+            onclick={() => viewModel.toggleHudTemporarilyHidden()}
+          >
+            {viewModel.isHudTemporarilyHidden ? 'Show HUD' : 'Hide HUD'}
+          </button>
+          <button
+            type="button"
+            class="btn btn-ghost btn-sm btn-circle"
+            aria-label="Close HUD editor"
+            data-testid="hud-editor-close"
+            onclick={() => viewModel.requestClose()}
+          >
+            ✕
+          </button>
+        </div>
       </div>
 
       {#if !viewModel.isEditorEnabled}
@@ -133,18 +123,31 @@ const onPointerUp = (anchor: HudSlot): void => {
           >
             {#each DROP_ANCHORS as anchor}
               <div
-                class="{hudAnchorClass(anchor)} z-40 flex min-h-8 min-w-16 flex-col gap-1 rounded border border-dashed border-base-content/30 p-1"
+                class="{hudAnchorClass(anchor)} z-40 flex min-h-10 min-w-24 flex-col gap-1 rounded border border-dashed border-base-content/30 p-1 transition-colors group-data-[hud-dragging=true]:border-solid group-data-[hud-dragging=true]:border-primary/50 group-data-[hud-dragging=true]:bg-primary/5 data-[hud-drop-hover=true]:border-solid data-[hud-drop-hover=true]:border-primary data-[hud-drop-hover=true]:bg-primary/25"
                 class:flex-col-reverse={anchor.startsWith('bottom')}
                 data-testid="hud-drop-anchor-{anchor}"
+                data-hud-drop-anchor={anchor}
+                data-hud-drop-hover={viewModel.dragPosition?.anchor === anchor ? 'true' : 'false'}
                 title="Drop region {anchor}"
                 role="presentation"
-                onpointerup={() => onPointerUp(anchor)}
+                onpointerup={(event: PointerEvent) => viewModel.handleDragPointerUp(event)}
               >
                 {#each viewModel.previewLayout.widgets.filter((widget) => widget.anchor === anchor) as widget (widget.widgetId)}
+                  <!-- svelte-ignore a11y_no_static_element_interactions a11y_no_noninteractive_element_interactions -->
                   <div
-                    class="rounded border border-primary/50 bg-primary/20 px-2 py-1 text-xs {widget.visible ? '' : 'opacity-40'}"
+                    class="cursor-grab rounded border border-primary/50 bg-primary/20 px-2 py-1 text-xs active:cursor-grabbing {widget.visible ? '' : 'opacity-40'}"
+                    class:pointer-events-none={viewModel.isDragging &&
+                      viewModel.selectedWidgetId === widget.widgetId}
+                    class:opacity-30={viewModel.isDragging &&
+                      viewModel.selectedWidgetId === widget.widgetId}
                     data-testid="hud-preview-{widget.widgetId}"
                     data-hud-anchor={widget.anchor}
+                    data-hud-drag-source={widget.widgetId}
+                    title="Drag {widget.label} to another region"
+                    onpointerdown={(event: PointerEvent) => viewModel.handlePointerDown(event)}
+                    onpointermove={(event: PointerEvent) => viewModel.handleDragPointerMove(event)}
+                    onpointerup={(event: PointerEvent) => viewModel.handleDragPointerUp(event)}
+                    onpointercancel={() => viewModel.endDrag()}
                   >
                     {widget.label}
                   </div>
@@ -168,38 +171,51 @@ const onPointerUp = (anchor: HudSlot): void => {
               {#each viewModel.widgetRows as row (row.widgetId)}
                 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
                 <li
-                  class="rounded border p-2"
+                  class="flex cursor-grab items-center gap-2 rounded border px-2 py-1.5 active:cursor-grabbing"
                   class:border-primary={viewModel.selectedWidgetId === row.widgetId}
                   class:border-base-300={viewModel.selectedWidgetId !== row.widgetId}
+                  class:opacity-50={viewModel.isDragging && viewModel.selectedWidgetId === row.widgetId}
                   data-testid="hud-editor-row-{row.widgetId}"
-                  onpointerdown={(event: PointerEvent) => onPointerDown(event, row.widgetId)}
-                  onclick={() => viewModel.selectWidget(row.widgetId)}
-                  onkeydown={(event: KeyboardEvent) => {
-  if (event.key === 'Enter' || event.key === ' ') {
-    viewModel.selectWidget(row.widgetId);
-  }
-}}
+                  data-hud-drag-source={row.widgetId}
+                  title="Drag {row.label} onto a region"
+                  onpointerdown={(event: PointerEvent) => viewModel.handlePointerDown(event)}
+                  onpointermove={(event: PointerEvent) => viewModel.handleDragPointerMove(event)}
+                  onpointerup={(event: PointerEvent) => viewModel.handleDragPointerUp(event)}
+                  onpointercancel={() => viewModel.endDrag()}
+                  onkeydown={(event: KeyboardEvent) => viewModel.handleWidgetRowKeyDown(event)}
                 >
-                  <div class="flex items-center justify-between gap-2">
-                    <button
-                      type="button"
-                      class="text-left text-sm font-medium"
-                      onclick={() => viewModel.selectWidget(row.widgetId)}
-                    >
-                      {row.label}
-                    </button>
-                    <div class="flex items-center gap-1">
-                      {#if row.required}
-                        <span class="badge badge-xs">Required</span>
-                      {/if}
-                      {#if row.dormant}
-                        <span class="badge badge-xs badge-warning">Unavailable</span>
-                      {/if}
-                      <span class="badge badge-xs badge-ghost">{row.visibility}</span>
-                      <span class="badge badge-xs badge-ghost">{row.anchor}</span>
-                      <span class="badge badge-xs badge-ghost">{Math.round(row.scale * 100)}%</span>
-                    </div>
-                  </div>
+                  <span
+                    class="select-none text-base-content/40"
+                    data-testid="hud-editor-drag-{row.widgetId}"
+                    data-hud-drag-handle
+                    aria-hidden="true"
+                  >
+                    ⠿
+                  </span>
+                  <button
+                    type="button"
+                    class="min-w-0 flex-1 truncate text-left text-sm font-medium"
+                    data-testid="hud-editor-select-{row.widgetId}"
+                    onclick={() => viewModel.selectWidget(row.widgetId)}
+                  >
+                    {row.label}
+                  </button>
+                  {#if row.required}
+                    <span class="badge badge-xs">Required</span>
+                  {/if}
+                  {#if row.dormant}
+                    <span class="badge badge-xs badge-warning">Unavailable</span>
+                  {/if}
+                  <button
+                    type="button"
+                    class="btn btn-xs btn-ghost"
+                    data-testid="hud-editor-visibility-{row.widgetId}"
+                    aria-label="Visibility for {row.label}: {row.visibility}. Click to change."
+                    disabled={row.required}
+                    onclick={() => viewModel.cycleWidgetVisibility(row.widgetId)}
+                  >
+                    {row.visibility}
+                  </button>
                 </li>
               {/each}
             </ul>
@@ -207,9 +223,10 @@ const onPointerUp = (anchor: HudSlot): void => {
         </div>
 
         <p class="mt-3 text-xs text-base-content/60">
-          Drag a widget onto a region, or use the keyboard: arrows move it, +/− scale it, V cycles
-          visibility, Tab selects the next widget, Escape closes. Controller: D-pad moves, bumpers
-          select, A cycles visibility, Start saves, B cancels.
+          Drag a widget onto a region — from the list on the right, or directly in the preview.
+          Click a widget's visibility button to show, make contextual, or hide it. Keyboard: arrows
+          move it, +/− scale it, V cycles visibility, Tab selects the next widget, Escape closes.
+          Controller: D-pad moves, bumpers select, A cycles visibility, Start saves, B cancels.
         </p>
 
         <div class="mt-4 flex flex-wrap gap-2 border-t border-base-300 pt-3">
@@ -272,5 +289,15 @@ const onPointerUp = (anchor: HudSlot): void => {
         </div>
       {/if}
     </div>
+
+    {#if viewModel.isDragging && viewModel.dragPosition}
+      <div
+        class="pointer-events-none fixed z-[100] flex -translate-x-1/2 -translate-y-full items-center gap-1 rounded border border-primary bg-primary px-2 py-1 text-xs font-semibold text-primary-content shadow-xl"
+        style="left: {viewModel.dragPosition.x}px; top: {viewModel.dragPosition.y}px;"
+        data-testid="hud-editor-drag-ghost"
+      >
+        ⠿ {viewModel.draggingLabel}
+      </div>
+    {/if}
   </div>
 </BaseViewModelContainer>

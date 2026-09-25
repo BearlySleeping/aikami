@@ -21,6 +21,7 @@ export const createPauseMenuOverlay = (
 ): PauseMenuOverlayCapabilities => ({
   isSaving: false,
   saveMessage: undefined,
+  lastSavedAt: undefined,
   resumeGame: () => unconfigured('resumeGame'),
   saveGame: () => unconfigured('saveGame'),
   goToSettings: () => unconfigured('goToSettings'),
@@ -32,13 +33,11 @@ export const createPauseMenuOverlay = (
   ...overrides,
 });
 
-/** C-528: HUD capability with an inert default and overridable actions. */
+/** C-528: HUD capability with an overridable editor-enabled state. */
 export const createPauseMenuHud = (
   overrides: Partial<PauseMenuHudCapabilities> = {},
 ): PauseMenuHudCapabilities => ({
-  isHudTemporarilyHidden: false,
   isEditorEnabled: true,
-  toggleHudTemporarilyHidden: () => unconfigured('toggleHudTemporarilyHidden'),
   ...overrides,
 });
 

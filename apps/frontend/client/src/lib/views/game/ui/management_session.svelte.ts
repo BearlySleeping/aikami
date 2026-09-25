@@ -29,8 +29,6 @@ import type {
   JournalTab,
   JournalViewModelInterface,
 } from '$views/journal/journal_view_model.svelte';
-import type { getQuestViewModel } from '$views/quest/quest_composition.ts';
-import type { QuestViewModelInterface } from '$views/quest/quest_view_model.svelte.ts';
 import type { getWorldViewModel } from '$views/world/world_composition.ts';
 import type { WorldTab, WorldViewModelInterface } from '$views/world/world_view_model.svelte';
 import type { GameUIOverlayCapabilities } from './game_ui_view_model_types.ts';
@@ -92,7 +90,6 @@ export type ManagementReturnContext = {
 export type ManagementPanelId =
   | 'inventory'
   | 'character'
-  | 'quests'
   | 'journal'
   | 'party'
   | 'reputation'
@@ -107,7 +104,6 @@ export type GameManagementSessionOptions = BaseFrontendClassOptions & {
   // ── Section ViewModel factories (production wiring lives in the composition) ──
 
   createInventoryViewModel: typeof getInventoryViewModel;
-  createQuestViewModel: typeof getQuestViewModel;
   createJournalViewModel: typeof getJournalViewModel;
   createCharacterSheetViewModel: typeof getCharacterSheetViewModel;
   createPartyRosterViewModel: typeof getPartyRosterViewModel;
@@ -136,7 +132,6 @@ export type GameManagementSessionInterface = BaseFrontendClassInterface & {
   readonly activeSectionLabel: string;
 
   readonly inventoryViewModel: InventoryViewModelInterface | undefined;
-  readonly questViewModel: QuestViewModelInterface | undefined;
   readonly journalViewModel: JournalViewModelInterface | undefined;
   readonly dashboardViewModel: CharacterSheetViewModelInterface | undefined;
   readonly partyRosterViewModel: PartyRosterViewModelInterface | undefined;
@@ -186,7 +181,6 @@ class GameManagementSession
   private readonly _npcDialogue: NpcDialogueServiceInterface;
 
   private readonly _createInventoryViewModel: typeof getInventoryViewModel;
-  private readonly _createQuestViewModel: typeof getQuestViewModel;
   private readonly _createJournalViewModel: typeof getJournalViewModel;
   private readonly _createCharacterSheetViewModel: typeof getCharacterSheetViewModel;
   private readonly _createPartyRosterViewModel: typeof getPartyRosterViewModel;
@@ -209,7 +203,6 @@ class GameManagementSession
   // ── Section ViewModels (one per visited section, alive for the session) ──
 
   inventoryViewModel = $state<InventoryViewModelInterface | undefined>(undefined);
-  questViewModel = $state<QuestViewModelInterface | undefined>(undefined);
   journalViewModel = $state<JournalViewModelInterface | undefined>(undefined);
   dashboardViewModel = $state<CharacterSheetViewModelInterface | undefined>(undefined);
   partyRosterViewModel = $state<PartyRosterViewModelInterface | undefined>(undefined);
@@ -239,7 +232,6 @@ class GameManagementSession
     this._overlays = options.overlays;
     this._npcDialogue = options.npcDialogue;
     this._createInventoryViewModel = options.createInventoryViewModel;
-    this._createQuestViewModel = options.createQuestViewModel;
     this._createJournalViewModel = options.createJournalViewModel;
     this._createCharacterSheetViewModel = options.createCharacterSheetViewModel;
     this._createPartyRosterViewModel = options.createPartyRosterViewModel;
@@ -311,12 +303,9 @@ class GameManagementSession
     switch (panel) {
       case 'inventory':
       case 'character':
+      case 'journal':
       case 'party':
         return this.isSection(panel);
-      case 'quests':
-        return this.isSection('journal') && this.location?.subview === 'quests';
-      case 'journal':
-        return this.isSection('journal') && this.location?.subview !== 'quests';
       case 'reputation':
         return this.isSection('world') && this.location?.subview === 'reputation';
       case 'world':
@@ -411,6 +400,14 @@ class GameManagementSession
 
   /** @inheritdoc */
   openMenu(): void {
+    // Dialogue intentionally exposes Inventory as its one compatible
+    // temporary management destination. Route the real Menu entry there
+    // instead of attempting the default Character surface, which the overlay
+    // compatibility matrix correctly blocks over Dialogue.
+    if (this._overlays.activeOverlay === 'DIALOGUE') {
+      this.openLocation({ section: 'inventory' });
+      return;
+    }
     this.openLocation(this.menuLocation);
   }
 
@@ -508,10 +505,10 @@ class GameManagementSession
     if (!base) {
       return;
     }
-    // Only capture when the JOURNAL/WORLD overlay is active. QUEST_LOG (a
-    // different overlay) and REPUTATION must keep their own remembered subview
-    // rather than being overwritten by the Journal/World view's own tab.
-    if (base.section === 'journal' && base.subview !== 'quests' && this.journalViewModel) {
+    // Journal quests, notes and recaps all render through the canonical Journal
+    // panel. Capture its live tab before a sibling switch, including when the
+    // remembered/default location is the quests subview.
+    if (base.section === 'journal' && this.journalViewModel) {
       this._rememberedSubviews.set('journal', this.journalViewModel.activeTab);
       return;
     }
@@ -534,16 +531,17 @@ class GameManagementSession
         untrack(() => this.journalViewModel?.setActiveTab(tab));
       }
     }
-    if (location.section === 'world' && this.worldViewModel) {
-      const tab = WORLD_TAB_BY_SUBVIEW[location.subview ?? ''];
-      if (tab !== undefined) {
-        untrack(() => this.worldViewModel?.setActiveTab(tab));
-      }
-    }
+    // World tabs (People/Places/…) are owned by WorldViewModel. The section's
+    // canonical `codex` subview names the surface, not a tab to reset to on
+    // every sibling return; applying it here would discard the player's tab.
   }
 
   /** @inheritdoc */
   ensureSection(overlay: GameOverlayType): void {
+    if (overlay === 'JOURNAL' || overlay === 'QUEST_LOG') {
+      this._ensureJournalSection(overlay);
+      return;
+    }
     if (this._createdOverlays.has(overlay)) {
       return;
     }
@@ -556,19 +554,6 @@ class GameManagementSession
           presentation: 'management',
         });
         return;
-      case 'QUEST_LOG':
-        this.questViewModel = this._createQuestViewModel({ className: 'QuestViewModel' });
-        return;
-      case 'JOURNAL': {
-        const vm = this._createJournalViewModel({ className: 'JournalViewModel' });
-        this.journalViewModel = vm;
-        // C-527: restore the subview the player last used in this section.
-        const tab = this._rememberedTab('journal', JOURNAL_TAB_BY_SUBVIEW);
-        if (tab !== undefined) {
-          untrack(() => vm.setActiveTab(tab as JournalTab));
-        }
-        return;
-      }
       case 'CHARACTER_DASHBOARD':
         this.dashboardViewModel = this._createCharacterSheetViewModel({
           className: 'CharacterSheetViewModel',
@@ -609,13 +594,38 @@ class GameManagementSession
   /** @inheritdoc */
   disposeSections(): void {
     this.inventoryViewModel = undefined;
-    this.questViewModel = undefined;
     this.journalViewModel = undefined;
     this.dashboardViewModel = undefined;
     this.partyRosterViewModel = undefined;
     this.reputationViewModel = undefined;
     this.worldViewModel = undefined;
     this._createdOverlays.clear();
+  }
+
+  /** Creates or reuses the single ViewModel behind the two Journal aliases. */
+  private _ensureJournalSection(overlay: 'JOURNAL' | 'QUEST_LOG'): void {
+    const journal = this.journalViewModel;
+    if (journal) {
+      const tab =
+        overlay === 'QUEST_LOG'
+          ? 'quests'
+          : (this._rememberedTab('journal', JOURNAL_TAB_BY_SUBVIEW) ?? 'quests');
+      untrack(() => journal.setActiveTab(tab));
+      return;
+    }
+
+    const vm = this._createJournalViewModel({ className: 'JournalViewModel' });
+    this.journalViewModel = vm;
+    this._createdOverlays.add('JOURNAL');
+    this._createdOverlays.add('QUEST_LOG');
+    // QUEST_LOG is a legacy input alias and always lands on the Journal's
+    // default quests tab. The canonical JOURNAL overlay restores the tab the
+    // player last used in this section.
+    const tab =
+      overlay === 'QUEST_LOG' ? undefined : this._rememberedTab('journal', JOURNAL_TAB_BY_SUBVIEW);
+    if (tab !== undefined) {
+      untrack(() => vm.setActiveTab(tab));
+    }
   }
 
   /** The remembered own-tab for a section, translated through its map. */
@@ -637,6 +647,15 @@ class GameManagementSession
    * stays attached to the same actor.
    */
   private _captureReturnContext(): void {
+    const activeOverlay = untrack(() => this._overlays.activeOverlay);
+    const overlayStack = untrack(() => this._overlays.overlayStack);
+    // Most management opens call beginSession before pushing, so the current
+    // overlay is the true origin. A production overlay-router trigger can also
+    // push first (for example Inventory over Dialogue); in that case the entry
+    // below the active management overlay is the origin.
+    const originOverlay = isManagementOverlay(activeOverlay)
+      ? (overlayStack[overlayStack.length - 2]?.type ?? 'NONE')
+      : activeOverlay;
     const npcId = untrack(() => this._npcDialogue.activeNpc?.npcId);
     const scrollAnchor = this._readScrollAnchor();
     this._originFocus =
@@ -645,7 +664,7 @@ class GameManagementSession
         : ((document.activeElement as HTMLElement | null) ?? undefined);
 
     this.returnContext = {
-      originOverlay: this._overlays.activeOverlay,
+      originOverlay,
       ...(npcId === undefined ? {} : { npcId, draftId: `dialogue-draft:${npcId}` }),
       ...(scrollAnchor === undefined ? {} : { scrollAnchor }),
     };

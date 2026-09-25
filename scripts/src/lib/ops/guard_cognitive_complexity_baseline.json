@@ -269,12 +269,6 @@
       "worst": 27
     }
   },
-  "apps/e2e/src/services/preflight.ts": {
-    "counts": {
-      "excessive": 1,
-      "worst": 16
-    }
-  },
   "apps/e2e/src/visual/core/capture.ts": {
     "counts": {
       "excessive": 2,
@@ -536,7 +530,7 @@
   "apps/frontend/client/src/lib/services/game/game_overlay_service.svelte.ts": {
     "counts": {
       "excessive": 1,
-      "worst": 73
+      "worst": 70
     }
   },
   "apps/frontend/client/src/lib/services/game/game_save_combat_preflight.ts": {
@@ -715,8 +709,8 @@
   },
   "apps/frontend/client/src/lib/views/dev/combat/session/combat_debug_live_session.ts": {
     "counts": {
-      "excessive": 2,
-      "worst": 20
+      "excessive": 1,
+      "worst": 16
     }
   },
   "apps/frontend/client/src/lib/views/dev/lpc_ai/lpc_ai_test_view_model.svelte.ts": {
@@ -1322,7 +1316,7 @@
   "packages/frontend/engine/src/worker/ecs_worker.ts": {
     "counts": {
       "excessive": 4,
-      "worst": 197
+      "worst": 186
     }
   },
   "packages/frontend/local-runtime/src/lib/local_engine.ts": {
@@ -2042,7 +2036,7 @@
   "scripts/src/lib/herdr/worktree.ts": {
     "counts": {
       "excessive": 4,
-      "worst": 133
+      "worst": 130
     }
   },
   "scripts/src/lib/ops/audit_lpc_coverage.ts": {
@@ -2077,8 +2071,8 @@
   },
   "scripts/src/lib/ops/generate_emberwatch_atlas.test.ts": {
     "counts": {
-      "excessive": 3,
-      "worst": 29
+      "excessive": 2,
+      "worst": 17
     }
   },
   "scripts/src/lib/ops/generate_emberwatch_atlas.ts": {
@@ -2090,7 +2084,7 @@
   "scripts/src/lib/ops/generate_emberwatch_maps.ts": {
     "counts": {
       "excessive": 1,
-      "worst": 32
+      "worst": 22
     }
   },
   "scripts/src/lib/ops/guard_data_plane.ts": {

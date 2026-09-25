@@ -1,7 +1,7 @@
 // packages/frontend/engine/src/worker/ecs_worker.ts
 /// <reference lib="webworker" />
 
-import { BASIC_COMBAT_ABILITIES, resolveCombatAbilityIds } from '@aikami/constants';
+import { BASIC_COMBAT_ABILITIES } from '@aikami/constants';
 import { PackConfigSchema } from '@aikami/schemas';
 import type { PackConfig } from '@aikami/types';
 import type { World } from 'bitecs';
@@ -26,11 +26,10 @@ import {
 } from '../assets/map_loader.ts';
 import { createCombatAiWorkerBinding } from '../combat/combat_ai_worker_binding.ts';
 import { tryDispatchCombatCommand } from '../combat/combat_command_dispatch.ts';
-import { retryEncounterCommand } from '../combat/combat_encounter_retry.ts';
 import {
-  startEncounterFromCommand,
-  startEncounterWithFallback,
-} from '../combat/combat_encounter_start.ts';
+  handleRetryEncounterCommand,
+  handleStartEncounterCommand,
+} from '../combat/combat_encounter_command.ts';
 import {
   Appearance,
   DEFAULT_BODY_LAYER_ID,
@@ -111,7 +110,6 @@ import {
 } from '../systems/camera_system.ts';
 import {
   type CollisionGrid,
-  getMapPixelBounds,
   getPathfindingGrid,
   insertIntoSpatialGrid,
   isBlocksSight,
@@ -146,13 +144,10 @@ import {
   hydrateZone,
   startMacroSimulation,
 } from '../systems/macro_simulation_system.ts';
-import {
-  clampSpawnToWalkable,
-  isPlayerSpawnBlocked,
-  updateMovement,
-} from '../systems/movement_system.ts';
+import { updateMovement } from '../systems/movement_system.ts';
 import { updatePartyFollow } from '../systems/party_follow_system.ts';
 import {
+  clearActorMovement,
   registerPathFollowHaltObservers,
   updatePathFollow,
 } from '../systems/path_follow_system.ts';
@@ -164,9 +159,10 @@ import {
 } from '../systems/render_worker.ts';
 import { setVisionGrid, updateSpatialVision } from '../systems/spatial_vision_system.ts';
 import { buildTerrainGridFromBoolean } from '../systems/terrain_grid.ts';
-import { emitCombatStateUpdate, initCombat } from '../systems/turn_manager_system.ts';
 import { updateZoningSystem } from '../systems/zoning_system.ts';
 import type { GameCommand, GameEvent, NPCSpawnData } from '../types.ts';
+import { relocateRestoredEntities } from './companion_restore.ts';
+import { resolveSpawnInStaging } from './spawn_resolution.ts';
 
 // ---------------------------------------------------------------------------
 // Worker: owns the full bitECS world and system ticking
@@ -505,8 +501,7 @@ const clearPlayerMovement = (): void => {
   if (!world || playerEntityId <= 0) {
     return;
   }
-  removeComponent(world, playerEntityId, Velocity);
-  removeComponent(world, playerEntityId, PathFollow);
+  clearActorMovement(world, playerEntityId);
 };
 
 /**
@@ -660,101 +655,39 @@ const handleBridgeCommand = (command: GameCommand): void => {
       break;
     }
     case 'COMBAT_START_ENCOUNTER': {
-      // ── C-516 AC-2: the single production encounter start ──
-      // Both funnels (the dialogue chip's authored roster and the collision
-      // trigger's derived roster) converge here. Legacy and v2 both come
-      // through this command; `initCombat` stays the legacy driver entry.
+      // C-516 AC-2: the single production encounter start. The start, the
+      // v2-rejection legacy fallback and the AI-turn kickoff live in the
+      // combat module; the worker keeps only the call site.
       if (world) {
-        const requested = command.engine ?? 'legacy';
-        const attempt = (engine: 'legacy' | 'v2') =>
-          startEncounterFromCommand({
-            world: world as World,
+        handleStartEncounterCommand({
+          command,
+          context: {
+            world,
             bridge: workerBridge,
-            command: {
-              encounterId: command.encounterId,
-              seed: command.seed,
-              engine,
-              ...(command.roster === undefined ? {} : { roster: command.roster }),
-            },
             playerEntityId,
-            abilityCatalog: BASIC_COMBAT_ABILITIES,
-            abilityIdsForClasses: resolveCombatAbilityIds,
-            // The v2 driver defers AI turns to the kernel-driven runner, so its
-            // hook is a no-op; the legacy branch starts through `initCombat`,
-            // which supplies the legacy AI hooks itself.
-            hooks: { runAiTurn: () => {}, emitStateUpdate: emitCombatStateUpdate },
-            startLegacy: (targetWorld, bridge, seed) => {
-              initCombat(targetWorld, bridge, seed);
+            aiTurns: _aiTurns,
+            setAbilityIds: (abilityIds) => {
+              _activeCombatAbilityIds = abilityIds;
             },
-          });
-
-        // ── C-516 Migration & Rollback: a failed v2 start falls back to the
-        // legacy engine for THAT encounter, rather than leaving the player in a
-        // broken fight (the policy lives in the combat module so it is unit
-        // tested; validation runs before any spawn, so the world is untouched).
-        const outcome = startEncounterWithFallback({ requested, attempt });
-        const started = outcome.started;
-        // C-516 Observability: log the engine that actually ran, and whether a
-        // v2 rejection forced the legacy fallback.
-        logger.info('[WorkerEngine] combat:startEncounter', {
-          encounterId: command.encounterId,
-          requested,
-          engine: outcome.engine,
-          fellBack: outcome.fellBack,
-          started: started.ok,
-          ...(started.ok ? {} : { reasonCode: started.reasonCode }),
+          },
         });
-
-        if (started.ok) {
-          _activeCombatAbilityIds = started.abilityIdsByCombatant;
-          // C-516: the driver deliberately defers AI turns, so if an AI
-          // combatant won initiative nothing else would resolve its turn and
-          // the fight would stall on an unowned turn. Run the AI turns now —
-          // the coordinator resolves them or defers one to the client.
-          if (outcome.engine === 'v2') {
-            // An AI failure must never leave the encounter half-started: the
-            // turn driver is live, and a surfaced error beats an uncaught one.
-            try {
-              _aiTurns.startFromEncounter({
-                world,
-                bridge: workerBridge,
-                playerEntityId,
-                started,
-                llmAgentsEnabled: command.llmAgentsEnabled === true,
-              });
-            } catch (error) {
-              logger.error('[WorkerEngine] combat:startEncounterAiFailed', {
-                encounterId: command.encounterId,
-                error: error instanceof Error ? error.message : String(error),
-              });
-            }
-          }
-        } else {
-          // No engine could start it: surface a typed rejection so the UI can
-          // leave the overlay it optimistically opened (AC-2 / Edge Cases).
-          logger.warn('[WorkerEngine] combat:startEncounterRejected', {
-            encounterId: command.encounterId,
-            reasonCode: started.reasonCode,
-          });
-          workerBridge.emit({
-            type: 'COMBAT_START_REJECTED',
-            encounterId: command.encounterId,
-            reasonCode: started.reasonCode,
-            messageKey: started.messageKey,
-          });
-        }
       }
       break;
     }
     case 'RETRY_ENCOUNTER': {
       // Engine-routed retry with the preserved seed (C-330 AC-5, C-516 AC-10).
       if (world) {
-        _activeCombatAbilityIds = retryEncounterCommand({
-          world,
-          bridge: workerBridge,
-          playerEntityId,
-          seed: command.combatSeed,
-          runAiTurns: (options) => _aiTurns.runRetryAiTurns(options),
+        handleRetryEncounterCommand({
+          command,
+          context: {
+            world,
+            bridge: workerBridge,
+            playerEntityId,
+            aiTurns: _aiTurns,
+            setAbilityIds: (abilityIds) => {
+              _activeCombatAbilityIds = abilityIds;
+            },
+          },
         });
       }
       break;
@@ -1532,43 +1465,6 @@ const copyComponentSoA = (
 };
 
 /**
- * Resolves a target spawn hash to pixel coordinates using a temporary
- * staging world.
- *
- * Creates an isolated bitECS world, spawns the provided spawn point
- * entities into it, queries for the matching `spawnHash`, and returns
- * the resolved coordinates. The staging world is destroyed immediately
- * after resolution — no entities are transferred to the main world.
- *
- * @param spawnPointEntities - Spawn point entities from the new map.
- * @param targetSpawnHash - The target spawn hash from the portal.
- * @returns The resolved X/Y pixel coordinates, or undefined if not found.
- */
-const _resolveSpawnInStaging = (
-  spawnPointEntities: SpawnPointEntity[] | undefined,
-  targetSpawnHash: number,
-): { x: number; y: number } | undefined => {
-  if (!spawnPointEntities || spawnPointEntities.length === 0) {
-    return undefined;
-  }
-
-  // Find the matching spawn point entity by spawnHash
-  const match = spawnPointEntities.find((sp) => sp.spawnHash === targetSpawnHash);
-  if (!match) {
-    logger.debug('_resolveSpawnInStaging:no-match', { targetSpawnHash });
-    return undefined;
-  }
-
-  logger.debug('_resolveSpawnInStaging:resolved', {
-    targetSpawnHash,
-    x: match.x,
-    y: match.y,
-  });
-
-  return { x: match.x, y: match.y };
-};
-
-/**
  * Handles incoming messages from the main thread.
  *
  * Message types:
@@ -1776,34 +1672,11 @@ self.onmessage = (event: MessageEvent): void => {
             addComponent(world, restoredEid, CameraFocus);
           }
 
-          // C-378: A saved position can land inside a solid prop or wall —
-          // the world was rebuilt by LOAD_MAP with CURRENT collision, while
-          // the save may predate it (this contract's map conversion added
-          // solid shop props, but any save-vs-map drift hits the same trap).
-          // Restoring onto a solid cell freezes the player: the movement
-          // bbox sampler spans the blocked cell on every axis, so no move
-          // is accepted. Re-run the LOAD_MAP spawn clamp on the restored
-          // position so the player always lands on a walkable tile. The
-          // oracle validates the FULL collision box (not just the feet
-          // tile) — a restore one tile below a solid prop deadlocks the
-          // same way (C-378).
-          {
-            const restoredPx = Position.x[playerEntityId] ?? 0;
-            const restoredPy = Position.y[playerEntityId] ?? 0;
-            const clamped = clampSpawnToWalkable(
-              restoredPx,
-              restoredPy,
-              isPlayerSpawnBlocked,
-              getMapPixelBounds(),
-            );
-            if (clamped.x !== restoredPx || clamped.y !== restoredPy) {
-              logger.debug(
-                'RESTORE_PLAYER',
-                `clamped restored spawn from (${restoredPx},${restoredPy}) to (${clamped.x},${clamped.y})`,
-              );
-              addComponent(world, playerEntityId, set(Position, { x: clamped.x, y: clamped.y }));
-            }
-          }
+          relocateRestoredEntities({
+            world,
+            playerEntityId,
+            source: 'RESTORE_PLAYER',
+          });
 
           // Snap the camera to the restored position and refresh the
           // player's LPC textures immediately. _refreshPlayerAppearance
@@ -1923,6 +1796,8 @@ self.onmessage = (event: MessageEvent): void => {
               playerEntityId = newEid;
             }
           }
+
+          relocateRestoredEntities({ world, playerEntityId, source: 'LOAD_GAME' });
 
           // Notify main thread about all hydrated entities.
           // Include NPC metadata for non-player entities so the
@@ -2123,7 +1998,7 @@ self.onmessage = (event: MessageEvent): void => {
             if (typeof candidate.hash !== 'number' || candidate.hash <= 0) {
               continue;
             }
-            const resolved = _resolveSpawnInStaging(markers, candidate.hash);
+            const resolved = resolveSpawnInStaging(markers, candidate.hash);
             if (resolved) {
               logger.debug(
                 'LOAD_MAP',
@@ -2157,6 +2032,18 @@ self.onmessage = (event: MessageEvent): void => {
           if (playerEntityId > 0) {
             addComponent(world, playerEntityId, set(Position, { x: resolvedX, y: resolvedY }));
           }
+
+          // 2b. Drop any click-to-move path + velocity carried over from the
+          //     previous map. A click-to-move player that crosses a portal
+          //     still has PathFollow waypoints (and Velocity) expressed in the
+          //     DEPARTING map's coordinates; the path is not part of the
+          //     serialized snapshot, and only non-player entities are torn
+          //     down above. Left in place, the resumed tick loop steers the
+          //     player back toward those stale waypoints on the new map (the
+          //     "player keeps moving after the portal" bug — C-379/C-138).
+          //     clearPlayerMovement removes both producers so updatePathFollow
+          //     and updateMovement leave the player parked on the new spawn.
+          clearPlayerMovement();
 
           // 3. Spawn new NPC and prop entities from the new map.
           //    Pass defeatedEnemies + collectedPickups so previously-defeated
@@ -2260,31 +2147,8 @@ self.onmessage = (event: MessageEvent): void => {
             }
           }
 
-          // 6a. C-180: Clamp player spawn position to a walkable tile.
-          //     Query params like ?position_x=0&position_y=0 may land on
-          //     water or outside the map — adjust to interior grass.
-          //     C-376 AC-3: use the canonical composite (spatial-grid entity
-          //     blocking OR terrain solidity) so a wall/NPC-occupied tile is
-          //     never a valid clamp target.
-          //     C-378: shared with RESTORE_PLAYER so a saved position that
-          //     lands inside a solid prop is also repositioned — otherwise
-          //     the bbox sampler deadlocks every movement axis.
-          if (playerEntityId > 0) {
-            const pos = getComponent(world, playerEntityId, Position) as PositionData | undefined;
-            if (pos) {
-              const clamped = clampSpawnToWalkable(pos.x, pos.y, isPlayerSpawnBlocked, {
-                width: mapPixelWidth as number,
-                height: mapPixelHeight as number,
-              });
-              if (clamped.x !== pos.x || clamped.y !== pos.y) {
-                logger.debug(
-                  'LOAD_MAP',
-                  `clamped spawn from (${pos.x},${pos.y}) to (${clamped.x},${clamped.y})`,
-                );
-                addComponent(world, playerEntityId, set(Position, { x: clamped.x, y: clamped.y }));
-              }
-            }
-          }
+          // Restore-time clamps share the current map's collision and occupancy.
+          relocateRestoredEntities({ world, playerEntityId, source: 'LOAD_MAP' });
 
           // 7. Snap the camera to the new spawn, THEN apply the map bounds.
           //    resetCameraTracking() clears the camera coords *and* the

@@ -15,6 +15,11 @@ tags: ["aikami", "backend", "cloudflare", "d1", "elysia", "drizzle", "testing"]
 **Prerequisite**: load `aikami-conventions` first (logger, imports, TS
 strictness, monorepo boundaries, TypeBox schema-first types).
 
+**Structural guard**: `guard-data-plane` confines database access to
+`$lib/server` / `*.server.ts`. Run every guard fast with
+`bun run scripts/src/lib/ops/run_guards.ts`. 🔴 On a failure, fix the code —
+never raise a baseline, waiver or ceiling.
+
 ---
 
 ## Server Data Plane

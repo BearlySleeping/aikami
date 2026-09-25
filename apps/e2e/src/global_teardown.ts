@@ -13,8 +13,13 @@ import { stopSpawnedServers } from './services/server_registry';
  */
 const globalTeardown = async (): Promise<void> => {
   console.log('\n🧹 Global Teardown: Purging emulator data...');
-  await clearAllEmulatorData();
-  stopSpawnedServers();
+  try {
+    await clearAllEmulatorData();
+  } finally {
+    // Teardown must still release only processes registered by this E2E run,
+    // even when a future purge step fails.
+    stopSpawnedServers();
+  }
   console.log('✓ Global teardown complete\n');
 };
 

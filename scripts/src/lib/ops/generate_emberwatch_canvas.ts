@@ -3,8 +3,8 @@
 // Shared RGBA scratch canvas + pixel helpers for the Emberwatch atlas
 // generator. Extracted from `generate_emberwatch_atlas.ts` so that file keeps
 // its painters readable without growing past its source-size ratchet. The
-// canvas is the 512×256 content scratch painters write into at 32px pitch;
-// `packAtlas` extrudes it into the 544×272 atlas separately.
+// canvas is the 512×352 content scratch painters write into at 32px pitch;
+// `packAtlas` extrudes it into the 544×374 atlas separately.
 
 import { ATLAS_COLS, ATLAS_ROWS, ATLAS_TILE_SIZE } from './generate_emberwatch_tables.ts';
 
@@ -15,7 +15,7 @@ export const TILE = ATLAS_TILE_SIZE; // 32 — frame content size
 // smaller than the atlas grid it feeds (an ATLAS_ROWS/COLS change propagates
 // instead of silently reading past the buffer end).
 export const W = ATLAS_COLS * TILE; // 512
-export const H = ATLAS_ROWS * TILE; // 256
+export const H = ATLAS_ROWS * TILE; // 352
 
 /** RGBA buffer (row-major). Fully opaque output for terrain. */
 export const buf = new Uint8Array(W * H * 4);

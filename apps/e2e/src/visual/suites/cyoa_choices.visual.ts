@@ -9,6 +9,12 @@
 
 import { Type } from 'typebox';
 import { defineConfig } from '$visual/core/config';
+import {
+  closeDevTools,
+  STAGE_REVIEW_PROMPT,
+  STAGE_SELECTOR,
+  StageReviewSchema,
+} from './dialogue_stage_fixtures';
 
 // ── Schema ───────────────────────────────────────────────────
 
@@ -81,12 +87,43 @@ const SELECTED_PROMPT = [
   'Return ONLY valid JSON matching the schema.',
 ].join('\n');
 
+// ── Setup hooks ──────────────────────────────────────────────
+
+/**
+ * Navigates to the dialogue sandbox in `?cyoa=<mode>`, closes devtools, sends
+ * a message to trigger the single-call CYOA turn, then waits for the real
+ * `cyoa-choices` block to render INSIDE the stage before capture.
+ */
+const captureCyoaStage =
+  (mode: string) =>
+  async (page: import('playwright').Page): Promise<void> => {
+    await page.goto(`http://localhost:5274/dev/sandbox/dialogue?cyoa=${mode}`, {
+      waitUntil: 'domcontentloaded',
+    });
+    await page.waitForSelector(STAGE_SELECTOR, { timeout: 15_000 });
+    await closeDevTools(page);
+
+    const input = page.locator('textarea').first();
+    const send = page.getByRole('button', { name: 'Send' }).first();
+    await input.waitFor({ state: 'visible', timeout: 15_000 });
+    await input.fill('Tell me about the ward.');
+    await send.click();
+
+    await page
+      .locator(`${STAGE_SELECTOR} [data-testid="cyoa-choices"]`)
+      .waitFor({ state: 'visible', timeout: 15_000 });
+    await page.waitForTimeout(800);
+  };
+
 // ── Suite ────────────────────────────────────────────────────
 
 export default defineConfig({
   id: 'cyoa-choices',
   route: '/dev/cyoa',
   waitCondition: 'game_ready',
+  // The standalone sandbox renders `cyoa-choices`; the dialogue-stage case
+  // navigates to the dialogue overlay, so accept either.
+  waitSelector: '[data-testid="cyoa-choices"], [data-testid="dialogue-overlay"]',
   cases: [
     {
       name: 'CYOA Choices — Initial State',
@@ -104,6 +141,31 @@ export default defineConfig({
         await firstChoice.click();
         await page.waitForTimeout(500);
       },
+    },
+    // ── C-547: real CYOA choices inline in the compact dialogue stage ──
+    // The sandbox `?cyoa=` seam puts it on the single-call `generateTurn`
+    // path so it emits real `activeChoices`; the hook sends a message and
+    // waits for `cyoa-choices` INSIDE the stage before capturing.
+    {
+      name: 'CYOA Choices — Dialogue Stage (4 choices)',
+      prompt: STAGE_REVIEW_PROMPT,
+      schema: StageReviewSchema,
+      screenshotSelector: STAGE_SELECTOR,
+      setupHook: captureCyoaStage('4'),
+    },
+    {
+      name: 'CYOA Choices — Dialogue Stage (1 choice)',
+      prompt: STAGE_REVIEW_PROMPT,
+      schema: StageReviewSchema,
+      screenshotSelector: STAGE_SELECTOR,
+      setupHook: captureCyoaStage('1'),
+    },
+    {
+      name: 'CYOA Choices — Dialogue Stage (after a long reply)',
+      prompt: STAGE_REVIEW_PROMPT,
+      schema: StageReviewSchema,
+      screenshotSelector: STAGE_SELECTOR,
+      setupHook: captureCyoaStage('long'),
     },
   ],
 });

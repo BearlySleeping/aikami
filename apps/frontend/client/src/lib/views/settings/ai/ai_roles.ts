@@ -69,6 +69,7 @@ export type TaskRoutingRow = {
   task: TextTask;
   label: string;
   role: AiRole;
+  connectionId: string | undefined;
   connectionLabel: string;
 };
 
@@ -89,6 +90,7 @@ export const buildTaskRoutingRows = (options: {
       task,
       label: TEXT_TASK_LABELS[task],
       role,
+      connectionId: assigned,
       // Unassigned roles fall through to the active text connection.
       connectionLabel: (assigned ? labelById.get(assigned) : undefined) ?? 'Inherits default',
     };

@@ -3,7 +3,11 @@
 import type { World } from 'bitecs';
 import { addComponent, addEntity, set } from 'bitecs';
 import { Appearance, setAppearanceLayers } from '../components/appearance.ts';
-import { CollisionData, CollisionLayer } from '../components/collision_data.ts';
+import {
+  COMPANION_COLLISION_MASK,
+  CollisionData,
+  CollisionLayer,
+} from '../components/collision_data.ts';
 import { Companion } from '../components/companion.ts';
 import { GridPosition } from '../components/grid_position.ts';
 import { NPCDialog } from '../components/npc_dialog.ts';
@@ -25,12 +29,6 @@ import type { NPCSpawnData } from '../types.ts';
  * Matches the NPC_APPEARANCE_LAYERS default in entity_spawner.ts.
  */
 const DEFAULT_NPC_APPEARANCE_LAYERS: readonly number[] = [3, 3, 23, 22, 7, 95];
-
-/**
- * Collision mask for NPCs — other NPCs, walls, and enemies block NPCs,
- * but the player does NOT collide with NPCs (C-402: soft obstacles).
- */
-const NPC_COLLISION_MASK = CollisionLayer.wall | CollisionLayer.npc | CollisionLayer.enemy;
 
 // ---------------------------------------------------------------------------
 // NPC entity factory
@@ -107,7 +105,7 @@ const createNPC = (world: World, data: NPCSpawnData): number => {
       addComponent(
         world,
         entityId,
-        set(CollisionData, { layer: CollisionLayer.npc, mask: NPC_COLLISION_MASK }),
+        set(CollisionData, { layer: CollisionLayer.npc, mask: COMPANION_COLLISION_MASK }),
       );
     }
 

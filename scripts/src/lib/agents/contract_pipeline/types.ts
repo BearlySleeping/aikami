@@ -391,6 +391,8 @@ export type RunManifest = {
   worktreeCheckoutPath?: string;
   /** herdr-native worktree: branch checked out in the worktree. */
   worktreeBranch?: string;
+  /** Commit checked out when this run's worktree was first provisioned. */
+  worktreeStartCommit?: string;
   blockedReason?: string;
   /**
    * How many worker-reported `blocked`/`failed` verdicts have been escalated

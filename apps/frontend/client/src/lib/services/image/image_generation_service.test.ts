@@ -246,6 +246,17 @@ describe('ImageGenerationService — C-388 engine abstraction', () => {
     expect(service.isGenerating).toBe(false);
   });
 
+  test('simulateProgress clamps and publishes dev progress', () => {
+    service.simulateProgress(42);
+    expect(service.generationProgress).toBe(42);
+
+    service.simulateProgress(150);
+    expect(service.generationProgress).toBe(100);
+
+    service.simulateProgress(-10);
+    expect(service.generationProgress).toBe(0);
+  });
+
   test('AC-7: progress labels never leak engine-specific strings', async () => {
     service.checkpoints = [{ id: 'sd_xl_base_1.0', description: 'x' }];
     service.selectedCheckpoint = 'sd_xl_base_1.0';

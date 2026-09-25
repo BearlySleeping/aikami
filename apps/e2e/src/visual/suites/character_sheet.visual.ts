@@ -10,6 +10,7 @@
 
 import { Type } from 'typebox';
 import { defineConfig } from '$visual/core/config';
+import { EMULATOR_PORTS } from '../../config';
 
 // ── Schema ───────────────────────────────────────────────────
 
@@ -182,17 +183,123 @@ const SANDBOX_PROMPT = [
 // ── Setup hooks ──────────────────────────────────────────────
 
 const setupProMode = async (page: import('playwright').Page): Promise<void> => {
-  await page.waitForSelector('text=Pro Mode', { timeout: 10_000 });
+  await page.setViewportSize({ width: 1280, height: 1600 });
+  const proModeToggle = page.locator('input[type="checkbox"].toggle').first();
+  await proModeToggle.waitFor({ state: 'visible', timeout: 10_000 });
 
   // Toggle Pro Mode on
-  const proModeToggle = page.locator('input[type="checkbox"].toggle').first();
   const isChecked = await proModeToggle.isChecked();
   if (!isChecked) {
-    await proModeToggle.click();
+    await proModeToggle.check({ force: true });
   }
 
   // Wait for JSON textarea to appear
   await page.waitForTimeout(500);
+};
+
+const MANAGEMENT_CHARACTER_PROMPT = [
+  'This is the production /game Character management task inside the single management workspace.',
+  'The first reading should be a summary: character identity, level, hit points, armor class, attack and the six core ability values.',
+  'Tiny unrestricted editing controls should not dominate the default view. An explicit Edit character action may reveal score and proficiency editing.',
+  'Report clipping, overlap, unreadable values, ambiguous saving-throw labels, or unexplained empty regions.',
+].join('\n');
+
+const hideProductionDevTools = async (page: import('playwright').Page): Promise<void> => {
+  await page.evaluate(() => {
+    const panel = document.querySelector('button[title="Collapse Dev Tools"]')?.parentElement;
+    if (panel) {
+      panel.style.display = 'none';
+    }
+    const eruda = document.querySelector<HTMLElement>('#eruda');
+    if (eruda) {
+      eruda.style.display = 'none';
+    }
+  });
+};
+
+const EMPTY_CHARACTER_SHEET = {
+  abilities: {
+    strength: { value: 10, modifier: 0 },
+    dexterity: { value: 10, modifier: 0 },
+    constitution: { value: 10, modifier: 0 },
+    intelligence: { value: 10, modifier: 0 },
+    wisdom: { value: 10, modifier: 0 },
+    charisma: { value: 10, modifier: 0 },
+  },
+  skills: [],
+  savingThrows: [],
+  traits: { personalityTraits: '', ideals: '', bonds: '', flaws: '' },
+  narrativeTraits: { likes: [], temptations: [], keys: [] },
+  proficiencyBonus: 2,
+  level: 1,
+  xp: 0,
+  hp: 10,
+  maxHp: 10,
+  attack: 0,
+  defense: 12,
+  classId: 'fighter',
+  classFeatures: [],
+  hotbarSlots: [],
+} as const;
+
+const POPULATED_CHARACTER_SHEET = {
+  abilities: {
+    strength: { value: 16, modifier: 3 },
+    dexterity: { value: 14, modifier: 2 },
+    constitution: { value: 15, modifier: 2 },
+    intelligence: { value: 12, modifier: 1 },
+    wisdom: { value: 13, modifier: 1 },
+    charisma: { value: 16, modifier: 3 },
+  },
+  skills: [],
+  savingThrows: [{ ability: 'wisdom', isProficient: true, isExpertise: false, modifier: 0 }],
+  traits: { personalityTraits: '', ideals: '', bonds: '', flaws: '' },
+  narrativeTraits: { likes: [], temptations: [], keys: [] },
+  proficiencyBonus: 3,
+  level: 5,
+  xp: 480,
+  hp: 34,
+  maxHp: 42,
+  attack: 4,
+  defense: 17,
+  classId: 'fighter',
+  classFeatures: ['fighter_second_wind'],
+  hotbarSlots: ['fighter_second_wind'],
+} as const;
+
+const characterSheetFor = (populated: boolean) =>
+  populated ? POPULATED_CHARACTER_SHEET : EMPTY_CHARACTER_SHEET;
+
+const openProductionCharacter = async (
+  page: import('playwright').Page,
+  populated: boolean,
+): Promise<void> => {
+  await page.addInitScript((sheet) => {
+    (window as unknown as Record<string, unknown>).__AIKAMI_E2E_SHEET__ = sheet;
+  }, characterSheetFor(populated));
+  await page.goto(`http://localhost:${EMULATOR_PORTS.client}/game`, {
+    waitUntil: 'domcontentloaded',
+  });
+  await page.getByTestId('hud-menu-entry').waitFor({ state: 'visible', timeout: 30_000 });
+  await page.waitForFunction(() => {
+    const app = (window as unknown as Record<string, unknown>).__PIXI_APP__ as
+      | { renderer?: { name?: unknown } }
+      | undefined;
+    return typeof app?.renderer?.name === 'string';
+  });
+  const renderer = await page.evaluate(() => {
+    const app = (window as unknown as Record<string, unknown>).__PIXI_APP__ as
+      | { renderer?: { name?: unknown } }
+      | undefined;
+    return typeof app?.renderer?.name === 'string' ? app.renderer.name : 'none';
+  });
+  if (renderer !== 'webgl') {
+    throw new Error(`Expected WebGL renderer, received ${renderer}`);
+  }
+  await page.getByTestId('hud-menu-entry').click();
+  await page.getByTestId('section-tab-character').click();
+  await page.getByTestId('character-summary').waitFor({ state: 'visible', timeout: 10_000 });
+  await hideProductionDevTools(page);
 };
 
 // ── Suite ────────────────────────────────────────────────────
@@ -207,14 +314,15 @@ export default defineConfig({
       name: 'Character Sheet — Abilities Tab',
       prompt: ABILITIES_PROMPT,
       schema: AbilitiesSchema,
+      screenshotSelector: '[role="dialog"][aria-label="Character Sheet"]',
     },
     {
       name: 'Character Sheet — Skills Tab',
       prompt: SKILLS_PROMPT,
       schema: SkillsSchema,
+      screenshotSelector: '[role="dialog"][aria-label="Character Sheet"]',
       setupHook: async (page) => {
-        await page.waitForSelector('text=Skills', { timeout: 10_000 });
-        await page.locator('text=Skills').click();
+        await page.getByRole('tab', { name: 'Skills', exact: true }).click();
         await page.waitForTimeout(500);
       },
     },
@@ -222,9 +330,9 @@ export default defineConfig({
       name: 'Character Sheet — Traits Tab',
       prompt: TRAITS_PROMPT,
       schema: TraitsSchema,
+      screenshotSelector: '[role="dialog"][aria-label="Character Sheet"]',
       setupHook: async (page) => {
-        await page.waitForSelector('text=Traits', { timeout: 10_000 });
-        await page.locator('text=Traits').click();
+        await page.getByRole('tab', { name: 'Traits', exact: true }).click();
         await page.waitForTimeout(500);
       },
     },
@@ -232,12 +340,28 @@ export default defineConfig({
       name: 'Character Sheet — Pro Mode',
       prompt: PRO_MODE_PROMPT,
       schema: ProModeSchema,
+      screenshotSelector: '[role="dialog"][aria-label="Character Sheet"]',
       setupHook: setupProMode,
     },
     {
       name: 'Character Sheet — Sandbox Full Page',
       prompt: SANDBOX_PROMPT,
       schema: SandboxSchema,
+      screenshotSelector: '[role="dialog"][aria-label="Character Sheet"]',
+    },
+    {
+      name: 'Character Sheet — Management Summary Empty',
+      prompt: MANAGEMENT_CHARACTER_PROMPT,
+      schema: AbilitiesSchema,
+      screenshotSelector: '[data-testid="management-workspace"]',
+      setupHook: (page) => openProductionCharacter(page, false),
+    },
+    {
+      name: 'Character Sheet — Management Summary Populated',
+      prompt: MANAGEMENT_CHARACTER_PROMPT,
+      schema: AbilitiesSchema,
+      screenshotSelector: '[data-testid="management-workspace"]',
+      setupHook: (page) => openProductionCharacter(page, true),
     },
   ],
 });

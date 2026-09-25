@@ -208,8 +208,11 @@ const handleSwipeRight = () => {
       >
     </div>
   {:else}
-    <div class="group flex gap-2 {alignRight ? 'flex-row-reverse' : 'flex-row'}">
-      <div class="flex max-w-[75%] flex-col gap-0.5">
+    <div
+      class="group flex gap-2 {alignRight ? 'flex-row-reverse' : 'flex-row'}"
+      data-testid="dialogue-message-row"
+    >
+      <div class="relative flex max-w-[75%] flex-col gap-0.5">
         {#if editing && !readOnly}
           <div class="flex flex-col gap-1">
             <textarea
@@ -293,7 +296,7 @@ const handleSwipeRight = () => {
         {#if !readOnly}
           <!-- Action buttons (hover-visible) -->
           <div
-            class="flex gap-0.5 opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-within:opacity-100 max-sm:opacity-100 {alignRight ? 'justify-end' : 'justify-start'}"
+            class="pointer-events-none absolute top-full z-10 flex gap-0.5 opacity-0 transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100 max-sm:pointer-events-auto max-sm:static max-sm:mt-0.5 max-sm:opacity-100 {alignRight ? 'right-0 justify-end' : 'left-0 justify-start'}"
           >
             {#if !isPlayer && !isPartyMate}
               <button

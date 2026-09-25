@@ -131,8 +131,118 @@ const SEED_NAMES = [
 ] as const;
 const RELEASE_KEY = 'index/v1/release.json';
 
-/** Merge seed and browse coverage; refuse conflicting identities or ambiguous local paths. */
-export const mergeWorkspaceEntries = (entries: readonly WorkspaceEntry[]): WorkspaceEntry[] => {
+/** A divergent alias pair the merge resolved deterministically. */
+export type AliasCollision = {
+  /** Working path both aliases map to. */
+  path: string;
+  /** The tag the snapshot keeps. */
+  kept: { tag: string; hash: string };
+  /** The tag the snapshot drops. */
+  dropped: { tag: string; hash: string };
+};
+
+/** Inputs that let the merge pick a winner for a divergent alias. */
+export type MergeWorkspaceOptions = {
+  /**
+   * Tags the release index (`release.json` shards) references. A release-index
+   * tag is authoritative over a seed-only alias, because the release is what the
+   * origin actually serves.
+   */
+  releaseIndexTags?: ReadonlySet<string>;
+  /** Called once per divergent alias that was resolved instead of throwing. */
+  onAliasCollision?: (collision: AliasCollision) => void;
+};
+
+/** True when the tag's last segment already carries the entry's extension. */
+const isExtensionQualified = (entry: { tag: string; ext: string }): boolean => {
+  const ext = entry.ext.startsWith('.') ? entry.ext : `.${entry.ext}`;
+  return entry.tag.endsWith(ext);
+};
+
+/**
+ * Picks the authoritative entry of a divergent alias pair.
+ *
+ * Order: the release-index-referenced tag, then the extension-qualified tag
+ * (`sprites:tilesets:atlas.webp` over the legacy `sprites:tilesets:atlas`).
+ * `undefined` means neither rule distinguishes them, which the caller reports
+ * as an unresolvable conflict rather than guessing.
+ */
+const aliasWinner = (
+  first: WorkspaceEntry,
+  second: WorkspaceEntry,
+  releaseIndexTags?: ReadonlySet<string>,
+): WorkspaceEntry | undefined => {
+  const firstIndexed = releaseIndexTags?.has(first.tag) ?? false;
+  const secondIndexed = releaseIndexTags?.has(second.tag) ?? false;
+  if (firstIndexed !== secondIndexed) {
+    return firstIndexed ? first : second;
+  }
+  const firstQualified = isExtensionQualified(first);
+  const secondQualified = isExtensionQualified(second);
+  if (firstQualified !== secondQualified) {
+    return firstQualified ? first : second;
+  }
+  return undefined;
+};
+
+/** True when two entries claiming the same tag disagree on identity. */
+const hasTagConflict = (old: WorkspaceEntry, entry: WorkspaceEntry): boolean =>
+  old.hash !== entry.hash ||
+  old.ext !== entry.ext ||
+  old.sizeBytes !== entry.sizeBytes ||
+  old.category !== entry.category;
+
+/** What to do with `entry` once a same-path alias `other` is found. */
+type PathAction = 'keep-both' | 'keep-entry' | 'keep-other';
+
+/**
+ * Classifies a same-path alias pair.
+ *
+ * Identical bytes coalesce (both tags survive); a divergent pair is resolved by
+ * {@link aliasWinner} and reported through `options.onAliasCollision`. A pair no
+ * rule separates — or two tags whose exact paths differ only by case — throws.
+ */
+const classifyPathCollision = (
+  other: WorkspaceEntry,
+  entry: WorkspaceEntry,
+  path: string,
+  options: MergeWorkspaceOptions,
+): PathAction => {
+  if (entryWorkingPath(other) !== path) {
+    throw new Error(`Catalog path collision: ${other.tag} / ${entry.tag}`);
+  }
+  if (other.hash === entry.hash && other.sizeBytes === entry.sizeBytes) {
+    return 'keep-both';
+  }
+  const winner = aliasWinner(other, entry, options.releaseIndexTags);
+  if (!winner) {
+    throw new Error(
+      `Catalog alias conflict with no authority: ${other.tag} (${other.hash}) / ${entry.tag} (${entry.hash})`,
+    );
+  }
+  const loser = winner === other ? entry : other;
+  options.onAliasCollision?.({
+    path,
+    kept: { tag: winner.tag, hash: winner.hash },
+    dropped: { tag: loser.tag, hash: loser.hash },
+  });
+  return winner === entry ? 'keep-entry' : 'keep-other';
+};
+
+/**
+ * Merge seed and browse coverage; refuse conflicting identities or ambiguous
+ * local paths.
+ *
+ * Two tags can legitimately map to the same working path (the legacy
+ * `sprites:tilesets:atlas` alias and `sprites:tilesets:atlas.webp`). When their
+ * bytes agree the alias is coalesced silently; when they diverge the release
+ * index decides, then the extension-qualified tag, and the caller is told which
+ * one won and which was dropped. Only a pair no rule can separate fails loudly.
+ */
+export const mergeWorkspaceEntries = (
+  entries: readonly WorkspaceEntry[],
+  options: MergeWorkspaceOptions = {},
+): WorkspaceEntry[] => {
   const tags = new Map<string, WorkspaceEntry>();
   const paths = new Map<string, WorkspaceEntry>();
   for (const entry of entries) {
@@ -140,24 +250,19 @@ export const mergeWorkspaceEntries = (entries: readonly WorkspaceEntry[]): Works
       throw new Error('Invalid catalog workspace entry');
     }
     const old = tags.get(entry.tag);
-    if (
-      old &&
-      (old.hash !== entry.hash ||
-        old.ext !== entry.ext ||
-        old.sizeBytes !== entry.sizeBytes ||
-        old.category !== entry.category)
-    ) {
+    if (old && hasTagConflict(old, entry)) {
       throw new Error(`Seed/index conflict for ${entry.tag}`);
     }
     const path = entryWorkingPath(entry);
     const other = paths.get(path.toLowerCase());
-    if (
-      other &&
-      (other.hash !== entry.hash ||
-        other.sizeBytes !== entry.sizeBytes ||
-        entryWorkingPath(other) !== path)
-    ) {
-      throw new Error(`Catalog path collision: ${other.tag} / ${entry.tag}`);
+    if (other) {
+      const action = classifyPathCollision(other, entry, path, options);
+      if (action === 'keep-other') {
+        continue;
+      }
+      if (action === 'keep-entry') {
+        tags.delete(other.tag);
+      }
     }
     tags.set(entry.tag, entry);
     paths.set(path.toLowerCase(), entry);
@@ -244,6 +349,10 @@ export const fetchWorkspaceSnapshot = async (options: {
   if (browseCount !== root.totalCount) {
     throw new Error('Catalog totalCount does not match shards');
   }
+  // The shards the release index references are the authoritative inventory; the
+  // seed rows below only supplement it. A divergent alias resolves in favour of
+  // the referenced tag (C-548 Item 4).
+  const releaseIndexTags = release ? new Set(entries.map((entry) => entry.tag)) : undefined;
   const dependencies = release?.dependencies ?? SEED_NAMES.map((name) => ({ key: `seed/${name}` }));
   const seedReferences = dependencies.filter(({ key }) => key.endsWith('/asset_seed.json'));
   if (seedReferences.length !== 1) {
@@ -278,10 +387,20 @@ export const fetchWorkspaceSnapshot = async (options: {
   if (!release && (await options.remote.readObject(RELEASE_KEY))) {
     throw new Error('A release appeared during legacy snapshot; retry');
   }
-  const merged = mergeWorkspaceEntries(entries);
+  const aliasCollisions: AliasCollision[] = [];
+  const merged = mergeWorkspaceEntries(entries, {
+    releaseIndexTags,
+    onAliasCollision: (collision) => aliasCollisions.push(collision),
+  });
   const warnings = release
     ? []
     : ['Legacy metadata observed twice; not an atomic published release.'];
+  for (const collision of aliasCollisions) {
+    warnings.push(
+      `Alias collision for ${collision.path}: kept ${collision.kept.tag} (${collision.kept.hash}) ` +
+        `over ${collision.dropped.tag} (${collision.dropped.hash}).`,
+    );
+  }
   if (merged.length !== browseCount) {
     warnings.push(
       `Browse index has ${browseCount} entries; seed/index union has ${merged.length}. Do not publish from a subset.`,

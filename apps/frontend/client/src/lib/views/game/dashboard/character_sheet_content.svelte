@@ -1,44 +1,51 @@
 <script lang="ts">
 // apps/frontend/client/src/lib/views/game/dashboard/character_sheet_content.svelte
 //
-// Zero-logic tabbed D&D-style character sheet. Replaces the minimal
-// character dashboard from C-153. All state lives in the ViewModel.
-//
-// Contract: C-232 Character Sheet & Traits System
+// Shared character content for the standalone developer sheet and the
+// production management workspace (C-551). Domain state remains in the
+// ViewModel; edit disclosure and display mappings live in the sibling
+// presentation module.
+
 import { Modal, NumberStepper } from '@aikami/frontend/components';
 import { ABILITY_KEYS } from '@aikami/types';
+import m from '$lib/views/utils/i18n';
+import {
+  CHARACTER_NARRATIVE_CATEGORIES,
+  CHARACTER_NARRATIVE_LABELS,
+  CHARACTER_NARRATIVE_PROMPTS,
+  CHARACTER_TRAIT_FIELDS,
+  CHARACTER_TRAIT_LABELS,
+  type CharacterSheetPresentationState,
+  characterModifierTone,
+  characterTabClass,
+  formatModifier,
+  submitNarrativeTrait,
+} from './character_sheet_presentation.svelte';
 import type { CharacterSheetViewModelInterface } from './character_sheet_view_model.svelte';
 
 type Props = {
   viewModel: CharacterSheetViewModelInterface;
-  /**
-   * Developer affordances (the AI context preview). Off in production
-   * management; the standalone/dev wrapper opts in. C-543 PART C.
-   */
+  presentation: CharacterSheetPresentationState;
+  /** Developer-only JSON and AI context affordances. */
   developerTools?: boolean;
 };
 
-const { viewModel, developerTools = false }: Props = $props();
+const { viewModel, presentation, developerTools = false }: Props = $props();
 </script>
 
-<!--
-  C-543 PART B — layout-neutral character CONTENT.
-  The standalone dialog wrapper supplies the card, title, Pro/JSON affordance and
-  Close; the management workspace supplies the actor identity header and the
-  Return action. This component renders the sheet body only, so it can never
-  behave like the old popup inside the workspace.
--->
 <div class="@container flex min-h-full w-full flex-col gap-3">
   {#if developerTools && viewModel.isProMode}
-    <!-- ── Pro Mode: JSON Editor ── -->
-    <div class="flex flex-col gap-2">
-      <div class="flex items-center justify-between">
-        <span class="text-xs font-semibold text-base-content/70">JSON Editor</span>
-        <label class="flex items-center gap-1 cursor-pointer">
-          <span class="text-xs text-base-content/50">Edit</span>
+    <section class="game-surface--raised flex flex-col gap-3 rounded-lg p-3">
+      <div class="flex items-center justify-between gap-3">
+        <div>
+          <p class="game-eyebrow">Developer</p>
+          <h3 class="game-section-title">JSON editor</h3>
+        </div>
+        <label class="flex cursor-pointer items-center gap-2">
+          <span class="game-metadata">Edit JSON</span>
           <input
             type="checkbox"
-            class="toggle toggle-xs"
+            class="toggle"
             checked={viewModel.isJsonEditing}
             onchange={() => viewModel.toggleJsonEditing()}
           >
@@ -46,24 +53,26 @@ const { viewModel, developerTools = false }: Props = $props();
       </div>
       {#if viewModel.isJsonEditing}
         <textarea
-          class="textarea textarea-bordered font-mono text-xs h-64 leading-relaxed"
+          class="textarea w-full font-mono text-sm"
+          style="min-block-size: 16rem"
           value={viewModel.jsonText}
-          oninput={(e: Event) => viewModel.setJsonText((e.target as HTMLTextAreaElement).value)}
+          aria-label="Character JSON"
+          oninput={(event) => viewModel.setJsonText(event.currentTarget.value)}
         ></textarea>
         {#if viewModel.jsonError}
-          <div class="text-xs text-error font-mono">{viewModel.jsonError}</div>
+          <p class="game-numeric--negative" role="alert">{viewModel.jsonError}</p>
         {/if}
-        <div class="flex gap-2">
+        <div class="flex flex-wrap gap-2">
           <button
             type="button"
-            class="btn btn-sm btn-primary"
+            class="btn game-control--accent"
             onclick={() => viewModel.saveJsonEdit()}
           >
-            Save & Validate
+            Save & validate
           </button>
           <button
             type="button"
-            class="btn btn-sm btn-ghost"
+            class="btn game-control--quiet"
             onclick={() => viewModel.toggleJsonEditing()}
           >
             Cancel
@@ -71,17 +80,79 @@ const { viewModel, developerTools = false }: Props = $props();
         </div>
       {:else}
         <pre
-          class="bg-base-200 rounded-lg p-3 text-xs font-mono leading-relaxed overflow-x-auto max-h-64"
+          class="game-surface--inset max-h-64 overflow-auto rounded-lg p-3 font-mono text-sm leading-relaxed"
         >{viewModel.jsonText}</pre>
       {/if}
-    </div>
+    </section>
   {:else}
-    <!-- ── Tabs ── -->
-    <div role="tablist" class="tabs tabs-bordered">
+    <section
+      class="game-character-summary game-surface--raised flex flex-col gap-3 rounded-lg p-3"
+      data-testid="character-summary"
+    >
+      <div class="game-stat-grid">
+        <div class="game-character-summary__stat game-surface--inset">
+          <span class="game-eyebrow">Hit points</span>
+          <strong class="game-numeric game-numeric--danger"
+            >{viewModel.hp}
+            / {viewModel.maxHp}</strong
+          >
+          <progress
+            class="progress progress-error w-full"
+            value={viewModel.hpPercent}
+            max="100"
+            aria-label="Hit points"
+          ></progress>
+        </div>
+        <div class="game-character-summary__stat game-surface--inset">
+          <span class="game-eyebrow">{m.character_ac()}</span>
+          <strong class="game-numeric game-numeric--defense">{viewModel.totalDefense}</strong>
+          <span class="game-metadata">Damage avoided</span>
+        </div>
+        <div class="game-character-summary__stat game-surface--inset">
+          <span class="game-eyebrow">Attack</span>
+          <strong class="game-numeric game-numeric--attack">{viewModel.totalAttack}</strong>
+          <span class="game-metadata">With equipment</span>
+        </div>
+        <div class="game-character-summary__stat game-surface--inset">
+          <span class="game-eyebrow">Experience</span>
+          <strong class="game-numeric game-numeric--accent">
+            {viewModel.xp}
+            / {viewModel.xpToNext}
+          </strong>
+          <progress
+            class="progress progress-accent w-full"
+            value={viewModel.xpPercent}
+            max="100"
+            aria-label="Experience"
+          ></progress>
+        </div>
+      </div>
+
+      <div>
+        <p class="game-eyebrow mb-2">Core abilities</p>
+        <div class="game-ability-grid">
+          {#each presentation.abilityRows(viewModel) as ability (ability.key)}
+            <div class="game-ability-grid__item game-surface--inset">
+              <span class="game-metadata">{ability.label}</span>
+              <div class="flex items-baseline gap-1">
+                <strong class="game-numeric game-numeric--emphasis">{ability.score}</strong>
+                <span class={`game-numeric ${characterModifierTone(ability.modifier)}`}>
+                  {formatModifier(ability.modifier)}
+                </span>
+              </div>
+            </div>
+          {/each}
+        </div>
+      </div>
+    </section>
+
+    <div class="game-tabs" role="tablist" aria-label="Character details">
       <button
         type="button"
         role="tab"
-        class="tab tab-sm {viewModel.activeTab === 'abilities' ? 'tab-active' : ''}"
+        class={`game-tab ${characterTabClass(viewModel.activeTab, 'abilities')}`}
+        aria-selected={viewModel.activeTab === 'abilities'}
+        aria-controls="character-panel"
         onclick={() => viewModel.setActiveTab('abilities')}
       >
         Abilities
@@ -89,7 +160,9 @@ const { viewModel, developerTools = false }: Props = $props();
       <button
         type="button"
         role="tab"
-        class="tab tab-sm {viewModel.activeTab === 'skills' ? 'tab-active' : ''}"
+        class={`game-tab ${characterTabClass(viewModel.activeTab, 'skills')}`}
+        aria-selected={viewModel.activeTab === 'skills'}
+        aria-controls="character-panel"
         onclick={() => viewModel.setActiveTab('skills')}
       >
         Skills
@@ -97,7 +170,9 @@ const { viewModel, developerTools = false }: Props = $props();
       <button
         type="button"
         role="tab"
-        class="tab tab-sm {viewModel.activeTab === 'traits' ? 'tab-active' : ''}"
+        class={`game-tab ${characterTabClass(viewModel.activeTab, 'traits')}`}
+        aria-selected={viewModel.activeTab === 'traits'}
+        aria-controls="character-panel"
         onclick={() => viewModel.setActiveTab('traits')}
       >
         Traits
@@ -105,412 +180,302 @@ const { viewModel, developerTools = false }: Props = $props();
       <button
         type="button"
         role="tab"
-        class="tab tab-sm {viewModel.activeTab === 'features' ? 'tab-active' : ''}"
+        class={`game-tab ${characterTabClass(viewModel.activeTab, 'features')}`}
+        aria-selected={viewModel.activeTab === 'features'}
+        aria-controls="character-panel"
         onclick={() => viewModel.setActiveTab('features')}
       >
         Features
       </button>
     </div>
 
-    <div class="game-columns">
-      <div class="game-surface--raised flex min-w-0 flex-col gap-3 rounded-lg p-3">
-        <!-- ── Tab Content ── -->
-        {#if viewModel.activeTab === 'abilities'}
-          <!-- Abilities Tab -->
-          <div class="game-stat-grid">
-            {#each ABILITY_KEYS as key}
-              {@const ability = viewModel.abilities[key]}
-              {@const label = viewModel.abilityLabels[key]}
-              <div class="stat bg-base-200 rounded-lg p-2">
-                <div class="stat-title text-xs opacity-60">{label}</div>
-                <div class="flex items-center gap-1">
-                  <NumberStepper
-                    value={ability.value}
-                    min={3}
-                    max={20}
-                    size="xs"
-                    label="{label} score"
-                    onchange={(value) => viewModel.setAbilityScore(key, value)}
-                  />
-                  <span
-                    class="text-xs font-mono font-bold {viewModel.modifierColor(ability.modifier)}"
-                  >
-                    {viewModel.modifierSign(ability.modifier)}
-                  </span>
-                </div>
-                <!-- Save Proficiency -->
-                <label class="flex items-center gap-1 mt-1 cursor-pointer">
+    <section
+      id="character-panel"
+      class="game-surface--raised min-h-56 flex-1 rounded-lg p-3"
+      role="tabpanel"
+    >
+      {#if viewModel.activeTab === 'abilities'}
+        <div class="game-stat-grid">
+          {#each presentation.abilityRows(viewModel) as ability (ability.key)}
+            <div class="game-surface--inset flex flex-col gap-2 rounded-lg p-3">
+              <div class="flex items-center justify-between gap-2">
+                <span class="game-body-text font-semibold">{ability.label}</span>
+                <span class={`game-numeric ${characterModifierTone(ability.modifier)}`}>
+                  {formatModifier(ability.modifier)}
+                </span>
+              </div>
+              {#if presentation.isEditing}
+                <NumberStepper
+                  value={ability.score}
+                  min={3}
+                  max={20}
+                  size="md"
+                  class="game-number-stepper"
+                  label="{ability.label} score"
+                  onchange={(value) => viewModel.setAbilityScore(ability.key, value)}
+                />
+                <label class="flex cursor-pointer items-center gap-2">
                   <input
                     type="checkbox"
-                    class="checkbox checkbox-xs"
-                    checked={viewModel.savingThrows.find((s) => s.ability === key)?.isProficient ?? false}
-                    onchange={() => viewModel.toggleSaveProficiency(key)}
+                    class="checkbox checkbox-sm"
+                    checked={ability.isSavingThrowProficient}
+                    aria-label={m.character_saving_throw_proficiency({ ability: ability.label })}
+                    onchange={() => viewModel.toggleSaveProficiency(ability.key)}
                   >
-                  <span class="text-[10px] text-base-content/50">Save</span>
+                  <span class="game-metadata">{m.character_saving_throw()}</span>
                 </label>
-              </div>
-            {/each}
-          </div>
-        {:else if viewModel.activeTab === 'skills'}
-          <!-- Skills Tab -->
-          <div class="flex flex-col gap-2 max-h-[50vh] overflow-y-auto">
-            {#each ABILITY_KEYS as abilityKey}
-              {@const groupSkills = viewModel.skillsByAbility[abilityKey]}
-              {#if groupSkills.length > 0}
-                <div class="text-xs font-semibold text-base-content/50 uppercase">
-                  {viewModel.abilityLabels[abilityKey]}
+              {:else}
+                <div class="flex items-center justify-between gap-2">
+                  <strong class="game-numeric game-numeric--emphasis">{ability.score}</strong>
+                  <span class="game-badge">
+                    {m.character_saving_throw()}
+                    {ability.isSavingThrowProficient ? ' ✓' : ' —'}
+                  </span>
                 </div>
-                {#each groupSkills as skill}
-                  <div class="flex items-center justify-between bg-base-200 rounded-lg px-2 py-1">
-                    <div class="flex items-center gap-1 min-w-0">
-                      <span class="text-xs truncate">{skill.name}</span>
-                      {#if skill.isExpertise}
-                        <span class="text-[10px] text-warning">★★</span>
-                      {:else if skill.isProficient}
-                        <span class="text-[10px] text-success">★</span>
-                      {/if}
-                    </div>
-                    <div class="flex items-center gap-2 flex-shrink-0">
-                      <span
-                        class="text-xs font-mono font-bold {viewModel.modifierColor(skill.modifier)}"
-                      >
-                        {viewModel.modifierSign(skill.modifier)}
-                      </span>
-                      <!-- proficiency checkbox -->
-                      <input
-                        type="checkbox"
-                        class="checkbox checkbox-xs"
-                        checked={skill.isProficient}
-                        onchange={() => viewModel.toggleSkillProficiency(skill.name)}
-                        aria-label="Proficiency in {skill.name}"
-                      >
-                      <!-- expertise checkbox -->
-                      <input
-                        type="checkbox"
-                        class="checkbox checkbox-xs [--chkfg:var(--fallback-wa,oklch(var(--wa)))]"
-                        checked={skill.isExpertise}
-                        onchange={() => viewModel.toggleSkillExpertise(skill.name)}
-                        aria-label="Expertise in {skill.name}"
-                        title="Expertise"
-                      >
-                    </div>
-                  </div>
-                {/each}
               {/if}
-            {/each}
-          </div>
-        {:else if viewModel.activeTab === 'features'}
-          <!-- Features Tab (C-337) -->
-          <div class="flex flex-col gap-3">
-            <!-- Class & Level Header -->
-            <div class="flex items-center gap-2 mb-1">
-              <span class="badge badge-primary badge-sm">{viewModel.className}</span>
-              <span class="text-xs text-base-content/50">Level {viewModel.level}</span>
             </div>
-
-            <!-- Class Description -->
-            <p class="text-xs text-base-content/70">
-              <span class="font-semibold">Class Features</span>
-              — Abilities and passives granted by your class.
-            </p>
-
-            <!-- Earned Features -->
-            <div>
-              <h4 class="text-xs font-semibold text-base-content/70 mb-1">Known Features</h4>
-              <div class="flex flex-col gap-2 max-h-48 overflow-y-auto">
-                {#each viewModel.classFeatures as feature}
-                  {#if feature.earned}
-                    <div class="flex items-start gap-2 bg-base-200 rounded-lg p-2">
-                      <div class="mt-0.5">
-                        {#if feature.kind === 'active'}
-                          <span class="text-success text-sm">✓</span>
-                        {:else}
-                          <span class="text-info text-sm">✓</span>
-                        {/if}
-                      </div>
-                      <div class="flex-1 min-w-0">
-                        <div class="flex items-center gap-1">
-                          <span class="text-xs font-semibold">{feature.name}</span>
-                          {#if feature.kind === 'active'}
-                            <span class="badge badge-ghost badge-xs">Active</span>
+          {/each}
+        </div>
+      {:else if viewModel.activeTab === 'skills'}
+        <div class="flex flex-col gap-3">
+          {#each ABILITY_KEYS as abilityKey (abilityKey)}
+            {@const groupSkills = viewModel.skillsByAbility[abilityKey]}
+            {#if groupSkills.length > 0}
+              <section>
+                <h3 class="game-eyebrow mb-2">{viewModel.abilityLabels[abilityKey]}</h3>
+                <div class="grid gap-2 md:grid-cols-2">
+                  {#each groupSkills as skill (skill.name)}
+                    <div class="game-surface--inset flex items-center gap-3 rounded-lg p-2">
+                      <div class="min-w-0 flex-1">
+                        <p class="game-body-text truncate">{skill.name}</p>
+                        <div class="mt-1 flex flex-wrap gap-1">
+                          {#if skill.isExpertise}
+                            <span class="game-badge game-badge--accent">Expertise</span>
+                          {:else if skill.isProficient}
+                            <span class="game-badge game-badge--positive">Proficient</span>
                           {:else}
-                            <span class="badge badge-ghost badge-xs">Passive</span>
+                            <span class="game-badge">Untrained</span>
                           {/if}
                         </div>
-                        <p class="text-[10px] text-base-content/60 mt-0.5">
-                          {feature.description}
-                        </p>
-                        {#if feature.activation}
-                          <div class="flex gap-2 mt-1">
-                            <span class="text-[10px] text-base-content/40">
-                              Cost: {feature.activation.cost.replaceAll('_', ' ')}
-                            </span>
-                            {#if feature.activation.effectDice}
-                              <span class="text-[10px] text-warning">
-                                {feature.activation.effectDice}
-                              </span>
-                            {/if}
-                          </div>
-                        {/if}
                       </div>
-                    </div>
-                  {/if}
-                {/each}
-                {#if viewModel.classFeatures.filter((f) => f.earned).length === 0}
-                  <p class="text-xs text-base-content/40 italic">No features unlocked yet.</p>
-                {/if}
-              </div>
-            </div>
-
-            <!-- Next Level Projection -->
-            <div>
-              <h4 class="text-xs font-semibold text-base-content/70 mb-1">
-                {viewModel.isMaxLevel ? 'Maximum Level Reached' : 'Next Level Features'}
-              </h4>
-              {#if viewModel.isMaxLevel}
-                <p class="text-xs text-base-content/40 italic">
-                  You have reached the maximum level (5).
-                </p>
-              {:else if viewModel.nextLevelFeatures.length > 0}
-                <div class="flex flex-col gap-2">
-                  {#each viewModel.nextLevelFeatures as feature}
-                    <div class="flex items-start gap-2 bg-base-200 rounded-lg p-2 opacity-70">
-                      <div class="mt-0.5">
-                        <span class="text-base-content/30 text-sm">🔒</span>
-                      </div>
-                      <div class="flex-1 min-w-0">
-                        <div class="flex items-center gap-1">
-                          <span class="text-xs font-semibold">{feature.name}</span>
-                          {#if feature.kind === 'active'}
-                            <span class="badge badge-ghost badge-xs">Active</span>
-                          {:else}
-                            <span class="badge badge-ghost badge-xs">Passive</span>
-                          {/if}
+                      <span class={`game-numeric ${characterModifierTone(skill.modifier)}`}>
+                        {formatModifier(skill.modifier)}
+                      </span>
+                      {#if presentation.isEditing}
+                        <div class="flex gap-2">
+                          <input
+                            type="checkbox"
+                            class="checkbox checkbox-sm"
+                            checked={skill.isProficient}
+                            onchange={() => viewModel.toggleSkillProficiency(skill.name)}
+                            aria-label="Proficiency in {skill.name}"
+                          >
+                          <input
+                            type="checkbox"
+                            class="checkbox checkbox-sm"
+                            checked={skill.isExpertise}
+                            onchange={() => viewModel.toggleSkillExpertise(skill.name)}
+                            aria-label="Expertise in {skill.name}"
+                          >
                         </div>
-                        <p class="text-[10px] text-base-content/60 mt-0.5">
-                          {feature.description}
-                        </p>
-                        {#if feature.activation}
-                          <div class="flex gap-2 mt-1">
-                            <span class="text-[10px] text-base-content/40">
-                              Cost: {feature.activation.cost.replaceAll('_', ' ')}
-                            </span>
-                          </div>
-                        {/if}
-                      </div>
+                      {/if}
                     </div>
                   {/each}
                 </div>
-              {:else}
-                <p class="text-xs text-base-content/40 italic">No features at next level.</p>
-              {/if}
-            </div>
+              </section>
+            {/if}
+          {/each}
+        </div>
+      {:else if viewModel.activeTab === 'features'}
+        <div class="flex flex-col gap-4">
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="game-badge game-badge--accent">{viewModel.className}</span>
+            <span class="game-metadata">Level {viewModel.level}</span>
           </div>
-        {:else if viewModel.activeTab === 'traits'}
-          <!-- Traits Tab -->
-          <div class="flex flex-col gap-3">
-            <!-- Personality / Ideals / Bonds / Flaws -->
-            <div class="flex flex-col gap-2">
-              <div>
-                <label class="text-xs font-semibold text-base-content/70">
-                  Personality Traits
-                  <textarea
-                    class="textarea textarea-bordered textarea-xs w-full mt-1 text-xs"
-                    rows="2"
-                    maxlength="500"
-                    value={viewModel.traits.personalityTraits}
-                    oninput={(e: Event) => viewModel.setTrait('personalityTraits', (e.target as HTMLTextAreaElement).value)}
-                  ></textarea>
-                </label>
-              </div>
-              <div>
-                <label class="text-xs font-semibold text-base-content/70">
-                  Ideals
-                  <textarea
-                    class="textarea textarea-bordered textarea-xs w-full mt-1 text-xs"
-                    rows="2"
-                    maxlength="500"
-                    value={viewModel.traits.ideals}
-                    oninput={(e: Event) => viewModel.setTrait('ideals', (e.target as HTMLTextAreaElement).value)}
-                  ></textarea>
-                </label>
-              </div>
-              <div>
-                <label class="text-xs font-semibold text-base-content/70">
-                  Bonds
-                  <textarea
-                    class="textarea textarea-bordered textarea-xs w-full mt-1 text-xs"
-                    rows="2"
-                    maxlength="500"
-                    value={viewModel.traits.bonds}
-                    oninput={(e: Event) => viewModel.setTrait('bonds', (e.target as HTMLTextAreaElement).value)}
-                  ></textarea>
-                </label>
-              </div>
-              <div>
-                <label class="text-xs font-semibold text-base-content/70">
-                  Flaws
-                  <textarea
-                    class="textarea textarea-bordered textarea-xs w-full mt-1 text-xs"
-                    rows="2"
-                    maxlength="500"
-                    value={viewModel.traits.flaws}
-                    oninput={(e: Event) => viewModel.setTrait('flaws', (e.target as HTMLTextAreaElement).value)}
-                  ></textarea>
-                </label>
-              </div>
+          <div>
+            <h3 class="game-eyebrow mb-2">Known features</h3>
+            <div class="grid gap-2 lg:grid-cols-2">
+              {#each viewModel.classFeatures as feature (feature.id)}
+                {#if feature.earned}
+                  <article class="game-surface--inset rounded-lg p-3">
+                    <div class="flex flex-wrap items-center gap-2">
+                      <h4 class="game-body-text font-semibold">{feature.name}</h4>
+                      <span class="game-badge">{feature.kind}</span>
+                    </div>
+                    <p class="game-metadata mt-1">{feature.description}</p>
+                    {#if feature.activation}
+                      <p class="game-metadata mt-2">
+                        Cost: {presentation.formatActivationCost(feature.activation.cost)}
+                        {#if feature.activation.effectDice}
+                          · {feature.activation.effectDice}
+                        {/if}
+                      </p>
+                    {/if}
+                  </article>
+                {/if}
+              {/each}
             </div>
+            {#if !presentation.hasEarnedFeatures(viewModel.classFeatures)}
+              <div class="game-empty game-empty--inline">
+                <p class="game-body-text font-semibold">No features unlocked yet</p>
+              </div>
+            {/if}
+          </div>
+          <div>
+            <h3 class="game-eyebrow mb-2">
+              {viewModel.isMaxLevel ? 'Maximum level reached' : 'Next level features'}
+            </h3>
+            {#if viewModel.nextLevelFeatures.length > 0}
+              <div class="grid gap-2 lg:grid-cols-2">
+                {#each viewModel.nextLevelFeatures as feature (feature.id)}
+                  <article class="game-surface--inset rounded-lg p-3 opacity-75">
+                    <div class="flex flex-wrap items-center gap-2">
+                      <span aria-hidden="true">🔒</span>
+                      <h4 class="game-body-text font-semibold">{feature.name}</h4>
+                      <span class="game-badge">{feature.kind}</span>
+                    </div>
+                    <p class="game-metadata mt-1">{feature.description}</p>
+                    {#if feature.activation}
+                      <p class="game-metadata mt-2">
+                        Cost: {presentation.formatActivationCost(feature.activation.cost)}
+                      </p>
+                    {/if}
+                  </article>
+                {/each}
+              </div>
+            {:else}
+              <p class="game-metadata">No further class features are authored.</p>
+            {/if}
+          </div>
+        </div>
+      {:else}
+        <div class="grid gap-3 lg:grid-cols-2">
+          {#each CHARACTER_TRAIT_FIELDS as field (field)}
+            <section class="game-surface--inset rounded-lg p-3">
+              <h3 id={`character-trait-label-${field}`} class="game-eyebrow">
+                {CHARACTER_TRAIT_LABELS[field]}
+              </h3>
+              {#if presentation.isEditing}
+                <textarea
+                  id={`character-trait-${field}`}
+                  aria-labelledby={`character-trait-label-${field}`}
+                  class="textarea mt-2 w-full"
+                  rows="3"
+                  maxlength="500"
+                  value={viewModel.traits[field]}
+                  oninput={(event) => viewModel.setTrait(field, event.currentTarget.value)}
+                ></textarea>
+              {:else}
+                <p class="game-body-text mt-2">
+                  {viewModel.traits[field] || 'Not recorded yet.'}
+                </p>
+              {/if}
+            </section>
+          {/each}
+        </div>
 
-            <div class="divider my-0"></div>
-
-            <!-- Narrative Traits -->
-            <div>
-              <h3 class="game-eyebrow mb-2">Narrative Traits</h3>
-              {#each ['likes', 'temptations', 'keys'] as const as category}
-                <div class="mb-2">
-                  <span class="text-[11px] font-semibold uppercase text-base-content/50"
-                    >{category}</span
-                  >
-                  <div class="flex flex-wrap gap-1 mt-1">
-                    {#each viewModel.narrativeTraits[category] as trait}
-                      <span class="badge badge-sm gap-1">
-                        {trait}
+        <section class="mt-4">
+          <h3 class="game-eyebrow mb-2">Narrative traits</h3>
+          <div class="grid gap-3 lg:grid-cols-3">
+            {#each CHARACTER_NARRATIVE_CATEGORIES as category}
+              <div class="game-surface--inset rounded-lg p-3">
+                <h4 class="game-metadata uppercase">{CHARACTER_NARRATIVE_LABELS[category]}</h4>
+                <div class="mt-2 flex flex-wrap gap-1">
+                  {#each viewModel.narrativeTraits[category] as trait}
+                    <span class="game-badge">
+                      {trait}
+                      {#if presentation.isEditing}
                         <button
                           type="button"
-                          class="cursor-pointer text-base-content/40 hover:text-error"
+                          class="game-inline-action"
                           onclick={() => viewModel.removeNarrativeTrait(category, trait)}
                           aria-label="Remove {trait}"
                         >
-                          ✕
+                          ×
                         </button>
-                      </span>
-                    {/each}
+                      {/if}
+                    </span>
+                  {/each}
+                  {#if presentation.isEditing}
                     <form
-                      class="flex items-center gap-1"
-                      onsubmit={(e: Event) => {
-  e.preventDefault();
-  const input = (e.target as HTMLFormElement).querySelector('input') as HTMLInputElement;
-  viewModel.addNarrativeTrait(category, input.value);
-  input.value = '';
-}}
+                      class="flex w-full items-center gap-1"
+                      onsubmit={(event) => submitNarrativeTrait(event, category, viewModel)}
                     >
+                      <label class="sr-only" for={`character-narrative-${category}`}>
+                        Add a {CHARACTER_NARRATIVE_PROMPTS[category]} trait
+                      </label>
                       <input
+                        id={`character-narrative-${category}`}
                         type="text"
-                        class="input input-xs input-bordered w-24 text-xs"
-                        placeholder="Add..."
+                        class="input input-sm min-w-0 flex-1"
+                        placeholder="Add a {CHARACTER_NARRATIVE_PROMPTS[category]} trait"
                       >
-                      <button type="submit" class="btn btn-xs btn-ghost">+</button>
+                      <button type="submit" class="btn btn-sm game-control--quiet">Add</button>
                     </form>
-                  </div>
+                  {/if}
                 </div>
-              {/each}
-            </div>
+              </div>
+            {/each}
           </div>
-        {/if}
-      </div>
+        </section>
+      {/if}
+    </section>
 
-      <div class="game-surface--raised flex min-w-0 flex-col gap-3 rounded-lg p-3">
-        <!-- Game Stats Summary -->
+    <section class="game-surface--raised rounded-lg p-3" data-testid="character-equipment">
+      <div class="mb-2 flex items-center justify-between gap-2">
+        <h3 class="game-eyebrow">Equipment</h3>
+        <span class="game-metadata">{viewModel.equippedItems.length} equipped</span>
+      </div>
+      {#if viewModel.equippedItems.length === 0}
+        <div class="game-empty game-empty--inline">
+          <p class="game-body-text font-semibold">No equipment equipped</p>
+          <p class="game-metadata">Items equipped from Inventory appear here.</p>
+        </div>
+      {:else}
         <div class="game-stat-grid">
-          <div class="bg-base-200 rounded-lg p-2 flex flex-col gap-1">
-            <div class="flex justify-between items-center">
-              <span class="game-metadata">HP</span>
-              <span class="text-xs font-mono font-bold text-error"
-                >{viewModel.hp}
-                / {viewModel.maxHp}</span
-              >
+          {#each viewModel.equippedItems as entry (entry.slot)}
+            <div class="game-surface--inset flex items-center gap-3 rounded-lg p-2">
+              <span class="text-xl" aria-hidden="true">{viewModel.getSlotIcon(entry.slot)}</span>
+              <div class="min-w-0">
+                <p class="game-metadata">{viewModel.getSlotLabel(entry.slot)}</p>
+                <p class="game-body-text truncate font-semibold">{entry.definition.label}</p>
+              </div>
             </div>
-            <progress
-              class="progress progress-error w-full h-1"
-              value={viewModel.hpPercent}
-              max="100"
-            ></progress>
-          </div>
-          <div class="bg-base-200 rounded-lg p-2 flex flex-col gap-1">
-            <div class="flex justify-between items-center">
-              <span class="game-metadata">XP</span>
-              <span class="text-xs font-mono font-bold text-accent"
-                >{viewModel.xp}
-                / {viewModel.xpToNext}</span
-              >
-            </div>
-            <progress
-              class="progress progress-accent w-full h-1"
-              value={viewModel.xpPercent}
-              max="100"
-            ></progress>
-          </div>
-          <div class="stat bg-base-200 rounded-lg p-2">
-            <div class="stat-title game-metadata">Attack</div>
-            <div class="stat-value text-warning game-numeric">{viewModel.totalAttack}</div>
-          </div>
-          <div class="stat bg-base-200 rounded-lg p-2">
-            <div class="stat-title game-metadata">Defense</div>
-            <div class="stat-value text-info game-numeric">{viewModel.totalDefense}</div>
-          </div>
+          {/each}
         </div>
-
-        <!-- Equipment Slots -->
-        <div>
-          <h3 class="game-eyebrow mb-2">Equipment</h3>
-          {#if viewModel.equippedItems.length === 0}
-            <div class="game-metadata">Nothing equipped</div>
-          {:else}
-            <div class="game-stat-grid">
-              {#each viewModel.equippedItems as entry}
-                <div class="rounded-lg bg-base-200 p-2 flex items-center gap-2">
-                  <div class="flex h-8 w-8 items-center justify-center rounded-md bg-base-300">
-                    <span class="text-sm">{viewModel.getSlotIcon(entry.slot)}</span>
-                  </div>
-                  <div class="flex-1 min-w-0">
-                    <div class="game-metadata">{viewModel.getSlotLabel(entry.slot)}</div>
-                    <div class="game-body-text truncate">{entry.definition.label}</div>
-                    <div class="game-metadata flex gap-1">
-                      {#if entry.definition.attackBonus > 0}
-                        <span class="text-warning">+{entry.definition.attackBonus} ATK</span>
-                      {/if}
-                      {#if entry.definition.defenseBonus > 0}
-                        <span class="text-info">+{entry.definition.defenseBonus} DEF</span>
-                      {/if}
-                    </div>
-                  </div>
-                </div>
-              {/each}
-            </div>
-          {/if}
-        </div>
-      </div>
-    </div>
+      {/if}
+    </section>
   {/if}
 
   {#if developerTools}
-    <!-- Footer (developer surface only) -->
-    <div class="divider my-0"></div>
-    <div class="flex items-center justify-between">
+    <div class="flex items-center justify-between border-t border-current/20 pt-2">
       <button
         type="button"
-        class="btn btn-xs btn-ghost"
+        class="btn btn-sm game-control--quiet"
         onclick={() => viewModel.toggleAiPreview()}
       >
-        AI Context Preview
+        AI context preview
       </button>
-      <kbd class="kbd kbd-xs opacity-60">C</kbd>
+      <kbd class="kbd kbd-sm">C</kbd>
     </div>
   {/if}
 </div>
 
-<!-- AI Context Preview Modal -->
 <Modal open={viewModel.showAiPreview} onclose={() => viewModel.toggleAiPreview()}>
   {#snippet title()}
-    <h3 class="text-lg font-bold">AI Context Preview</h3>
+    <h3 class="game-section-title">AI context preview</h3>
   {/snippet}
   {#snippet children()}
     <pre
-      class="bg-base-200 rounded-lg p-3 text-xs font-mono leading-relaxed overflow-x-auto max-h-96 whitespace-pre-wrap"
+      class="game-surface--inset max-h-96 overflow-auto whitespace-pre-wrap rounded-lg p-3 font-mono text-sm"
     >{viewModel.aiPreviewText}</pre>
   {/snippet}
   {#snippet actions()}
-    <button type="button" class="btn btn-sm" onclick={() => viewModel.toggleAiPreview()}>
+    <button
+      type="button"
+      class="btn game-control--quiet"
+      onclick={() => viewModel.toggleAiPreview()}
+    >
       Close
     </button>
   {/snippet}

@@ -1,28 +1,25 @@
 // apps/e2e/src/services/server_registry.ts
 //
-// Tracks App-server processes the preflight spawned itself and stops them in
-// global teardown.
-//
-// Why a registry: preflight and teardown run in the same Playwright main
-// process (verified), so module state set in global_setup is NOT shared with
-// global_teardown (separate module graphs) — but `globalThis` is. Servers
-// started via herdr are deliberately NOT stopped here: herdr tabs are meant
-// to outlive a single test run.
+// Tracks only processes spawned by the current E2E run. The registry is kept
+// on globalThis because Playwright loads global setup and teardown through
+// separate module graphs.
 
 export type SpawnedServer = {
   label: string;
   pid: number;
   /** Process log, for when a test run fails mysteriously. */
   logFile: string;
+  /** Preflight invocation that created this process. */
+  runId?: string;
 };
+
+export type SpawnedServerRegistry = { spawned: SpawnedServer[] };
 
 const REGISTRY_KEY = '__AIKAMI_E2E_SPAWNED_SERVERS__';
 
-type Registry = { spawned: SpawnedServer[] };
-
-export const getRegistry = (): Registry => {
+export const getRegistry = (): SpawnedServerRegistry => {
   const holder = globalThis as typeof globalThis & {
-    [REGISTRY_KEY]?: Registry;
+    [REGISTRY_KEY]?: SpawnedServerRegistry;
   };
   if (!holder[REGISTRY_KEY]) {
     holder[REGISTRY_KEY] = { spawned: [] };
@@ -30,33 +27,78 @@ export const getRegistry = (): Registry => {
   return holder[REGISTRY_KEY];
 };
 
-export const trackSpawned = (server: SpawnedServer): void => {
+/**
+ * Register a child process. PID zero is the spawn failure sentinel used by
+ * Node/Bun and must never reach process.kill(-pid), which would target the
+ * caller's entire process group.
+ */
+export const trackSpawned = (server: SpawnedServer): boolean => {
+  if (!Number.isInteger(server.pid) || server.pid <= 0) {
+    return false;
+  }
   getRegistry().spawned.push(server);
+  return true;
+};
+
+/** Clear registry entries without signalling anything (useful for test setup). */
+export const clearSpawnedServers = (): void => {
+  getRegistry().spawned = [];
+};
+
+export type StopSpawnedServersOptions = {
+  /** If supplied, stop only entries created by this preflight invocation. */
+  runId?: string;
+  /** Injectable signal seam for deterministic tests. */
+  kill?: (pid: number, signal: 'SIGTERM' | 'SIGKILL') => void;
+  /** Injectable timer seam for deterministic tests. */
+  schedule?: (callback: () => void, milliseconds: number) => unknown;
+  /** Escalation delay; set to 0 to skip the second signal. */
+  killAfterMs?: number;
+};
+
+const defaultKill = (pid: number, signal: 'SIGTERM' | 'SIGKILL'): void => {
+  process.kill(-pid, signal);
 };
 
 /**
- * SIGTERM each spawned process group, then SIGKILL anything still alive.
- *
- * Detached spawns become their own process-group leader, so killing -pid
- * takes the whole tree (vite's esbuild children, etc.) with it. Errors are
- * swallowed: a server Playwright didn't start may already be gone.
+ * SIGTERM each registered process group, then SIGKILL anything still alive.
+ * Entries are removed before signalling, so a later teardown cannot signal a
+ * process twice. No Herdr or foreign-listener entry can be present here.
  */
-export const stopSpawnedServers = (): void => {
-  const { spawned } = getRegistry();
-  getRegistry().spawned = [];
+export const stopSpawnedServers = (options: StopSpawnedServersOptions = {}): void => {
+  const registry = getRegistry();
+  const spawned = registry.spawned.filter(
+    (server) => options.runId === undefined || server.runId === options.runId,
+  );
+  registry.spawned = registry.spawned.filter(
+    (server) => options.runId !== undefined && server.runId !== options.runId,
+  );
+  if (spawned.length === 0) {
+    return;
+  }
+
+  const kill = options.kill ?? defaultKill;
   for (const server of spawned) {
     try {
-      process.kill(-server.pid, 'SIGTERM');
-    } catch {}
+      kill(server.pid, 'SIGTERM');
+    } catch {
+      // Already exited — expected during best-effort cleanup.
+    }
   }
-  // Give the SIGTERMs a moment, then escalate for anything still bound.
-  setTimeout(() => {
+
+  const killAfterMs = options.killAfterMs ?? 750;
+  if (killAfterMs <= 0) {
+    return;
+  }
+  const escalate = (): void => {
     for (const server of spawned) {
       try {
-        process.kill(-server.pid, 'SIGKILL');
+        kill(server.pid, 'SIGKILL');
       } catch {
-        // Already exited — expected for a graceful SIGTERM shutdown.
+        // Graceful shutdown won the race.
       }
     }
-  }, 750);
+  };
+  const timer = (options.schedule ?? setTimeout)(escalate, killAfterMs);
+  (timer as { unref?: () => void }).unref?.();
 };

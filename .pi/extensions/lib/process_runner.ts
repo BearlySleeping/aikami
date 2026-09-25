@@ -17,7 +17,7 @@ import { spawn, spawnSync } from 'node:child_process';
 export type RunCommandOptions = {
   /** Working directory (default: process.cwd()) */
   cwd?: string;
-  /** Extra env vars merged on top of process.env + CI defaults */
+  /** Extra env vars merged on top of process.env + non-interactive defaults. */
   env?: Record<string, string>;
   /** Timeout in milliseconds. Default: 180_000 (3 min). */
   timeoutMs?: number;
@@ -44,8 +44,10 @@ export type RunCommandResult = {
 
 // ── Default environment injected into every child ──────────────────
 
-const CI_ENV: Record<string, string> = {
-  CI: 'true',
+// CI is deliberately absent: local Pi commands must retain the parent process's
+// CI value (including leaving it unset) so Moon does not silently switch to its
+// CI task filter. FORCE_COLOR and Git interactivity remain local safeguards.
+const NON_INTERACTIVE_ENV: Record<string, string> = {
   FORCE_COLOR: '1',
   GIT_TERMINAL_PROMPT: '0',
 };
@@ -187,7 +189,7 @@ export function startCommand(
   const cwd = options.cwd ?? process.cwd();
   const env = {
     ...(process.env as Record<string, string>),
-    ...CI_ENV,
+    ...NON_INTERACTIVE_ENV,
     ...options.env,
   };
 
@@ -387,7 +389,7 @@ export function runSync(
   const cwd = options.cwd ?? process.cwd();
   const env = {
     ...(process.env as Record<string, string>),
-    ...CI_ENV,
+    ...NON_INTERACTIVE_ENV,
     ...options.env,
   };
 

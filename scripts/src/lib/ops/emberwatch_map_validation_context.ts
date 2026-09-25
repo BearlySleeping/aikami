@@ -52,7 +52,7 @@ export type ManifestPropDef = ManifestProp & {
 
 export type Manifest = {
   maps?: Record<string, unknown>;
-  tiles?: Record<string, ManifestTile>;
+  tiles?: Record<string, ManifestTile & { frame?: string }>;
   props?: Record<string, ManifestPropDef>;
   evidence?: Array<{ id?: string; discoverableAt?: string }>;
 };
@@ -122,6 +122,13 @@ const placedObjects = (map: RawMap): PlacedObject[] => {
   }
   return out;
 };
+
+/** Inclusive point test matching the runtime zoning rectangle. */
+export const rectContainsPoint = (object: PlacedObject, x: number, y: number): boolean =>
+  x >= object.x &&
+  x <= object.x + Math.max(0, object.width) &&
+  y >= object.y &&
+  y <= object.y + Math.max(0, object.height);
 
 /** Cells inside a transition's trigger rectangle. */
 export const rectCells = (object: PlacedObject): Array<{ c: number; r: number }> => {

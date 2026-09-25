@@ -18,8 +18,11 @@ mock.module('@aikami/frontend/engine', () => {
     interact: 'e',
     open_inventory: 'i',
     open_quest_log: 'q',
+    open_journal: 'j',
     open_character: 'c',
+    open_party_roster: 'p',
     open_menu: 'Escape',
+    toggle_hud: 'h',
   };
   return {
     KEYBINDING_STORAGE_KEY: 'aikami:settings:keybindings',
@@ -54,8 +57,11 @@ const DEFAULTS = {
   interact: 'e',
   open_inventory: 'i',
   open_quest_log: 'q',
+  open_journal: 'j',
   open_character: 'c',
+  open_party_roster: 'p',
   open_menu: 'Escape',
+  toggle_hud: 'h',
 };
 
 describe('InputActionService', () => {
@@ -107,6 +113,47 @@ describe('InputActionService', () => {
     expect(service.keyToAction('Escape')).toBe('open_menu');
   });
 
+  test('keyToAction: should map "h" to "toggle_hud"', () => {
+    expect(service.keyToAction('h')).toBe('toggle_hud');
+  });
+
+  test('handleGlobalShortcut: toggles HUD and consumes the event', () => {
+    let toggleCount = 0;
+    let prevented = false;
+    service.setHudShortcutCapability({
+      toggleHudTemporarilyHidden: () => {
+        toggleCount += 1;
+      },
+    });
+
+    const consumed = service.handleGlobalShortcut({
+      key: 'h',
+      defaultPrevented: false,
+      isComposing: false,
+      keyCode: 0,
+      target: null,
+      preventDefault: () => {
+        prevented = true;
+      },
+    } as unknown as KeyboardEvent);
+
+    expect(consumed).toBe(true);
+    expect(toggleCount).toBe(1);
+    expect(prevented).toBe(true);
+
+    const repeated = service.handleGlobalShortcut({
+      key: 'h',
+      repeat: true,
+      defaultPrevented: false,
+      isComposing: false,
+      keyCode: 0,
+      target: null,
+      preventDefault: () => {},
+    } as unknown as KeyboardEvent);
+    expect(repeated).toBe(true);
+    expect(toggleCount).toBe(1);
+  });
+
   test('keyToAction: should be case-insensitive', () => {
     expect(service.keyToAction('E')).toBe('interact');
     expect(service.keyToAction('ESCAPE')).toBe('open_menu');
@@ -124,6 +171,7 @@ describe('InputActionService', () => {
     expect(service.actionToKey('interact')).toBe('e');
     expect(service.actionToKey('open_menu')).toBe('Escape');
     expect(service.actionToKey('open_inventory')).toBe('i');
+    expect(service.actionToKey('toggle_hud')).toBe('h');
   });
 
   test('actionToKey: should return action ID as fallback', () => {

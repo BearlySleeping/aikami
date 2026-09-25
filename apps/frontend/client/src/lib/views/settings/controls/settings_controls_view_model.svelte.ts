@@ -60,7 +60,13 @@ const DEFAULT_ACTIONS: readonly ControlAction[] = [
   { id: 'move_left', label: 'Move Left' },
   { id: 'move_right', label: 'Move Right' },
   { id: 'interact', label: 'Interact' },
+  { id: 'open_inventory', label: 'Open Inventory' },
+  { id: 'open_quest_log', label: 'Open Quest Log' },
+  { id: 'open_journal', label: 'Open Journal' },
+  { id: 'open_character', label: 'Open Character' },
+  { id: 'open_party_roster', label: 'Open Party Roster' },
   { id: 'open_menu', label: 'Open Menu' },
+  { id: 'toggle_hud', label: 'Toggle HUD' },
 ] as const;
 
 const DEFAULT_BINDINGS: KeybindingMap = { ...DEFAULT_KEYBINDINGS };

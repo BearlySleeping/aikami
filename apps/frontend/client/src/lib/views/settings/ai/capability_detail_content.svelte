@@ -24,30 +24,28 @@ let advancedOpen = $state(false);
 </script>
 
 <div class="max-w-2xl mx-auto space-y-6">
-  <!-- Status card -->
-  <div class="card card-bordered border-base-300 bg-base-100">
-    <div class="card-body">
-      <div class="flex items-center justify-between">
-        <div>
-          <h2 class="text-lg font-bold">Status</h2>
-          <p class="text-sm text-base-content/60 mt-1">
-            {#if viewModel.isConfigured}
-              {viewModel.providerLabel}
-              {#if viewModel.modelName}
-                · {viewModel.modelName}
-              {/if}
-            {:else}
-              Not configured
-            {/if}
-          </p>
-        </div>
-        <span class="badge {viewModel.statusColor}">{viewModel.statusLabel}</span>
+  <!-- Capability status and availability -->
+  <div class="game-surface game-surface--raised" data-testid="capability-detail-status">
+    <div class="space-y-2">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <h2 class="game-section-title">{viewModel.title}</h2>
+        <span class="game-badge" data-testid="capability-availability"
+          >{viewModel.availabilityLabel}</span
+        >
       </div>
+      <p class="text-sm text-base-content/80">{viewModel.description}</p>
+      {#if viewModel.isConfigured}
+        <p class="text-sm text-base-content/70">Current connection: {viewModel.connectionLabel}</p>
+      {:else}
+        <p class="text-sm text-base-content/70" data-testid="capability-unavailable-note">
+          This capability is not available yet. {viewModel.playableWithout}
+        </p>
+      {/if}
     </div>
   </div>
 
   <!-- Actions -->
-  <div class="flex gap-3">
+  <div class="flex flex-wrap gap-3">
     {#if viewModel.isConfigured}
       <button type="button" class="btn btn-primary" onclick={() => viewModel.openChange()}>
         Change
@@ -61,10 +59,17 @@ let advancedOpen = $state(false);
         {viewModel.isTesting ? 'Testing…' : 'Test Connection'}
       </button>
     {:else}
-      <button type="button" class="btn btn-primary" onclick={() => viewModel.openSetup()}>
-        Set Up
+      <button type="button" class="btn game-control--accent" onclick={() => viewModel.openSetup()}>
+        {viewModel.setupActionLabel}
       </button>
     {/if}
+    <button
+      type="button"
+      class="btn btn-outline"
+      onclick={() => aiVm.openCapabilitySetup(viewModel.capability)}
+    >
+      + New connection
+    </button>
   </div>
 
   <!-- Connection settings (every capability) -->

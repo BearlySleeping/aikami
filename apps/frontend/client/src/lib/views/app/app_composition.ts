@@ -9,6 +9,7 @@ import { setDialogCapabilities } from '@aikami/frontend/services/base';
 import {
   appService,
   authService,
+  configService,
   dialogService,
   emulatorSeedService,
   routerService,
@@ -33,6 +34,7 @@ export const getAppViewModel = (options: AppViewModelCallerOptions): AppViewMode
     app: appService,
     router: routerService,
     runtimeConfig: runtimeConfigService,
+    config: configService,
     emulatorSeed: emulatorSeedService,
     updater: updaterService,
   });

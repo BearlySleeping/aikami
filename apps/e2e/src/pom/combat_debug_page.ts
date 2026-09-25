@@ -185,6 +185,47 @@ export class CombatDebugPage {
     return this.page.locator('#combat-debug-canvas');
   }
 
+  /** The battlefield pane that owns the live canvas's dimensions. */
+  get battlefield() {
+    return this.page.getByTestId('combat-debug-battlefield');
+  }
+
+  get battlefieldSummary() {
+    return this.page.getByTestId('combat-debug-battlefield-summary');
+  }
+
+  get canvasSummary() {
+    return this.page.getByTestId('combat-debug-canvas-summary');
+  }
+
+  get cameraSummary() {
+    return this.page.getByTestId('combat-debug-camera-summary');
+  }
+
+  get paritySummary() {
+    return this.page.getByTestId('combat-debug-parity-summary');
+  }
+
+  get pointerSummary() {
+    return this.page.getByTestId('combat-debug-pointer-summary');
+  }
+
+  get diagnostics() {
+    return this.page.getByTestId('combat-debug-diagnostics');
+  }
+
+  get healthOverall() {
+    return this.page.getByTestId('combat-debug-health-overall');
+  }
+
+  get overlayToggles() {
+    return this.page.getByTestId('combat-debug-overlay-toggles');
+  }
+
+  get fitCameraButton() {
+    return this.page.getByTestId('combat-debug-fit-camera');
+  }
+
   // ── Toolbar controls ──────────────────────────────────────
 
   get modeSelect() {
@@ -515,5 +556,101 @@ export class CombatDebugPage {
     for (const [key, value] of Object.entries(expected)) {
       expect(url.searchParams.get(key)).toBe(value);
     }
+  }
+
+  // ── Viewport / battlefield assertions ─────────────────────
+
+  /** Reads the canvas host, CSS and backing-store dimensions from the DOM. */
+  async readCanvasMetrics(): Promise<{
+    hostWidth: number;
+    hostHeight: number;
+    cssWidth: number;
+    cssHeight: number;
+    backingWidth: number;
+    backingHeight: number;
+  }> {
+    return this.page.evaluate(() => {
+      const node = document.getElementById('combat-debug-canvas');
+      const canvas = node instanceof HTMLCanvasElement ? node : null;
+      const host = canvas?.parentElement ?? null;
+      return {
+        hostWidth: host?.clientWidth ?? 0,
+        hostHeight: host?.clientHeight ?? 0,
+        cssWidth: canvas?.clientWidth ?? 0,
+        cssHeight: canvas?.clientHeight ?? 0,
+        backingWidth: canvas?.width ?? 0,
+        backingHeight: canvas?.height ?? 0,
+      };
+    });
+  }
+
+  /**
+   * The canvas is sized by its host pane, not the browser window: the host has
+   * non-zero dimensions, the canvas CSS box matches the host, and the canvas
+   * backing store is a whole-number multiple of the CSS box (DPR).
+   */
+  async expectViewportOwnedByHost(timeout = 5_000): Promise<void> {
+    const { expect } = await import('@playwright/test');
+    // The observer coalesces to one resize per animation frame, so poll until
+    // the renderer has applied the host's new size rather than reading once.
+    await expect
+      .poll(
+        async () => {
+          const metrics = await this.readCanvasMetrics();
+          if (metrics.hostWidth <= 0 || metrics.hostHeight <= 0) {
+            return 'host has zero size';
+          }
+          if (metrics.cssWidth !== metrics.hostWidth || metrics.cssHeight !== metrics.hostHeight) {
+            return `canvas CSS ${metrics.cssWidth}×${metrics.cssHeight} ≠ host ${metrics.hostWidth}×${metrics.hostHeight}`;
+          }
+          if (
+            metrics.backingWidth % metrics.cssWidth !== 0 ||
+            metrics.backingHeight % metrics.cssHeight !== 0
+          ) {
+            return `backing ${metrics.backingWidth}×${metrics.backingHeight} is not a whole multiple of CSS`;
+          }
+          return 'ok';
+        },
+        { timeout },
+      )
+      .toBe('ok');
+  }
+
+  /** The synthetic battlefield projection reports the scenario dimensions. */
+  async expectSyntheticBattlefield(width: number, height: number): Promise<void> {
+    const { expect } = await import('@playwright/test');
+    await expect(this.battlefieldSummary).toContainText(`synthetic ${width}×${height}`);
+  }
+
+  /** Render parity: every authoritative combatant has a projected token. */
+  async expectRenderParity(stateCombatants: number, projectedActors: number): Promise<void> {
+    const { expect } = await import('@playwright/test');
+    await expect(this.paritySummary).toContainText(
+      `Combatants ${stateCombatants} · projected ${projectedActors}`,
+    );
+  }
+
+  /** The battlefield canvas is visibly inside the battlefield pane. */
+  async expectBoardVisible(): Promise<void> {
+    const { expect } = await import('@playwright/test');
+    const canvasBox = await this.liveCanvas.boundingBox();
+    const paneBox = await this.battlefield.boundingBox();
+    expect(canvasBox).not.toBeNull();
+    expect(paneBox).not.toBeNull();
+    if (canvasBox === null || paneBox === null) {
+      return;
+    }
+    expect(canvasBox.width).toBeGreaterThan(0);
+    expect(canvasBox.height).toBeGreaterThan(0);
+    expect(canvasBox.x).toBeGreaterThanOrEqual(paneBox.x - 1);
+    expect(canvasBox.y).toBeGreaterThanOrEqual(paneBox.y - 1);
+    expect(canvasBox.x + canvasBox.width).toBeLessThanOrEqual(paneBox.x + paneBox.width + 1);
+    expect(canvasBox.y + canvasBox.height).toBeLessThanOrEqual(paneBox.y + paneBox.height + 1);
+  }
+
+  /** The renderer health surface does not claim a broken renderer is healthy. */
+  async expectHealthNotError(): Promise<void> {
+    const { expect } = await import('@playwright/test');
+    await expect(this.healthOverall).not.toHaveText('error');
   }
 }

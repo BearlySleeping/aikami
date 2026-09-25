@@ -30,7 +30,12 @@ export const createDialogueOverlayCapabilities = (): DialogueOverlayCapabilities
   router: appServices.routerService,
   tts: appServices.ttsService,
   chunker: appServices.SentenceBoundaryChunker,
-  gameStateFacts: appServices.buildGameStateFacts,
+  // Memory facts lead so the bounded [GAME STATE] cap never crowds them out:
+  // the NPC recalls past conversations on every turn, not just the first.
+  gameStateFacts: (factOptions) => [
+    ...appServices.npcMemoryService.getPromptFacts(factOptions.npcId),
+    ...appServices.buildGameStateFacts(factOptions),
+  ],
   playerState: appServices.playerStateService,
   operations: appServices.operationLedgerService,
   campaign: {

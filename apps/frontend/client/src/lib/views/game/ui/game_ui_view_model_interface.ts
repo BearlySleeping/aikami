@@ -138,6 +138,9 @@ export type GameUIViewModelContract = BaseViewModelInterface & {
   readonly interactionPromptLabel: string;
   /** Whether the interaction prompt is visible. */
   readonly interactionPromptVisible: boolean;
+  /** Target-relative CSS-pixel position for the interaction prompt. */
+  readonly interactionPromptScreenX: number | undefined;
+  readonly interactionPromptScreenY: number | undefined;
   /** Current onboarding hint text, or undefined if none. */
   readonly onboardingHintText: string | undefined;
   /** Whether the onboarding hint toast is visible. */

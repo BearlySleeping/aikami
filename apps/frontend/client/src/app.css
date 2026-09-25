@@ -140,3 +140,17 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* Compact Inventory paperdoll: reflow the five authored slots into an
+ * intrinsic-width strip so the bag's empty state remains inside the workspace
+ * at the 800×600 play-shell checkpoint. This stays after the imported game
+ * layer because the layer owns the base 3×3 silhouette. */
+@media (max-width: 50rem) {
+  [data-aikami-theme-scope] .game-inventory__paperdoll {
+    grid-template-columns: repeat(auto-fit, minmax(5.5rem, 1fr));
+  }
+
+  [data-aikami-theme-scope] .game-inventory__paperdoll .game-inventory__slot {
+    grid-area: auto;
+  }
+}

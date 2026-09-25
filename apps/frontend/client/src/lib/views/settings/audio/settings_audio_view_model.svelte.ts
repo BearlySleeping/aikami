@@ -32,12 +32,6 @@ export type SettingsAudioEngineCapabilities = {
   stopAll(): void;
 };
 
-/** In-game music-player overlay visibility. */
-export type SettingsAudioMusicPlayerCapabilities = {
-  readonly visible: boolean;
-  toggleVisible(): void;
-};
-
 /** Text-to-speech engine state and operations. */
 export type SettingsAudioTtsCapabilities = {
   readonly ttsVolume: number;
@@ -85,13 +79,8 @@ export type SettingsAudioViewModelInterface = BaseViewModelInterface & {
   readonly ttsVolume: number;
   /** Whether a BGM crossfade is currently in progress. */
   readonly isCrossfading: boolean;
-  /** Whether the in-game music player overlay is visible. */
-  readonly musicPlayerVisible: boolean;
   /** Last test-playback feedback message. */
   readonly feedback: string;
-
-  /** Shows/hides the in-game music player overlay. */
-  toggleMusicPlayer(): void;
 
   setMasterVolume(volume: number): void;
   setBgmVolume(volume: number): void;
@@ -141,8 +130,6 @@ export type SettingsAudioViewModelInterface = BaseViewModelInterface & {
 export type SettingsAudioViewModelOptions = BaseViewModelOptions & {
   /** Audio-engine volume/playback capability. */
   audio: SettingsAudioEngineCapabilities;
-  /** In-game music player visibility capability. */
-  musicPlayer: SettingsAudioMusicPlayerCapabilities;
   /** Text-to-speech capability. */
   tts: SettingsAudioTtsCapabilities;
   /** On-demand voice model capability. */
@@ -162,7 +149,6 @@ class SettingsAudioViewModel
   implements SettingsAudioViewModelInterface
 {
   private readonly _audio: SettingsAudioEngineCapabilities;
-  private readonly _musicPlayer: SettingsAudioMusicPlayerCapabilities;
   private readonly _tts: SettingsAudioTtsCapabilities;
   private readonly _voiceModel: SettingsAudioVoiceModelCapabilities;
   private readonly _runtimeConfig: SettingsAudioRuntimeConfigCapabilities;
@@ -171,7 +157,6 @@ class SettingsAudioViewModel
   constructor(options: SettingsAudioViewModelOptions) {
     super(options);
     this._audio = options.audio;
-    this._musicPlayer = options.musicPlayer;
     this._tts = options.tts;
     this._voiceModel = options.voiceModel;
     this._runtimeConfig = options.runtimeConfig;
@@ -224,14 +209,6 @@ class SettingsAudioViewModel
 
   setTtsVolume(volume: number): void {
     this._tts.setTtsVolume(volume);
-  }
-
-  get musicPlayerVisible(): boolean {
-    return this._musicPlayer.visible;
-  }
-
-  toggleMusicPlayer(): void {
-    this._musicPlayer.toggleVisible();
   }
 
   async testExploreBgm(): Promise<void> {

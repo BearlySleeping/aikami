@@ -21,6 +21,8 @@ import { combatService } from './combat_service.svelte';
 import { gameEngineService } from './game_engine_service.svelte';
 import { isConsumedOrComposing, isEditableTarget } from './game_input_guard.ts';
 import { gameModeService } from './game_mode_service.svelte.ts';
+import { handleHotbarShortcut } from './game_overlay_hotbar_shortcut';
+import { handleJournalShortcut } from './game_overlay_journal_shortcut';
 // GameOverlayService — overlay router for the game UI layer. C-332 replaced the
 // flat active-overlay toggle with an explicit stack; Escape always pops exactly
 // one layer.
@@ -44,12 +46,11 @@ import { onboardingHintService } from './onboarding_hint_service.svelte.ts';
 import { applyOverlayModeTransition } from './overlay_combat_mode.ts';
 import { OVERLAY_COMPATIBILITY } from './overlay_compatibility.ts';
 import { partyFollowService } from './party_follow_service.svelte.ts';
-import { playerStateService } from './player_state_service.svelte';
 import { buildSaveMapBlock, getCurrentMapName } from './save_map_block';
+import { getSessionPlaytimeMinutes } from './session_playtime.ts';
 import { sessionService } from './session_service.svelte.ts';
 import { timeService } from './time_service.svelte';
 import { worldStateService } from './world_state_service.svelte.ts';
-
 export type GameOverlayServiceInterface = GameOverlayServiceContract;
 export type GameOverlayServiceOptions = GameOverlayServiceContractOptions;
 
@@ -91,16 +92,17 @@ export class GameOverlayService
   }
   isSaving = $state<boolean>(false);
   saveMessage = $state<string | undefined>(undefined);
+  get lastSavedAt(): string | undefined {
+    return campaignService.activeCampaign?.lastSavedAt;
+  }
   isTransitioning = $state<boolean>(false);
   autoSaveStatus = $state<AutoSaveStatus>('idle');
-
   get useOllama(): boolean {
     if (!this._settingsLoaded) {
       void this._initSettings();
     }
     return this._useOllama;
   }
-
   get textProvider(): { endpoint: string } | undefined {
     if (!this._settingsLoaded) {
       void this._initSettings();
@@ -337,13 +339,10 @@ export class GameOverlayService
 
   // ── Auto-Save Scheduler (C-334) ───────────────────────────────────
 
-  /** Default auto-save interval in milliseconds (2 minutes). */
   private static readonly _AUTOSAVE_INTERVAL_MS = 2 * 60 * 1000;
 
-  /** Interval timer handle. */
   private _autoSaveTimer: ReturnType<typeof setInterval> | undefined;
 
-  /** Whether the auto-save scheduler is running. */
   autoSaveSchedulerActive = $state(false);
 
   /** @inheritdoc */
@@ -439,34 +438,37 @@ export class GameOverlayService
     this._cameraZoomNpcScreenX = options.npcScreenX;
     this._cameraZoomNpcScreenY = options.npcScreenY;
   }
-
-  /** Stores the last vendor session options for VM creation. */
   vendorSessionOptions = $state<
     { vendorId: string; vendorName: string; vendorInventory: string } | undefined
   >(undefined);
-
-  /** Stores the companion the Talk to Party overlay was opened for (C-340). */
   talkToPartyOptions = $state<{ npcId: string; name: string } | undefined>(undefined);
-
-  /** Interaction prompt state (C-327 AC-2). */
   interactionPromptLabel = $state<string>('');
   interactionPromptVisible = $state<boolean>(false);
+  interactionPromptScreenX = $state<number | undefined>(undefined);
+  interactionPromptScreenY = $state<number | undefined>(undefined);
   private _interactionTargetMetadata = $state<{ verb: string; targetName: string } | undefined>(
     undefined,
   );
-
-  /** Sets the interaction prompt label and visibility (called by bridge_listeners). */
   setInteractionPrompt(options: {
     label: string;
     visible: boolean;
     targetMetadata?: { verb: string; targetName: string };
+    targetScreenX?: number;
+    targetScreenY?: number;
   }): void {
     this.interactionPromptLabel = options.label;
     this.interactionPromptVisible = options.visible;
+    this.interactionPromptScreenX = options.targetScreenX;
+    this.interactionPromptScreenY = options.targetScreenY;
     this._interactionTargetMetadata = options.targetMetadata;
   }
-
-  /** Plays pickup SFX when inventory count increases. */
+  setInteractionPromptPosition(options: { targetScreenX?: number; targetScreenY?: number }): void {
+    this.interactionPromptScreenX = options.targetScreenX;
+    this.interactionPromptScreenY = options.targetScreenY;
+  }
+  async triggerAutoSave(): Promise<void> {
+    await this._triggerAutoSave();
+  }
   onInventoryCountChange(newCount: number): void {
     if (newCount > this._previousInventoryCount) {
       void playSfxByName('sfx_pickup');
@@ -724,6 +726,12 @@ export class GameOverlayService
       return;
     }
 
+    if (actionId === 'open_journal') {
+      if (handleJournalShortcut({ actionId, event, service: this })) {
+        onboardingHintService.onActionPerformed('open_journal');
+      }
+      return;
+    }
     // ── Overlay toggle: open_character ──
     if (actionId === 'open_character') {
       if (this.activeOverlay === 'CHARACTER_DASHBOARD') {
@@ -740,7 +748,6 @@ export class GameOverlayService
         return;
       }
     }
-
     // ── Overlay toggle: open_party_roster (C-340) — P key ──
     if (actionId === 'open_party_roster') {
       if (this.activeOverlay === 'PARTY_ROSTER') {
@@ -757,28 +764,21 @@ export class GameOverlayService
         return;
       }
     }
-
-    // ── Hotbar activation: keys 1-6 ──
-    if (this.activeOverlay === 'NONE') {
-      const key = event.key;
-      if (key >= '1' && key <= '6') {
-        event.preventDefault();
-        const slotIndex = Number.parseInt(key, 10) - 1; // Convert to zero-based index (key "1" -> index 0)
-        const featureId = playerStateService.hotbarSlots[slotIndex];
-        if (featureId) {
-          playerStateService.useAbility(featureId);
-          this.debug('hotbar:activate', { slotIndex, featureId });
-        }
-        return;
-      }
+    if (
+      handleHotbarShortcut({
+        event,
+        activeOverlay: this.activeOverlay,
+        onActivate: ({ slotIndex, featureId }) =>
+          this.debug('hotbar:activate', { slotIndex, featureId }),
+      })
+    ) {
+      return;
     }
-
     // ── Fallthrough: notify onboarding of any recognized action that wasn't rejected ──
     if (actionId) {
       onboardingHintService.onActionPerformed(actionId);
     }
   }
-
   resumeGame(): void {
     this.clearStack();
     gameModeService.setMode('EXPLORE');
@@ -1033,16 +1033,17 @@ export class GameOverlayService
     return true;
   }
 
-  /** Pops the current overlay, resuming exploration when the stack empties. */
+  /** Pops the current overlay and restores the mode of the surface beneath it. */
   private _exitManagementOverlay(onClose?: () => void): void {
     this.popOverlay();
+    const nextMode =
+      this.activeOverlay === 'NONE' || this.activeOverlay === 'DIALOGUE' ? 'EXPLORE' : 'MENU';
+    gameModeService.setMode(nextMode);
     if (this.activeOverlay === 'NONE') {
-      gameModeService.setMode('EXPLORE');
       this._engineService?.resumeEngine();
     }
     onClose?.();
   }
-
   openJournal(): void {
     this._enterManagementOverlay('JOURNAL');
   }
@@ -1190,8 +1191,6 @@ export class GameOverlayService
     this._engineService?.resumeEngine();
   }
 
-  // ── Session Management (C-240) ─────────────────────────────────────
-
   /** @inheritdoc */
   openEndSession(): void {
     const success = this.pushOverlay('END_SESSION');
@@ -1210,7 +1209,9 @@ export class GameOverlayService
 
   /** @inheritdoc */
   async endSession(): Promise<void> {
-    await sessionService.endSession({ playtimeMinutes: 30 });
+    await sessionService.endSession({
+      playtimeMinutes: getSessionPlaytimeMinutes(sessionService.activeSession),
+    });
   }
 
   /** @inheritdoc */

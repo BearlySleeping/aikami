@@ -26,7 +26,6 @@
 import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
 import InventoryView from '../../../inventory/inventory_view.svelte';
 import JournalView from '../../../journal/journal_view.svelte';
-import QuestView from '../../../quest/quest_view.svelte';
 import WorldView from '../../../world/world_view.svelte';
 import CharacterSheetManagementView from '../../dashboard/character_sheet_management_view.svelte';
 import type { GameUIViewModelInterface } from '../game_ui_view_model.svelte';
@@ -77,7 +76,7 @@ const { viewModel }: Props = $props();
         </div>
         <button
           type="button"
-          class="btn ml-auto"
+          class="btn game-control--quiet ml-auto"
           data-testid="management-close"
           onclick={() => viewModel.closeManagement()}
         >
@@ -131,19 +130,6 @@ const { viewModel }: Props = $props();
               data-testid="management-panel-character"
             >
               <CharacterSheetManagementView viewModel={viewModel.management.dashboardViewModel} />
-            </div>
-          {/if}
-
-          {#if viewModel.management.questViewModel}
-            <div
-              class="absolute inset-0"
-              hidden={!viewModel.management.isPanelActive('quests')}
-              inert={!viewModel.management.isPanelActive('quests')}
-              data-testid="management-panel-quests"
-            >
-              <div class="h-full overflow-x-hidden overflow-y-auto p-4">
-                <QuestView viewModel={viewModel.management.questViewModel} embedded />
-              </div>
             </div>
           {/if}
 

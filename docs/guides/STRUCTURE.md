@@ -66,7 +66,7 @@ The `packages` directory contains the following shared packages:
 - `types`: TypeScript types and interfaces shared across all projects.
 - `schemas`: TypeBox validation schemas for API boundaries and persistence.
 - `parser`: Instruct / macro / slash-command parser (lexer, macro resolver).
-- `logger`: Structured logging with environment-specific implementations (browser, functions, SSR).
+- `logger`: Structured logging with environment-specific implementations (browser, SSR, basic).
 - `utils`: Error handling (`AppError`), country data, formatters.
 - `mocks`: Test fixtures, mock factories, `MockAiService`, `MockDatabaseService`.
 

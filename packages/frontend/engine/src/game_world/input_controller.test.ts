@@ -118,6 +118,21 @@ describe('InputController — movement', () => {
     expect(harness.velocities).toHaveLength(0);
   });
 
+  test('OS auto-repeat does not re-run onMovementStart', () => {
+    // A held key fires repeated `keydown` events. Each repeat used to call
+    // onMovementStart (which posts STOP_PLAYER and clears the player's
+    // Velocity) without re-posting the held velocity — the player froze
+    // mid-walk until the key was released and pressed again.
+    const harness = makeHarness();
+    harness.target.dispatch('keydown', keyEvent('ArrowRight'));
+    expect(harness.movementStarts).toBe(1);
+
+    for (let repeat = 0; repeat < 5; repeat++) {
+      harness.target.dispatch('keydown', keyEvent('ArrowRight'));
+    }
+    expect(harness.movementStarts).toBe(1);
+  });
+
   test('keystrokes in an input field are ignored', () => {
     const harness = makeHarness();
     harness.target.dispatch(
@@ -125,6 +140,23 @@ describe('InputController — movement', () => {
       keyEvent('ArrowRight', { target: { tagName: 'INPUT', isContentEditable: false } }),
     );
     expect(harness.velocities).toHaveLength(0);
+  });
+
+  test('Enter on a focused button is not swallowed as the interact key', () => {
+    const harness = makeHarness();
+    let prevented = false;
+    harness.target.dispatch(
+      'keydown',
+      keyEvent('Enter', {
+        target: { tagName: 'BUTTON', isContentEditable: false },
+        preventDefault: () => {
+          prevented = true;
+        },
+      }),
+    );
+    // The game must not consume Enter (or prevent the button's activation).
+    expect(harness.interacts).toBe(0);
+    expect(prevented).toBe(false);
   });
 });
 

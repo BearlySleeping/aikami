@@ -150,9 +150,24 @@ let { viewModel }: { viewModel: StartViewModelInterface } = $props();
           </summary>
           <div class="mt-3 flex flex-col gap-2">
             {#each viewModel.advancedItems as item}
-              <button type="button" class="btn btn-outline btn-sm" onclick={item.action}>
-                {item.label}
-              </button>
+              {#if item.buttonHref}
+                <a
+                  href={item.buttonHref}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="btn btn-outline btn-sm"
+                >
+                  {item.label}
+                </a>
+              {:else if item.action}
+                <button
+                  type="button"
+                  class="btn btn-outline btn-sm"
+                  onclick={() => item.action?.()}
+                >
+                  {item.label}
+                </button>
+              {/if}
               <p class="text-[11px] leading-snug text-base-content/50">
                 {item.description}
                 {#if item.href}

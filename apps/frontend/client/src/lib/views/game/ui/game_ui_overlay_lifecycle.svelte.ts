@@ -40,6 +40,7 @@ import type { VendorViewModelInterface } from '$views/vendor/vendor_view_model.s
 import type {
   GameUIChatCapabilities,
   GameUICombatStateCapabilities,
+  GameUINpcMemoryCapabilities,
   GameUIOverlayCapabilities,
   GameUISessionCapabilities,
 } from './game_ui_view_model_types.ts';
@@ -52,6 +53,8 @@ export type GameUIOverlayLifecycleOptions = {
   overlays: GameUIOverlayCapabilities;
   /** Conversation source for the dialogue ViewModel. */
   npcDialogue: NpcDialogueServiceInterface;
+  /** Per-NPC memory: transcript captured on close, returning greeting on open. */
+  npcMemory?: GameUINpcMemoryCapabilities;
   /** Combat service state read when the combat overlay activates. */
   combat: GameUICombatStateCapabilities;
   /** Chat state read for the auto-summary threshold effect. */
@@ -142,20 +145,56 @@ const simpleOverlayCleanup = (
  */
 export const registerGameUIOverlayLifecycle = (options: GameUIOverlayLifecycleOptions): void => {
   const { overlays, npcDialogue, management } = options;
+  let dialogueViewModel: DialogueOverlayViewModelInterface | undefined;
+  let dialogueNpcId: string | undefined;
+
+  const clearDialogueViewModel = (): void => {
+    if (!dialogueViewModel) {
+      return;
+    }
+    // Hand the finished transcript to NPC memory before the VM is released.
+    // Untracked: this runs inside the dialogue effect and must not subscribe
+    // it to the (now orphaned) transcript.
+    const closing = dialogueViewModel;
+    const closingNpcId = dialogueNpcId;
+    untrack(() => {
+      if (closingNpcId !== undefined) {
+        void options.npcMemory?.recordConversation({
+          npcId: closingNpcId,
+          npcName: closing.npcName,
+          messages: closing.messages,
+        });
+      }
+    });
+    dialogueViewModel.hasNpcScreenPosition = false;
+    dialogueViewModel = undefined;
+    dialogueNpcId = undefined;
+    options.setDialogueViewModel(undefined);
+  };
 
   options.registerEffectRoot(() => {
     // ── Dialogue ──
+    // Inventory can be a temporary surface above an active conversation. Keep
+    // the dialogue ViewModel alive while DIALOGUE remains anywhere in the
+    // overlay stack so returning from Inventory restores the transcript and
+    // unsent composer state instead of constructing a fresh conversation.
     $effect(() => {
-      if (overlays.activeOverlay !== 'DIALOGUE') {
-        return;
-      }
+      const activeOverlay = overlays.activeOverlay;
+      const dialogueInStack = overlays.overlayStack.some((entry) => entry.type === 'DIALOGUE');
       const npc = npcDialogue.activeNpc;
-      if (!npc) {
+      if (activeOverlay !== 'DIALOGUE' && !dialogueInStack) {
+        clearDialogueViewModel();
         return;
       }
-      const vm = options.createDialogueOverlayViewModel({
+      if (!npc || (dialogueViewModel && dialogueNpcId === npc.npcId)) {
+        return;
+      }
+
+      clearDialogueViewModel();
+      dialogueViewModel = options.createDialogueOverlayViewModel({
         className: 'DialogueOverlayViewModel',
-        npcData: npc,
+        // A remembered NPC greets with its prepared, history-aware opener.
+        npcData: untrack(() => options.npcMemory?.resolveGreeting(npc) ?? npc),
         onEndChat: () => overlays.endDialogue(),
         npcDialogueService: npcDialogue,
         onStartCombat: (combatNpcData) => {
@@ -165,12 +204,8 @@ export const registerGameUIOverlayLifecycle = (options: GameUIOverlayLifecycleOp
           });
         },
       });
-      options.setDialogueViewModel(vm);
-
-      return () => {
-        vm.hasNpcScreenPosition = false;
-        options.setDialogueViewModel(undefined);
-      };
+      dialogueNpcId = npc.npcId;
+      options.setDialogueViewModel(dialogueViewModel);
     });
 
     // ── Combat ──

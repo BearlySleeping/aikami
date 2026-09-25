@@ -235,6 +235,50 @@ describe('emberwatch map validation rules', () => {
     expect(findings.some((f) => f.rule === 'transition-bounce-back')).toBe(true);
   });
 
+  test('an arrival exactly on the inclusive bottom trigger boundary is bounce-back', () => {
+    const contextA = makeContext({
+      id: 'a',
+      blocked: [
+        [1, 0, 0],
+        [0, 0, 0],
+        [0, 0, 0],
+      ],
+      objects: [
+        transition({
+          targetMap: 'b',
+          targetSpawnId: 'arrival',
+          targetX: 0,
+          targetY: 64,
+          x: 32,
+          y: 0,
+          width: 32,
+          height: 32,
+        }),
+      ],
+    });
+    const contextB = makeContext({
+      id: 'b',
+      blocked: [
+        [0, 0, 0],
+        [0, 0, 0],
+        [0, 0, 0],
+      ],
+      objects: [
+        transition({ targetMap: 'a', targetX: 0, targetY: 0, x: 0, y: 0, width: 32, height: 64 }),
+        { type: 'spawn', x: 0, y: 64, props: { spawnId: 'arrival' } },
+      ],
+    });
+    const findings: Parameters<typeof validateTransitions>[1] = [];
+    validateTransitions(
+      new Map([
+        ['a', contextA],
+        ['b', contextB],
+      ]),
+      findings,
+    );
+    expect(findings.some((finding) => finding.rule === 'transition-bounce-back')).toBe(true);
+  });
+
   test('missing and unknown destination spawn ids are blockers', () => {
     const contextA = makeContext({
       id: 'a',

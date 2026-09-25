@@ -11,7 +11,7 @@ const { viewModel }: Props = $props();
 </script>
 <BaseViewModelContainer {viewModel}>
   <div
-    class="pointer-events-auto absolute inset-0 z-20 flex items-center justify-center bg-base-300/80 backdrop-blur-sm"
+    class="game-pause-scrim pointer-events-auto absolute inset-0 z-[60] flex items-center justify-center"
     role="dialog"
     aria-modal="true"
     aria-label="Pause Menu"
@@ -37,17 +37,21 @@ const { viewModel }: Props = $props();
   }
 }}
   >
-    <div class="w-72 rounded-xl border border-base-300 bg-base-200 p-6 shadow-xl">
+    <div
+      class="game-surface game-pause-panel w-full max-w-sm p-5 shadow-xl"
+      data-testid="pause-menu"
+    >
       {#if viewModel.confirmingQuit}
-        <h2 class="text-center text-lg font-bold text-base-content">Quit to Main Menu?</h2>
-        <p class="mt-2 text-center text-sm text-base-content/60">
-          Any unsaved progress will be lost.
+        <h2 class="game-section-title text-center">Quit to Main Menu?</h2>
+        <p class="mt-2 text-center text-sm text-base-content/70">
+          Your campaign and existing local saves stay on this device. Changes since the last save
+          may not be available when you return.
         </p>
 
         <div class="mt-6 space-y-3">
           <button
             type="button"
-            class="btn btn-error btn-block"
+            class="btn game-control--neutral btn-block"
             onclick={() => viewModel.confirmQuit()}
           >
             Quit
@@ -62,55 +66,47 @@ const { viewModel }: Props = $props();
           </button>
         </div>
       {:else}
-        <h2 class="text-center text-lg font-bold text-base-content">Paused</h2>
+        <h2 class="game-section-title text-center">Paused</h2>
 
-        <div class="mt-6 space-y-3">
+        <div class="mt-5 space-y-2">
           <button
             type="button"
-            class="btn btn-primary btn-block"
+            class="btn game-control--accent btn-block"
             onclick={() => viewModel.resumeGame()}
           >
-            Resume Game
+            Resume
           </button>
 
           <button
             type="button"
-            class="btn btn-outline btn-block"
+            class="btn game-control--quiet btn-block"
             disabled={viewModel.isSaving}
             onclick={() => viewModel.saveGame()}
           >
             {#if viewModel.isSaving}
               <span class="loading loading-spinner loading-xs"></span>
-              Saving...
+              Saving…
             {:else}
-              Save Game
+              Save now
             {/if}
           </button>
 
-          {#if viewModel.saveMessage}
-            <p
-              class="text-center text-sm"
-              class:text-success={viewModel.saveMessage === 'Game Saved!'}
-              class:text-error={viewModel.saveMessage === 'Save failed'}
-            >
-              {viewModel.saveMessage}
-            </p>
-          {/if}
+          <p class="game-pause-save-status text-center text-sm" role="status" aria-live="polite">
+            {viewModel.saveStatusLabel}
+          </p>
 
           <button
             type="button"
-            class="btn btn-outline btn-block"
+            class="btn game-control--quiet btn-block"
             onclick={() => viewModel.goToSettings()}
           >
             Settings
           </button>
 
-          <!-- C-528: HUD customization. Customize HUD opens the paused editor;
-               Hide HUD is temporary and reversible, and never erases saved
-               preferences. -->
+          <!-- C-528: HUD customization opens the paused editor. -->
           <button
             type="button"
-            class="btn btn-outline btn-block"
+            class="btn game-control--quiet btn-block"
             data-testid="pause-customize-hud"
             disabled={!viewModel.isHudEditorEnabled}
             onclick={() => viewModel.openHudEditor()}
@@ -120,16 +116,7 @@ const { viewModel }: Props = $props();
 
           <button
             type="button"
-            class="btn btn-ghost btn-block"
-            data-testid="pause-hide-hud"
-            onclick={() => viewModel.toggleHudTemporarilyHidden()}
-          >
-            {viewModel.isHudTemporarilyHidden ? 'Show HUD' : 'Hide HUD'}
-          </button>
-
-          <button
-            type="button"
-            class="btn btn-ghost btn-block"
+            class="btn game-control--quiet btn-block"
             onclick={() => viewModel.openEndSession()}
           >
             End Session
@@ -137,7 +124,7 @@ const { viewModel }: Props = $props();
 
           <button
             type="button"
-            class="btn btn-ghost btn-block text-error"
+            class="btn game-control--quiet btn-block"
             onclick={() => viewModel.requestQuit()}
           >
             Quit to Main Menu
@@ -145,7 +132,7 @@ const { viewModel }: Props = $props();
         </div>
       {/if}
 
-      <p class="mt-4 text-center text-xs text-base-content/50">Press Escape to resume</p>
+      <p class="mt-4 text-center text-xs text-base-content/60">Press Escape to resume</p>
     </div>
   </div>
 </BaseViewModelContainer>

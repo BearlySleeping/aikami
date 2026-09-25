@@ -21,14 +21,23 @@
 //
 // Contract: combat debug workspace (execution prompt §1–§8)
 
-import type { EngineBridge } from '@aikami/frontend/engine';
-import {
-  BaseViewModel,
-  type BaseViewModelInterface,
-  type BaseViewModelOptions,
-} from '@aikami/frontend/services/base';
+import type {
+  DebugSceneOverlayLayers,
+  GameWorldViewportDiagnostics,
+} from '@aikami/frontend/engine';
+import { BaseViewModel } from '@aikami/frontend/services/base';
 import type { CombatReproduction, CombatState } from '@aikami/types';
+import { untrack } from 'svelte';
 import type { CombatViewModelInterface } from '$views/combat/combat_view_model.svelte';
+import {
+  buildCombatDebugBattlefieldDiagnostics,
+  type CombatDebugBattlefieldDiagnostics,
+} from './battlefield/combat_debug_battlefield_diagnostics.ts';
+import {
+  applyCombatDebugBattlefieldScene,
+  countCombatDebugCombatants,
+  DEFAULT_COMBAT_DEBUG_OVERLAY_LAYERS,
+} from './battlefield/combat_debug_battlefield_projection.ts';
 import {
   buildCombatDebugReproduction,
   buildCombatDebugSnapshotTrace,
@@ -75,8 +84,9 @@ import {
   serializeCombatDebugUrlConfig,
 } from './scenarios/combat_debug_url_config.ts';
 import type {
+  CombatDebugPointerProjection,
+  CombatDebugSelectionProjection,
   CombatDebugSession,
-  CombatDebugSessionObserver,
   CombatDebugSessionSnapshot,
 } from './session/combat_debug_session_contract.ts';
 import { createCombatDebugSessionObserver } from './session/combat_debug_session_observer.ts';
@@ -95,120 +105,17 @@ import {
   type CombatDebugStatus,
 } from './types/combat_debug_types.ts';
 
-/** The runtime capabilities the workspace needs, supplied by composition. */
-export type CombatDebugViewModelCapabilities = {
-  /** Reads window.location.search (browser) — injected for testability. */
-  readUrlSearch(): string;
-  /** Writes a query string to history without a reload. */
-  replaceUrl(query: string): void;
-  /** Reads the complete current URL after synchronization. */
-  readCurrentUrl(): string;
-  /** Writes text through the platform clipboard capability. */
-  writeClipboard(text: string): Promise<void>;
-  /** Builds a live session; the composition supplies the heavy dependencies. */
-  createLiveSession(options: {
-    canvas: HTMLCanvasElement;
-    scenario: CombatDebugScenarioDefinition;
-    seed: number;
-    observer: CombatDebugSessionObserver;
-  }): CombatDebugSession;
-  /**
-   * Builds the PRODUCTION combat ViewModel for the debug session's bridge. The
-   * composition supplies it so the workspace renders the real combat UI rather
-   * than reimplementing it, and this module never imports the combat feature.
-   */
-  createProductionCombatViewModel(bridge: EngineBridge): CombatViewModelInterface;
-  /** Notifies the UI that a live session status changed (announcements). */
-  announce(message: string): void;
-};
+// The contract lives in ./types/combat_debug_view_model_types.ts so this module
+// stays inside its source-size budget. It is re-exported as a local alias so
+// importers keep one import site and the MVVM guard still sees the names.
+import type {
+  CombatDebugViewModelCapabilities,
+  CombatDebugViewModelInterface as CombatDebugViewModelInterfaceContract,
+  CombatDebugViewModelOptions as CombatDebugViewModelOptionsContract,
+} from './types/combat_debug_view_model_types.ts';
 
-/** The workspace ViewModel contract. */
-export type CombatDebugViewModelInterface = BaseViewModelInterface & {
-  // Mode + scenario
-  readonly mode: CombatDebugMode;
-  readonly modeOptions: readonly CombatDebugMode[];
-  readonly scenarios: readonly CombatDebugScenarioDefinition[];
-  readonly scenario: CombatDebugScenarioDefinition;
-  readonly status: CombatDebugStatus;
-  readonly statusLabel: string;
-  readonly controlOwner: CombatDebugControlOwner;
-  readonly faultMode: CombatDebugFaultMode;
-  readonly faultModeOptions: readonly CombatDebugFaultMode[];
-  readonly seed: number;
-  readonly urlError: string | undefined;
-  readonly urlSnapshot: string;
-  // Live/session state
-  readonly engineReady: boolean;
-  readonly engineError: string | undefined;
-  readonly combatViewModel: CombatViewModelInterface | undefined;
-  readonly state: CombatState | undefined;
-  readonly revision: number;
-  readonly round: number;
-  readonly encounterRunId: string | undefined;
-  // Trace
-  readonly traceEntries: readonly CombatDebugTraceEntry[];
-  readonly traceDroppedCount: number;
-  readonly traceIncomplete: boolean;
-  // Inspectors
-  readonly activeTab: CombatDebugInspectorTab;
-  readonly tabOptions: readonly CombatDebugInspectorTab[];
-  readonly contextSummary: CombatDebugContextSummary | undefined;
-  readonly actorSummary: CombatDebugActorSummary | undefined;
-  readonly actionSummary:
-    | import('./inspector/combat_debug_inspector.ts').CombatDebugActionSummary
-    | undefined;
-  readonly objectsSummary: CombatDebugObjectsSummary | undefined;
-  readonly reactionSummary: CombatDebugReactionSummary | undefined;
-  readonly aiSummary: CombatDebugAiSummary;
-  readonly assertions: readonly CombatDebugAssertionViolation[];
-  readonly assertionIds: typeof COMBAT_DEBUG_ASSERTIONS;
-  // Fixtures
-  readonly fixturePreset: CombatDebugFixturePresetId;
-  readonly fixturePresetOptions: readonly CombatDebugFixturePresetId[];
-  readonly presentationFixture: CombatDebugPresentationFixture;
-  readonly fixtureNotice: string;
-  // Replay
-  readonly replayResultText: string | undefined;
-  readonly replayComparison: CombatDebugReplayComparison | undefined;
-  replayImportText: string;
-  // Scheduler controls
-  readonly isPaused: boolean;
-  readonly canStep: boolean;
-  /** Commands held at the client → engine boundary; 0 when the gate is open. */
-  readonly queuedCommandCount: number;
-  /**
-   * Bumped whenever the live session's identity changes (scenario switch,
-   * mode switch, restart, reset). The view keys the canvas on it so the
-   * session is re-booted exactly once against a fresh element instead of
-   * leaving a disposed world behind a dead canvas.
-   */
-  readonly sessionEpoch: number;
-  // Actions
-  initialize(): Promise<void>;
-  initializeLiveCanvas(canvas: HTMLCanvasElement): Promise<void>;
-  setMode(mode: CombatDebugMode): void;
-  selectScenario(scenarioId: string): void;
-  setSeed(seed: number): void;
-  setTab(tab: CombatDebugInspectorTab): void;
-  setFaultMode(mode: CombatDebugFaultMode): void;
-  setFixturePreset(preset: CombatDebugFixturePresetId): void;
-  restart(): Promise<void>;
-  resetDebug(): Promise<void>;
-  step(): void;
-  togglePause(): void;
-  exportReproduction(): string;
-  downloadReproductionBundle(): void;
-  importReproduction(text: string): void;
-  submitReplayImport(): void;
-  copyUrl(): Promise<void>;
-  readonly exportText: string | undefined;
-};
-
-/** Public options accepted by route callers; capabilities are wired by composition. */
-export type CombatDebugViewModelPublicOptions = BaseViewModelOptions;
-
-/** Full options including injected capabilities. */
-export type CombatDebugViewModelOptions = BaseViewModelOptions & CombatDebugViewModelCapabilities;
+export type CombatDebugViewModelInterface = CombatDebugViewModelInterfaceContract;
+export type CombatDebugViewModelOptions = CombatDebugViewModelOptionsContract;
 
 const MODE_OPTIONS: readonly CombatDebugMode[] = ['live', 'replay', 'fixtures'];
 const FAULT_OPTIONS: readonly CombatDebugFaultMode[] = [
@@ -279,8 +186,16 @@ class CombatDebugViewModel
   sessionEpoch = $state(0);
   exportText = $state<string | undefined>(undefined);
 
+  battlefieldLayers = $state<DebugSceneOverlayLayers>({ ...DEFAULT_COMBAT_DEBUG_OVERLAY_LAYERS });
+  viewportDiagnostics = $state<GameWorldViewportDiagnostics | undefined>(undefined);
+  pointerProjection = $state<CombatDebugPointerProjection | undefined>(undefined);
+  stateCombatantCount = $state(0);
+  projectedActorCount = $state(0);
+  selectionProjection = $state<CombatDebugSelectionProjection | undefined>(undefined);
+
   private _session: CombatDebugSession | undefined;
   private _generation = 0;
+  private _urlConfigApplied = false;
   private _controllerRecords: CombatDebugControllerRecord[] = [];
   private readonly _recording = createCombatDebugRecording();
   private _lastActionOptions:
@@ -296,17 +211,27 @@ class CombatDebugViewModel
 
   /** Applies the initial URL configuration, then boots the default mode. */
   async initialize(): Promise<void> {
-    this._applyUrlConfig();
+    this._ensureUrlConfigApplied();
     this.presentationFixture = buildCombatDebugPresentationFixture(this.fixturePreset);
     await super.initialize();
   }
 
   /** Binds the live canvas and boots (or reboots) the live session. */
   async initializeLiveCanvas(canvas: HTMLCanvasElement): Promise<void> {
+    // The attachment can run before `initialize()`; apply the URL config first
+    // so the boot uses the deep-linked scenario/mode, not the defaults.
+    this._ensureUrlConfigApplied();
     if (this.mode !== 'live') {
       return;
     }
     await this._bootLiveSession(canvas);
+  }
+
+  /** Boots an attached canvas without making the attachment effect track ViewModel reads. */
+  attachLiveCanvas(canvas: HTMLCanvasElement): void {
+    untrack(() => {
+      void this.initializeLiveCanvas(canvas);
+    });
   }
 
   setMode(mode: CombatDebugMode): void {
@@ -363,6 +288,20 @@ class CombatDebugViewModel
   setFixturePreset(preset: CombatDebugFixturePresetId): void {
     this.fixturePreset = preset;
     this.presentationFixture = buildCombatDebugPresentationFixture(preset);
+  }
+
+  /** Flips one synthetic-battlefield overlay layer and repaints the scene. */
+  toggleBattlefieldLayer(layer: keyof DebugSceneOverlayLayers): void {
+    this.battlefieldLayers = {
+      ...this.battlefieldLayers,
+      [layer]: !this.battlefieldLayers[layer],
+    };
+    this._applyDebugScene();
+  }
+
+  /** Re-fits the synthetic board into the available pane. */
+  fitBattlefieldCamera(): void {
+    this._session?.fitDebugCamera();
   }
 
   /**
@@ -562,7 +501,38 @@ class CombatDebugViewModel
     return buildCombatDebugAiSummary(this._controllerRecords);
   }
 
+  get battlefieldDiagnostics(): CombatDebugBattlefieldDiagnostics {
+    return buildCombatDebugBattlefieldDiagnostics({
+      mode: this.mode,
+      status: this.status,
+      engineReady: this.engineReady,
+      engineError: this.engineError,
+      scenario: this.scenario,
+      state: this.state,
+      viewport: this.viewportDiagnostics,
+      pointer: this.pointerProjection,
+      layers: this.battlefieldLayers,
+      activeCombatantId: this.contextSummary?.activeCombatantId,
+      revision: this.revision,
+      round: this.round,
+      stateCombatants: this.stateCombatantCount,
+      projectedActors: this.projectedActorCount,
+      selectionCells:
+        (this.selectionProjection?.legalEndpoints.length ?? 0) +
+        (this.selectionProjection?.legalTargetCells.length ?? 0),
+    });
+  }
+
   // ── Internals ──────────────────────────────────────────────
+
+  /** Applies the URL configuration once, whichever lifecycle callback runs first. */
+  private _ensureUrlConfigApplied(): void {
+    if (this._urlConfigApplied) {
+      return;
+    }
+    this._urlConfigApplied = true;
+    this._applyUrlConfig();
+  }
 
   private _applyUrlConfig(): void {
     const parsed = parseCombatDebugUrlConfig(
@@ -631,6 +601,16 @@ class CombatDebugViewModel
           this.engineError = message;
           this.status = 'error';
         },
+        applySelection: (selection) => {
+          this.selectionProjection = selection;
+          this._applyDebugScene();
+        },
+        applyPointer: (pointer) => {
+          this.pointerProjection = pointer;
+        },
+        applyViewport: (diagnostics) => {
+          this.viewportDiagnostics = diagnostics;
+        },
       }),
     });
     this._session = session;
@@ -641,6 +621,9 @@ class CombatDebugViewModel
       return;
     }
     this.engineReady = !session.disposed;
+    // Paint the scenario's board immediately (actors arrive with snapshots).
+    this._applyDebugScene();
+    this.viewportDiagnostics = session.getViewportDiagnostics();
 
     // Render the PRODUCTION combat UI against the isolated session bridge.
     const bridge = session.bridge;
@@ -679,8 +662,26 @@ class CombatDebugViewModel
       }),
     );
 
+    this.stateCombatantCount = countCombatDebugCombatants(snapshot.state);
+    this._applyDebugScene();
+
     if (this.isPaused) {
       this.status = 'paused';
+    }
+  }
+
+  /** Projects authoritative state + scenario battlefield onto the session. */
+  private _applyDebugScene(): void {
+    const projectedActors = applyCombatDebugBattlefieldScene({
+      session: this._session,
+      battlefield: this.scenario.battlefield,
+      state: this.state,
+      layers: this.battlefieldLayers,
+      activeCombatantId: this.contextSummary?.activeCombatantId,
+      selection: this.selectionProjection,
+    });
+    if (projectedActors !== undefined) {
+      this.projectedActorCount = projectedActors;
     }
   }
 
@@ -736,6 +737,13 @@ class CombatDebugViewModel
     // against a boundary that no longer exists.
     this.isPaused = false;
     this.canStep = false;
+    // Drop projections derived from the disposed world so the next session
+    // never renders a stale battlefield, pointer cell or renderer health.
+    this.selectionProjection = undefined;
+    this.pointerProjection = undefined;
+    this.viewportDiagnostics = undefined;
+    this.stateCombatantCount = 0;
+    this.projectedActorCount = 0;
   }
 
   /**

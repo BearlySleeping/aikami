@@ -10,12 +10,7 @@
 
 import { describe, expect, test } from 'bun:test';
 import sharp from 'sharp';
-import {
-  CORNER_WEDGE_TESTS,
-  encodePng,
-  packAtlas,
-  terrainOwnsPixel,
-} from './generate_emberwatch_atlas.ts';
+import { encodePng, packAtlas } from './generate_emberwatch_atlas.ts';
 import {
   ATLAS_CELL,
   ATLAS_HEIGHT,
@@ -91,55 +86,6 @@ describe('C-378 AC-5 — atlas packer', () => {
     }
   });
 
-  test('all four corner wedges are mirror images selecting 136 pixels each', () => {
-    const TILE = ATLAS_TILE_SIZE; // 32
-
-    // Each diagonal wedge predicate must select exactly 136 pixels — the
-    // triangle cut by the two edge-midpoint diagonals. An asymmetric wedge
-    // (e.g. the old NE/SW shapes) would shift the terrain cut and break
-    // the corner-16 visual contract.
-    for (const { bit, test: testFn } of CORNER_WEDGE_TESTS) {
-      let count = 0;
-      for (let y = 0; y < TILE; y++) {
-        for (let x = 0; x < TILE; x++) {
-          if (testFn(x, y)) {
-            count += 1;
-          }
-        }
-      }
-      expect(count, `wedge bit ${bit.toString(2)} area`).toBe(136);
-    }
-
-    // True mirror images around the tile center: NW(x,y) is SE(31-x,31-y),
-    // NE(31-x,y), and SW(x,31-y).
-    const [nw, ne, se, sw] = CORNER_WEDGE_TESTS.map(({ test: testFn }) => testFn);
-    for (let y = 0; y < TILE; y++) {
-      for (let x = 0; x < TILE; x++) {
-        expect(nw(x, y), `NW≡SE mirror at (${x},${y})`).toBe(se(31 - x, 31 - y));
-        expect(nw(x, y), `NW≡NE vertical mirror at (${x},${y})`).toBe(ne(31 - x, y));
-        expect(nw(x, y), `NW≡SW horizontal mirror at (${x},${y})`).toBe(sw(x, 31 - y));
-      }
-    }
-
-    // Documented mask-3 top-half behavior: NW+NE (plus the always-terrain
-    // center diamond) covers the ENTIRE top half (y < 16) — preserved.
-    for (let y = 0; y < 16; y++) {
-      for (let x = 0; x < TILE; x++) {
-        expect(terrainOwnsPixel(0b0011, x, y), `mask 3 owns top-half pixel (${x},${y})`).toBe(true);
-      }
-    }
-
-    // Complementary bottom-half coverage: mask 12 (SE+SW) owns the entire
-    // bottom half (y >= 16) — the vertical mirror of the mask-3 top half.
-    for (let y = 16; y < TILE; y++) {
-      for (let x = 0; x < TILE; x++) {
-        expect(terrainOwnsPixel(0b1100, x, y), `mask 12 owns bottom-half pixel (${x},${y})`).toBe(
-          true,
-        );
-      }
-    }
-  });
-
   test('frame rects sit at col*CELL+PAD / row*CELL+PAD with exact 32×32 content', () => {
     const { frames } = packAtlas();
 
@@ -188,29 +134,29 @@ describe('C-378 AC-5 — atlas packer', () => {
       { mask0Base: number[]; mask0Overlay: number[]; mask15Overlay: number[] }
     > = {
       dirt: {
-        mask0Base: [61, 141, 66, 255],
+        mask0Base: [71, 144, 59, 255],
         mask0Overlay: [138, 90, 51, 255],
-        mask15Overlay: [147, 78, 57, 255],
+        mask15Overlay: [138, 89, 51, 255],
       },
       water: {
-        mask0Base: [74, 143, 60, 255],
+        mask0Base: [44, 88, 116, 255],
         mask0Overlay: [46, 111, 176, 255],
-        mask15Overlay: [46, 111, 176, 255],
+        mask15Overlay: [47, 113, 177, 255],
       },
       gravel: {
-        mask0Base: [85, 151, 66, 255],
-        mask0Overlay: [112, 108, 96, 255],
-        mask15Overlay: [104, 106, 99, 255],
+        mask0Base: [71, 144, 59, 255],
+        mask0Overlay: [110, 112, 94, 255],
+        mask15Overlay: [112, 108, 96, 255],
       },
       earth: {
         mask0Base: [112, 108, 96, 255],
-        mask0Overlay: [87, 50, 32, 255],
-        mask15Overlay: [78, 58, 40, 255],
+        mask0Overlay: [89, 52, 47, 255],
+        mask15Overlay: [76, 57, 40, 255],
       },
       cobblestone: {
-        mask0Base: [148, 103, 66, 255],
-        mask0Overlay: [154, 154, 154, 255],
-        mask15Overlay: [154, 154, 154, 255],
+        mask0Base: [149, 100, 57, 255],
+        mask0Overlay: [128, 132, 126, 255],
+        mask15Overlay: [141, 144, 138, 255],
       },
     };
 

@@ -103,6 +103,44 @@ const MANY_CHIPS_MODE =
   typeof window !== 'undefined' && window.location.search.includes('manyChips=1');
 
 /**
+ * C-547: `?cyoa=1|4|long` puts the sandbox on the single-call `generateTurn`
+ * path so it emits real CYOA `activeChoices` (the free-text `analyzeIntent`
+ * path only emits suggestion chips). `1` = one choice, `4` = four choices,
+ * `long` = a long narrative reply followed by choices.
+ */
+const CYOA_MODE =
+  typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('cyoa') : null;
+
+/** The CYOA choice set the sandbox emits for a given `?cyoa=` mode. */
+const buildCyoaChoices = (mode: string | null): Array<{ id: string; label: string }> => {
+  if (mode === '1') {
+    return [{ id: 'ward', label: 'Ask about the ward' }];
+  }
+  if (mode === '4') {
+    return [
+      { id: 'ward', label: 'Ask about the ward' },
+      { id: 'help', label: 'Offer to help' },
+      { id: 'trade', label: 'Browse the wares' },
+      { id: 'leave', label: 'Take your leave' },
+    ];
+  }
+  return [
+    { id: 'ward', label: 'Ask about the ward' },
+    { id: 'leave', label: 'Leave' },
+  ];
+};
+
+/** The narrative the sandbox streams for a `?cyoa=` turn. */
+const CYOA_NARRATIVE_CHUNKS = [
+  '*Elder Thrain ponders your words.*\n',
+  '"The road ahead is not an easy one, traveler. ',
+  'The ward that shelters this village grows weaker with every passing moon, ',
+  'and the old stories say only a willing hand can mend it. ',
+  'If you truly mean to help, there is much I could tell you — ',
+  'but every choice carries its own weight."',
+];
+
+/**
  * Emits chunks to onChunk on a fixed cadence, respecting the abort signal.
  * Resolves after the last chunk; rejects with AbortError on cancel (AC-3).
  */
@@ -151,15 +189,14 @@ const viewModel: DialogueDevViewModelInterface = DialogueDevViewModel.create({
     endDialogue: () => {},
     generateTurn: async (opts: { onChunk?: (text: string) => void; signal?: AbortSignal }) => {
       // C-401: stream a deterministic slow narrative, then return the turn.
-      const chunks = ['*The elder ponders your words.*\n', '"An interesting proposition."'];
+      const chunks = CYOA_MODE
+        ? CYOA_NARRATIVE_CHUNKS
+        : ['*The elder ponders your words.*\n', '"An interesting proposition."'];
       await emitChunks({ chunks, onChunk: opts.onChunk, signal: opts.signal });
       mockTurnState = { kind: 'complete', text: chunks.join('') };
       return {
         narrative: chunks.join(''),
-        choices: [
-          { id: 'talk', label: 'Ask about the ward' },
-          { id: 'leave', label: 'Leave' },
-        ],
+        choices: buildCyoaChoices(CYOA_MODE),
         source: 'ai',
       };
     },
@@ -389,7 +426,7 @@ const viewModel: DialogueDevViewModelInterface = DialogueDevViewModel.create({
         suggestedChips: [],
       };
     },
-    useFreeTextFirst: true,
+    useFreeTextFirst: CYOA_MODE === null,
   },
   onStartCombat: () => {
     goBack();

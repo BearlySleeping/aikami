@@ -27,7 +27,6 @@ import type { getQuestTrackerViewModel } from '$views/game/ui/quest_tracker_comp
 import type { QuestTrackerViewModelInterface } from '$views/game/ui/quest_tracker_view_model.svelte';
 import type { getInventoryViewModel } from '$views/inventory/inventory_composition.ts';
 import type { getJournalViewModel } from '$views/journal/journal_composition.ts';
-import type { getQuestViewModel } from '$views/quest/quest_composition.ts';
 import type { getVendorViewModel } from '$views/vendor/vendor_composition.ts';
 import type { VendorViewModelInterface } from '$views/vendor/vendor_view_model.svelte';
 import type { getWorldViewModel } from '$views/world/world_composition.ts';
@@ -58,6 +57,8 @@ import type {
   GameUIHudViewCapabilities,
   GameUIInputActionCapabilities,
   GameUIMotionCapabilities,
+  GameUIMusicCapabilities,
+  GameUINpcMemoryCapabilities,
   GameUIOnboardingCapabilities,
   GameUIOverlayCapabilities,
   GameUIPartyCapabilities,
@@ -93,6 +94,8 @@ export type { AutoSaveStatus, DialogueNpcData, GameOverlayType, ManagementReturn
 export type GameUIViewModelOptions = BaseViewModelOptions & {
   /** Chat state read for the auto-summary threshold effect. */
   chat: GameUIChatCapabilities;
+  /** Per-NPC memory — optional so fixtures without it keep working. */
+  npcMemory?: GameUINpcMemoryCapabilities;
   /** Combat-encounter state read when the combat overlay activates. */
   combat: GameUICombatStateCapabilities;
   /** Text-provider configuration read for onboarding hints. */
@@ -121,6 +124,8 @@ export type GameUIViewModelOptions = BaseViewModelOptions & {
   time: GameUITimeCapabilities;
   /** C-527 AC-6: the player's persisted motion selection. */
   motion: GameUIMotionCapabilities;
+  /** C-528: live BGM state for the contextual music-player widget. */
+  music?: GameUIMusicCapabilities;
   /** C-528: the HUD preference authority (read-only in this layer). */
   hud: GameUIHudCapabilities;
   /** C-528: measured viewport and text scale for HUD reflow. */
@@ -133,7 +138,6 @@ export type GameUIViewModelOptions = BaseViewModelOptions & {
   createCombatViewModel: typeof getCombatViewModel;
   createDialogueOverlayViewModel: typeof getDialogueOverlayViewModel;
   createInventoryViewModel: typeof getInventoryViewModel;
-  createQuestViewModel: typeof getQuestViewModel;
   createJournalViewModel: typeof getJournalViewModel;
   createCharacterSheetViewModel: typeof getCharacterSheetViewModel;
   createVendorViewModel: typeof getVendorViewModel;
@@ -169,6 +173,7 @@ class GameUIViewModel
   private readonly _overlays: GameUIOverlayCapabilities;
   private readonly _inputAction: GameUIInputActionCapabilities;
   private readonly _npcDialogue: NpcDialogueServiceInterface;
+  private readonly _npcMemory: GameUINpcMemoryCapabilities | undefined;
   private readonly _onboarding: GameUIOnboardingCapabilities;
   private readonly _playerState: GameUIPlayerStateCapabilities;
   private readonly _party: GameUIPartyCapabilities;
@@ -177,6 +182,7 @@ class GameUIViewModel
   private readonly _session: GameUISessionCapabilities;
   private readonly _time: GameUITimeCapabilities;
   private readonly _motion: GameUIMotionCapabilities;
+  private readonly _music: GameUIMusicCapabilities | undefined;
   private readonly _engine: GameEngineServiceInterface;
 
   private readonly _createCombatViewModel: typeof getCombatViewModel;
@@ -225,6 +231,7 @@ class GameUIViewModel
     this._overlays = options.overlays;
     this._inputAction = options.inputAction;
     this._npcDialogue = options.npcDialogue;
+    this._npcMemory = options.npcMemory;
     this._onboarding = options.onboarding;
     this._playerState = options.playerState;
     this._party = options.party;
@@ -233,6 +240,7 @@ class GameUIViewModel
     this._session = options.session;
     this._time = options.time;
     this._motion = options.motion;
+    this._music = options.music;
     this._engine = options.engine;
 
     this._createCombatViewModel = options.createCombatViewModel;
@@ -250,7 +258,6 @@ class GameUIViewModel
       overlays: this._overlays,
       npcDialogue: this._npcDialogue,
       createInventoryViewModel: options.createInventoryViewModel,
-      createQuestViewModel: options.createQuestViewModel,
       createJournalViewModel: options.createJournalViewModel,
       createCharacterSheetViewModel: options.createCharacterSheetViewModel,
       createPartyRosterViewModel: options.createPartyRosterViewModel,
@@ -270,10 +277,14 @@ class GameUIViewModel
         isTransitioning: this._overlays.isTransitioning,
         autoSaveStatus: this._overlays.autoSaveStatus,
         interactionPromptVisible: this.interactionPromptVisible,
-        hasObjective: this.questTrackerViewModel.hasQuests,
+        hasObjective:
+          this.questTrackerViewModel.hasQuests ||
+          this.questOverlayVisible ||
+          this.onboardingHintVisible,
         hasOnboardingHint: this.onboardingHintVisible,
         hasPlayerStatus: this.showHpBar,
         hasHotbar: this.showHotbar,
+        isMusicPlaying: this._music?.isPlaying ?? false,
       }),
     });
   }
@@ -286,6 +297,14 @@ class GameUIViewModel
 
   get interactionPromptVisible(): boolean {
     return this._overlays.interactionPromptVisible;
+  }
+
+  get interactionPromptScreenX(): number | undefined {
+    return this._overlays.interactionPromptScreenX;
+  }
+
+  get interactionPromptScreenY(): number | undefined {
+    return this._overlays.interactionPromptScreenY;
   }
 
   get onboardingHintText(): string | undefined {
@@ -535,6 +554,7 @@ class GameUIViewModel
       registerEffectRoot: (fn) => this.registerEffectRoot(fn),
       overlays: this._overlays,
       npcDialogue: this._npcDialogue,
+      npcMemory: this._npcMemory,
       combat: this._combat,
       chat: this._chat,
       session: this._session,
@@ -588,6 +608,9 @@ class GameUIViewModel
   // ── Delegated ──
 
   handleKeyDown(event: KeyboardEvent): void {
+    if (this._inputAction.handleGlobalShortcut(event)) {
+      return;
+    }
     this._overlays.handleKeyDown(event);
   }
 

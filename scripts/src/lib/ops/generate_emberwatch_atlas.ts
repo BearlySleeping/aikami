@@ -2,12 +2,13 @@
 //
 // Generates the Emberwatch coherent tileset atlas (C-375 AC-4).
 //
-// Replaces the 128×128 9-frame placeholder with a 512×256 (16×8 grid)
+// Replaces the 128×128 9-frame placeholder with a 512×352 (16×11 grid)
 // procedurally-drawn 32px tileset: grass/dirt/path/floor/wall/roof/water
 // tiles plus furniture + prop cells (well, notice board, gate, barrels,
 // crates, counters, tables, beds, rugs...).
 //
-// Deterministic (seeded RNG) — every cell is fully opaque pixel art.
+// Deterministic (seeded RNG); terrain is opaque while deliberate house hips and
+// prop/decor shadows carry transparent pixels.
 // Emits `atlas.webp` (via cwebp) + `atlas.json` (frame rects matching the
 // grid layout). The map tileset blocks (imagewidth/imageheight/columns/
 // tilecount) MUST match this layout — see the maps rebuilt in C-375 AC-5.
@@ -21,6 +22,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { deflateSync } from 'node:zlib';
+import { paintAssemblyFrame } from './generate_emberwatch_assembly_frames.ts';
 import {
   buf,
   clearCell,
@@ -35,18 +37,30 @@ import {
   vline,
   W,
 } from './generate_emberwatch_canvas.ts';
+import { paintTerrainCornerFrame } from './generate_emberwatch_corner_painters.ts';
+import {
+  paintGrass,
+  paintGrassDark,
+  paintGrassFlowers,
+} from './generate_emberwatch_grass_frames.ts';
 import {
   ATLAS_CELL,
-  ATLAS_COLS,
   ATLAS_HEIGHT,
   ATLAS_PADDING,
-  ATLAS_ROWS,
   ATLAS_WIDTH,
   buildFrames,
-  CORNER16_FRAMES,
-  cornerFrameName,
-  readManifestTerrains,
+  registerTerrainFrames,
 } from './generate_emberwatch_tables.ts';
+import {
+  paintCobble,
+  paintCobbleLight,
+  paintDirt,
+  paintInteriorFlagstone,
+  paintSand,
+  paintStoneFloor,
+  paintWater,
+  paintWoodFloor,
+} from './generate_emberwatch_terrain_frames.ts';
 
 // ---------------------------------------------------------------------------
 // Constants — atlas geometry is derived from the shared tables module so the
@@ -54,215 +68,27 @@ import {
 // drift independently (CodeRabbit review, C-376).
 //
 // C-378 AC-5: frames are packed with 1px edge extrusion. The painters draw
-// the 32×32 CONTENT at the old content pitch (W=512, H=256) into a scratch
-// buffer; a post-pass extrudes each frame into the final 544×272 atlas with
+// the 32×32 CONTENT at the old content pitch (W=512, H=352) into a scratch
+// buffer; a post-pass extrudes each frame into the final 544×374 atlas with
 // a 1px border duplicated from the frame's edge pixels. The border makes
 // adjacent-atlas sampling safe — the chunk renderer's half-texel inset is
 // deleted (AC-5).
 // ---------------------------------------------------------------------------
-
 const CELL = ATLAS_CELL; // 34 — cell pitch in the final atlas
 const PAD = ATLAS_PADDING; // 1 — extrusion border width
 const CW = ATLAS_WIDTH; // 544 — final atlas width
-const CH = ATLAS_HEIGHT; // 272 — final atlas height
-
-/**
- * Allocates 16 contiguous cells (a full atlas row) per corner16 terrain
- * and registers the derived mask frame names into the caller's frames map.
- *
- * C-378 AC-5: frames are built into a LOCAL map per packAtlas() call so a
- * test can pack twice without the "collides with an existing atlas frame"
- * throw that a module-level singleton would cause.
- */
-const registerTerrainFrames = (frames: Record<string, [number, number]>): void => {
-  const terrains = readManifestTerrains();
-  // Derive the first free cell from the OCCUPIED [col,row] coordinates —
-  // never Object.keys(frames).length: a sparse baked-frames table (a tile
-  // without a frame leaves a gap) would start terrain allocation on a cell
-  // that may already be occupied by a higher-GID baked frame, silently
-  // overwriting it in the atlas. Start after the highest occupied index.
-  let nextCell = 0;
-  for (const [col, row] of Object.values(frames)) {
-    nextCell = Math.max(nextCell, row * ATLAS_COLS + col + 1);
-  }
-  for (const terrain of terrains) {
-    if (terrain.wang !== 'corner16') {
-      continue;
-    }
-    for (let mask = 0; mask < CORNER16_FRAMES; mask++) {
-      const name = cornerFrameName(terrain.frameBase, mask);
-      if (frames[name]) {
-        throw new Error(
-          `generate_emberwatch: corner frame "${name}" collides with an existing atlas frame`,
-        );
-      }
-      const col = nextCell % ATLAS_COLS;
-      const row = Math.floor(nextCell / ATLAS_COLS);
-      if (row >= ATLAS_ROWS) {
-        throw new Error(
-          `generate_emberwatch: atlas full — cannot place corner frame "${name}" (row ${row})`,
-        );
-      }
-      frames[name] = [col, row];
-      nextCell += 1;
-    }
-  }
-};
+const CH = ATLAS_HEIGHT; // 374 — final extruded atlas height
 
 // ---------------------------------------------------------------------------
 // Tile painters
+//
+// The grass material + its variants live in their own module (C-549): they share
+// one base value by construction, which is what keeps a variant cell from
+// reading as a square.
 // ---------------------------------------------------------------------------
 
-const paintGrass = (
-  col: number,
-  row: number,
-  base: readonly [number, number, number] = [74, 143, 60],
-): void => {
-  fillCell(col, row, base[0], base[1], base[2]);
-  noiseCell(col, row, col * 31 + row * 17 + 1, 0.55, 26, 30, 20);
-  // Speckle highlights / shadows
-  const rng = makeRng(col * 131 + row * 73 + 7);
-  for (let i = 0; i < 24; i++) {
-    const x = Math.floor(rng() * TILE);
-    const y = Math.floor(rng() * TILE);
-    const v = rng();
-    if (v < 0.4) {
-      setPx(col * TILE + x, row * TILE + y, 89, 158, 73);
-    } else if (v < 0.7) {
-      setPx(col * TILE + x, row * TILE + y, 53, 107, 43);
-    }
-  }
-};
-
-const paintGrassFlowers = (col: number, row: number): void => {
-  paintGrass(col, row);
-  const rng = makeRng(col * 211 + row * 97 + 13);
-  const colors = [
-    [232, 184, 74],
-    [201, 91, 210],
-    [240, 240, 240],
-  ];
-  for (let i = 0; i < 7; i++) {
-    const x = 2 + Math.floor(rng() * (TILE - 4));
-    const y = 2 + Math.floor(rng() * (TILE - 4));
-    const c = colors[Math.floor(rng() * colors.length)];
-    setPx(col * TILE + x, row * TILE + y, c[0], c[1], c[2]);
-    if (rng() < 0.5) {
-      setPx(col * TILE + x + 1, row * TILE + y, c[0], c[1], c[2]);
-    }
-  }
-};
-
-const paintGrassDark = (col: number, row: number): void => {
-  paintGrass(col, row, [58, 116, 50] as const);
-};
-
-const paintDirt = (col: number, row: number): void => {
-  fillCell(col, row, 138, 90, 51);
-  noiseCell(col, row, col * 41 + row * 23 + 3, 0.6, 30, 24, 18);
-  const rng = makeRng(col * 89 + row * 151 + 5);
-  for (let i = 0; i < 18; i++) {
-    const x = Math.floor(rng() * TILE);
-    const y = Math.floor(rng() * TILE);
-    const v = rng();
-    if (v < 0.5) {
-      setPx(col * TILE + x, row * TILE + y, 153, 104, 63);
-    } else {
-      setPx(col * TILE + x, row * TILE + y, 122, 76, 42);
-    }
-  }
-};
-
-/** Loose packed gravel: muted grey-brown, dense small-stone speckle. */
-const paintGravel = (col: number, row: number): void => {
-  fillCell(col, row, 112, 108, 96);
-  noiseCell(col, row, col * 43 + row * 71 + 4, 0.7, 34, 32, 26);
-  const rng = makeRng(col * 59 + row * 37 + 8);
-  for (let i = 0; i < 40; i++) {
-    const x = Math.floor(rng() * TILE);
-    const y = Math.floor(rng() * TILE);
-    const v = rng();
-    if (v < 0.4) {
-      setPx(col * TILE + x, row * TILE + y, 138, 134, 122);
-    } else if (v < 0.7) {
-      setPx(col * TILE + x, row * TILE + y, 88, 84, 74);
-    }
-  }
-};
-
-/** Dark packed earth: cooler and deeper than the dirt road material. */
-const paintEarth = (col: number, row: number): void => {
-  fillCell(col, row, 78, 58, 40);
-  noiseCell(col, row, col * 67 + row * 29 + 6, 0.65, 26, 20, 16);
-  const rng = makeRng(col * 97 + row * 53 + 12);
-  for (let i = 0; i < 22; i++) {
-    const x = Math.floor(rng() * TILE);
-    const y = Math.floor(rng() * TILE);
-    if (rng() < 0.5) {
-      setPx(col * TILE + x, row * TILE + y, 96, 72, 50);
-    } else {
-      setPx(col * TILE + x, row * TILE + y, 62, 46, 32);
-    }
-  }
-};
-
-const paintCobble = (
-  col: number,
-  row: number,
-  base: readonly [number, number, number] = [154, 154, 154],
-): void => {
-  fillCell(col, row, base[0], base[1], base[2]);
-  // Mortar grid
-  for (let i = 1; i < TILE; i += 4) {
-    hline(col, row, 0, TILE - 1, i, 126, 126, 126);
-    vline(col, row, i, 0, TILE - 1, 126, 126, 126);
-  }
-  // Stone highlights + shadows
-  const rng = makeRng(col * 47 + row * 61 + 9);
-  for (let i = 0; i < 26; i++) {
-    const x = Math.floor(rng() * TILE);
-    const y = Math.floor(rng() * TILE);
-    const v = rng();
-    if (v < 0.45) {
-      setPx(col * TILE + x, row * TILE + y, 181, 181, 181);
-    } else if (v < 0.8) {
-      setPx(col * TILE + x, row * TILE + y, 130, 130, 130);
-    }
-  }
-};
-
-const paintStoneFloor = (col: number, row: number): void => {
-  fillCell(col, row, 143, 143, 146);
-  // Large slabs 8×8 with grout
-  for (let sy = 0; sy < TILE; sy += 8) {
-    for (let sx = 0; sx < TILE; sx += 8) {
-      fillRect(col, row, sx, sy, 7, 7, 143, 143, 146);
-      // slab shading
-      hline(col, row, sx, sx + 6, sy, 168, 168, 172);
-      hline(col, row, sx, sx + 6, sy + 6, 118, 118, 122);
-      vline(col, row, sx, sy, sy + 6, 168, 168, 172);
-      vline(col, row, sx + 6, sy, sy + 6, 118, 118, 122);
-    }
-  }
-  noiseCell(col, row, col * 53 + row * 29 + 11, 0.25, 14, 14, 14);
-};
-
-const paintWoodFloor = (col: number, row: number): void => {
-  fillCell(col, row, 155, 106, 63);
-  // Horizontal planks 4px tall with seams every 8
-  for (let y = 0; y < TILE; y++) {
-    const plank = Math.floor(y / 4);
-    const shade = plank % 2 === 0 ? 0 : -14;
-    hline(col, row, 0, TILE - 1, y, 155 + shade, 106 + shade, 63 + shade);
-    // vertical seam staggered per plank row
-    const seam = (plank * 7) % TILE;
-    if (y % 4 === 3) {
-      setPx(col * TILE + seam, row * TILE + y, 110, 68, 38);
-      setPx(col * TILE + ((seam + 16) % TILE), row * TILE + y, 110, 68, 38);
-    }
-  }
-  noiseCell(col, row, col * 71 + row * 13 + 5, 0.2, 16, 12, 10);
-};
+// Terrain materials live in `generate_emberwatch_terrain_frames.ts` (C-552)
+// so the organic corner compositor and its material palette stay cohesive.
 
 const paintBrick = (col: number, row: number): void => {
   fillCell(col, row, 143, 63, 51);
@@ -369,27 +195,6 @@ const paintRoof = (col: number, row: number): void => {
         scallop ? 68 + rowShade : 58 + rowShade,
         scallop ? 58 + rowShade : 46 + rowShade,
       );
-    }
-  }
-};
-
-const paintWater = (col: number, row: number): void => {
-  fillCell(col, row, 46, 111, 176);
-  const rng = makeRng(col * 37 + row * 83 + 15);
-  for (let i = 0; i < 30; i++) {
-    const x = Math.floor(rng() * TILE);
-    const y = Math.floor(rng() * TILE);
-    const v = rng();
-    if (v < 0.5) {
-      setPx(col * TILE + x, row * TILE + y, 63, 132, 196);
-    } else {
-      setPx(col * TILE + x, row * TILE + y, 39, 97, 156);
-    }
-  }
-  // Wave streaks
-  for (let y = 4; y < TILE; y += 8) {
-    for (let x = 2; x < TILE - 4; x += 3) {
-      setPx(col * TILE + x, row * TILE + y, 82, 158, 214);
     }
   }
 };
@@ -676,20 +481,6 @@ const paintWaterEdge = (col: number, row: number): void => {
   hline(col, row, 0, TILE - 1, 4, 180, 160, 110);
 };
 
-const paintBridge = (col: number, row: number): void => {
-  paintWater(col, row);
-  // wooden planks
-  fillRect(col, row, 0, 8, TILE, 16, 155, 106, 63);
-  for (let x = 2; x < TILE; x += 6) {
-    vline(col, row, x, 8, 23, 122, 78, 46);
-  }
-  hline(col, row, 0, TILE - 1, 8, 185, 132, 84);
-  hline(col, row, 0, TILE - 1, 23, 110, 68, 38);
-  // side rails
-  hline(col, row, 0, TILE - 1, 6, 140, 92, 56);
-  hline(col, row, 0, TILE - 1, 26, 140, 92, 56);
-};
-
 const paintSteps = (col: number, row: number): void => {
   fillCell(col, row, 143, 143, 146);
   // descending steps
@@ -739,16 +530,6 @@ const paintWoodDoor = (col: number, row: number): void => {
   setPx(col * TILE + 21, row * TILE + 2, 140, 92, 56);
 };
 
-const paintFlagstone = (col: number, row: number): void => {
-  paintStoneFloor(col, row);
-  // bigger irregular slabs
-  fillRect(col, row, 1, 1, 13, 13, 155, 155, 158);
-  fillRect(col, row, 17, 2, 13, 12, 155, 155, 158);
-  fillRect(col, row, 3, 17, 12, 12, 155, 155, 158);
-  fillRect(col, row, 18, 17, 12, 12, 155, 155, 158);
-  noiseCell(col, row, col * 3 + row * 17 + 33, 0.2, 12, 12, 12);
-};
-
 const paintRugRound = (col: number, row: number): void => {
   clearCell(col, row); // C-504: transparent unpainted region
   // round rug
@@ -773,150 +554,34 @@ const paintRugRound = (col: number, row: number): void => {
   }
 };
 
-const paintSand = (col: number, row: number): void => {
-  fillCell(col, row, 216, 194, 140);
-  noiseCell(col, row, col * 27 + row * 19 + 25, 0.5, 22, 20, 14);
-};
-
 // ---------------------------------------------------------------------------
 // Paint all frames
 // ---------------------------------------------------------------------------
 
-// ---- Corner-16 terrain frames (C-378) ------------------------------------
+// ---- Corner-16 terrain frames (C-552) ------------------------------------
 //
-// Each corner frame composites the terrain (dirt/water) onto the base
-// (grass) using the corner-16 geometry:
-//   - the four corner wedges are the triangles cut by the tile diagonals
-//     through the edge midpoints — a corner whose mask bit is set owns its
-//     wedge;
-//   - the center diamond (pixels in no wedge) is ALWAYS terrain — the
-//     cell's own terrain owns its core regardless of the corners.
-// Mask bit order is the documented contract: bit0=NW, bit1=NE, bit2=SE,
-// bit3=SW (clockwise from north-west). This produces the diagonal blended
-// edges the autotiler relies on (mask 3 = top half, mask 12 = bottom half,
-// mask 5 = diagonal pair, …).
-
-/** Corner bit → wedge test (tile-local x,y in 0..TILE-1, center at 16). */
-// The four wedges are true mirror images around the tile center
-// ((x,y) → (31-x,31-y)) and each selects exactly 136 pixels for TILE = 32
-// (the triangle cut by the two edge-midpoint diagonals). Bit order is the
-// documented contract: bit0=NW, bit1=NE, bit2=SE, bit3=SW.
-export const CORNER_WEDGE_TESTS: Array<{
-  bit: number;
-  test: (x: number, y: number) => boolean;
-}> = [
-  { bit: 0b0001, test: (x, y) => x + y < 16 }, // NW: top-left triangle
-  { bit: 0b0010, test: (x, y) => x - y > 15 }, // NE: top-right triangle (mirror of NW across the vertical axis)
-  { bit: 0b0100, test: (x, y) => x + y > 46 }, // SE: bottom-right triangle (mirror of NW through the center)
-  { bit: 0b1000, test: (x, y) => y - x > 15 }, // SW: bottom-left triangle (mirror of NW across the horizontal axis)
-];
-
-/** True when the pixel is in the center diamond (always terrain). */
-const inCenterDiamond = (x: number, y: number): boolean =>
-  !CORNER_WEDGE_TESTS.some(({ test }) => test(x, y));
-
-/** True when the pixel is owned by a set-corner wedge (or the diamond). */
-export const terrainOwnsPixel = (mask: number, x: number, y: number): boolean => {
-  if (inCenterDiamond(x, y)) {
-    return true;
-  }
-  return CORNER_WEDGE_TESTS.some(({ bit, test }) => (mask & bit) !== 0 && test(x, y));
-};
-
-/**
- * Paints a corner-16 frame: base fill everywhere, terrain stamped into the
- * owned wedges + center diamond.
- *
- * The terrain/base painters write the full cell; we snapshot both into
- * scratch buffers then composite pixel-by-pixel (deterministic — the
- * painters' rng is driven by cell coordinates only).
- */
-const paintCornerFrame = (
-  col: number,
-  row: number,
-  mask: number,
-  paintBase: (col: number, row: number) => void,
-  paintTerrain: (col: number, row: number) => void,
-): void => {
-  const cx = col * TILE;
-  const cy = row * TILE;
-
-  // Snapshot the base fill (grass) into a scratch array.
-  const basePixels = new Uint8Array(TILE * TILE * 3);
-  paintBase(col, row);
-  for (let y = 0; y < TILE; y++) {
-    for (let x = 0; x < TILE; x++) {
-      const i = ((cy + y) * W + (cx + x)) * 4;
-      const o = (y * TILE + x) * 3;
-      basePixels[o] = buf[i];
-      basePixels[o + 1] = buf[i + 1];
-      basePixels[o + 2] = buf[i + 2];
-    }
-  }
-
-  // Snapshot the terrain fill (dirt/water) into a scratch array.
-  const terrainPixels = new Uint8Array(TILE * TILE * 3);
-  paintTerrain(col, row);
-  for (let y = 0; y < TILE; y++) {
-    for (let x = 0; x < TILE; x++) {
-      const i = ((cy + y) * W + (cx + x)) * 4;
-      const o = (y * TILE + x) * 3;
-      terrainPixels[o] = buf[i];
-      terrainPixels[o + 1] = buf[i + 1];
-      terrainPixels[o + 2] = buf[i + 2];
-    }
-  }
-
-  // Composite: owned wedges + diamond → terrain; everything else → base.
-  for (let y = 0; y < TILE; y++) {
-    for (let x = 0; x < TILE; x++) {
-      const i = ((cy + y) * W + (cx + x)) * 4;
-      const o = (y * TILE + x) * 3;
-      if (terrainOwnsPixel(mask, x, y)) {
-        buf[i] = terrainPixels[o];
-        buf[i + 1] = terrainPixels[o + 1];
-        buf[i + 2] = terrainPixels[o + 2];
-      } else {
-        buf[i] = basePixels[o];
-        buf[i + 1] = basePixels[o + 1];
-        buf[i + 2] = basePixels[o + 2];
-      }
-    }
-  }
-};
-
-/**
- * Base + overlay painters per corner-16 terrain id.
- *
- * The overlay is the terrain the cell owns; the base is the material the
- * frame composites over (the terrain directly beneath it in the biome) and is
- * baked into the unset regions exactly like the original dirt/water-over-grass
- * sets. Adding a new corner-16 set is one entry here plus its manifest
- * `terrains` declaration — the frame registrar and painter derive the rest.
- */
-const CORNER_TERRAIN_PAINTERS: Record<
-  string,
-  { base: (col: number, row: number) => void; overlay: (col: number, row: number) => void }
-> = {
-  dirt: { base: paintGrass, overlay: paintDirt },
-  water: { base: paintGrass, overlay: paintWater },
-  gravel: { base: paintGrass, overlay: paintGravel },
-  earth: { base: paintGravel, overlay: paintEarth },
-  cobblestone: { base: paintWoodFloor, overlay: paintCobble },
-};
+// The engine still owns mask selection. The painter now composites rounded,
+// noise-shaped material coverage instead of exact half-plane triangles while
+// preserving the fixed terrain block and opaque lower-layer contract.
 
 const paintFrame = (key: string, col: number, row: number): void => {
+  if (paintAssemblyFrame({ key, col, row })) {
+    return;
+  }
   // C-378 corner-16 terrain frames: `<terrain>_<mask>.png`. Only ids with a
   // registered painter pair are corner frames; an unknown id falls through to
   // the default below rather than being silently mis-painted.
   const cornerMatch = /^([a-z0-9_]+?)_(\d{1,2})\.png$/.exec(key);
-  if (cornerMatch) {
-    const painters = CORNER_TERRAIN_PAINTERS[cornerMatch[1]];
-    const mask = Number(cornerMatch[2]);
-    if (painters && mask >= 0 && mask < 16) {
-      paintCornerFrame(col, row, mask, painters.base, painters.overlay);
-      return;
-    }
+  if (
+    cornerMatch &&
+    paintTerrainCornerFrame({
+      terrainName: cornerMatch[1] ?? '',
+      col,
+      row,
+      mask: Number(cornerMatch[2]),
+    })
+  ) {
+    return;
   }
   switch (key) {
     case 'grass.png':
@@ -935,13 +600,13 @@ const paintFrame = (key: string, col: number, row: number): void => {
       paintCobble(col, row);
       break;
     case 'path_tough_variant.png':
-      paintCobble(col, row, [166, 166, 166] as const);
+      paintCobbleLight(col, row);
       break;
     case 'stone_floor.png':
       paintStoneFloor(col, row);
       break;
     case 'stone_floor_variant.png':
-      paintFlagstone(col, row);
+      paintInteriorFlagstone(col, row);
       break;
     case 'wood_floor.png':
       paintWoodFloor(col, row);
@@ -1031,9 +696,6 @@ const paintFrame = (key: string, col: number, row: number): void => {
     case 'sand.png':
       paintSand(col, row);
       break;
-    case 'bridge.png':
-      paintBridge(col, row);
-      break;
     case 'steps.png':
       paintSteps(col, row);
       break;
@@ -1047,7 +709,7 @@ const paintFrame = (key: string, col: number, row: number): void => {
       paintWoodDoor(col, row);
       break;
     case 'flagstone.png':
-      paintFlagstone(col, row);
+      paintCobbleLight(col, row);
       break;
     case 'grass_edge_n.png':
     case 'grass_edge_s.png':
@@ -1191,7 +853,7 @@ export type PackedAtlasFrame = {
  * The pure result of packing the emberwatch atlas.
  */
 export type PackedAtlas = {
-  /** Extruded RGBA pixels, CW×CH×4 (544×272). */
+  /** Extruded RGBA pixels, CW×CH×4 (544×374). */
   rgba: Uint8Array;
   width: number;
   height: number;
@@ -1201,8 +863,8 @@ export type PackedAtlas = {
 
 /**
  * Packs the emberwatch atlas: builds the frame registry (baked tiles +
- * corner-16 terrain frames), paints every frame into the 512×256 content
- * scratch, extrudes each frame 1px into the final 544×272 atlas, and
+ * corner-16 terrain frames), paints every frame into the 512×352 content
+ * scratch, extrudes each frame 1px into the final 544×374 atlas, and
  * returns the RGBA pixels + frame rects.
  *
  * Pure and deterministic — no file I/O, no `cwebp`. A test can call it
@@ -1219,8 +881,8 @@ export const packAtlas = (): PackedAtlas => {
   drawAll(frames);
 
   // ── C-378 AC-5: 1px edge extrusion ──
-  // The content scratch is 512×256 at 32px pitch. The final atlas is
-  // CW×CH (544×272) at 34px pitch: every frame gets a 1px border that
+  // The content scratch is 512×352 at 32px pitch. The final atlas is
+  // CW×CH (544×374) at 34px pitch: every frame gets a 1px border that
   // duplicates its own edge pixels, so adjacent-atlas sampling never bleeds
   // and the chunk renderer can use exact UV rects (no half-texel inset).
   // Deterministic for identical inputs (pure copy pass).

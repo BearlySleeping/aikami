@@ -13,6 +13,7 @@
 
 import type { Page } from '@playwright/test';
 import { EMULATOR_PORTS } from '../config';
+import { approachProductionNpc } from './npc_approach';
 
 /** Origin of the client dev server for this run (contract-scoped offset applied). */
 const CLIENT_ORIGIN = `http://localhost:${EMULATOR_PORTS.client}`;
@@ -96,7 +97,9 @@ export class GamePage {
     // Wait for canvas container
     await this.page.waitForSelector('#game-canvas-container', {
       state: 'attached',
-      timeout: 15_000,
+      // Fresh worktrees compile and load the first Emberwatch atlas in Vite;
+      // allow the cold boot to finish before declaring the engine absent.
+      timeout: 60_000,
     });
 
     // Wait for canvas element
@@ -234,24 +237,10 @@ export class GamePage {
 
   // ── NPC Interaction ───────────────────────────────────────
 
-  /**
-   * Walk toward the nearest NPC using arrow keys and interact.
-   * In the demo, the NPC spawns near the player.
-   */
+  /** Walk toward the nearest production NPC and interact through real WASD input. */
   async approachAndTalkToNpc(): Promise<void> {
-    // Walk a few steps toward NPC spawn point (typically south-east)
-    for (let i = 0; i < 8; i++) {
-      await this.page.keyboard.press('ArrowRight');
-      await this.page.waitForTimeout(100);
-    }
-    for (let i = 0; i < 4; i++) {
-      await this.page.keyboard.press('ArrowDown');
-      await this.page.waitForTimeout(100);
-    }
-
-    // Press Enter/Space to interact with NPC
-    await this.page.keyboard.press('Enter');
-    await this.page.waitForTimeout(1000);
+    await approachProductionNpc(this.page);
+    await this.expectDialogueVisible();
   }
 
   // ── Dialogue ──────────────────────────────────────────────
@@ -299,7 +288,7 @@ export class GamePage {
 
   /** The most recent NPC response rendered in the dialogue overlay. */
   get npcResponse() {
-    return this.page.locator('[data-testid="dialogue-overlay"] .chat-start').last();
+    return this.page.locator('[data-testid="dialogue-overlay"] .rounded-bl-md.bg-base-100').last();
   }
 
   /** Hover the first NPC message bubble to reveal its action controls. */

@@ -11,6 +11,7 @@
 //
 // Contract: combat debug workspace (execution prompt §2, §7, §8)
 
+import type { GameWorldViewportDiagnostics } from '@aikami/frontend/engine';
 import type { CombatEvent } from '@aikami/types';
 import {
   buildCombatDebugAcceptedTrace,
@@ -27,6 +28,8 @@ import type {
   CombatDebugFaultMode,
 } from '../types/combat_debug_types.ts';
 import type {
+  CombatDebugPointerProjection,
+  CombatDebugSelectionProjection,
   CombatDebugSessionObserver,
   CombatDebugSessionSnapshot,
 } from './combat_debug_session_contract.ts';
@@ -67,6 +70,12 @@ export type CombatDebugObserverHost = {
   applySessionStatus(status: string): void;
   /** Reports a session error; the host sets its error state. */
   reportError(message: string): void;
+  /** Stores the latest authoritative selection the engine was handed. */
+  applySelection(selection: CombatDebugSelectionProjection): void;
+  /** Stores the latest pointer projection; `undefined` clears it. */
+  applyPointer(pointer: CombatDebugPointerProjection | undefined): void;
+  /** Stores the latest viewport/renderer diagnostics. */
+  applyViewport(diagnostics: GameWorldViewportDiagnostics): void;
 };
 
 /**
@@ -214,6 +223,27 @@ export const createCombatDebugSessionObserver = (
         return;
       }
       host.reportError(message);
+    },
+
+    onSelection: (selection) => {
+      if (!current()) {
+        return;
+      }
+      host.applySelection(selection);
+    },
+
+    onPointer: (pointer) => {
+      if (!current()) {
+        return;
+      }
+      host.applyPointer(pointer);
+    },
+
+    onViewport: (diagnostics) => {
+      if (!current()) {
+        return;
+      }
+      host.applyViewport(diagnostics);
     },
   };
 };

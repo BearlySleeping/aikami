@@ -19,6 +19,7 @@ const ENV_KEYS = [
   'PI_MAX_RUN_MINUTES',
   'PI_SOFT_SPEND',
   'PI_HARD_SPEND',
+  'PI_MAX_SPEND_CEILING',
   'PI_REPETITION_GUARD',
   'CONTRACT_PIPELINE_ROLE',
   'CONTRACT_PIPELINE_RESULT_PATH',
@@ -31,11 +32,23 @@ afterEach(() => {
 });
 
 type Handler = (event: unknown, ctx: unknown) => Promise<void> | void;
+type CommandOptions = {
+  handler: (args: string, ctx: unknown) => Promise<void> | void;
+  getArgumentCompletions?: (prefix: string) => { value: string; label: string }[] | null;
+};
 
 /** Build a pi/ctx pair that records what the guard did. */
-const harness = () => {
+const harness = (initialEntries: unknown[] = []) => {
   const handlers = new Map<string, Handler[]>();
-  const calls = { notify: [] as string[], steer: [] as string[], abort: 0, shutdown: 0 };
+  const commands = new Map<string, CommandOptions>();
+  const sessionEntries = [...initialEntries];
+  const calls = {
+    notify: [] as string[],
+    status: [] as string[],
+    steer: [] as string[],
+    abort: 0,
+    shutdown: 0,
+  };
 
   const pi = {
     on: (event: string, handler: Handler) => {
@@ -43,12 +56,24 @@ const harness = () => {
       list.push(handler);
       handlers.set(event, list);
     },
+    registerCommand: (name: string, options: CommandOptions) => commands.set(name, options),
+    appendEntry: (type: string, data: unknown) => {
+      sessionEntries.push({ type: 'custom', customType: type, data });
+    },
     sendUserMessage: (message: string) => calls.steer.push(message),
   };
 
   const ctx = {
     model: { cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } },
-    ui: { notify: (message: string) => calls.notify.push(message) },
+    sessionManager: { getBranch: () => sessionEntries },
+    ui: {
+      notify: (message: string) => calls.notify.push(message),
+      setStatus: (_key: string, value: string | undefined) => {
+        if (value !== undefined) {
+          calls.status.push(value);
+        }
+      },
+    },
     abort: () => {
       calls.abort += 1;
     },
@@ -61,6 +86,14 @@ const harness = () => {
     for (const handler of handlers.get(event) ?? []) {
       await handler(payload, ctx);
     }
+  };
+
+  const runCommand = async (name: string, args = '') => {
+    const registered = commands.get(name);
+    if (!registered) {
+      throw new Error(`Command not registered: ${name}`);
+    }
+    await registered.handler(args, ctx);
   };
 
   // A normal, varied working turn: real tool call, negligible cost.
@@ -84,7 +117,7 @@ const harness = () => {
     },
   });
 
-  return { pi, calls, emit, turn, thinkingTurn };
+  return { pi, calls, commands, runCommand, emit, sessionEntries, turn, thinkingTurn };
 };
 
 /**
@@ -515,5 +548,124 @@ describe('cost guard strike accounting across the stream boundary', () => {
     expect(calls.abort).toBe(2);
     expect(calls.steer.some((m) => m.includes('Second collapse this run'))).toBe(true);
     expect(calls.shutdown).toBe(0);
+  });
+});
+
+describe('interactive budget commands', () => {
+  test('re-arms a tripped hard cap without resetting spend', async () => {
+    process.env.PI_HARD_SPEND = '0.01';
+    const { pi, calls, commands, runCommand, emit } = harness();
+    costGuard(pi as never);
+    await emit('session_start', {});
+    await emit('before_agent_start', {});
+
+    await emit('turn_end', {
+      message: {
+        content: [{ type: 'toolCall', name: 'bash', arguments: { command: 'trip' } }],
+        usage: { input: 10, output: 10, cost: { total: 0.02 } },
+      },
+    });
+    expect(calls.notify.filter((message) => message.includes('Hard limit'))).toHaveLength(1);
+    expect(calls.abort).toBe(1);
+    expect(calls.steer.at(-1)).toContain('Run /budget +10');
+    expect(commands.get('budget')?.getArgumentCompletions?.('s')).toEqual([
+      { value: 'soft', label: 'soft' },
+    ]);
+
+    await runCommand('budget', '+5');
+    expect(calls.notify.at(-1)).toContain('hard $0.01 → $15.00');
+    expect(calls.notify.at(-1)).toContain('remaining $14.98');
+    expect(calls.notify.at(-1)).toContain('Hard cap auto-raised to match soft.');
+
+    await emit('before_agent_start', {});
+    expect(calls.notify.filter((message) => message.includes('Hard limit'))).toHaveLength(1);
+    expect(calls.abort).toBe(1);
+
+    await runCommand('budget');
+    expect(calls.notify.at(-1)).toContain('Spent $0.02');
+    expect(calls.status.at(-1)).toBe('$0.0 / $15.0');
+  });
+
+  test('re-warns at a newly raised soft cap', async () => {
+    process.env.PI_SOFT_SPEND = '0.01';
+    const { pi, calls, runCommand, emit } = harness();
+    costGuard(pi as never);
+    await emit('session_start', {});
+    await emit('before_agent_start', {});
+
+    await emit('turn_end', {
+      message: {
+        content: [{ type: 'toolCall', name: 'bash', arguments: { command: 'first' } }],
+        usage: { input: 10, output: 10, cost: { total: 0.02 } },
+      },
+    });
+    expect(calls.notify.filter((message) => message.includes('Soft cap'))).toHaveLength(1);
+
+    await runCommand('budget', 'soft 0.03');
+    expect(calls.notify.at(-1)).toContain('Soft $0.01 → $0.03');
+    await emit('turn_end', {
+      message: {
+        content: [{ type: 'toolCall', name: 'bash', arguments: { command: 'second' } }],
+        usage: { input: 10, output: 10, cost: { total: 0.02 } },
+      },
+    });
+
+    expect(calls.notify.filter((message) => message.includes('Soft cap'))).toHaveLength(2);
+  });
+
+  test('warns without rejecting when the new hard cap is still blocked', async () => {
+    const { pi, calls, runCommand, emit } = harness([
+      { type: 'usage', usage: { cost: { total: 30 } } },
+    ]);
+    costGuard(pi as never);
+    await emit('session_start', {});
+
+    await runCommand('budget', 'soft 20');
+
+    expect(calls.notify.at(-1)).toContain('Hard cap auto-raised to match soft.');
+    expect(calls.notify.at(-1)).toContain('next prompt remains blocked');
+    await runCommand('budget');
+    expect(calls.notify.at(-1)).toContain('Remaining -$10.00');
+  });
+
+  test('does not register budget changes in an unattended worker', () => {
+    process.env.CONTRACT_PIPELINE_ROLE = 'implementer';
+    process.env.CONTRACT_PIPELINE_RESULT_PATH = '/dev/null';
+    const { pi, commands } = harness();
+
+    costGuard(pi as never);
+
+    expect(commands.has('budget')).toBe(false);
+  });
+
+  test('requires force above the hard-cap ceiling', async () => {
+    const { pi, calls, runCommand, emit, sessionEntries } = harness();
+    costGuard(pi as never);
+    await emit('session_start', {});
+
+    await runCommand('budget', 'hard 300');
+    expect(calls.notify.at(-1)).toContain('--force');
+    expect(sessionEntries).toHaveLength(0);
+
+    await runCommand('budget', 'hard 300 --force');
+    await runCommand('budget');
+    expect(calls.notify.at(-1)).toContain('Hard $300.00');
+  });
+
+  test('restores persisted overrides after reload', async () => {
+    const first = harness();
+    costGuard(first.pi as never);
+    await first.emit('session_start', {});
+    await first.runCommand('budget', 'soft 20');
+
+    const reloaded = harness(first.sessionEntries);
+    costGuard(reloaded.pi as never);
+    await reloaded.emit('session_start', {});
+    await reloaded.runCommand('budget');
+
+    expect(reloaded.calls.notify.at(-1)).toContain('Soft $20.00 | Hard $20.00');
+    await reloaded.runCommand('budget', 'reset');
+    await reloaded.runCommand('budget');
+    expect(reloaded.calls.notify.at(-1)).toContain('Soft $10.00 | Hard $15.00');
   });
 });

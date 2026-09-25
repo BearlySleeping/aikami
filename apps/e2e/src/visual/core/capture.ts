@@ -10,11 +10,11 @@
 
 import { existsSync, mkdirSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { EMULATOR_PORTS } from '@aikami/constants';
-
 import { DEFAULT_LANCZOS_SIZE, optimizePng, resizeLanczos, toBase64DataUri } from '@scripts/ai';
 import { chromium, type Locator, type Page } from 'playwright';
 import type { TSchema } from 'typebox';
+import { EMULATOR_PORTS } from '../../config';
+import { assertGpuRendererName, resolveCaptureRendererMode } from './gpu_renderer_guard.ts';
 
 // ── Types ─────────────────────────────────────────────────────
 
@@ -205,6 +205,30 @@ const _waitForPixiLoaded = async (page: Page, timeout = 15_000): Promise<void> =
   await page.evaluate(() => new Promise((r) => requestAnimationFrame(r)));
 };
 
+/** Reads the live PixiJS renderer name and applies {@link assertGpuRendererName}. */
+const _assertGpuRenderer = async (page: Page, mode: 'pixi' | 'dom'): Promise<void> => {
+  const renderer = await page.evaluate(() => {
+    const app = (window as any).__PIXI_APP__ as { renderer?: { name?: string } } | undefined; // guard-ignore lint/type-safety/casting: custom window property for e2e hooks
+    return app?.renderer?.name ?? null;
+  });
+  assertGpuRendererName(renderer, mode);
+};
+
+const _captureRendererMode = async (
+  page: Page,
+  waitCondition: VisualTestSuite['waitCondition'],
+  canvasSelector?: string,
+  screenshotSelector?: string,
+): Promise<'pixi' | 'dom'> => {
+  const explicit = screenshotSelector !== undefined || canvasSelector !== undefined;
+  return resolveCaptureRendererMode({
+    waitCondition,
+    ...(canvasSelector !== undefined ? { canvasSelector } : {}),
+    ...(screenshotSelector !== undefined ? { screenshotSelector } : {}),
+    canvasCount: explicit ? 0 : await page.locator('canvas').count(),
+  });
+};
+
 /**
  * Waits for the game engine to be ready by polling the DOM.
  *
@@ -391,7 +415,6 @@ const _captureClippedScreenshot = async (options: {
 
 /**
  * Builds the full URL for a suite route using EMULATOR_PORTS.
- * Builds the full URL for a suite route using EMULATOR_PORTS.
  *
  * Always includes `screenshot=true` as a default query param.
  * Case-level `searchParams` are merged on top and can override defaults.
@@ -403,7 +426,7 @@ const _buildUrl = (suites: {
 }): string => {
   const app = suites.app ?? 'client';
   const port = app === 'hub' ? EMULATOR_PORTS.hub : EMULATOR_PORTS.client;
-  const base = `http://localhost:${port + Number(process.env.PUBLIC_EMULATOR_PORT_OFFSET || 0)}${suites.route}`;
+  const base = `http://localhost:${port}${suites.route}`;
 
   // Default: always request screenshot mode so the page suppresses
   // overlays, HUD, and extraneous UI that would contaminate visual diffs.
@@ -517,6 +540,16 @@ export const captureSuite = async (suite: VisualTestSuite): Promise<CaptureResul
               await _waitForGameReady(page);
             }
           }
+
+          // C-548: never capture a Canvas2D fallback — the tilemap is invisible
+          // on it and the screenshot would masquerade as valid evidence.
+          const mode = await _captureRendererMode(
+            page,
+            suite.waitCondition,
+            testCase.canvasSelector,
+            testCase.screenshotSelector,
+          );
+          await _assertGpuRenderer(page, mode);
 
           const sanitizedName = testCase.name.replace(/[^a-z0-9_-]/gi, '_').toLowerCase();
           const filename = `${suite.id}_${sanitizedName}.png`;

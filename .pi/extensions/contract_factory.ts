@@ -495,6 +495,11 @@ export default function (pi: ExtensionAPI) {
               'Unique task or contract ID (e.g. "C-312" or "contract-writer-xyz"). ' +
               'Used to generate a sanitized workspace directory name.',
           }),
+          content: Type.Optional(
+            Type.Boolean({
+              description: 'Generate the canonical local content plane (default true).',
+            }),
+          ),
         }),
         async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
           const cwd = ctx.cwd;
@@ -512,6 +517,7 @@ export default function (pi: ExtensionAPI) {
               const r = await runPiScript<{ installed: boolean }>('worktree.bootstrap', {
                 checkoutPath: existing.path,
                 repoRoot: cwd,
+                content: params.content,
               });
               installed = r.installed;
             } catch {
@@ -548,11 +554,10 @@ export default function (pi: ExtensionAPI) {
           const w = await runPiScript<TaskWorktree>('worktree.create', {
             slug: params.taskId,
             repoRoot: cwd,
+            content: params.content,
           });
-          // createWorktree bootstraps (gitignored env seeds + bun install)
-          // before returning, so there is nothing to run again here — read the
-          // outcome back. A failed install is reported below; the checkout is
-          // kept so the operator can re-run `bun install` in place.
+          // createWorktree bootstraps (gitignored env seeds + bun install + content)
+          // before returning, so there is nothing to run again here.
           const installed = w.bootstrap?.installed ?? false;
           const headCommit = await runPiScript<string>('git.headCommit', {
             cwd: w.checkoutPath,

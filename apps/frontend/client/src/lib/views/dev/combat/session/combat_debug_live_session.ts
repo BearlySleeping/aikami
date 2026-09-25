@@ -19,15 +19,23 @@
 
 import { BASIC_MELEE_ABILITY_ID } from '@aikami/constants';
 import type {
+  CollisionGrid,
+  DebugSceneSpec,
   EngineBridge,
   GameCommand,
   GameWorld,
   GameWorldOptions,
+  GameWorldViewportDiagnostics,
   TextureManager,
 } from '@aikami/frontend/engine';
 import type { CombatCommand, CombatState } from '@aikami/types';
 import { logger } from '$logger';
+import { buildSyntheticCollisionGrid } from '../battlefield/combat_debug_battlefield_projection.ts';
 import type { CombatDebugScenarioDefinition } from '../types/combat_debug_types.ts';
+import {
+  type CombatDebugCanvasViewport,
+  createCombatDebugCanvasViewport,
+} from './combat_debug_canvas_viewport.ts';
 import {
   type CombatDebugCommandGate,
   createCombatDebugCommandGate,
@@ -97,6 +105,14 @@ export type CombatDebugLiveSessionOptions = {
   readonly observer: CombatDebugLiveSessionObserver;
   readonly capabilities: CombatDebugLiveSessionCapabilities;
 };
+
+/**
+ * Boot size when the debugger pane has not been laid out yet. The first
+ * ResizeObserver observation corrects it, so this is only a safe non-zero seed
+ * that avoids a 0×0 PixiJS init.
+ */
+const BOOT_FALLBACK_WIDTH = 640;
+const BOOT_FALLBACK_HEIGHT = 480;
 
 let _workerConstructor: (new () => Worker) | undefined;
 
@@ -273,6 +289,18 @@ export class CombatDebugLiveSession {
   >();
   private readonly _commandGate: CombatDebugCommandGate = createCombatDebugCommandGate();
 
+  /**
+   * Owns the ResizeObserver that keeps the embedded canvas sized to its HOST
+   * pane. Created before `initialize` so the first measured size can seed the
+   * renderer, then corrected on every observation through `GameWorld.resize`.
+   */
+  private _viewport: CombatDebugCanvasViewport | undefined;
+  /** True once `initialize` has returned, so earlier observations are ignored. */
+  private _booted = false;
+  /** Detaches the canvas pointer diagnostics listeners. */
+  private _pointerDetach: (() => void) | undefined;
+  private _pointerFrame: number | undefined;
+
   constructor(options: CombatDebugLiveSessionOptions) {
     this._canvas = options.canvas;
     this._scenario = options.scenario;
@@ -319,12 +347,52 @@ export class CombatDebugLiveSession {
     return this._commandGate.step();
   }
 
+  // ── Viewport / debug-scene diagnostics ─────────────────────
+
+  /**
+   * Sets (or clears) the synthetic debug scene the engine paints. The engine
+   * re-fits the camera to the board; it never derives mechanics from the spec.
+   */
+  applyDebugScene(spec: DebugSceneSpec | undefined): void {
+    this._gameWorld?.debugScene.setScene(spec);
+  }
+
+  /** Re-fits the active synthetic board to the current pane size. */
+  fitDebugCamera(): void {
+    this._gameWorld?.debugScene.fit();
+  }
+
+  /** Read-only viewport/renderer diagnostics for the workspace health panel. */
+  getViewportDiagnostics(): GameWorldViewportDiagnostics {
+    return (
+      this._gameWorld?.debugScene.getDiagnostics() ?? {
+        renderer: 'unknown',
+        cssWidth: 0,
+        cssHeight: 0,
+        backingWidth: 0,
+        backingHeight: 0,
+        screenWidth: 0,
+        screenHeight: 0,
+        resolution: 1,
+        camera: { x: 0, y: 0, zoom: 1 },
+        debugSceneActive: false,
+        debugSceneActorCount: 0,
+      }
+    );
+  }
+
   /**
    * Boots the real engine, loads the scenario battlefield and starts the
    * encounter. Every `await` is followed by a dispose check so a superseded
    * session never finishes booting.
    */
   async boot(): Promise<void> {
+    // Boot exactly once: a second call would create a second GameWorld/worker
+    // and a second listener set on the singleton bridge (duplicate events).
+    if (this._gameWorld !== undefined) {
+      logger.warn('combatDebugLiveSession:boot-called-twice', { scenarioId: this._scenario.id });
+      return;
+    }
     this._observer.onStatus('booting');
     try {
       const engine = await import('@aikami/frontend/engine');
@@ -361,48 +429,57 @@ export class CombatDebugLiveSession {
       const gameWorld = engine.GameWorld.create(worldOptions);
       this._gameWorld = gameWorld;
 
+      // The embedded debugger pane owns its own dimensions. Opt OUT of Pixi's
+      // `resizeTo: window` watcher (passing the own property, even undefined,
+      // suppresses the default) and drive `GameWorld.resize` from the HOST
+      // element's measured box instead. The production fullscreen game canvas
+      // keeps the window default; only this workspace opts out.
+      const viewport = createCombatDebugCanvasViewport({
+        canvas: this._canvas,
+        onResize: (width, height) => {
+          if (!this._booted) {
+            return;
+          }
+          this._gameWorld?.resize(width, height);
+          this._observer.onViewport?.(this.getViewportDiagnostics());
+        },
+      });
+      this._viewport = viewport;
+      const measured = viewport.measure();
+      const bootWidth = measured.width > 0 ? measured.width : BOOT_FALLBACK_WIDTH;
+      const bootHeight = measured.height > 0 ? measured.height : BOOT_FALLBACK_HEIGHT;
+
+      // A synthetic scenario declares its own board; forwarding it as the
+      // collision grid makes `CombatState.battlefield` (dimensions + blocked
+      // cells) authoritative, so movement/pathfinding and the projection agree
+      // without a second source of truth. Authored scenarios load a real map.
+      const collisionGrid: CollisionGrid | undefined = buildSyntheticCollisionGrid(
+        this._scenario.battlefield,
+      );
+
       await gameWorld.initialize({
         canvas: this._canvas,
+        width: bootWidth,
+        height: bootHeight,
+        resizeTo: undefined,
+        ...(collisionGrid === undefined ? {} : { collisionGrid }),
         playerData: { name: 'Adventurer' },
       });
       if (this._disposed) {
         return;
       }
+      this._booted = true;
+      // Re-apply the measured size now the renderer exists, so CSS, backing
+      // store, Pixi screen and the worker's screen size are coherent from boot.
+      viewport.refresh();
+      this._attachPointerDiagnostics();
+      this._observer.onViewport?.(this.getViewportDiagnostics());
 
       this._subscribeToBridge(bridge);
 
-      if (this._scenario.battlefield.kind === 'authored') {
-        const contentPack = await this._loadAuthoredBattlefield(gameWorld);
-        if (this._disposed) {
-          return;
-        }
-        if (contentPack !== undefined) {
-          this._observer.onStatus('starting-encounter');
-          const started = this._capabilities.startAuthoredEncounter({
-            contentPack,
-            encounterId: this._scenario.battlefield.encounterId,
-            seed: this._seed,
-            send: (command) => bridge.send(command as never),
-          });
-          if (!started) {
-            this._observer.onError('Unable to start the authored combat encounter.');
-            this._observer.onStatus('error');
-            return;
-          }
-        }
-      } else {
-        this._observer.onStatus('starting-encounter');
-        const started = this._capabilities.startSyntheticEncounter({
-          encounterId: this._scenario.id,
-          seed: this._seed,
-          roster: buildSyntheticRoster(this._scenario),
-          send: (command) => bridge.send(command as never),
-        });
-        if (!started) {
-          this._observer.onError('Unable to start the synthetic combat encounter.');
-          this._observer.onStatus('error');
-          return;
-        }
+      const started = await this._startScenarioEncounter(gameWorld, bridge);
+      if (!started || this._disposed) {
+        return;
       }
 
       this._observer.onStatus('ready');
@@ -445,6 +522,18 @@ export class CombatDebugLiveSession {
     this._commandGate.clear();
     this._commandGate.setHeld(false);
 
+    // Tear down the element-bound resize observer and pointer diagnostics
+    // BEFORE the world, so no observation can outlive the session.
+    this._viewport?.dispose();
+    this._viewport = undefined;
+    this._booted = false;
+    this._pointerDetach?.();
+    this._pointerDetach = undefined;
+    if (this._pointerFrame !== undefined) {
+      window.cancelAnimationFrame(this._pointerFrame);
+      this._pointerFrame = undefined;
+    }
+
     for (const unsubscribe of this._unsubscribers) {
       try {
         unsubscribe();
@@ -471,6 +560,51 @@ export class CombatDebugLiveSession {
   }
 
   // ── Internals ──────────────────────────────────────────────
+
+  /**
+   * Starts the scenario's encounter through its production path. Returns false
+   * when the start failed (already reported) or the session was disposed.
+   */
+  private async _startScenarioEncounter(
+    gameWorld: GameWorld,
+    bridge: EngineBridge,
+  ): Promise<boolean> {
+    const send = (command: unknown): void => bridge.send(command as never);
+    if (this._scenario.battlefield.kind === 'authored') {
+      const contentPack = await this._loadAuthoredBattlefield(gameWorld);
+      if (this._disposed) {
+        return false;
+      }
+      if (contentPack === undefined) {
+        return true;
+      }
+      this._observer.onStatus('starting-encounter');
+      const started = this._capabilities.startAuthoredEncounter({
+        contentPack,
+        encounterId: this._scenario.battlefield.encounterId,
+        seed: this._seed,
+        send,
+      });
+      return this._confirmEncounterStart(started, 'authored');
+    }
+    this._observer.onStatus('starting-encounter');
+    const started = this._capabilities.startSyntheticEncounter({
+      encounterId: this._scenario.id,
+      seed: this._seed,
+      roster: buildSyntheticRoster(this._scenario),
+      send,
+    });
+    return this._confirmEncounterStart(started, 'synthetic');
+  }
+
+  private _confirmEncounterStart(started: boolean, kind: 'authored' | 'synthetic'): boolean {
+    if (started) {
+      return true;
+    }
+    this._observer.onError(`Unable to start the ${kind} combat encounter.`);
+    this._observer.onStatus('error');
+    return false;
+  }
 
   private async _loadAuthoredBattlefield(gameWorld: GameWorld): Promise<unknown | undefined> {
     if (this._scenario.battlefield.kind !== 'authored') {
@@ -572,6 +706,71 @@ export class CombatDebugLiveSession {
         this._observer.onStatus('ended');
       }),
     );
+
+    // The production ViewModel hands the engine the authoritative selection
+    // cells it projected; capture the same cells for the debugger's pointer /
+    // overlay diagnostics instead of recomputing them.
+    this._unsubscribers.push(
+      bridge.onCommand('COMBAT_SELECTION_HIGHLIGHTS', (command) => {
+        this._observer.onSelection?.({
+          legalEndpoints: command.legalEndpoints,
+          legalTargetCells: command.legalTargetCells,
+        });
+      }),
+    );
+  }
+
+  /**
+   * Attaches throttled canvas pointer diagnostics. A pointer move is coalesced
+   * to one measurement per animation frame, and the canvas-local offset is
+   * removed from the raw client coordinates before unprojection — the embedded
+   * pane is not at the viewport origin, so using client coordinates directly is
+   * what produces obviously wrong (negative/off-board) cells.
+   */
+  private _attachPointerDiagnostics(): void {
+    const canvas = this._canvas;
+    let pending: { x: number; y: number } | undefined;
+
+    const flush = (): void => {
+      this._pointerFrame = undefined;
+      const gameWorld = this._gameWorld;
+      const point = pending;
+      pending = undefined;
+      if (point === undefined || gameWorld === undefined || this._disposed) {
+        return;
+      }
+      const rect = canvas.getBoundingClientRect();
+      const screenX = point.x - rect.left;
+      const screenY = point.y - rect.top;
+      const world = gameWorld.unprojectScreenToWorld(screenX, screenY);
+      const tileSize = gameWorld.tileSize;
+      this._observer.onPointer?.({
+        screenX,
+        screenY,
+        worldX: world.x,
+        worldY: world.y,
+        cellX: Math.floor(world.x / tileSize),
+        cellY: Math.floor(world.y / tileSize),
+      });
+    };
+
+    const onPointerMove = (event: PointerEvent): void => {
+      pending = { x: event.clientX, y: event.clientY };
+      if (this._pointerFrame === undefined) {
+        this._pointerFrame = window.requestAnimationFrame(flush);
+      }
+    };
+    const onPointerLeave = (): void => {
+      pending = undefined;
+      this._observer.onPointer?.(undefined);
+    };
+
+    canvas.addEventListener('pointermove', onPointerMove);
+    canvas.addEventListener('pointerleave', onPointerLeave);
+    this._pointerDetach = (): void => {
+      canvas.removeEventListener('pointermove', onPointerMove);
+      canvas.removeEventListener('pointerleave', onPointerLeave);
+    };
   }
 
   private _emitSnapshot(state: CombatState): void {

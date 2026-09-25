@@ -7,6 +7,26 @@
 import { Type } from 'typebox';
 
 /**
+ * Schema for the combat debug battlefield presentation assessment.
+ */
+export const BattlefieldSchema = Type.Object({
+  score: Type.Number({ description: '0-100 score of battlefield presentation correctness' }),
+  boardVisible: Type.Boolean({
+    description: 'Whether a bounded tactical board is visible (not a blank/black pane)',
+  }),
+  tokensVisible: Type.Boolean({
+    description: 'Whether distinct actor tokens are visible on the board',
+  }),
+  blockedCellsVisible: Type.Boolean({
+    description: 'Whether blocked/obstacle cells are visibly marked on the board',
+  }),
+  authoredScene: Type.Boolean({
+    description: 'Whether a real authored map scene (not a synthetic board) is visible',
+  }),
+  issues: Type.Array(Type.String(), { description: 'List of visual issues detected' }),
+});
+
+/**
  * Schema for Creator Studio's recipe, prompt, generation, and library assessment.
  */
 export const CreatorStudioSchema = Type.Object({

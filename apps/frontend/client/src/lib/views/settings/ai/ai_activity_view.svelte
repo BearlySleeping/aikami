@@ -27,10 +27,29 @@ const { viewModel }: Props = $props();
       <div class="card card-bordered border-base-300 bg-base-100">
         <div class="card-body p-4 space-y-2">
           {#each viewModel.taskRoutingRows as row (row.task)}
-            <div class="flex items-center justify-between gap-3 text-sm">
-              <span class="font-mono">{row.label}</span>
-              <span class="font-mono text-base-content/50">{row.role}</span>
-              <span class="font-mono truncate max-w-[40%] text-right">{row.connectionLabel}</span>
+            <div
+              class="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.2fr)] items-center gap-3 text-sm"
+            >
+              <span class="font-mono truncate">{row.label}</span>
+              <span class="text-center font-mono text-base-content/50">{row.role}</span>
+              <select
+                class="select select-bordered select-sm min-w-0 font-mono"
+                aria-label={`Connection for ${row.label}`}
+                value={row.connectionId ?? ''}
+                onchange={(e) => {
+  const value = (e.target as HTMLSelectElement).value;
+  if (value) {
+    viewModel.assignRole(row.role, value);
+  } else {
+    viewModel.clearRole(row.role);
+  }
+}}
+              >
+                <option value="">Inherits default</option>
+                {#each viewModel.textConnections as connection (connection.id)}
+                  <option value={connection.id}>{connection.label}</option>
+                {/each}
+              </select>
             </div>
           {/each}
         </div>

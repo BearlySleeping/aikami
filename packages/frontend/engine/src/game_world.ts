@@ -10,25 +10,28 @@ import { BaseEngineClass, type BaseEngineClassOptions } from './base_engine_clas
 import type { LpcLayerRecipe } from './components/appearance.ts';
 import { COMPONENT_STRIDE } from './config/memory_config.ts';
 import type { EngineBridge } from './engine_bridge.ts';
-import { COLOR_INTERIOR, ENV_UBO_OFFSETS } from './environment/environment_ubo.ts';
 import { unprojectScreenPoint } from './frame_pacing.ts';
 import { loadStaticVisual } from './game_world/actor_visual_transport.ts';
 import { CombatSelectionHighlights } from './game_world/combat_selection_highlights.ts';
 import { setupGameCommandForwarding } from './game_world/command_forwarding.ts';
+import { DebugSceneController } from './game_world/debug_scene_controller.ts';
 import {
   exposeEngineState,
   isE2ETestMode,
   isVisualScreenshotMode,
+  publishNpcEntityIds,
   publishPlayerVisibleByMask,
   resetEntityPositions,
 } from './game_world/diagnostics.ts';
 import { EntityAppearanceLoader } from './game_world/entity_appearance.ts';
 import { createEntityDisplay } from './game_world/entity_display.ts';
 import { FrameRenderer } from './game_world/frame_renderer.ts';
+import { reportHeartbeatEvent } from './game_world/heartbeat_reporter.ts';
 import { InputController } from './game_world/input_controller.ts';
 import { PointerController } from './game_world/pointer_controller.ts';
 import { RenderBufferPool } from './game_world/render_buffer_pool.ts';
 import type { RenderEntry } from './game_world/render_entry.ts';
+import { SceneAmbientController } from './game_world/scene_ambient.ts';
 import {
   buildFrameUvResolver,
   drawDebugGrid,
@@ -43,18 +46,12 @@ import {
 } from './game_world/scene_transition.ts';
 import { WeatherFxController } from './game_world/weather_fx_controller.ts';
 import {
-  type HeartbeatEvent,
   type WorkerFailure,
   type WorkerOutboundMessage,
   WorkerSession,
 } from './game_world/worker_session.ts';
-import {
-  createPixiApp,
-  DEFAULT_HEIGHT,
-  DEFAULT_WIDTH,
-  type PixiAppInstance,
-  type PixiAppOptions,
-} from './pixi_app.ts';
+import { applyWorldResize } from './game_world/world_resize.ts';
+import { createPixiApp, type PixiAppInstance, type PixiAppOptions } from './pixi_app.ts';
 import { sanitizeCanvasDimension } from './pixi_init_options.ts';
 import { WORLD_Z_BANDS } from './rendering/layer_bands.ts';
 import { type LpcSlotCatalog, mergeLpcRecipes } from './rendering/lpc_appearance_resolver.ts';
@@ -416,6 +413,18 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
   /** Current camera zoom received from the worker (1.0–1.5). */
   private _cameraZoom = 1.0;
 
+  /**
+   * Owns a caller-supplied synthetic debug scene and its fitted camera
+   * (combat debug workspace). Production never sets a scene.
+   */
+  readonly debugScene = new DebugSceneController({
+    getContainer: () => this._worldContainer,
+    getScreen: () => this._app?.screen,
+    getApp: () => this._app,
+    getCamera: () => ({ x: this._cameraX, y: this._cameraY, zoom: this._cameraZoom }),
+    getRenderer: () => this.renderer,
+  });
+
   // -- C-380 AC-6: Cursor feedback — owned by PointerController -----------
 
   /** Tile size for the active map; undefined until terrain is loaded. */
@@ -507,14 +516,6 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
   private _isInteriorMap = false;
 
   /**
-   * C-378 AC-9: whether the day/night tint has been sampled in screenshot
-   * mode. The first ambient value (once the worker UBO arrives) is retained
-   * for the whole capture instead of refreshing from the advancing worker
-   * UBO, keeping the tint deterministic across runs.
-   */
-  private _screenshotTintSampled = false;
-
-  /**
    * C-378 AC-9: the last game hour reported by the worker. When it
    * changes, a screenshot tint frozen from the previous hour's UBO is
    * stale — the sample latch is reset so the next ticker frame re-samples
@@ -523,6 +524,13 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    * never the boot hour).
    */
   private _lastReportedGameHour: number | undefined;
+
+  /**
+   * C-545: resolves the one scene ambient and applies it to terrain (uTint)
+   * and to every entity container, so props, actors and enemies multiply by
+   * the same factor as the ground.
+   */
+  private readonly _sceneAmbient = new SceneAmbientController();
 
   constructor(options: GameWorldOptions) {
     super(options);
@@ -588,7 +596,8 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       workerFactory: options.workerFactory,
       onMessage: (message) => this._handleWorkerMessage(message),
       onFailure: (failure) => this._handleWorkerFailure(failure),
-      onHeartbeat: (event) => this._handleHeartbeatEvent(event),
+      onHeartbeat: (event) =>
+        reportHeartbeatEvent(event, (message, detail) => this.warn(message, detail)),
       shouldCheckStall: () => !this._inputController.locked,
     });
 
@@ -776,45 +785,32 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       }
 
       // ── C-177: Update uTime for GPU tile animation ──
-      // ── C-378 AC-9: update the day/night tint from the worker's UBO ──
-      if (this._tilemapUniforms) {
-        // C-378 visual determinism: freeze the tile animation clock in
-        // screenshot mode (the visual runner always injects `screenshot=true`).
-        // Animated water tiles made every capture pixel-different, which busted
-        // the VLM cache key and produced independent (flaky) judgements.
-        if (!this._isVisualScreenshotMode()) {
-          this._tilemapUniforms.uniforms.uTime = performance.now() / 1000;
-        }
-        // C-378 AC-9: outside screenshot mode the ambient tint follows the
-        // live worker UBO every frame. In screenshot mode the FIRST sampled
-        // tint is retained for the entire capture — the worker UBO keeps
-        // advancing (game time passes), so refreshing it per frame would
-        // make the tint non-deterministic across runs.
-        const screenshotMode = this._isVisualScreenshotMode();
-        if (!screenshotMode || !this._screenshotTintSampled) {
-          const tintArr = this._tilemapUniforms.uniforms.uTint as Float32Array | undefined;
-          if (tintArr && this._environmentUbo) {
-            // C-417 AC-2: interior maps pin their ambient tint to a fixed
-            // warm colour so they stay readable regardless of the outdoor
-            // clock; outdoor maps follow the worker's diurnal UBO ambient
-            // (same factor the rest of the scene uses). Neutral (1,1,1) when
-            // the worker hasn't sent a UBO yet (boot) → pixel-identical to
-            // an untinted render.
-            if (this._isInteriorMap) {
-              tintArr[0] = COLOR_INTERIOR[0] ?? 0.82;
-              tintArr[1] = COLOR_INTERIOR[1] ?? 0.78;
-              tintArr[2] = COLOR_INTERIOR[2] ?? 0.68;
-            } else {
-              const ambient = this._environmentUbo;
-              tintArr[0] = ambient[ENV_UBO_OFFSETS.ambientColor + 0] ?? 1;
-              tintArr[1] = ambient[ENV_UBO_OFFSETS.ambientColor + 1] ?? 1;
-              tintArr[2] = ambient[ENV_UBO_OFFSETS.ambientColor + 2] ?? 1;
-            }
-            if (screenshotMode) {
-              this._screenshotTintSampled = true;
-            }
-          }
-        }
+      // ── C-378/C-545: resolve the ambient and apply it to the scene ──
+      if (this._tilemapUniforms && !this._isVisualScreenshotMode()) {
+        this._tilemapUniforms.uniforms.uTime = performance.now() / 1000;
+      }
+
+      // ONE ambient policy: terrain's uTint and every entity container tint
+      // come from the same resolved factor. Runs every frame, so an hour
+      // change, a map transition, entering/leaving an interior, or a texture
+      // that loads late is picked up without a dedicated re-tint hook. The HUD
+      // is not in this map and terrain is tinted by the shader, so neither is
+      // touched.
+      this._sceneAmbient.update({
+        isInterior: this._isInteriorMap,
+        environmentUbo: this._environmentUbo,
+        tilemapUniforms: this._tilemapUniforms,
+        freeze: this._isVisualScreenshotMode(),
+      });
+      this._sceneAmbient.applyToEntries(this._renderEntries.values());
+
+      // A caller-supplied debug scene owns the camera so a synthetic board is
+      // always framed; without one the worker's follow-camera is unchanged.
+      const debugCamera = this.debugScene.camera;
+      if (debugCamera !== undefined) {
+        this._cameraX = debugCamera.x;
+        this._cameraY = debugCamera.y;
+        this._cameraZoom = debugCamera.zoom;
       }
 
       this._frameRenderer.render({
@@ -868,28 +864,20 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    * correct world-to-screen ratio.
    */
   resize(width: number, height: number): void {
-    // Resize callers measure the DOM, which lies on some WebKitGTK hosts
-    // (negative innerWidth, billions-scale clientWidth). Passing that
-    // through wraps to a multi-gigapixel backing store the platform
-    // refuses, blanking a canvas that was rendering fine a frame earlier.
-    const safeWidth = sanitizeCanvasDimension(width, this._app?.renderer.width ?? DEFAULT_WIDTH);
-    const safeHeight = sanitizeCanvasDimension(
+    applyWorldResize({
+      app: this._app,
+      worldContainer: this._worldContainer,
+      width,
       height,
-      this._app?.renderer.height ?? DEFAULT_HEIGHT,
-    );
-
-    if (this._app) {
-      this._app.renderer.resize(safeWidth, safeHeight);
-    }
-
-    // Notify the worker so the camera system updates its screen dimensions
-    // and recalculates clamping with the active world container scale.
-    this._session.post({
-      type: 'SET_SCREEN_SIZE',
-      width: safeWidth,
-      height: safeHeight,
-      scale: this._worldContainer?.scale.x ?? BASE_WORLD_SCALE,
+      postScreenSize: (size) => this._session.post({ type: 'SET_SCREEN_SIZE', ...size }),
     });
+    // A synthetic debug board must re-fit when the pane changes size.
+    this.debugScene.fit();
+  }
+
+  /** Active map/debug tile size in pixels (32 until a scene supplies one). */
+  get tileSize(): number {
+    return this._activeTileSize ?? this.debugScene.tileSize ?? 32;
   }
 
   /**
@@ -915,8 +903,8 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    * leaks and orphaned animation frames.
    */
   destroy(): void {
-    // Diagnostic: trace who calls destroy
-    this.error('[GameWorld] destroy:called', { stack: new Error().stack });
+    // Trace-level: disposal is expected on every teardown, not an error.
+    this.debug('[GameWorld] destroy:called');
     // Flag disposal so in-flight async init paths (worker import) abort
     this._disposed = true;
     // Stop the render loop
@@ -954,9 +942,9 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     // Release buffer references
     this._renderBufferPool.clear();
 
-    // Clear render entries
+    // Clear render entries and scene diagnostics
     this._renderEntries.clear();
-    resetEntityPositions();
+    this._resetNpcDiagnostics();
 
     // Destroy services
     this._apiService?.destroy();
@@ -975,6 +963,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     }
 
     this._worldContainer = undefined;
+    this.debugScene.clear();
   }
 
   // -----------------------------------------------------------------------
@@ -1208,25 +1197,6 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     this._bridge.emit({ type: 'GAME_ERROR', message: failure.message });
   }
 
-  /** Logs heartbeat observations (control flow stays in WorkerSession). */
-  private _handleHeartbeatEvent(event: HeartbeatEvent): void {
-    if (event.kind === 'stall') {
-      this.warn('[GameWorld] WARN: Simulation stalled — tickCount unchanged for 3 heartbeats', {
-        tickCount: event.tickCount,
-        staleCycles: event.staleCycles,
-        writableBufferCount: event.writableBufferCount,
-        syncWithBuffer: event.syncWithBuffer,
-        syncWithoutBuffer: event.syncWithoutBuffer,
-        recycled: event.recycled,
-      });
-      return;
-    }
-    this.warn('[GameWorld] WARN: Worker engine heartbeat missed!', {
-      elapsedMs: event.elapsedMs,
-      missedCount: event.missedCount,
-    });
-  }
-
   /**
    * Handles a STATE_UPDATE message from the worker.
    *
@@ -1334,7 +1304,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       // Outside screenshot mode the latch is never set — no-op.
       const reportedHour = envData.gameHour as number;
       if (this._lastReportedGameHour !== undefined && this._lastReportedGameHour !== reportedHour) {
-        this._screenshotTintSampled = false;
+        this._sceneAmbient.invalidateSample();
       }
       this._lastReportedGameHour = reportedHour;
       // Feed the renderer's weather targets from the worker's UBO.
@@ -1387,9 +1357,23 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
           isVendor: npcData.isVendor || false,
           vendorInventory: npcData.vendorInventory || '',
         });
-        // Resolved from the AUTHORED npcId, never from worker mechanics.
-        this._maybeLoadAuthoredStaticVisual(eid);
+        publishNpcEntityIds(this._npcMeta.keys());
       }
+    }
+
+    // C-545: an emissive prop (lit hearth/brazier) declares an ambient
+    // opt-out in its definition; the frame→meta map carries it here so the
+    // entity is never tinted by the day/night cycle.
+    const ambientExempt =
+      message.frame !== undefined && this._propFrameMeta.get(message.frame)?.emissive === true;
+
+    // A reconnect or map load can announce the same ECS identity again. Replace
+    // the previous display before creating the new one; otherwise the old
+    // placeholder remains in the world graph at (0, 0) and is indistinguishable
+    // from a live actor to evidence guards.
+    const previousDisplay = this._renderEntries.get(eid);
+    if (previousDisplay) {
+      previousDisplay.displayObject.destroy({ children: true });
     }
 
     const display = createEntityDisplay({
@@ -1400,9 +1384,14 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       stage: this._app.stage,
       loadPropFrame: (options) => void this._loadPropFrameTexture(options),
       frame: message.frame,
+      ambientExempt,
       onAddedToStage: (info) => this.debug('entity-added-to-stage', info),
     });
     this._renderEntries.set(eid, display.entry);
+    if (this._npcMeta.has(eid)) {
+      // Resolved from the authored npcId after the replacement is registered.
+      this._maybeLoadAuthoredStaticVisual(eid);
+    }
     // Recipes will be loaded when the first APPEARANCE_CHANGED event arrives.
   }
 
@@ -1761,10 +1750,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       entry.displayObject.destroy({ children: true });
     }
     this._renderEntries.clear();
-    this._npcMeta.clear();
-    this._staticVisualEntities.clear();
-    this._playerEntityId = 0;
-    resetEntityPositions();
+    this._resetNpcDiagnostics();
 
     // Wait for the worker to finish restoring. WorkerSession correlates the
     // reply and rejects on timeout/crash/disposal exactly once.
@@ -1837,6 +1823,16 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     return this._sceneTransition.load(options);
   }
 
+  /** Clears NPC identity and position diagnostics at every scene boundary. */
+  private _resetNpcDiagnostics(): void {
+    this._npcMeta.clear();
+    publishNpcEntityIds([]);
+    this._staticVisualEntities.clear();
+    this._debugNpcAppearance = {};
+    this._playerEntityId = 0;
+    resetEntityPositions();
+  }
+
   /**
    * Tears down the previous scene's display objects and derived state before
    * a new scene is prepared. Kept on the facade because it owns the PixiJS
@@ -1847,13 +1843,15 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       entry.displayObject.destroy({ children: true });
     }
     this._renderEntries.clear();
-    this._npcMeta.clear();
-    this._staticVisualEntities.clear();
-    // C-504 AC-5: reset the debug per-NPC appearance map on map switch so a
-    // stale map's NPCs never leak into the next map's debug state.
-    this._debugNpcAppearance = {};
-    this._playerEntityId = 0;
-    resetEntityPositions();
+    // C-504 AC-5: reset identity, appearance and position diagnostics together
+    // so a stale map's NPCs never leak into the next map's debug state.
+    this._resetNpcDiagnostics();
+
+    // C-380 AC-6 / C-138: a click-to-move destination is map-local. Drop the
+    // marker on a map switch so a destination clicked on the previous map does
+    // not linger over the new scene (the worker clears the matching PathFollow
+    // when it repositions the player).
+    this._pointerController.clearDestinationMarker();
     this._activeTileSize = undefined;
     this._activeTerrainGrid = undefined;
     this._activePathGrid = undefined;
@@ -1887,6 +1885,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    * flag. Rendering happens after this, so the tint path reads the new map.
    */
   private _installScene(scene: PreparedScene): void {
+    this._sceneAmbient.invalidateSample();
     this._isInteriorMap = scene.packConfig?.interior === true;
     // Interiors have no sky — suppress outdoor weather (same flag as lighting).
     this._weatherFx?.setSceneContext({ interior: this._isInteriorMap });

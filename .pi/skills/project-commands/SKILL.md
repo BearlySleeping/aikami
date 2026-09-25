@@ -261,13 +261,34 @@ The root `package.json` provides shortcuts for common operations:
 | `herdr:stop`     | `bun run scripts/src/lib/herdr/stop.ts`     | Stop a herdr workspace                                         |
 | `herdr:stop-all` | `bun run scripts/src/lib/herdr/stop_all.ts` | Stop all aikami herdr workspaces                               |
 | `herdr:status`   | `bun run scripts/src/lib/herdr/status.ts`   | List running aikami herdr workspaces                           |
-| `worktree:bootstrap` | `bun run scripts/src/lib/herdr/worktree_bootstrap.ts` | Seed env files + `bun install` into a manually created herdr worktree (`-- --cwd <path>`) |
+| `worktree:bootstrap` | `bun run scripts/src/lib/herdr/worktree_bootstrap.ts` | Trust direnv, seed env files, frozen-install, and generate/cache Emberwatch content (`-- --cwd <path>`; `--no-content` opts out) |
 
 > 🔴 A worktree created with the **raw `herdr worktree create` CLI** has none of
 > the gitignored env files. Before running dev servers or E2E in it, run
 > `bun run worktree:bootstrap -- --cwd <checkout>`. `createWorktree()`
 > (used by `herdr:task` and the contract pipeline) already bootstraps, so this
-> is only needed for manual checkouts. See the `git-worktree` skill.
+> is only needed for manual checkouts. Bootstrap now also runs the canonical
+> seven-step Emberwatch generation phase (fingerprinted/cacheable). Pass
+> `--no-content` only for an intentional tool-only worktree. See the
+> `git-worktree` skill.
+
+### E2E Ports & Evidence
+
+- A linked worktree receives a stable checkout-scoped
+  `PUBLIC_EMULATOR_PORT_OFFSET`; the root checkout keeps offset `0`.
+- `bun run --cwd apps/e2e test:unit` is the hermetic preflight test lane.
+- For a real Playwright project, use `bun moon run e2e:test-client`,
+  `e2e:test-game`, or `e2e:test-hub`. Preflight reuses only a listener whose
+  service/checkout identity matches; it never kills a foreign Herdr client.
+- Persistent visual proof belongs under `.evidence/<contract>/`, not only
+  `/tmp`. Generate it with
+  `bun run --cwd apps/e2e capture:evidence -- --contract C-560 --help`.
+  The lane is gitignored and contains paired WebGL/entity-gated PNGs,
+  `montage.png`, `manifest.json`, `checksums.sha256`, and `index.md`.
+- Start a truthful local published baseline with
+  `bun run scripts/src/lib/ops/local_asset_origin.ts --published-only --port 8788`.
+  It pins the public seed/manifest locally and applies zero candidate overlays;
+  the normal local origin is the candidate-overlay lane. Both are read-only.
 
 ### Validation (Run Separately)
 
@@ -386,6 +407,27 @@ bun moon run :fix                  # Auto-fix lint issues
 bun moon run :test                 # Run all tests
 bun moon run :validate             # Full CI validation
 ```
+
+## Interactive Pi Budget Controls
+
+The `cost_guard` extension supports one human-only `/budget` command in interactive
+sessions:
+
+```text
+/budget                 # spent, soft, hard, remaining, turns, run minutes
+/budget soft 20         # set soft cap; accepts $20 and decimals such as 20.5
+/budget hard 30         # set hard cap
+/budget +10             # raise both caps by 10
+/budget reset           # restore PI_SOFT_SPEND / PI_HARD_SPEND defaults
+```
+
+`PI_SOFT_SPEND` and `PI_HARD_SPEND` seed each pi session. `PI_MAX_SPEND_CEILING`
+(default `200`) limits interactive hard-cap increases; use
+`/budget hard 300 --force` to exceed it deliberately. Commands are unavailable in
+unattended contract-pipeline workers and are never exposed as an agent tool.
+Overrides persist on the active session branch across `/reload` and resume. Resume
+also restores spend from persisted `usage.cost.total` entries so restarting cannot
+reset the cap; turn, loop, cycle, and repetition state remains run-local.
 
 ---
 
@@ -544,8 +586,8 @@ Use `--force` with `herdr:start` to kill and recreate an existing workspace.
 # Start services (mode from $AIKAMI_MODE, defaults to emulator)
 bun run herdr:start hub               # Hub SSR dev server only
 bun run herdr:start client            # Client dev server
-bun run herdr:start image             # Image generation (ComfyUI Docker)
-bun run herdr:start text              # Text generation (Ollama Docker)
+bun run herdr:start image             # Image generation (sd-server Docker)
+bun run herdr:start text              # Text generation (llama.cpp Docker)
 bun run herdr:start voice             # Voice synthesis (Kokoro TTS Docker)
 bun run herdr:start all               # Full stack (client + hub + image + text + voice)
 

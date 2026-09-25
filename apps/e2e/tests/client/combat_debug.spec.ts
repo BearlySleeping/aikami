@@ -240,6 +240,10 @@ test.describe('Combat debug workspace (/dev/combat)', () => {
   test.describe('keyboard operability', () => {
     test('inspector tabs are reachable and activatable by keyboard', async () => {
       await debug.gotoLive();
+      // Wait for the isolated session to settle: while it boots, the sidebar
+      // mounting re-renders the workspace and a keypress can land on a
+      // detached tab. A real user only tabs after the UI is interactive.
+      await debug.expectLiveSessionInteractive();
       await debug.selectTabViaKeyboard('ai');
       await expect(debug.tab('ai')).toHaveAttribute('aria-selected', 'true');
       await expect(debug.panel('ai')).toBeVisible();
@@ -258,6 +262,123 @@ test.describe('Combat debug workspace (/dev/combat)', () => {
       await debug.modeSelect.focus();
       await debug.modeSelect.selectOption('fixtures');
       await debug.expectUrlQuery({ mode: 'fixtures' });
+    });
+  });
+
+  // ── Viewport ownership ────────────────────────────────────
+  //
+  // A blank or wrongly sized canvas still satisfies `toBeAttached`. These
+  // assertions pin the real geometric contract: the embedded pane owns the
+  // canvas size, not the browser window.
+
+  test.describe('viewport ownership', () => {
+    test('the canvas is sized by its host pane, not the window', async () => {
+      await debug.gotoLive({ scenario: 'basic-direct-turn' });
+      await debug.expectLiveSessionInteractive();
+      await debug.expectViewportOwnedByHost();
+      await debug.expectBoardVisible();
+      await debug.expectNoEngineError();
+    });
+
+    test('the canvas tracks the host after a browser resize', async () => {
+      await debug.gotoLive({ scenario: 'basic-direct-turn' });
+      await debug.expectLiveSessionInteractive();
+      await debug.page.setViewportSize({ width: 1100, height: 760 });
+      await debug.expectViewportOwnedByHost();
+      await debug.page.setViewportSize({ width: 1440, height: 900 });
+      await debug.expectViewportOwnedByHost();
+      await debug.expectNoEngineError();
+    });
+
+    test('the diagnostics overlay reports coherent CSS, backing and Pixi sizes', async () => {
+      await debug.gotoLive({ scenario: 'basic-direct-turn' });
+      await debug.expectLiveSessionInteractive();
+      await expect(debug.canvasSummary).toContainText(/CSS \d+×\d+/);
+      await expect(debug.canvasSummary).toContainText(/Pixi \d+×\d+/);
+      await expect(debug.cameraSummary).toContainText(/zoom/);
+    });
+  });
+
+  // ── Synthetic battlefield + actor projection ──────────────
+
+  test.describe('synthetic battlefield', () => {
+    test('basic-direct-turn renders an 8×8 board with both combatants', async () => {
+      await debug.gotoLive({ scenario: 'basic-direct-turn' });
+      await debug.expectLiveSessionInteractive();
+      await debug.expectSyntheticBattlefield(8, 8);
+      // Authoritative CombatState has two combatants; both are projected.
+      await debug.expectRenderParity(2, 2);
+      await debug.expectBoardVisible();
+    });
+
+    test('movement-geometry uses its declared 10×10 dimensions', async () => {
+      await debug.gotoLive({ scenario: 'movement-geometry' });
+      await debug.expectLiveSessionInteractive();
+      await debug.expectSyntheticBattlefield(10, 10);
+      await debug.expectRenderParity(2, 2);
+      await debug.expectBoardVisible();
+    });
+
+    test('overlay toggles are operable and do not disturb render parity', async () => {
+      await debug.gotoLive({ scenario: 'basic-direct-turn' });
+      await debug.expectLiveSessionInteractive();
+      await expect(debug.overlayToggles).toBeVisible();
+      await debug.fitCameraButton.click();
+      await debug.expectRenderParity(2, 2);
+      await debug.expectHealthNotError();
+    });
+  });
+
+  // ── Pointer → cell projection ─────────────────────────────
+
+  test.describe('pointer projection', () => {
+    test('hovering the board reports screen, world and a non-negative cell', async () => {
+      await debug.gotoLive({ scenario: 'basic-direct-turn' });
+      await debug.expectLiveSessionInteractive();
+      const box = await debug.liveCanvas.boundingBox();
+      expect(box).not.toBeNull();
+      if (box === null) {
+        return;
+      }
+      await debug.page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+      await expect(debug.pointerSummary).toBeVisible();
+      const text = (await debug.pointerSummary.innerText()).trim();
+      const cell = /cell (-?\d+),(-?\d+)/.exec(text);
+      expect(cell).not.toBeNull();
+      if (cell === null) {
+        return;
+      }
+      // An embedded canvas measured in client coordinates produces negative
+      // cells; a correctly offset canvas reports an on-board cell.
+      expect(Number(cell[1])).toBeGreaterThanOrEqual(0);
+      expect(Number(cell[2])).toBeGreaterThanOrEqual(0);
+      expect(Number(cell[1])).toBeLessThan(8);
+      expect(Number(cell[2])).toBeLessThan(8);
+    });
+  });
+
+  // ── Authored scenario ─────────────────────────────────────
+
+  test.describe('authored scenario', () => {
+    test('emberwatch-proof uses the authored content path, never a synthetic substitute', async () => {
+      await debug.gotoLive({ scenario: 'emberwatch-proof' });
+      // The authored path settles into Ready (pack present) or Error (pack
+      // unavailable) — never a synthetic board.
+      await expect
+        .poll(async () => (await debug.statusLabel.innerText()).trim(), { timeout: 60_000 })
+        .toMatch(/Ready|Error/i);
+      await expect(debug.battlefieldSummary).toContainText('authored');
+
+      const engineFailed = (await debug.engineError.count()) > 0;
+      if (engineFailed) {
+        // The pack/manifest failure is surfaced, not papered over, and the
+        // health surface must not claim a healthy render.
+        await expect(debug.engineError).toContainText(/ContentPack|pack|manifest/i);
+        await expect(debug.healthOverall).not.toHaveText('info');
+        return;
+      }
+      await debug.expectBoardVisible();
+      await debug.expectNoEngineError();
     });
   });
 });

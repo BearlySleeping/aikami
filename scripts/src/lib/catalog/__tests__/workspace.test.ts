@@ -24,6 +24,7 @@ import {
 } from '../workspace_files.ts';
 import { inspectWorkspaceImage, optimizeWorkspaceImage } from '../workspace_image.ts';
 import {
+  type AliasCollision,
   fetchWorkspaceSnapshot,
   mergeWorkspaceEntries,
   type WorkspaceEntry,
@@ -196,6 +197,61 @@ describe('safe paths and selection', () => {
   });
 });
 
+describe('catalog alias resolution (C-548)', () => {
+  const legacyAlias = (bytes = original): WorkspaceEntry =>
+    entry({
+      tag: 'sprites:tilesets:atlas',
+      category: 'sprites',
+      hash: digestBytes(bytes),
+      sizeBytes: bytes.length,
+    });
+
+  test('an identical alias is coalesced silently', () => {
+    const merged = mergeWorkspaceEntries([entry(), legacyAlias()]);
+    expect(merged.map((item) => item.tag)).toEqual([
+      'sprites:tilesets:atlas',
+      'sprites:tilesets:atlas.webp',
+    ]);
+  });
+
+  test('a divergent alias prefers the release-index-referenced tag', () => {
+    const collisions: AliasCollision[] = [];
+    const merged = mergeWorkspaceEntries([entry(), legacyAlias(replacement)], {
+      releaseIndexTags: new Set(['sprites:tilesets:atlas.webp']),
+      onAliasCollision: (collision) => collisions.push(collision),
+    });
+    expect(merged.map((item) => item.tag)).toEqual(['sprites:tilesets:atlas.webp']);
+    expect(collisions).toHaveLength(1);
+    expect(collisions[0]?.kept.tag).toBe('sprites:tilesets:atlas.webp');
+    expect(collisions[0]?.dropped.tag).toBe('sprites:tilesets:atlas');
+    expect(collisions[0]?.dropped.hash).toBe(digestBytes(replacement));
+    expect(collisions[0]?.path).toBe('game-data/sprites/tilesets/atlas.webp');
+  });
+
+  test('a divergent alias without a release index prefers the extension-qualified tag', () => {
+    const merged = mergeWorkspaceEntries([entry(), legacyAlias(replacement)]);
+    expect(merged.map((item) => item.tag)).toEqual(['sprites:tilesets:atlas.webp']);
+  });
+
+  test('a release index pointing at the legacy alias wins over extension qualification', () => {
+    const merged = mergeWorkspaceEntries([entry(), legacyAlias(replacement)], {
+      releaseIndexTags: new Set(['sprites:tilesets:atlas']),
+    });
+    expect(merged.map((item) => item.tag)).toEqual(['sprites:tilesets:atlas']);
+  });
+
+  test('an alias pair no rule can separate fails loudly', () => {
+    const first = entry({ tag: 'lpc:body:bodies_male:walk', category: 'lpc' });
+    const second = entry({
+      tag: 'lpc:body:bodies_male.walk',
+      category: 'lpc',
+      hash: digestBytes(replacement),
+      sizeBytes: replacement.length,
+    });
+    expect(() => mergeWorkspaceEntries([first, second])).toThrow('no authority');
+  });
+});
+
 describe('remote inventory snapshots', () => {
   test('merges full seed coverage, retains credits, labels legacy consistency, performs no writes', async () => {
     const fixture = metadataFixture();
@@ -205,6 +261,26 @@ describe('remote inventory snapshots', () => {
     expect(result.documents.has('seed/asset_credits.json')).toBe(true);
     expect(fixture.writes).toHaveLength(0);
     expect(fixture.reads.filter((key) => key === 'seed/asset_seed.json')).toHaveLength(2);
+  });
+  test('legacy snapshots prefer an extension-qualified seed alias over a divergent index row', async () => {
+    const fixture = metadataFixture();
+    const bytes = fixture.files.get('index/v1/tilesets.json');
+    if (!bytes) {
+      throw new Error('missing fixture shard');
+    }
+    const shard = JSON.parse(new TextDecoder().decode(bytes)) as {
+      entries: Array<{ tag: string; hash: string; sizeBytes: number }>;
+    };
+    const indexed = shard.entries[0];
+    if (!indexed) {
+      throw new Error('missing fixture entry');
+    }
+    indexed.tag = 'sprites:tilesets:atlas';
+    indexed.hash = digestBytes(replacement);
+    indexed.sizeBytes = replacement.length;
+    fixture.files.set('index/v1/tilesets.json', jsonBytes(shard));
+    const result = await fetchWorkspaceSnapshot({ remote: fixture.remote, ...snapshot() });
+    expect(result.snapshot.entries.filter((item) => item.tag.includes('atlas'))).toEqual([entry()]);
   });
   test('malformed release pointer never falls back to legacy', async () => {
     const fixture = metadataFixture();

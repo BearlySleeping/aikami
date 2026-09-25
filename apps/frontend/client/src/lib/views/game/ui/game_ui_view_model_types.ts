@@ -12,6 +12,7 @@ import type {
   HudPreferenceServiceInterface,
   InputActionServiceInterface,
   MotionPreferenceServiceInterface,
+  NpcMemoryServiceInterface,
   OnboardingHintServiceInterface,
   PartyRosterServiceInterface,
   PlayerStateServiceInterface,
@@ -22,6 +23,12 @@ import type {
 } from '$services';
 
 export type GameUIChatCapabilities = Pick<ChatServiceInterface, 'messages'>;
+
+/** Per-NPC conversational memory: capture on close, returning greeting on open. */
+export type GameUINpcMemoryCapabilities = Pick<
+  NpcMemoryServiceInterface,
+  'recordConversation' | 'resolveGreeting'
+>;
 
 export type GameUICombatStateCapabilities = Pick<
   CombatServiceInterface,
@@ -44,6 +51,8 @@ export type GameUIOverlayCapabilities = Pick<
   | '_cameraZoomNpcScreenY'
   | 'interactionPromptLabel'
   | 'interactionPromptVisible'
+  | 'interactionPromptScreenX'
+  | 'interactionPromptScreenY'
   | 'setEngineService'
   | 'initialize'
   | 'handleKeyDown'
@@ -71,7 +80,10 @@ export type GameUIOverlayCapabilities = Pick<
   | 'replaceOverlay'
 >;
 
-export type GameUIInputActionCapabilities = Pick<InputActionServiceInterface, 'actionDisplayLabel'>;
+export type GameUIInputActionCapabilities = Pick<
+  InputActionServiceInterface,
+  'actionDisplayLabel' | 'handleGlobalShortcut'
+>;
 
 export type GameUIOnboardingCapabilities = Pick<
   OnboardingHintServiceInterface,
@@ -129,6 +141,15 @@ export type GameUIMotionCapabilities = Pick<
   MotionPreferenceServiceInterface,
   'preference' | 'setPreference'
 >;
+
+/**
+ * C-528 — live BGM playback state the resolver uses to decide whether the
+ * contextual music-player widget is relevant right now. Optional so sandboxes
+ * and tests that never show music do not have to wire an audio service.
+ */
+export type GameUIMusicCapabilities = {
+  readonly isPlaying: boolean;
+};
 
 /**
  * C-528 — the HUD preference authority the game HUD renders from.

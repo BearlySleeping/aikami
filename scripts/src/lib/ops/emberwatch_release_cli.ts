@@ -13,6 +13,15 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+/**
+ * Read-only plan fixture directory used by CLI-path tests.
+ *
+ * The release shell honors this only for `--plan` and only when the existing
+ * release-plane isolation seam is also present. Apply always resolves the live
+ * release graph, so this cannot redirect a publication.
+ */
+export const RELEASE_PLAN_SNAPSHOT_ENV = 'AIKAMI_RELEASE_PLAN_SNAPSHOT';
+
 export const USAGE = `Emberwatch release orchestrator
 
   bun run emberwatch:release --mode staging|production [--plan|--apply] [options]

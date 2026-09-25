@@ -18,6 +18,7 @@ import {
 } from '../../ops/infra_report.ts';
 import { commitAll, pushBranch, remoteBranchExists, runGit } from '../git_worktree.ts';
 import { playError } from './alarm.ts';
+import { checkBaseHealth } from './base_health.ts';
 import { parseContractStatus, readContractStatus, withUpdatedStatus } from './contract_status.ts';
 import {
   commitContractContent,
@@ -27,7 +28,7 @@ import {
   readMainContent,
 } from './contract_sync.ts';
 import { prePushGateForRevision, verifierFeedback } from './feedback.ts';
-import { captureGitState, currentCommit } from './git_state.ts';
+import { captureGitState, currentCommit, isCleanWorktreeAtCommit } from './git_state.ts';
 import {
   buildWorkspaceLabel,
   ContractHerdrAdapter,
@@ -1012,6 +1013,7 @@ export const runContractPipeline = async (options: {
       cwd: options.repoRoot,
       message: `Initializing Herdr for ${manifest.contractId}.`,
     });
+    const worktreeAlreadyPersisted = manifest.worktreeCheckoutPath !== undefined;
     const ws = await adapter.initialize();
     manifest.workspaceId = ws.workspaceId;
     manifest.pipelinePaneId = ws.pipelinePaneId;
@@ -1021,6 +1023,9 @@ export const runContractPipeline = async (options: {
       manifest.worktreeWorkspaceId = ws.workspaceId;
       manifest.worktreeCheckoutPath = adapter.getWorkspacePath() || undefined;
       manifest.worktreeBranch = adapter.getWorktreeBranch() || undefined;
+      if (!worktreeAlreadyPersisted && manifest.worktreeCheckoutPath) {
+        manifest.worktreeStartCommit = currentCommit(manifest.worktreeCheckoutPath);
+      }
     }
     writeManifest({ manifest, cwd: options.repoRoot });
     options.onReady?.(manifest);
@@ -1041,6 +1046,11 @@ export const runContractPipeline = async (options: {
         const attempt = manifest.attempts.filter((e) => e.stage === stage).length + 1;
         const startTime = new Date().toISOString();
         const wPath = adapter.getWorkspacePath();
+        const snapshotOptions = {
+          excludePaths: [
+            contractRelPath({ repoRoot: options.repoRoot, contractPath: manifest.contractPath }),
+          ],
+        };
 
         // ── Contract isolation — BEFORE the agent runs, for EVERY stage ──
         // Seed the worktree with the root's contract and (re-)apply
@@ -1067,6 +1077,18 @@ export const runContractPipeline = async (options: {
           if (!isolated.ok) {
             console.warn(`⚠️  ${isolated.message}`);
           }
+          // Surface inherited red guards only while the worktree is still at
+          // the exact clean revision persisted when it was provisioned.
+          if (
+            stage === 'implement' &&
+            isCleanWorktreeAtCommit({
+              cwd: wPath,
+              commit: manifest.worktreeStartCommit,
+              excludePaths: snapshotOptions.excludePaths,
+            })
+          ) {
+            checkBaseHealth({ cwd: wPath, runId: manifest.runId });
+          }
         }
 
         const cwdForGit =
@@ -1075,11 +1097,6 @@ export const runContractPipeline = async (options: {
         // `main` and lives in the worktree only as a convenience copy; when
         // untracked it would otherwise show up as a "change" and let an
         // Execution Report alone satisfy the zero-diff implement guard.
-        const snapshotOptions = {
-          excludePaths: [
-            contractRelPath({ repoRoot: options.repoRoot, contractPath: manifest.contractPath }),
-          ],
-        };
         const before = captureGitState(cwdForGit, snapshotOptions);
         const headBefore = currentCommit(cwdForGit);
         const feedback =

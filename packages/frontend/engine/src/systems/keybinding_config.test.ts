@@ -89,8 +89,9 @@ describe('keyToDirection — C-379 AC-8 rebind read-through', () => {
 
   test('buildKeyToAction maps lowercase keys to action ids', () => {
     // biome-ignore lint/style/useNamingConvention: keybinding action ids are snake_case constants
-    const map = buildKeyToAction({ move_up: 'W', interact: 'e' });
+    const map = buildKeyToAction({ move_up: 'W', interact: 'e', toggle_hud: 'H' });
     expect(map.get('w')).toBe('move_up');
     expect(map.get('e')).toBe('interact');
+    expect(map.get('h')).toBe('toggle_hud');
   });
 });

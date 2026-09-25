@@ -13,6 +13,16 @@
 
 import { Type } from 'typebox';
 import { defineConfig } from '$visual/core/config';
+import {
+  atTextScale,
+  atViewport,
+  closeDevTools,
+  STAGE_REVIEW_PROMPT,
+  STAGE_SELECTOR,
+  StageReviewSchema,
+  walkToEmberwatchNpc,
+  withStageHooks,
+} from './dialogue_stage_fixtures';
 
 const DialogueFallbackSchema = Type.Object({
   score: Type.Number({
@@ -59,12 +69,15 @@ export default defineConfig({
   id: 'dialogue_fallback',
   route: '/dev/sandbox/dialogue',
   waitCondition: 'game_ready',
+  waitSelector: STAGE_SELECTOR,
   cases: [
     {
       name: 'authored-fallback',
       searchParams: { forceOffline: '1' },
       prompt: FALLBACK_PROMPT,
       schema: DialogueFallbackSchema,
+      // DOM-only sandbox: target the stage rather than the default canvas crop.
+      screenshotSelector: STAGE_SELECTOR,
     },
     // ── Production Route Case (C-335 AC-7) ────────────────
     {
@@ -78,31 +91,31 @@ export default defineConfig({
         'No raw error strings or blank dialogue areas.',
       ].join('\n'),
       schema: DialogueFallbackSchema,
-      setupHook: async (page) => {
-        // Navigate to production route
-        await page.goto('http://localhost:5274/game?forceOffline=1', {
-          waitUntil: 'domcontentloaded',
-        });
-        // Wait for engine and approach NPC
-        await page.waitForSelector('#game-canvas-container canvas', {
-          state: 'attached',
-          timeout: 30_000,
-        });
-
-        // Walk toward NPC spawn
-        for (let i = 0; i < 8; i++) {
-          await page.keyboard.press('ArrowRight');
-          await page.waitForTimeout(100);
-        }
-        for (let i = 0; i < 4; i++) {
-          await page.keyboard.press('ArrowDown');
-          await page.waitForTimeout(100);
-        }
-
-        // Interact
-        await page.keyboard.press('Enter');
-        await page.waitForTimeout(2000);
-      },
+      setupHook: walkToEmberwatchNpc,
+    },
+    // ── C-547: short authored line on a compact stage ─────────
+    {
+      name: 'short_line_compact_800x600',
+      searchParams: { forceOffline: '1' },
+      prompt: STAGE_REVIEW_PROMPT,
+      schema: StageReviewSchema,
+      screenshotSelector: STAGE_SELECTOR,
+      setupHook: withStageHooks(atViewport(800, 600), closeDevTools, async (page) => {
+        await page.waitForSelector(STAGE_SELECTOR, { timeout: 15_000 });
+        await page.waitForTimeout(800);
+      }),
+    },
+    // ── C-547: 200% text on the authored fallback ─────────────
+    {
+      name: 'short_line_text_200pct',
+      searchParams: { forceOffline: '1' },
+      prompt: STAGE_REVIEW_PROMPT,
+      schema: StageReviewSchema,
+      screenshotSelector: STAGE_SELECTOR,
+      setupHook: withStageHooks(atTextScale(200), closeDevTools, async (page) => {
+        await page.waitForSelector(STAGE_SELECTOR, { timeout: 15_000 });
+        await page.waitForTimeout(800);
+      }),
     },
   ],
 });

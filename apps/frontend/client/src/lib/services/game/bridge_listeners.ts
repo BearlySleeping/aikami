@@ -39,6 +39,9 @@ import {
   setActiveAudioCueContext,
 } from '../audio/audio_asset_resolver';
 import type { ContextualTriggerServiceInterface } from '../image/contextual_trigger_service.svelte.ts';
+// Direct singletons (like combatSettlementLedger): background memory prefetch
+// needs no injection seam and must not grow the overlay service's wiring.
+import { npcMemoryService } from '../npc/npc_memory_service.svelte.ts';
 import type { CombatServiceInterface } from './combat_service.svelte';
 import { combatSettlementLedger } from './combat_settlement_ledger.svelte.ts';
 import type { GameEngineServiceInterface } from './game_engine_service.svelte';
@@ -229,6 +232,8 @@ export const setupBridgeListeners = async (params: SetupBridgeListenersParams): 
     gameOverlayService.setTransitioning(false);
     gameOverlayService.onMapLoaded();
     partyFollowService.onMapLoaded();
+    // Warm returning-greeting openers for remembered NPCs on this map.
+    npcMemoryService.prefetchForNpcs(gameEngineService.currentMapNpcIds);
     setActiveAudioCueContext({
       packId: gameEngineService.contentPackId,
       mapId: gameEngineService.currentMapId,
@@ -368,12 +373,16 @@ export const setupBridgeListeners = async (params: SetupBridgeListenersParams): 
         label: `${keyLabel} — ${verb} ${event.targetName}`,
         visible: gameOverlayService.activeOverlay === 'NONE',
         targetMetadata: { verb, targetName: event.targetName },
+        targetScreenX: event.targetScreenX,
+        targetScreenY: event.targetScreenY,
       });
     } else {
       gameOverlayService.setInteractionPrompt({
         label: '',
         visible: false,
         targetMetadata: undefined,
+        targetScreenX: undefined,
+        targetScreenY: undefined,
       });
     }
 
@@ -381,6 +390,15 @@ export const setupBridgeListeners = async (params: SetupBridgeListenersParams): 
     if (event.targetEntityId !== undefined) {
       onboardingHintService.onInteractionTargetChanged();
     }
+
+    // Approaching a remembered NPC: refresh a stale opener before they talk.
+    if (event.targetType === 'npc' && event.targetName) {
+      npcMemoryService.prefetchByName(event.targetName);
+    }
+  });
+
+  bridge.on('INTERACTION_TARGET_POSITION_UPDATED', (event) => {
+    gameOverlayService.setInteractionPromptPosition(event);
   });
 
   // ── C-327 AC-5: Gamepad polling via UI rAF ──

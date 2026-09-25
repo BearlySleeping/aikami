@@ -25,8 +25,10 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services/base';
+import { LpcAnimationState } from '@aikami/lpc';
 import type { EquipmentSlot, ItemDefinition } from '@aikami/types';
-import { getItemDefinition } from '$utils/inventory_utils';
+import { getLpcAssetPath } from '$lib/data/lpc_asset_catalog';
+import { getItemCategoryIcon, getItemDefinition } from '$utils/inventory_utils';
 
 // ── Capability contracts ────────────────────────────────────────────────
 
@@ -68,20 +70,13 @@ export type EquippedItemView = {
 export type InventoryItemView = {
   readonly itemId: string;
   readonly quantity: number;
-  readonly initial: string;
+  readonly artUrl: string | undefined;
+  readonly fallbackIcon: string;
 };
 
 /** Bag ordering options. `acquired` preserves pickup order — the default. */
 export type InventorySortMode = 'acquired' | 'name' | 'quantity';
 export type InventoryPresentation = 'standalone' | 'management';
-
-const SLOT_GRID_CLASS: Record<EquipmentSlot, string> = {
-  head: 'col-start-2 row-start-1',
-  leftHand: 'col-start-1 row-start-2',
-  body: 'col-start-2 row-start-2',
-  rightHand: 'col-start-3 row-start-2',
-  feet: 'col-start-2 row-start-3',
-};
 
 /** Base configuration used to create the inventory ViewModel. */
 export type InventoryViewModelOptions = BaseViewModelOptions & {
@@ -121,7 +116,6 @@ export type InventoryViewModelInterface = BaseViewModelInterface & {
   getItemLabel(itemId: string): string;
   getSlotLabel(slot: EquipmentSlot): string;
   getSlotIcon(slot: EquipmentSlot): string;
-  getSlotGridClass(slot: EquipmentSlot): string;
   /** Returns the equipped entry for a paperdoll slot (undefined = empty). */
   getEquippedItem(slot: EquipmentSlot): EquippedItemView | undefined;
   isEquippable(itemId: string): boolean;
@@ -211,10 +205,16 @@ export class InventoryViewModel
     } else if (this.sortMode === 'quantity') {
       filtered.sort((a, b) => b.quantity - a.quantity);
     }
-    return filtered.map((item) => ({
-      ...item,
-      initial: item.itemId.charAt(0).toUpperCase(),
-    }));
+    return filtered.map((item) => {
+      const definition = getItemDefinition(item.itemId);
+      return {
+        ...item,
+        artUrl: definition.lpcAssetId
+          ? (getLpcAssetPath('', definition.lpcAssetId, LpcAnimationState.Walk) ?? undefined)
+          : undefined,
+        fallbackIcon: getItemCategoryIcon(definition.itemType),
+      };
+    });
   }
 
   get slotOrder(): readonly EquipmentSlot[] {
@@ -256,10 +256,6 @@ export class InventoryViewModel
 
   getSlotIcon(slot: EquipmentSlot): string {
     return EQUIPMENT_SLOT_ICONS[slot];
-  }
-
-  getSlotGridClass(slot: EquipmentSlot): string {
-    return SLOT_GRID_CLASS[slot];
   }
 
   getEquippedItem(slot: EquipmentSlot): EquippedItemView | undefined {

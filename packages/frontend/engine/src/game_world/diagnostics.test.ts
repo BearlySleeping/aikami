@@ -2,11 +2,13 @@
 
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import {
+  clearEntityPosition,
   exposeEngineState,
   isAuthoringOverlayMode,
   isE2ETestMode,
   isVisualScreenshotMode,
   publishEntityPosition,
+  publishNpcEntityIds,
   publishPlayerDebug,
   publishPlayerVisibleByMask,
   resetEntityPositions,
@@ -106,6 +108,7 @@ describe('diagnostics — debug globals', () => {
   afterEach(() => {
     setWindow(undefined);
     resetEntityPositions();
+    publishNpcEntityIds([]);
   });
 
   test('exposeEngineState writes the engine state global', () => {
@@ -152,6 +155,21 @@ describe('diagnostics — debug globals', () => {
     expect(second.npcCount).toBe(1);
   });
 
+  test('publishNpcEntityIds exposes registered IDs and clears them in place', () => {
+    publishNpcEntityIds([4, 9]);
+    const first = debugRecord().npcEntityIds as number[];
+    expect(first).toEqual([4, 9]);
+
+    publishNpcEntityIds([7]);
+    const second = debugRecord().npcEntityIds as number[];
+    expect(second).toBe(first);
+    expect(second).toEqual([7]);
+
+    publishNpcEntityIds([]);
+    expect(debugRecord().npcEntityIds).toBe(second);
+    expect(second).toEqual([]);
+  });
+
   test('publishEntityPosition reuses the record for an entity', () => {
     publishEntityPosition(5, { x: 1, y: 2 });
     const positions = debugRecord().entityPositions as Record<string, { x: number; y: number }>;
@@ -159,6 +177,15 @@ describe('diagnostics — debug globals', () => {
     publishEntityPosition(5, { x: 9, y: 8 });
     expect(positions['5']).toBe(record);
     expect(record).toEqual({ x: 9, y: 8 });
+  });
+
+  test('clearEntityPosition drops one invalid frame without touching other entities', () => {
+    publishEntityPosition(5, { x: 1, y: 2 });
+    publishEntityPosition(6, { x: 3, y: 4 });
+    clearEntityPosition(5);
+    const positions = debugRecord().entityPositions as Record<string, unknown>;
+    expect(positions['5']).toBeUndefined();
+    expect(positions['6']).toEqual({ x: 3, y: 4 });
   });
 
   test('resetEntityPositions drops stale map entities', () => {

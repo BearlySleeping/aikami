@@ -26,7 +26,10 @@ import { fileURLToPath } from 'node:url';
  * C-376).
  */
 export const ATLAS_COLS = 16;
-export const ATLAS_ROWS = 8;
+// C-546 grew 8→10 for bridge frames; C-553 grows 10→11 for the two upper door
+// frames plus palette-only slate/thatch roof variants. Existing GIDs and the
+// pinned corner16 terrain block never move.
+export const ATLAS_ROWS = 11;
 export const ATLAS_TILE_SIZE = 32;
 
 /** 1px edge extrusion around every frame (C-378 AC-5). */
@@ -37,8 +40,23 @@ export const ATLAS_CELL = ATLAS_TILE_SIZE + ATLAS_PADDING * 2;
 
 export const ATLAS_WIDTH = ATLAS_COLS * ATLAS_CELL; // 544
 
-export const ATLAS_HEIGHT = ATLAS_ROWS * ATLAS_CELL; // 272
-export const ATLAS_TILE_COUNT = ATLAS_COLS * ATLAS_ROWS; // 128
+export const ATLAS_HEIGHT = ATLAS_ROWS * ATLAS_CELL; // 374
+export const ATLAS_TILE_COUNT = ATLAS_COLS * ATLAS_ROWS; // 176
+
+/**
+ * First atlas cell (0-based) reserved for the corner16 terrain block.
+ *
+ * The baked manifest tiles occupy cells 0..47 (GIDs 1..48). Terrain frames are
+ * allocated from cell 48 regardless of any frames appended at higher GIDs:
+ * growing `ATLAS_ROWS` to append a frame must never shift an existing terrain
+ * frame's GID (the committed atlas.json and the derivation test pin them). A
+ * baked frame placed inside this block is caught by the collision check in
+ * `registerTerrainFrames`; appended frames belong after the block.
+ */
+export const ATLAS_TERRAIN_BLOCK_START = 48;
+
+/** Exclusive end of the terrain block; appended frames start at GID 129. */
+export const ATLAS_TERRAIN_BLOCK_END = 128;
 
 /** Corner-16 mask count per terrain (C-378). */
 export const CORNER16_FRAMES = 16;
@@ -205,10 +223,16 @@ export const buildFrames = (): Record<string, [number, number]> => {
         `generate_emberwatch: tile GID ${numericGid} is outside the atlas grid (1..${maxGid}) — cannot emit frame "${def.frame}"`,
       );
     }
+    const cell = numericGid - 1;
+    if (cell >= ATLAS_TERRAIN_BLOCK_START && cell < ATLAS_TERRAIN_BLOCK_END) {
+      throw new Error(
+        `generate_emberwatch: tile GID ${numericGid} occupies reserved terrain cell ${cell} — cannot emit frame "${def.frame}"`,
+      );
+    }
     if (frames[def.frame]) {
       throw new Error(`generate_emberwatch: duplicate manifest frame "${def.frame}" (GID ${gid})`);
     }
-    frames[def.frame] = [(numericGid - 1) % ATLAS_COLS, Math.floor((numericGid - 1) / ATLAS_COLS)];
+    frames[def.frame] = [cell % ATLAS_COLS, Math.floor(cell / ATLAS_COLS)];
   }
   return frames;
 };
@@ -287,6 +311,60 @@ export const readManifestTerrains = (): Array<{
     };
   });
   return _cachedManifestTerrains;
+};
+
+/** Validates and resolves one reserved terrain cell before registration. */
+const terrainFramePosition = (options: {
+  frames: Record<string, [number, number]>;
+  occupiedCells: ReadonlySet<number>;
+  name: string;
+  cell: number;
+}): [number, number] => {
+  const { frames, occupiedCells, name, cell } = options;
+  if (cell >= ATLAS_TERRAIN_BLOCK_END) {
+    throw new Error(
+      `generate_emberwatch: reserved terrain block full — cannot place corner frame "${name}" at cell ${cell}`,
+    );
+  }
+  if (frames[name]) {
+    throw new Error(
+      `generate_emberwatch: corner frame "${name}" collides with an existing atlas frame`,
+    );
+  }
+  if (occupiedCells.has(cell)) {
+    throw new Error(
+      `generate_emberwatch: terrain cell ${cell} for corner frame "${name}" is occupied by an existing atlas frame`,
+    );
+  }
+  const col = cell % ATLAS_COLS;
+  const row = Math.floor(cell / ATLAS_COLS);
+  if (row >= ATLAS_ROWS) {
+    throw new Error(
+      `generate_emberwatch: atlas full — cannot place corner frame "${name}" (row ${row})`,
+    );
+  }
+  return [col, row];
+};
+
+/**
+ * Allocates the reserved terrain cells and registers each corner16 mask.
+ * Frames stay local to one atlas pack so repeated builds cannot collide.
+ */
+export const registerTerrainFrames = (frames: Record<string, [number, number]>): void => {
+  const occupiedCells = new Set(Object.values(frames).map(([col, row]) => row * ATLAS_COLS + col));
+  let nextCell = ATLAS_TERRAIN_BLOCK_START;
+  for (const terrain of readManifestTerrains()) {
+    if (terrain.wang !== 'corner16') {
+      continue;
+    }
+    for (let mask = 0; mask < CORNER16_FRAMES; mask++) {
+      const name = cornerFrameName(terrain.frameBase, mask);
+      const [col, row] = terrainFramePosition({ frames, occupiedCells, name, cell: nextCell });
+      frames[name] = [col, row];
+      occupiedCells.add(nextCell);
+      nextCell += 1;
+    }
+  }
 };
 
 /** Clears the memoized terrain read (test isolation only). */

@@ -47,7 +47,7 @@ test.describe('Inventory Overlay', () => {
     await inventory.toggle();
     await inventory.expectOpen();
 
-    const closeButton = inventory.inventoryCard.locator('button[aria-label="Close inventory"]');
+    const closeButton = inventory.closeButton;
     await expect(closeButton).toBeVisible();
     await closeButton.click();
     await inventory.page.waitForTimeout(500);
@@ -55,21 +55,17 @@ test.describe('Inventory Overlay', () => {
     await inventory.expectClosed();
   });
 
-  test('should not open inventory when another overlay is active', async () => {
-    // Open pause menu first (Escape)
-    await inventory.close(); // Escape
-    const pauseMenu = inventory.page.locator('text=Resume Game');
-    await expect(pauseMenu).toBeVisible();
-
-    // Try to open inventory while pause menu is visible — should be ignored
-    await inventory.toggle();
-    await inventory.expectClosed();
-
-    // Pause menu should still be visible
-    await expect(pauseMenu).toBeVisible();
-
-    // Close pause menu
+  test('should open inventory over the pause menu through the shared management host', async () => {
     await inventory.close();
+    const pauseMenu = inventory.pauseMenuResumeButton;
+    await expect(pauseMenu).toBeVisible();
+
+    await inventory.toggle();
+    await inventory.expectOpen();
     await expect(pauseMenu).not.toBeVisible();
+    await expect(inventory.closeButton).toContainText('Back to pause menu');
+
+    await inventory.closeButton.click();
+    await expect(pauseMenu).toBeVisible();
   });
 });

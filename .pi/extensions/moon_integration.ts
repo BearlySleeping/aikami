@@ -28,6 +28,33 @@ export default function (pi: ExtensionAPI) {
   /** Extended timeout for heavy tasks like builds and integration tests (5 min). */
   const HeavyTimeoutMs = 300_000;
 
+  /**
+   * Runs the structural guards and records the outcome on the validate
+   * accumulators.
+   *
+   * Extracted from `validate.execute` so the added phase does not grow that
+   * function's cognitive-complexity score past the file's recorded worst.
+   */
+  const runStructuralGuards = async (options: {
+    signal: AbortSignal | undefined;
+    errors: string[];
+    ok: string[];
+    detailSections: string[];
+  }): Promise<void> => {
+    const result = await runCommand('bun', ['run', 'scripts/src/lib/ops/run_guards.ts'], {
+      signal: options.signal,
+      timeoutMs: DefaultTimeoutMs,
+    });
+    if (result.code !== 0) {
+      options.errors.push('guards');
+      options.detailSections.push(
+        `**guards** ❌ (do not raise a baseline, waiver or ceiling to clear these)\n${result.stderr || result.stdout}`,
+      );
+      return;
+    }
+    options.ok.push('guards');
+  };
+
   // ── Fetch workspace dynamically on session start ─────────────────────
   pi.on('session_start', async (_event, _ctx) => {
     try {
@@ -277,9 +304,9 @@ export default function (pi: ExtensionAPI) {
     label: 'Batch Validate',
     description:
       'Validate changed projects: detect affected → run fix+typecheck → optionally build+test. ' +
-      'Use at END of feature, not during development. No test-runner string — moon handles caching.',
+      'Also runs the structural guards (same as pre-commit and CI). Use at END of feature, before committing.',
     promptSnippet:
-      'Use validate at the end of a feature to run fix+typecheck+build+test on all affected projects.',
+      'Use validate before committing: fix + typecheck + structural guards (same as pre-commit/CI), optionally build + test.',
     parameters: Type.Object({
       test: Type.Optional(
         Type.Boolean({
@@ -396,6 +423,10 @@ export default function (pi: ExtensionAPI) {
       } else {
         ok.push(':typecheck');
       }
+
+      // 2b. Structural guards — the same aggregate CI and the pre-commit hook
+      // enforce. Spawned directly (not `moon run scripts:guard`): ~1.5s vs ~34s.
+      await runStructuralGuards({ signal, errors, ok, detailSections });
 
       // 3. Build + test (optional, only if fix+typecheck passed)
       if (params.test && errors.length === 0) {

@@ -91,6 +91,18 @@ describe('FrameRenderer — entity transform', () => {
     expect(entry.displayObject.zIndex).toBeGreaterThan(0);
     expect(entry.displayObject.visible).toBe(true);
   });
+
+  test('does not apply non-finite coordinates to a display entry', () => {
+    const renderer = new FrameRenderer({});
+    const pool = new RenderBufferPool();
+    feed(pool, [Number.NaN, 2]);
+    const entry = makeEntry();
+    renderer.render(defaultOptions(pool, new Map([[1, entry]])));
+
+    expect(entry.displayObject.x).toBe(0);
+    expect(entry.displayObject.y).toBe(0);
+    expect(entry.displayObject.visible).toBe(true);
+  });
 });
 
 describe('FrameRenderer — camera transform', () => {

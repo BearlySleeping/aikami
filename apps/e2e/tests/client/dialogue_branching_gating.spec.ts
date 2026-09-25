@@ -114,4 +114,56 @@ test.describe('C-490 dialogue transcript gating', () => {
     await expect(overlay.getByRole('button', { name: 'Delete' })).not.toHaveCount(0);
     await expect(overlay.getByRole('button', { name: 'Rephrase' })).toHaveCount(1);
   });
+
+  test('C-547: full stage fits the scrim and delete confirmation restores composer focus', async ({
+    page,
+  }) => {
+    await page.goto('/dev/sandbox/dialogue', { waitUntil: 'domcontentloaded' });
+    const overlay = page.locator('[data-testid="dialogue-overlay"]');
+    const stage = overlay.locator('.game-stage');
+    await expect(stage).toBeVisible();
+    const compactHeight = (await stage.boundingBox())?.height ?? 0;
+
+    // Full view takes the reclaimed height and stays inside the scrim: the
+    // compact cap used to double-count the bottom safe-area inset and the full
+    // view used to overflow the scrim horizontally.
+    await overlay.getByRole('button', { name: 'Enter full view' }).click();
+    const scrimBounds = await overlay.boundingBox();
+    const stageBounds = await stage.boundingBox();
+    expect(stageBounds?.height).toBeGreaterThan(compactHeight);
+    expect(stageBounds?.x).toBeGreaterThanOrEqual(scrimBounds?.x ?? 0);
+    expect((stageBounds?.x ?? 0) + (stageBounds?.width ?? 0)).toBeLessThanOrEqual(
+      (scrimBounds?.x ?? 0) + (scrimBounds?.width ?? 0),
+    );
+    expect((stageBounds?.y ?? 0) + (stageBounds?.height ?? 0)).toBeLessThanOrEqual(
+      (scrimBounds?.y ?? 0) + (scrimBounds?.height ?? 0),
+    );
+
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await expect(overlay).toBeVisible();
+    const composer = overlay.locator('textarea').first();
+    await composer.fill('Tell me about the ward');
+    await composer.press('Enter');
+
+    // The delete confirmation takes focus, and both cancel paths hand it back
+    // to the composer (click and Escape).
+    const deleteAction = overlay.getByRole('button', { name: 'Delete', exact: true });
+    await expect(deleteAction).toBeEnabled();
+    const deleteMessage = overlay
+      .getByTestId('dialogue-message-row')
+      .filter({ hasText: 'Tell me about the ward' });
+    await deleteMessage.hover();
+    await deleteAction.click();
+    const cancel = overlay.getByRole('button', { name: 'Cancel', exact: true });
+    await expect(cancel).toBeFocused();
+    await cancel.click();
+    await expect(composer).toBeFocused();
+
+    await deleteMessage.hover();
+    await deleteAction.click();
+    await expect(cancel).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(cancel).toHaveCount(0);
+    await expect(composer).toBeFocused();
+  });
 });

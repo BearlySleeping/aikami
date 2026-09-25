@@ -43,9 +43,11 @@
 //
 // Exit codes: 0 ok · 1 a step failed · 2 refused (dirty/stale/blocked) · 4 usage.
 
-import { existsSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import type { ReleaseDocumentReader } from '@aikami/schemas';
 import {
   type CatalogConfig,
   type CatalogTarget,
@@ -58,6 +60,7 @@ import type { PublishReportLike } from '../catalog/release.ts';
 import { buildReceipt, receiptPath } from '../catalog/release.ts';
 import type { ReleaseTarget } from '../catalog/release_target.ts';
 import { createR2Client } from '../catalog/upload.ts';
+import { EMBERWATCH_BUILD_STEPS } from './emberwatch_build_steps.ts';
 import { loadSealedCandidate } from './emberwatch_candidate.ts';
 import {
   assertCleanForApply,
@@ -66,12 +69,14 @@ import {
   type PackIdentity,
   parseInvocation,
   printHeader,
+  RELEASE_PLAN_SNAPSHOT_ENV,
   readPackIdentity,
   USAGE,
 } from './emberwatch_release_cli.ts';
 import {
   buildReleaseReport,
   createStepRecorder,
+  RELEASE_PLANE_ENV,
   type ReleasePointer,
   readReleasePointer,
   releasePlaneDir,
@@ -94,6 +99,49 @@ const here = dirname(fileURLToPath(import.meta.url));
 const repository = join(here, '../../../..');
 const releasePlane = releasePlaneDir();
 
+/**
+ * Opens a prepared release graph for a read-only CLI-path test.
+ *
+ * Requiring the release-plane seam keeps this opt-in for isolated tests, and
+ * the caller passes it only to `--plan`; apply always reads the live origin.
+ */
+const releaseSnapshotReader = (): ReleaseDocumentReader | undefined => {
+  const snapshot = process.env[RELEASE_PLAN_SNAPSHOT_ENV];
+  if (snapshot === undefined) {
+    return undefined;
+  }
+  if (process.env[RELEASE_PLANE_ENV] === undefined) {
+    throw new Error(`${RELEASE_PLAN_SNAPSHOT_ENV} requires ${RELEASE_PLANE_ENV}`);
+  }
+  return async (key) => {
+    const path = join(snapshot, key);
+    return existsSync(path) ? new Uint8Array(readFileSync(path)) : undefined;
+  };
+};
+
+/** Resolves the same pointer contract as the live origin reader, without HTTP. */
+const readSnapshotPointer = async (reader: ReleaseDocumentReader): Promise<ReleasePointer> => {
+  const key = 'index/v1/release.json';
+  try {
+    const bytes = await reader(key);
+    if (bytes === undefined) {
+      return { key, status: 404 };
+    }
+    return {
+      key,
+      sha256: createHash('sha256').update(bytes).digest('hex'),
+      body: JSON.parse(new TextDecoder().decode(bytes)),
+      status: 200,
+    };
+  } catch (error) {
+    return {
+      key,
+      status: 0,
+      body: { error: error instanceof Error ? error.message : String(error) },
+    };
+  }
+};
+
 type TargetContext = {
   /**
    * Read-only target identity — bucket, read origin, safety warnings.
@@ -105,6 +153,23 @@ type TargetContext = {
   target: CatalogTarget;
   releaseTarget: ReleaseTarget;
 };
+
+/** Opens the prepared graph only for read-only plans; apply always stays live. */
+const planSnapshotReader = (invocation: Invocation): ReleaseDocumentReader | undefined =>
+  invocation.apply ? undefined : releaseSnapshotReader();
+
+/** Reads the initial pointer from the prepared plan graph or the live origin. */
+const readTargetPointer = async (options: {
+  target: TargetContext;
+  reader: ReleaseDocumentReader | undefined;
+}): Promise<ReleasePointer> =>
+  options.reader === undefined
+    ? await readReleasePointer(options.target.target.originUrl)
+    : await readSnapshotPointer(options.reader);
+
+const releaseReaderOption = (
+  reader: ReleaseDocumentReader | undefined,
+): { reader?: ReleaseDocumentReader } => (reader === undefined ? {} : { reader });
 
 /** The planned steps a `--plan` run reports without executing. */
 const plannedSteps = (mode: string): string[] => [
@@ -234,28 +299,9 @@ const maybeAcceptRun = (io: StepRecorder, invocation: Invocation): void => {
  * report success.
  */
 const buildAndSealCandidate = (io: StepRecorder, mode: string): void => {
-  const buildSteps: [string, string, string[]?][] = [
-    ['install portraits', 'scripts/src/lib/ops/install_emberwatch_portraits.ts'],
-    ['install authored audio beds', 'scripts/src/lib/ops/install_emberwatch_audio.ts'],
-    ['generate terrain/grid atlas', 'scripts/src/lib/ops/generate_emberwatch_atlas.ts'],
-    ['generate prop atlas pages', 'scripts/src/lib/ops/generate_emberwatch_props_atlas.ts'],
-    ['regenerate canonical maps', 'scripts/src/lib/ops/generate_emberwatch_maps.ts'],
-    ['scan manifest + hashes + credits', 'scripts/src/lib/ops/scan_assets.ts'],
-    // The seed is a DERIVED artifact of the scan above, exactly like the atlas
-    // and the maps, and it must exist before the seal: the candidate lock has a
-    // `seed` group, and `runSeedPublish` refuses to publish a release whose
-    // seed is absent from both the candidate and the previous release. Leaving
-    // it out of this list is what made `asset_seed.json` a file that only
-    // existed in whoever's working tree had run the generator by hand.
-    //
-    // No `--merge-origin`: this step is mode-independent and must be
-    // reproducible from the source tree alone. Carrying the published catalog's
-    // rows in happens at PUBLISH time, against the target's verified release.
-    ['generate asset seed', 'scripts/src/lib/ops/generate_asset_seed.ts', ['--write']],
-  ];
   const treeBefore = io.git(['status', '--porcelain']);
-  for (const [label, script, args] of buildSteps) {
-    if (io.bun(label, script, args ?? []).status === 'failed') {
+  for (const step of EMBERWATCH_BUILD_STEPS) {
+    if (io.bun(step.label, step.script, [...(step.args ?? [])]).status === 'failed') {
       process.exit(1);
     }
   }
@@ -400,6 +446,7 @@ const runPlanMode = async (options: {
   sourceCommit: string;
   pack: PackIdentity;
   dirty: boolean;
+  reader?: ReleaseDocumentReader;
 }): Promise<never> => {
   const { io, invocation } = options;
   for (const name of plannedSteps(invocation.mode)) {
@@ -420,9 +467,17 @@ const runPlanMode = async (options: {
   // candidate is re-derived locally, and base-release resolution is a GET.
   const failures: string[] = [];
 
+  // The release-plane seam also captures the audit's machine report. Without
+  // this, every CLI-path test rewrites the tracked reference report while the
+  // rest of the suite is reading the worktree.
+  const coverageAuditArgs =
+    process.env[RELEASE_PLANE_ENV] === undefined
+      ? []
+      : ['--out', join(releasePlane, 'coverage-audit.json')];
   const audit = io.bun(
     'coverage audit (read-only)',
     'scripts/src/lib/ops/emberwatch_coverage_audit.ts',
+    coverageAuditArgs,
   );
   if (audit.status === 'failed') {
     failures.push(`coverage audit reported blockers (exit ${audit.exitCode})`);
@@ -468,6 +523,7 @@ const runPlanMode = async (options: {
       mode: invocation.mode,
       releaseTarget: options.target.releaseTarget,
       candidatePhase,
+      ...releaseReaderOption(options.reader),
     });
     if (planPhases.ok) {
       printPlanFacts(planPhases.value);
@@ -707,7 +763,8 @@ const main = async (): Promise<void> => {
   }
 
   const target = preflightTarget(invocation.mode);
-  const previous = await readReleasePointer(target.target.originUrl);
+  const planReader = planSnapshotReader(invocation);
+  const previous = await readTargetPointer({ target, reader: planReader });
   printTarget({ mode: invocation.mode, target, previous });
 
   assertReadOnlyChecks(io);
@@ -715,7 +772,10 @@ const main = async (): Promise<void> => {
 
   const shared = { io, invocation, target, previous, sourceCommit, pack, dirty };
   if (!invocation.apply) {
-    await runPlanMode(shared);
+    await runPlanMode({
+      ...shared,
+      ...(planReader === undefined ? {} : { reader: planReader }),
+    });
   }
   await applyRelease(shared);
 };

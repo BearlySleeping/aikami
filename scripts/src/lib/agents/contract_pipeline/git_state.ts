@@ -108,3 +108,14 @@ export const currentCommit = (cwd: string): string => {
     return 'unknown';
   }
 };
+
+/** Confirm a worktree is still clean at the revision where the run started. */
+export const isCleanWorktreeAtCommit = (options: {
+  cwd: string;
+  commit?: string;
+  excludePaths?: string[];
+}): boolean =>
+  options.commit !== undefined &&
+  options.commit !== 'unknown' &&
+  currentCommit(options.cwd) === options.commit &&
+  changedPaths(options.cwd, { excludePaths: options.excludePaths }).length === 0;

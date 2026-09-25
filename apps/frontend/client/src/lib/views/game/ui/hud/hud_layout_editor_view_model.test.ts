@@ -77,22 +77,36 @@ const createVm = (
   viewModel: HudLayoutEditorViewModelInterface;
   hud: ReturnType<typeof createHudFixture>;
   closes: number[];
+  visibilityToggles: number[];
 } => {
   const hud = createHudFixture();
   const closes: number[] = [];
+  const visibilityToggles: number[] = [];
   const viewModel = createHudLayoutEditorViewModel({
     className: 'HudLayoutEditorViewModel',
     hud,
+    visibility: {
+      isHudTemporarilyHidden: false,
+      toggleHudTemporarilyHidden: () => visibilityToggles.push(1),
+    },
     view: { viewport: { width: 1920, height: 1080 }, textScale: 1 },
     capabilities: ['party', 'time', 'audio-library'],
     dormantWidgetIds: [],
     onClose: () => closes.push(1),
     ...overrides,
   });
-  return { viewModel, hud, closes };
+  return { viewModel, hud, closes, visibilityToggles };
 };
 
 describe('C-528 editor ViewModel — input parity (AC-2)', () => {
+  test('toggles temporary HUD visibility from the editor', () => {
+    const { viewModel, visibilityToggles } = createVm();
+
+    viewModel.toggleHudTemporarilyHidden();
+
+    expect(visibilityToggles).toEqual([1]);
+  });
+
   test('pointer drag and keyboard anchor moves reach the same configuration', () => {
     const pointer = createVm();
     pointer.viewModel.beginDrag('objective');
@@ -180,6 +194,54 @@ describe('C-528 editor ViewModel — input parity (AC-2)', () => {
     // The editor is a paused surface: the preview must still show the layout.
     expect(viewModel.previewLayout.widgets.length).toBeGreaterThan(0);
   });
+
+  test('the visibility control routes through the same command as the keyboard', () => {
+    const { viewModel } = createVm();
+
+    viewModel.cycleWidgetVisibility('music-player');
+    expect(viewModel.widgetRows.find((row) => row.widgetId === 'music-player')?.visibility).toBe(
+      'always',
+    );
+  });
+
+  test('dropping a widget on its own region is not an edit', () => {
+    const { viewModel } = createVm();
+    viewModel.beginDrag('hotbar');
+    viewModel.dropOnAnchor('bottom-center');
+    expect(viewModel.isDirty).toBe(false);
+    expect(viewModel.isDragging).toBe(false);
+    expect(viewModel.canUndo).toBe(false);
+  });
+
+  test('dropping a widget on a reserved region is refused and explains why', () => {
+    const { viewModel } = createVm();
+    viewModel.beginDrag('objective');
+    viewModel.dropOnAnchor('bottom-center');
+    expect(viewModel.widgetRows.find((row) => row.widgetId === 'objective')?.anchor).toBe(
+      'bottom-start',
+    );
+    expect(viewModel.isDirty).toBe(false);
+    expect(viewModel.statusMessage).toBeDefined();
+    expect(viewModel.isDragging).toBe(false);
+  });
+
+  test('the drag ghost tracks the pointer and clears when the drag ends', () => {
+    const { viewModel } = createVm();
+    expect(viewModel.draggingLabel).toBeUndefined();
+    expect(viewModel.dragPosition).toBeUndefined();
+
+    viewModel.beginDrag('music-player');
+    expect(viewModel.draggingLabel).toBe('Music player');
+    // No movement yet — no ghost, so a plain click does not flash one.
+    expect(viewModel.dragPosition).toBeUndefined();
+
+    viewModel.updateDrag({ x: 10, y: 20, anchor: 'top-end' });
+    expect(viewModel.dragPosition).toEqual({ x: 10, y: 20, anchor: 'top-end' });
+
+    viewModel.endDrag();
+    expect(viewModel.dragPosition).toBeUndefined();
+    expect(viewModel.isDragging).toBe(false);
+  });
 });
 
 describe('C-528 editor ViewModel — transactional editing (AC-3)', () => {
@@ -252,5 +314,17 @@ describe('C-528 editor ViewModel — transactional editing (AC-3)', () => {
     const { viewModel } = createVm({ capabilities: ['party', 'time'] });
     const music = viewModel.widgetRows.find((row) => row.widgetId === 'music-player');
     expect(music?.dormant).toBe(true);
+  });
+
+  test('the widget list and preview never contain a duplicate widget id', () => {
+    const { viewModel } = createVm();
+    const rowIds = viewModel.widgetRows.map((row) => row.widgetId);
+    expect(new Set(rowIds).size).toBe(rowIds.length);
+
+    viewModel.beginDrag('music-player');
+    viewModel.dropOnAnchor('bottom-end');
+    viewModel.cycleWidgetVisibility('music-player');
+    const previewIds = viewModel.previewLayout.widgets.map((widget) => widget.widgetId);
+    expect(new Set(previewIds).size).toBe(previewIds.length);
   });
 });

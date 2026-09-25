@@ -72,17 +72,35 @@ const _npcHaltReason = new Map<number, NpcHaltReason>();
 export const getNpcHaltReason = (eid: number): NpcHaltReason => _npcHaltReason.get(eid) ?? 'none';
 
 /**
- * Records a halt reason, logging the transition at debug level.
+ * Records a halt reason and logs only diagnostically useful transitions.
+ *
+ * Normal path completion is high-frequency, expected engine behaviour (idle
+ * NPCs deliberately request another stroll), so logging every `reached_goal`
+ * transition floods development consoles without identifying a fault. Keep
+ * it available through {@link getNpcHaltReason}, but reserve console output
+ * for abnormal states.
  *
  * @param eid - The entity ID.
  * @param reason - The new halt reason.
  */
 const _setNpcHaltReason = (eid: number, reason: NpcHaltReason): void => {
   const previous = _npcHaltReason.get(eid) ?? 'none';
-  if (previous !== reason) {
-    logger.debug('path-follow:halt-reason', { eid, previous, reason });
-    _npcHaltReason.set(eid, reason);
+  if (previous === reason) {
+    return;
   }
+
+  _npcHaltReason.set(eid, reason);
+  if (reason === 'reached_goal') {
+    return;
+  }
+  if (previous === 'reached_goal' && reason === 'none') {
+    return;
+  }
+  if (reason === 'missing_waypoints') {
+    logger.warn('path-follow:halt-reason', { eid, previous, reason });
+    return;
+  }
+  logger.debug('path-follow:halt-reason', { eid, previous, reason });
 };
 
 /**
@@ -148,6 +166,28 @@ export const resetNpcHaltReasons = (): void => {
   _npcHaltReason.clear();
   _haltedForMs.clear();
   _haltYielded.clear();
+};
+
+/**
+ * Removes every locomotion producer from an actor: its PathFollow buffer and
+ * its Velocity.
+ *
+ * This is the scene-discontinuity reset (C-138 map transitions). A
+ * click-to-move player that crosses a portal still carries a PathFollow whose
+ * waypoints are expressed in the DEPARTING map's coordinate space; unless it is
+ * dropped the resumed tick loop steers the player across the new map toward
+ * those stale waypoints. Callers reposition the actor first, then call this so
+ * `updatePathFollow` and `updateMovement` leave it parked.
+ *
+ * @param world - The bitECS world.
+ * @param eid - The entity to park. Non-positive ids are ignored.
+ */
+export const clearActorMovement = (world: World, eid: number): void => {
+  if (eid <= 0) {
+    return;
+  }
+  removeComponent(world, eid, Velocity);
+  removeComponent(world, eid, PathFollow);
 };
 
 /**
@@ -288,7 +328,8 @@ export const updatePathFollow = (world: World, deltaMs: number, playerEntityId =
       _setNpcHaltReason(eid, 'reached_goal');
       removeComponent(world, eid, PathFollow);
       PathFollow.repathAtMs[eid] = 0;
-      _clearHaltState(eid);
+      _haltedForMs.delete(eid);
+      _haltYielded.delete(eid);
       continue;
     }
 
@@ -298,7 +339,8 @@ export const updatePathFollow = (world: World, deltaMs: number, playerEntityId =
       _setNpcHaltReason(eid, 'missing_waypoints');
       removeComponent(world, eid, PathFollow);
       PathFollow.repathAtMs[eid] = 0;
-      _clearHaltState(eid);
+      _haltedForMs.delete(eid);
+      _haltYielded.delete(eid);
       continue;
     }
 
@@ -333,14 +375,17 @@ export const updatePathFollow = (world: World, deltaMs: number, playerEntityId =
 
       PathFollow.index[eid] = index + 1;
       if (index + 1 >= length) {
-        // Final waypoint reached — stop and detach.
+        // Final waypoint reached — stop and detach. Record the same stable
+        // terminal state as the already-exhausted-path branch.
         addComponent(world, eid, set(Velocity, { x: 0, y: 0 }));
+        _setNpcHaltReason(eid, 'reached_goal');
         removeComponent(world, eid, PathFollow);
         // Clear the SoA repath slot so a stale deadline written by another
         // provider (party-follow) cannot gate a recycled eid (CodeRabbit
         // review, C-379).
         PathFollow.repathAtMs[eid] = 0;
-        _clearHaltState(eid);
+        _haltedForMs.delete(eid);
+        _haltYielded.delete(eid);
         continue;
       }
       // Intermediate waypoint reached — steer toward the NEXT waypoint in

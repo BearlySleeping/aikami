@@ -79,7 +79,7 @@ export type RouterServiceInterface = BaseFrontendClassInterface & {
    * Only use this when it is not possible to use {@link goToRoute},
    * currently this use case is only for embed package.
    */
-  goToHref(href: string): Promise<void>;
+  goToHref(href: string, options?: { replace?: boolean }): Promise<void>;
   goToRoute<T extends RouteName>(
     route: T,
     options: RouteOptions & {
@@ -158,13 +158,13 @@ export class RouterService extends BaseClass implements RouterServiceInterface {
     return redirectToHref;
   }
 
-  async goToHref(goto: string): Promise<void> {
+  async goToHref(goto: string, options?: { replace?: boolean }): Promise<void> {
     this.log('goToHref', { goto });
     if (!this._goto) {
       throw toAppError({ errorType: 'internal', errorMessage: 'RouterService is not initialized' });
     }
 
-    return await this._goto(goto);
+    return await this._goto(goto, options);
   }
   async goToRoute<T extends RouteName>(
     route: T,

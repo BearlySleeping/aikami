@@ -85,14 +85,13 @@ test.describe('Character Sheet — Dev Sandbox', () => {
     await sheet.tabTraits.click();
 
     // Scroll to the Narrative Traits section and fill in the likes input
-    const likesInput = sheet.card.locator('input[type="text"]').first();
+    const likesInput = sheet.narrativeAddInput('likes');
     await likesInput.scrollIntoViewIfNeeded();
     await likesInput.fill('Music');
-    // Click the "+" button next to the input
-    await sheet.card.locator('button:has-text("+")').first().click();
+    await sheet.narrativeAddButton('likes').click();
 
     // Should see the new chip
-    const musicChip = sheet.card.locator('.badge').filter({ hasText: 'Music' });
+    const musicChip = sheet.narrativeChips('likes').filter({ hasText: 'Music' });
     await expect(musicChip).toBeVisible({ timeout: 3_000 });
 
     // Remove it
@@ -104,9 +103,8 @@ test.describe('Character Sheet — Dev Sandbox', () => {
     // Toggle pro mode on
     await sheet.proModeToggle.click();
 
-    // Enable editing to see the textarea
-    const editToggle = sheet.card.locator('input[type="checkbox"].toggle').nth(1);
-    await editToggle.click();
+    // Enable JSON editing to see the textarea
+    await sheet.jsonEditToggle.check();
 
     // JSON textarea should appear
     const jsonArea = sheet.jsonTextarea;
@@ -122,9 +120,8 @@ test.describe('Character Sheet — Dev Sandbox', () => {
     // Toggle pro mode on
     await sheet.proModeToggle.click();
 
-    // Enable editing
-    const editToggle = sheet.card.locator('input[type="checkbox"].toggle').nth(1);
-    await editToggle.click();
+    // Enable JSON editing
+    await sheet.jsonEditToggle.check();
 
     // Type invalid JSON
     const textarea = sheet.jsonTextarea;

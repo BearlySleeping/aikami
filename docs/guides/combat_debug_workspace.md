@@ -247,6 +247,34 @@ prerequisite is missing, the workspace **surfaces that fact** — it does not
 substitute a synthetic lookalike for the authored encounter. Synthetic
 scenarios need no pack.
 
+## Battlefield, viewport and renderer health
+
+The live canvas is **embedded in a pane**, not the browser window. The session
+opts out of PixiJS's `resizeTo: window` watcher and drives the engine's existing
+`GameWorld.resize` path from a `ResizeObserver` on the canvas HOST element
+(`.../session/combat_debug_canvas_viewport.ts`). Observations are coalesced to
+one resize per animation frame, transient `0×0` layout is ignored, and the
+observer is disposed with the session — so CSS size, the canvas backing store,
+the Pixi screen and the worker's screen size stay coherent across browser and
+pane resizes without recreating the world.
+
+**Synthetic scenarios render a tactical board, not a wallpaper.** The scenario's
+declared dimensions and blocked cells are forwarded to the engine as its
+collision grid at boot, so `CombatState.battlefield` (the movement authority)
+matches what is drawn. Every combatant in `CombatState` is projected as a token
+at its authoritative cell, with team colour, an active-actor ring, an HP strip,
+a short label and downed/defeated state. This is a **read-only presentation
+projection** (`.../battlefield/combat_debug_battlefield_projection.ts`); the
+debugger never calculates mechanics or mutates state. Authored scenarios
+(`emberwatch-proof`) keep the real map/world rendering path instead.
+
+The battlefield header shows a **health** surface (INFO / DEGRADED / ERROR):
+engine, renderer, viewport coherence, render parity (state combatants vs
+projected tokens) and asset readiness. A known-broken renderer can never read
+as "Ready". Overlay toggles (grid, coordinates, blocked, IDs, reachable,
+targets, objects, origin) are projection preferences only; reachable/target
+cells are the authoritative cells the production engine overlay already draws.
+
 ## Verification
 
 Run each check through its Moon task (never a bare tool):

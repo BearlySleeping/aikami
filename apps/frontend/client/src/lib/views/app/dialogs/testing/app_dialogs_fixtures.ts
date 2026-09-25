@@ -21,6 +21,7 @@ export const createAppDialogCapabilities = (
   appLoading: undefined,
   snackbar: undefined,
   close: () => unconfigured('close'),
+  setAppLoading: () => unconfigured('setAppLoading'),
   hideSnackbar: () => unconfigured('hideSnackbar'),
   ...overrides,
 });

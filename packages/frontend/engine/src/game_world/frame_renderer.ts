@@ -16,7 +16,7 @@ import { computeEntityZIndex } from '../rendering/layer_bands.ts';
 import { snapToDevicePixels } from '../rendering/pixel_snap.ts';
 import type { TextureManager } from '../rendering/texture_manager.ts';
 import { frustumCullChunks, type TilemapChunk } from '../rendering/tilemap_chunk_renderer.ts';
-import { publishEntityPosition, publishPlayerDebug } from './diagnostics.ts';
+import { clearEntityPosition, publishEntityPosition, publishPlayerDebug } from './diagnostics.ts';
 import { applyLpcFrameToEntry } from './entity_appearance.ts';
 import type { RenderBufferPool } from './render_buffer_pool.ts';
 import type { RenderEntry } from './render_entry.ts';
@@ -41,6 +41,9 @@ export type FrameRenderOptions = {
 };
 
 const RENDER_LOG_INTERVAL_MS = 1000;
+
+const isFiniteCoordinate = (value: number | undefined): value is number =>
+  value !== undefined && Number.isFinite(value);
 
 export class FrameRenderer {
   private readonly _textureManager: TextureManager | undefined;
@@ -101,10 +104,10 @@ export class FrameRenderer {
         const currX = renderView[offset];
         const currY = renderView[offset + 1];
         if (
-          prevX !== undefined &&
-          currX !== undefined &&
-          !Number.isNaN(prevX) &&
-          !Number.isNaN(currX)
+          isFiniteCoordinate(prevX) &&
+          isFiniteCoordinate(prevY) &&
+          isFiniteCoordinate(currX) &&
+          isFiniteCoordinate(currY)
         ) {
           x = interpolateValue({ previous: prevX, current: currX, alpha });
           y = interpolateValue({ previous: prevY, current: currY, alpha });
@@ -117,7 +120,8 @@ export class FrameRenderer {
         y = renderView[offset + 1];
       }
 
-      if (x === undefined || y === undefined) {
+      if (!isFiniteCoordinate(x) || !isFiniteCoordinate(y)) {
+        clearEntityPosition(eid);
         continue;
       }
 

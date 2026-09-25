@@ -270,7 +270,7 @@ Generate only barrel, crate and notice board next using the new prompt document.
 
 ### Prop-atlas layer (oversized props)
 
-The grid atlas is a fixed 16×8 grid of 32×32 cells with per-cell edge extrusion, and every approved prop is larger than 32×32 (inn 256×224, ward tree 192×152, table 96×42). Oversized props therefore ship as one or more irregularly-packed pages:
+The grid atlas uses a fixed 16-column grid of 32×32 cells with per-cell edge extrusion, and every approved prop is larger than 32×32 (inn 256×224, ward tree 192×152, table 96×42). Oversized props therefore ship as one or more irregularly-packed pages:
 
 - `content/packs/emberwatch/props/*.png` is the standalone authoring source of truth.
 - `scripts/src/lib/ops/prop_atlas_packer.ts` packs them (deterministic shelf packing, 1px extruded borders, content-sized pages, automatic spill to `props-2.*` when a page hits the budget).
@@ -356,7 +356,7 @@ Each emits 96 overlay cells on the 28×18 test grid. Test maps: `corner16_<set>_
 
 `generate_emberwatch_atlas.ts` now dispatches corner frames through a `CORNER_TERRAIN_PAINTERS` map (base + overlay painters per terrain id) instead of the hardcoded `dirt|water` regex. The village map's `aikami.terrain` channel uses them: a gravel plaza (rows 5–7, cols 2–6) with an embedded earth patch (rows 6–7, cols 3–4), so both the over-grass and over-gravel layering paths are exercised. `autotileLayers` resolves all six layers with zero frames missing from the regenerated atlas. `cobblestone_over_wood_floor` is declared for indoor hearth/aprons but has no map placement yet (the inn/shop use the baked indoor grid, which has no terrain channel).
 
-🔴 **Atlas headroom is now zero.** The 48 baked tiles plus five corner16 terrains × 16 masks fill all 128 cells (16×8) exactly. A sixth corner16 terrain requires growing `ATLAS_ROWS` (maps' tileset blocks and `tilecount` must follow) before it can be added.
+🔴 **Atlas headroom is one frame.** The C-553 grid has 176 cells (16×11), with 175 used after the append-only house palette frames. A sixth corner16 terrain or any further frame requires growing `ATLAS_ROWS` and every derived tileset block first.
 
 **Remote state unchanged.** No upload or deletion has occurred; the committed manifest is the source of truth and the atlas is a gitignored build artifact regenerated at release.
 

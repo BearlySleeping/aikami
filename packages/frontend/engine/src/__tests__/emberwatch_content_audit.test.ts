@@ -110,13 +110,14 @@ const EMBERWATCH_FIXTURES = {
       import.meta.dir,
       '../../../../../apps/frontend/client/static/game-data/sprites/tilesets/atlas.json',
     ),
-    // C-378 AC-5: 1px extruded frames — 34px cell pitch, 544×272 atlas.
+    // C-378 AC-5: 1px extruded frames — 34px cell pitch, 544×374 atlas.
     // tileSize/spacing/margin mirror the map tileset blocks (asserted
     // below) so GID math derives from geometry instead of hardcoded 34/16/1.
+    // C-546 added bridge rows; C-553 adds the paired doors/palette row.
     minFrames: 80,
-    size: { w: 544, h: 272 },
+    size: { w: 544, h: 374 },
     columns: 16,
-    tilecount: 128,
+    tilecount: 176,
     tileSize: 32,
     spacing: 2,
     margin: 1,
@@ -605,7 +606,7 @@ describe('Emberwatch map audit (C-375 AC-5 + C-376 AC-6 fixtures)', () => {
     }
   });
 
-  test('map tileset blocks match the atlas grid (544×272 extruded, 16 cols, 128 tiles)', () => {
+  test('map tileset blocks match the atlas grid (544×374 extruded, 16 cols, 176 tiles)', () => {
     for (const [, map] of Object.entries(maps)) {
       const block = map.tilesets[0];
       expect(block.firstgid).toBe(1);

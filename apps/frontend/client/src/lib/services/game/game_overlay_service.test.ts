@@ -1,9 +1,10 @@
 // apps/frontend/client/src/lib/services/game/game_overlay_service.test.ts
 
-import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test';
+import { afterAll, beforeEach, describe, expect, mock, spyOn, test } from 'bun:test';
 import type { EngineBridge } from '@aikami/frontend/engine';
 import type { GameOverlayType, OverlayStackEntry } from '$types';
 import { createRealLocalDatabase } from '../__tests__/local_database_fixture.ts';
+import { onboardingHintService } from './onboarding_hint_service.svelte.ts';
 
 // $state, $derived are polyfilled by test_setup.ts
 
@@ -267,6 +268,24 @@ describe('GameOverlayService', () => {
     expect(service.activeOverlay).toBe('QUEST_LOG');
   });
 
+  test('journal shortcut reports onboarding only when it toggles the journal', () => {
+    const report = spyOn(onboardingHintService, 'onActionPerformed').mockImplementation(() => {});
+    try {
+      service.handleKeyDown(new KeyboardEvent('keydown', { key: 'j' }));
+      expect(service.activeOverlay).toBe('JOURNAL');
+      expect(report).toHaveBeenCalledWith('open_journal');
+
+      report.mockClear();
+      service.activeOverlay = 'NONE';
+      service.openInventory();
+      service.handleKeyDown(new KeyboardEvent('keydown', { key: 'j' }));
+      expect(service.activeOverlay).toBe('INVENTORY');
+      expect(report).not.toHaveBeenCalled();
+    } finally {
+      report.mockRestore();
+    }
+  });
+
   test('should open character dashboard on "c" key', () => {
     const event = new KeyboardEvent('keydown', { key: 'c' });
     service.handleKeyDown(event);
@@ -425,6 +444,29 @@ describe('GameOverlayService', () => {
   test('should allow pause menu over inventory', () => {
     service.pushOverlay('PAUSE_MENU');
     expect(service.canOpenOverlay('INVENTORY')).toBe(true);
+  });
+
+  test('C-551: allows Inventory over Dialogue so the management host can preserve return context', () => {
+    service.pushOverlay('DIALOGUE');
+
+    expect(service.canOpenOverlay('INVENTORY')).toBe(true);
+    service.openInventory();
+
+    expect(service.activeOverlay).toBe('INVENTORY');
+    expect(service.overlayStack.map((entry) => entry.type)).toEqual(['DIALOGUE', 'INVENTORY']);
+  });
+
+  test('C-551: closing Inventory over Dialogue restores explore mode without resuming the world', async () => {
+    const { gameModeService } = await import('./game_mode_service.svelte.ts');
+    gameModeService.setMode('EXPLORE');
+    service.pushOverlay('DIALOGUE');
+    service.openInventory();
+
+    expect(gameModeService.currentMode).toBe('MENU');
+    service.closeInventory();
+
+    expect(service.activeOverlay).toBe('DIALOGUE');
+    expect(gameModeService.currentMode).toBe('EXPLORE');
   });
 
   test('should clear stack on dialogue close', () => {

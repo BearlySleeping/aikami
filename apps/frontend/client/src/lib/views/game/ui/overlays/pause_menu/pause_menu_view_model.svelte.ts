@@ -13,6 +13,7 @@ import {
   type BaseViewModelOptions,
 } from '@aikami/frontend/services/base';
 import type { DiceHistoryEntry } from '$types';
+import { formatLastSavedAt } from './pause_menu_presentation';
 
 // ── Capability contracts ────────────────────────────────────────────────
 
@@ -20,6 +21,7 @@ import type { DiceHistoryEntry } from '$types';
 export type PauseMenuOverlayCapabilities = {
   readonly isSaving: boolean;
   readonly saveMessage: string | undefined;
+  readonly lastSavedAt: string | undefined;
   resumeGame(): void;
   saveGame(): Promise<void>;
   goToSettings(): Promise<void>;
@@ -31,17 +33,9 @@ export type PauseMenuOverlayCapabilities = {
   openHudEditor(): void;
 };
 
-/**
- * C-528 — the temporary Hide HUD / Customize HUD capability.
- *
- * Hide HUD is session-scoped and reversible: it never writes the preference
- * snapshot, and the resolver keeps the required recovery surfaces visible while
- * it is on.
- */
+/** C-528 — capability required to open the paused HUD layout editor. */
 export type PauseMenuHudCapabilities = {
-  readonly isHudTemporarilyHidden: boolean;
   readonly isEditorEnabled: boolean;
-  toggleHudTemporarilyHidden(): void;
 };
 
 /** The dice-history capability the pause menu reads (reactively). */
@@ -64,6 +58,9 @@ export type PauseMenuViewModelOptions = BaseViewModelOptions & {
 export type PauseMenuViewModelInterface = BaseViewModelInterface & {
   readonly isSaving: boolean;
   readonly saveMessage: string | undefined;
+  readonly lastSavedAt: string | undefined;
+  readonly lastSavedLabel: string;
+  readonly saveStatusLabel: string;
   readonly confirmingQuit: boolean;
   readonly isRollHistoryOpen: boolean;
   readonly rollHistory: DiceHistoryEntry[];
@@ -78,14 +75,10 @@ export type PauseMenuViewModelInterface = BaseViewModelInterface & {
   openReputation(): void;
   openRollHistory(): void;
   closeRollHistory(): void;
-  /** C-528: whether the HUD is temporarily hidden. */
-  readonly isHudTemporarilyHidden: boolean;
   /** C-528: whether the HUD editor is available in this build. */
   readonly isHudEditorEnabled: boolean;
   /** C-528: opens the paused HUD layout editor. */
   openHudEditor(): void;
-  /** C-528: toggles the temporary Hide HUD state. */
-  toggleHudTemporarilyHidden(): void;
 };
 
 // ── Implementation ──────────────────────────────────────────────────────
@@ -109,11 +102,6 @@ class PauseMenuViewModel
   }
 
   /** @inheritdoc */
-  get isHudTemporarilyHidden(): boolean {
-    return this._hud.isHudTemporarilyHidden;
-  }
-
-  /** @inheritdoc */
   get isHudEditorEnabled(): boolean {
     return this._hud.isEditorEnabled;
   }
@@ -121,11 +109,6 @@ class PauseMenuViewModel
   /** @inheritdoc */
   openHudEditor(): void {
     this._overlay.openHudEditor();
-  }
-
-  /** @inheritdoc */
-  toggleHudTemporarilyHidden(): void {
-    this._hud.toggleHudTemporarilyHidden();
   }
 
   get rollHistory(): DiceHistoryEntry[] {
@@ -138,6 +121,24 @@ class PauseMenuViewModel
 
   get saveMessage(): string | undefined {
     return this._overlay.saveMessage;
+  }
+
+  get lastSavedAt(): string | undefined {
+    return this._overlay.lastSavedAt;
+  }
+
+  get lastSavedLabel(): string {
+    return formatLastSavedAt(this.lastSavedAt);
+  }
+
+  get saveStatusLabel(): string {
+    if (this.isSaving) {
+      return 'Saving…';
+    }
+    if (this.saveMessage === 'Game Saved!' && this.lastSavedAt) {
+      return `${this.saveMessage} · ${this.lastSavedLabel}`;
+    }
+    return this.saveMessage ?? this.lastSavedLabel;
   }
 
   resumeGame(): void {

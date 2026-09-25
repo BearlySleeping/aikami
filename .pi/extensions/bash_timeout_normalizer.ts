@@ -9,8 +9,9 @@
  * This extension intercepts `tool_call` events for Bash and:
  *   1. Normalises timeout values that are clearly in milliseconds (≥ 1000) down to seconds.
  *   2. Caps timeouts at a safe maximum (default: 600 s = 10 min).
- *   3. Injects CI=true, FORCE_COLOR=1, GIT_TERMINAL_PROMPT=0 into every command so
- *      CLI tools never hang waiting for interactive input (TTY prompts, colour queries, etc.).
+ *   3. Injects FORCE_COLOR=1 and GIT_TERMINAL_PROMPT=0 into every command so
+ *      CLI tools never hang waiting for interactive input. Ambient CI is left
+ *      untouched so local Moon tasks keep their truthful CI semantics.
  *
  * Heuristic: timeout ≥ 1000 → divide by 1000 (no legitimate bash timeout needs
  * 1000+ seconds / ~17 minutes).
@@ -25,8 +26,8 @@ const MAX_TIMEOUT_SECONDS = 600;
 /** Default timeout in seconds when none is provided. */
 const DEFAULT_TIMEOUT_SECONDS = 60;
 
-/** Environment guard prefix injected before every command. */
-export const ENV_GUARD = 'export CI=true FORCE_COLOR=1 GIT_TERMINAL_PROMPT=0 2>/dev/null; ';
+/** Non-interactive environment guard prefix injected before every command. */
+export const ENV_GUARD = 'export FORCE_COLOR=1 GIT_TERMINAL_PROMPT=0 2>/dev/null; ';
 
 /**
  * Normalise a Bash tool timeout to a safe value in seconds.
@@ -48,6 +49,8 @@ export const normalizeTimeout = (timeout: number | null | undefined): number => 
 
 /**
  * Prepend the non-interactive environment guards unless already present.
+ * CI is intentionally absent so the command inherits its ambient value and a
+ * later caller assignment can override it.
  */
 export const guardCommand = (command: string): string => {
   if (command.startsWith(ENV_GUARD)) {

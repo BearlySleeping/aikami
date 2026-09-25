@@ -7,7 +7,6 @@
 import type { BaseViewModelOptions } from '@aikami/frontend/services/base';
 import {
   audioService,
-  musicPlayerService,
   playSceneBgm,
   runtimeConfigService,
   ttsService,
@@ -28,7 +27,6 @@ export const getSettingsAudioViewModel = (
   createSettingsAudioViewModel({
     ...options,
     audio: audioService,
-    musicPlayer: musicPlayerService,
     tts: ttsService,
     voiceModel: voiceModelService,
     runtimeConfig: runtimeConfigService,

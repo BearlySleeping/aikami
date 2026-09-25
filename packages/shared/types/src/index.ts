@@ -66,6 +66,7 @@ export * from './lib/game/lpc_recipe.ts';
 export * from './lib/game/macro.ts';
 export * from './lib/game/narrative_event.ts';
 export * from './lib/game/npc_dialogue_command.ts';
+export * from './lib/game/npc_memory.ts';
 export * from './lib/game/npc_schedule.ts';
 export * from './lib/game/pack_index.js';
 export * from './lib/game/party.ts';

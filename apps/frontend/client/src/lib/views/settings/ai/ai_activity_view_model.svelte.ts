@@ -22,6 +22,8 @@ import { buildTaskRoutingRows, type TaskRoutingRow } from './ai_roles';
 export type AiActivityConfigCapabilities = {
   getAiConnections(): readonly AiConnection[];
   getRoleAssignments(): RoleAssignments;
+  setRoleAssignment(role: TaskRoutingRow['role'], connectionId: string): void;
+  clearRoleAssignment(role: TaskRoutingRow['role']): void;
 };
 
 /** Telemetry surface the activity list reads (narrowed from the service). */
@@ -61,6 +63,8 @@ export type AiActivityTaskRow = {
 export type AiActivityViewModelInterface = BaseViewModelInterface & {
   /** Task → role → connection projection. */
   readonly taskRoutingRows: readonly TaskRoutingRow[];
+  /** Text-capability connections available for task routing. */
+  readonly textConnections: readonly AiConnection[];
   /** Recent text-generation spans, newest first. */
   readonly activitySpans: ReadonlyArray<TextTelemetrySpan>;
   /** Spans formatted for display. */
@@ -75,6 +79,10 @@ export type AiActivityViewModelInterface = BaseViewModelInterface & {
   readonly hasActivityRows: boolean;
   /** Clears the activity buffer. */
   clearActivity(): void;
+  /** Assigns the connection used by a text task's role. */
+  assignRole(role: TaskRoutingRow['role'], connectionId: string): void;
+  /** Clears a role override so it inherits the active text connection. */
+  clearRole(role: TaskRoutingRow['role']): void;
 };
 
 export type AiActivityViewModelOptions = BaseViewModelOptions & {
@@ -104,6 +112,10 @@ class AiActivityViewModel
       connections: this._config.getAiConnections(),
       assignments: this._config.getRoleAssignments(),
     });
+  }
+
+  get textConnections(): readonly AiConnection[] {
+    return this._config.getAiConnections().filter((connection) => connection.capability === 'text');
   }
 
   get activitySpans(): ReadonlyArray<TextTelemetrySpan> {
@@ -146,6 +158,16 @@ class AiActivityViewModel
 
   clearActivity(): void {
     this._telemetry.clear();
+  }
+
+  assignRole(role: TaskRoutingRow['role'], connectionId: string): void {
+    if (this._config.getAiConnections().some((connection) => connection.id === connectionId)) {
+      this._config.setRoleAssignment(role, connectionId);
+    }
+  }
+
+  clearRole(role: TaskRoutingRow['role']): void {
+    this._config.clearRoleAssignment(role);
   }
 }
 

@@ -9,6 +9,9 @@ tags: ["tauri", "desktop", "rust", "sveltekit", "ipc"]
 
 Tauri v2 wraps the SvelteKit Client (PWA) inside a native Rust-powered webview for cross-platform desktop exports. The Rust backend lives in `src-tauri/` at the SvelteKit project root; the JS bridge is `@tauri-apps/api` v2.
 
+**No structural guard** enforces this skill — it is prompt-enforced. Run the
+guards that do exist with `bun run scripts/src/lib/ops/run_guards.ts`.
+
 ---
 
 ## 1. Project Structure

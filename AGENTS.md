@@ -1,6 +1,6 @@
 # Aikami — Agent Guidelines
 
-Monorepo: AI-powered 2D JRPG platform. SvelteKit 2 + PixiJS v8 + Tauri v2
+Monorepo: AI-powered 2D JRPG platform. SvelteKit 3 + PixiJS v8 + Tauri v2
 client, Cloudflare Workers backend (D1 + R2 + Better Auth), local AI
 microservices. Bun runtime, Moon orchestrator, Biome linting (never
 Prettier/ESLint).
@@ -29,14 +29,17 @@ client lives at `apps/frontend/client/` — **not** `apps/client/`.
 | **Server** | Cloudflare D1 | Identity (Better Auth), community packs, save-backup metadata. |
 | **Blobs** | Cloudflare R2 | Catalog assets, save backups. |
 
-The game must boot, play, and save with **no network and no sign-in**. Never
-make a cloud call a boot dependency.
+The game must boot, play, and save with **no sign-in**. The first run needs
+network once to download starter content (C-448); every later run is fully
+offline from the OPFS / Tauri FS cache. Never make a cloud call a boot
+dependency.
 
-> Firebase, Firestore, Data Connect, Cloud Run, and Neon Postgres have all been
-> removed or are being decommissioned. You will still find references in
-> `docs/contracts/` and older code comments — those are history, not the target.
-> The Postgres path in `packages/backend/database` survives only for the C-426
-> rollback window and is deleted in C-436.
+> Firebase, Firestore, Data Connect, Cloud Run, Neon and Postgres are removed
+> (C-426/C-436). References in `docs/contracts/` and old comments are history.
+
+**Boundaries (C-455):** `scripts/` may import `apps/backend/cloudflare/src/lib/`
+(the deploy operations library); no other app is importable from anywhere.
+Apps get `dev`/`build`/`deploy`; packages get `build`/`test`.
 
 ## 🧠 Skills — Load Before Coding
 
@@ -51,21 +54,61 @@ Skills live in `.pi/skills/` (project rules) and `.pi/generated-skills/`
 |---|---|
 | Any code | `aikami-conventions` (logger, imports, TS rules) |
 | Frontend / Svelte | `svelte-conventions` (runes, MVVM) |
-| Backend / API | `backend-conventions` (controller → service) |
+| Backend / API | `backend-conventions` (Drizzle directly — no controller/service/repository layer) |
 | UI styling | `aikami-ui` |
 | Game engine | `pixijs-v8` |
 | Testing | `testing` |
 
 ## 🛑 Before Structural Changes
 
-Read `.context/CONTEXT.md` (stack versions, structure) and `.context/index.md`
-(module map, boundary rules).
+Read `docs/guides/STRUCTURE.md` (accurate package layout) and
+`docs/architecture/architecture.md`. `.context/llms.txt` indexes all docs.
+
+## 🌿 Fresh Worktrees
+
+- `createWorktree()` and `bun run worktree:bootstrap -- --cwd <path>` trust the
+  generated `.envrc` with `direnv allow`, seed local env files, run
+  `bun install --frozen-lockfile`, and generate the seven canonical Emberwatch
+  artifacts. Generation is fingerprinted/cached and may be disabled explicitly
+  with `--no-content`. To trust all managed worktrees on every future shell,
+  copy `scripts/direnv/direnv.toml.example` to
+  `~/.config/direnv/direnv.toml`; its prefix is deliberately limited to
+  `~/.herdr/worktrees/aikami`.
+- Raw `herdr worktree create` output is not ready until
+  `bun run worktree:bootstrap -- --cwd <path>` succeeds. Worktree-local files
+  stay skip-worktree and are never published.
+- `subagent.message` accepts a running subagent: the message is written to a
+  durable inbox and delivered in the same Pi session/worktree at the next safe
+  JSON-mode process boundary, before publication or terminal completion.
+- E2E in a linked worktree gets a stable checkout-scoped port offset. Never kill
+  or reuse a listener merely because it answers on the expected port; preflight
+  proves service/checkout identity and only stops processes spawned by the run.
+
+## 🧪 Evidence Lane
+
+WebGL/entity-texture before/after evidence belongs in the gitignored
+`.evidence/<contract>/` lane, never `/tmp` as the only copy and never in a PR.
+The lane contains paired PNGs, `montage.png`, `manifest.json`,
+`checksums.sha256`, and `index.md`. Use
+`bun run --cwd apps/e2e capture:evidence -- --help`; every capture must fail
+closed on a non-WebGL renderer or unresolved visible entity texture.
 
 ## ✅ Verification
 
 - Lint/format: `bun run lint` / `bun run fix` (Biome only)
-- Full validation: `bun moon run :validate` (or pi's `validate()` tool)
+- Structural guards (~1.5s, whole repo): `bun run scripts/src/lib/ops/run_guards.ts`
+- Before committing: pi's `validate` tool runs fix, typecheck, and structural
+  guards. The pre-commit hook separately runs `verify_bun_version.ts`. Full
+  sweep: `bun moon run :validate`.
 - Never commit/push without explicit user instruction
+
+🔴 **Guards are red → fix the code, never the policy.** Do not raise a
+baseline, waiver or ceiling in `scripts/src/lib/ops/guard_*_{baseline,waivers}.json`
+to make a guard pass; that is a human-reviewed policy change. If a failure
+names none of your files, the base is already red — say so, don't fold a fix in.
+
+The pre-commit hook (`scripts/src/lib/ops/pre_commit.ts`) runs: bun-version
+check → `:fix` (staged) → structural guards → `:typecheck` (staged).
 
 ### Validate through Moon, never with a bare tool
 

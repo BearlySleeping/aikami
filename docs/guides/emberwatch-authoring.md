@@ -149,10 +149,12 @@ change: run validation, read the report, then `--update` the golden.
 bun run emberwatch:studio
 ```
 
-Orchestrates: semantic validation → regenerate maps → regenerate the prop atlas
-(when its sources are newer) → scan assets → build/update the boot seed → check
-the candidate plane → serve the local candidate origin → launch the client →
-print URLs and toggles.
+Orchestrates the **same ordered build the release seal runs** (one shared list,
+`emberwatch_build_steps.ts`): source tile-table validation → install portraits →
+install audio → generate the terrain atlas → generate the prop-atlas pages →
+regenerate the canonical maps → scan assets → `generate_asset_seed.ts --write`
+→ re-validate → check the candidate plane → serve the local candidate origin →
+launch the client → print URLs and toggles.
 
 | Flag | Effect |
 |---|---|
@@ -160,9 +162,33 @@ print URLs and toggles.
 | `--no-client` / `--no-serve` | run checks only / don't launch one side |
 | `--skip-build` | launch against the current artifacts |
 | `--port <n>` | local origin port (default 8788) |
-| `--update-seed` | force `generate_asset_seed.ts --write` |
 
-It never writes to the network and never runs model generation.
+It never writes to the network and never runs model generation. Because the
+studio runs the full build, a fresh worktree no longer needs a manual
+portraits/audio/atlas step before its first run.
+
+### Fresh-worktree sequence
+
+```shell
+# 0. Isolated worktree (any branch from origin/main).
+git worktree add ~/.herdr/worktrees/aikami/<name> -b <branch> origin/main
+bun run worktree:bootstrap -- --cwd ~/.herdr/worktrees/aikami/<name>
+cd ~/.herdr/worktrees/aikami/<name>
+
+# 1. Read-only production snapshot (needs scripts/.env.production; no writes).
+bun run --cwd scripts catalog:workspace snapshot --mode production
+
+# 2. Build + serve the local candidate plane (origin :8788, client :5173).
+bun run emberwatch:studio
+#    …or, when the generated artifacts are already current:
+bun run emberwatch:studio --skip-build
+```
+
+The studio resolves the newest snapshot under
+`.local/catalog/production/snapshots` for the terrain-atlas rule; a release
+snapshot stores its seed content-addressed (`remote/seed/<hash>/asset_seed.json`),
+which the origin reads directly. The client's `.env.emulator.local` already
+points `PUBLIC_ASSETS_BASE_URL` at `http://localhost:8788`.
 
 ## 7. Validators
 
@@ -195,6 +221,10 @@ Layers: `grid`, `walkable`, `connectivity`, `transitions`, `destinations`,
 `propBounds`, `propCollision`, `propAnchor`, `shadowBounds`, `npcs`,
 `landmarks`, `ids`. `?e2e=true` still enables the plain walkability grid. None
 of this reaches the production HUD.
+
+The walkability/collision grid draws **above** the terrain and prop bands but
+below entities (C-548), so it is visible on the terrain maps — the earlier
+`-2000` band sat under the opaque ground and could never be seen.
 
 ## 9. Regenerate + prove determinism
 

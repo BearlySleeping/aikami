@@ -24,7 +24,8 @@ const { viewModel }: Props = $props();
      visible (opacity:0 otherwise) — see party_roster_view for the pattern. -->
 <BaseViewModelContainer {viewModel}>
   <div
-    class="modal modal-open backdrop-blur-sm bg-black/60"
+    class="game-settings-scrim pointer-events-auto z-[60]"
+    data-aikami-theme-scope
     role="dialog"
     aria-modal="true"
     aria-label="In-game settings"
@@ -40,27 +41,38 @@ const { viewModel }: Props = $props();
   }
 }}
   >
-    <div class="modal-box w-full max-w-lg max-h-[80vh] overflow-y-auto">
+    <div class="game-settings-panel" data-testid="in-game-settings-root">
       <!-- Header -->
-      <div class="flex items-center justify-between mb-4">
-        <h2 class="text-lg font-bold">Settings</h2>
-        <button
-          type="button"
-          class="btn btn-ghost btn-sm btn-circle"
-          onclick={() => viewModel.close()}
-          aria-label="Close settings"
-        >
-          ✕
-        </button>
+      <div class="game-settings-header flex items-center justify-between gap-3 mb-4">
+        <h2 class="game-section-title">Settings</h2>
+        <div class="flex items-center gap-2">
+          <button
+            type="button"
+            class="btn game-control--quiet btn-sm"
+            onclick={() => viewModel.navigateToFullSettings()}
+          >
+            Full Settings →
+          </button>
+          <button
+            type="button"
+            class="btn game-control--quiet btn-sm btn-circle"
+            onclick={() => viewModel.close()}
+            aria-label="Close settings"
+          >
+            ✕
+          </button>
+        </div>
       </div>
 
       <!-- Registry-driven tabs -->
-      <div class="tabs tabs-boxed bg-base-200 mb-4 justify-center">
+      <div class="game-tabs mb-4" role="tablist" aria-label="In-game settings sections">
         {#each viewModel.pauseSections as section}
           <button
             type="button"
-            class="tab tab-sm"
-            class:tab-active={viewModel.activeSectionId === section.id}
+            class="game-tab"
+            class:game-tab--selected={viewModel.activeSectionId === section.id}
+            role="tab"
+            aria-selected={viewModel.activeSectionId === section.id}
             onclick={() => viewModel.setActiveSection(section.id)}
           >
             {section.label}
@@ -69,7 +81,7 @@ const { viewModel }: Props = $props();
       </div>
 
       <!-- Dynamic content — renders the active section's view -->
-      <div class="py-2">
+      <div class="game-settings-content py-2" role="tabpanel">
         {#if viewModel.activeAudioViewModel}
           <SettingsAudioView viewModel={viewModel.activeAudioViewModel} />
         {:else if viewModel.activeDisplayViewModel}
@@ -83,17 +95,6 @@ const { viewModel }: Props = $props();
         {:else}
           <p class="text-sm text-base-content/60 text-center py-4">Section not available</p>
         {/if}
-      </div>
-
-      <!-- Full Settings navigation action (AC-4) -->
-      <div class="mt-4 pt-3 border-t border-base-300">
-        <button
-          type="button"
-          class="btn btn-sm btn-ghost w-full justify-center text-base-content/60 hover:text-base-content"
-          onclick={() => viewModel.navigateToFullSettings()}
-        >
-          Full Settings →
-        </button>
       </div>
     </div>
   </div>

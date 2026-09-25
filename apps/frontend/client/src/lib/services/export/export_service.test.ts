@@ -7,12 +7,34 @@ import { expect, mock, test } from 'bun:test';
 const mockAuthService: { uid: string | undefined } = { uid: 'previous-account' };
 const mockListChats = mock(async (_uid: string) => []);
 
+const executedSql: string[] = [];
+const mockFlush = mock(async () => {});
+const transactionStarted = Promise.withResolvers<void>();
+const releaseTransaction = Promise.withResolvers<void>();
+const mockDb = {
+  transaction: mock(async (queries: readonly { sql: string }[]) => {
+    executedSql.push(...queries.map((query) => query.sql));
+    transactionStarted.resolve();
+    await releaseTransaction.promise;
+  }),
+  flush: mockFlush,
+};
+
 mock.module('../auth/auth_service.svelte.ts', () => ({
   authService: mockAuthService,
 }));
 
 mock.module('../chat/chat_storage.svelte.ts', () => ({
   chatStorage: { listChats: mockListChats },
+}));
+
+// Keep the real storage module's exports intact — the export service pulls in
+// modules that import other values (e.g. findArtifactReferences) from it — and
+// override only the connection factory.
+const actualStorage = await import('@aikami/frontend/storage');
+mock.module('@aikami/frontend/storage', () => ({
+  ...actualStorage,
+  getLocalDatabase: async () => mockDb,
 }));
 
 const { exportService } = await import('./export_service.svelte.ts');
@@ -24,4 +46,23 @@ test('sign-out blocks bulk backup before prior-account chats are read', async ()
     'Sign in before exporting a backup.',
   );
   expect(mockListChats).not.toHaveBeenCalled();
+});
+
+test('deleteAllLocalData clears every table and flushes after the transaction settles', async () => {
+  executedSql.length = 0;
+  mockFlush.mockClear();
+
+  const deletion = exportService.deleteAllLocalData();
+  await transactionStarted.promise;
+  expect(mockFlush).not.toHaveBeenCalled();
+
+  releaseTransaction.resolve();
+  await deletion;
+
+  // The reported regression: campaigns survived a delete + immediate reload
+  // because the debounced IndexedDB snapshot was never flushed.
+  expect(executedSql).toContain('DELETE FROM campaigns');
+  expect(executedSql).toContain('DELETE FROM game_operations');
+  expect(executedSql).toContain('DELETE FROM generation_candidates');
+  expect(mockFlush).toHaveBeenCalledTimes(1);
 });

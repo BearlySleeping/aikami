@@ -1,29 +1,19 @@
-# Swarm Agent Runners
+# Pi Runners
 
-Specialized worker scripts for each agent role in the swarm director workspace.
-
-Each runner file corresponds to a specific agent role and contains the
-role-specific instructions, tool configurations, and task templates used
-during swarm execution.
+Standalone scripts that an agent or the contract pipeline invokes directly
+(not pi tools). They are plain Bun entrypoints, loaded at runtime, and follow
+the standard Aikami conventions (`$logger`, type-only imports, arrow
+functions).
 
 ## Runner Layout
 
-| File | Role | Purpose |
-|------|------|---------|
-| `architect_runner.ts` | Architect | System design, contract analysis, task decomposition |
-| `coder_runner.ts` | Coder | Code generation, file mutations, monorepo-aware edits |
-| `qa_runner.ts` | QA | Test execution, validation sweeps, compliance checking |
-| `git_runner.ts` | Git | Commit staging, PR generation, push coordination |
-
-## Integration
-
-Runners are invoked by the swarm director (`scripts/src/lib/agents/swarm_director.ts`)
-via herdr `pane run` commands targeting pre-provisioned role tabs in the
-`aikami-agents` workspace. Each runner receives task context through stdin
-or environment variables.
+| File | Purpose |
+|------|---------|
+| `convention_gate.ts` | AST-aware convention review: deterministic Biome/tree-sitter checks plus a scored convention report |
+| `mcp_bridge.ts` | Bridges an MCP server's tools into the pi tool surface over stdio |
+| `test_healer.ts` | Self-healing visual test harness: runs visual suites, captures mismatches, proposes fixes |
 
 ## Notes
 
-- This directory is tracked by Git but runners are loaded at runtime by Bun
-- Runners use `$logger` for consistent logging across agent roles
-- Runners follow the standard Aikami conventions (type-only imports, arrow functions, etc.)
+- This directory is tracked by Git; runners are executed by Bun, not bundled.
+- Runners use `$logger` for consistent logging.

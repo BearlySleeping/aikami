@@ -309,11 +309,44 @@ export const cornerFrameName = (frameBase: string, mask: number): string => {
   return `${stem}_${mask}${ext}`;
 };
 
+const VARIANT_DETAIL_RATE = 0.018;
+const VARIANT_BROAD_THRESHOLD = 0.6;
+const VARIANT_NOISE_SCALE = 6;
+
+const variantHash = (x: number, y: number, seed: number): number => {
+  let value = (Math.imul(x, 0x1f123bb5) ^ Math.imul(y, 0x5f356495) ^ seed) | 0;
+  value = Math.imul(value ^ (value >>> 16), 0x7feb352d);
+  value = Math.imul(value ^ (value >>> 15), 0x846ca68b);
+  return ((value ^ (value >>> 16)) >>> 0) / 4294967296;
+};
+
+const variantSmoothstep = (value: number): number => value * value * (3 - 2 * value);
+
+const broadVariantNoise = (x: number, y: number): number => {
+  const scaledX = x / VARIANT_NOISE_SCALE;
+  const scaledY = y / VARIANT_NOISE_SCALE;
+  const x0 = Math.floor(scaledX);
+  const y0 = Math.floor(scaledY);
+  const tx = variantSmoothstep(scaledX - x0);
+  const ty = variantSmoothstep(scaledY - y0);
+  const topLeft = variantHash(x0, y0, 0x243f6a88);
+  const topRight = variantHash(x0 + 1, y0, 0x243f6a88);
+  const bottomLeft = variantHash(x0, y0 + 1, 0x243f6a88);
+  const bottomRight = variantHash(x0 + 1, y0 + 1, 0x243f6a88);
+  const top = topLeft + (topRight - topLeft) * tx;
+  const bottom = bottomLeft + (bottomRight - bottomLeft) * tx;
+  return top + (bottom - top) * ty;
+};
+
 /**
  * Deterministically picks a fill variant for a cell.
  *
- * Uses a tiny integer hash of (x, y) — no RNG state, so repeated calls
- * with the same coordinates pick the same frame (idempotency + determinism).
+ * One variant keeps the historical base-or-variant split. With multiple
+ * variants, the final entry is a broad value patch selected by coherent
+ * low-frequency noise; preceding entries are sparse micro-details selected by
+ * a 1.8% coordinate hash. This keeps the base material dominant while making
+ * detail placement independent and irregular. No RNG state is retained, so
+ * repeated calls with the same coordinates remain identical.
  */
 export const pickFillVariant = (
   variants: readonly string[],
@@ -324,12 +357,38 @@ export const pickFillVariant = (
   if (variants.length === 0) {
     return frameBase;
   }
-  // Knuth multiplicative hash of the cell coordinate.
-  let h = (x * 374761393 + y * 668265263) | 0;
-  h = Math.imul(h ^ (h >>> 13), 1274126177);
-  h = h ^ (h >>> 16);
-  const index = Math.abs(h) % (variants.length + 1);
-  return index === 0 ? frameBase : variants[index - 1];
+  if (variants.length === 1) {
+    return variantHash(x, y, 0x9e3779b9) < 0.5 ? frameBase : (variants[0] ?? frameBase);
+  }
+
+  const broadVariant = variants.at(-1);
+  if (broadVariant && broadVariantNoise(x, y) >= VARIANT_BROAD_THRESHOLD) {
+    return broadVariant;
+  }
+
+  const detail = variantHash(x + 101, y + 211, 0x85ebca6b);
+  if (detail >= VARIANT_DETAIL_RATE) {
+    return frameBase;
+  }
+  const detailVariants = variants.slice(0, -1);
+  const detailIndex = Math.min(
+    detailVariants.length - 1,
+    Math.floor((detail / VARIANT_DETAIL_RATE) * detailVariants.length),
+  );
+  return detailVariants[detailIndex] ?? frameBase;
+};
+
+const pickBaseFrame = (options: {
+  isBaseCell: boolean;
+  variants: readonly string[];
+  frameBase: string;
+  x: number;
+  y: number;
+}): string => {
+  if (!options.isBaseCell) {
+    return options.frameBase;
+  }
+  return pickFillVariant(options.variants, options.frameBase, options.x, options.y);
 };
 
 // ---------------------------------------------------------------------------
@@ -376,7 +435,18 @@ export const autotileLayers = (options: AutotileOptions): TerrainLayerEmission[]
     const frames: Array<string | 0> = new Array<string | 0>(total).fill(0);
     for (let y = 0; y < height; y++) {
       for (let x = 0; x < width; x++) {
-        frames[y * width + x] = pickFillVariant(base.variants ?? [], base.frameBase, x, y);
+        const cellIndex = y * width + x;
+        frames[cellIndex] = pickBaseFrame({
+          // Empty channel values are also used by generated maps for baked
+          // non-terrain tiles (paths, sand, bridges, and building cells).
+          // Restrict sparse details to an authored base-terrain ID so those
+          // cells can never receive a grass tuft underneath their real frame.
+          isBaseCell: terrain[cellIndex] === base.name,
+          variants: base.variants ?? [],
+          frameBase: base.frameBase,
+          x,
+          y,
+        });
       }
     }
     emissions.push({

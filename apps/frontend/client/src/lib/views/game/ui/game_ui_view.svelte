@@ -56,6 +56,7 @@ const ANCHORS: readonly HudSlot[] = HUD_ANCHOR_ORDER;
     data-motion={viewModel.motionAttribute}
     data-testid="game-ui-overlay-layer"
     id="game-ui-layer"
+    data-overlay-active={viewModel.activeOverlay === 'PAUSE_MENU' || viewModel.activeOverlay === 'SETTINGS' || viewModel.activeOverlay === 'END_SESSION' || viewModel.activeOverlay === 'GAME_OVER'}
     onfocusin={(event) => viewModel.hud.handleFocusIn(event)}
     onfocusout={() => viewModel.hud.setFocusedWidget(undefined)}
   >
@@ -63,12 +64,17 @@ const ANCHORS: readonly HudSlot[] = HUD_ANCHOR_ORDER;
          Each anchor renders exactly the widgets the resolver placed in it, in
          the resolver's stack order. A widget can no longer invent its own
          coordinates, and an inactive widget is not rendered at all — so a
-         hidden node can never capture pointer input or a tab stop. -->
+         hidden node can never capture pointer input or a tab stop. The
+         fullscreen dialogue state stays local to that overlay; the relational
+         class below hides every HUD anchor without leaking presentation state
+         into the game UI ViewModel. End anchors also use `items-end` so each
+         widget's intrinsic width stays flush with the viewport edge. -->
     {#each ANCHORS as anchor}
       <div
-        class="{hudAnchorClass(anchor)} z-50 flex gap-2 pointer-events-none"
+        class="{hudAnchorClass(anchor)} z-50 flex gap-2 pointer-events-none [#game-ui-layer:has(.game-stage--full)_&]:hidden"
         class:flex-col-reverse={viewModel.hud.stacksUpward(anchor)}
         class:flex-col={!viewModel.hud.stacksUpward(anchor)}
+        class:items-end={anchor === 'top-end' || anchor === 'bottom-end'}
         data-testid="hud-anchor-{anchor}"
       >
         {#each viewModel.hud.widgetsInAnchor(anchor) as widget (widget.widgetId)}
@@ -112,7 +118,12 @@ const ANCHORS: readonly HudSlot[] = HUD_ANCHOR_ORDER;
                 <QuestTrackerView viewModel={viewModel.questTrackerViewModel} />
               {/if}
             {:else if widget.widgetId === 'interaction'}
-              <InteractionPrompt label={viewModel.interactionPromptLabel} visible={true} />
+              <InteractionPrompt
+                label={viewModel.interactionPromptLabel}
+                visible={true}
+                screenX={viewModel.interactionPromptScreenX}
+                screenY={viewModel.interactionPromptScreenY}
+              />
             {:else if widget.widgetId === 'hotbar'}
               <HotbarView />
             {:else if widget.widgetId === 'music-player'}
@@ -184,8 +195,6 @@ const ANCHORS: readonly HudSlot[] = HUD_ANCHOR_ORDER;
       <PauseMenuView viewModel={viewModel.pauseMenuViewModel} />
     {:else if viewModel.activeOverlay === 'HUD_EDITOR' && viewModel.hudEditorViewModel}
       <HudLayoutEditorOverlay viewModel={viewModel.hudEditorViewModel} />
-    {:else if viewModel.activeOverlay === 'DIALOGUE' && viewModel.dialogueViewModel}
-      <DialogueOverlay viewModel={viewModel.dialogueViewModel} />
     {:else if viewModel.activeOverlay === 'GAME_OVER'}
       <GameOverOverlay
         onRespawn={() => viewModel.respawnPlayer()}
@@ -199,6 +208,22 @@ const ANCHORS: readonly HudSlot[] = HUD_ANCHOR_ORDER;
       <SettingsOverlay viewModel={viewModel.settingsOverlayViewModel} />
     {:else if viewModel.activeOverlay === 'TALK_TO_PARTY' && viewModel.talkToPartyViewModel}
       <TalkToPartyView viewModel={viewModel.talkToPartyViewModel} />
+    {/if}
+
+    {#if viewModel.dialogueViewModel}
+      <!--
+        A management surface may temporarily cover Dialogue. Keep the
+        conversation mounted but hidden/inert so its BaseViewModelContainer
+        does not dispose the transcript and draft while Inventory is open.
+      -->
+      <div
+        class="contents"
+        hidden={viewModel.activeOverlay !== 'DIALOGUE'}
+        inert={viewModel.activeOverlay !== 'DIALOGUE'}
+        data-testid="dialogue-session"
+      >
+        <DialogueOverlay viewModel={viewModel.dialogueViewModel} />
+      </div>
     {/if}
 
     <TransitionOverlay {viewModel} />

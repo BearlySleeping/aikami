@@ -69,13 +69,16 @@ describe('C-520 AC-6: overflow fails visibly', () => {
   });
 
   test('terrain capacity is explicit, so an overrun is reported rather than evicting a cell', () => {
-    const frames = Array.from({ length: 130 }, (_unused, index) => ({
-      name: `terrain-${index}`,
-      x: 1,
-      y: 1,
-      width: 8,
-      height: 8,
-    }));
+    const frames = Array.from(
+      { length: EMBERWATCH_TERRAIN_ATLAS_CAPACITY.cells + 1 },
+      (_unused, index) => ({
+        name: `terrain-${index}`,
+        x: 1,
+        y: 1,
+        width: 8,
+        height: 8,
+      }),
+    );
     const issues = validateAtlasPages({
       pages: [page('atlas.webp', frames)],
       maxPageSize: 2048,
@@ -84,7 +87,11 @@ describe('C-520 AC-6: overflow fails visibly', () => {
       capacityCells: EMBERWATCH_TERRAIN_ATLAS_CAPACITY.cells,
     });
     expect(codesOf(issues)).toContain(ATLAS_VALIDATION_CODES.capacityOverflow);
-    expect(issues.some((issue) => issue.message.includes('130'))).toBe(true);
+    expect(
+      issues.some((issue) =>
+        issue.message.includes(String(EMBERWATCH_TERRAIN_ATLAS_CAPACITY.cells + 1)),
+      ),
+    ).toBe(true);
   });
 
   test('a dropped frame is visible when the packer expected more', () => {

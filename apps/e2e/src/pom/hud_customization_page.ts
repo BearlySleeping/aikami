@@ -61,6 +61,11 @@ export class HudCustomizationPage {
     return this.page.getByTestId(`hud-editor-row-${widgetId}`);
   }
 
+  /** The drag handle for a widget row (the row center hosts controls). */
+  editorDragHandle(widgetId: string) {
+    return this.page.getByTestId(`hud-editor-drag-${widgetId}`);
+  }
+
   previewWidget(widgetId: string) {
     return this.page.getByTestId(`hud-preview-${widgetId}`);
   }
@@ -98,7 +103,7 @@ export class HudCustomizationPage {
   }
 
   async selectEditorWidget(widgetId: string): Promise<void> {
-    await this.editorRow(widgetId).click();
+    await this.page.getByTestId(`hud-editor-select-${widgetId}`).click();
   }
 
   async selectPreviewContext(context: string): Promise<void> {
@@ -130,11 +135,27 @@ export class HudCustomizationPage {
   }
 
   async dragWidgetTo(widgetId: string, anchor: string): Promise<void> {
-    await this.editorRow(widgetId).scrollIntoViewIfNeeded();
-    const source = await this.editorRow(widgetId).boundingBox();
+    await this.editorDragHandle(widgetId).scrollIntoViewIfNeeded();
+    const source = await this.editorDragHandle(widgetId).boundingBox();
     const target = await this.page.getByTestId(`hud-drop-anchor-${anchor}`).boundingBox();
     if (!source || !target) {
       throw new Error(`drag ${widgetId} -> ${anchor}: source or target not visible`);
+    }
+    await this.page.mouse.move(source.x + source.width / 2, source.y + source.height / 2);
+    await this.page.mouse.down();
+    await this.page.mouse.move(target.x + target.width / 2, target.y + target.height / 2, {
+      steps: 8,
+    });
+    await this.page.mouse.up();
+    await this.page.waitForTimeout(200);
+  }
+
+  /** Drags a widget that is already placed, from the preview onto another region. */
+  async dragPreviewWidgetTo(widgetId: string, anchor: string): Promise<void> {
+    const source = await this.previewWidget(widgetId).boundingBox();
+    const target = await this.page.getByTestId(`hud-drop-anchor-${anchor}`).boundingBox();
+    if (!source || !target) {
+      throw new Error(`preview drag ${widgetId} -> ${anchor}: source or target not visible`);
     }
     await this.page.mouse.move(source.x + source.width / 2, source.y + source.height / 2);
     await this.page.mouse.down();
@@ -208,7 +229,9 @@ export class HudCustomizationPage {
   }
 
   async toggleHiddenHudAndResume(): Promise<void> {
-    await this.page.getByTestId('pause-hide-hud').click();
+    await this.page.getByTestId('pause-customize-hud').click();
+    await this.page.getByTestId('hud-editor-toggle-visibility').click();
+    await this.page.getByTestId('hud-editor-close').click();
     await this.page.getByRole('button', { name: 'Resume Game' }).click();
   }
 

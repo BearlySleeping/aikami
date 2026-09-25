@@ -81,7 +81,7 @@ each app declares in `scripts/src/lib/deploy/deployment_config.ts`:
 Key jobs, in order:
 
 - `resolve-plan` — decides what this release actually needs to deploy
-- `prepare-secrets` — pulls the deploy-time secret set from GCP Secret Manager
+- `decrypt-secrets` — decrypts the deploy-time secret set from the SOPS/age bundles (no GCP)
 - `plan-desktop` / `plan-matrix` — expands the per-platform build matrix
 - `build-web` — builds the web apps once, shared by the deploy jobs
 - `deploy-cloudflare` — `wrangler deploy` per Worker, with D1/R2 bindings

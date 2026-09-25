@@ -27,8 +27,12 @@
 //   arrival spawns sit clear of every transition rectangle on this map.
 
 import {
+  assertNoHousePropOverlaps,
   cell,
+  isBridgeGid,
   OLD_ROAD_ARRIVAL,
+  placeBridge,
+  placeHouse,
   placeLandmark,
   placeNpc,
   placeProp,
@@ -43,6 +47,7 @@ import {
   makeMap,
   makeRng,
   scatter,
+  scatterPatches,
   setTile,
 } from './emberwatch_map_shared.ts';
 import { buildG } from './generate_emberwatch_tables.ts';
@@ -182,8 +187,11 @@ const streamChannel = (): Array<[number, number]> => {
   for (let r = 3; r <= 7; r++) {
     channel.push([40, r]);
   }
-  for (let c = 39; c >= 26; c--) {
-    channel.push([c, 7]);
+  // C-549: the E–W reach is two rows deep (7–8) from its west end to the elbow
+  // at col 40, so the crossing sits on a straight span whose long sides are
+  // water and whose travel ends are dry land.
+  for (let c = 40; c >= 26; c--) {
+    channel.push([c, 7], [c, 8]);
   }
   for (let r = 8; r <= 12; r++) {
     channel.push([26, r]);
@@ -213,8 +221,9 @@ const layChannel = (m: MapData, channel: Array<[number, number]>): void => {
  * would render as fallback grass.
  */
 const bankChannel = (m: MapData, channel: Array<[number, number]>): void => {
-  // Only the inner (south/east) shore is banked, so the stream keeps a single
-  // dry edge rather than a wide beach on both sides.
+  // The generic pass follows the stream's inner (south/east) shore. The
+  // straight E–W reach gets a paired-bank pass below so its two banks use the
+  // same material.
   const neighbours = [
     [0, 1],
     [1, 0],
@@ -237,14 +246,38 @@ const bankChannel = (m: MapData, channel: Array<[number, number]>): void => {
   }
 };
 
-/** The stone bridge: the only dry crossing of the stream. */
-const buildStreamBridge = (m: MapData): void => {
-  for (const c of [39, 40, 41]) {
-    for (const r of [7, 8]) {
-      setTile(m, c, r, G.BRIDGE);
-      m.collision[r * W + c] = 0;
+/**
+ * Paints the two dry banks of the straight E–W reach with the same material.
+ * The channel's generic bank pass follows the stream's inner corner, which
+ * leaves only a south-side strip at this reach. Keep the banks paired here;
+ * the short worn approaches are painted after this pass.
+ */
+const bankStraightReach = (m: MapData): void => {
+  for (let c = 26; c <= 40; c++) {
+    for (const r of [6, 9]) {
+      if (!inBounds(c, r)) {
+        continue;
+      }
+      const index = r * W + c;
+      if (m.ground[index] === G.WATER || m.collision[index] === 1) {
+        continue;
+      }
+      setTile(m, c, r, G.SAND);
     }
   }
+};
+
+/** The wooden bridge: the only dry crossing of the stream. */
+const buildStreamBridge = (m: MapData): void => {
+  // C-549: on the straight E–W reach, so the strict bank check holds — both
+  // travel ends are dry land and both long sides are water. Three columns keep
+  // the north-road route companion-safe instead of creating a new two-cell
+  // bottleneck at the widened crossing.
+  placeBridge(m, {
+    region: { c0: 36, r0: 7, c1: 38, r1: 8 },
+    axis: 'ns',
+    mapId: 'village',
+  });
 };
 
 /**
@@ -253,111 +286,15 @@ const buildStreamBridge = (m: MapData): void => {
  * Enters from the north-east treeline, runs west inside the northern rim and
  * drains out through the west rim. It shapes the perimeter instead of sitting in
  * the middle of the map as a decorative pond. Collision stays semantic — water
- * blocks — and the only dry crossing is the stone bridge on the notice-board
+ * blocks — and the only dry crossing is the wooden bridge on the notice-board
  * approach.
  */
 const stream = (m: MapData): void => {
   const channel = streamChannel();
   layChannel(m, channel);
   bankChannel(m, channel);
+  bankStraightReach(m);
   buildStreamBridge(m);
-};
-
-type DoorSide = 'north' | 'south' | 'east' | 'west';
-
-/** The building's wall ring. */
-const paintShell = (
-  m: MapData,
-  c0: number,
-  r0: number,
-  w: number,
-  h: number,
-  wall: number,
-): void => {
-  for (let c = c0; c <= c0 + w - 1; c++) {
-    setTile(m, c, r0, wall);
-    setTile(m, c, r0 + h - 1, wall);
-    block(m, c, r0);
-    block(m, c, r0 + h - 1);
-  }
-  for (let r = r0 + 1; r <= r0 + h - 2; r++) {
-    setTile(m, c0, r, wall);
-    setTile(m, c0 + w - 1, r, wall);
-    block(m, c0, r);
-    block(m, c0 + w - 1, r);
-  }
-};
-
-/** The roofed interior. */
-const paintInterior = (m: MapData, c0: number, r0: number, w: number, h: number): void => {
-  for (let r = r0 + 1; r <= r0 + h - 2; r++) {
-    for (let c = c0 + 1; c <= c0 + w - 2; c++) {
-      setTile(m, c, r, G.ROOF);
-      block(m, c, r);
-    }
-  }
-};
-
-/** The two-tile door and the two-cell landing in front of it. */
-const doorPlacement = (options: {
-  c0: number;
-  r0: number;
-  w: number;
-  h: number;
-  doorSide: DoorSide;
-}): { doorCells: Array<[number, number]>; landingCells: Array<[number, number]> } => {
-  const { c0, r0, w, h, doorSide } = options;
-  const doorCells: Array<[number, number]> = [];
-  const landingCells: Array<[number, number]> = [];
-  if (doorSide === 'south' || doorSide === 'north') {
-    const doorRow = doorSide === 'south' ? r0 + h - 1 : r0;
-    const step = doorSide === 'south' ? 1 : -1;
-    const midC = c0 + Math.floor(w / 2);
-    for (const c of [midC - 1, midC]) {
-      doorCells.push([c, doorRow]);
-      landingCells.push([c, doorRow + step], [c, doorRow + step * 2]);
-    }
-    return { doorCells, landingCells };
-  }
-  const doorCol = doorSide === 'east' ? c0 + w - 1 : c0;
-  const step = doorSide === 'east' ? 1 : -1;
-  const midR = r0 + Math.floor(h / 2);
-  for (const r of [midR - 1, midR]) {
-    doorCells.push([doorCol, r]);
-    landingCells.push([doorCol + step, r], [doorCol + step * 2, r]);
-  }
-  return { doorCells, landingCells };
-};
-
-/** Opens a set of cells to stone floor, leaving out-of-bounds cells untouched. */
-const openCells = (m: MapData, cells: Array<[number, number]>): void => {
-  for (const [c, r] of cells) {
-    if (!inBounds(c, r)) {
-      continue;
-    }
-    setTile(m, c, r, G.STONE_FLOOR);
-    m.collision[r * W + c] = 0;
-  }
-};
-
-/**
- * A walled building shell with a two-tile door on the given side and a
- * two-cell landing in front of it, so no entrance is a dead end.
- */
-const building = (
-  m: MapData,
-  c0: number,
-  r0: number,
-  w: number,
-  h: number,
-  wall: number,
-  doorSide: DoorSide,
-): void => {
-  paintShell(m, c0, r0, w, h, wall);
-  paintInterior(m, c0, r0, w, h);
-  const { doorCells, landingCells } = doorPlacement({ c0, r0, w, h, doorSide });
-  openCells(m, doorCells);
-  openCells(m, landingCells);
 };
 
 /**
@@ -390,9 +327,10 @@ const paintSecondaryRoutes = (m: MapData): void => {
   // Shop approach: south from the north–south road to the shop landing.
   fillRect(m, 39, 33, 53, 34, G.DIRT);
   fillRect(m, 50, 33, 51, 34, G.STONE_FLOOR);
-  // Notice-board approach: north from the road, over the bridge.
+  // Notice-board approach: north from the road to the crossing's south bank.
+  // The short spurs onto each bank are painted after the stream so the bank
+  // sand cannot overwrite them (see paintNoticeBoardApproach).
   fillRect(m, 39, 9, 40, 22, G.DIRT);
-  fillRect(m, 41, 10, 46, 11, G.DIRT);
   // Well approach: west from the square.
   fillRect(m, 23, 22, 26, 23, G.DIRT);
   // A worn spur down to the south shed, so the south-west is not dead grass.
@@ -402,23 +340,78 @@ const paintSecondaryRoutes = (m: MapData): void => {
 /** ── Pads ─────────────────────────────────────────────────────────────────── */
 const paintPads = (m: MapData): void => {
   fillRect(m, 17, 21, 22, 25, G.STONE_FLOOR); // well
-  fillRect(m, 43, 8, 47, 12, G.STONE_FLOOR); // notice board
   fillRect(m, 4, 27, 14, 30, G.STONE_FLOOR); // smith's yard
   fillRect(m, 47, 20, 56, 22, G.STONE_FLOOR); // inn forecourt
   fillRect(m, 47, 33, 56, 34, G.STONE_FLOOR); // shop landing
 };
 
-/** The five building shells, in placement order. */
+/**
+ * The notice board's compact worn approach (C-549).
+ *
+ * The existing dirt path at cols 39–40 runs north to the crossing's south bank;
+ * a short three-cell landing meets the span on each bank. The board keeps a
+ * grass surround; only the narrow approach below it is worn earth, so the
+ * shared corner16 painter never gets a broad slab to turn into a sawtooth.
+ */
+const paintNoticeBoardApproach = (m: MapData): void => {
+  // Reassert the authored trunk after the symmetric bank pass.
+  fillRect(m, 39, 9, 40, 22, G.DIRT);
+  fillRect(m, 36, 9, 38, 9, G.DIRT); // south landing → crossing
+  fillRect(m, 36, 5, 38, 5, G.DIRT); // short worn landing below the board
+  fillRect(m, 36, 6, 38, 6, G.DIRT); // north landing → board walk
+};
+
+/** All seven village structures share the C-550/C-553 raised-house assembly. */
 const placeBuildings = (m: MapData): void => {
-  building(m, 47, 12, 9, 8, G.STONE_WALL, 'south'); // the inn (east)
-  building(m, 47, 26, 9, 7, G.WOOD_WALL, 'south'); // the shop (south-east)
-  building(m, 4, 30, 9, 7, G.STONE_WALL, 'north'); // the smithy (west)
-  building(m, 5, 15, 8, 6, G.WOOD_WALL, 'south'); // cottage (north-west)
-  // The second cottage is offset from the first — two doors on the same row
-  // read as a level-editor row, not a village.
-  building(m, 18, 13, 7, 6, G.WOOD_WALL, 'south'); // cottage (north)
-  building(m, 24, 36, 7, 6, G.WOOD_WALL, 'north'); // shed (south-west)
-  building(m, 51, 5, 6, 5, G.WOOD_WALL, 'south'); // hut (north-east)
+  placeHouse(m, {
+    region: { c0: 47, r0: 12, c1: 55, r1: 19 },
+    door: { c: 51, state: 'open' },
+    facing: 's',
+    roofMaterial: 'slate',
+    mapId: 'village',
+  });
+  placeHouse(m, {
+    region: { c0: 47, r0: 26, c1: 55, r1: 32 },
+    door: { c: 51, state: 'open' },
+    facing: 's',
+    roofMaterial: 'thatch',
+    mapId: 'village',
+  });
+  placeHouse(m, {
+    region: { c0: 4, r0: 30, c1: 12, r1: 36 },
+    door: { c: 8, state: 'closed' },
+    facing: 's',
+    roofMaterial: 'slate',
+    mapId: 'village',
+  });
+  placeHouse(m, {
+    region: { c0: 5, r0: 15, c1: 12, r1: 20 },
+    door: { c: 9, state: 'closed' },
+    facing: 's',
+    roofMaterial: 'cedar',
+    mapId: 'village',
+  });
+  placeHouse(m, {
+    region: { c0: 18, r0: 13, c1: 24, r1: 18 },
+    door: { c: 21, state: 'closed' },
+    facing: 's',
+    roofMaterial: 'cedar',
+    mapId: 'village',
+  });
+  placeHouse(m, {
+    region: { c0: 24, r0: 36, c1: 30, r1: 41 },
+    door: { c: 27, state: 'closed' },
+    facing: 's',
+    roofMaterial: 'thatch',
+    mapId: 'village',
+  });
+  placeHouse(m, {
+    region: { c0: 51, r0: 5, c1: 56, r1: 9 },
+    door: { c: 54, state: 'closed' },
+    facing: 's',
+    roofMaterial: 'cedar',
+    mapId: 'village',
+  });
 };
 
 /**
@@ -527,9 +520,9 @@ const resealWater = (m: MapData): void => {
 
 /** …and the bridge stays open after that. */
 const reopenBridge = (m: MapData): void => {
-  for (const c of [39, 40, 41]) {
+  for (const c of [36, 37, 38]) {
     for (const r of [7, 8]) {
-      if (m.ground[r * W + c] === G.BRIDGE) {
+      if (isBridgeGid(m.ground[r * W + c])) {
         m.collision[r * W + c] = 0;
       }
     }
@@ -563,10 +556,33 @@ export const buildVillage = (): { map: MapData; objectLayers: MapObjectLayer[] }
   paintPads(m);
   placeBuildings(m);
   stream(m);
+  paintNoticeBoardApproach(m);
 
   // ── Ground variation and woodland stands ─────────────────────────────────
-  scatter(m, rng, 2, 2, W - 3, H - 3, G.GRASS, G.GRASS_DARK, 0.14);
-  scatter(m, rng, 2, 2, W - 3, H - 3, G.GRASS, G.GRASS_VARIANT, 0.06);
+  // C-549: broad, soft grass patches (deterministic value noise), not
+  // independent per-cell flecks that advertise the grid (plan §1.6).
+  scatterPatches({
+    map: m,
+    seed: 0x5a11,
+    c0: 2,
+    r0: 2,
+    c1: W - 3,
+    r1: H - 3,
+    baseGid: G.GRASS,
+    gid: G.GRASS_DARK,
+    threshold: 0.62,
+  });
+  scatterPatches({
+    map: m,
+    seed: 0x5a12,
+    c0: 2,
+    r0: 2,
+    c1: W - 3,
+    r1: H - 3,
+    baseGid: G.GRASS,
+    gid: G.GRASS_VARIANT,
+    threshold: 0.82,
+  });
   // Paving wear through the earthen square.
   scatter(m, rng, 26, 19, 39, 28, G.DIRT, G.FLAGSTONE, 0.14);
 
@@ -586,7 +602,7 @@ export const buildVillage = (): { map: MapData; objectLayers: MapObjectLayer[] }
 
         // ── Landmarks ──────────────────────────────────────────────────────
         placeLandmark(2, 'village_well', 'Old Stone Well', 'prop_well.png', 19, 24),
-        placeLandmark(3, 'notice_board', 'Village Notice Board', 'prop_notice_board.png', 45, 11),
+        placeLandmark(3, 'notice_board', 'Village Notice Board', 'prop_notice_board.png', 37, 4),
         placeLandmark(4, 'village_gate', 'Emberwatch Village Gate', 'prop_gate.png', 32, 45),
         placeLandmark(12, 'ward_tree_landmark', 'The Ward Tree', 'ward_large.png', 32, 23),
 
@@ -596,7 +612,7 @@ export const buildVillage = (): { map: MapData; objectLayers: MapObjectLayer[] }
         // and the south-east stays open toward the services.
         placeProp(13, 'woodland_oak', 'Woodland Oak', 'oak.png', 27, 14),
         placeProp(15, 'woodland_oak_2', 'Woodland Oak', 'oak.png', 44, 16),
-        placeProp(16, 'woodland_oak_3', 'Woodland Oak', 'oak.png', 12, 20),
+        placeProp(16, 'woodland_oak_3', 'Woodland Oak', 'oak.png', 15, 20),
         placeProp(17, 'woodland_oak_4', 'Woodland Oak', 'oak.png', 56, 40),
         placeProp(18, 'woodland_birch', 'Woodland Birch', 'birch.png', 27, 17),
         placeProp(19, 'woodland_birch_2', 'Woodland Birch', 'birch.png', 45, 29),
@@ -605,15 +621,17 @@ export const buildVillage = (): { map: MapData; objectLayers: MapObjectLayer[] }
         placeProp(23, 'ward_grove_c', 'Ward Grove (lit)', 'ward_small_c.png', 29, 20),
 
         // ── Building-adjacent clutter (never blocks a route) ───────────────
-        placeProp(24, 'inn_barrel', 'Barrel', 'prop_barrel.png', 54, 21),
+        placeProp(24, 'inn_barrel', 'Barrel', 'prop_barrel.png', 56, 22),
         placeProp(25, 'inn_crate', 'Crate', 'prop_crate.png', 5, 27),
         placeProp(26, 'yard_anvil', 'Smith Anvil', 'prop_anvil.png', 5, 28),
         placeProp(27, 'shop_crate', 'Crate', 'prop_crate.png', 55, 35),
-        placeProp(28, 'inn_chair', 'Chair', 'chair.png', 53, 20),
+        placeProp(28, 'inn_chair', 'Chair', 'chair.png', 55, 22),
+        // One existing prop definition, used as the inn's warm door light.
+        placeProp(61, 'inn_brazier', 'Inn Door Brazier', 'prop_brazier.png', 53, 22),
 
         // ── Arrival markers ────────────────────────────────────────────────
-        placeSpawn(7, 'from_merchant', 3, 24),
-        placeSpawn(8, 'from_inn', 60, 24),
+        placeSpawn(7, 'from_merchant', 51, 36),
+        placeSpawn(8, 'from_inn', 51, 23),
         placeSpawn(9, 'village_gate', 32, 44),
         placeSpawn(60, 'from_old_road', 32, 3),
       ],
@@ -628,14 +646,14 @@ export const buildVillage = (): { map: MapData; objectLayers: MapObjectLayer[] }
           targetMap: 'merchant_shop',
           targetSpawnId: 'shop_entrance',
           target: { x: cell(12), y: cell(15) },
-          at: { c: 0, r: 23, width: 1, height: 3 },
+          at: { c: 51, r: 33, width: 1, height: 2 },
         }),
         placeTransition({
           id: 1006,
           targetMap: 'inn',
           targetSpawnId: 'inn_entrance',
           target: { x: cell(14), y: cell(17) },
-          at: { c: 63, r: 23, width: 1, height: 3 },
+          at: { c: 51, r: 20, width: 1, height: 2 },
         }),
         placeTransition({
           id: 1007,
@@ -655,5 +673,6 @@ export const buildVillage = (): { map: MapData; objectLayers: MapObjectLayer[] }
     },
   ];
 
+  assertNoHousePropOverlaps({ map: m, objectLayers });
   return { map: m, objectLayers };
 };

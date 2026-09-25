@@ -35,9 +35,12 @@ export const createEntityDisplay = (options: {
     | ((options: { eid: number; frame: string; container: Container }) => void)
     | undefined;
   frame: string | undefined;
+  /** C-545: light-source prop — skipped by the scene ambient tint. */
+  ambientExempt?: boolean;
   onAddedToStage: (info: { eid: number; stageChildren: number }) => void;
 }): EntityDisplay => {
   const container = new Container();
+  container.label = `entity-${options.eid}`;
 
   // Draw a debug colored square using the worker's tint so entities are visible
   // even before LPC textures load. Uses Sprite(Texture.WHITE) because PixiJS v8
@@ -77,6 +80,7 @@ export const createEntityDisplay = (options: {
       // Initialize per-entity animation controller for walk/idle state
       animationController: new AnimationController(),
       tint: options.tint,
+      ...(options.ambientExempt ? { ambientExempt: true } : {}),
       cullable: true,
       recipes: [],
     },
