@@ -7,23 +7,23 @@
   "packUpdatedAt": "2026-09-18T00:00:00.000Z",
   "generatedAt": "1980-01-01T00:00:00.000Z",
   "summary": {
-    "accepted/current": 147,
-    "acceptable-shared": 84,
+    "accepted/current": 146,
+    "acceptable-shared": 92,
     "placeholder/wrong-semantic-reuse": 0,
     "missing": 0,
-    "needs-regeneration": 0,
+    "needs-regeneration": 2,
     "needs-map-layout-change": 0,
     "needs-runtime-capability": 0
   },
   "counts": {
     "maps": 5,
-    "terrains": 6,
-    "bakedTiles": 95,
-    "corner16Terrains": 5,
-    "atlasCellsUsed": 175,
-    "atlasCellsTotal": 176,
-    "atlasCellsFree": 1,
-    "props": 95,
+    "terrains": 7,
+    "bakedTiles": 111,
+    "corner16Terrains": 6,
+    "atlasCellsUsed": 207,
+    "atlasCellsTotal": 192,
+    "atlasCellsFree": -15,
+    "props": 103,
     "npcs": 13,
     "hostileNpcs": 4,
     "evidence": 4,
@@ -31,7 +31,7 @@
     "sourceImages": 28,
     "transitions": 8,
     "catalogTags": 12,
-    "findings": 231
+    "findings": 240
   },
   "findings": [
     {
@@ -44,25 +44,25 @@
       "id": "map:inn",
       "surface": "map",
       "classification": "accepted/current",
-      "detail": "28x20; 20 prop placements, 2 NPC placements, 1 transitions"
+      "detail": "28x20; 22 prop placements, 2 NPC placements, 1 transitions"
     },
     {
       "id": "map:merchant_shop",
       "surface": "map",
       "classification": "accepted/current",
-      "detail": "24x18; 11 prop placements, 1 NPC placements, 1 transitions"
+      "detail": "24x18; 13 prop placements, 1 NPC placements, 1 transitions"
     },
     {
       "id": "map:old_road",
       "surface": "map",
       "classification": "accepted/current",
-      "detail": "72x36; 24 prop placements, 2 NPC placements, 2 transitions"
+      "detail": "72x36; 26 prop placements, 2 NPC placements, 2 transitions"
     },
     {
       "id": "map:ruined_shrine",
       "surface": "map",
       "classification": "accepted/current",
-      "detail": "40x36; 7 prop placements, 1 NPC placements, 1 transitions"
+      "detail": "40x36; 9 prop placements, 1 NPC placements, 1 transitions"
     },
     {
       "id": "terrain:grass",
@@ -101,10 +101,16 @@
       "detail": "corner16 (16 atlas cells); precedence 5; walkable=true"
     },
     {
+      "id": "terrain:path",
+      "surface": "terrain",
+      "classification": "accepted/current",
+      "detail": "corner16 (16 atlas cells); precedence 6; walkable=true"
+    },
+    {
       "id": "atlas:headroom",
       "surface": "atlas-frame",
-      "classification": "accepted/current",
-      "detail": "175/176 atlas cells used (95 baked tiles + 5×16 corner16) — 1 free; a new corner16 terrain requires an explicit geometry change"
+      "classification": "needs-regeneration",
+      "detail": "207/192 atlas cells used (111 baked tiles + 6×16 corner16) — -15 free; a new corner16 terrain requires an explicit geometry change"
     },
     {
       "id": "prop:ward_tree_landmark",
@@ -428,13 +434,13 @@
       "id": "prop:inn_support",
       "surface": "prop",
       "classification": "acceptable-shared",
-      "detail": "frame prop_support.png shared with waystation_support"
+      "detail": "frame prop_support.png shared with waystation_support, inn_perimeter_post_w, inn_perimeter_post_e, shop_perimeter_post_w, shop_perimeter_post_e, waystation_perimeter_post_w, waystation_perimeter_post_e, shrine_perimeter_post_w, shrine_perimeter_post_e"
     },
     {
       "id": "prop:waystation_support",
       "surface": "prop",
       "classification": "acceptable-shared",
-      "detail": "frame prop_support.png shared with inn_support"
+      "detail": "frame prop_support.png shared with inn_support, inn_perimeter_post_w, inn_perimeter_post_e, shop_perimeter_post_w, shop_perimeter_post_e, waystation_perimeter_post_w, waystation_perimeter_post_e, shrine_perimeter_post_w, shrine_perimeter_post_e"
     },
     {
       "id": "prop:inn_hanging_crate",
@@ -459,6 +465,54 @@
       "surface": "prop",
       "classification": "accepted/current",
       "detail": "frame prop_cart.png"
+    },
+    {
+      "id": "prop:inn_perimeter_post_w",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame prop_support.png shared with inn_support, waystation_support, inn_perimeter_post_e, shop_perimeter_post_w, shop_perimeter_post_e, waystation_perimeter_post_w, waystation_perimeter_post_e, shrine_perimeter_post_w, shrine_perimeter_post_e"
+    },
+    {
+      "id": "prop:inn_perimeter_post_e",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame prop_support.png shared with inn_support, waystation_support, inn_perimeter_post_w, shop_perimeter_post_w, shop_perimeter_post_e, waystation_perimeter_post_w, waystation_perimeter_post_e, shrine_perimeter_post_w, shrine_perimeter_post_e"
+    },
+    {
+      "id": "prop:shop_perimeter_post_w",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame prop_support.png shared with inn_support, waystation_support, inn_perimeter_post_w, inn_perimeter_post_e, shop_perimeter_post_e, waystation_perimeter_post_w, waystation_perimeter_post_e, shrine_perimeter_post_w, shrine_perimeter_post_e"
+    },
+    {
+      "id": "prop:shop_perimeter_post_e",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame prop_support.png shared with inn_support, waystation_support, inn_perimeter_post_w, inn_perimeter_post_e, shop_perimeter_post_w, waystation_perimeter_post_w, waystation_perimeter_post_e, shrine_perimeter_post_w, shrine_perimeter_post_e"
+    },
+    {
+      "id": "prop:waystation_perimeter_post_w",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame prop_support.png shared with inn_support, waystation_support, inn_perimeter_post_w, inn_perimeter_post_e, shop_perimeter_post_w, shop_perimeter_post_e, waystation_perimeter_post_e, shrine_perimeter_post_w, shrine_perimeter_post_e"
+    },
+    {
+      "id": "prop:waystation_perimeter_post_e",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame prop_support.png shared with inn_support, waystation_support, inn_perimeter_post_w, inn_perimeter_post_e, shop_perimeter_post_w, shop_perimeter_post_e, waystation_perimeter_post_w, shrine_perimeter_post_w, shrine_perimeter_post_e"
+    },
+    {
+      "id": "prop:shrine_perimeter_post_w",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame prop_support.png shared with inn_support, waystation_support, inn_perimeter_post_w, inn_perimeter_post_e, shop_perimeter_post_w, shop_perimeter_post_e, waystation_perimeter_post_w, waystation_perimeter_post_e, shrine_perimeter_post_e"
+    },
+    {
+      "id": "prop:shrine_perimeter_post_e",
+      "surface": "prop",
+      "classification": "acceptable-shared",
+      "detail": "frame prop_support.png shared with inn_support, waystation_support, inn_perimeter_post_w, inn_perimeter_post_e, shop_perimeter_post_w, shop_perimeter_post_e, waystation_perimeter_post_w, waystation_perimeter_post_e, shrine_perimeter_post_w"
     },
     {
       "id": "prop:shrine_arch",
@@ -1171,8 +1225,8 @@
     {
       "id": "atlas:frames",
       "surface": "atlas-frame",
-      "classification": "accepted/current",
-      "detail": "grid atlas declares 175 frames (expected 175)"
+      "classification": "needs-regeneration",
+      "detail": "grid atlas declares 191 frames (expected 207)"
     },
     {
       "id": "props-atlas:frames",
