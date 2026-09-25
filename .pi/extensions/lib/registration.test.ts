@@ -114,6 +114,8 @@ const createBashEvent = (command: string): ToolCallEvent => ({
 
 const BLOCKED_BASH_COMMANDS = [
   ['mkdir', String.raw`mkdir -p 'src/routes/\(dev\)'`],
+  ['assignment before mkdir', String.raw`MODE=test mkdir -p 'src/routes/\(dev\)'`],
+  ['quoted path with greater-than', String.raw`mkdir 'src/routes/\(dev\)/a>b'`],
   ['touch', String.raw`touch 'src/routes/\(sandbox\)/page.svelte'`],
   ['mv source', String.raw`mv 'src/routes/\(dev\)' 'src/routes/(dev)'`],
   ['cp destination', String.raw`cp source.svelte 'src/routes/\(dev\)/source.svelte'`],
@@ -143,6 +145,7 @@ const ALLOWED_BASH_COMMANDS = [
   ['stdout redirection', String.raw`printf '%s\n' route > 'src/routes/\(dev\)/diagnostic.txt'`],
   ['mkdir stderr redirection', String.raw`mkdir -p src/routes/(dev) 2> 'logs/\(dev\)'`],
   ['mkdir noclobber redirection', String.raw`mkdir safe >| 'logs/\(dev\)'`],
+  ['escaped group in separate argument', String.raw`mkdir 'src/routes/(dev)' '\(sandbox\)'`],
   ['verb text in another command', String.raw`echo "run touch 'src/routes/\(dev\)'"`],
   [
     'target verb without an escaped path',

@@ -372,7 +372,7 @@ const claimCompletion = (spec: SubagentSpec): SubagentState =>
     }
     return {
       ...current,
-      status: spec.kind === 'write' ? 'publishing' : 'succeeded',
+      status: 'publishing',
       activity: 'finalizing',
       queuedMessages: 0,
     };
@@ -434,10 +434,25 @@ const runRound = async (context: RoundContext): Promise<RoundBoundary> => {
     finish(context.spec, {});
     return { kind: 'failed' };
   }
-  if (listSteeringMessages(context.spec.repoRoot, context.spec.id).length > 0) {
+  const lateMessages = listSteeringMessages(context.spec.repoRoot, context.spec.id);
+  if (lateMessages.length > 0) {
+    const task = buildSteeringTask({ previousResult: result, messages: lateMessages });
+    writeText(runFile(context.spec.repoRoot, context.spec.id, 'task.md'), `${task}\n`);
+    const running = patchState(context.spec.repoRoot, context.spec.id, {
+      status: 'running',
+      activity: `delivering ${lateMessages.length} queued message(s)`,
+      queuedMessages: lateMessages.length,
+    });
     return {
       kind: 'continue',
-      context: { ...context, state: claimed, result, rounds, deliveredMessageIds: [] },
+      context: {
+        ...context,
+        state: running,
+        task,
+        result,
+        rounds,
+        deliveredMessageIds: lateMessages.map((message) => message.id),
+      },
     };
   }
   return { kind: 'complete', state: claimed, outcome, result, rounds };

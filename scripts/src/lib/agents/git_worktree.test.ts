@@ -26,10 +26,12 @@ import type { BuildStep } from '../ops/emberwatch_build_steps.ts';
 import { EMBERWATCH_BUILD_STEPS } from '../ops/emberwatch_build_steps.ts';
 import {
   baseRefName,
+  branchBaseRefName,
   buildRefRange,
   commitAll,
   normalizeBaseRef,
   resolveBaseRef,
+  resolveRemoteBaseRef,
   splitGitCommand,
 } from './git_worktree.ts';
 
@@ -188,9 +190,25 @@ describe('base ref normalization', () => {
       execFileSync('git', ['update-ref', 'refs/remotes/origin/main', 'HEAD'], {
         cwd: repository,
       });
+      execFileSync('git', ['update-ref', 'refs/remotes/upstream/main', 'HEAD'], {
+        cwd: repository,
+      });
+      execFileSync('git', ['update-ref', 'refs/heads/upstream/main', 'HEAD'], {
+        cwd: repository,
+      });
 
       expect(resolveBaseRef('main', { cwd: repository })).toBe('main');
       expect(resolveBaseRef('origin/main', { cwd: repository })).toBe('origin/main');
+      expect(resolveBaseRef('refs/remotes/upstream/main', { cwd: repository })).toBe(
+        'refs/remotes/upstream/main',
+      );
+      expect(resolveRemoteBaseRef('main', { cwd: repository })).toBe('origin/main');
+      expect(resolveRemoteBaseRef('refs/remotes/upstream/main', { cwd: repository })).toBe(
+        'refs/remotes/upstream/main',
+      );
+      expect(branchBaseRefName('refs/remotes/upstream/main')).toBe('main');
+      expect(() => branchBaseRefName(commit)).toThrow(/branch refs/);
+      expect(() => branchBaseRefName('HEAD')).toThrow(/branch refs/);
       expect(resolveBaseRef(commit, { cwd: repository })).toBe(commit);
     } finally {
       rmSync(repository, { recursive: true, force: true });
@@ -388,6 +406,17 @@ describe('worktree content cache policy', () => {
     const { io, files } = makeContentIo('?? generated.json\n');
     await expect(bootstrapWorktreeContent({ checkoutPath: '/checkout', io })).rejects.toThrow(
       /introduced new Git status entries/,
+    );
+    expect(files.has(join('/checkout', WORKTREE_CONTENT_CACHE_RELATIVE_PATH))).toBe(false);
+  });
+
+  it('rejects changes to an existing fingerprint input before writing a marker', async () => {
+    const { io, files } = makeContentIo();
+    io.runStep = () => {
+      io.readBytes = () => new Uint8Array([4, 5, 6]);
+    };
+    await expect(bootstrapWorktreeContent({ checkoutPath: '/checkout', io })).rejects.toThrow(
+      /changed pre-existing fingerprint inputs/,
     );
     expect(files.has(join('/checkout', WORKTREE_CONTENT_CACHE_RELATIVE_PATH))).toBe(false);
   });

@@ -28,11 +28,14 @@ const ROUTE_PATH_RE = /(?:^|[\s'"/=])src\/routes(?:\/|$)/i;
 const QUOTED_ESCAPED_GROUP_RE = /(['"])[^'"]*\\+\([a-z0-9_-]+\\+\)[^'"]*\1/i;
 
 /** Finds a path-mutating command at the start of one shell command segment. */
-const PATH_MUTATING_COMMAND_RE = /^\s*(?:(?:sudo|command)\s+)*(?:mkdir|touch|mv|cp)\b(.*)/i;
+const PATH_MUTATING_COMMAND_RE =
+  /^\s*(?:(?:(?:sudo|command)\s+)|(?:[a-z_][a-z0-9_]*=(?:"(?:\\.|[^"])*"|'[^']*'|[^\s'"]*)\s+))*(?:mkdir|touch|mv|cp)\b(.*)/i;
 
 /** Removes redirection operands so they cannot be mistaken for command paths. */
 const REDIRECTION_OPERAND_RE =
-  /\d*(?:>>>|>>|>\||<<<|<<|<>|>|<)\s*(?:"(?:\\.|[^"])*"|'(?:\\.|[^'])*'|[^\s;&|]+)/g;
+  /'[^']*'|"(?:\\.|[^"])*"|\d*(?:>>>|>>|>\||<<<|<<|<>|>|<)\s*(?:"(?:\\.|[^"])*"|'[^']*'|[^\s;&|]+)/g;
+
+const COMMAND_ARGUMENT_RE = /(?:'[^']*'|"(?:\\.|[^"])*"|[^\s'"])+/g;
 
 /**
  * Match quoted spans before unquoted shell control operators. Inspection
@@ -99,8 +102,14 @@ const hasEscapedPathArgument = (command: string): boolean => {
     if (!match) {
       continue;
     }
-    const commandArguments = (match[1] ?? '').replace(REDIRECTION_OPERAND_RE, '');
-    if (ROUTE_PATH_RE.test(commandArguments) && QUOTED_ESCAPED_GROUP_RE.test(commandArguments)) {
+    const commandArguments = (match[1] ?? '').replace(REDIRECTION_OPERAND_RE, (operand) =>
+      operand.startsWith("'") || operand.startsWith('"') ? operand : '',
+    );
+    if (
+      [...commandArguments.matchAll(COMMAND_ARGUMENT_RE)].some(
+        ([argument]) => ROUTE_PATH_RE.test(argument) && QUOTED_ESCAPED_GROUP_RE.test(argument),
+      )
+    ) {
       return true;
     }
   }

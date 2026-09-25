@@ -219,6 +219,7 @@ export const applyBudgetCommand = (options: {
   if (
     options.command.action !== 'reset' &&
     after.hardCap > options.ceiling &&
+    after.hardCap > options.current.hardCap &&
     !options.command.force
   ) {
     return {

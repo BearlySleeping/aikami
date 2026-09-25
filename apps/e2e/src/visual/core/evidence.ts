@@ -6,6 +6,32 @@ import { createHash } from 'node:crypto';
 /** A lane in a paired evidence capture. */
 export type EvidenceLane = 'before' | 'after';
 
+/** Verify that a capture used its assigned asset lane before recording evidence. */
+export const validateEvidenceLaneRequests = (options: {
+  lane: EvidenceLane;
+  assetOrigin: string;
+  otherAssetOrigin: string;
+  requestUrls: readonly string[];
+}): void => {
+  const assetOrigin = new URL(options.assetOrigin).origin;
+  const otherAssetOrigin = new URL(options.otherAssetOrigin).origin;
+  const requests = options.requestUrls.map((url) => new URL(url));
+  if (!requests.some((request) => request.origin === assetOrigin)) {
+    throw new Error(`Evidence lane ${options.lane} made no requests to ${assetOrigin}`);
+  }
+  if (
+    requests.some(
+      (request) =>
+        request.origin === otherAssetOrigin &&
+        (request.pathname.startsWith('/seed/') ||
+          request.pathname.startsWith('/assets/') ||
+          request.pathname.startsWith('/index/')),
+    )
+  ) {
+    throw new Error(`Evidence lane ${options.lane} requested seed or assets from ${otherAssetOrigin}`);
+  }
+};
+
 /** The two-dimensional viewport used by a capture. */
 export type EvidenceViewport = {
   width: number;

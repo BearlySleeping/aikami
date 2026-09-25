@@ -2036,7 +2036,7 @@
   "scripts/src/lib/herdr/worktree.ts": {
     "counts": {
       "excessive": 4,
-      "worst": 131
+      "worst": 130
     }
   },
   "scripts/src/lib/ops/audit_lpc_coverage.ts": {

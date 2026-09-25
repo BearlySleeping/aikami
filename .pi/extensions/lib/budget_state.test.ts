@@ -134,6 +134,16 @@ describe('budget cap transitions', () => {
 });
 
 describe('budget ceiling', () => {
+  test('allows changing the soft cap beneath an existing hard cap above the ceiling', () => {
+    const change = _apply({
+      command: { action: 'set-soft', amount: 20, force: false },
+      current: { softCap: 10, hardCap: 300 },
+      ceiling: 200,
+    });
+
+    expect(change.after).toEqual({ softCap: 20, hardCap: 300 });
+  });
+
   test('requires force to set a hard cap above the ceiling', () => {
     const command = { action: 'set-hard', amount: 300, force: false } as const;
     const rejected = applyBudgetCommand({

@@ -32,6 +32,7 @@ import {
   renderChecksumsFile,
   renderEvidenceIndex,
   sha256Hex,
+  validateEvidenceLaneRequests,
 } from '../src/visual/core/evidence.ts';
 
 const ROOT = resolve(import.meta.dirname, '../../..');
@@ -132,6 +133,7 @@ type CaptureLaneOptions = {
   lane: EvidenceLane;
   clientUrl: string;
   assetOrigin: string;
+  otherAssetOrigin: string;
   originRole: EvidenceOrigin['role'];
   identity: EvidenceIdentity;
   mapId: EmberwatchHouseMapId;
@@ -513,7 +515,9 @@ const writeMontage = async (options: {
 const captureLane = async (options: CaptureLaneOptions): Promise<CaptureLaneResult> => {
   const page: Page = await options.context.newPage();
   const pageErrors: string[] = [];
+  const requestUrls: string[] = [];
   page.on('pageerror', (error) => pageErrors.push(errorMessage(error)));
+  page.on('request', (request) => requestUrls.push(request.url()));
   const file = `${options.lane}/${options.id}.png`;
   const path = join(options.stageDir, file);
   try {
@@ -534,6 +538,12 @@ const captureLane = async (options: CaptureLaneOptions): Promise<CaptureLaneResu
     if (snapshot.mapId !== options.mapId) {
       throw new Error(`Evidence loaded ${snapshot.mapId}, expected ${options.mapId}`);
     }
+    validateEvidenceLaneRequests({
+      lane: options.lane,
+      assetOrigin: options.assetOrigin,
+      otherAssetOrigin: options.otherAssetOrigin,
+      requestUrls,
+    });
     const record = createEvidenceCaptureRecord({
       lane: options.lane,
       id: options.id,
@@ -650,6 +660,7 @@ const publishEvidence = async (options: {
           lane: 'before',
           clientUrl: options.options.beforeUrl,
           assetOrigin: options.options.beforeOrigin,
+          otherAssetOrigin: options.options.afterOrigin,
           originRole: 'published',
           identity: options.beforeIdentity,
           mapId: options.options.mapId,
@@ -666,6 +677,7 @@ const publishEvidence = async (options: {
           lane: 'after',
           clientUrl: options.options.afterUrl,
           assetOrigin: options.options.afterOrigin,
+          otherAssetOrigin: options.options.beforeOrigin,
           originRole: 'candidate',
           identity: options.afterIdentity,
           mapId: options.options.mapId,

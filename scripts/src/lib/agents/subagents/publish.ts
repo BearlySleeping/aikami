@@ -8,7 +8,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { openPullRequest, publishWorktree } from '../../herdr/worktree.ts';
-import { buildRefRange, resolveBaseRef, runGit } from '../git_worktree.ts';
+import { branchBaseRefName, buildRefRange, resolveRemoteBaseRef, runGit } from '../git_worktree.ts';
 import { runAutofix, waitForReview } from './coderabbit.ts';
 import { splitTitle } from './prompt.ts';
 import { CODERABBIT_IGNORE, decideReview, parseNumstat } from './review_policy.ts';
@@ -62,7 +62,8 @@ export const publishRun = async (options: {
 }): Promise<void> => {
   const { spec, checkoutPath, report } = options;
   const { repoRoot, id } = spec;
-  const baseRef = resolveBaseRef(spec.pr.base, { cwd: checkoutPath });
+  branchBaseRefName(spec.pr.base);
+  const baseRef = resolveRemoteBaseRef(spec.pr.base, { cwd: checkoutPath });
 
   if (!hasChanges(checkoutPath, baseRef)) {
     report('No changes to publish — skipping PR');

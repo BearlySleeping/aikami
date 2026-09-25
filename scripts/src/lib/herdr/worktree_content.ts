@@ -11,6 +11,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { BuildStep } from '../ops/emberwatch_build_steps.ts';
 import { EMBERWATCH_BUILD_STEPS } from '../ops/emberwatch_build_steps.ts';
+import { reportInfraIssue } from '../ops/infra_report.ts';
 
 /** Cache marker path, relative to the checkout being prepared. */
 export const WORKTREE_CONTENT_CACHE_RELATIVE_PATH = '.local/herdr/worktree-content.json';
@@ -452,6 +453,12 @@ export const bootstrapWorktreeContent = async (options: {
       `Worktree content generation introduced new Git status entries: ${introducedStatus.join(', ')}`,
     );
   }
+  const fingerprintAfter = computeWorktreeContentFingerprint(
+    collectWorktreeContentFingerprintInput({ checkoutPath: options.checkoutPath, io }),
+  );
+  if (fingerprintAfter !== fingerprint) {
+    throw new Error('Worktree content generation changed pre-existing fingerprint inputs');
+  }
   if (failed) {
     throw failure instanceof Error ? failure : new Error(String(failure));
   }
@@ -488,4 +495,30 @@ export const bootstrapWorktreeContent = async (options: {
     cleanGeneration: true,
     durationMs: Math.max(0, completedAtMs - startedAt),
   };
+};
+
+/** Keep a generated worktree usable when optional content preparation fails. */
+export const tryBootstrapWorktreeContent = async (options: {
+  checkoutPath: string;
+  repoRoot: string;
+  contentEnabled: boolean;
+}): Promise<ContentBootstrapResult | undefined> => {
+  if (!options.contentEnabled) {
+    return undefined;
+  }
+  try {
+    return await bootstrapWorktreeContent({ checkoutPath: options.checkoutPath });
+  } catch (error: unknown) {
+    console.warn(
+      `⚠️  Worktree content generation failed in ${options.checkoutPath}: ${String(error)}`,
+    );
+    reportInfraIssue({
+      component: 'worktree_bootstrap',
+      operation: 'bootstrapWorktreeContent',
+      error,
+      context: { checkoutPath: options.checkoutPath },
+      cwd: options.repoRoot,
+    });
+    return undefined;
+  }
 };

@@ -182,11 +182,13 @@ tasks:
       # `files.routes` at `.svelte-kit/routes-prod` and make `./$types`
       # unresolvable from `src/routes`. Opt in exactly as `dev`/`test` do.
       AIKAMI_INCLUDE_DEV_ROUTES: 'true'
-  # `svelte-kit sync` and the Bun-only alias config share `.svelte-kit` across
-  # the duplicate test entry points. Keep their combined writer behind one
-  # cached task so `test` and `test-unit` can run concurrently without racing.
+  # Build and both test entry points share `.svelte-kit`. Complete the build
+  # before test preparation so both test runs read the test-generated files
+  # after the last build writer has finished.
   test-prepare:
     command: 'bun run test:prepare'
+    deps:
+      - '~:build'
     inputs:
       - '@group(sources)'
       - '@group(configs)'

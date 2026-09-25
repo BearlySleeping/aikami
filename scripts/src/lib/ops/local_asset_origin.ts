@@ -43,7 +43,7 @@ import {
   rmSync,
   writeFileSync,
 } from 'node:fs';
-import { dirname, join, resolve, sep } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { type ContentPackManifest, ContentPackManifestSchema } from '@aikami/schemas';
 import { Value } from 'typebox/value';
@@ -495,8 +495,12 @@ const downloadPublishedSeed = async (options: {
     );
   }
   const manifestPath = join(options.outDir, manifestKey);
+  const manifestBytes = Buffer.from(await manifestResponse.arrayBuffer());
+  if (sha256(manifestBytes) !== manifestRow.h) {
+    throw new Error(`Published Emberwatch manifest hash mismatch: ${manifestUrl}`);
+  }
   mkdirSync(dirname(manifestPath), { recursive: true });
-  writeFileSync(manifestPath, Buffer.from(await manifestResponse.arrayBuffer()));
+  writeFileSync(manifestPath, manifestBytes);
 
   // Optional, but when published the client should receive the same offline-core
   // declaration from the local origin rather than reaching around it.
@@ -547,6 +551,16 @@ const parseOriginOptions = (args: string[]): OriginOptions => {
 
 const prepareOutputDirectory = (options: OriginOptions): void => {
   if (options.publishedOnly) {
+    const localRoot = resolve(repository, '.local');
+    const relativeOutDir = relative(localRoot, resolve(options.outDir));
+    if (
+      relativeOutDir === '' ||
+      relativeOutDir === '..' ||
+      relativeOutDir.startsWith(`..${sep}`) ||
+      isAbsolute(relativeOutDir)
+    ) {
+      throw new Error('Published-only output directory must be strictly inside repository .local');
+    }
     // Never let a previous candidate run leak into the published baseline.
     rmSync(options.outDir, { recursive: true, force: true });
   }
@@ -644,11 +658,11 @@ const main = async (): Promise<void> => {
   // The published rows drive the terrain-atlas rule (C-548). A missing
   // snapshot is handled by the downloaded public seed below.
   const snapshotSeedPath = findPublishedSeedPath(repository);
-  const publishedHashes = readPublishedSeedHashes(snapshotSeedPath ?? '');
+  const inputs = await resolvePublishedInputs(origin, snapshotSeedPath);
+  const publishedHashes = readPublishedSeedHashes(inputs.seedPath);
   if (checkCandidatePlane(origin, publishedHashes)) {
     return;
   }
-  const inputs = await resolvePublishedInputs(origin, snapshotSeedPath);
   buildAndServe({ origin, ...inputs, publishedHashes });
 };
 

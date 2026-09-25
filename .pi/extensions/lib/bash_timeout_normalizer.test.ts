@@ -30,7 +30,24 @@ describe('guardCommand', () => {
   test('prepends the non-interactive env guard without synthesizing CI', () => {
     const guarded = guardCommand('git status');
     expect(guarded).toBe(`${ENV_GUARD}git status`);
-    expect(ENV_GUARD).not.toMatch(/\bCI=/);
+  });
+
+  test.serial('leaves CI unset when executing a guarded command without ambient CI', () => {
+    const previousCi = process.env.CI;
+    delete process.env.CI;
+    try {
+      const result = runSync('sh', [
+        '-c',
+        guardCommand(`if [ "\${CI+x}" = x ]; then printf set; else printf unset; fi`),
+      ]);
+      expect(result.stdout).toBe('unset');
+    } finally {
+      if (previousCi === undefined) {
+        delete process.env.CI;
+      } else {
+        process.env.CI = previousCi;
+      }
+    }
   });
 
   test('does not double-prepend the guard', () => {

@@ -36,6 +36,7 @@ import {
 import { join, resolve } from 'node:path';
 import {
   baseRefName,
+  branchBaseRefName,
   commitAll,
   normalizeBaseRef,
   pushBranch,
@@ -46,7 +47,7 @@ import {
 } from '../agents/git_worktree.ts';
 import { reportInfraIssue } from '../ops/infra_report.ts';
 import { findWorkspace, herdr, herdrJson, TASK_WORKSPACE_PREFIX } from './session.ts';
-import { bootstrapWorktreeContent, type ContentBootstrapResult } from './worktree_content.ts';
+import { type ContentBootstrapResult, tryBootstrapWorktreeContent } from './worktree_content.ts';
 import { prepareWorktreeEnvironment } from './worktree_environment.ts';
 import { missingWorktreeSeeds, seedWorktreeFiles } from './worktree_seeds.ts';
 import {
@@ -845,7 +846,7 @@ export const bootstrapWorktree = async (options: BootstrapOptions): Promise<Boot
   // Content is generated after install so every generator sees the complete
   // dependency tree. The helper owns the fingerprint/cache and refuses to
   // publish a marker when generation changes Git status.
-  const content = contentEnabled ? await bootstrapWorktreeContent({ checkoutPath }) : undefined;
+  const content = await tryBootstrapWorktreeContent({ checkoutPath, repoRoot, contentEnabled });
 
   return { installed, missingSeeds, ...(content === undefined ? {} : { content }) };
 };
@@ -1109,7 +1110,7 @@ export const openPullRequest = async (
   // gh's --base is a branch name. Passing a remote-qualified name makes its
   // own remote-tracking lookup duplicate the remote; keep the Git resolution
   // above, then remove only the remote qualifier for the API boundary.
-  const base = baseRefName(resolvedBase);
+  const base = branchBaseRefName(resolvedBase);
   const args = [
     'pr',
     'create',

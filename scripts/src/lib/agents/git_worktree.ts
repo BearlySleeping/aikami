@@ -161,18 +161,22 @@ const parseBaseRef = (raw: string): ParsedBaseRef => {
     kind: 'branch',
     name,
     remoteName,
-    candidates: [`${remoteName}/${name}`, name],
+    candidates: [
+      remoteName === DEFAULT_REMOTE
+        ? `${remoteName}/${name}`
+        : `refs/remotes/${remoteName}/${name}`,
+      name,
+    ],
   };
 };
 
-const fullRefForCandidate = (ref: string): string => {
-  const parsed = parseBaseRef(ref);
+const fullRefForCandidate = (ref: string, parsed: ParsedBaseRef): string => {
   if (parsed.kind !== 'branch') {
     return ref;
   }
-  return parsed.remoteName
-    ? `refs/remotes/${parsed.remoteName}/${parsed.name}`
-    : `refs/heads/${parsed.name}`;
+  return ref === parsed.name
+    ? `refs/heads/${parsed.name}`
+    : `refs/remotes/${parsed.remoteName ?? DEFAULT_REMOTE}/${parsed.name}`;
 };
 
 /** Check whether a normalized branch, remote ref, symbolic ref, or SHA exists. */
@@ -183,7 +187,7 @@ export const gitRefExists = (ref: string, options: { cwd?: string } = {}): boole
   try {
     const parsed = parseBaseRef(ref);
     if (parsed.kind === 'branch') {
-      const fullRef = formatGitArgument(fullRefForCandidate(ref));
+      const fullRef = formatGitArgument(fullRefForCandidate(parsed.candidates[0], parsed));
       runGit(`show-ref --verify --quiet ${fullRef}`, { cwd: options.cwd });
     } else {
       const revision =
@@ -212,13 +216,35 @@ export type ResolveBaseRefOptions = {
  *
  * Local names and SHA values remain local, while `origin/<name>` and
  * `refs/remotes/origin/<name>` remain explicitly remote. Namespace wrappers
- * such as `refs/heads/` and `refs/remotes/` are removed so callers never
- * manufacture `origin/origin/...`.
+ * such as `refs/heads/` and `refs/remotes/origin/` are removed so callers
+ * never manufacture `origin/origin/...`. Non-origin remote refs retain their
+ * full namespace so subsequent resolution cannot confuse them with local branches.
  */
 export const normalizeBaseRef = (raw: string): string => parseBaseRef(raw).candidates[0];
 
 /** Return the unqualified branch/name portion for APIs that require a branch name. */
 export const baseRefName = (raw: string): string => parseBaseRef(raw).name;
+
+/** Return a branch name for GitHub's PR API, rejecting commits and symbolic refs. */
+export const branchBaseRefName = (raw: string): string => {
+  const parsed = parseBaseRef(raw);
+  if (parsed.kind !== 'branch') {
+    invalidBaseRef(raw, 'pull request bases must be branch refs');
+  }
+  return parsed.name;
+};
+
+/** Resolve a branch against its remote-tracking ref for GitHub-style comparisons. */
+export const resolveRemoteBaseRef = (raw: string, options: ResolveBaseRefOptions = {}): string => {
+  const parsed = parseBaseRef(raw);
+  if (parsed.kind !== 'branch') {
+    invalidBaseRef(raw, 'comparison bases must be branch refs');
+  }
+  return resolveBaseRef(
+    `refs/remotes/${parsed.remoteName ?? DEFAULT_REMOTE}/${parsed.name}`,
+    options,
+  );
+};
 
 /**
  * Resolve a base ref with local-first semantics for an unqualified name.
@@ -232,7 +258,7 @@ export const resolveBaseRef = (raw: string, options: ResolveBaseRefOptions = {})
   const probe =
     options.refExists ??
     ((ref: string) =>
-      gitRefExists(fullRefForCandidate(ref), { cwd: options.cwd ?? process.cwd() }));
+      gitRefExists(fullRefForCandidate(ref, parsed), { cwd: options.cwd ?? process.cwd() }));
   for (const candidate of parsed.candidates) {
     if (probe(candidate)) {
       return candidate;

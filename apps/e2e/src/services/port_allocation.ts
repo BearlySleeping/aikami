@@ -66,6 +66,7 @@ export type PortAllocationStore = {
   writeRecord: (directory: string, record: PortAllocationRecord) => void;
   withLock: <Result>(directory: string, action: () => Result) => Result;
   isPortAvailable: (port: number) => boolean;
+  checkoutExists: (checkout: string) => boolean;
 };
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -305,15 +306,33 @@ const tryCreateAllocationLock = (options: {
 };
 
 const isStaleAllocationLock = (lockPath: string, now: () => number): boolean => {
+  let mtimeMs: number;
   try {
-    const metadata = JSON.parse(readFileSync(lockPath, 'utf8')) as unknown;
-    if (isRecord(metadata) && typeof metadata.pid === 'number') {
-      return !pidIsAlive(metadata.pid);
-    }
-    return statSync(lockPath).mtimeMs < now() - LOCK_STALE_MS;
+    mtimeMs = statSync(lockPath).mtimeMs;
   } catch {
     return true;
   }
+  try {
+    const metadata = JSON.parse(readFileSync(lockPath, 'utf8')) as unknown;
+    if (
+      isRecord(metadata) &&
+      typeof metadata.pid === 'number' &&
+      Number.isInteger(metadata.pid) &&
+      metadata.pid > 0 &&
+      typeof metadata.token === 'string' &&
+      metadata.token.length > 0 &&
+      typeof metadata.acquiredAt === 'string' &&
+      Number.isFinite(Date.parse(metadata.acquiredAt))
+    ) {
+      return !pidIsAlive(metadata.pid);
+    }
+  } catch (error) {
+    if (isRecord(error) && error.code === 'ENOENT') {
+      return true;
+    }
+    // A contender may still be writing metadata; use age for incomplete locks.
+  }
+  return mtimeMs < now() - LOCK_STALE_MS;
 };
 
 const removeAllocationLock = (lockPath: string): void => {
@@ -404,6 +423,7 @@ const defaultStore: PortAllocationStore = {
   writeRecord: writeAllocationRecord,
   withLock: withAllocationLock,
   isPortAvailable: isPortAvailableSync,
+  checkoutExists: (checkout) => existsSync(join(checkout, '.git')),
 };
 
 export type PortAllocationOptions = {
@@ -440,7 +460,9 @@ export const allocatePortOffset = (options: PortAllocationOptions): number => {
     const records = store.readRecords(directory, slots, step);
     const existing = records.find((record) => record.checkout === checkout);
     const occupied = new Set(
-      records.filter((record) => record.checkout !== checkout).map((record) => record.offset),
+      records
+        .filter((record) => record.checkout !== checkout && store.checkoutExists(record.checkout))
+        .map((record) => record.offset),
     );
     const validOffsets = new Set(portOffsetsForSlots(slots, step));
 

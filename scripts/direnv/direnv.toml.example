@@ -6,4 +6,4 @@
 # do not widen it to all of ~/.herdr or a repository parent that contains
 # unrelated projects.
 [whitelist]
-prefix = ["~/.herdr/worktrees/aikami"]
+prefix = ["~/.herdr/worktrees/aikami/"]

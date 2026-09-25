@@ -3,7 +3,7 @@
 // effect goes through the injectable PreflightIo, so these run hermetically.
 
 import { beforeEach, describe, expect, test } from 'bun:test';
-import { mkdtempSync, readdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -22,6 +22,7 @@ import {
   renderChecksumsFile,
   renderEvidenceIndex,
   sha256Hex,
+  validateEvidenceLaneRequests,
 } from '../visual/core/evidence.ts';
 import {
   allocatePortOffset,
@@ -657,6 +658,7 @@ const makeMemoryPortStore = (): {
       },
       withLock: (_directory, action) => action(),
       isPortAvailable: () => true,
+      checkoutExists: () => true,
     },
   };
 };
@@ -713,6 +715,16 @@ describe('persistent port allocation', () => {
     expect(records.map((record) => record.checkout)).toEqual(['/tmp/one', '/tmp/two']);
   });
 
+  test('ignores a removed checkout when choosing an occupied slot', () => {
+    const { records, store } = makeMemoryPortStore();
+    const checkout = '/tmp/current-checkout';
+    const preferred = portOffsetsForSlots()[preferredPortSlot(checkout)];
+    records.push({ checkout: '/tmp/removed-checkout', offset: preferred, allocatedAt: '2026-01-01' });
+    store.checkoutExists = (path) => path !== '/tmp/removed-checkout';
+
+    expect(allocatePortOffset({ checkout, store })).toBe(preferred);
+  });
+
   test('does not choose a slot whose complete service port set is busy', () => {
     const { store } = makeMemoryPortStore();
     const checkout = '/tmp/busy';
@@ -754,6 +766,25 @@ describe('persistent port allocation', () => {
       const value = withPortAllocationLock(directory, () => 'allocated');
       expect(value).toBe('allocated');
       expect(readdirSync(directory)).not.toContain('.allocation.lock');
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  test('keeps a recent malformed lock and reclaims it after the stale threshold', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'aikami-e2e-lock-'));
+    const lockPath = join(directory, '.allocation.lock');
+    try {
+      writeFileSync(lockPath, '{incomplete');
+      let time = Date.now();
+      const now = () => (time += 1_000);
+      expect(() => withPortAllocationLock(directory, () => 'unexpected', now)).toThrow(/Timed out/);
+      expect(existsSync(lockPath)).toBe(true);
+
+      const stale = new Date(Date.now() - 31_000);
+      utimesSync(lockPath, stale, stale);
+      expect(withPortAllocationLock(directory, () => 'reclaimed')).toBe('reclaimed');
+      expect(existsSync(lockPath)).toBe(false);
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }
@@ -867,6 +898,35 @@ const evidenceCapture = (lane: 'before' | 'after'): EvidenceCaptureRecord => ({
 });
 
 describe('persistent evidence records', () => {
+  test('requires each capture to request its own origin without crossing asset lanes', () => {
+    const origins = {
+      lane: 'before' as const,
+      assetOrigin: 'http://127.0.0.1:8788',
+      otherAssetOrigin: 'http://127.0.0.1:8789',
+    };
+    expect(() =>
+      validateEvidenceLaneRequests({
+        ...origins,
+        requestUrls: ['http://127.0.0.1:5274/game'],
+      }),
+    ).toThrow(/made no requests/);
+    expect(() =>
+      validateEvidenceLaneRequests({
+        ...origins,
+        requestUrls: [
+          'http://127.0.0.1:8788/seed/asset_seed.json',
+          'http://127.0.0.1:8789/assets/a/file.png',
+        ],
+      }),
+    ).toThrow(/requested seed or assets/);
+    expect(() =>
+      validateEvidenceLaneRequests({
+        ...origins,
+        requestUrls: ['http://127.0.0.1:8788/assets/a/file.png'],
+      }),
+    ).not.toThrow();
+  });
+
   test('hashes and renders deterministic checksum records', () => {
     expect(sha256Hex('hello')).toBe(
       '2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824',
