@@ -9,6 +9,7 @@ import { mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promise
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { ContentIdentitySnapshotSchema } from '@aikami/schemas';
 import type { ContentIdentitySnapshot } from '@aikami/types';
+import { jcsStringify } from '@aikami/utils';
 import { type BrowserContext, chromium, type Page } from 'playwright';
 import sharp from 'sharp';
 import { Value } from 'typebox/value';
@@ -519,6 +520,30 @@ const writeMontage = async (options: {
     .toFile(join(options.stageDir, 'montage.png'));
 };
 
+export const verifyLoadedContentIdentity = async (
+  value: unknown,
+  lane: EvidenceLane,
+  identityRoot: string,
+): Promise<ContentIdentitySnapshot | undefined> => {
+  if (value !== undefined && !Value.Check(ContentIdentitySnapshotSchema, value)) {
+    throw new Error(`Evidence ${lane} loaded-content identity is invalid`);
+  }
+  if (lane === 'before') {
+    return value as ContentIdentitySnapshot | undefined;
+  }
+  if (value === undefined) {
+    throw new Error('Evidence after loaded-content identity was not published');
+  }
+  const candidateManifest = JSON.parse(
+    await readFile(join(identityRoot, 'content/packs/emberwatch/manifest.json'), 'utf8'),
+  ) as unknown;
+  const expectedDigest = sha256Hex(jcsStringify(candidateManifest));
+  if ((value as ContentIdentitySnapshot).manifestSha256 !== expectedDigest) {
+    throw new Error('Evidence after loaded-content digest does not match candidate manifest');
+  }
+  return value as ContentIdentitySnapshot;
+};
+
 const captureLane = async (options: CaptureLaneOptions): Promise<CaptureLaneResult> => {
   const page: Page = await options.context.newPage();
   const pageErrors: string[] = [];
@@ -566,17 +591,11 @@ const captureLane = async (options: CaptureLaneOptions): Promise<CaptureLaneResu
       const globals = window as unknown as Record<string, unknown>;
       return globals.__AIKAMI_CONTENT_IDENTITY__;
     });
-    if (
-      loadedContentValue !== undefined &&
-      !Value.Check(ContentIdentitySnapshotSchema, loadedContentValue)
-    ) {
-      throw new Error(`Evidence ${options.lane} loaded-content identity is invalid`);
-    }
-    if (options.contentIdentityOverlay && loadedContentValue === undefined) {
-      throw new Error(
-        `Evidence ${options.lane} requested the content identity overlay but none was published`,
-      );
-    }
+    const loadedContent = await verifyLoadedContentIdentity(
+      loadedContentValue,
+      options.lane,
+      options.identity.root,
+    );
     const record = createEvidenceCaptureRecord({
       lane: options.lane,
       id: options.id,
@@ -602,7 +621,7 @@ const captureLane = async (options: CaptureLaneOptions): Promise<CaptureLaneResu
     });
     return {
       record,
-      loadedContent: loadedContentValue as ContentIdentitySnapshot | undefined,
+      loadedContent,
       pageErrors,
     };
   } finally {

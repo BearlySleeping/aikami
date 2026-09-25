@@ -166,7 +166,7 @@ const captureCases = async (page: Page): Promise<CaptureRecord[]> => {
     const viewport = definition.viewport ?? DEFAULT_VIEWPORT;
     await page.setViewportSize(viewport);
     const game = new EmberwatchHousePage(page, CLIENT_URL);
-    await game.goto({ gameHour: 12 });
+    await game.goto({ gameHour: 12, contentIdentity: true });
     await game.loadMapAt(definition.mapId, definition.target);
     const textures = await game.requireResolvedEntityTextures();
     const file = `${LANE}-${definition.id}.png`;

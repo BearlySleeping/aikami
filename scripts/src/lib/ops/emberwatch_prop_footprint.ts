@@ -39,6 +39,22 @@ const finiteNumber = (value: unknown): value is number =>
 const positiveNumber = (value: unknown): number | undefined =>
   finiteNumber(value) && value > 0 ? value : undefined;
 
+/** The axis-aligned collision footprint used by the cell coverage audit. */
+export const collisionFootprintSize = (
+  value: unknown,
+): { width: number; height: number } | undefined => {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  if (value.type === 'circle') {
+    const radius = positiveNumber(value.radius);
+    return radius === undefined ? undefined : { width: radius * 2, height: radius * 2 };
+  }
+  const width = positiveNumber(value.width);
+  const height = positiveNumber(value.height);
+  return width === undefined || height === undefined ? undefined : { width, height };
+};
+
 const readManifestProps = (): Record<string, UnknownRecord> => {
   const raw: unknown = JSON.parse(readFileSync(MANIFEST_PATH, 'utf8'));
   if (!isRecord(raw) || !isRecord(raw.props)) {
@@ -55,9 +71,9 @@ const readManifestProps = (): Record<string, UnknownRecord> => {
 
 const readSize = (definition: UnknownRecord): { width: number; height: number } | undefined => {
   const renderSize = isRecord(definition.renderSize) ? definition.renderSize : undefined;
-  const collision = isRecord(definition.collision) ? definition.collision : undefined;
-  const width = positiveNumber(renderSize?.width) ?? positiveNumber(collision?.width);
-  const height = positiveNumber(renderSize?.height) ?? positiveNumber(collision?.height);
+  const collision = collisionFootprintSize(definition.collision);
+  const width = positiveNumber(renderSize?.width) ?? collision?.width;
+  const height = positiveNumber(renderSize?.height) ?? collision?.height;
   return width === undefined || height === undefined ? undefined : { width, height };
 };
 
@@ -86,15 +102,15 @@ export const readPropFootprintAudit = (propId: string): PropFootprintAudit => {
     throw new Error(`emberwatch_prop_footprint: missing prop "${propId}"`);
   }
   const footprint = readPropFootprint(propId);
-  const collisionValue = isRecord(definition.collision) ? definition.collision : undefined;
-  const collisionWidth = positiveNumber(collisionValue?.width);
-  const collisionHeight = positiveNumber(collisionValue?.height);
-  const collision =
-    collisionWidth === undefined || collisionHeight === undefined
-      ? undefined
-      : { width: collisionWidth, height: collisionHeight };
-  const cellCount = (width: number, height: number): number =>
-    Math.ceil(width / 32) * Math.ceil(height / 32);
+  const collision = collisionFootprintSize(definition.collision);
+  const cellCount = (width: number, height: number): number => {
+    const left = -width * footprint.anchorX;
+    const top = -height * footprint.anchorY;
+    return (
+      (Math.ceil((left + width) / 32) - Math.floor(left / 32)) *
+      (Math.ceil((top + height) / 32) - Math.floor(top / 32))
+    );
+  };
   return {
     ...footprint,
     collision,

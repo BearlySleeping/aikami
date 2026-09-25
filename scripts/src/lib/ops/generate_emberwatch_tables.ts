@@ -356,6 +356,11 @@ const registerPinnedTerrainFrames = (options: {
     return false;
   }
   const pinnedCell = pinnedStart[1] * ATLAS_COLS + pinnedStart[0];
+  if (pinnedCell + CORNER16_FRAMES > ATLAS_COLS * ATLAS_ROWS) {
+    throw new Error(
+      `generate_emberwatch: pinned terrain "${options.frameBase}" extends past the final atlas cell`,
+    );
+  }
   for (let mask = 0; mask < CORNER16_FRAMES; mask++) {
     const name = cornerFrameName(options.frameBase, mask);
     const expectedCell = pinnedCell + mask;

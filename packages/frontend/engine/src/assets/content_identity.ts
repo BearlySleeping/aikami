@@ -1,6 +1,7 @@
 // packages/frontend/engine/src/assets/content_identity.ts
 
 import type { ContentIdentitySnapshot } from '@aikami/types';
+import { jcsStringify } from '@aikami/utils';
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -16,30 +17,6 @@ const requiredString = (record: Record<string, unknown>, key: string): string =>
 const optionalString = (record: Record<string, unknown>, key: string): string | undefined => {
   const value = record[key];
   return typeof value === 'string' && value.length > 0 ? value : undefined;
-};
-
-const compareCodeUnits = (left: string, right: string): number => {
-  if (left < right) {
-    return -1;
-  }
-  if (left > right) {
-    return 1;
-  }
-  return 0;
-};
-
-const canonicalize = (value: unknown): unknown => {
-  if (Array.isArray(value)) {
-    return value.map(canonicalize);
-  }
-  if (isRecord(value)) {
-    return Object.fromEntries(
-      Object.entries(value)
-        .toSorted(([left], [right]) => compareCodeUnits(left, right))
-        .map(([key, entry]) => [key, canonicalize(entry)]),
-    );
-  }
-  return value;
 };
 
 const sha256Hex = async (value: string): Promise<string> => {
@@ -70,7 +47,7 @@ const readPropAtlases = (
 
 /**
  * Resolves the identity of the exact validated manifest consumed by the client.
- * The digest is SHA-256 over recursively key-sorted JSON; array order remains
+ * The digest is SHA-256 over RFC 8785 JCS UTF-8 JSON; array order remains
  * significant because authored arrays can carry semantic ordering.
  */
 export const resolveContentIdentity = async (
@@ -91,10 +68,7 @@ export const resolveContentIdentity = async (
     : undefined;
   const atlasTextureUrl = atlasValue ? optionalString(atlasValue, 'textureUrl') : undefined;
   const atlasSpritesheetUrl = atlasValue ? optionalString(atlasValue, 'spritesheetUrl') : undefined;
-  const canonicalManifest = JSON.stringify(canonicalize(manifest));
-  if (canonicalManifest === undefined) {
-    throw new Error('Content identity manifest is not serializable');
-  }
+  const canonicalManifest = jcsStringify(manifest);
 
   return {
     packId,

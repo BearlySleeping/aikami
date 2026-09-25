@@ -418,11 +418,14 @@ const readSemanticTerrain = (mapId: string): string[] => {
   if (!builder) {
     throw new Error(`C-559 missing map builder ${mapId}`);
   }
-  const json = buildMapJson({ mapId, ...builder() }).json;
-  if (!isRecord(json) || !isRecord(json.aikami)) {
-    return [];
-  }
-  if (!Array.isArray(json.aikami.terrain)) {
+  const json = buildMapJson({
+    semanticMapping: mapId === 'inn' || mapId === 'merchant_shop' ? 'none' : 'outdoor',
+    ...builder(),
+  }).json;
+  if (!isRecord(json) || !isRecord(json.aikami) || !Array.isArray(json.aikami.terrain)) {
+    if (mapId !== 'inn' && mapId !== 'merchant_shop') {
+      throw new Error(`C-559 outdoor map ${mapId} has no aikami.terrain array`);
+    }
     return [];
   }
   return json.aikami.terrain.map((value) => (typeof value === 'string' ? value : ''));
@@ -794,7 +797,7 @@ describe('C-559 semantic terrain edges', () => {
       if (!builder) {
         throw new Error(`C-559 missing interior map builder ${mapId}`);
       }
-      const { json } = buildMapJson({ mapId, ...builder() });
+      const { json } = buildMapJson({ semanticMapping: 'none', ...builder() });
       expect(visualFingerprint(json), `${mapId} origin/main visual fingerprint`).toBe(
         EXPECTED_INTERIOR_VISUAL_SHA256[mapId],
       );
@@ -809,7 +812,7 @@ describe('C-559 semantic terrain edges', () => {
       if (!builder) {
         throw new Error(`C-559 missing outdoor map builder ${mapId}`);
       }
-      const { json } = buildMapJson({ mapId, ...builder() });
+      const { json } = buildMapJson({ semanticMapping: 'outdoor', ...builder() });
       const ground = readLayerData(json, 'ground');
       const decor = readLayerData(json, 'decor');
       const overhead = readLayerData(json, 'overhead');
@@ -852,8 +855,8 @@ describe('C-559 semantic terrain edges', () => {
         G.DIRT,
       );
     }
-    expect(expectedDirtColumnsByRow.get(9)).not.toContain(35);
-    expect(expectedDirtColumnsByRow.get(9)).not.toContain(40);
+    expect(map.ground[9 * map.width + 35]).not.toBe(G.DIRT);
+    expect(map.ground[9 * map.width + 40]).not.toBe(G.DIRT);
   });
 
   test('placed ward-square composites keep the C-552 perceptual boundary bound', () => {

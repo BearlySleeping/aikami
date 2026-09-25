@@ -8,6 +8,7 @@ export * from './lib/common/deferred.ts';
 export * from './lib/common/device.ts';
 export * from './lib/common/error.ts';
 export * from './lib/common/limit.ts';
+export * from './lib/common/jcs.ts';
 export * from './lib/common/listener.ts';
 export * from './lib/common/prop_render_size.ts';
 export * from './lib/common/utils.ts';

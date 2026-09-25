@@ -4,7 +4,11 @@ import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { packRoot } from './emberwatch_map_validation_context.ts';
-import { readPropFootprintAudit } from './emberwatch_prop_footprint.ts';
+import {
+  collisionFootprintSize,
+  propFootprintCells,
+  readPropFootprintAudit,
+} from './emberwatch_prop_footprint.ts';
 
 type Manifest = {
   props: Record<
@@ -49,8 +53,22 @@ describe('C-561 prop coherence pass', () => {
     const audit = readPropFootprintAudit('inn_perimeter_post_w');
     expect(audit.styleClass).toBe('structural');
     expect(audit.originCovered).toBe(true);
-    expect(audit.collisionCellCount).toBe(1);
+    expect(audit.collisionCellCount).toBe(2);
+    expect(audit.visualCellCount).toBe(
+      propFootprintCells({ propId: 'inn_perimeter_post_w', x: 0, y: 0 }).length,
+    );
     expect(audit.visualCellCount).toBeGreaterThan(audit.collisionCellCount);
+  });
+
+  test('derives circle collision coverage from radius and retains rectangles', () => {
+    expect(collisionFootprintSize({ type: 'circle', radius: 12 })).toEqual({
+      width: 24,
+      height: 24,
+    });
+    expect(collisionFootprintSize({ type: 'rect', width: 20, height: 10 })).toEqual({
+      width: 20,
+      height: 10,
+    });
   });
 
   test('keeps walkable architectural props free of a false solid footprint', () => {
@@ -72,7 +90,16 @@ describe('C-561 prop coherence pass', () => {
         .filter(
           (value): value is string => typeof value === 'string' && value.includes('perimeter_post'),
         );
-      expect(postIds, `${mapId} post ids`).toHaveLength(2);
+      const prefix = {
+        inn: 'inn',
+        merchant_shop: 'shop',
+        old_road: 'waystation',
+        ruined_shrine: 'shrine',
+      }[mapId];
+      expect(postIds.toSorted(), `${mapId} post ids`).toEqual([
+        `${prefix}_perimeter_post_e`,
+        `${prefix}_perimeter_post_w`,
+      ]);
       expect(new Set(objects.map((object) => object.id)).size, `${mapId} object ids`).toBe(
         objects.length,
       );

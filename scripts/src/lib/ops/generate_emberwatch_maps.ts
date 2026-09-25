@@ -35,8 +35,6 @@ export type { MapData, MapObjectLayer, SpawnObject } from './emberwatch_map_shar
 
 const G = buildG();
 
-const INTERIOR_MAP_IDS: ReadonlySet<string> = new Set(['inn', 'merchant_shop']);
-
 const SEMANTIC_TERRAIN_BY_TILE_NAME: Readonly<Record<string, string>> = {
   path_tough: 'path',
   path_tough_variant: 'path',
@@ -221,13 +219,12 @@ const buildTerrainNameMap = (): Map<string, string> => {
 };
 
 const applyCanonicalSemanticMappings = (options: {
-  mapId: string | undefined;
+  mode: 'outdoor' | 'none';
   terrainNameToId: Map<string, string>;
 }): void => {
-  if (!options.mapId || INTERIOR_MAP_IDS.has(options.mapId)) {
-    return;
+  if (options.mode === 'outdoor') {
+    addOutdoorSemanticMappings(options.terrainNameToId);
   }
-  addOutdoorSemanticMappings(options.terrainNameToId);
 };
 
 const resolveLayerBuffers = (options: {
@@ -266,12 +263,11 @@ const resolveLayerBuffers = (options: {
  * committed maps without writing to the repository.
  */
 export const buildMapJson = ({
-  mapId,
+  semanticMapping,
   map: m,
   objectLayers,
 }: {
-  /** Canonical map identity; omitted by synthetic authoring tests. */
-  mapId?: string;
+  semanticMapping: 'outdoor' | 'none';
   map: MapData;
   objectLayers: MapObjectLayer[];
 }): { json: unknown; width: number; height: number } => {
@@ -279,7 +275,7 @@ export const buildMapJson = ({
   // inverting `tiles[gid].name` → terrain id. Cells whose GID is not a
   // declared terrain (walls, roofs, furniture) stay hand-placed GIDs.
   const terrainNameToId = buildTerrainNameMap();
-  applyCanonicalSemanticMappings({ mapId, terrainNameToId });
+  applyCanonicalSemanticMappings({ mode: semanticMapping, terrainNameToId });
   const { ground, decor, overhead, terrainChannel } = resolveLayerBuffers({
     map: m,
     terrainNameToId,
@@ -404,7 +400,10 @@ const emit = (mapName: string): void => {
   if (!builder) {
     throw new Error(`generate_emberwatch_maps: no builder for map "${mapName}"`);
   }
-  const { json, width, height } = buildMapJson({ mapId: mapName, ...builder() });
+  const { json, width, height } = buildMapJson({
+    semanticMapping: mapName === 'inn' || mapName === 'merchant_shop' ? 'none' : 'outdoor',
+    ...builder(),
+  });
   const outPath = join(mapOutDir(), `${mapName}.json`);
   mkdirSync(dirname(outPath), { recursive: true });
   writeFileSync(outPath, `${JSON.stringify(json, null, 2)}\n`);

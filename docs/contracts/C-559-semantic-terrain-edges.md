@@ -15,7 +15,7 @@ created_at: "2026-09-24T20:50:00Z"
 
 ## Goal
 
-Close the C-552 report-only gap where baked outdoor path, stone, and sand cells had no semantic terrain identity. Resolve those authored material boundaries through corner16 terrain while preserving origin/main water, bridge visuals, interior output, collision, locked identities, and save-clamp behavior.
+Close the C-552 report-only gap where baked outdoor path, stone, and sand cells had no semantic terrain identity. Resolve those authored material boundaries through corner16 terrain while preserving origin/main water, bridge visuals, interior terrain and tile-layer output, collision, locked identities, and save-clamp behavior. Added perimeter-post objects are exempt from interior whole-map exactness.
 
 C-559 was unused at implementation start: no `docs/contracts/C-559-*` file existed.
 
@@ -33,7 +33,7 @@ C-559 was unused at implementation start: no `docs/contracts/C-559-*` file exist
 - Canonical terrain derivation remains in `scripts/src/lib/ops/generate_emberwatch_maps.ts`; map JSON is generated, not hand-edited.
 - Existing terrain GIDs 48–127 and all existing object/spawn/transition IDs remain unchanged.
 - C-559 adds only append-only path frames at manifest GIDs 177–192. Atlas capacity grows from 11 to 12 rows. Existing GIDs do not move.
-- `inn` and `merchant_shop` remain exactly origin/main except unavoidable atlas `imageheight` and `tilecount` metadata. Semantic terrain plus ground/decor/overhead/collision output is pinned by regression fingerprints derived from origin/main.
+- `inn` and `merchant_shop` remain exactly origin/main except unavoidable atlas `imageheight` and `tilecount` metadata and added perimeter-post objects. Semantic terrain plus ground/decor/overhead/collision output is pinned by regression fingerprints derived from origin/main.
 - `bridge` and `bridge_*` receive no C-559 semantic mapping and retain origin/main ground/decor ownership.
 - `paintWater`, water corner16 expectations, and corner16 water output remain origin/main. C-559 adds no water metric.
 - The crossing approach uses existing `dirt` terrain and authored asymmetric cells. No dedicated landing terrain family, GIDs, frames, painter, or overrides remain.
@@ -59,7 +59,7 @@ Review identified three failures:
 - Add semantic `earth` ownership for outdoor `stone_floor`, `stone_floor_variant`, and `flagstone`.
 - Add semantic `gravel` ownership for outdoor `sand`.
 - Do not map or split bridge visuals.
-- Do not alter interiors, water, collision, object identities, or save behavior.
+- Do not alter interior terrain or tile layers, water, collision, existing object identities, or save behavior; added perimeter-post objects are exempt.
 - Use rendered metrics only as supporting regression evidence. Footprint geometry and same-camera appearance—not a threshold—drive the crossing decision.
 
 ## Acceptance criteria
@@ -76,7 +76,7 @@ Review identified three failures:
 
 - `inn` and `merchant_shop` have no semantic terrain channel.
 - Their semantic-terrain-plus-ground/decor/overhead/collision fingerprints match origin/main.
-- Only atlas `imageheight` and `tilecount` may differ in committed interior map JSON.
+- Only atlas `imageheight` and `tilecount` and added perimeter-post objects may differ in committed interior map JSON.
 
 ### AC-3 — Organic crossing approach
 
@@ -136,7 +136,7 @@ Review identified three failures:
 
 Additional origin/main comparisons:
 
-- `inn` and `merchant_shop` are byte/structure-equivalent to origin/main after zeroing only tileset `imageheight` and `tilecount` for comparison.
+- `inn` and `merchant_shop` are byte/structure-equivalent to origin/main after excluding added perimeter-post objects and zeroing tileset `imageheight` and `tilecount` for comparison.
 - All five collision layers are byte-identical to origin/main. SHA-256 values remain: village `09d2397f…09ffc`, inn `e0334e3d…7260d`, merchant `11d9b9b1…1a6`, old road `83bb92ec…b97db9`, ruined shrine `16b8b021…5a7f`.
 - `git diff origin/main -- scripts/src/lib/ops/generate_emberwatch_terrain_frames.ts` contains only the added path seed; `paintWater` has no source diff from origin/main.
 
@@ -187,7 +187,7 @@ The rejected first pass was reduced to its actual scope: outdoor path, stone, an
 | AC | Status | Notes |
 |---|---|---|
 | AC-1 | ✅ | Outdoor path/stone/sand semantics added; water and bridge remain outside C-559 and match main behavior. |
-| AC-2 | ✅ | Inn and merchant semantic/layer fingerprints match main; only atlas dimensions differ. |
+| AC-2 | ✅ | Inn and merchant semantic/layer fingerprints match main; atlas dimensions and added perimeter-post objects differ. |
 | AC-3 | ⚠️ | Existing dirt contour and guarded same-camera evidence are ready; human acceptance pending. |
 | AC-4 | ✅ | All five collision layers and locked identities remain unchanged. |
 | AC-5 | ✅ | Canonical seven-step generation, focused tests/typechecks, content validation, and locked-ID validation pass. |
