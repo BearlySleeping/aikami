@@ -326,7 +326,7 @@ Temporary capture clients (`14524`/`14525`) and loopback asset origins
 
 ### Files and scope
 
-The C-560 implementation itself was **59 changed paths** (52 tracked paths
+The committed C-560 implementation was **59 changed paths** (52 tracked paths
 and 7 new files), below its original 60-path limit. The requested import from
 root `main` adds four net paths (the two `cost_guard` files, two
 `budget_state` files, plus the required guidance-manifest entry; the overlapping
@@ -358,4 +358,4 @@ changed paths**. Main implementation groups are:
   before claiming universal E2E reuse across every historical lane. That sweep
   is deliberately deferred: it adds roughly 14–15 paths and would exceed the
   explicit 59-path PR budget.
-- No commit, push, or PR was created.
+- Published as commit `26ae2fa` and PR [#405](https://github.com/BearlySleeping/aikami/pull/405), targeting `main`.
