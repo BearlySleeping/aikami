@@ -229,10 +229,26 @@ const captureCases = async (page: Page): Promise<CaptureRecord[]> => {
   return records;
 };
 
+const isBeforeCaptureManifest = (
+  value: unknown,
+): value is { schemaVersion: 2; lane: 'before'; captures: CaptureRecord[] } =>
+  typeof value === 'object' &&
+  value !== null &&
+  'schemaVersion' in value &&
+  value.schemaVersion === 2 &&
+  'lane' in value &&
+  value.lane === 'before' &&
+  'captures' in value &&
+  Array.isArray(value.captures);
+
 const writeAfterEvidence = async (records: readonly CaptureRecord[]): Promise<void> => {
-  const before = JSON.parse(
+  const parsedBefore: unknown = JSON.parse(
     readFileSync(join(EVIDENCE_DIR, 'before', 'capture_manifest.json'), 'utf8'),
-  ) as { captures: CaptureRecord[] };
+  );
+  if (!isBeforeCaptureManifest(parsedBefore)) {
+    throw new Error('C-559 before capture manifest is invalid');
+  }
+  const before = parsedBefore;
   const byLane = [...before.captures, ...records];
   for (const definition of CASES) {
     const beforeRecord = before.captures.find((record) => record.id === definition.id);

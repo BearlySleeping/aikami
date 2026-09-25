@@ -18,6 +18,16 @@ const optionalString = (record: Record<string, unknown>, key: string): string | 
   return typeof value === 'string' && value.length > 0 ? value : undefined;
 };
 
+const compareCodeUnits = (left: string, right: string): number => {
+  if (left < right) {
+    return -1;
+  }
+  if (left > right) {
+    return 1;
+  }
+  return 0;
+};
+
 const canonicalize = (value: unknown): unknown => {
   if (Array.isArray(value)) {
     return value.map(canonicalize);
@@ -25,7 +35,7 @@ const canonicalize = (value: unknown): unknown => {
   if (isRecord(value)) {
     return Object.fromEntries(
       Object.entries(value)
-        .toSorted(([left], [right]) => left.localeCompare(right))
+        .toSorted(([left], [right]) => compareCodeUnits(left, right))
         .map(([key, entry]) => [key, canonicalize(entry)]),
     );
   }

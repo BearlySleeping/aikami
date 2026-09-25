@@ -48,6 +48,11 @@ describe('content identity overlay', () => {
     expect(
       container.children.filter((child) => child.label === 'content-identity-panel'),
     ).toHaveLength(1);
+    const panel = container.getChildByLabel('content-identity-panel');
+    expect(panel).not.toBeNull();
+    expect(
+      panel?.children.some((child) => 'text' in child && String(child.text).includes('5.0.1')),
+    ).toBe(true);
 
     drawContentIdentityOverlay({ container, enabled: false, identity });
     expect(container.getChildByLabel('content-identity-panel')).toBeNull();

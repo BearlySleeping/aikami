@@ -125,7 +125,7 @@ Review identified three failures:
 | Check | Result |
 |---|---|
 | `bun scripts/src/lib/ops/emberwatch_studio.ts --no-client --no-serve` | pass — ran the canonical seven steps: portraits, audio, terrain atlas, prop atlas, maps, asset scan/hashes, asset seed; semantic validation reported 0 warnings / 0 blockers |
-| `env -u CI bun moon run scripts:test -- src/lib/ops/emberwatch_terrain_pass.test.ts src/lib/ops/generate_emberwatch_atlas.test.ts src/lib/ops/emberwatch_map_compile.test.ts src/lib/ops/emberwatch_village_crossing.test.ts --timeout 30000` | pass — 58 tests, 0 failures, 14,262 assertions |
+| `env -u CI bun moon run scripts:test -- src/lib/ops/emberwatch_terrain_pass.test.ts src/lib/ops/generate_emberwatch_atlas.test.ts src/lib/ops/emberwatch_map_compile.test.ts src/lib/ops/emberwatch_village_crossing.test.ts --timeout 30000` | pass — 58 tests, 0 failures, 14,265 assertions |
 | `env -u CI bun moon run scripts:typecheck` | pass |
 | `env -u CI bun moon run frontend-engine:test -- src/__tests__/emberwatch_content_audit.test.ts` | pass — 48 tests, 0 failures, 59,001 assertions |
 | `bun run validate:content` | pass — all NPC appearances valid and in runtime parity |

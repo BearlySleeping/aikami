@@ -97,7 +97,7 @@ See [status lifecycle](SHARED_SECTIONS.md#status-lifecycle).
 
 ### Summary
 
-Pending final validation and report.
+C-561 is implemented. The registry now carries typed style classes and eight map-specific perimeter-post definitions; the visual audit renders each frame on dark, light, and checker surfaces; and the footprint audit records visual/collision cell counts without silently converting tall overhead art into full-height movement collision. Focused tests, the full affected Moon gate, and the contract-status reconciliation are green.
 
 ### AC Status
 
