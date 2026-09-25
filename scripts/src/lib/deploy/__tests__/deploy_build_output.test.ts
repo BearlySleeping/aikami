@@ -20,6 +20,7 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { DEV_ROUTES_BUILD_MARKER_FILE } from '@aikami/constants';
 import { cleanBuildOutput } from '../build_output';
 import { runDeployAssetGuard } from '../cloudflare';
 import type { AppConfig } from '../deployment_config';
@@ -116,5 +117,26 @@ describe('runDeployAssetGuard', () => {
   test('returns false when the app has no guard script', () => {
     const appRoot = temporaryRoot();
     expect(runDeployAssetGuard({} as AppConfig, appRoot)).toBe(false);
+  });
+
+  test("honors the build's own marker when the env is not loaded", () => {
+    // The real CI shape: the build read `.env.<mode>`, this process did not,
+    // so `process.env` says nothing about the route graph that was produced.
+    const { appRoot, argvPath, config } = guardFixture();
+    mkdirSync(join(appRoot, 'build'), { recursive: true });
+    writeFileSync(join(appRoot, 'build', DEV_ROUTES_BUILD_MARKER_FILE), 'true\n');
+
+    expect(runDeployAssetGuard(config, appRoot)).toBe(true);
+    expect(readFileSync(argvPath, 'utf-8')).toContain('--allow-dev-routes');
+  });
+
+  test('an explicit false marker overrides a stale opt-in env', () => {
+    const { appRoot, argvPath, config } = guardFixture();
+    mkdirSync(join(appRoot, 'build'), { recursive: true });
+    writeFileSync(join(appRoot, 'build', DEV_ROUTES_BUILD_MARKER_FILE), 'false\n');
+    process.env.AIKAMI_INCLUDE_DEV_ROUTES = 'true';
+
+    expect(runDeployAssetGuard(config, appRoot)).toBe(true);
+    expect(readFileSync(argvPath, 'utf-8')).not.toContain('--allow-dev-routes');
   });
 });
