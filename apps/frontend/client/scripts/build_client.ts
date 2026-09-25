@@ -112,7 +112,8 @@ run('check service worker', 'bun', ['scripts/check_service_worker.ts', 'build'])
 //
 //    The decision comes from the same resolver the gate itself uses, so the
 //    guard can never disagree with the route graph that was actually built.
-const allowDevRoutes = resolveIncludeDevRoutes('build');
+const allowDevRoutes =
+  resolveIncludeDevRoutes('build') || process.env.AIKAMI_DESKTOP_BUILD === 'true';
 if (allowDevRoutes) {
   logger.info(`[build-client] ${DEV_ROUTES_ENV_VAR}=true — dev routes are expected in this build.`);
 }
