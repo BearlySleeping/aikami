@@ -10,7 +10,7 @@
 
 import { DEFAULT_LPC_RECIPE } from '@aikami/constants';
 import type { ContentPackLoaderInterface, EngineBridge, GameWorld } from '@aikami/frontend/engine';
-import { createLpcPipeline, projectLpcCatalog } from '@aikami/frontend/engine/content';
+import { createLpcPipeline } from '@aikami/frontend/engine/content';
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
@@ -1251,7 +1251,7 @@ class GameBootService
     // GameWorld.create).
     this._cachedLpcSlots = generatedLpcSlots;
     return createLpcPipeline({
-      catalog: projectLpcCatalog(generatedLpcSlots),
+      catalog: generatedLpcSlots,
       // guard-ignore lint/type-safety/casting: callback type narrowing for asset path resolver
       getLpcAssetPath: getLpcAssetPath as unknown as (
         slot: string,

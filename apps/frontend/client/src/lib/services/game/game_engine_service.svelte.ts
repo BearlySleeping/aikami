@@ -8,7 +8,7 @@ import type {
   GameWorld,
   InteractableStateMap,
 } from '@aikami/frontend/engine';
-import { createLpcPipeline, projectLpcCatalog } from '@aikami/frontend/engine/content';
+import { createLpcPipeline } from '@aikami/frontend/engine/content';
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
@@ -1008,7 +1008,7 @@ class GameEngineService
     // worker and main thread share this exact function.
     this._cachedLpcSlots = generatedLpcSlots;
     return createLpcPipeline({
-      catalog: projectLpcCatalog(generatedLpcSlots),
+      catalog: generatedLpcSlots,
       // guard-ignore lint/type-safety/casting: bridge send() command literal or LPC state enum cast
       getLpcAssetPath: resolveLpcAssetPath as unknown as (
         slot: string,

@@ -32,7 +32,7 @@ export {
 /** Options for {@link createLpcPipeline}. */
 export type CreateLpcPipelineOptions = {
   /** The projected engine-slot catalog (see {@link projectLpcCatalog}). */
-  catalog: readonly LpcSlotCatalog[];
+  catalog: readonly { slot: string; variants: readonly { assetId: string }[] }[];
   /** Resolves a slot's asset ID to a renderable texture URL. */
   getLpcAssetPath: (slot: string, assetId: string, state: string) => string | null;
 };
@@ -45,8 +45,13 @@ export type CreateLpcPipelineOptions = {
  * (C-400). Also returns the projected catalog so callers pass the SAME
  * instance to GameWorld's `lpcCatalog` option instead of projecting twice.
  *
- * @param options - Projected catalog + asset URL resolver.
- * @returns Recipe resolver, asset URL resolver, and the projected catalog.
+ * Takes the FULL generated slot list, not a pre-projected catalog: the extras
+ * a weapon or shield needs are dropped by the base projection, so a caller that
+ * projected first would silently strip every extra an outfit declares. Both
+ * projections happen here, which is also why there is only one of this function.
+ *
+ * @param options - Generated slot catalog + asset URL resolver.
+ * @returns Recipe resolver, asset URL resolver, and the appearance catalog.
  */
 export const createLpcPipeline = (
   options: CreateLpcPipelineOptions,
@@ -58,7 +63,11 @@ export const createLpcPipeline = (
   const { catalog, getLpcAssetPath } = options;
 
   const recipeResolver = (layerIds: readonly number[]): LpcLayerRecipe[] => [
-    ...resolveLpcAppearance({ layerIds, catalog, fallbacks: DEFAULT_LPC_SLOT_FALLBACKS }).recipes,
+    ...resolveLpcAppearance({
+      layerIds,
+      catalog: projectLpcCatalog(catalog),
+      fallbacks: DEFAULT_LPC_SLOT_FALLBACKS,
+    }).recipes,
   ];
 
   const assetUrlResolver = (slot: string, assetId: string, state: string): string | null =>
