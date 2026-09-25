@@ -71,6 +71,14 @@ export {
   resolveNpcAppearance,
 } from './lib/named_appearance.ts';
 export {
+  isPartialLayerAsset,
+  isPartialLayerInGarmentSlot,
+  LPC_COMPLETE_GARMENT_SLOTS,
+  LPC_PARTIAL_LAYER_ASSET_IDS,
+  LPC_PARTIAL_LAYER_ASSETS_BY_TYPE,
+  LPC_PARTIAL_LAYER_TYPES,
+} from './lib/partial_layers.ts';
+export {
   type LpcBodySuffix,
   type LpcRig,
   RIG_SUFFIXES,

@@ -26,6 +26,7 @@
 //           C-523 Emberwatch asset pilot and offline integration
 
 import type { AssetEntry } from '@aikami/types';
+import { isBgmSuppressedByPlayer } from '$lib/utils/music_playback_intent.ts';
 import { assetStore } from '../assets/asset_store.svelte';
 import { arbitrateAudioCue, createAudioCueArbiterState } from './audio_cue_arbiter.ts';
 import { localAudioSource } from './audio_local_source.ts';
@@ -351,6 +352,14 @@ const _playBgm = async (
   durationMs: number | undefined,
   playbackId: number,
 ): Promise<void> => {
+  // 🔴 The player's Stop outranks every scene cue. Map entry, combat and
+  // combat exit all reach BGM through here, and none of them pass through the
+  // mini music player — so without this gate a player who pressed Stop still
+  // got the next map's cue. Checked at the one funnel every BGM start shares,
+  // not per caller, so a new cue source cannot reintroduce the bug.
+  if (isBgmSuppressedByPlayer()) {
+    return;
+  }
   const { audioService } = await import('$services');
   if (playbackId !== _playbackId) {
     return;
@@ -485,6 +494,14 @@ export const playSceneBgm = async (
   scene: 'explore' | 'combat',
   durationMs?: number,
 ): Promise<void> => {
+  // 🔴 A player who pressed Stop is not overruled by a map change. Returning
+  // here — before any pack, catalog or lock work — also keeps a suppressed
+  // player from paying for a cue resolve and a network fetch on every map
+  // entry. `_playBgm` still re-checks, because that is the funnel every BGM
+  // start actually shares and this is only the cheap way in.
+  if (isBgmSuppressedByPlayer()) {
+    return;
+  }
   // Claim the newest-request slot *before* any await. Resolution is async (pack
   // load, catalog, lock fetch), so two map loads in flight can finish out of
   // order; without this token the slower lookup would be admitted last and the

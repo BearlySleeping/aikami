@@ -20,6 +20,12 @@
  * Usage:
  *   bun run scripts/src/lib/ops/collect_lpc_assets.ts --convert   (full pipeline)
  *   bun run scripts/src/lib/ops/collect_lpc_assets.ts              (catalog only, no conversion)
+ *   bun run scripts/src/lib/ops/collect_lpc_assets.ts --convert --audit-coverage
+ *
+ * `--audit-coverage` measures the opaque pixel coverage of every published
+ * sheet and reports any that are effectively empty. It is ADVISORY, and it is
+ * NOT a partial-layer detector — see `auditGarmentCoverage` for the measurement
+ * that shows why. Pass `--audit-strict` to exit non-zero on an empty sheet.
  */
 
 import { execSync } from 'node:child_process';
@@ -69,6 +75,21 @@ const OUTPUT_CREDITS = join(dirname(OUTPUT_ASSETS_DIR), 'lpc_credits.json');
 const OUTPUT_CREDITS_SUPPLEMENT = join(dirname(OUTPUT_ASSETS_DIR), 'lpc_credits_supplement.json');
 
 const CONVERT = process.argv.includes('--convert');
+const AUDIT_COVERAGE = process.argv.includes('--audit-coverage');
+const AUDIT_STRICT = process.argv.includes('--audit-strict');
+
+/**
+ * Whole-sheet opaque pixel count below which a published LPC sheet is reported
+ * as effectively empty.
+ *
+ * Every LPC `walk` sheet is 576x256 (36 frames of 64x64), so whole-sheet counts
+ * are directly comparable. A healthy garment measures 7500-14000. A sheet that
+ * never rendered, or was sliced from the wrong region, lands in the hundreds.
+ *
+ * This is deliberately a "certainly corrupt" floor, NOT a garment-completeness
+ * threshold — see `auditGarmentCoverage` for why the latter is not measurable.
+ */
+const COVERAGE_EMPTY_FLOOR = 400;
 
 const SOURCE_EXT = '.png';
 const WEBP_QUALITY = 80;
@@ -493,6 +514,103 @@ if (creditsCsv.size === 0) {
   }
 }
 
+// ── Coverage audit (advisory) ─────────────────────────────────────────────
+
+/**
+ * Counts fully-opaque pixels across a whole LPC sheet.
+ *
+ * Measures the WHOLE sheet, not frame 0. Two reasons:
+ *  - LPC PNGs come in two encodings (truecolor RGBA and colormap+tRNS); a
+ *    frame-0 crop measured through `-alpha extract` silently returns 0 for the
+ *    colormap variant, which would report healthy sheets as empty. Whole-sheet
+ *    counts are correct for both.
+ *  - every `walk` sheet is 576x256, so the numbers are comparable across assets.
+ */
+const measureSheetOpaque = (src: string): number | undefined => {
+  try {
+    const out = execSync(
+      `magick "${src}" -background none -alpha set -alpha extract -threshold 50% -format "%[fx:round(mean*w*h)]" info:`,
+      { encoding: 'utf8', timeout: 10_000, stdio: ['ignore', 'pipe', 'ignore'] },
+    ).trim();
+    const n = Number.parseInt(out, 10);
+    return Number.isFinite(n) ? n : undefined;
+  } catch {
+    return undefined; // magick missing, or an unreadable file — not a finding.
+  }
+};
+
+/**
+ * Reports published sheets whose opaque coverage is effectively empty.
+ *
+ * WHY THIS IS ADVISORY AND NOT A PARTIAL-LAYER GATE
+ * -------------------------------------------------
+ * The obvious guard — "a complete garment must cover enough pixels" — does not
+ * work, and the failure is measurable rather than theoretical. Measured over
+ * the upstream sheets:
+ *
+ *   torso/aprons/suspenders/female   1908 opaque px   type_name "overalls"  (COMPLETE)
+ *   torso/waist/belt_leather/female  1943 opaque px   type_name "belt"      (PARTIAL)
+ *
+ * A complete garment scores *lower* than a partial layer, so any pixel floor
+ * that catches the belt also convicts the suspenders, and any floor low enough
+ * to spare the suspenders lets near-empty partials through. Legitimate small
+ * garments (aprons, corsets, waistbands) and legitimately small partials (belts,
+ * obi knots, jacket trim) occupy the same coverage band.
+ *
+ * What coverage CAN detect reliably is a sheet that is essentially empty — one
+ * that never rendered or was sliced from the wrong region. That is a different
+ * failure mode from partiality, so it gets its own, much lower floor here.
+ *
+ * The authoritative partial-layer guard is the upstream `type_name`
+ * classification committed at `packages/shared/lpc/src/lib/partial_layers.ts`
+ * and enforced by `validate_content_appearance.ts`.
+ */
+const auditGarmentCoverage = (entries: { src: string; dst: string }[]): void => {
+  const walks = entries.filter((e) => e.dst.endsWith('.walk.webp') && !e.dst.includes('/behind.'));
+  console.log(`\n🔍 Auditing opaque coverage of ${walks.length} walk sheets...`);
+
+  const empty: { assetId: string; opaque: number }[] = [];
+  let measured = 0;
+
+  for (const entry of walks) {
+    const opaque = measureSheetOpaque(entry.src);
+    if (opaque === undefined) {
+      continue;
+    }
+    measured += 1;
+    if (opaque < COVERAGE_EMPTY_FLOOR) {
+      empty.push({
+        assetId: entry.dst.slice(OUTPUT_ASSETS_DIR.length + 1).replace(/\.walk\.webp$/, ''),
+        opaque,
+      });
+    }
+  }
+
+  if (empty.length === 0) {
+    console.log(
+      `   ✓ No effectively-empty sheets (${measured} measured, floor ${COVERAGE_EMPTY_FLOOR}px).`,
+    );
+    return;
+  }
+
+  empty.sort((a, b) => a.opaque - b.opaque);
+  console.log(
+    `   ⚠ ${empty.length} effectively-empty sheet(s) (floor ${COVERAGE_EMPTY_FLOOR}px of 147456):`,
+  );
+  for (const { assetId, opaque } of empty) {
+    console.log(`     - ${assetId}  (${opaque} opaque px)`);
+  }
+  console.log(
+    '     These sheets will render as nothing. Re-download or re-slice them; this is\n' +
+      '     NOT the partial-layer check (belts/obi/trim are legitimately small).',
+  );
+
+  if (AUDIT_STRICT) {
+    console.error('   ✗ --audit-strict: exiting non-zero.');
+    process.exit(1);
+  }
+};
+
 // ── Phase 2: Convert (parallel) ──────────────────────────────────────────
 
 if (CONVERT) {
@@ -573,6 +691,10 @@ if (CONVERT) {
   }
 
   console.log(`\n   Done in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
+
+  if (AUDIT_COVERAGE) {
+    auditGarmentCoverage(manifest);
+  }
 
   // Summary
   const totalKb =

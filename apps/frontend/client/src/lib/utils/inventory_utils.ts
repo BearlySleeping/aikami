@@ -35,7 +35,7 @@ export const getItemCategoryIcon = (itemType: ItemType): string => ITEM_CATEGORY
  * the LPC character. Every equipment item maps to a real spritesheet asset
  * under static/game-data/lpc/.
  */
-const ITEM_CATALOG: Record<string, ItemDefinition> = {
+export const ITEM_CATALOG: Record<string, ItemDefinition> = {
   // ── Swords (right hand → LPC weapon layer) ──
   rustySword: {
     label: 'Rusty Sword',
@@ -315,6 +315,24 @@ let _activeCatalog: Record<string, ItemDefinition> | undefined;
 export const setActiveCatalog = (items: Record<string, ItemDefinition>): void => {
   _activeCatalog = items;
 };
+
+/**
+ * Every item definition {@link getItemDefinition} can resolve, as one map:
+ * the hardcoded fallback catalog with the active content-pack catalog layered
+ * over it (pack wins on id collision, mirroring the lookup precedence).
+ *
+ * Exposed so callers can reason about the WHOLE catalog — e.g. "which assets do
+ * equippable items provide for this layer?" — instead of probing ids one by one.
+ *
+ * The UNION matters. A pack only declares the items it ships (emberwatch: 7),
+ * while the fallback still resolves ~23 more, so an equippable `chainmailArmor`
+ * is reachable at runtime even with a pack loaded. Reasoning about the pack
+ * alone would miss every fallback item and silently under-report.
+ *
+ * Returns a fresh object — do not mutate it.
+ */
+export const getResolvableItemCatalog = (): Record<string, ItemDefinition> =>
+  _activeCatalog ? { ...ITEM_CATALOG, ..._activeCatalog } : { ...ITEM_CATALOG };
 
 /**
  * Looks up the {@link ItemDefinition} for a given item ID.

@@ -18,6 +18,7 @@
 // Contract: C-511 Local Audio Generation Modality, C-513 AC-10
 
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
+import { MUSIC_PLAYER_PLAYBACK_KEY } from '@aikami/constants';
 import type { AssetEntry, AssetManifest } from '@aikami/types';
 
 let manifest: AssetManifest | undefined;
@@ -31,6 +32,17 @@ let listTagsCalls: string[] = [];
 let resolveLocalCalls: string[] = [];
 /** Set to make the registry unavailable (a device with no local DB). */
 let listTagsThrows = false;
+
+// The resolver's unsuppressed path reaches the authored-cue source, which
+// reads build-time feature flags. Suppressed players return before that, so
+// without this the only playable-path test would be the suppressed one.
+mock.module('$app/env/public', () => ({
+  // biome-ignore-start lint/style/useNamingConvention: these are ENVIRONMENT VARIABLE names — a mock must spell them exactly as the runtime reads them.
+  PUBLIC_ASSET_PUBLISHING: true,
+  PUBLIC_ASSET_GENERATION: true,
+  PUBLIC_AUDIO_GENERATION: true,
+  // biome-ignore-end lint/style/useNamingConvention: env var names
+}));
 
 mock.module('../assets/asset_store.svelte.ts', () => ({
   assetStore: {
@@ -61,7 +73,8 @@ mock.module('./audio_local_source.ts', () => ({
   },
 }));
 
-const { resolveAmbientUrl, resolveBgmUrl, resolveSfxUrl } = await import(
+const { isBgmSuppressedByPlayer } = await import('$lib/utils/music_playback_intent.ts');
+const { playSceneBgm, resolveAmbientUrl, resolveBgmUrl, resolveSfxUrl } = await import(
   './audio_asset_resolver.ts'
 );
 
@@ -287,5 +300,58 @@ describe('audio_asset_resolver — C-513 AC-10 community import, offline after r
     expect(await resolveSfxUrl('gate-slam')).toBeNull();
     expect(await resolveAmbientUrl('forest')).toBeNull();
     expect(resolveLocalCalls).toEqual([]);
+  });
+});
+
+describe('audio_asset_resolver — a player who pressed Stop is not overruled by the scene', () => {
+  test('🔴 the control: with no recorded opinion, the scene still plays', async () => {
+    localStorage.removeItem(MUSIC_PLAYER_PLAYBACK_KEY);
+    manifest = undefined;
+    localTags = { music: ['music:community:village-theme'] };
+    localUrls = new Map([['music:community:village-theme', 'blob:cached/village-theme']]);
+
+    expect(isBgmSuppressedByPlayer()).toBe(false);
+    resolveUrlCalls = [];
+    localTags = { music: ['music:community:village-theme'] };
+    localUrls = new Map([['music:community:village-theme', 'blob:cached/village-theme']]);
+
+    await playSceneBgm('explore');
+
+    // Without this, a gate that simply broke scene music for everyone would
+    // still pass the suppression test below.
+    expect(listTagsCalls).toContain('music');
+  });
+
+  test('a map cue does not start while the player has music stopped', async () => {
+    localStorage.removeItem(MUSIC_PLAYER_PLAYBACK_KEY);
+    // A fresh player (no stored intent) still gets scene music.
+    expect(isBgmSuppressedByPlayer()).toBe(false);
+
+    // The player presses Stop. Map entry, combat and combat exit all call
+    // playSceneBgm, and none of them pass through the mini music player — so
+    // before the gate, the next map's cue started anyway.
+    localStorage.setItem(MUSIC_PLAYER_PLAYBACK_KEY, JSON.stringify({ state: 'stopped' }));
+    expect(isBgmSuppressedByPlayer()).toBe(true);
+
+    resolveUrlCalls = [];
+    listTagsCalls = [];
+    localTags = { music: ['music:community:village-theme'] };
+    localUrls = new Map([['music:community:village-theme', 'blob:cached/village-theme']]);
+
+    await playSceneBgm('explore');
+
+    // Not merely silent: the cue was never even looked up, so a suppressed
+    // player pays nothing for a map change.
+    expect(listTagsCalls).toEqual([]);
+    expect(resolveUrlCalls).toEqual([]);
+  });
+
+  test('the gate opens again the moment the player asks for music', async () => {
+    localStorage.setItem(
+      MUSIC_PLAYER_PLAYBACK_KEY,
+      JSON.stringify({ state: 'playing', trackId: 'music:exploration:bgm_explore' }),
+    );
+    expect(isBgmSuppressedByPlayer()).toBe(false);
+    localStorage.removeItem(MUSIC_PLAYER_PLAYBACK_KEY);
   });
 });

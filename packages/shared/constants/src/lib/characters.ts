@@ -339,14 +339,26 @@ export type AppearancePreset = {
 /**
  * Safe default LPC recipe that always produces a valid character sprite.
  * Used as the fallback when no recipe is available or a preset asset is missing.
+ *
+ * C-374 invariant: the `torso` and `feet` base layers are UNDERS — a plain
+ * shirt and plain shoes. The equipment pipeline merges gear recipes over this
+ * base with `mergeLpcRecipes`, which can only *replace* or *append* layers —
+ * it can never remove one. So if the base already wore armour/boots, the
+ * matching inventory item (chainmailArmor → `torso/chainmail_male`,
+ * leatherBoots → `feet/boots/basic_male`) would render identically equipped
+ * and unequipped, and toggling it would be a visual no-op. Keep the base
+ * equipment-free; gear supplies the armoured variants.
+ *
+ * Both are rig-safe: `resolveRigCompatibleAsset` remaps the `_male` default to
+ * the catalog's `_female`/`_thin` variant for other body profiles.
  */
 export const DEFAULT_LPC_RECIPE: Readonly<Record<string, string>> = {
   head: 'head/heads/human_male',
   body: 'body/bodies_male',
   hair: 'hair/bangs_adult',
-  torso: 'torso/chainmail_male',
+  torso: 'torso/clothes/longsleeve/longsleeve_male',
   legs: 'legs/pants_male',
-  feet: 'feet/boots/basic_male',
+  feet: 'feet/shoes/basic_male',
 } as const;
 
 export const APPEARANCE_PRESETS: readonly AppearancePreset[] = [

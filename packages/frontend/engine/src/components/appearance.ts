@@ -194,6 +194,41 @@ export const getAppearanceLayers = (eid: number): readonly number[] => {
 };
 
 /**
+ * Chooses the player's BASE appearance layers when a save is restored.
+ *
+ * `Appearance.layers` stores POSITIONAL catalog indices, so a save persists a
+ * derived value: the indices that were correct for the persona's recipe *at save
+ * time*. If the recipe changes since — a new persona, a corrected
+ * `DEFAULT_LPC_RECIPE`, a re-authored outfit — the restored indices still resolve,
+ * but to the OLD assets. That is silent: the sprite renders, just wrongly.
+ *
+ * For the player specifically this is harmful, because equipment is merged over
+ * the base by the main thread with `mergeLpcRecipes`, which can only replace or
+ * append a layer. A stale base that happens to resolve to the same asset an
+ * equipped item provides makes equip/unequip a visual no-op — the exact bug this
+ * rule prevents.
+ *
+ * The persona is therefore authoritative for the base look: it is re-derived from
+ * `playerData` on every boot and the save must not own it. Equipment lives in
+ * the equipment service and is layered on top, so nothing is lost by discarding
+ * the restored base.
+ *
+ * @param restored - Layers deserialised from the save, if any.
+ * @param fromPersona - Layers derived from the persona's current recipe.
+ * @returns The layers the player entity should carry.
+ */
+export const resolvePlayerBaseLayers = (options: {
+  restored?: readonly number[] | undefined;
+  fromPersona?: readonly number[] | undefined;
+}): readonly number[] => {
+  const { restored, fromPersona } = options;
+  if (fromPersona && fromPersona.length > 0) {
+    return fromPersona;
+  }
+  return restored ?? [];
+};
+
+/**
  * Helper to update the Appearance layers for an entity.
  *
  * Writes to the variable-length `layers` Map and also populates the

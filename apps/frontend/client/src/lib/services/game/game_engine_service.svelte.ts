@@ -1,7 +1,5 @@
 // apps/frontend/client/src/lib/services/game/game_engine_service.svelte.ts
 
-import { DEFAULT_LPC_RECIPE } from '@aikami/constants';
-
 import type {
   EngineBridge,
   GameCommand,
@@ -23,6 +21,7 @@ import type {
 } from '@aikami/types';
 import { getLpcAssetPath, getLpcCatalog, wireLpcUrlResolver } from '$lib/data/lpc_asset_catalog';
 import type { ActiveContextEntry, CombatantScreenState, FloatingTextInstance } from '$types';
+import { buildEffectiveAppearanceRecipe } from '$utils/appearance_recipe';
 import { assetManager } from '../assets/asset_manager.svelte';
 import { assetTagResolver } from '../assets/registry_resolver';
 import {
@@ -888,21 +887,19 @@ class GameEngineService
       slotIndexMap.set(generatedLpcSlots[i].slot, i);
     }
 
-    // Use DEFAULT_LPC_RECIPE as the base. Only allow persona's recipe
-    // to override slots where the asset ID is valid in the catalog.
-    const effectiveRecipe: Record<string, string> = { ...DEFAULT_LPC_RECIPE };
-    if (lpcRecipe) {
-      for (const [slot, assetId] of Object.entries(lpcRecipe)) {
+    // C-374: mirrors game_boot_service — base appearance, persona overlay, then
+    // stripped of any asset an equippable item also provides so equip/unequip is
+    // always visible. Personas persist their outfit, so this runs every boot.
+    const effectiveRecipe = buildEffectiveAppearanceRecipe({
+      personaRecipe: lpcRecipe,
+      isValidAsset: (slot, assetId) => {
         const catalogIdx = slotIndexMap.get(slot);
-        if (catalogIdx !== undefined) {
-          const slotDef = generatedLpcSlots[catalogIdx];
-          const found = slotDef?.variants.some((v) => v.assetId === assetId);
-          if (found) {
-            effectiveRecipe[slot] = assetId;
-          }
-        }
-      }
-    }
+        return (
+          catalogIdx !== undefined &&
+          !!generatedLpcSlots[catalogIdx]?.variants.some((v) => v.assetId === assetId)
+        );
+      },
+    });
 
     this.debug('lpc.engine.PlayerData', {
       personaId: this._activePersona.id,

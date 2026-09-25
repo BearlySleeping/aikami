@@ -9,6 +9,7 @@
 import { describe, expect, test } from 'bun:test';
 import {
   HUD_ANCHORS,
+  HUD_DEFAULT_PRESET_ID,
   HUD_DENSITIES,
   HUD_LAYOUT_PRESETS,
   HUD_MAX_WIDGETS,
@@ -90,6 +91,28 @@ describe('C-528 HUD layout presets', () => {
     expect(objective?.anchor).toBe('bottom-start');
     expect(onboarding?.anchor).toBe('bottom-start');
     expect(onboarding?.order).toBeGreaterThan(objective?.order ?? 0);
+  });
+
+  test('the default preset shows the music player at the bottom right', () => {
+    // 🔴 The widget was already anchored `bottom-end` in every preset, so
+    // position alone never made it appear: the default preset also shipped it
+    // `hidden`. Pin both halves — a "bottom right music player" that is hidden
+    // is not a music player.
+    const adventure = HUD_LAYOUT_PRESETS.find((preset) => preset.id === HUD_DEFAULT_PRESET_ID);
+    const music = adventure?.widgets.find((widget) => widget.widgetId === 'music-player');
+    expect(music?.visibility).toBe('always');
+    expect(music?.anchor).toBe('bottom-end');
+  });
+
+  test('the distraction-reducing presets still hide the music player on purpose', () => {
+    // These presets have stated purposes that exclude a persistent player.
+    // Keeping the default from leaking into them is deliberate, not an
+    // oversight to be tidied away in a later pass.
+    for (const presetId of ['minimal', 'tactical', 'readable'] as const) {
+      const preset = HUD_LAYOUT_PRESETS.find((entry) => entry.id === presetId);
+      const music = preset?.widgets.find((widget) => widget.widgetId === 'music-player');
+      expect(music?.visibility).toBe('hidden');
+    }
   });
 
   test('every preset covers every registered widget exactly once', () => {

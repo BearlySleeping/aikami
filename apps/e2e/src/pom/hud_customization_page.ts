@@ -1,7 +1,7 @@
 // apps/e2e/src/pom/hud_customization_page.ts
 // Production HUD customization journeys and persisted-state access.
 
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 
 const HUD_PREFERENCES_KEY = 'aikami:hud:preferences';
 
@@ -49,6 +49,15 @@ export class HudCustomizationPage {
     return this.page.getByTestId('hud-export-output');
   }
 
+  /** The editor's own status line — how a refused drop explains itself. */
+  get editorStatus() {
+    return this.page.getByTestId('hud-editor-status');
+  }
+
+  dropAnchor(anchor: string) {
+    return this.page.getByTestId(`hud-drop-anchor-${anchor}`);
+  }
+
   hudAnchor(anchor: string) {
     return this.page.getByTestId(`hud-anchor-${anchor}`);
   }
@@ -70,6 +79,36 @@ export class HudCustomizationPage {
     return this.page.getByTestId(`hud-preview-${widgetId}`);
   }
 
+  /** The Hidden shelf — the sixth place a widget can be. */
+  get hiddenShelf() {
+    return this.page.getByTestId('hud-editor-hidden-shelf');
+  }
+
+  /** A chip resting on the shelf, i.e. a widget that is off the HUD. */
+  shelfWidget(widgetId: string) {
+    return this.page.getByTestId(`hud-preview-${widgetId}`);
+  }
+
+  /** The row's Hide / Show control. */
+  hideWidget(widgetId: string) {
+    return this.page.getByTestId(`hud-editor-hide-${widgetId}`);
+  }
+
+  /** The Always / When-relevant control for one widget. */
+  visibilityControl(widgetId: string) {
+    return this.page.getByTestId(`hud-editor-visibility-${widgetId}`);
+  }
+
+  /** The Always / When-relevant control's individual button. */
+  visibilityOption(widgetId: string, option: 'Always' | 'When relevant') {
+    return this.visibilityControl(widgetId).getByRole('button', { name: option, exact: true });
+  }
+
+  /** The row's location cell — where the widget currently lives. */
+  widgetLocation(widgetId: string) {
+    return this.page.getByTestId(`hud-editor-location-${widgetId}`);
+  }
+
   /** Starts each test on a clean production HUD route. */
   async open(): Promise<void> {
     await this.page.goto('/game');
@@ -85,6 +124,18 @@ export class HudCustomizationPage {
   async reload(): Promise<void> {
     await this.page.reload();
     await this.waitForHud();
+  }
+
+  /**
+   * Shrinks the window below the old 1100px `bottom-end` cutoff.
+   *
+   * The default Playwright viewport is wide enough that `bottom-end` was
+   * always available, which is why the "the music player is not at the bottom
+   * right" regression survived the whole E2E suite.
+   */
+  async useNarrowWindow(): Promise<void> {
+    await this.page.setViewportSize({ width: 780, height: 437 });
+    await this.reload();
   }
 
   async openPauseMenu(): Promise<void> {
@@ -136,34 +187,98 @@ export class HudCustomizationPage {
 
   async dragWidgetTo(widgetId: string, anchor: string): Promise<void> {
     await this.editorDragHandle(widgetId).scrollIntoViewIfNeeded();
-    const source = await this.editorDragHandle(widgetId).boundingBox();
-    const target = await this.page.getByTestId(`hud-drop-anchor-${anchor}`).boundingBox();
-    if (!source || !target) {
-      throw new Error(`drag ${widgetId} -> ${anchor}: source or target not visible`);
+    await this.dragFromTo(
+      await this.centerOf(this.editorDragHandle(widgetId)),
+      await this.centerOf(this.page.getByTestId(`hud-drop-anchor-${anchor}`)),
+    );
+  }
+
+  /**
+   * Puts keyboard focus inside the editor.
+   *
+   * The editor handles keys on a `keydown` bound to the modal, so every
+   * keyboard gesture — V, H, Tab, Escape — requires focus to be inside it.
+   * Pointer tests do not need this; keyboard ones must establish it rather than
+   * inherit it from whichever element the pause menu last focused.
+   */
+  async focusEditor(): Promise<void> {
+    await this.editor.evaluate((element) => element.focus());
+  }
+
+  /** Presses the mouse on a row's drag handle and leaves it held down. */
+  async beginDrag(widgetId: string): Promise<void> {
+    await this.editorDragHandle(widgetId).scrollIntoViewIfNeeded();
+    const box = await this.editorDragHandle(widgetId).boundingBox();
+    if (!box) {
+      throw new Error(`begin drag ${widgetId}: handle not visible`);
     }
-    await this.page.mouse.move(source.x + source.width / 2, source.y + source.height / 2);
+    await this.page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
     await this.page.mouse.down();
-    await this.page.mouse.move(target.x + target.width / 2, target.y + target.height / 2, {
-      steps: 8,
-    });
+  }
+
+  /** Drags a row's widget onto the Hidden shelf — the "remove it" gesture. */
+  async dragWidgetToShelf(widgetId: string): Promise<void> {
+    await this.editorDragHandle(widgetId).scrollIntoViewIfNeeded();
+    await this.dragFromTo(
+      await this.centerOf(this.editorDragHandle(widgetId)),
+      await this.centerOf(this.hiddenShelf),
+    );
+  }
+
+  /** Drags a chip that is already on the shelf back onto a region. */
+  async dragShelfWidgetTo(widgetId: string, anchor: string): Promise<void> {
+    await this.dragFromTo(
+      await this.centerOf(this.shelfWidget(widgetId)),
+      await this.centerOf(this.page.getByTestId(`hud-drop-anchor-${anchor}`)),
+    );
+  }
+
+  private async dragFromTo(
+    from: { x: number; y: number },
+    to: { x: number; y: number },
+  ): Promise<void> {
+    await this.page.mouse.move(from.x, from.y);
+    await this.page.mouse.down();
+    await this.page.mouse.move(to.x, to.y, { steps: 12 });
     await this.page.mouse.up();
     await this.page.waitForTimeout(200);
   }
 
   /** Drags a widget that is already placed, from the preview onto another region. */
   async dragPreviewWidgetTo(widgetId: string, anchor: string): Promise<void> {
+    await this.dragPreviewWidgetToPoint(
+      widgetId,
+      await this.centerOf(this.page.getByTestId(`hud-drop-anchor-${anchor}`)),
+    );
+  }
+
+  /**
+   * Drags a preview widget to an absolute viewport point.
+   *
+   * Used to drop into the dead space BETWEEN regions, which is what a player
+   * aiming at a region from a few pixels off actually does.
+   */
+  async dragPreviewWidgetToPoint(
+    widgetId: string,
+    point: { readonly x: number; readonly y: number },
+  ): Promise<void> {
     const source = await this.previewWidget(widgetId).boundingBox();
-    const target = await this.page.getByTestId(`hud-drop-anchor-${anchor}`).boundingBox();
-    if (!source || !target) {
-      throw new Error(`preview drag ${widgetId} -> ${anchor}: source or target not visible`);
+    if (!source) {
+      throw new Error(`preview drag ${widgetId}: source not visible`);
     }
     await this.page.mouse.move(source.x + source.width / 2, source.y + source.height / 2);
     await this.page.mouse.down();
-    await this.page.mouse.move(target.x + target.width / 2, target.y + target.height / 2, {
-      steps: 8,
-    });
+    await this.page.mouse.move(point.x, point.y, { steps: 8 });
     await this.page.mouse.up();
     await this.page.waitForTimeout(200);
+  }
+
+  private async centerOf(locator: Locator): Promise<{ x: number; y: number }> {
+    const box = await locator.boundingBox();
+    if (!box) {
+      throw new Error('drop target not visible');
+    }
+    return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
   }
 
   async readStoredPreferences(): Promise<unknown> {

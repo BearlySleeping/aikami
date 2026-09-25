@@ -108,6 +108,18 @@ const playPauseTitle = $derived.by(() => {
           <span class="ml-1 min-w-0 flex-1 truncate text-[11px] text-warning" aria-live="polite">
             {viewModel.feedback}
           </span>
+        {:else if viewModel.silentBecause}
+          <!--
+          🔴 A reload never resumes audio on its own, so silence after a visit
+          where music was on is otherwise indistinguishable from a broken HUD.
+          -->
+          <span
+            class="ml-1 min-w-0 flex-1 truncate text-[11px] text-base-content/50"
+            aria-live="polite"
+            data-testid="music-player-silent-because"
+          >
+            {viewModel.silentBecause}
+          </span>
         {:else}
           <span class="ml-1 flex-1 text-right text-[11px] text-base-content/40">
             {viewModel.hasSimilarTracks ? 'similar vibe' : ''}

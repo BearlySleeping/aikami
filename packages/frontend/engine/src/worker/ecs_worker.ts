@@ -36,6 +36,7 @@ import {
   getAppearanceLayers,
   type LpcLayerRecipe,
   registerAppearanceObservers,
+  resolvePlayerBaseLayers,
   setAppearanceLayers,
 } from '../components/appearance.ts';
 import { CameraFocus, registerCameraFocusObservers } from '../components/camera_focus.ts';
@@ -149,6 +150,7 @@ import { updatePartyFollow } from '../systems/party_follow_system.ts';
 import {
   clearActorMovement,
   registerPathFollowHaltObservers,
+  releasePathToDirectInput,
   updatePathFollow,
 } from '../systems/path_follow_system.ts';
 import { updatePressurePlates } from '../systems/pressure_plate_system.ts';
@@ -467,6 +469,11 @@ const handleSetPlayerVelocity = (velocity: { x: number; y: number }): void => {
   // game mode separately. If we gate here, {0,0} stop commands sent while
   // in MENU/DIALOGUE are silently dropped, causing sticky movement when
   // returning to EXPLORE.
+  //
+  // A live click-to-move path is dropped first: updatePathFollow rewrites
+  // Velocity every tick, so keeping it would make the player ignore the keys
+  // (and keep walking after every key is released). See releasePathToDirectInput.
+  releasePathToDirectInput(world, playerEntityId, velocity);
   addComponent(world, playerEntityId, set(Velocity, velocity));
 };
 
@@ -923,6 +930,23 @@ const initializeEngine = (
         tint,
         ...(frame ? { frame } : {}),
       });
+    }
+
+    // The player's BASE appearance is derived state owned by the persona, not by
+    // the save. `Appearance.layers` persists POSITIONAL catalog indices, so a
+    // save written before the persona's recipe changed restores stale indices
+    // that resolve back to the old assets — silently re-creating the
+    // equip/unequip no-op, because the base torso then resolves to whatever the
+    // item also provides. Re-seed from playerData on every boot: equipment is
+    // layered on top by the main thread, so the persona is authoritative for the
+    // base look and the save must not own it. Runs after the eidMap loop, which
+    // is what assigns `playerEntityId`.
+    if (playerEntityId > 0) {
+      const baseLayers = resolvePlayerBaseLayers({
+        restored: getAppearanceLayers(playerEntityId),
+        fromPersona: playerData?.appearanceLayers,
+      });
+      setAppearanceLayers(world, playerEntityId, baseLayers);
     }
   } else {
     playerEntityId = createPlayer(world, playerData);

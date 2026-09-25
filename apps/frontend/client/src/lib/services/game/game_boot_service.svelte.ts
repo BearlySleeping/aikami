@@ -8,7 +8,6 @@
 
 // biome-ignore-all lint/style/useNamingConvention: stage identifiers use snake_case per GameBootStage type
 
-import { DEFAULT_LPC_RECIPE } from '@aikami/constants';
 import type { ContentPackLoaderInterface, EngineBridge, GameWorld } from '@aikami/frontend/engine';
 import { createLpcPipeline } from '@aikami/frontend/engine/content';
 import {
@@ -20,6 +19,7 @@ import { type LpcAnimationState, resolveBaseAppearanceRecipe } from '@aikami/lpc
 import type { Campaign, PersonaData } from '@aikami/types';
 import { isTauri } from '$lib/views/utils/is_tauri';
 import type { GameBootInput, GameBootProgress, GameBootResult, GameBootStage } from '$types';
+import { buildEffectiveAppearanceRecipe } from '$utils/appearance_recipe';
 import { resetAudioCueAuthority } from '../audio/audio_asset_resolver.ts';
 import { transition } from '../campaign/boot_state_machine.ts';
 import { campaignService } from '../campaign/campaign_service.svelte';
@@ -1290,23 +1290,20 @@ class GameBootService
       slotIndexMap.set(entry.slot, i);
     }
 
-    // Use DEFAULT_LPC_RECIPE as the base. The persona's lpcRecipe
-    // may contain AI-generated assets that don't render well.
-    // Only override slots where the persona's recipe explicitly
-    // provides a VALID asset ID that exists in the catalog.
-    const effectiveRecipe: Record<string, string> = { ...DEFAULT_LPC_RECIPE };
-    if (lpcRecipe) {
-      for (const [slot, assetId] of Object.entries(lpcRecipe)) {
+    // C-374: base appearance = DEFAULT_LPC_RECIPE, overlaid with the persona's
+    // own valid assets, then stripped of any asset an equippable item also
+    // provides — otherwise equip/unequip is invisible. Personas persist their
+    // outfit, so this normalises on every boot (no save migration needed).
+    const effectiveRecipe = buildEffectiveAppearanceRecipe({
+      personaRecipe: lpcRecipe,
+      isValidAsset: (slot, assetId) => {
         const catalogIdx = slotIndexMap.get(slot);
-        if (catalogIdx !== undefined) {
-          const slotDef = generatedLpcSlots[catalogIdx];
-          const found = slotDef?.variants.some((v) => v.assetId === assetId);
-          if (found) {
-            effectiveRecipe[slot] = assetId;
-          }
-        }
-      }
-    }
+        return (
+          catalogIdx !== undefined &&
+          !!generatedLpcSlots[catalogIdx]?.variants.some((v) => v.assetId === assetId)
+        );
+      },
+    });
 
     this.debug('lpc.boot.PlayerData', {
       personaId: this._persona.id,
