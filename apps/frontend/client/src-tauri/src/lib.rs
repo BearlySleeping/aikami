@@ -386,22 +386,26 @@ fn safe_asset_path(dir: &Path, file_name: &str) -> Result<PathBuf, String> {
 }
 
 /// Reads `models.originUrl` from the runtime config in the app data dir.
-/// The Rust-side download is only allowed to fetch from this origin.
+/// The Rust-side download is only allowed to fetch from this origin. Older
+/// configs did not persist the model origin, so retain the canonical resolver
+/// origin as a safe fallback for those installations.
 fn configured_model_origin(app: &tauri::AppHandle) -> Result<String, String> {
+    const DEFAULT_MODEL_ORIGIN: &str = "https://huggingface.co";
+
     let dir = assets_dir(app)?;
     let path = dir.join(CONFIG_FILE);
     if !path.exists() {
-        return Err("No runtime config — model origin is not configured".to_string());
+        return Ok(DEFAULT_MODEL_ORIGIN.to_string());
     }
     let raw = fs::read_to_string(&path).map_err(|e| format!("Cannot read config: {e}"))?;
     let parsed: serde_json::Value =
         serde_json::from_str(&raw).map_err(|e| format!("Cannot parse config: {e}"))?;
-    parsed
+    Ok(parsed
         .get("models")
         .and_then(|m| m.get("originUrl"))
         .and_then(|u| u.as_str())
         .map(|s| s.trim_end_matches('/').to_string())
-        .ok_or_else(|| "models.originUrl is missing from config".to_string())
+        .unwrap_or_else(|| DEFAULT_MODEL_ORIGIN.to_string()))
 }
 
 /// Validates a download URL against the configured model origin: same scheme
@@ -419,6 +423,27 @@ fn validate_model_download_url(origin: &str, url: &str) -> Result<(), String> {
         ));
     }
     Ok(())
+}
+
+/// Whether a redirect target stays inside Hugging Face's trusted HTTPS estate.
+///
+/// Small metadata files are served from `huggingface.co` after a same-origin
+/// 307, but LFS/Xet assets (notably `onnx/model_quantized.onnx`) redirect
+/// straight to a regional CDN such as `us.aws.cdn.hf.co`. Refusing those
+/// cross-host hops makes every browser-mode Kokoro download fail on desktop
+/// while the same URL works in a normal browser, so the CDN suffix is
+/// allowlisted explicitly rather than permitting arbitrary redirects.
+fn is_allowed_model_redirect(url: &Url, first: &Url) -> bool {
+    if url.scheme() != "https" {
+        return false;
+    }
+    let Some(host) = url.host_str() else {
+        return false;
+    };
+    if url.scheme() == first.scheme() && Some(host) == first.host_str() {
+        return true;
+    }
+    host == "hf.co" || host.ends_with(".hf.co")
 }
 
 /// Returns the runtime `config.json` from the app data directory, or `None`
@@ -460,7 +485,20 @@ async fn download_model_file(
     validate_model_download_url(&origin, &url)?;
 
     let client = reqwest::Client::builder()
-        .redirect(reqwest::redirect::Policy::none())
+        .redirect(reqwest::redirect::Policy::custom(|attempt| {
+            let previous = attempt.previous();
+            let Some(first) = previous.first() else {
+                return attempt.error("missing redirect origin");
+            };
+            if previous.len() >= 5 {
+                return attempt.error("too many model-download redirects");
+            }
+            let next = attempt.url();
+            if !is_allowed_model_redirect(next, first) {
+                return attempt.error("model-download redirect left the trusted model origins");
+            }
+            attempt.follow()
+        }))
         .build()
         .map_err(|e| format!("Cannot build HTTP client: {e}"))?;
     let response = client
@@ -713,4 +751,35 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{is_allowed_model_redirect, Url};
+
+    fn allowed(candidate: &str) -> bool {
+        let first = Url::parse("https://huggingface.co/onnx-community/Kokoro-82M-ONNX/resolve/rev/config.json")
+            .expect("first URL parses");
+        let next = Url::parse(candidate).expect("candidate URL parses");
+        is_allowed_model_redirect(&next, &first)
+    }
+
+    #[test]
+    fn allows_same_origin_metadata_redirect() {
+        assert!(allowed(
+            "https://huggingface.co/api/resolve-cache/models/onnx-community/Kokoro-82M-ONNX/config.json"
+        ));
+    }
+
+    #[test]
+    fn allows_hugging_face_cdn_for_lfs_assets() {
+        assert!(allowed("https://us.aws.cdn.hf.co/xet-bridge-us/asset"));
+    }
+
+    #[test]
+    fn rejects_untrusted_or_downgraded_redirects() {
+        assert!(!allowed("https://cdn.example.com/asset"));
+        assert!(!allowed("http://huggingface.co/api/resolve-cache/asset"));
+        assert!(!allowed("https://huggingface.co.evil.test/asset"));
+    }
 }

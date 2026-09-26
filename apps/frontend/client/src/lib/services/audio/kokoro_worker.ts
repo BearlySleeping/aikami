@@ -5,10 +5,17 @@
  * zero-setup text-to-speech in the browser via WebGPU or WASM.
  *
  * C-389 changes:
- * - `env.allowLocalModels` is inverted to `true` and `localModelPath` points
- *   at `/models/` — the explicit voice-model download pre-warms the
- *   transformers Cache Storage under those keys, so initialization loads
- *   fully offline (no HuggingFace request after the first explicit download).
+ * - Model files resolve through canonical HuggingFace URLs pinned to
+ *   `KOKORO_REVISION`. The explicit voice-model download pre-warms the
+ *   transformers Cache Storage under exactly those keys, so initialization
+ *   loads from cache without re-downloading (see
+ *   `configurePinnedRemoteModelResolution`).
+ * - The worker owns that cache through `env.customCache`. transformers always
+ *   probes the document-relative `/models/...` key BEFORE the canonical URL,
+ *   whatever `allowLocalModels` says, so a WebView2-persisted entry holding
+ *   `index.html` (written when the app answered that path) kept shadowing the
+ *   real bytes and failed with `Unexpected token '<'`. The owned cache refuses
+ *   every non-canonical key, which makes that failure unreachable.
  * - ORT WASM binaries are fetched from the `aikami-dist` distribution plane
  *   under a version-pinned path instead of being bundled (see
  *   `packages/frontend/local-runtime/src/lib/ort_runtime.ts`), so no ORT
@@ -23,16 +30,54 @@
  * Contracts: C-131, C-389
  */
 
+import { KOKORO_MODEL_ID, KOKORO_REVISION } from '@aikami/constants';
 import {
-  configureLocalModelResolution,
   configureOrtRuntime,
+  configurePinnedRemoteModelResolution,
+  createCacheStorageBackend,
+  createPinnedModelCache,
+  MODEL_ORIGIN,
   type OrtConfigurableEnv,
 } from '@aikami/frontend/local-runtime';
 import { env } from '@huggingface/transformers';
 
-// Local models enabled — weights come from the app-controlled cache
-// (pre-warmed by the explicit download control), not the HF CDN.
-configureLocalModelResolution(env as OrtConfigurableEnv);
+// Model files resolve through their canonical HuggingFace URLs, pinned to the
+// same revision the download control caches under. The bytes still come from
+// the app-controlled Cache Storage — a network fetch only happens for files
+// the bundle does not carry (e.g. tokenizer_config.json).
+configurePinnedRemoteModelResolution(env as OrtConfigurableEnv, {
+  revision: KOKORO_REVISION,
+});
+
+// Own the cache. `useCustomCache` is only consulted when `useBrowserCache` is
+// off, so both are set; without this the relative `/models/...` lookup hits
+// WebView2's persisted (HTML) entry before the canonical key is ever tried.
+const pinnedEnv = env as OrtConfigurableEnv & {
+  useBrowserCache?: boolean;
+  useCustomCache?: boolean;
+  customCache?: unknown;
+};
+pinnedEnv.useBrowserCache = false;
+pinnedEnv.useCustomCache = true;
+/**
+ * Cache keys the owned cache refused, newest last.
+ *
+ * Surfaced with the initialization error so a future model-load failure names
+ * the URL that was rejected instead of only reporting a parse error deep in a
+ * third-party bundle.
+ */
+const rejectedCacheKeys: string[] = [];
+
+pinnedEnv.customCache = createPinnedModelCache(createCacheStorageBackend(), {
+  origin: MODEL_ORIGIN,
+  repos: [KOKORO_MODEL_ID],
+  revision: KOKORO_REVISION,
+  onReject: (url) => {
+    if (rejectedCacheKeys.length < 10 && !rejectedCacheKeys.includes(url)) {
+      rejectedCacheKeys.push(url);
+    }
+  },
+});
 
 // ---------------------------------------------------------------------------
 // Worker-scoped state
@@ -154,8 +199,10 @@ const handleInitialize = async (message: InitializeMessage): Promise<void> => {
     const response: InitializeResponse = { type: 'ready', backend: activeBackend };
     self.postMessage(response);
   } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown initialization error';
-    const response: ErrorResponse = { type: 'error', message: errorMessage };
+    const base = error instanceof Error ? error.message : 'Unknown initialization error';
+    const rejected =
+      rejectedCacheKeys.length > 0 ? ` (refused cache keys: ${rejectedCacheKeys.join(', ')})` : '';
+    const response: ErrorResponse = { type: 'error', message: `${base}${rejected}` };
     self.postMessage(response);
   }
 };

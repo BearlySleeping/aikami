@@ -36,8 +36,21 @@ export {
   TauriAssetTransport,
 } from './lib/model_asset_store.ts';
 export {
+  createCacheStorageBackend,
+  createPinnedModelCache,
+  isCanonicalModelUrl,
+  MODEL_ORIGIN,
+  type ModelCacheBackend,
+  type ModelCacheKey,
+  type PinnedModelCache,
+  type PinnedModelCacheOptions,
+  responseLooksLikeHtml,
+  TRANSFORMERS_CACHE_NAME,
+} from './lib/model_cache.ts';
+export {
   configureLocalModelResolution,
   configureOrtRuntime,
+  configurePinnedRemoteModelResolution,
   DEFAULT_ORT_DIST_ORIGIN,
   ORT_DIST_PATH,
   ORT_RUNTIME_VERSION,
