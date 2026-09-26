@@ -30,7 +30,7 @@ const approvalBadgeClass = $derived.by(() => {
     aria-modal="true"
     aria-label="Talking to {viewModel.npcName}"
     tabindex="-1"
-    onclick={(event: MouseEvent) => viewModel.handleBackdropClick(event)}
+    onclick={(event: MouseEvent) => viewModel?.handleBackdropClick(event)}
     onkeydown={(event: KeyboardEvent) => viewModel.handleKeyDown(event)}
   >
     <div

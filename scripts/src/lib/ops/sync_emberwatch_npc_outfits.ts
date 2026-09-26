@@ -127,14 +127,14 @@ export const EMBERWATCH_NPC_OUTFITS: readonly NpcOutfit[] = [
     { slot: 'weapon', assetId: 'weapon/sword/longsword' },
     { slot: 'shield', assetId: 'shield/heater/original/wood_fg' },
   ]),
-  // Ada the Woodcutter — cuffed work shirt, trousers and boots, and a war axe.
+  // Ada the Woodcutter — long-sleeved work shirt, trousers and boots, and a war axe.
   // It is the one published axe in the collection; there is no wood-cutting
   // axe sheet, so this is the closest thing the library can honestly draw.
   outfit('woodcutter_ada', [
     { slot: 'body', assetId: 'body/bodies_female' },
     { slot: 'hair', assetId: 'hair/high_ponytail/fg_adult' },
     { slot: 'head', assetId: 'head/heads/human_female' },
-    { slot: 'torso', assetId: 'torso/clothes/longsleeve/longsleeves_cuffed_female' },
+    { slot: 'torso', assetId: 'torso/clothes/longsleeve/longsleeve2_female' },
     { slot: 'legs', assetId: 'legs/pants_thin' },
     { slot: 'feet', assetId: 'feet/boots/basic_thin' },
     { slot: 'weapon', assetId: 'weapon/blunt/waraxe' },

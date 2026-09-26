@@ -209,8 +209,12 @@ describe('MusicPlayerService — playback intent survives a reload', () => {
     expect(attempted).not.toContain(FOREST_A.url);
   });
 
-  test('a player who never used the controls leaves no recorded opinion', () => {
+  test('a player who never used the controls leaves no recorded opinion', async () => {
+    resetMocks([FOREST_A, FOREST_B, COMBAT]);
     localStorage.removeItem(MUSIC_PLAYER_PLAYBACK_KEY);
+    await musicPlayerService.initialize();
+    musicPlayerService.setSceneContext(FOREST_SCENE);
+    musicPlayerService.stopForTeardown();
     // Scene music must keep working for players who never opened the player.
     // (The "no record reads as no opinion" rule itself is asserted as pure data
     // in music_playback_intent.test.ts; this guards the service against ever

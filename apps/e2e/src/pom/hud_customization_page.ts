@@ -86,7 +86,7 @@ export class HudCustomizationPage {
 
   /** A chip resting on the shelf, i.e. a widget that is off the HUD. */
   shelfWidget(widgetId: string) {
-    return this.page.getByTestId(`hud-preview-${widgetId}`);
+    return this.hiddenShelf.getByTestId(`hud-preview-${widgetId}`);
   }
 
   /** The row's Hide / Show control. */

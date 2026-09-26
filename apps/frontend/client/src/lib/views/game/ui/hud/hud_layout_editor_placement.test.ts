@@ -161,6 +161,33 @@ describe('C-528 AC-2 — "not shown right now" is not "removed"', () => {
     expect(rows(committed()).shelf.some((row) => row.widgetId === 'autosave')).toBe(false);
   });
 
+  test('reflow overflow is marked collapsed while explicitly hidden widgets are not', () => {
+    const preferences = committed();
+    const layout = resolveHudLayout({
+      preferences,
+      capabilities: [...CAPABILITIES],
+      overlay: 'NONE',
+      viewport: { width: 390, height: 844 },
+      textScale: 1,
+      relevantWidgetIds: ['music-player'],
+    });
+    expect(layout.overflow.some((widget) => widget.widgetId === 'music-player')).toBe(true);
+    const result = hudEditorPlacementRows({ preferences, layout, capabilities: CAPABILITIES });
+    expect(result.board.find((row) => row.widgetId === 'music-player')?.collapsed).toBe(true);
+    expect(result.board.find((row) => row.widgetId === 'menu')?.collapsed).toBe(false);
+
+    const hidden = applyHudEditorCommand(createHudEditorState(preferences), {
+      kind: 'hide-widget',
+      widgetId: 'music-player',
+    }).draft;
+    const hiddenRows = hudEditorPlacementRows({
+      preferences: hidden,
+      layout,
+      capabilities: CAPABILITIES,
+    });
+    expect(hiddenRows.shelf.find((row) => row.widgetId === 'music-player')?.collapsed).toBe(false);
+  });
+
   test('a widget missing its capability is marked unavailable, not removed', () => {
     const preferences = committed();
     const result = hudEditorPlacementRows({

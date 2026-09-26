@@ -3,7 +3,12 @@
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { LEGACY_CATALOG_SNAPSHOT, LPC_EXTRA_SLOT_ORDER, LPC_MAX_LAYERS } from '@aikami/lpc';
+import {
+  isPartialLayerInGarmentSlot,
+  LEGACY_CATALOG_SNAPSHOT,
+  LPC_EXTRA_SLOT_ORDER,
+  LPC_MAX_LAYERS,
+} from '@aikami/lpc';
 import { packRoot } from './emberwatch_map_validation_context.ts';
 import {
   appearanceFor,
@@ -100,6 +105,9 @@ describe('Emberwatch NPC outfit pass', () => {
     for (const { npcId, layers } of EMBERWATCH_NPC_OUTFITS) {
       for (const { slot, assetId } of layers) {
         expect(catalog.has(assetId), `${npcId}/${slot} → ${assetId}`).toBe(true);
+        expect(isPartialLayerInGarmentSlot(slot, assetId), `${npcId}/${slot} → ${assetId}`).toBe(
+          false,
+        );
       }
     }
   });

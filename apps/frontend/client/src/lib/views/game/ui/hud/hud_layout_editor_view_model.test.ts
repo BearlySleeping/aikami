@@ -268,7 +268,7 @@ describe('C-528 editor ViewModel — input parity (AC-2)', () => {
   test('a region that does not exist in this viewport is refused and explained', () => {
     // A touch-class viewport has no `bottom-end`; dropping there used to
     // collapse the widget into the overflow entry with nothing to show for it.
-    const { viewModel } = createVm({
+    const { viewModel, hud } = createVm({
       view: { viewport: { width: 390, height: 844 }, textScale: 1 },
     });
     viewModel.selectWidget('music-player');
@@ -286,13 +286,13 @@ describe('C-528 editor ViewModel — input parity (AC-2)', () => {
     );
 
     viewModel.beginDrag('music-player');
-    const beforeRefusal = JSON.stringify(viewModel.draft);
+    const beforeRefusal = JSON.stringify(hud.draft);
     viewModel.dropOn({ kind: 'region', anchor: 'bottom-end' });
     expect(viewModel.widgetRows.find((row) => row.widgetId === 'music-player')?.anchor).toBe(
       'top-end',
     );
     // The refusal records nothing: the draft is byte-identical afterwards.
-    expect(JSON.stringify(viewModel.draft)).toBe(beforeRefusal);
+    expect(JSON.stringify(hud.draft)).toBe(beforeRefusal);
     expect(viewModel.statusMessage).toContain('window size');
   });
 

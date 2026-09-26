@@ -115,6 +115,8 @@ test.describe('C-528 HUD presets and layout editor', () => {
     // The board no longer offers it, and it is not on the live HUD either.
     await hud.saveEditor();
     await expect(hud.editor).toHaveCount(0);
+    await hud.page.keyboard.press('Escape');
+    await expect(hud.hudWidget('objective')).toBeAttached();
     await expect(hud.hudWidget('hotbar')).toHaveCount(0);
 
     const stored = (await hud.readStoredPreferences()) as {
@@ -132,6 +134,8 @@ test.describe('C-528 HUD presets and layout editor', () => {
     // a sentence and leave nothing behind — not a silent no-op, and not a
     // history entry that makes Undo a dead press.
     await expect(hud.hideWidget('menu')).toHaveCount(0);
+    await expect(hud.visibilityControl('menu')).toHaveCount(0);
+    await expect(hud.visibilityControl('hotbar')).toBeVisible();
     await hud.dragWidgetToShelf('menu');
     await expect(hud.editorStatus).toContainText('required');
     await expect(hud.widgetLocation('menu')).toHaveText('Top right');
@@ -144,7 +148,7 @@ test.describe('C-528 HUD presets and layout editor', () => {
     // that bucket as "removed" is what used to make a widget seem to vanish
     // when the player merely switched preview tabs.
     await expect(hud.previewWidget('autosave')).toBeVisible();
-    await expect(hud.shelfWidget('autosave')).toBeVisible();
+    await expect(hud.shelfWidget('autosave')).toHaveCount(0);
     await expect(hud.widgetLocation('autosave')).toHaveText('Top right');
 
     await hud.selectPreviewContext('dialogue');

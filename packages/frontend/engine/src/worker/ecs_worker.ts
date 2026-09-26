@@ -164,6 +164,7 @@ import { buildTerrainGridFromBoolean } from '../systems/terrain_grid.ts';
 import { updateZoningSystem } from '../systems/zoning_system.ts';
 import type { GameCommand, GameEvent, NPCSpawnData } from '../types.ts';
 import { relocateRestoredEntities } from './companion_restore.ts';
+import { restorePlayerAppearance } from './player_appearance_restore.ts';
 import { resolveSpawnInStaging } from './spawn_resolution.ts';
 
 // ---------------------------------------------------------------------------
@@ -1718,43 +1719,24 @@ self.onmessage = (event: MessageEvent): void => {
             break;
           }
 
+          const restoredPlayerId = restorePlayerAppearance({
+            world,
+            playerEid: playerEntityId,
+            restoredEid,
+            personaLayers: _personaBaseLayers,
+          });
+
           if (playerEntityId > 0 && playerEntityId !== restoredEid) {
             // Copy persistent components from the temp entity to the player,
             // then discard the temp entity.
             copyComponentSoA(Position, restoredEid, playerEntityId);
-            // C-430: Appearance has a Map field — use setAppearanceLayers to
-            // properly copy both the Map and legacy arrays
-            //
-            // The persona owns the base look, NOT the snapshot: `layers` holds
-            // positional catalog indices, so a save written while gear was
-            // equipped carries the equipped torso/feet as its base. Replaying
-            // them would make equip/unequip a no-op, because the base layer
-            // would already BE the item's asset. Mirrors the fresh-boot
-            // re-seed in `initializeEngine`.
-            const restoredLayers = resolvePlayerBaseLayers({
-              restored: getAppearanceLayers(restoredEid),
-              fromPersona: _personaBaseLayers,
-            });
-            setAppearanceLayers(world, playerEntityId, restoredLayers);
             copyComponentSoA(CombatStats, restoredEid, playerEntityId);
             copyComponentSoA(Visual, restoredEid, playerEntityId);
             incrementEntityGeneration(restoredEid);
             removeEntity(world, restoredEid);
           } else {
-            // No player yet — adopt the restored entity as the player, then
-            // re-assert the persona's base layers for the same reason as the
-            // branch above: the snapshot's positional indices may have the
-            // equipped outfit baked in as the base.
-            playerEntityId = restoredEid;
+            playerEntityId = restoredPlayerId;
             addComponent(world, restoredEid, CameraFocus);
-            setAppearanceLayers(
-              world,
-              playerEntityId,
-              resolvePlayerBaseLayers({
-                restored: getAppearanceLayers(restoredEid),
-                fromPersona: _personaBaseLayers,
-              }),
-            );
           }
 
           relocateRestoredEntities({

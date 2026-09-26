@@ -17,7 +17,7 @@
 //
 // Contract: C-511 Local Audio Generation Modality, C-513 AC-10
 
-import { beforeEach, describe, expect, mock, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 import { MUSIC_PLAYER_PLAYBACK_KEY } from '@aikami/constants';
 import type { AssetEntry, AssetManifest } from '@aikami/types';
 
@@ -73,10 +73,19 @@ mock.module('./audio_local_source.ts', () => ({
   },
 }));
 
+const transitionToBgm = mock(async (_url: string, _durationMs?: number) => {});
+const fadeOutBgm = mock(async () => {});
+mock.module('$services', () => ({ audioService: { transitionToBgm, fadeOutBgm } }));
+
 const { isBgmSuppressedByPlayer } = await import('$lib/utils/music_playback_intent.ts');
-const { playSceneBgm, resolveAmbientUrl, resolveBgmUrl, resolveSfxUrl } = await import(
-  './audio_asset_resolver.ts'
-);
+const {
+  playSceneBgm,
+  requestAudioCue,
+  resetAudioCueAuthority,
+  resolveAmbientUrl,
+  resolveBgmUrl,
+  resolveSfxUrl,
+} = await import('./audio_asset_resolver.ts');
 
 /** The manifest entry shape `runAssetGeneration` produces for a recipe tag. */
 const entryFor = (options: { tag: string; category: string; subcategory: string }): AssetEntry => {
@@ -312,8 +321,7 @@ describe('audio_asset_resolver — a player who pressed Stop is not overruled by
 
     expect(isBgmSuppressedByPlayer()).toBe(false);
     resolveUrlCalls = [];
-    localTags = { music: ['music:community:village-theme'] };
-    localUrls = new Map([['music:community:village-theme', 'blob:cached/village-theme']]);
+    listTagsCalls = [];
 
     await playSceneBgm('explore');
 
@@ -353,5 +361,48 @@ describe('audio_asset_resolver — a player who pressed Stop is not overruled by
     );
     expect(isBgmSuppressedByPlayer()).toBe(false);
     localStorage.removeItem(MUSIC_PLAYER_PLAYBACK_KEY);
+  });
+});
+
+describe('suppressed admitted cues remain playable', () => {
+  const cue = { source: 'map', context: 'village', url: 'blob:village', authored: true } as const;
+
+  beforeEach(() => {
+    resetAudioCueAuthority();
+    transitionToBgm.mockClear();
+    localStorage.setItem(MUSIC_PLAYER_PLAYBACK_KEY, JSON.stringify({ state: 'stopped' }));
+  });
+
+  afterEach(() => {
+    resetAudioCueAuthority();
+    localStorage.removeItem(MUSIC_PLAYER_PLAYBACK_KEY);
+  });
+
+  test('the same cue starts after suppression lifts, then deduplicates normally', async () => {
+    await requestAudioCue(cue);
+    expect(transitionToBgm).not.toHaveBeenCalled();
+    localStorage.setItem(MUSIC_PLAYER_PLAYBACK_KEY, JSON.stringify({ state: 'playing' }));
+    await requestAudioCue(cue);
+    expect(transitionToBgm).toHaveBeenCalledWith(cue.url, undefined);
+    await requestAudioCue(cue);
+    expect(transitionToBgm).toHaveBeenCalledTimes(1);
+  });
+
+  test('a pending cue does not bypass a higher priority or declared silence', async () => {
+    await requestAudioCue(cue);
+    const combat = { ...cue, source: 'combat', context: 'combat', url: 'blob:combat' } as const;
+    await requestAudioCue(combat);
+    localStorage.removeItem(MUSIC_PLAYER_PLAYBACK_KEY);
+    await requestAudioCue(cue);
+    expect(transitionToBgm).not.toHaveBeenCalled();
+    await requestAudioCue(combat);
+    expect(transitionToBgm).toHaveBeenCalledWith(combat.url, undefined);
+
+    localStorage.setItem(MUSIC_PLAYER_PLAYBACK_KEY, JSON.stringify({ state: 'stopped' }));
+    await requestAudioCue({ ...combat, url: 'blob:other' });
+    await requestAudioCue({ ...combat, source: 'scripted', url: null });
+    localStorage.removeItem(MUSIC_PLAYER_PLAYBACK_KEY);
+    await requestAudioCue(combat);
+    expect(transitionToBgm).toHaveBeenCalledTimes(1);
   });
 });

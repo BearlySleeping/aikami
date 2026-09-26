@@ -17,11 +17,6 @@ import type { HudViewport } from '$lib/utils/hud/hud_layout_policy.ts';
 import type { HudEditorCommand } from '$lib/utils/hud/hud_layout_state.ts';
 import type { HudEditorBoardRow } from './hud_layout_editor_placement.ts';
 
-/** The fixture contexts the editor can preview. Presentation only. */
-export const HUD_PREVIEW_CONTEXTS = ['explore', 'dialogue', 'combat'] as const;
-
-export type HudPreviewContext = (typeof HUD_PREVIEW_CONTEXTS)[number];
-
 /** The HUD authority the editor writes drafts through. */
 export type HudEditorPreferenceCapabilities = {
   readonly preferences: HudUserPreferences;

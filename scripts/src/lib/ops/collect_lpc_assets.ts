@@ -28,7 +28,7 @@
  * that shows why. Pass `--audit-strict` to exit non-zero on an empty sheet.
  */
 
-import { execSync } from 'node:child_process';
+import { execFileSync, execSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import {
@@ -528,8 +528,22 @@ if (creditsCsv.size === 0) {
  */
 const measureSheetOpaque = (src: string): number | undefined => {
   try {
-    const out = execSync(
-      `magick "${src}" -background none -alpha set -alpha extract -threshold 50% -format "%[fx:round(mean*w*h)]" info:`,
+    const out = execFileSync(
+      'magick',
+      [
+        src,
+        '-background',
+        'none',
+        '-alpha',
+        'set',
+        '-alpha',
+        'extract',
+        '-threshold',
+        '50%',
+        '-format',
+        '%[fx:round(mean*w*h)]',
+        'info:',
+      ],
       { encoding: 'utf8', timeout: 10_000, stdio: ['ignore', 'pipe', 'ignore'] },
     ).trim();
     const n = Number.parseInt(out, 10);

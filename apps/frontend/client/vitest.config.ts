@@ -65,7 +65,7 @@ export default defineConfig({
   test: {
     // Keep this lane strictly separate from the Bun *.test.ts files under
     // src/lib — those import Bun's test API and must never be collected here.
-    include: ['src/browser_tests/**/*.browser.test.ts'],
+    include: ['src/browser_tests/**/*.browser.test.ts', 'tests/**/*.browser.test.ts'],
     // Reject unexpected cross-origin application traffic; the local Vitest/Vite
     // harness is same-origin and never blocked. See the setup file.
     setupFiles: ['src/browser_tests/setup_browser_tests.ts'],

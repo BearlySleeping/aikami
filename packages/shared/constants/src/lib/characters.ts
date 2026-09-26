@@ -356,6 +356,8 @@ export const DEFAULT_LPC_RECIPE: Readonly<Record<string, string>> = {
   head: 'head/heads/human_male',
   body: 'body/bodies_male',
   hair: 'hair/bangs_adult',
+  // Complete garment: torso/clothes/longsleeve/longsleeve_male.
+  // torso/clothes/longsleeve/longsleeves_male is only a partial overlay.
   torso: 'torso/clothes/longsleeve/longsleeve_male',
   legs: 'legs/pants_male',
   feet: 'feet/shoes/basic_male',

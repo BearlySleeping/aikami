@@ -102,21 +102,23 @@ const WHEN_SHOWN = [
             screen readers the same grouping AND a visible, always-correct
             caption, so the two-state control says what it controls.
           -->
-          <fieldset class="join border-0 p-0" data-testid="hud-editor-visibility-{row.widgetId}">
-            <legend class="sr-only">When {row.label} is shown</legend>
-            {#each WHEN_SHOWN as option (option.value)}
-              <button
-                type="button"
-                class="btn btn-xs join-item {row.visibility === option.value
+          {#if !row.required}
+            <fieldset class="join border-0 p-0" data-testid="hud-editor-visibility-{row.widgetId}">
+              <legend class="sr-only">When {row.label} is shown</legend>
+              {#each WHEN_SHOWN as option (option.value)}
+                <button
+                  type="button"
+                  class="btn btn-xs join-item {row.visibility === option.value
                   ? 'btn-primary'
                   : 'btn-ghost'}"
-                aria-pressed={row.visibility === option.value}
-                onclick={() => viewModel.dispatch({ kind: 'set-visibility', widgetId: row.widgetId, visibility: option.value })}
-              >
-                {option.label}
-              </button>
-            {/each}
-          </fieldset>
+                  aria-pressed={row.visibility === option.value}
+                  onclick={() => viewModel.dispatch({ kind: 'set-visibility', widgetId: row.widgetId, visibility: option.value })}
+                >
+                  {option.label}
+                </button>
+              {/each}
+            </fieldset>
+          {/if}
           {#if row.required}
             <span
               class="badge badge-xs badge-ghost"

@@ -32,7 +32,7 @@
     "fix": "biome check --write src --error-on-warnings",
     "test:prepare": "bunx svelte-kit sync && bun scripts/write_test_tsconfig.ts",
     "test:unit": "bun run test:prepare && bun run test:unit:run",
-    "test:unit:run": "bun test --isolate --path-ignore-patterns='src/browser_tests/**' --preload ./src/lib/test_setup.ts --tsconfig-override=tsconfig.test.json src/lib tests",
+    "test:unit:run": "bun test --isolate --path-ignore-patterns='src/browser_tests/**' --path-ignore-patterns='tests/**/*.browser.test.ts' --preload ./src/lib/test_setup.ts --tsconfig-override=tsconfig.test.json src/lib tests",
     "test:browser": "vitest run --config vitest.config.ts"
   },
   "devDependencies": {

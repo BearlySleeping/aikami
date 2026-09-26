@@ -54,6 +54,9 @@ let _bgmRequestId = 0;
  */
 let _playbackId = 0;
 
+/** An admitted cue that has not started because the player suppressed music. */
+let _pendingPlaybackId: number | undefined;
+
 /**
  * The pack/map the game is currently in.
  *
@@ -90,6 +93,7 @@ export const resetAudioCueAuthority = (): void => {
   _activeCueContext = { packId: '', mapId: '' };
   _bgmRequestId += 1;
   _playbackId += 1;
+  _pendingPlaybackId = undefined;
 };
 
 /** Manifest category names consumed by this resolver. */
@@ -352,18 +356,23 @@ const _playBgm = async (
   durationMs: number | undefined,
   playbackId: number,
 ): Promise<void> => {
-  // 🔴 The player's Stop outranks every scene cue. Map entry, combat and
-  // combat exit all reach BGM through here, and none of them pass through the
-  // mini music player — so without this gate a player who pressed Stop still
-  // got the next map's cue. Checked at the one funnel every BGM start shares,
-  // not per caller, so a new cue source cannot reintroduce the bug.
+  if (playbackId !== _playbackId) {
+    return;
+  }
   if (isBgmSuppressedByPlayer()) {
+    _pendingPlaybackId = playbackId;
     return;
   }
   const { audioService } = await import('$services');
   if (playbackId !== _playbackId) {
     return;
   }
+  // Stop may have been pressed while the service import was in flight.
+  if (isBgmSuppressedByPlayer()) {
+    _pendingPlaybackId = playbackId;
+    return;
+  }
+  _pendingPlaybackId = undefined;
   await audioService.transitionToBgm(url, durationMs);
 };
 
@@ -417,8 +426,13 @@ const _submitCue = async (options: {
   // that is what keeps a rejected DJ dispatch from cancelling a valid pending
   // map transition.
   if (!decision.play && !decision.stop) {
+    // A deduplicated cue may still be silent: suppression is not playback.
+    if (decision.reason === 'no-change' && _pendingPlaybackId === _playbackId && options.url) {
+      await _playBgm(options.url, options.durationMs, _playbackId);
+    }
     return decision;
   }
+  _pendingPlaybackId = undefined;
   const playbackId = ++_playbackId;
 
   if (decision.stop) {
@@ -473,6 +487,7 @@ const releaseAudioCueSource = async (source: 'map' | 'combat' | 'scripted') => {
 
   const url = decision.play?.url;
   if (url) {
+    _pendingPlaybackId = undefined;
     await _playBgm(url, undefined, ++_playbackId);
   }
   return decision;

@@ -200,6 +200,7 @@ export const hudEditorPlacementRows = (options: {
   const { merged } = mergeHudPreferences(options.preferences);
   const capabilities = new Set(options.capabilities);
   const placed = new Map(options.layout.widgets.map((widget) => [widget.widgetId, widget]));
+  const overflow = new Set(options.layout.overflow.map((widget) => widget.widgetId));
   const rows: HudEditorBoardRow[] = [];
   const board: HudEditorBoardRow[] = [];
   const shelf: HudEditorBoardRow[] = [];
@@ -224,7 +225,7 @@ export const hudEditorPlacementRows = (options: {
       scale: preference.scale,
       painted: preference.visibility !== 'hidden' && painted,
       idleInContext: preference.visibility === 'contextual' && !dormant && !painted,
-      collapsed: resolved?.collapsed ?? false,
+      collapsed: preference.visibility !== 'hidden' && overflow.has(widgetId),
     };
     rows.push(row);
     (preference.visibility === 'hidden' ? shelf : board).push(row);

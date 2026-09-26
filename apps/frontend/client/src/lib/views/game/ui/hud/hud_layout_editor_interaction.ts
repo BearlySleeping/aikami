@@ -144,6 +144,11 @@ class HudLayoutEditorDomInteractionAdapter implements HudLayoutEditorInteraction
     if (!target.isDragging) {
       return;
     }
+    if (!this._hasCrossedDragThreshold(event)) {
+      this._dragOrigin = undefined;
+      target.endDrag();
+      return;
+    }
     const resolved = this._resolveDropTarget({
       target,
       clientX: event.clientX,
