@@ -30,7 +30,7 @@ const approvalBadgeClass = $derived.by(() => {
     aria-modal="true"
     aria-label="Talking to {viewModel.npcName}"
     tabindex="-1"
-    onclick={(event: MouseEvent) => viewModel.handleBackdropClick(event)}
+    onclick={(event: MouseEvent) => viewModel?.handleBackdropClick(event)}
     onkeydown={(event: KeyboardEvent) => viewModel.handleKeyDown(event)}
   >
     <div
@@ -59,7 +59,6 @@ const approvalBadgeClass = $derived.by(() => {
         messages={viewModel.richMessages}
         containerClass="flex-1 space-y-2 overflow-y-auto px-4 py-3"
         isStreaming={viewModel.isStreaming}
-        bind:containerElement={viewModel.messageContainerElement}
       >
         {#snippet renderRow(
   message,

@@ -36,6 +36,7 @@ import {
   getAppearanceLayers,
   type LpcLayerRecipe,
   registerAppearanceObservers,
+  resolvePlayerBaseLayers,
   setAppearanceLayers,
 } from '../components/appearance.ts';
 import { CameraFocus, registerCameraFocusObservers } from '../components/camera_focus.ts';
@@ -149,6 +150,7 @@ import { updatePartyFollow } from '../systems/party_follow_system.ts';
 import {
   clearActorMovement,
   registerPathFollowHaltObservers,
+  releasePathToDirectInput,
   updatePathFollow,
 } from '../systems/path_follow_system.ts';
 import { updatePressurePlates } from '../systems/pressure_plate_system.ts';
@@ -162,6 +164,7 @@ import { buildTerrainGridFromBoolean } from '../systems/terrain_grid.ts';
 import { updateZoningSystem } from '../systems/zoning_system.ts';
 import type { GameCommand, GameEvent, NPCSpawnData } from '../types.ts';
 import { relocateRestoredEntities } from './companion_restore.ts';
+import { restorePlayerAppearance } from './player_appearance_restore.ts';
 import { resolveSpawnInStaging } from './spawn_resolution.ts';
 
 // ---------------------------------------------------------------------------
@@ -268,6 +271,42 @@ let _packConfig: PackConfig | undefined;
 
 /** The player entity ID, set during initialization. */
 let playerEntityId = 0;
+
+/**
+ * The persona's authoritative base appearance layers, captured at
+ * `INITIALIZE_ENGINE` and replayed on every `RESTORE_PLAYER`.
+ *
+ * `Appearance.layers` persists POSITIONAL catalog indices, so a snapshot taken
+ * while gear was equipped bakes the equipped torso/feet into the base array
+ * (e.g. `[5,3,23,24,7,102]` — torso 23 is chainmail, feet 7 are boots). A
+ * restore that trusts those indices reinstalls the equipped look as the BASE
+ * outfit, and the equip/unequip toggle becomes a visual no-op: the main thread
+ * drops the equipment recipe, but the base layer underneath is the same
+ * garment.
+ *
+ * The persona — not the save — owns the base look (equipment is merged on top
+ * by the main thread's `equipmentRecipeProvider`). Retaining the boot-time
+ * layers here is what lets `RESTORE_PLAYER` re-assert them, exactly as
+ * `initializeEngine` does on a fresh boot. See `resolvePlayerBaseLayers`.
+ */
+let _personaBaseLayers: readonly number[] | undefined;
+
+/**
+ * Reads the persona's base layers out of the boot payload, or `undefined` when
+ * the boot supplied none (a sandbox avatar, or a caller that omits them).
+ *
+ * Extracted so `INITIALIZE_ENGINE` keeps a single statement here — the restore
+ * path is the one that must not silently inherit a snapshot's layers.
+ */
+const readPersonaBaseLayers = (
+  playerData: PlayerCreateOptions | undefined,
+): readonly number[] | undefined => {
+  const layers = playerData?.appearanceLayers;
+  if (!Array.isArray(layers) || layers.length === 0) {
+    return undefined;
+  }
+  return [...layers];
+};
 
 /**
  * Per-combatant ability grants for the running v2 encounter (C-516 AC-2).
@@ -467,6 +506,11 @@ const handleSetPlayerVelocity = (velocity: { x: number; y: number }): void => {
   // game mode separately. If we gate here, {0,0} stop commands sent while
   // in MENU/DIALOGUE are silently dropped, causing sticky movement when
   // returning to EXPLORE.
+  //
+  // A live click-to-move path is dropped first: updatePathFollow rewrites
+  // Velocity every tick, so keeping it would make the player ignore the keys
+  // (and keep walking after every key is released). See releasePathToDirectInput.
+  releasePathToDirectInput(world, playerEntityId, velocity);
   addComponent(world, playerEntityId, set(Velocity, velocity));
 };
 
@@ -923,6 +967,23 @@ const initializeEngine = (
         tint,
         ...(frame ? { frame } : {}),
       });
+    }
+
+    // The player's BASE appearance is derived state owned by the persona, not by
+    // the save. `Appearance.layers` persists POSITIONAL catalog indices, so a
+    // save written before the persona's recipe changed restores stale indices
+    // that resolve back to the old assets — silently re-creating the
+    // equip/unequip no-op, because the base torso then resolves to whatever the
+    // item also provides. Re-seed from playerData on every boot: equipment is
+    // layered on top by the main thread, so the persona is authoritative for the
+    // base look and the save must not own it. Runs after the eidMap loop, which
+    // is what assigns `playerEntityId`.
+    if (playerEntityId > 0) {
+      const baseLayers = resolvePlayerBaseLayers({
+        restored: getAppearanceLayers(playerEntityId),
+        fromPersona: playerData?.appearanceLayers,
+      });
+      setAppearanceLayers(world, playerEntityId, baseLayers);
     }
   } else {
     playerEntityId = createPlayer(world, playerData);
@@ -1494,6 +1555,10 @@ self.onmessage = (event: MessageEvent): void => {
           ? (lpcCatalog as LpcSlotCatalog[])
           : undefined;
 
+        // Retain the persona's base layers so RESTORE_PLAYER can re-assert them
+        // over a snapshot's stale positional indices (see _personaBaseLayers).
+        _personaBaseLayers = readPersonaBaseLayers(playerData);
+
         // Reset camera state for fresh engine
         resetCameraTracking();
 
@@ -1654,21 +1719,23 @@ self.onmessage = (event: MessageEvent): void => {
             break;
           }
 
+          const restoredPlayerId = restorePlayerAppearance({
+            world,
+            playerEid: playerEntityId,
+            restoredEid,
+            personaLayers: _personaBaseLayers,
+          });
+
           if (playerEntityId > 0 && playerEntityId !== restoredEid) {
             // Copy persistent components from the temp entity to the player,
             // then discard the temp entity.
             copyComponentSoA(Position, restoredEid, playerEntityId);
-            // C-430: Appearance has a Map field — use setAppearanceLayers to
-            // properly copy both the Map and legacy arrays
-            const restoredLayers = getAppearanceLayers(restoredEid);
-            setAppearanceLayers(world, playerEntityId, restoredLayers);
             copyComponentSoA(CombatStats, restoredEid, playerEntityId);
             copyComponentSoA(Visual, restoredEid, playerEntityId);
             incrementEntityGeneration(restoredEid);
             removeEntity(world, restoredEid);
           } else {
-            // No player yet — adopt the restored entity as the player.
-            playerEntityId = restoredEid;
+            playerEntityId = restoredPlayerId;
             addComponent(world, restoredEid, CameraFocus);
           }
 

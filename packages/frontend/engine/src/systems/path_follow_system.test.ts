@@ -25,6 +25,7 @@ import {
   getNpcHaltReason,
   hasActivePath,
   registerPathFollowHaltObservers,
+  releasePathToDirectInput,
   resetNpcHaltReasons,
   updatePathFollow,
 } from './path_follow_system.ts';
@@ -606,5 +607,49 @@ describe('path_follow_system (C-379 AC-7)', () => {
         expect(vel.x !== 0 || vel.y !== 0).toBe(true);
       }
     });
+  });
+
+  // ── Direct input outranks a live click-to-move path (stuck-walking bug) ──
+
+  it('direct input drops a live path so the actor is not stuck walking it', () => {
+    setCollisionGrid(ALL_WALKABLE);
+    const eid = nextEid();
+    addComponent(world, eid, set(Position, { x: 160, y: 160 }));
+    addComponent(world, eid, set(Velocity, { x: 0, y: 0 }));
+    // A click destination far to the north.
+    attachPath(eid, [160, 160, 160, 32], 150, 0);
+    expect(hasActivePath(world, eid)).toBe(true);
+
+    // The player presses a key: SET_PLAYER_VELOCITY runs this first.
+    const released = releasePathToDirectInput(world, eid, { x: 0, y: -150 });
+    expect(released).toBe(true);
+    addComponent(world, eid, set(Velocity, { x: 0, y: -150 }));
+
+    // The path must no longer steer — otherwise the actor walks to the click
+    // destination for as long as the path lives, whatever the keys do.
+    expect(hasActivePath(world, eid)).toBe(false);
+    updatePathFollow(world, 100);
+    updateMovement(world, 100);
+    const vel = getComponent(world, eid, Velocity) as { x: number; y: number } | undefined;
+    const pos = getComponent(world, eid, Position) as { x: number; y: number } | undefined;
+    expect(vel).toBeDefined();
+    expect(pos).toBeDefined();
+    if (vel && pos) {
+      // Moved north on the input vector, and nowhere near the old waypoint.
+      expect(vel.y).toBeCloseTo(-150, 3);
+      expect(pos.y).toBeLessThan(160);
+    }
+  });
+
+  it('a zero velocity does not cancel a live path', () => {
+    setCollisionGrid(ALL_WALKABLE);
+    const eid = nextEid();
+    addComponent(world, eid, set(Position, { x: 160, y: 160 }));
+    addComponent(world, eid, set(Velocity, { x: 0, y: 0 }));
+    attachPath(eid, [160, 160, 160, 32], 150, 0);
+
+    // Keyup / input-lock / blur while a click path is in flight.
+    expect(releasePathToDirectInput(world, eid, { x: 0, y: 0 })).toBe(false);
+    expect(hasActivePath(world, eid)).toBe(true);
   });
 });

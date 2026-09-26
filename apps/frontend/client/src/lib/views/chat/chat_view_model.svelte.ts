@@ -259,8 +259,6 @@ export type ChatViewModelInterface = BaseViewModelInterface & {
     messageId: string,
     action: 'copy' | 'retry' | 'edit' | 'delete' | 'branch' | 'speak',
   ): void;
-  /** Scrollable message container — bound by View via bind:this. */
-  messageContainerElement: HTMLDivElement | undefined;
   generateImage(prompt: string): Promise<string>;
   playTts(messageId: string): Promise<void>;
   stopTts(): void;
@@ -415,9 +413,6 @@ export class ChatViewModel
     await this._slashAutocomplete.dispose();
     return super.dispose();
   }
-
-  /** Scrollable message container — bound by View via bind:this. */
-  messageContainerElement = $state.raw<HTMLDivElement | undefined>(undefined);
 
   override async initialize(): Promise<void> {
     // Restore per-chat input draft from IndexedDB

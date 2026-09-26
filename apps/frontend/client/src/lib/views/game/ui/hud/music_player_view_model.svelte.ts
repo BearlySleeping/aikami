@@ -30,6 +30,9 @@ export type MusicPlayerCapabilities = {
   readonly isPaused: boolean;
   readonly hasSimilarTracks: boolean;
   readonly feedback: string;
+  /** The restored BGM intent, or undefined when the player never chose. */
+  readonly intentState: 'playing' | 'paused' | 'stopped' | undefined;
+  readonly intentTrackTitle: string | undefined;
   setVisible(v: boolean): void;
   resume(): Promise<void>;
   pause(): void;
@@ -84,6 +87,14 @@ export type MusicPlayerViewModelInterface = BaseViewModelInterface & {
   /** Whether any track is loaded/playing at all. */
   readonly hasActiveTrack: boolean;
 
+  /**
+   * Why the player is hearing nothing, when something was asked for last time.
+   *
+   * `undefined` when nothing is playing and nothing was asked for — the normal
+   * silent case needs no explanation.
+   */
+  readonly silentBecause: string | undefined;
+
   /** Last user-facing feedback (e.g. "Only one track in the library"). */
   readonly feedback: string;
 
@@ -103,6 +114,42 @@ export type MusicPlayerViewModelInterface = BaseViewModelInterface & {
 // ---------------------------------------------------------------------------
 // Implementation
 // ---------------------------------------------------------------------------
+
+/**
+ * Why the player hears nothing, per stored intent.
+ *
+ * A lookup rather than a branch ladder: the set of reasons is closed, and a
+ * table keeps the sentences next to each other so they stay consistent.
+ */
+const SILENT_REASONS: Readonly<
+  Record<
+    NonNullable<MusicPlayerCapabilities['intentState']>,
+    (title: string | undefined) => string | undefined
+  >
+> = {
+  playing: (title) =>
+    title ? `Was playing ${title} — press play to start again` : 'Press play to start',
+  paused: (title) => (title ? `Paused — press play for ${title}` : 'Paused'),
+  stopped: () => 'Music stopped',
+};
+
+/**
+ * Why the player is hearing nothing right now, if that is worth saying.
+ *
+ * `undefined` covers both "something is playing" and "the player never chose",
+ * and the two are deliberately the same answer: with no recorded opinion,
+ * silence is not a decision to explain.
+ */
+const silentReasonFor = (player: MusicPlayerCapabilities): string | undefined => {
+  if (player.isPlaying) {
+    return undefined;
+  }
+  if (player.isPaused) {
+    return 'Paused';
+  }
+  const state = player.intentState;
+  return state === undefined ? undefined : SILENT_REASONS[state](player.intentTrackTitle);
+};
 
 class MusicPlayerViewModel
   extends BaseViewModel<MusicPlayerViewModelOptions>
@@ -147,6 +194,26 @@ class MusicPlayerViewModel
 
   get feedback(): string {
     return this._player.feedback;
+  }
+
+  get intentState(): 'playing' | 'paused' | 'stopped' | undefined {
+    return this._player.intentState;
+  }
+
+  get intentTrackTitle(): string | undefined {
+    return this._player.intentTrackTitle;
+  }
+
+  /**
+   * Explains an unexpected silence.
+   *
+   * A reload never resumes audio on its own, so after visiting a page where
+   * music was on, the player finds it silent with no way to tell whether the
+   * game broke or simply will not start by itself. Saying so is the difference
+   * between a decision and a bug report.
+   */
+  get silentBecause(): string | undefined {
+    return silentReasonFor(this._player);
   }
 
   hide(): void {

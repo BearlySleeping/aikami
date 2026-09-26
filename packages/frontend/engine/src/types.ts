@@ -10,6 +10,7 @@ import type {
   CombatStartedEvent,
   CombatTurnChangedEvent,
 } from './combat/combat_v2_lifecycle_events.ts';
+import type { AppearanceChangedEvent } from './game_events/appearance_changed.ts';
 
 /**
  * Data required to spawn an NPC entity in the game world.
@@ -399,13 +400,7 @@ export type GameEvent =
       type: 'CONTEXT_EXITED';
       entityId: string;
     }
-  | {
-      /** Emitted when an entity's Appearance component layers change. */
-      type: 'APPEARANCE_CHANGED';
-      eid: number;
-      /** The new layer IDs (all 5 layers) for dirty-check comparison. */
-      layerIds: number[];
-    }
+  | AppearanceChangedEvent
   | {
       /**
        * Emitted when the closest interactable target changes (entering range,

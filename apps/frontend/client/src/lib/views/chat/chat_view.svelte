@@ -81,7 +81,6 @@ const pushStoryViewModel = getPushStoryButtonViewModel({
 
           <RichMessageList
             messages={viewModel.messages}
-            bind:containerElement={viewModel.messageContainerElement}
             containerClass="flex-1 overflow-y-auto border border-base-300 rounded-lg p-4 space-y-2 min-h-0"
             emptyText="No messages yet. Start the conversation!"
             isStreaming={viewModel.isTyping}

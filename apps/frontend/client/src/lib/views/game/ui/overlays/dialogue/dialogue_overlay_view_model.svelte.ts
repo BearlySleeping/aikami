@@ -362,9 +362,6 @@ export type DialogueOverlayViewModelInterface = BaseViewModelInterface & {
    */
   hasNpcScreenPosition: boolean;
 
-  /** Scrollable message container — bound by View via bind:this. */
-  messageContainerElement: HTMLDivElement | undefined;
-
   /** Textarea input — bound by View via bind:this for autofocus. */
   inputElement: HTMLTextAreaElement | undefined;
 
@@ -725,9 +722,6 @@ class DialogueOverlayViewModel
 
   /** @inheritdoc */
   hasNpcScreenPosition = $state<boolean>(false);
-
-  /** Scrollable message container — set by View via bind:this. */
-  messageContainerElement = $state.raw<HTMLDivElement | undefined>(undefined);
 
   /** Textarea input — set by View via bind:this for autofocus. */
   inputElement = $state.raw<HTMLTextAreaElement | undefined>(undefined);

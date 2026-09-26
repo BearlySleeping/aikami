@@ -101,6 +101,59 @@ export const getLpcCatalog = (): LpcCatalog => {
 };
 
 /**
+ * Attempts awaited by {@link ensureLpcCatalogReady} before it concludes the
+ * catalog is genuinely absent.
+ *
+ * A first attempt can land before the seed is installed, or can fail outright
+ * (offline, integrity failure, origin 5xx) — the asset store swallows those and
+ * leaves no catalog, so a caller that reads `getLpcCatalog()` straight after a
+ * single manifest fetch sees `{ slots: [] }` and cannot tell "not ready" from
+ * "not there". Retrying turns both into a deterministic wait.
+ */
+const _readinessAttempts = 3;
+const _readinessRetryDelayMs = 250;
+
+const delay = (ms: number): Promise<void> =>
+  new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+
+/** Whether the catalog currently has at least one projected slot. */
+export const isLpcCatalogReady = (): boolean => getLpcCatalog().slots.length > 0;
+
+/**
+ * Awaits a POPULATED LPC catalog and returns it.
+ *
+ * This is the readiness contract the boot path depends on: the manifest being
+ * wired is NOT the same fact as the seed being installed, and the catalog is
+ * built from the seed. Callers that need real catalog indices (engine
+ * creation, appearance resolution) must await this instead of inferring
+ * readiness from a side effect of the manifest fetch.
+ *
+ * Never throws: a genuinely absent catalog resolves to the empty catalog so
+ * the caller can report it and degrade explicitly rather than crash mid-boot.
+ */
+export const ensureLpcCatalogReady = async (): Promise<LpcCatalog> => {
+  for (let attempt = 0; attempt < _readinessAttempts; attempt++) {
+    await wireLpcUrlResolver();
+    if (isLpcCatalogReady()) {
+      return getLpcCatalog();
+    }
+    // The manifest load resolves without a catalog when it fails, and clears
+    // its own memoised promise — so this genuinely retries the load rather
+    // than re-awaiting a settled rejection.
+    await assetStore.fetchManifest();
+    if (isLpcCatalogReady()) {
+      return getLpcCatalog();
+    }
+    if (attempt < _readinessAttempts - 1) {
+      await delay(_readinessRetryDelayMs);
+    }
+  }
+  return getLpcCatalog();
+};
+
+/**
  * Builds an AI prompt string from the LPC catalog.
  * Must be called after the catalog is built (not at module scope).
  */

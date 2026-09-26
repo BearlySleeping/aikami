@@ -12,6 +12,9 @@ export {
 // LpcLayerRole is defined in slot_model.ts; layer_order.ts imports it from there.
 export {
   DEFAULT_LPC_SLOT_FALLBACKS,
+  isLpcExtraSlot,
+  LPC_EXTRA_SLOT_ORDER,
+  LPC_MAX_LAYERS,
   LPC_SLOT_ORDER,
   type LpcAppearanceResult,
   type LpcLayerRecipe,
@@ -19,6 +22,7 @@ export {
   type LpcSlotFallbacks,
   type LpcSlotName,
   type LpcSlotResolution,
+  projectAppearanceCatalog,
   projectLpcCatalog,
   type ResolveLpcAppearanceOptions,
   resetLpcFallbackWarnings,
@@ -52,6 +56,7 @@ export {
   type AppearanceCatalogSlot,
   type AppearanceDiagnostic,
   type AppearanceNormalizationStatus,
+  extrasToRecipes,
   isNamedAppearance,
   legacyToNamed,
   type NamedAppearance,
@@ -65,6 +70,14 @@ export {
   type ResolveNpcAppearanceResult,
   resolveNpcAppearance,
 } from './lib/named_appearance.ts';
+export {
+  isPartialLayerAsset,
+  isPartialLayerInGarmentSlot,
+  LPC_COMPLETE_GARMENT_SLOTS,
+  LPC_PARTIAL_LAYER_ASSET_IDS,
+  LPC_PARTIAL_LAYER_ASSETS_BY_TYPE,
+  LPC_PARTIAL_LAYER_TYPES,
+} from './lib/partial_layers.ts';
 export {
   type LpcBodySuffix,
   type LpcRig,

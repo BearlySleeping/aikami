@@ -5,18 +5,14 @@
 //
 // Contract C-136 Task 3, C-138 Task 1
 
-import {
-  type AppearanceCatalog,
-  LEGACY_CATALOG_SNAPSHOT_ID,
-  resolveNpcAppearance,
-} from '@aikami/lpc';
+import type { AppearanceCatalog } from '@aikami/lpc';
 import type { PackConfig } from '@aikami/types';
 import type { World } from 'bitecs';
 import { addComponent, addEntity, set } from 'bitecs';
 import { logger } from '$logger';
 import type { SpawnPoint, TransitionZone } from '../assets/map_loader.ts';
 import { djb2Hash } from '../assets/map_loader.ts';
-import { Appearance, setAppearanceLayers } from '../components/appearance.ts';
+import { Appearance, setAppearanceExtras, setAppearanceLayers } from '../components/appearance.ts';
 import {
   COMPANION_COLLISION_MASK,
   CollisionData,
@@ -41,6 +37,7 @@ import { AssetAlias, Visual } from '../components/visual.ts';
 import { DEFAULT_ACTION_GO_TO_PUB } from '../math/goap/action_registry.ts';
 import { WorldStateBit } from '../math/goap/world_state_bits.ts';
 import { getTerrainTileSize } from './collision_system.ts';
+import { resolveNpcAppearanceLayers } from './npc_appearance.ts';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -436,9 +433,10 @@ const _spawnNpc = (
   );
 
   addComponent(world, eid, Appearance);
-  const appearanceLayers =
-    _resolveNpcLayerIds(spawnPoint, packConfig, lpcCatalog) ?? NPC_APPEARANCE_LAYERS;
+  const resolvedAppearance = resolveNpcAppearanceLayers(spawnPoint, packConfig, lpcCatalog);
+  const appearanceLayers = resolvedAppearance?.layerIds ?? NPC_APPEARANCE_LAYERS;
   setAppearanceLayers(world, eid, appearanceLayers);
+  setAppearanceExtras(eid, resolvedAppearance?.extraLayers);
 
   addComponent(world, eid, NPCDialog);
   addComponent(
@@ -897,74 +895,6 @@ const _getBoolProperty = (
  *
  * Falls back to `defaultValue` when the property is missing or not a string.
  */
-/**
- * Resolves an NPC's appearance to derived engine layer IDs (C-504).
- *
- * The manifest's named `appearance` (slot + assetId + layerRole) is preferred;
- * legacy `appearanceLayers` (numeric indices tied to the verified legacy
- * catalog snapshot) are migrated via the shared normalization boundary — never
- * a positional read against the derived catalog. Both the worker and the main
- * thread resolve against the SAME catalog (`lpcCatalog`), so a given NPC
- * resolves to the same slot/assetId sequence everywhere.
- *
- * @returns Derived layer IDs, or undefined when no appearance is declared or
- *   resolution fails (caller falls back to the whole-character default — never
- *   a mixed per-slot recipe).
- */
-const _resolveNpcLayerIds = (
-  spawnPoint: SpawnPoint,
-  packConfig?: PackConfig,
-  lpcCatalog?: AppearanceCatalog,
-): readonly number[] | undefined => {
-  const npcId = _getStringProperty(spawnPoint.properties, 'npcId', spawnPoint.id);
-  const entry = packConfig?.npcs?.[npcId];
-  const named = entry?.appearance;
-  const legacy = entry?.appearanceLayers;
-
-  const input = named ?? legacy;
-  if (input === undefined) {
-    return undefined;
-  }
-
-  // The derived catalog must be present to resolve a named/legacy appearance
-  // (worker receives it via INITIALIZE_ENGINE). A missing catalog means every
-  // named asset would read as "missing" — surface a diagnostic instead of
-  // silently substituting the hardcoded default stack.
-  if (!lpcCatalog || lpcCatalog.length === 0) {
-    logger.warn('entity-spawner:npc-appearance-no-catalog', {
-      npcId,
-      source: named ? 'manifest:appearance' : 'manifest:appearanceLayers',
-      hint: 'No LPC catalog available to resolve the NPC appearance — using the whole-character default. The worker normally receives the catalog at INITIALIZE_ENGINE.',
-    });
-    return undefined;
-  }
-
-  const result = resolveNpcAppearance({
-    input,
-    catalog: lpcCatalog ?? [],
-    // Legacy appearanceLayers in the shipped pack are tied to the verified
-    // legacy catalog-order snapshot. Named appearance needs no snapshot.
-    snapshot: named ? undefined : LEGACY_CATALOG_SNAPSHOT_ID,
-    source: named ? 'manifest:appearance' : 'manifest:appearanceLayers',
-    npcId,
-  });
-
-  if (result.layerIds !== undefined && result.diagnostics.length === 0) {
-    return result.layerIds;
-  }
-  if (result.diagnostics.length > 0) {
-    for (const d of result.diagnostics) {
-      logger.warn('entity-spawner:npc-appearance', {
-        npcId,
-        slot: d.slot,
-        assetId: d.assetId,
-        detail: d.detail,
-      });
-    }
-  }
-  return undefined;
-};
-
 const _getStringProperty = (
   properties: Record<string, unknown>,
   key: string,

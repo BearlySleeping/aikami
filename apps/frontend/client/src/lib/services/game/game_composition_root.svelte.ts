@@ -727,7 +727,11 @@ export class GameCompositionRoot
 
     // Stop BGM — the composition root owns the music player's lifecycle
     // alongside every other game runtime service (mirrors initialize()).
-    musicPlayerService.stop();
+    //
+    // 🔴 Teardown, NOT a player decision: this runs on every page unload, so it
+    // must not persist a `stopped` intent. Unloading mid-song would otherwise
+    // overwrite a real pause and bring the music back on the next visit.
+    musicPlayerService.stopForTeardown();
 
     // C-512: let a queued contextual generation finish writing before the
     // runtime it belongs to is torn down.

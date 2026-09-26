@@ -31,6 +31,7 @@ import process from 'node:process';
 import {
   type AppearanceCatalog,
   buildLpcCatalog,
+  isPartialLayerInGarmentSlot,
   LEGACY_CATALOG_SNAPSHOT,
   LEGACY_CATALOG_SNAPSHOT_ID,
   LPC_SLOT_ORDER,
@@ -95,6 +96,40 @@ const diagnosticsToErrors = (options: {
 const readJson = <T>(path: string): T => JSON.parse(readFileSync(path, 'utf-8')) as T;
 
 /**
+ * Flags partial LPC layers (sleeve overlays, belts, sashes, jacket trim) that a
+ * manifest authored into a complete-garment slot.
+ *
+ * The collector publishes partial layers into the same torso/legs/feet slots as
+ * complete garments, so a manifest can author
+ * `torso/clothes/longsleeve/longsleeves_cuffed_female` — upstream's "Cuffed
+ * Longsleeves Overlay", which paints only the two detached sleeves — as if it
+ * were a whole shirt. The NPC renders with a bare chest and passes every catalog
+ * check, because the asset id genuinely IS in the catalog. Only upstream's
+ * `type_name` distinguishes it.
+ *
+ * Only the named `appearance` is checked: legacy `appearanceLayers` carries
+ * positional indices with no asset id to classify, and its resolution is already
+ * pinned against the verified snapshot.
+ */
+const partialLayerErrors = (options: {
+  packId: string;
+  npcId: string;
+  appearance?: NamedAppearance;
+}): AppearanceValidationError[] => {
+  const { packId, npcId, appearance } = options;
+  return (appearance?.components ?? [])
+    .filter((component) => isPartialLayerInGarmentSlot(component.slot, component.assetId))
+    .map((component) => ({
+      packId,
+      npcId,
+      slot: component.slot,
+      assetId: component.assetId,
+      source: 'manifest:appearance',
+      detail: `"${component.assetId}" is a PARTIAL LPC layer (a sleeve overlay / belt / trim), not a complete garment, so it cannot fill the "${component.slot}" slot on its own — the character renders bare. Author a complete garment here (type_name clothes/apron/armour/chainmail/overalls) and layer the partial separately.`,
+    }));
+};
+
+/**
  * Validates one NPC's appearance (named `appearance` preferred, legacy
  * `appearanceLayers` migrated) against the runtime catalog via the shared
  * normalization boundary. Empty appearance → no errors.
@@ -153,6 +188,9 @@ export const validateNpcAppearance = (options: {
       }),
     );
   }
+
+  // ── Partial-layer guard (upstream `type_name` classification) ──────────
+  errors.push(...partialLayerErrors({ packId, npcId, appearance }));
 
   // C-504: when the manifest retains BOTH representations, compare them only
   // after each one independently passes normalization and catalog resolution.

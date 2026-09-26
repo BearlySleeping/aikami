@@ -9,7 +9,7 @@
 //
 // Contract: C-528 AC-1, AC-5.
 
-import { HUD_COMPACT_MAX_WIDTH, HUD_SAFE_INSET, HUD_STACK_GAP } from '@aikami/constants';
+import { HUD_SAFE_INSET, HUD_STACK_GAP } from '@aikami/constants';
 import type { HudSlot } from '@aikami/types';
 import type { HudResolvedWidget, HudViewport, HudViewportClass } from './hud_layout_policy.ts';
 
@@ -54,22 +54,21 @@ export type HudRect = {
 /**
  * Anchors available in each viewport class.
  *
- * Availability is driven by WIDTH, not by the class: a 1280×720 window is a
- * short viewport (compact scale ceiling, tighter stacks) but it still has room
- * for all five regions. Collapsing `bottom-start` on any window under 800px
- * tall would hide the objective behind the overflow entry on the most common
- * laptop sizes — a regression, not a reflow.
+ * 🔴 The five regions are three disjoint horizontal columns (see
+ * `ANCHOR_COLUMN_SHARE`), so they do not compete for width: at 780px the end
+ * column is still 249px, which holds the widest widget. Withholding
+ * `bottom-end` on any width above the touch breakpoint therefore bought
+ * nothing and cost the music player's shipped bottom-right home — the widget
+ * vanished into the overflow entry while the editor still drew a `bottom-end`
+ * region for the player to aim at. Only the touch class, where the columns
+ * genuinely stop fitting, drops regions. A short desktop window stays a
+ * *compact* window (a lower scale ceiling, tighter stacks) rather than losing
+ * regions: collapsing `bottom-start` under 800px tall would hide the objective
+ * behind the overflow entry on the most common laptop sizes.
  */
-export const availableAnchors = (
-  viewport: HudViewport,
-  viewportClass: HudViewportClass,
-): readonly HudSlot[] => {
+export const availableAnchors = (viewportClass: HudViewportClass): readonly HudSlot[] => {
   if (viewportClass === 'touch') {
     return ['top-end', 'bottom-center'];
-  }
-  if (viewport.width < HUD_COMPACT_MAX_WIDTH) {
-    // Narrow: the bottom-end region is the first to go; the objective stays.
-    return ['top-start', 'top-end', 'bottom-start', 'bottom-center'];
   }
   return ['top-start', 'top-end', 'bottom-start', 'bottom-center', 'bottom-end'];
 };

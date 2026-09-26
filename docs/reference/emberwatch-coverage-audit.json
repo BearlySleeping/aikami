@@ -7,8 +7,8 @@
   "packUpdatedAt": "2026-09-18T00:00:00.000Z",
   "generatedAt": "1980-01-01T00:00:00.000Z",
   "summary": {
-    "accepted/current": 146,
-    "acceptable-shared": 92,
+    "accepted/current": 147,
+    "acceptable-shared": 91,
     "placeholder/wrong-semantic-reuse": 0,
     "missing": 0,
     "needs-regeneration": 2,
@@ -764,7 +764,7 @@
       "id": "npc-appearance:village_elder",
       "surface": "npc-appearance",
       "classification": "accepted/current",
-      "detail": "6 LPC components: body/bodies_female, hair/bangs_adult, torso/clothes/robe_female, legs/pants_female, feet/shoes/basic_thin, head/heads/human/female_elderly"
+      "detail": "6 LPC components: body/bodies_female, hair/bangs_adult, head/heads/human/female_elderly, torso/clothes/robe_female, legs/skirts/straight_thin, feet/shoes/basic_thin"
     },
     {
       "id": "portrait:village_elder",
@@ -782,7 +782,7 @@
       "id": "npc-appearance:rollo_grasper",
       "surface": "npc-appearance",
       "classification": "accepted/current",
-      "detail": "6 LPC components: body/bodies_male, hair/plain_adult, torso/chainmail_male, legs/pants_male, feet/boots/basic_male, head/heads/human_male"
+      "detail": "6 LPC components: body/bodies_male, hair/plain_adult, head/heads/human_male, torso/armour/leather_male, legs/pants_male, feet/boots/basic_male"
     },
     {
       "id": "portrait:rollo_grasper",
@@ -872,7 +872,7 @@
       "id": "npc-appearance:merchant",
       "surface": "npc-appearance",
       "classification": "accepted/current",
-      "detail": "6 LPC components: body/bodies_male, hair/long_adult, torso/clothes/vest_male, legs/pants_male, feet/shoes/basic_male, head/heads/human_male"
+      "detail": "6 LPC components: body/bodies_male, hair/long_adult, head/heads/human_male, torso/clothes/vest_male, legs/pants_male, feet/shoes/basic_male"
     },
     {
       "id": "portrait:merchant",
@@ -889,8 +889,8 @@
     {
       "id": "npc-appearance:village_guard",
       "surface": "npc-appearance",
-      "classification": "acceptable-shared",
-      "detail": "legacy appearanceLayers [3, 123, 23, 22, 7, 95] — resolves through the catalog-order snapshot, not a declared component set"
+      "classification": "accepted/current",
+      "detail": "8 LPC components: body/bodies_male, hair/plain_adult, head/heads/human_male, torso/armour/leather_male, legs/armour/plate_male, feet/armour/plate_male, weapon/sword/longsword, shield/heater/original/wood_fg"
     },
     {
       "id": "portrait:village_guard",
@@ -908,7 +908,7 @@
       "id": "npc-appearance:innkeeper_sella",
       "surface": "npc-appearance",
       "classification": "accepted/current",
-      "detail": "6 LPC components: body/bodies_female, hair/bangs_bun_adult, torso/aprons/apron_female, legs/pants_female, feet/shoes/basic_thin, head/heads/human_female"
+      "detail": "6 LPC components: body/bodies_female, hair/bangs_bun_adult, head/heads/human_female, torso/aprons/apron_female, legs/pants_thin, feet/shoes/basic_thin"
     },
     {
       "id": "portrait:innkeeper_sella",
@@ -926,7 +926,7 @@
       "id": "npc-appearance:smith_orra",
       "surface": "npc-appearance",
       "classification": "accepted/current",
-      "detail": "6 LPC components: body/bodies_muscular, hair/balding_adult, torso/aprons/apron_male, legs/pants_muscular, feet/boots/basic_male, head/heads/human_male"
+      "detail": "6 LPC components: body/bodies_muscular, hair/balding_adult, head/heads/human_male, torso/aprons/apron_male, legs/pants_muscular, feet/boots/basic_male"
     },
     {
       "id": "portrait:smith_orra",
@@ -944,7 +944,7 @@
       "id": "npc-appearance:cartographer_ivo",
       "surface": "npc-appearance",
       "classification": "accepted/current",
-      "detail": "6 LPC components: body/bodies_male, hair/curly_short_adult, torso/clothes/longsleeve/formal_male, legs/pants_male, feet/shoes/basic_male, head/heads/human_male"
+      "detail": "6 LPC components: body/bodies_male, hair/curly_short_adult, head/heads/human_male, torso/clothes/longsleeve/formal_male, legs/pants_male, feet/shoes/basic_male"
     },
     {
       "id": "portrait:cartographer_ivo",
@@ -962,7 +962,7 @@
       "id": "npc-appearance:shrine_keeper_nemi",
       "surface": "npc-appearance",
       "classification": "accepted/current",
-      "detail": "6 LPC components: body/bodies_female, hair/long_adult, torso/clothes/robe_female, legs/pants_female, feet/shoes/basic_thin, head/heads/human_female"
+      "detail": "6 LPC components: body/bodies_female, hair/long_adult, head/heads/human_female, torso/clothes/robe_female, legs/skirts/straight_thin, feet/shoes/basic_thin"
     },
     {
       "id": "portrait:shrine_keeper_nemi",
@@ -980,7 +980,7 @@
       "id": "npc-appearance:apprentice_tess",
       "surface": "npc-appearance",
       "classification": "accepted/current",
-      "detail": "6 LPC components: body/bodies_teen, hair/bob_adult, torso/clothes/shortsleeve/shortsleeve_female, legs/pants_teen, feet/boots/basic_thin, head/heads/human_female"
+      "detail": "6 LPC components: body/bodies_teen, hair/bob_adult, head/heads/human_female, torso/clothes/shortsleeve/shortsleeve_female, legs/pants_thin, feet/boots/basic_thin"
     },
     {
       "id": "portrait:apprentice_tess",
@@ -998,7 +998,7 @@
       "id": "npc-appearance:woodcutter_ada",
       "surface": "npc-appearance",
       "classification": "accepted/current",
-      "detail": "6 LPC components: body/bodies_female, hair/high_ponytail/fg_adult, torso/clothes/longsleeve/longsleeves_cuffed_female, legs/pants_female, feet/boots/basic_thin, head/heads/human_female"
+      "detail": "7 LPC components: body/bodies_female, hair/high_ponytail/fg_adult, head/heads/human_female, torso/clothes/longsleeve/longsleeve2_female, legs/pants_thin, feet/boots/basic_thin, weapon/blunt/waraxe"
     },
     {
       "id": "portrait:woodcutter_ada",
