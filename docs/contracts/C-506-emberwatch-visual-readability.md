@@ -139,3 +139,7 @@ None. All changes reuse existing presentation fields and render primitives; no n
 - Visual: Score — deferred to independent verifier `/game` captures.
 - Baseline: 2 pre-existing failures in `emberwatch_content_audit.test.ts` (atlas.json is a generated, uncommitted asset — identical on base commit); 0 new failures.
 
+## Current Evidence Reconciliation (C-558)
+
+The historical implementation status above remains unchanged. C-506 AC-3 and AC-5 are still not human-verified: the old report explicitly deferred the `/game` walk journey and presentation captures. C-559 supplies technical WebGL/entity evidence for terrain changes, not acceptance of C-506's broader movement-boundary and presentation goals. The walkability grid remains an E2E/authoring diagnostic; it is not a normal-player production HUD surface. This note preserves the original report and records the current evidence debt for dashboard/reviewer reconciliation.
+

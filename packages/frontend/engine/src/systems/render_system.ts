@@ -4,7 +4,7 @@ import { getComponent, hasComponent, observe, onAdd, onRemove, query } from 'bit
 import { Buffer, BufferUsage, type Container, Graphics, Rectangle } from 'pixi.js';
 import { logger } from '$logger';
 import type { LpcLayerRecipe } from '../components/appearance.ts';
-import { Appearance, getAppearanceLayers } from '../components/appearance.ts';
+import { Appearance, appearanceState } from '../components/appearance.ts';
 import type { PositionData } from '../components/position.ts';
 import { Position } from '../components/position.ts';
 import { Velocity } from '../components/velocity.ts';
@@ -733,8 +733,7 @@ const syncAppearanceSystem = (options: {
 
   // Detect enters + process existing entities
   for (const eid of entities) {
-    const layerIds = getAppearanceLayers(eid);
-    const recipes = recipeResolver(layerIds);
+    const { recipes } = appearanceState(eid, recipeResolver);
 
     if (!tracked.has(eid)) {
       // Enter: new entity — register in batch pool

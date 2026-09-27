@@ -8,6 +8,7 @@
 
 import { ContentPackManifestSchema, normaliseLegacyStep } from '@aikami/schemas';
 import type {
+  ContentIdentitySnapshot,
   ContentPackCredits,
   ContentPackEncounterEntry,
   ContentPackItemEntry,
@@ -21,6 +22,7 @@ import type {
 import { toAppError } from '@aikami/utils';
 import { Value } from 'typebox/value';
 import { logger } from '$logger';
+import { resolveContentIdentity } from './content_identity.ts';
 import type { AssetTagResolver } from './map_loader.ts';
 
 // ---------------------------------------------------------------------------
@@ -31,6 +33,9 @@ import type { AssetTagResolver } from './map_loader.ts';
 export type ContentPackLoaderInterface = {
   /** The loaded and validated manifest */
   readonly manifest: ContentPackManifest;
+
+  /** Browser-observable identity derived from the validated manifest. */
+  readonly identity: ContentIdentitySnapshot;
 
   /** The pack ID this loader was created for */
   readonly packId: string;
@@ -97,13 +102,20 @@ export type ContentPackLoaderInterface = {
 
 class ContentPackLoader implements ContentPackLoaderInterface {
   readonly manifest: ContentPackManifest;
+  readonly identity: ContentIdentitySnapshot;
   readonly packId: string;
   private readonly _basePath: string;
   private _disposed = false;
 
-  constructor(manifest: ContentPackManifest, packId: string, basePath: string) {
+  constructor(
+    manifest: ContentPackManifest,
+    identity: ContentIdentitySnapshot,
+    packId: string,
+    basePath: string,
+  ) {
     this.packId = packId;
     this.manifest = manifest;
+    this.identity = identity;
     this._basePath = basePath.replace(/\/+$/, ''); // strip trailing slash
   }
 
@@ -426,12 +438,14 @@ export const loadContentPack = async (options: {
   }
 
   // Create and cache loader
-  const loader = new ContentPackLoader(manifest, packId, basePath);
+  const identity = await resolveContentIdentity(manifest, packId);
+  const loader = new ContentPackLoader(manifest, identity, packId, basePath);
   _contentPackCache.set(packId, loader);
 
   logger.debug('loadContentPack:loaded', {
     packId,
     version: manifest.version,
+    manifestSha256: identity.manifestSha256,
     mapCount: Object.keys(manifest.maps).length,
     npcCount: Object.keys(manifest.npcs).length,
     itemCount: Object.keys(manifest.items).length,

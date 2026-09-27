@@ -8,6 +8,7 @@
 // lpc_layer_order.ts. packRecipeToUboBuffer is kept and refactored to use the
 // canonical table.
 
+import { LPC_MAX_LAYERS as SHARED_LPC_MAX_LAYERS } from '@aikami/lpc';
 import { Container, Filter, GlProgram, Graphics, Sprite, type Texture } from 'pixi.js';
 import type { LpcLayerRecipe } from '../components/appearance.ts';
 import { LPC_LAYER_ORDER, resolveLayerDepth } from './lpc_layer_order.ts';
@@ -128,8 +129,14 @@ const getLpcProgram = (): GlProgram => {
 // std140 UBO — Multi-Layer LPC Character Data
 // ---------------------------------------------------------------------------
 
-/** Number of animation layout layers packed into the UBO. */
-const LPC_MAX_LAYERS = 8;
+/**
+ * Number of animation layout layers packed into the UBO.
+ *
+ * Sourced from the shared LPC package so authoring, validation and rendering
+ * agree on ONE budget: a named appearance that resolves to more layers than
+ * this is refused at normalization time rather than silently truncated here.
+ */
+const LPC_MAX_LAYERS = SHARED_LPC_MAX_LAYERS;
 
 /**
  * Byte size of the std140 UBO buffer.

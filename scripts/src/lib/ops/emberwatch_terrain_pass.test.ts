@@ -15,7 +15,7 @@ import {
 } from '../../../../packages/frontend/engine/src/assets/autotile.ts';
 import { G } from './emberwatch_authoring.ts';
 import { packAtlas } from './generate_emberwatch_atlas.ts';
-import { EMBERWATCH_MAP_BUILDERS } from './generate_emberwatch_maps.ts';
+import { buildMapJson, EMBERWATCH_MAP_BUILDERS } from './generate_emberwatch_maps.ts';
 import {
   ATLAS_CELL,
   ATLAS_COLS,
@@ -34,7 +34,10 @@ const repository = join(dirname(fileURLToPath(import.meta.url)), '../../../..');
 const mapsDirectory = join(repository, 'content/packs/emberwatch/maps');
 const atlas = packAtlas();
 
-const CORNER_TERRAINS = ['dirt', 'water', 'gravel', 'earth', 'cobblestone'] as const;
+const CORNER_TERRAINS = ['dirt', 'water', 'gravel', 'earth', 'cobblestone', 'path'] as const;
+const RESERVED_CORNER_TERRAINS = ['dirt', 'water', 'gravel', 'earth', 'cobblestone'] as const;
+const INTERIOR_MAP_IDS = ['inn', 'merchant_shop'] as const;
+const OUTDOOR_MAP_IDS = ['village', 'old_road', 'ruined_shrine'] as const;
 
 /** Endpoint material means used to classify real intermediate pixels. */
 const CLASSIFICATION_FRAMES = {
@@ -43,6 +46,7 @@ const CLASSIFICATION_FRAMES = {
   gravel: { base: 'gravel_0.png', overlay: 'gravel_15.png' },
   earth: { base: 'earth_0.png', overlay: 'earth_15.png' },
   cobblestone: { base: 'cobblestone_0.png', overlay: 'cobblestone_15.png' },
+  path: { base: 'path_0.png', overlay: 'path_15.png' },
 } as const;
 
 // C-552 leaves the four retained-map collision layers unchanged. C-553 then
@@ -54,6 +58,12 @@ const EXPECTED_COLLISION_SHA256: Readonly<Record<string, string>> = {
   old_road: '83bb92ecf8def467fc1271b61f7f7f3d4a15bc2620ae2f972b20065399b97db9',
   ruined_shrine: '16b8b021c07f0c91abe7dc2dd4bd95d499d88aa343d74d9c3ab686a2fffc5a7f',
   village: '09d2397f021163a6e6dac712d9d732489452848865ae0c18ca90cddfde209ffc',
+} as const;
+
+/** Origin/main visual-layer fingerprints, excluding atlas capacity metadata. */
+const EXPECTED_INTERIOR_VISUAL_SHA256: Readonly<Record<string, string>> = {
+  inn: '230afdedb957a1f0c76027360c1501e9c3b1ee46cfb132cd0124fc3aa8277a0e',
+  merchant_shop: '6c55295cfc8beccfff53aa828b3fce4bc025bbb3c48a28b34ee9f1ed455836b9',
 } as const;
 
 type GrassTuftMetrics = { eligible: number; tufts: number; contaminated: number; excluded: number };
@@ -293,6 +303,40 @@ const measureBoundaryProfile = (values: readonly number[]): BoundaryProfile => (
   maxLagCorrelation: maxLagCorrelation(values),
 });
 
+/** Longest exact axis-aligned class boundary in a rendered placed composite. */
+const maxAxisAlignedBoundaryRun = (
+  classification: number[],
+  width: number,
+  height: number,
+): number => {
+  let longest = 0;
+  for (let x = 1; x < width; x++) {
+    let run = 0;
+    for (let y = 0; y < height; y++) {
+      const index = y * width + x;
+      if (classification[index] !== classification[index - 1]) {
+        run += 1;
+        longest = Math.max(longest, run);
+      } else {
+        run = 0;
+      }
+    }
+  }
+  for (let y = 1; y < height; y++) {
+    let run = 0;
+    for (let x = 0; x < width; x++) {
+      const index = y * width + x;
+      if (classification[index] !== classification[index - width]) {
+        run += 1;
+        longest = Math.max(longest, run);
+      } else {
+        run = 0;
+      }
+    }
+  }
+  return longest;
+};
+
 type TerrainLayer = ReturnType<typeof autotileLayers>[number];
 
 const selectedFrameForCell = (layers: readonly TerrainLayer[], cellIndex: number): string => {
@@ -368,6 +412,58 @@ const renderActualComposite = (options: {
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const readSemanticTerrain = (mapId: string): string[] => {
+  const builder = EMBERWATCH_MAP_BUILDERS[mapId];
+  if (!builder) {
+    throw new Error(`C-559 missing map builder ${mapId}`);
+  }
+  const json = buildMapJson({
+    semanticMapping: mapId === 'inn' || mapId === 'merchant_shop' ? 'none' : 'outdoor',
+    ...builder(),
+  }).json;
+  if (!isRecord(json) || !isRecord(json.aikami) || !Array.isArray(json.aikami.terrain)) {
+    if (mapId !== 'inn' && mapId !== 'merchant_shop') {
+      throw new Error(`C-559 outdoor map ${mapId} has no aikami.terrain array`);
+    }
+    return [];
+  }
+  return json.aikami.terrain.map((value) => (typeof value === 'string' ? value : ''));
+};
+
+const readLayer = (value: unknown, name: string): Record<string, unknown> => {
+  if (!isRecord(value) || !Array.isArray(value.layers)) {
+    throw new Error('Map JSON has no layers array');
+  }
+  const layer = value.layers.find((candidate) => isRecord(candidate) && candidate.name === name);
+  if (!isRecord(layer)) {
+    throw new Error(`Map JSON has no ${name} layer`);
+  }
+  return layer;
+};
+
+const readLayerData = (value: unknown, name: string): number[] => {
+  const data = readLayer(value, name).data;
+  if (!Array.isArray(data) || !data.every((entry) => typeof entry === 'number')) {
+    throw new Error(`${name} layer has invalid data`);
+  }
+  return data;
+};
+
+const visualFingerprint = (value: unknown): string => {
+  if (!isRecord(value) || !isRecord(value.aikami)) {
+    throw new Error('Map JSON has no aikami metadata');
+  }
+  const semanticTerrain = Array.isArray(value.aikami.terrain) ? value.aikami.terrain : null;
+  const fingerprint = {
+    terrain: semanticTerrain,
+    ground: readLayer(value, 'ground'),
+    decor: readLayer(value, 'decor'),
+    overhead: readLayer(value, 'overhead'),
+    collision: readLayer(value, 'collision'),
+  };
+  return createHash('sha256').update(JSON.stringify(fingerprint)).digest('hex');
+};
 
 const readCollisionLayer = (value: unknown): CollisionLayer => {
   if (!isRecord(value) || !Array.isArray(value.layers)) {
@@ -575,17 +671,203 @@ describe('C-552 AC-1 — all corner16 cases are organic and seamless', () => {
     });
   }
 
-  test('the actual 3x3 landing composites have non-periodic boundaries', () => {
+  test('the actual 3x3 crossing approach supports a non-periodic dirt boundary', () => {
     const map = EMBERWATCH_MAP_BUILDERS.village().map;
+    const terrain = readSemanticTerrain('village');
     const terrains = engineTerrains();
-    const namesByGid = terrainNameByGid(terrains);
-    const terrain = map.ground.map((gid) => namesByGid.get(gid) ?? '');
+    const base = meanRgb('grass.png');
+    const overlay = meanRgb('dirt_15.png');
+    for (const origin of [{ x: 36, y: 9 }]) {
+      const classification = renderActualComposite({
+        width: map.width,
+        height: map.height,
+        terrain,
+        terrains,
+        originX: origin.x,
+        originY: origin.y,
+        cells: 3,
+        base,
+        overlay,
+      });
+      const values = transitionProfile({
+        classification,
+        width: TILE * 3,
+        height: TILE * 3,
+        centerY: TILE * 1.5,
+        rowLimit: TILE * 3,
+      });
+      const profile = measureBoundaryProfile(values);
+      const axisAlignedRun = maxAxisAlignedBoundaryRun(classification, TILE * 3, TILE * 3);
+      expect(values.length, `crossing ${origin.x},${origin.y} profile samples`).toBeGreaterThan(16);
+      expect(
+        axisAlignedRun,
+        `crossing ${origin.x},${origin.y} straight axis-aligned boundary`,
+      ).toBeLessThanOrEqual(32);
+      expect(
+        profile.monotonicRun,
+        `crossing ${origin.x},${origin.y} fringe triangles`,
+      ).toBeLessThanOrEqual(8);
+      expect(
+        profile.maxLagCorrelation,
+        `crossing ${origin.x},${origin.y} short-period correlation`,
+      ).toBeLessThanOrEqual(0.99);
+    }
+  });
+
+  test('water corner frames contain no grass-hue pixels', () => {
+    for (let mask = 0; mask < 16; mask++) {
+      const frame = `water_${mask}.png`;
+      const greenPixels = framePixels(frame).filter(isGrassHue);
+      expect(greenPixels.length, `${frame} grass-hue pixels`).toBe(0);
+    }
+  });
+
+  test('the reserved terrain block and appended path family keep every GID pinned', () => {
+    const starts = {
+      dirt: 48,
+      water: 64,
+      gravel: 80,
+      earth: 96,
+      cobblestone: 112,
+      path: 176,
+    } as const;
+    expect(atlas.frames['landing_0.png']).toBeUndefined();
+    for (const terrain of [...RESERVED_CORNER_TERRAINS, 'path'] as const) {
+      const start = starts[terrain];
+      for (let mask = 0; mask < 16; mask++) {
+        const cell = start + mask;
+        const descriptor = atlas.frames[`${terrain}_${mask}.png`]?.frame;
+        expect(descriptor, `${terrain}_${mask}.png`).toEqual({
+          x: (cell % ATLAS_COLS) * ATLAS_CELL + ATLAS_PADDING,
+          y: Math.floor(cell / ATLAS_COLS) * ATLAS_CELL + ATLAS_PADDING,
+          w: TILE,
+          h: TILE,
+        });
+      }
+    }
+  });
+});
+
+describe('C-559 semantic terrain edges', () => {
+  test('every outdoor baked path, stone, and sand cell owns its corner16 terrain', () => {
+    const tiles = readManifestTiles();
+    const expectedTerrain = (tileName: string): string | undefined => {
+      if (/^path_tough/.test(tileName)) {
+        return 'path';
+      }
+      if (/^(stone_floor|flagstone)/.test(tileName)) {
+        return 'earth';
+      }
+      if (tileName === 'sand') {
+        return 'gravel';
+      }
+      return undefined;
+    };
+    let checkedCells = 0;
+    for (const mapId of OUTDOOR_MAP_IDS) {
+      const builder = EMBERWATCH_MAP_BUILDERS[mapId];
+      if (!builder) {
+        throw new Error(`C-559 missing outdoor map builder ${mapId}`);
+      }
+      const built = builder();
+      const terrain = readSemanticTerrain(mapId);
+      const visualCells = [
+        ...built.map.ground.map((gid, index) => [index, gid] as const),
+        ...(built.map.groundExtra?.map(([column, row, gid]) => [
+          row * built.map.width + column,
+          gid,
+        ]) ?? []),
+      ];
+      for (const [index, gid] of visualCells) {
+        const tileName = tiles[String(gid)]?.name;
+        const expected = expectedTerrain(tileName ?? '');
+        if (!expected) {
+          continue;
+        }
+        checkedCells++;
+        expect(terrain[index], `${mapId} cell ${index} ${tileName}`).toBe(expected);
+      }
+    }
+    expect(checkedCells).toBeGreaterThan(500);
+  });
+
+  test('inn and merchant visual layers remain exactly origin/main', () => {
+    for (const mapId of INTERIOR_MAP_IDS) {
+      const builder = EMBERWATCH_MAP_BUILDERS[mapId];
+      if (!builder) {
+        throw new Error(`C-559 missing interior map builder ${mapId}`);
+      }
+      const { json } = buildMapJson({ semanticMapping: 'none', ...builder() });
+      expect(visualFingerprint(json), `${mapId} origin/main visual fingerprint`).toBe(
+        EXPECTED_INTERIOR_VISUAL_SHA256[mapId],
+      );
+    }
+  });
+
+  test('bridge cells retain origin/main ground and decor ownership without terrain semantics', () => {
+    const tiles = readManifestTiles();
+    let checkedCells = 0;
+    for (const mapId of OUTDOOR_MAP_IDS) {
+      const builder = EMBERWATCH_MAP_BUILDERS[mapId];
+      if (!builder) {
+        throw new Error(`C-559 missing outdoor map builder ${mapId}`);
+      }
+      const { json } = buildMapJson({ semanticMapping: 'outdoor', ...builder() });
+      const ground = readLayerData(json, 'ground');
+      const decor = readLayerData(json, 'decor');
+      const overhead = readLayerData(json, 'overhead');
+      const terrain = readSemanticTerrain(mapId);
+      for (const [index, gid] of builder().map.ground.entries()) {
+        const tileName = tiles[String(gid)]?.name ?? '';
+        if (tileName !== 'bridge' && !tileName.startsWith('bridge_')) {
+          continue;
+        }
+        checkedCells++;
+        expect(ground[index], `${mapId} bridge ground ${index}`).toBe(gid);
+        expect(decor[index], `${mapId} bridge decor ${index}`).toBe(gid);
+        expect(overhead[index], `${mapId} bridge overhead ${index}`).toBe(0);
+        expect(terrain[index], `${mapId} bridge terrain ${index}`).toBe('');
+      }
+    }
+    expect(checkedCells).toBeGreaterThan(10);
+  });
+
+  test('crossing approach is asymmetric, bridge-aligned, and not the rejected 5x2 slab', () => {
+    const { map } = EMBERWATCH_MAP_BUILDERS.village();
+    const expectedDirtColumnsByRow = new Map<number, number[]>([
+      [9, [36, 37, 38]],
+      [10, [37, 38, 39]],
+      [11, [38, 39]],
+      [12, [39, 40]],
+      [13, [39, 40]],
+    ]);
+    for (const [row, expectedColumns] of expectedDirtColumnsByRow) {
+      const dirtColumns: number[] = [];
+      for (let column = 35; column <= 40; column++) {
+        if (map.ground[row * map.width + column] === G.DIRT) {
+          dirtColumns.push(column);
+        }
+      }
+      expect(dirtColumns, `crossing approach row ${row}`).toEqual(expectedColumns);
+    }
+    for (const bridgeColumn of [36, 37, 38]) {
+      expect(map.ground[9 * map.width + bridgeColumn], `bridge column ${bridgeColumn}`).toBe(
+        G.DIRT,
+      );
+    }
+    expect(map.ground[9 * map.width + 35]).not.toBe(G.DIRT);
+    expect(map.ground[9 * map.width + 40]).not.toBe(G.DIRT);
+  });
+
+  test('placed ward-square composites keep the C-552 perceptual boundary bound', () => {
+    const map = EMBERWATCH_MAP_BUILDERS.village().map;
+    const terrain = readSemanticTerrain('village');
+    const terrains = engineTerrains();
     const base = meanRgb('grass.png');
     const overlay = meanRgb('dirt_15.png');
     for (const origin of [
-      { x: 36, y: 9 },
-      { x: 37, y: 9 },
-      { x: 38, y: 9 },
+      { x: 27, y: 22 },
+      { x: 37, y: 22 },
     ]) {
       const classification = renderActualComposite({
         width: map.width,
@@ -606,40 +888,17 @@ describe('C-552 AC-1 — all corner16 cases are organic and seamless', () => {
         rowLimit: TILE,
       });
       const profile = measureBoundaryProfile(values);
-      expect(values.length, `landing ${origin.x},${origin.y} profile samples`).toBeGreaterThan(16);
+      const axisAlignedRun = maxAxisAlignedBoundaryRun(classification, TILE * 3, TILE * 3);
+      expect(values.length, `square ${origin.x},${origin.y} profile samples`).toBeGreaterThan(16);
       expect(
-        profile.monotonicRun,
-        `landing ${origin.x},${origin.y} fringe triangles`,
-      ).toBeLessThanOrEqual(8);
+        axisAlignedRun,
+        `square ${origin.x},${origin.y} straight axis-aligned boundary`,
+      ).toBeLessThanOrEqual(32);
+      expect(profile.monotonicRun, `square ${origin.x},${origin.y} fringe`).toBeLessThanOrEqual(8);
       expect(
         profile.maxLagCorrelation,
-        `landing ${origin.x},${origin.y} short-period correlation`,
+        `square ${origin.x},${origin.y} short-period correlation`,
       ).toBeLessThanOrEqual(0.99);
-    }
-  });
-
-  test('water corner frames contain no grass-hue pixels', () => {
-    for (let mask = 0; mask < 16; mask++) {
-      const frame = `water_${mask}.png`;
-      const greenPixels = framePixels(frame).filter(isGrassHue);
-      expect(greenPixels.length, `${frame} grass-hue pixels`).toBe(0);
-    }
-  });
-
-  test('the reserved terrain block keeps every existing GID cell pinned', () => {
-    const starts = { dirt: 48, water: 64, gravel: 80, earth: 96, cobblestone: 112 } as const;
-    for (const terrain of CORNER_TERRAINS) {
-      const start = starts[terrain];
-      for (let mask = 0; mask < 16; mask++) {
-        const cell = start + mask;
-        const descriptor = atlas.frames[`${terrain}_${mask}.png`]?.frame;
-        expect(descriptor, `${terrain}_${mask}.png`).toEqual({
-          x: (cell % ATLAS_COLS) * ATLAS_CELL + ATLAS_PADDING,
-          y: Math.floor(cell / ATLAS_COLS) * ATLAS_CELL + ATLAS_PADDING,
-          w: TILE,
-          h: TILE,
-        });
-      }
     }
   });
 });

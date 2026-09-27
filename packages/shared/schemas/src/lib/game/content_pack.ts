@@ -20,11 +20,10 @@ import { FactionDefinitionSchema } from './faction_standing.ts';
 import { NpcSuggestionChipSchema } from './npc_dialogue_command.ts';
 import { OnboardingSectionSchema } from './onboarding_hints.ts';
 import { ContentPackPropAtlasSchema } from './prop_atlas.ts';
+import { PropStyleClassSchema } from './prop_style.ts';
 
-// ---------------------------------------------------------------------------
 // Semver validation pattern (x.y.z with optional pre-release + build)
 // ---------------------------------------------------------------------------
-
 const SEMVER_PATTERN =
   '^\\d+\\.\\d+\\.\\d+(-[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?(\\+[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?$';
 
@@ -132,7 +131,7 @@ export const NamedAppearanceSchema = Type.Object(
   {
     formatVersion: Type.Literal(1, { description: 'Named appearance representation version' }),
     components: Type.Array(NamedAppearanceComponentSchema, {
-      description: 'Base appearance layers',
+      description: 'Base six slots, plus any extra layers drawn on top (hat, shield, weapon, …).',
     }),
     legacyProvenance: Type.Optional(
       Type.Object({
@@ -864,6 +863,7 @@ export const ContentPackPropSchema = Type.Object({
   renderSize: Type.Optional(PropRenderSizeSchema),
   /** Renderer-owned contact shadow (see {@link PropContactShadowSchema}). */
   shadow: Type.Optional(PropContactShadowSchema),
+  styleClass: Type.Optional(PropStyleClassSchema),
   emissive: Type.Optional(Type.Boolean({ description: 'Light source (C-545)' })),
   /** Per-asset provenance (C-381 AC-1). */
   provenance: Type.Optional(AssetProvenanceSchema),

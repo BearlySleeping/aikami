@@ -300,8 +300,10 @@ Aikami-x86_64.AppImage
 # Pipeline verification evidence — verifier/implementer screenshots must live
 # in the gitignored .pi/.screenshots/ (browser_screenshot tool) or
 # apps/e2e/test-results/visual/ (visual runner). Any screenshot saved to the
-# worktree root or an artifacts/ dir is a leak — never commit it. See
+# worktree root or an artifacts/ dir is a leak — never commit it. The generic
+# before/after evidence lane is local-only for the same reason. See
 # .pi/prompts/contract-verify.md Phase 3 for the evidence-save rule.
+.evidence/
 artifacts/
 /*.png
 /*.jpg

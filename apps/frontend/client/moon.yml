@@ -257,6 +257,7 @@ tasks:
       - '~:paraglide'
     inputs:
       - 'src/browser_tests/**/*'
+      - 'tests/**/*.browser.test.ts'
       - 'vitest.config.ts'
       - '@group(sources)'
       - '@group(configs)'

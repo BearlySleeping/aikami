@@ -12,9 +12,9 @@
 // was blocked from its own catalog. These tests fail if any of them drifts back
 // to a single hardcoded origin.
 
+import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { describe, expect, test } from 'bun:test';
 import { CATALOG_ORIGINS } from '@aikami/constants';
 
 const CLIENT_DIR = join(import.meta.dirname, '..');

@@ -90,7 +90,7 @@ export const handleReserveCommunityAsset = async (
   if (!accountId) {
     return unauthorized();
   }
-  if (!(await withinPublishRateLimit(env, accountId))) {
+  if (!(await withinPublishRateLimit({ env, accountId }))) {
     logger.info('asset:community reserve rate-limited', { accountId });
     return rateLimited();
   }
@@ -261,7 +261,7 @@ export const handleUploadCommunityAsset = async (
   if (!accountId) {
     return unauthorized();
   }
-  if (!(await withinPublishRateLimit(env, accountId))) {
+  if (!(await withinPublishRateLimit({ env, accountId }))) {
     logger.info('asset:community upload rate-limited', { accountId, slug });
     return rateLimited();
   }

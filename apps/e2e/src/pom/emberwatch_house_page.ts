@@ -232,6 +232,7 @@ export class EmberwatchHousePage {
       e2e?: boolean;
       authoring?: boolean;
       authoringLayers?: readonly string[];
+      contentIdentity?: boolean;
       textScale?: number;
     } = {},
   ): Promise<void> {
@@ -247,6 +248,9 @@ export class EmberwatchHousePage {
       if (options.authoringLayers && options.authoringLayers.length > 0) {
         params.set('authoringLayers', options.authoringLayers.join(','));
       }
+    }
+    if (options.contentIdentity) {
+      params.set('contentIdentity', 'true');
     }
     await this.page.goto(`${this.origin}/game?${params.toString()}`, {
       waitUntil: 'domcontentloaded',

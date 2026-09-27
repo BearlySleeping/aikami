@@ -107,7 +107,7 @@ export const handleReserveThemeVersion = async (
   if (!accountId) {
     return unauthorized();
   }
-  if (!(await withinPublishRateLimit(env, accountId))) {
+  if (!(await withinPublishRateLimit({ env, accountId }))) {
     logger.info('asset:theme reserve rate-limited', { accountId });
     return rateLimited();
   }
@@ -282,7 +282,7 @@ export const handleUploadThemeVersion = async (
   if (!accountId) {
     return unauthorized();
   }
-  if (!(await withinPublishRateLimit(env, accountId))) {
+  if (!(await withinPublishRateLimit({ env, accountId }))) {
     logger.info('asset:theme upload rate-limited', { accountId, themeId });
     return rateLimited();
   }

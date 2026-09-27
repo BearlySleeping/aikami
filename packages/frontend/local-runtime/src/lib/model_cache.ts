@@ -100,28 +100,44 @@ export const isCanonicalModelUrl = (
  */
 export const responseLooksLikeHtml = async (response: Response): Promise<boolean> => {
   const contentType = response.headers.get('content-type') ?? '';
-  if (contentType.includes('text/html')) {
+  if (contentType.toLowerCase().includes('text/html')) {
     return true;
   }
   // Some SPA fallbacks are served with no content type at all, so peek at the
-  // first bytes. The body is read one chunk and cancelled: model weights are
-  // tens of megabytes and must never be buffered to be sniffed.
+  // first bytes. Model weights are tens of megabytes and must not be buffered.
   const body = response.clone().body;
   if (!body || typeof body.getReader !== 'function') {
     return false;
   }
   const reader = body.getReader();
+  const decoder = new TextDecoder();
+  const prefixes = ['<!doctype', '<html'];
+  const maxPrefixBytes = 256;
+  let bytesRead = 0;
+  let head = '';
   try {
-    const first = await reader.read();
-    if (first.done) {
-      return false;
+    while (bytesRead < maxPrefixBytes) {
+      const chunk = await reader.read();
+      if (chunk.done) {
+        return false;
+      }
+      const bytes = chunk.value.subarray(0, maxPrefixBytes - bytesRead);
+      bytesRead += bytes.byteLength;
+      head += decoder.decode(bytes, { stream: true });
+      const prefix = head.trimStart().toLowerCase();
+      if (prefixes.some((candidate) => prefix.startsWith(candidate))) {
+        return true;
+      }
+      if (!prefixes.some((candidate) => candidate.startsWith(prefix))) {
+        return false;
+      }
     }
-    const head = new TextDecoder().decode(first.value).trimStart();
-    return head.startsWith('<!DOCTYPE') || head.startsWith('<html');
+    return false;
   } catch {
     return false;
   } finally {
-    await reader.cancel().catch(() => {});
+    void reader.cancel().catch(() => {});
+    reader.releaseLock();
   }
 };
 

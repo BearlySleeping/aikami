@@ -7,6 +7,7 @@
 // Contract: C-327 AC-3 — onboarding hint types added
 
 import type {
+  ContentIdentitySnapshotSchema,
   ContentPackAccountSchema,
   ContentPackCombatStatsSchema,
   ContentPackCreditsSchema,
@@ -36,6 +37,7 @@ import type {
   OnboardingHintStepSchema,
   OnboardingSectionSchema,
   PackConfigSchema,
+  PropStyleClassSchema,
   QuestObjectiveFailureConditionSchema,
 } from '@aikami/schemas';
 import type { Static } from 'typebox';
@@ -91,8 +93,14 @@ export type ContentPackEncounterEntry = Static<typeof ContentPackEncounterEntryS
 /** Adventure credits (C-316). */
 export type ContentPackCredits = Static<typeof ContentPackCreditsSchema>;
 
+/** Content prop style category used by authoring audits and evidence. */
+export type PropStyleClass = Static<typeof PropStyleClassSchema>;
+
 /** Top-level content pack manifest. */
 export type ContentPackManifest = Static<typeof ContentPackManifestSchema>;
+
+/** Browser-observed loaded-content identity for dev diagnostics and evidence. */
+export type ContentIdentitySnapshot = Static<typeof ContentIdentitySnapshotSchema>;
 
 /** An onboarding/tutorial hint step (C-327). */
 export type OnboardingHintStep = Static<typeof OnboardingHintStepSchema>;

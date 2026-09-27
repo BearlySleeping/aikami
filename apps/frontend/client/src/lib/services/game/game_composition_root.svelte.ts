@@ -17,6 +17,7 @@ import { resolveCompanionControlMode } from '@aikami/schemas';
 import type { ContentPackLootEntry } from '@aikami/types';
 import { configureNpcPortraitSource } from '$lib/data/npc_avatar_catalog';
 import { textGenerationService } from '../ai/text_generation_service.svelte';
+import { assetStore } from '../assets/asset_store.svelte';
 import { musicPlayerService } from '../audio/music_player_service.svelte';
 import type { CampaignServiceInterface } from '../campaign/campaign_service.svelte';
 import { campaignService } from '../campaign/campaign_service.svelte';
@@ -29,6 +30,7 @@ import {
 import { buildItemCatalogFromPack } from './content_pack_catalog';
 import type { EquipmentServiceInterface } from './equipment_service.svelte';
 import { equipmentService } from './equipment_service.svelte';
+import { publishLoadedContentIdentity } from './game_content_identity.ts';
 import type { GameEngineServiceInterface } from './game_engine_service.svelte';
 import { gameEngineService } from './game_engine_service.svelte';
 import type { GameModeServiceInterface } from './game_mode_service.svelte';
@@ -271,13 +273,27 @@ export class GameCompositionRoot
     this.debug('initialize:contentPackId', { contentPackId });
 
     // Phase 5c: Wire NPC dialogue orchestrator with content pack + gateway
-    const { djb2Hash, loadContentPack, createEngineBridge } = await import(
+    const { djb2Hash, loadContentPack, createEngineBridge, publishContentIdentity } = await import(
       '@aikami/frontend/engine'
     );
     const { assetTagResolver } = await import('$lib/services/assets/registry_resolver');
     const contentPack = await loadContentPack({
       packId: contentPackId,
       resolveTag: assetTagResolver,
+    });
+    const packLock = assetStore.packLock;
+    publishLoadedContentIdentity({
+      identity: contentPack.identity,
+      metadata: {
+        manifestAssetSha256: assetStore.seed?.rows.find(
+          (row) => row.tag === `${contentPackId}:manifest`,
+        )?.hash,
+        releaseId: assetStore.releaseId ?? undefined,
+        releaseSource: assetStore.releaseSource ?? undefined,
+        packLockSource: assetStore.packLockSource ?? undefined,
+        lockedAssetCount: packLock?.assets.length,
+      },
+      publish: publishContentIdentity,
     });
 
     // ── C-331 AC-1: content pack is the single source of item truth ──
@@ -711,7 +727,11 @@ export class GameCompositionRoot
 
     // Stop BGM — the composition root owns the music player's lifecycle
     // alongside every other game runtime service (mirrors initialize()).
-    musicPlayerService.stop();
+    //
+    // 🔴 Teardown, NOT a player decision: this runs on every page unload, so it
+    // must not persist a `stopped` intent. Unloading mid-song would otherwise
+    // overwrite a real pause and bring the music back on the next visit.
+    musicPlayerService.stopForTeardown();
 
     // C-512: let a queued contextual generation finish writing before the
     // runtime it belongs to is torn down.

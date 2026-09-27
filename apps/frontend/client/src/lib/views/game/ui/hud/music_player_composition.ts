@@ -58,6 +58,12 @@ export const getMusicPlayerViewModel = (
       get feedback(): string {
         return musicPlayerService.feedback;
       },
+      get intentState() {
+        return musicPlayerService.intent?.state;
+      },
+      get intentTrackTitle(): string | undefined {
+        return musicPlayerService.intentTrackTitle;
+      },
       setVisible: (visible) => {
         configuredHudPreferenceService.applyNow({
           kind: 'set-visibility',

@@ -1,8 +1,8 @@
 # Aikami Knowledge Index
 
 > **AI-first entry point.** Read this file first.
-> Generated: 2026-09-23
-> Files: 482 across 10 categories
+> Generated: 2026-09-25
+> Files: 501 across 10 categories
 
 ## Quick Start (Read These First)
 
@@ -438,6 +438,25 @@ Monorepo: SvelteKit Client × Cloudflare Workers backend (D1 + R2 + Better Auth)
 - [Contract C-532: Combat-08 — Objectives, Morale, Reactions, and Release Gate](contracts/C-532-combat-08-objectives-morale-reactions-and-release-gate.md)
 - [Contract C-543: Production Management Workspace, HUD Semantics, and Theme Integration Correction](contracts/C-543-production-management-workspace-and-hud-correction.md)
 - [Contract C-544: Deterministic Particle Weather FX — Rain, Atmosphere and Scene Gating](contracts/C-544-deterministic-particle-weather-fx.md)
+- [Contract C-545: Emberwatch baseline and ambient parity](contracts/C-545-emberwatch-baseline-and-ambient-parity.md)
+- [Contract C-546: Emberwatch continuous oriented bridge assembly](contracts/C-546-emberwatch-bridge-assembly.md)
+- [Contract C-547: Compact dialogue stage on game UI roles](contracts/C-547-dialogue-stage.md)
+- [Contract C-548: Emberwatch release atlas integrity + reproducible local evidence plane](contracts/C-548-emberwatch-release-atlas-integrity.md)
+- [Contract C-549: Emberwatch village crossing on the straight reach + restrained grass](contracts/C-549-village-crossing-and-grass-restraint.md)
+- [Contract C-550: Emberwatch raised house assembly — NE hut](contracts/C-550-emberwatch-house-assembly.md)
+- [Contract C-551: Management content on game UI roles](contracts/C-551-management-content-game-ui-roles.md)
+- [Contract C-552: Emberwatch terrain pass](contracts/C-552-emberwatch-terrain-pass.md)
+- [Contract C-553: Emberwatch house assembly rollout](contracts/C-553-emberwatch-house-rollout.md)
+- [Contract C-554: Pause, settings and session actions on game UI roles](contracts/C-554-pause-settings-session-actions.md)
+- [C-555 — Exploration HUD (UI PR-4)](contracts/C-555-exploration-hud.md)
+- [Contract C-556: Clamp restored companions to safe cells and refresh follow paths](contracts/C-556-companion-restore-clamp.md)
+- [Contract C-557: Release-plan test timeout chore](contracts/C-557-release-plan-test-timeout.md)
+- [Contract C-558: Emberwatch loaded-content identity overlay](contracts/C-558-emberwatch-loaded-content-identity.md)
+- [C-559 — Semantic terrain edges](contracts/C-559-semantic-terrain-edges.md)
+- [Contract C-560: Fresh-worktree DX hardening](contracts/C-560-fresh-worktree-dx-hardening.md)
+- [Contract C-561: Emberwatch prop coherence pass](contracts/C-561-emberwatch-prop-coherence-pass.md)
+- [Contract C-562: Emberwatch five-map polish adoption](contracts/C-562-emberwatch-five-map-polish-adoption.md)
+- [Contract C-563: Emberwatch final acceptance review](contracts/C-563-emberwatch-final-acceptance.md)
 - [Contracts — Aikami Feature Development](contracts/INDEX.md)
 - [MVP Contract Backlog — C-400 … C-419](contracts/MVP_BACKLOG.md)
 - [Contract Implementation Archive](contracts/PROGRESS_ARCHIVE.md)

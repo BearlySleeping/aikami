@@ -230,6 +230,27 @@ export const applyHudPreset = (
 export type HudEditorCommand =
   | { kind: 'set-visibility'; widgetId: HudWidgetId; visibility: HudVisibility }
   | { kind: 'cycle-visibility'; widgetId: HudWidgetId; direction: 1 | -1 }
+  /**
+   * Takes the widget out of the layout and onto the editor's Hidden shelf.
+   *
+   * Distinct from `set-visibility: 'hidden'` only in intent: this is the
+   * command a drop on the shelf produces, so the placement decision and the
+   * visibility decision share one undo step instead of racing each other.
+   */
+  | { kind: 'hide-widget'; widgetId: HudWidgetId }
+  /**
+   * Puts a hidden widget back, optionally into a different region.
+   *
+   * `anchor` rides on the same command so a drag from the shelf straight onto a
+   * region is ONE undo step — two commands would make one gesture cost two
+   * undos, which reads as the history being broken.
+   */
+  | {
+      kind: 'show-widget';
+      widgetId: HudWidgetId;
+      visibility: HudVisibility;
+      anchor?: HudAnchor;
+    }
   | { kind: 'set-anchor'; widgetId: HudWidgetId; anchor: HudAnchor }
   | { kind: 'move-anchor'; widgetId: HudWidgetId; direction: 1 | -1 }
   | { kind: 'set-density'; widgetId: HudWidgetId; density: HudDensity }
@@ -298,12 +319,28 @@ const nextAnchor = (
   return allowed[nextIndex];
 };
 
-const visibilityOrder: readonly HudVisibility[] = ['always', 'contextual', 'hidden'];
+/**
+ * The two visibilities a cycling control steps between.
+ *
+ * 🔴 `hidden` is NOT in this list. Cycling *into* hidden made one control carry
+ * two unrelated decisions — "when does this show" and "is this on the HUD at
+ * all" — and it dead-ended: the third step computed `hidden`, the override
+ * writer stripped it for required widgets, and the value never advanced, so the
+ * control stopped responding. Removal is now a placement decision with its own
+ * command, its own target and its own restore path.
+ */
+const cycleVisibilityOrder: readonly HudVisibility[] = ['always', 'contextual'];
 
 const cycleVisibility = (current: HudVisibility, direction: 1 | -1): HudVisibility => {
-  const index = visibilityOrder.indexOf(current);
-  const nextIndex = (index + direction + visibilityOrder.length) % visibilityOrder.length;
-  return visibilityOrder[nextIndex] ?? current;
+  if (current === 'hidden') {
+    return 'always';
+  }
+  const index = cycleVisibilityOrder.indexOf(current);
+  if (index === -1) {
+    return 'always';
+  }
+  const nextIndex = (index + direction + cycleVisibilityOrder.length) % cycleVisibilityOrder.length;
+  return cycleVisibilityOrder[nextIndex] ?? 'always';
 };
 
 /**
@@ -351,15 +388,27 @@ const reorderWidget = (options: {
 export const applyHudEditorCommand = (
   state: HudEditorState,
   command: HudEditorCommand,
-): HudEditorState => {
+): HudEditorState =>
+  applyHistoryCommand(state, command) ??
+  applyDensityCommand(state, command) ??
+  applyWidgetCommand(state, command);
+
+/**
+ * The history and snapshot commands: undo, redo, save, cancel, preset, reset.
+ *
+ * Split out of `applyHudEditorCommand` because one switch carrying every
+ * command in the product is unreadable past a certain size — and because the
+ * branches that carry a RULE deserve to be readable on their own. Each of these
+ * returns `undefined` for a command it does not own, so the chain above stays
+ * exhaustive over the union without a `never` assertion anywhere.
+ */
+const applyHistoryCommand = (
+  state: HudEditorState,
+  command: HudEditorCommand,
+): HudEditorState | undefined => {
   switch (command.kind) {
     case 'save':
-      return {
-        committed: state.draft,
-        draft: state.draft,
-        undoStack: [],
-        redoStack: [],
-      };
+      return { committed: state.draft, draft: state.draft, undoStack: [], redoStack: [] };
     case 'cancel':
       return { committed: state.committed, draft: state.committed, undoStack: [], redoStack: [] };
     case 'undo': {
@@ -392,38 +441,46 @@ export const applyHudEditorCommand = (
       return withDraft(state, applyHudPreset(state.draft, command.presetId));
     case 'reset-widget':
       return withDraft(state, resetHudWidgetOverride(state.draft, command.widgetId));
+    default:
+      return undefined;
+  }
+};
+
+/** The one command that edits appearance without changing placement. */
+const applyDensityCommand = (
+  state: HudEditorState,
+  command: HudEditorCommand,
+): HudEditorState | undefined =>
+  command.kind === 'set-density'
+    ? patchWidget(state, command.widgetId, { density: command.density })
+    : undefined;
+
+/**
+ * The per-widget placement commands.
+ *
+ * Every branch is one `patchWidget`, and `patchWidget` is where the rules
+ * actually live: the override writer drops an impossible patch (a required
+ * widget's visibility, a region the widget may not occupy) and `withDraft`
+ * records no history when the draft is unchanged. A refused command therefore
+ * cannot leave a phantom undo entry behind, and "this did nothing" is a
+ * property of the data rather than of a caller remembering to check.
+ */
+const applyWidgetCommand = (state: HudEditorState, command: HudEditorCommand): HudEditorState => {
+  switch (command.kind) {
+    case 'hide-widget':
+      return patchWidget(state, command.widgetId, { visibility: 'hidden' });
+    case 'show-widget':
+      return patchWidget(
+        state,
+        command.widgetId,
+        command.anchor === undefined
+          ? { visibility: command.visibility }
+          : { visibility: command.visibility, anchor: command.anchor },
+      );
     case 'set-visibility':
-      return withDraft(
-        state,
-        setHudWidgetOverride({
-          preferences: state.draft,
-          widgetId: command.widgetId,
-          patch: { visibility: command.visibility },
-        }),
-      );
-    case 'cycle-visibility': {
-      const current = effectiveHudWidgetPreference(state.draft, command.widgetId);
-      if (!current) {
-        return state;
-      }
-      return withDraft(
-        state,
-        setHudWidgetOverride({
-          preferences: state.draft,
-          widgetId: command.widgetId,
-          patch: { visibility: cycleVisibility(current.visibility, command.direction) },
-        }),
-      );
-    }
+      return patchWidget(state, command.widgetId, { visibility: command.visibility });
     case 'set-anchor':
-      return withDraft(
-        state,
-        setHudWidgetOverride({
-          preferences: state.draft,
-          widgetId: command.widgetId,
-          patch: { anchor: command.anchor },
-        }),
-      );
+      return patchWidget(state, command.widgetId, { anchor: command.anchor });
     case 'move-anchor': {
       const current = effectiveHudWidgetPreference(state.draft, command.widgetId);
       if (!current) {
@@ -433,46 +490,27 @@ export const applyHudEditorCommand = (
       if (!anchor || anchor === current.anchor) {
         return state;
       }
-      return withDraft(
-        state,
-        setHudWidgetOverride({
-          preferences: state.draft,
-          widgetId: command.widgetId,
-          patch: { anchor },
-        }),
-      );
+      return patchWidget(state, command.widgetId, { anchor });
     }
-    case 'set-density':
-      return withDraft(
-        state,
-        setHudWidgetOverride({
-          preferences: state.draft,
-          widgetId: command.widgetId,
-          patch: { density: command.density },
-        }),
-      );
     case 'set-scale':
-      return withDraft(
-        state,
-        setHudWidgetOverride({
-          preferences: state.draft,
-          widgetId: command.widgetId,
-          patch: { scale: clampHudScale(command.scale) },
-        }),
-      );
+      return patchWidget(state, command.widgetId, { scale: clampHudScale(command.scale) });
     case 'nudge-scale': {
       const current = effectiveHudWidgetPreference(state.draft, command.widgetId);
       if (!current) {
         return state;
       }
-      return withDraft(
-        state,
-        setHudWidgetOverride({
-          preferences: state.draft,
-          widgetId: command.widgetId,
-          patch: { scale: clampHudScale(current.scale + command.delta) },
-        }),
-      );
+      return patchWidget(state, command.widgetId, {
+        scale: clampHudScale(current.scale + command.delta),
+      });
+    }
+    case 'cycle-visibility': {
+      const current = effectiveHudWidgetPreference(state.draft, command.widgetId);
+      if (!current) {
+        return state;
+      }
+      return patchWidget(state, command.widgetId, {
+        visibility: cycleVisibility(current.visibility, command.direction),
+      });
     }
     case 'reorder':
       return withDraft(
@@ -483,6 +521,14 @@ export const applyHudEditorCommand = (
       return state;
   }
 };
+
+/** One override write, as one history entry — or as none at all. */
+const patchWidget = (
+  state: HudEditorState,
+  widgetId: HudWidgetId,
+  patch: Partial<Omit<HudWidgetPreference, 'widgetId'>>,
+): HudEditorState =>
+  withDraft(state, setHudWidgetOverride({ preferences: state.draft, widgetId, patch }));
 
 // ---------------------------------------------------------------------------
 // Exchange

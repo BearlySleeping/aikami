@@ -24,6 +24,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { PROP_STYLE_CLASSES, type PropStyleClass } from './emberwatch_prop_styles.ts';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repository = join(here, '../../../..');
@@ -202,6 +203,7 @@ type PropDef = {
   environment?: Record<string, unknown>;
   renderSize?: PropRenderSize;
   shadow?: PropShadow;
+  styleClass?: PropStyleClass;
   /** C-545: light source exempt from the day/night ambient tint. */
   emissive?: boolean;
 };
@@ -314,6 +316,7 @@ const anchored = (
   // Per-frame logical world size + contact shadow apply to every prop that
   // reuses the frame, so a shared frame can never render at two sizes.
   ...(PROP_PRESENTATION[frame] ?? {}),
+  styleClass: PROP_STYLE_CLASSES[frame],
   ...extra,
 });
 
@@ -334,6 +337,7 @@ export const EMBERWATCH_PROPS: Record<string, PropDef> = {
     provenance: { source: 'generated:local-sdcpp-anima' },
     anchor: { x: 0.5, y: 1 },
     isWalkable: true,
+    styleClass: 'structural',
     ...(PROP_PRESENTATION['prop_gate.png'] ?? {}),
   },
 
@@ -431,6 +435,14 @@ export const EMBERWATCH_PROPS: Record<string, PropDef> = {
 
   // ── Road and shrine ──────────────────────────────────────────────────────
   waystation_cart: anchored('Abandoned Cart', 'prop_cart.png', 40, 24),
+  inn_perimeter_post_w: anchored('Perimeter Post', 'prop_support.png', 22, 22),
+  inn_perimeter_post_e: anchored('Perimeter Post', 'prop_support.png', 22, 22),
+  shop_perimeter_post_w: anchored('Perimeter Post', 'prop_support.png', 22, 22),
+  shop_perimeter_post_e: anchored('Perimeter Post', 'prop_support.png', 22, 22),
+  waystation_perimeter_post_w: anchored('Perimeter Post', 'prop_support.png', 22, 22),
+  waystation_perimeter_post_e: anchored('Perimeter Post', 'prop_support.png', 22, 22),
+  shrine_perimeter_post_w: anchored('Perimeter Post', 'prop_support.png', 22, 22),
+  shrine_perimeter_post_e: anchored('Perimeter Post', 'prop_support.png', 22, 22),
   // The arch is a passage: the player must be able to walk through it.
   shrine_arch: {
     name: 'Shrine Arch',
@@ -438,6 +450,7 @@ export const EMBERWATCH_PROPS: Record<string, PropDef> = {
     provenance: { source: 'generated:gpt' },
     anchor: { x: 0.5, y: 1 },
     isWalkable: true,
+    styleClass: 'structural',
     ...(PROP_PRESENTATION['shrine_arch.png'] ?? {}),
   },
   ward_socket: anchored('Ward Socket', 'prop_ward_socket.png', 24, 16),

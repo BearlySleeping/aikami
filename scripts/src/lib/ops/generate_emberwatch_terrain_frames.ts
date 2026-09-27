@@ -328,6 +328,7 @@ export const CORNER_TERRAIN_SEEDS = {
   gravel: 117,
   earth: 120,
   cobblestone: 128,
+  path: 131,
 } as const;
 
 const isOuterEdge = (x: number, y: number): boolean =>
@@ -373,7 +374,7 @@ const edgeCoverage = (options: { mask: number; x: number; y: number; seed: numbe
  *
  * The missing corner owns the low-distance side of the field; the other three
  * corners own the high-distance side. This replaces four repeated radial lobes
- * at the real landing masks (13/14) with one coherent noisy contour.
+ * at real three-corner masks (13/14) with one coherent noisy contour.
  */
 const diagonalCornerField = (options: {
   mask: number;

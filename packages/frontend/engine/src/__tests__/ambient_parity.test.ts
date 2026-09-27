@@ -29,8 +29,8 @@ import {
   COLOR_NOON,
   ENV_UBO_OFFSETS,
 } from '../environment/environment_ubo.ts';
-import type { RenderEntry } from '../game_world/render_entry.ts';
 import type { EntityAppearanceLoader } from '../game_world/entity_appearance.ts';
+import type { RenderEntry } from '../game_world/render_entry.ts';
 import { SceneAmbientController } from '../game_world/scene_ambient.ts';
 import type { PropFrameAnchor } from '../game_world/scene_transition.ts';
 import type { GameWorld as GameWorldInstance, GameWorldOptions } from '../game_world.ts';

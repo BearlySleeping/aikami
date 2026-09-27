@@ -5,12 +5,15 @@ import {
   clearEntityPosition,
   exposeEngineState,
   isAuthoringOverlayMode,
+  isContentIdentityOverlayMode,
   isE2ETestMode,
   isVisualScreenshotMode,
+  publishContentIdentity,
   publishEntityPosition,
   publishNpcEntityIds,
   publishPlayerDebug,
   publishPlayerVisibleByMask,
+  readContentIdentity,
   resetEntityPositions,
   resetVisualScreenshotModeCache,
 } from './diagnostics.ts';
@@ -97,6 +100,22 @@ describe('diagnostics — mode detection', () => {
     setWindow(makeWindow('?authoring=false'));
     expect(isAuthoringOverlayMode()).toBe(false);
   });
+
+  test('content identity mode requires development mode and the explicit query flag', () => {
+    setWindow(makeWindow('?contentIdentity=true'));
+    process.env.PUBLIC_MODE = 'testing';
+    expect(isContentIdentityOverlayMode()).toBe(true);
+
+    process.env.PUBLIC_MODE = 'production';
+    expect(isContentIdentityOverlayMode()).toBe(false);
+
+    process.env.PUBLIC_MODE = 'unknown';
+    expect(isContentIdentityOverlayMode()).toBe(false);
+
+    setWindow(makeWindow());
+    process.env.PUBLIC_MODE = 'testing';
+    expect(isContentIdentityOverlayMode()).toBe(false);
+  });
 });
 
 describe('diagnostics — debug globals', () => {
@@ -109,6 +128,23 @@ describe('diagnostics — debug globals', () => {
     setWindow(undefined);
     resetEntityPositions();
     publishNpcEntityIds([]);
+  });
+
+  test('publishes and reads the loaded content identity snapshot', () => {
+    const identity = {
+      packId: 'emberwatch',
+      packName: 'Emberwatch: The Fading Ward',
+      version: '5.0.0',
+      updatedAt: '2026-09-18T00:00:00.000Z',
+      manifestSha256: 'a'.repeat(64),
+      atlasTextureUrl: '/game-data/sprites/tilesets/atlas.webp',
+      atlasSpritesheetUrl: '/game-data/sprites/tilesets/atlas.json',
+      propAtlases: [],
+      provenanceSource: 'generated:gpt',
+    };
+
+    publishContentIdentity(identity);
+    expect(readContentIdentity()).toEqual(identity);
   });
 
   test('exposeEngineState writes the engine state global', () => {
