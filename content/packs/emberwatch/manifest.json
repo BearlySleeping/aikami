@@ -4044,14 +4044,6 @@
     "village_elder": {
       "name": "Elder Thalia",
       "defaultDialogueKey": "elder_thalia_greeting",
-      "appearanceLayers": [
-        2,
-        3,
-        65,
-        21,
-        20,
-        97
-      ],
       "appearance": {
         "formatVersion": 1,
         "components": [
@@ -4066,30 +4058,26 @@
             "layerRole": "front"
           },
           {
+            "slot": "head",
+            "assetId": "head/heads/human/female_elderly",
+            "layerRole": "front"
+          },
+          {
             "slot": "torso",
             "assetId": "torso/clothes/robe_female",
             "layerRole": "front"
           },
           {
             "slot": "legs",
-            "assetId": "legs/pants_female",
+            "assetId": "legs/skirts/straight_thin",
             "layerRole": "front"
           },
           {
             "slot": "feet",
             "assetId": "feet/shoes/basic_thin",
             "layerRole": "front"
-          },
-          {
-            "slot": "head",
-            "assetId": "head/heads/human/female_elderly",
-            "layerRole": "front"
           }
-        ],
-        "legacyProvenance": {
-          "source": "manifest:appearanceLayers",
-          "snapshot": "legacy-catalog-order-v1"
-        }
+        ]
       },
       "isVendor": false,
       "initialSuggestions": [
@@ -4141,14 +4129,6 @@
     "rollo_grasper": {
       "name": "Rollo the Grasper",
       "defaultDialogueKey": "rollo_greeting",
-      "appearanceLayers": [
-        3,
-        123,
-        23,
-        22,
-        7,
-        95
-      ],
       "appearance": {
         "formatVersion": 1,
         "components": [
@@ -4163,8 +4143,13 @@
             "layerRole": "front"
           },
           {
+            "slot": "head",
+            "assetId": "head/heads/human_male",
+            "layerRole": "front"
+          },
+          {
             "slot": "torso",
-            "assetId": "torso/chainmail_male",
+            "assetId": "torso/armour/leather_male",
             "layerRole": "front"
           },
           {
@@ -4176,17 +4161,8 @@
             "slot": "feet",
             "assetId": "feet/boots/basic_male",
             "layerRole": "front"
-          },
-          {
-            "slot": "head",
-            "assetId": "head/heads/human_male",
-            "layerRole": "front"
           }
-        ],
-        "legacyProvenance": {
-          "source": "manifest:appearanceLayers",
-          "snapshot": "legacy-catalog-order-v1"
-        }
+        ]
       },
       "isVendor": false,
       "combatStats": {
@@ -4426,14 +4402,6 @@
     "merchant": {
       "name": "Mara the Merchant",
       "defaultDialogueKey": "merchant_mara_greeting",
-      "appearanceLayers": [
-        3,
-        91,
-        127,
-        22,
-        19,
-        95
-      ],
       "appearance": {
         "formatVersion": 1,
         "components": [
@@ -4445,6 +4413,11 @@
           {
             "slot": "hair",
             "assetId": "hair/long_adult",
+            "layerRole": "front"
+          },
+          {
+            "slot": "head",
+            "assetId": "head/heads/human_male",
             "layerRole": "front"
           },
           {
@@ -4461,17 +4434,8 @@
             "slot": "feet",
             "assetId": "feet/shoes/basic_male",
             "layerRole": "front"
-          },
-          {
-            "slot": "head",
-            "assetId": "head/heads/human_male",
-            "layerRole": "front"
           }
-        ],
-        "legacyProvenance": {
-          "source": "manifest:appearanceLayers",
-          "snapshot": "legacy-catalog-order-v1"
-        }
+        ]
       },
       "isVendor": true,
       "vendorInventory": "ironSword,steelSword,healthPotion,manaPotion,ironArmor,woodenShield",
@@ -4522,14 +4486,6 @@
     "village_guard": {
       "name": "Bram the Guard",
       "defaultDialogueKey": "bram_greeting",
-      "appearanceLayers": [
-        3,
-        123,
-        23,
-        22,
-        7,
-        95
-      ],
       "isCompanion": true,
       "recruitDialogueKey": "bram_recruit_offer",
       "dismissDialogueKey": "bram_dismiss",
@@ -4569,6 +4525,51 @@
         "variants": {
           "neutral": "/game-data/portraits/emberwatch/village_guard/neutral.png"
         }
+      },
+      "appearance": {
+        "formatVersion": 1,
+        "components": [
+          {
+            "slot": "body",
+            "assetId": "body/bodies_male",
+            "layerRole": "front"
+          },
+          {
+            "slot": "hair",
+            "assetId": "hair/plain_adult",
+            "layerRole": "front"
+          },
+          {
+            "slot": "head",
+            "assetId": "head/heads/human_male",
+            "layerRole": "front"
+          },
+          {
+            "slot": "torso",
+            "assetId": "torso/armour/leather_male",
+            "layerRole": "front"
+          },
+          {
+            "slot": "legs",
+            "assetId": "legs/armour/plate_male",
+            "layerRole": "front"
+          },
+          {
+            "slot": "feet",
+            "assetId": "feet/armour/plate_male",
+            "layerRole": "front"
+          },
+          {
+            "slot": "weapon",
+            "assetId": "weapon/sword/longsword",
+            "layerRole": "front"
+          },
+          {
+            "slot": "shield",
+            "assetId": "shield/heater/original/wood_fg",
+            "layerRole": "front"
+          }
+        ]
       }
     },
     "innkeeper_sella": {
@@ -4588,23 +4589,23 @@
             "layerRole": "front"
           },
           {
+            "slot": "head",
+            "assetId": "head/heads/human_female",
+            "layerRole": "front"
+          },
+          {
             "slot": "torso",
             "assetId": "torso/aprons/apron_female",
             "layerRole": "front"
           },
           {
             "slot": "legs",
-            "assetId": "legs/pants_female",
+            "assetId": "legs/pants_thin",
             "layerRole": "front"
           },
           {
             "slot": "feet",
             "assetId": "feet/shoes/basic_thin",
-            "layerRole": "front"
-          },
-          {
-            "slot": "head",
-            "assetId": "head/heads/human_female",
             "layerRole": "front"
           }
         ]
@@ -4649,6 +4650,11 @@
             "layerRole": "front"
           },
           {
+            "slot": "head",
+            "assetId": "head/heads/human_male",
+            "layerRole": "front"
+          },
+          {
             "slot": "torso",
             "assetId": "torso/aprons/apron_male",
             "layerRole": "front"
@@ -4661,11 +4667,6 @@
           {
             "slot": "feet",
             "assetId": "feet/boots/basic_male",
-            "layerRole": "front"
-          },
-          {
-            "slot": "head",
-            "assetId": "head/heads/human_male",
             "layerRole": "front"
           }
         ]
@@ -4710,6 +4711,11 @@
             "layerRole": "front"
           },
           {
+            "slot": "head",
+            "assetId": "head/heads/human_male",
+            "layerRole": "front"
+          },
+          {
             "slot": "torso",
             "assetId": "torso/clothes/longsleeve/formal_male",
             "layerRole": "front"
@@ -4722,11 +4728,6 @@
           {
             "slot": "feet",
             "assetId": "feet/shoes/basic_male",
-            "layerRole": "front"
-          },
-          {
-            "slot": "head",
-            "assetId": "head/heads/human_male",
             "layerRole": "front"
           }
         ]
@@ -4771,23 +4772,23 @@
             "layerRole": "front"
           },
           {
+            "slot": "head",
+            "assetId": "head/heads/human_female",
+            "layerRole": "front"
+          },
+          {
             "slot": "torso",
             "assetId": "torso/clothes/robe_female",
             "layerRole": "front"
           },
           {
             "slot": "legs",
-            "assetId": "legs/pants_female",
+            "assetId": "legs/skirts/straight_thin",
             "layerRole": "front"
           },
           {
             "slot": "feet",
             "assetId": "feet/shoes/basic_thin",
-            "layerRole": "front"
-          },
-          {
-            "slot": "head",
-            "assetId": "head/heads/human_female",
             "layerRole": "front"
           }
         ]
@@ -4832,23 +4833,23 @@
             "layerRole": "front"
           },
           {
+            "slot": "head",
+            "assetId": "head/heads/human_female",
+            "layerRole": "front"
+          },
+          {
             "slot": "torso",
             "assetId": "torso/clothes/shortsleeve/shortsleeve_female",
             "layerRole": "front"
           },
           {
             "slot": "legs",
-            "assetId": "legs/pants_teen",
+            "assetId": "legs/pants_thin",
             "layerRole": "front"
           },
           {
             "slot": "feet",
             "assetId": "feet/boots/basic_thin",
-            "layerRole": "front"
-          },
-          {
-            "slot": "head",
-            "assetId": "head/heads/human_female",
             "layerRole": "front"
           }
         ]
@@ -4893,13 +4894,18 @@
             "layerRole": "front"
           },
           {
+            "slot": "head",
+            "assetId": "head/heads/human_female",
+            "layerRole": "front"
+          },
+          {
             "slot": "torso",
-            "assetId": "torso/clothes/longsleeve/longsleeves_cuffed_female",
+            "assetId": "torso/clothes/longsleeve/longsleeve2_female",
             "layerRole": "front"
           },
           {
             "slot": "legs",
-            "assetId": "legs/pants_female",
+            "assetId": "legs/pants_thin",
             "layerRole": "front"
           },
           {
@@ -4908,8 +4914,8 @@
             "layerRole": "front"
           },
           {
-            "slot": "head",
-            "assetId": "head/heads/human_female",
+            "slot": "weapon",
+            "assetId": "weapon/blunt/waraxe",
             "layerRole": "front"
           }
         ]

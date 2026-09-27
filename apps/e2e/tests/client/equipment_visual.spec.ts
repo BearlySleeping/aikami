@@ -18,6 +18,8 @@
 import { expect, test } from '@playwright/test';
 
 test.describe('Equipment → LPC sprite sync (C-417 AC-1)', () => {
+  /** Base (unequipped) torso layer from DEFAULT_LPC_RECIPE — see characters.ts. */
+  const BASE_TORSO = 'torso/clothes/longsleeve/longsleeve_male';
   /**
    * Reads the composed preview recipes exposed by the sandbox VM
    * (window.__LPC_PREVIEW_RECIPES__) and returns the torso layer's assetId.
@@ -47,8 +49,10 @@ test.describe('Equipment → LPC sprite sync (C-417 AC-1)', () => {
       { timeout: 15_000 },
     );
 
-    // Baseline: the preview torso layer is the base chainmail recipe.
-    await expect.poll(() => getPreviewTorso(page)).toBe('torso/chainmail_male');
+    // Baseline: the preview torso layer is the base *under*-shirt recipe. The
+    // base must not wear armour — mergeLpcRecipes can only replace/append
+    // layers, so an armoured base would make equip/unequip a visual no-op.
+    await expect.poll(() => getPreviewTorso(page)).toBe(BASE_TORSO);
 
     // Equip Iron Armor → the body paperdoll slot shows it + an Unequip button.
     await equipIronArmor.click();
@@ -68,9 +72,9 @@ test.describe('Equipment → LPC sprite sync (C-417 AC-1)', () => {
     await expect(page.getByRole('button', { name: 'Unequip Iron Armor' })).toHaveCount(0);
     // The Equip button is available again.
     await expect(page.getByRole('button', { name: 'Equip Iron Armor' })).toBeVisible();
-    // The preview output reverts to the base chainmail torso — unequipping
+    // The preview output reverts to the base undershirt torso — unequipping
     // reveals the persona's base outfit, not a bare body (C-504 follow-up).
-    await expect.poll(() => getPreviewTorso(page)).toBe('torso/chainmail_male');
+    await expect.poll(() => getPreviewTorso(page)).toBe(BASE_TORSO);
   });
 
   test('equipped stats update when Iron Armor is equipped (defense bonus reflects gear)', async ({

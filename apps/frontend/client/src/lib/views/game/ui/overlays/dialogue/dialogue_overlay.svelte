@@ -168,7 +168,6 @@ const stage = createDialogueStageState();
     <!-- Scrollable transcript — the one scroll region (shared RichMessageList). -->
     <RichMessageList
       messages={toRichMessages(viewModel.messages)}
-      bind:containerElement={viewModel.messageContainerElement}
       containerClass="game-stage__transcript space-y-3"
       isStreaming={viewModel.isStreaming}
     >

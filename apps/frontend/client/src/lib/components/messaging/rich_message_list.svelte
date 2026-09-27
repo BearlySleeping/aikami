@@ -11,6 +11,12 @@
 // the messages (typing indicator, CYOA choices, branch selector, …) is
 // passed in via the `after` snippet.
 //
+// The scroll container is INTERNAL, never a bindable prop: a `bind:this`
+// teardown reads the binding path back, so a parent that binds through
+// `viewModel.something` is read once more while the host may already have
+// dropped the ViewModel prop — a TypeError that escalates to an error page.
+// Scrolling is this component's own concern; surfaces never need the node.
+//
 // Contract: C-424 Unified Message Surfaces
 import type { Snippet } from 'svelte';
 import type { RichMessage } from '$types';
@@ -28,8 +34,6 @@ type Props = {
   emptyText?: string;
   /** CSS classes for the scrollable container. */
   containerClass?: string;
-  /** Scrollable container element — bound by the parent via bind:this. */
-  containerElement?: HTMLDivElement | undefined;
   /** Whether the surface is streaming — sets aria-busy on the container. */
   isStreaming?: boolean;
 };
@@ -41,9 +45,11 @@ let {
   after,
   emptyText = 'No messages yet.',
   containerClass = '',
-  containerElement = $bindable(),
   isStreaming = false,
 }: Props = $props();
+
+/** Own scroll container — internal, see the header note. */
+let containerElement = $state.raw<HTMLDivElement | undefined>(undefined);
 
 // Scroll anchoring — keep the newest message in view when the list grows
 // or while the surface is streaming. Only auto-scroll when the user is

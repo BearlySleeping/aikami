@@ -73,26 +73,117 @@ test.describe('C-528 HUD presets and layout editor', () => {
     await expect(hud.editorUndo).toBeEnabled();
   });
 
-  test('AC-2: a hidden widget can be added with the visibility control and survives save', async () => {
+  test('AC-2: a hidden widget can be brought back with the visibility control', async () => {
     await hud.openEditor();
-    // The music player ships hidden; add it without relying on a drag.
-    await hud.selectEditorWidget('music-player');
-    const visibility = hud.page.getByTestId('hud-editor-visibility-music-player');
-    await visibility.click();
-    await expect(visibility).toHaveText('always');
+    // `onboarding-hint` ships contextual and idle, so it is the widget that is
+    // genuinely absent from the HUD — the same "not visible until asked"
+    // scenario, now that the music player is on by default.
+    await hud.selectEditorWidget('onboarding-hint');
+    await hud.visibilityOption('onboarding-hint', 'Always').click();
+    await expect(hud.visibilityOption('onboarding-hint', 'Always')).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
     await hud.saveEditor();
     await expect(hud.editor).toHaveCount(0);
 
     const stored = (await hud.readStoredPreferences()) as {
       overrides: { widgetId: string; visibility: string }[];
     };
-    expect(stored.overrides.find((widget) => widget.widgetId === 'music-player')?.visibility).toBe(
-      'always',
-    );
+    expect(
+      stored.overrides.find((widget) => widget.widgetId === 'onboarding-hint')?.visibility,
+    ).toBe('always');
 
     // Resume so the HUD chrome is mounted again, then the widget must paint.
     await hud.page.keyboard.press('Escape');
+    await expect(hud.hudWidget('onboarding-hint')).toBeAttached();
+  });
+
+  test('AC-2: dragging a widget onto the Hidden shelf removes it, and back restores it', async () => {
+    await hud.openEditor();
+    // The shelf is the sixth place, beside the five regions. Removal is a
+    // PLACEMENT — which is why the removed widget stays findable instead of
+    // vanishing with no way back.
+    await expect(hud.hiddenShelf).toContainText('Hidden');
+    await expect(hud.widgetLocation('hotbar')).toHaveText('Bottom centre');
+
+    await hud.dragWidgetToShelf('hotbar');
+    await expect(hud.shelfWidget('hotbar')).toBeVisible();
+    await expect(hud.widgetLocation('hotbar')).toHaveText('Hidden');
+    await expect(hud.editorStatus).toContainText('removed from the HUD');
+
+    // The board no longer offers it, and it is not on the live HUD either.
+    await hud.saveEditor();
+    await expect(hud.editor).toHaveCount(0);
+    await hud.page.keyboard.press('Escape');
+    await expect(hud.hudWidget('objective')).toBeAttached();
+    await expect(hud.hudWidget('hotbar')).toHaveCount(0);
+
+    const stored = (await hud.readStoredPreferences()) as {
+      overrides: { widgetId: string; visibility: string }[];
+    };
+    expect(stored.overrides.find((entry) => entry.widgetId === 'hotbar')?.visibility).toBe(
+      'hidden',
+    );
+  });
+
+  test('AC-2: a required widget cannot be dragged off the HUD, and says why', async () => {
+    await hud.openEditor();
+    await hud.focusEditor();
+    // `menu` is recovery navigation. Dropping it on the shelf must refuse with
+    // a sentence and leave nothing behind — not a silent no-op, and not a
+    // history entry that makes Undo a dead press.
+    await expect(hud.hideWidget('menu')).toHaveCount(0);
+    await expect(hud.visibilityControl('menu')).toHaveCount(0);
+    await expect(hud.visibilityControl('hotbar')).toBeVisible();
+    await hud.dragWidgetToShelf('menu');
+    await expect(hud.editorStatus).toContainText('required');
+    await expect(hud.widgetLocation('menu')).toHaveText('Top right');
+  });
+
+  test('AC-2: a widget idle in the preview context is on the board, not on the shelf', async () => {
+    await hud.openEditor();
+    // 🔴 `autosave` is contextual and idle in the `explore` fixture. The
+    // resolver files idle-contextual in the same bucket as hidden, and treating
+    // that bucket as "removed" is what used to make a widget seem to vanish
+    // when the player merely switched preview tabs.
+    await expect(hud.previewWidget('autosave')).toBeVisible();
+    await expect(hud.shelfWidget('autosave')).toHaveCount(0);
+    await expect(hud.widgetLocation('autosave')).toHaveText('Top right');
+
+    await hud.selectPreviewContext('dialogue');
+    await expect(hud.previewWidget('autosave')).toBeVisible();
+    await expect(hud.widgetLocation('autosave')).toHaveText('Top right');
+  });
+
+  test('AC-2: Escape during a drag cancels the drag instead of closing the editor', async () => {
+    await hud.openEditor();
+    // The editor's key handling is a `keydown` on the modal, so keys only reach
+    // it while focus is inside it. That is the precondition of the whole
+    // keyboard surface (V, H, Tab), not something this gesture introduces.
+    await hud.focusEditor();
+    await hud.beginDrag('clock');
+    await hud.page.keyboard.press('Escape');
+    await hud.page.mouse.up();
+
+    // The drag is gone and the editor is still open — a cancel, not a close.
+    await expect(hud.editor).toBeVisible();
+    await expect(hud.editor).toHaveAttribute('data-hud-dragging', 'false');
+    await expect(hud.editorStatus).toContainText('Drag cancelled');
+  });
+
+  test('AC-2: the music player is on the HUD from the default preset, with no edit', async () => {
+    // No drag, no visibility click: a fresh install must already show it, and
+    // must show it WITHOUT a stored override — otherwise this is a stored
+    // choice wearing the costume of a default.
     await expect(hud.hudWidget('music-player')).toBeAttached();
+
+    const stored = (await hud.readStoredPreferences()) as {
+      selectedPresetId: string;
+      overrides: { widgetId: string; visibility: string }[];
+    } | null;
+    expect(stored?.selectedPresetId).toBe('adventure');
+    expect(stored?.overrides.some((entry) => entry.widgetId === 'music-player')).toBe(false);
   });
 
   test('AC-2: a reserved action region refuses an unrelated widget', async () => {
@@ -266,5 +357,58 @@ test.describe('C-528 HUD presets and layout editor', () => {
   test('AC-1: the Interface section is reachable from the in-game settings overlay', async () => {
     await hud.openInGameInterfaceSettings();
     await expect(hud.settingsInterface).toBeVisible();
+  });
+
+  test('AC-5: the music player sits at the bottom right in a narrow window', async () => {
+    // 🔴 Regression: `bottom-end` used to be withheld below 1100px, so the
+    // music player's shipped bottom-right home collapsed into "More HUD" while
+    // the editor still drew a `bottom-end` target for the player to aim at.
+    // 🔴 And position was never the whole story: the default preset also
+    // shipped it `hidden`, so it was absent even where the region existed.
+    await hud.useNarrowWindow();
+    await expect(hud.hudWidget('music-player')).toBeAttached();
+
+    const box = await hud.hudWidget('music-player').boundingBox();
+    const viewport = hud.page.viewportSize();
+    expect(box).not.toBeNull();
+    expect(viewport).not.toBeNull();
+    if (!box || !viewport) {
+      return;
+    }
+    // Bottom right: flush with the right edge, below the vertical midpoint, and
+    // it is a placed widget — not behind the labelled overflow entry.
+    expect(box.x + box.width).toBeGreaterThan(viewport.width - 24);
+    expect(box.y).toBeGreaterThan(viewport.height / 2);
+    expect(await hud.hudWidget('music-player').isVisible()).toBe(true);
+  });
+
+  test('AC-2: a refused drop says so, and a drop beside a region still lands', async () => {
+    await hud.openEditor();
+
+    // A reserved region refuses the drop — and now explains itself on the
+    // board instead of looking exactly like a broken drag.
+    await hud.dragWidgetTo('objective', 'bottom-center');
+    await expect(hud.previewWidget('objective')).not.toHaveAttribute(
+      'data-hud-anchor',
+      'bottom-center',
+    );
+    await expect(hud.editorStatus).toContainText('Bottom centre');
+
+    // A drop into the dead space beside a region snaps to that region rather
+    // than resolving to "nowhere" and snapping the widget back where it was.
+    const box = await hud.dropAnchor('bottom-end').boundingBox();
+    expect(box).not.toBeNull();
+    if (!box) {
+      return;
+    }
+    await hud.dragWidgetTo('objective', 'top-start');
+    await expect(hud.previewWidget('objective')).toHaveAttribute('data-hud-anchor', 'top-start');
+    // 20px above the region: outside it, close enough to mean it.
+    await hud.dragPreviewWidgetToPoint('objective', {
+      x: box.x + box.width / 2,
+      y: box.y - 20,
+    });
+    await expect(hud.previewWidget('objective')).toHaveAttribute('data-hud-anchor', 'bottom-end');
+    await expect(hud.editorStatus).toContainText('Bottom right');
   });
 });

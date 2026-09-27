@@ -80,6 +80,95 @@ export type AppearanceData = {
 };
 
 /**
+ * Extra-slot LPC layers per entity — hat, shield, weapon, cape and the rest
+ * that the renderer can order but the six-slot positional array cannot hold.
+ *
+ * Deliberately NOT a field on {@link Appearance}: that component is walked by
+ * the ECS serializer, and extras are re-derived from the content pack every
+ * time an NPC spawns, so persisting them would add a second, redundant
+ * representation of an authored outfit to every save.
+ */
+const _appearanceExtras = new Map<number, readonly LpcLayerRecipe[]>();
+
+/**
+ * Replaces an entity's extra layers.
+ *
+ * @param eid - The entity ID.
+ * @param recipes - Resolved extra recipes, or undefined/empty to clear.
+ */
+export const setAppearanceExtras = (eid: number, recipes?: readonly LpcLayerRecipe[]): void => {
+  if (recipes === undefined || recipes.length === 0) {
+    _appearanceExtras.delete(eid);
+    return;
+  }
+  _appearanceExtras.set(eid, recipes);
+};
+
+/**
+ * Reads an entity's extra layers.
+ *
+ * @param eid - The entity ID.
+ * @returns The extra recipes, or an empty array when the entity has none.
+ */
+export const getAppearanceExtras = (eid: number): readonly LpcLayerRecipe[] =>
+  _appearanceExtras.get(eid) ?? [];
+
+/**
+ * Appends extra-slot layers to a resolved base recipe list.
+ *
+ * Extras are appended rather than merged: the composer's depth table owns the
+ * draw order, so a shield listed after a body layer still draws behind it.
+ * Only the base six can be REPLACED by a slot; an extra is additive, and the
+ * normalizer refuses two components for the same extra slot.
+ *
+ * @param base - Recipes for the six positional base slots.
+ * @param extras - Resolved extra-slot recipes, if any.
+ * @returns The combined recipe list.
+ */
+export const withExtraLayers = (
+  base: LpcLayerRecipe[],
+  extras: readonly LpcLayerRecipe[] | undefined,
+): LpcLayerRecipe[] => (extras === undefined || extras.length === 0 ? base : [...base, ...extras]);
+
+/**
+ * Everything a render path needs to draw one entity this frame.
+ *
+ * One call rather than three, so each render path cannot forget one of them —
+ * a path that composes the base six but forgets the extras draws a
+ * half-dressed character with nothing in the logs to say why.
+ *
+ * @param eid - The entity ID.
+ * @param resolveBase - Resolves the six base slots from their layer IDs.
+ * @returns The base layer IDs, the combined recipes, the extras alone, and a change key.
+ */
+export const appearanceState = (
+  eid: number,
+  resolveBase: (layerIds: readonly number[]) => LpcLayerRecipe[],
+): {
+  layerIds: readonly number[];
+  recipes: LpcLayerRecipe[];
+  extras: readonly LpcLayerRecipe[];
+  key: string;
+} => {
+  const layerIds = getAppearanceLayers(eid);
+  const extras = getAppearanceExtras(eid);
+  return {
+    layerIds,
+    recipes: withExtraLayers(resolveBase(layerIds), extras),
+    extras,
+    // The extras are part of the entity's identity for change detection: an
+    // outfit that swaps its shield must re-emit even when the positional
+    // layer IDs are unchanged.
+    key: `${layerIds.join(',')}|${extras.map((recipe) => recipe.assetId).join(',')}`,
+  };
+};
+
+/** Drops every entity's extra layers. Call on world teardown. */
+export const clearAppearanceExtras = (): void => {
+  _appearanceExtras.clear();
+};
+
+/**
  * Returns all layer IDs for a given entity.
  *
  * Reads from the variable-length `layers` Map if available, falling back
@@ -102,6 +191,41 @@ export const getAppearanceLayers = (eid: number): readonly number[] => {
     Appearance.layer4[eid] ?? 0,
     Appearance.layer5[eid] ?? 0,
   ];
+};
+
+/**
+ * Chooses the player's BASE appearance layers when a save is restored.
+ *
+ * `Appearance.layers` stores POSITIONAL catalog indices, so a save persists a
+ * derived value: the indices that were correct for the persona's recipe *at save
+ * time*. If the recipe changes since — a new persona, a corrected
+ * `DEFAULT_LPC_RECIPE`, a re-authored outfit — the restored indices still resolve,
+ * but to the OLD assets. That is silent: the sprite renders, just wrongly.
+ *
+ * For the player specifically this is harmful, because equipment is merged over
+ * the base by the main thread with `mergeLpcRecipes`, which can only replace or
+ * append a layer. A stale base that happens to resolve to the same asset an
+ * equipped item provides makes equip/unequip a visual no-op — the exact bug this
+ * rule prevents.
+ *
+ * The persona is therefore authoritative for the base look: it is re-derived from
+ * `playerData` on every boot and the save must not own it. Equipment lives in
+ * the equipment service and is layered on top, so nothing is lost by discarding
+ * the restored base.
+ *
+ * @param restored - Layers deserialised from the save, if any.
+ * @param fromPersona - Layers derived from the persona's current recipe.
+ * @returns The layers the player entity should carry.
+ */
+export const resolvePlayerBaseLayers = (options: {
+  restored?: readonly number[] | undefined;
+  fromPersona?: readonly number[] | undefined;
+}): readonly number[] => {
+  const { restored, fromPersona } = options;
+  if (fromPersona && fromPersona.length > 0) {
+    return fromPersona;
+  }
+  return restored ?? [];
 };
 
 /**

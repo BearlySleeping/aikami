@@ -131,7 +131,7 @@ export const NamedAppearanceSchema = Type.Object(
   {
     formatVersion: Type.Literal(1, { description: 'Named appearance representation version' }),
     components: Type.Array(NamedAppearanceComponentSchema, {
-      description: 'Base appearance layers',
+      description: 'Base six slots, plus any extra layers drawn on top (hat, shield, weapon, …).',
     }),
     legacyProvenance: Type.Optional(
       Type.Object({
