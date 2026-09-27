@@ -71,15 +71,37 @@ export const unprocessable = (error: string, extra?: Record<string, unknown>): R
 export const COMMUNITY_PUBLISH_MAX_HITS = 30;
 export const COMMUNITY_PUBLISH_WINDOW_MS = 60 * 1000;
 
-/** Atomically meters one publish step for `accountId`; false ⇒ answer 429. */
+/** Options for {@link withinPublishRateLimit}. */
+export type PublishRateLimitOptions = {
+  /** Bindings the meter reads (only `DB` is used). */
+  env: AssetCommunityEnv;
+  /** The account being metered. */
+  accountId: string;
+  /**
+   * Epoch milliseconds the window is derived from. Defaults to the wall clock.
+   *
+   * The window is a fixed wall-clock bucket, so a caller that issues a burst
+   * spanning a bucket boundary is legitimately re-metered into the next window.
+   * That is correct for production but makes the quota's behaviour a function
+   * of *when* the test happens to run — a 31-request burst fails whenever it
+   * straddles a minute boundary. Injecting the clock lets a test pin one
+   * window and assert the real invariant (a quota is exhausted and shared
+   * across instances) instead of racing the wall clock.
+   */
+  now?: number;
+};
+
+/** The fixed window bucket `now` falls into. */
+export const publishWindowStart = (now: number): Date =>
+  new Date(Math.floor(now / COMMUNITY_PUBLISH_WINDOW_MS) * COMMUNITY_PUBLISH_WINDOW_MS);
+
+/** Atomically meters one publish step; false ⇒ answer 429. */
 export const withinPublishRateLimit = async (
-  env: AssetCommunityEnv,
-  accountId: string,
+  options: PublishRateLimitOptions,
 ): Promise<boolean> => {
+  const { env, accountId } = options;
   const db = drizzle(env.DB, { schema: { assetPublishRateLimits } });
-  const windowStartedAt = new Date(
-    Math.floor(Date.now() / COMMUNITY_PUBLISH_WINDOW_MS) * COMMUNITY_PUBLISH_WINDOW_MS,
-  );
+  const windowStartedAt = publishWindowStart(options.now ?? Date.now());
 
   // Bound retained state to the current window for each active account. The
   // reservation below remains the single atomic security decision.
