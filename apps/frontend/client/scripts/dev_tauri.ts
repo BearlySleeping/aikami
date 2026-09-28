@@ -37,7 +37,12 @@ const VALID_MODES = ['emulator', 'staging', 'production'] as const;
 type BuildMode = (typeof VALID_MODES)[number];
 
 const args = process.argv.slice(2);
-const modeFlag = args.find((a) => a.startsWith('--mode='))?.slice('--mode='.length);
+const modeIndex = args.findIndex((arg) => arg === '--mode' || arg.startsWith('--mode='));
+let modeFlag: string | undefined;
+if (modeIndex !== -1) {
+  const modeArg = args[modeIndex];
+  modeFlag = modeArg === '--mode' ? (args[modeIndex + 1] ?? '') : modeArg?.slice('--mode='.length);
+}
 const rawMode = modeFlag ?? process.env.TAURI_BUILD_MODE ?? 'emulator';
 
 if (!VALID_MODES.includes(rawMode as BuildMode)) {
@@ -59,4 +64,4 @@ if (result.error) {
   logger.error(`❌ Failed to spawn vite dev: ${result.error.message}`);
   process.exit(1);
 }
-process.exit(result.status ?? 0);
+process.exit(result.status ?? (result.signal ? 1 : 0));

@@ -487,6 +487,25 @@ describe('TtsService — C-389 config-driven TTS', () => {
     }
   });
 
+  test('server speak() reports cancellation when stop() aborts its request', async () => {
+    const response = Promise.withResolvers<Response>();
+    Object.assign(globalThis, { fetch: mock(() => response.promise) });
+    const { ttsService } = await resetTtsService();
+    Object.assign(ttsService, {
+      status: 'ready',
+      backend: 'server',
+      isKokoroServerAvailable: true,
+      _kokoroServerUrl: 'http://10.0.0.7:6006',
+    });
+
+    const pending = ttsService.speak({ text: 'stop me' });
+    ttsService.stop();
+    response.resolve(new Response(new Uint8Array([0x52, 0x49, 0x46, 0x46])));
+
+    expect(await pending).toEqual({ kind: 'cancelled' });
+    expect(ttsService.isPlaying).toBe(false);
+  });
+
   test('server mode synthesize() posts to the configured URL', async () => {
     const fetchMock = mock(async () => {
       const wav = new Uint8Array([0x52, 0x49, 0x46, 0x46, 0x00, 0x00, 0x00, 0x00]);

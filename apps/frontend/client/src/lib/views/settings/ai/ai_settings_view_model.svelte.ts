@@ -1444,9 +1444,7 @@ export class AiSettingsViewModel
   }
 
   /**
-   * Projects the draft onto an AiProvider for verification. The stored
-   * credential stands in when the user left the key field untouched while
-   * editing an existing connection (the editor never prefills the secret).
+   * Projects the draft for verification, reusing its stored key when the field is untouched.
    */
   private _draftAsProvider(): AiProvider {
     const existing =
@@ -1535,7 +1533,9 @@ export class AiSettingsViewModel
       return;
     }
     if (update) {
-      const provider = this._findProviderByRegistry(this.draft.registryId);
+      const provider =
+        (this.draft.providerId ? this._config.getProvider(this.draft.providerId) : undefined) ??
+        this._accountForDraft().existing;
       if (provider) {
         this._config.updateProvider(provider.id, { credential: this.keyConflictPrompt.newKey });
         // Same invalidation as the saveDraft rotation path: this account's

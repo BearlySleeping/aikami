@@ -356,10 +356,10 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
     const { signal } = utterance;
     this.isSynthesizing = true;
     try {
-      // Server dispatch and worker dispatch are the same decision as
-      // synthesize() — preview and gameplay must never diverge.
+      // Match synthesize() backend dispatch so preview and gameplay agree.
       if (this.backend === 'server' && this._kokoroServerUrl) {
         await this._synthesizeViaServer({ text: options.text, voice, signal });
+        signal.throwIfAborted();
       } else if (this._engine) {
         const result = await this._engine.synthesize({ text: options.text, voice, signal });
         signal.throwIfAborted();

@@ -532,14 +532,18 @@ export class ModelAssetStore implements ModelAssetStoreInterface {
   /**
    * Deletes the pre-fix, document-relative manifest entry for a bundle.
    *
-   * Bundles keyed their manifest as `<id>/manifest-v1` before it was pinned to
+   * Bundles used modality-specific legacy keys before their manifests were pinned to
    * an absolute https URL. Those entries survive on installs that ran on an
    * http(s) origin and are unreachable on WebKit (which refuses the relative
    * form), so the delete is best-effort and never throws.
    */
   private async _deleteLegacyManifestKey(cache: Cache, bundle: LocalModelBundle): Promise<void> {
-    const legacyKey = `${bundle.id}/manifest-v1`;
-    if (legacyKey === bundle.manifestKey) {
+    const legacyKeys: Readonly<Record<string, string>> = {
+      'kokoro-82m': 'aikami-voice-model/manifest-v1',
+      'qwen3-0.6b': 'aikami-text-model/manifest-v1',
+    };
+    const legacyKey = legacyKeys[bundle.id];
+    if (!legacyKey || legacyKey === bundle.manifestKey) {
       return;
     }
     try {

@@ -147,3 +147,23 @@ describe('SettingsAudioViewModel — voice model', () => {
     expect(vm.ttsBackendLabel).toBe('Local server');
   });
 });
+
+describe('SettingsAudioViewModel — voice model feedback', () => {
+  const states: VoiceModelState[] = [
+    { status: 'downloading', receivedBytes: 1, totalBytes: 100 },
+    { status: 'verifying' },
+    { status: 'loading' },
+    { status: 'error', message: 'Download failed', retryable: true },
+  ];
+  for (const state of states) {
+    test(`does not label ${state.status} as not downloaded`, () => {
+      const vm = createViewModel({ voiceModel: createVoiceModel({ state }) });
+      expect(vm.voiceModelFeedback).toBeNull();
+    });
+  }
+  test('distinguishes a missing model from a ready runtime', () => {
+    expect(createViewModel().voiceModelFeedback).toBe('Voice model not downloaded yet.');
+    const vm = createViewModel({ voiceModel: createVoiceModel({ state: { status: 'ready' } }) });
+    expect(vm.voiceModelFeedback).toBe('Speech runtime ready (webgpu).');
+  });
+});

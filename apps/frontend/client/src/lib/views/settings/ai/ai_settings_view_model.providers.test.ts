@@ -15,6 +15,7 @@ import { createAiConnectionStatus } from './ai_connection_status.svelte';
 let nextId = 1;
 let providers: AiProvider[] = [];
 let connections: AiConnection[] = [];
+let status = createAiConnectionStatus();
 const defaultByCapability: Record<string, string> = {};
 
 const config = {
@@ -105,7 +106,7 @@ const createAiSettingsViewModel: typeof import('./ai_settings_view_model.svelte'
         resolveChatTestRequest: () => undefined,
         verifyConnection: mock(async () => ({ ok: true, latencyMs: 1 })),
       },
-      status: createAiConnectionStatus(),
+      status,
     });
 
 const openTextDraft = async (registryId: string) => {
@@ -119,6 +120,7 @@ const openTextDraft = async (registryId: string) => {
 const addProvider = (fields: Omit<AiProvider, 'id'>): string => config.addProvider(fields);
 
 beforeEach(() => {
+  status = createAiConnectionStatus();
   nextId = 1;
   providers = [];
   connections = [];
@@ -222,4 +224,54 @@ describe('AI settings editor — provider account identity', () => {
     expect(providers.length).toBe(1);
     expect(connections[0]?.providerId).toBe(providers[0]?.id);
   });
+});
+
+describe('AI settings editor — key conflict account isolation', () => {
+  for (const useProviderId of [true, false]) {
+    test(`Update all rotates only the conflicting account (provider ID: ${useProviderId})`, async () => {
+      const first = addProvider({
+        registryId: 'custom',
+        label: 'A',
+        baseUrl: 'https://a.example.test',
+        credential: 'key-a',
+        source: 'stored',
+      });
+      const second = addProvider({
+        registryId: 'custom',
+        label: 'B',
+        baseUrl: 'https://b.example.test',
+        credential: 'key-b',
+        source: 'stored',
+      });
+      const connectionIds = [first, second, second].map((providerId) =>
+        config.addAiConnection({
+          providerId,
+          capability: 'text',
+          label: providerId,
+          model: 'test-model',
+          params: {},
+        }),
+      );
+      const vm = await openTextDraft('custom');
+      vm.setDraftField('baseUrl', 'https://b.example.test/v1/');
+      vm.setDraftField('apiKey', 'replacement');
+      vm.setDraftProvider('custom');
+      expect(vm.keyConflictPrompt).toBeDefined();
+      if (!useProviderId) {
+        vm.draft = { ...vm.draft, providerId: undefined };
+      }
+      for (const id of connectionIds) {
+        status.setResult(id, { ok: true, latencyMs: 1 });
+      }
+      vm.resolveKeyConflict(true);
+      expect(config.getProvider(first)?.credential).toBe('key-a');
+      expect(config.getProvider(second)?.credential).toBe('replacement');
+      for (const id of connectionIds) {
+        expect(status.resultFor(id)?.ok).toBe(
+          config.getAiConnection(id)?.providerId === first ? true : undefined,
+        );
+      }
+      expect(vm.keyConflictPrompt).toBeUndefined();
+    });
+  }
 });

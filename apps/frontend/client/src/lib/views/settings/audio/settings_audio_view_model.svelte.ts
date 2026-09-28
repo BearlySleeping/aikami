@@ -168,7 +168,7 @@ class SettingsAudioViewModel
   private readonly _runtimeConfig: SettingsAudioRuntimeConfigCapabilities;
   private readonly _playSceneBgm: (scene: 'explore' | 'combat') => Promise<void>;
   /** Guards against a second Test TTS while one is in flight. */
-  private _testTtsBusy = false;
+  private _testTtsBusy = $state(false);
 
   constructor(options: SettingsAudioViewModelOptions) {
     super(options);
@@ -371,11 +371,14 @@ class SettingsAudioViewModel
    * voice-model problem.
    */
   get voiceModelFeedback(): string | null {
-    if (this._tts.status === 'error' && this._tts.errorMessage) {
-      return `TTS failed: ${this._tts.errorMessage}`;
+    if (this.voiceModelState.status === 'not-downloaded') {
+      return 'Voice model not downloaded yet.';
     }
     if (this.voiceModelState.status !== 'ready') {
-      return 'Voice model not downloaded yet.';
+      return null;
+    }
+    if (this._tts.status === 'error' && this._tts.errorMessage) {
+      return `TTS failed: ${this._tts.errorMessage}`;
     }
     if (this._tts.status === 'initializing') {
       return 'Loading speech runtime…';
