@@ -17,7 +17,7 @@
 
 services:
   text:
-    image: ghcr.io/ggml-org/llama.cpp:server@sha256:87ee5d122fe7645ce3ae169aa1b5b0633e4e392b0d90459c4aee06fbaaf101ff
+    image: ghcr.io/ggml-org/llama.cpp:server@sha256:a9334a8532688296e915679d61f096f55f95457cf22a1128b73e71ee9c369805
 
   image:
     image: ${AIKAMI_IMAGE_PREFIX:-ghcr.io/bearlysleeping}/aikami-sd-server:cpu

@@ -15,7 +15,7 @@
 
 services:
   text:
-    image: ghcr.io/ggml-org/llama.cpp:server-musa@sha256:8b597fc8ba155bfdbca4ae553f3f5753ac5de1028ee5acb407fb6205b8702bc1
+    image: ghcr.io/ggml-org/llama.cpp:server-musa@sha256:53e464ba9117b8a13ab04ed7a2b5453d991276e0a8a9c788fa67b329c9050cfa
 
   image:
-    image: ghcr.io/leejet/stable-diffusion.cpp:master-musa@sha256:bbbb8a6820e9e14bb7d552deccef6085993dff2c0f318a98a422d5f9cae955d7
+    image: ghcr.io/leejet/stable-diffusion.cpp:master-musa@sha256:662d3cd82d96100a2aa3db9887f33a5c0d558a124fef28797780e15bbe71cc33
