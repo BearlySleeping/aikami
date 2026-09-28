@@ -4,7 +4,7 @@
   "version": "0.1.2",
   "identifier": "com.aikami.app",
   "build": {
-    "beforeDevCommand": "bun run update:cors && bun run dev",
+    "beforeDevCommand": "bun run update:cors && bun run dev:tauri-server",
     "devUrl": "http://localhost:5274",
     "beforeBuildCommand": "bun run update:cors && bun run build:tauri-web",
     "frontendDist": "../build"

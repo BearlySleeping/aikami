@@ -121,7 +121,7 @@ const inertMessageBranch = (): MessageBranchCapabilities => ({
 const inertNpc = (): NpcCapabilities => ({ get: async () => undefined });
 const inertPersona = (): PersonaCapabilities => ({ getActivePersona: async () => undefined });
 const inertTts = (): TtsCapabilities => ({
-  speak: async () => {},
+  speak: async () => ({ kind: 'scheduled' as const }),
   stop: () => {},
   initialize: async () => {},
 });

@@ -43,16 +43,20 @@ const { viewModel }: Props = $props();
       </select>
     </div>
 
-    <!-- API key (masked) -->
+    <!-- API key (masked). Shown whenever the provider accepts one — required
+         for the fixed cloud providers, optional for a user-supplied endpoint
+         that may or may not sit behind a key. -->
     {#if viewModel.needsApiKey}
       <div>
-        <label for="api-key-input" class="label-text font-mono text-xs mb-1 block">API Key</label>
+        <label for="api-key-input" class="label-text font-mono text-xs mb-1 block"
+          >API Key{viewModel.apiKeyIsOptional ? ' (optional)' : ''}</label
+        >
         <div class="join w-full">
           <input
             id="api-key-input"
             type={viewModel.draft.showApiKey ? 'text' : 'password'}
             class="input input-bordered join-item w-full font-mono text-sm"
-            placeholder={viewModel.draft.apiKey ? '••••••••' : 'Enter API key'}
+            placeholder={viewModel.draft.apiKey ? '••••••••' : viewModel.apiKeyPlaceholder}
             value={viewModel.draft.apiKey}
             oninput={(e) => viewModel.setDraftField('apiKey', (e.target as HTMLInputElement).value)}
           >
@@ -82,6 +86,13 @@ const { viewModel }: Props = $props();
           value={viewModel.draft.baseUrl}
           oninput={(e) => viewModel.setDraftField('baseUrl', (e.target as HTMLInputElement).value)}
         >
+        {#if viewModel.draft.registryId === 'custom'}
+          <p class="mt-1 text-[10px] font-mono text-base-content/50">
+            Base URL of any OpenAI-compatible chat-completions API. A bare host gets
+            <code>/v1</code>
+            appended.
+          </p>
+        {/if}
       </div>
     {/if}
 

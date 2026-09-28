@@ -20,7 +20,7 @@
 // only after deploy, and points at a hashed chunk rather than any source file.
 // A build-time check is the cheapest place to catch it.
 
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import process from 'node:process';
 
@@ -291,6 +291,100 @@ const cycles = findCycles(chunkSources);
 const unbound = findUnboundNamespaceGetters(chunkSources);
 
 const short = (path: string): string => relative(bundleDir, path);
+
+/** Relative module specifiers only. Matching every `from"..."` also hits
+ *  ordinary minified code (`"int32"`, `` `${e}` ``) and would false-positive. */
+const isRelativeSpecifier = (specifier: string): boolean => /^\.{1,2}\//.test(specifier);
+
+/** Every relative static import emitted in one worker bundle. */
+const scanWorkerFile = (path: string): string[] => {
+  const source = readFileSync(path, 'utf8');
+  const found: string[] = [];
+  for (const match of source.matchAll(FROM_CLAUSE)) {
+    if (isRelativeSpecifier(match[1])) {
+      found.push(`${short(path)} statically imports "${match[1]}"`);
+    }
+  }
+  for (const match of source.matchAll(SIDE_EFFECT_IMPORT)) {
+    if (isRelativeSpecifier(match[1])) {
+      found.push(`${short(path)} side-effect imports "${match[1]}"`);
+    }
+  }
+  return found;
+};
+
+/**
+ * Worker bundles must be self-contained — one file each, no sibling chunks.
+ *
+ * A split worker builds a module graph inside the worker's global scope, and
+ * a dynamic import can close a cycle across it that the static-only
+ * {@link findCycles} above cannot see by design. That is exactly what shipped:
+ *
+ *   kokoro_worker-X.js ──static──▶ chunks/B6m02ndO.js      (transformers)
+ *            ▲                            │
+ *            └──── static ── chunks/BgCu9Ag9.js ◀──dynamic── kokoro-js
+ *
+ * WebKitGTK (Linux Tauri, served from `tauri://localhost`) does not dedupe the
+ * re-imported entry, so the worker module body evaluated TWICE: the second pass
+ * re-ran `self.onmessage = ...` over a fresh module-scope `session` that was
+ * still null. The worker that reported `ready` was therefore not the worker
+ * that answered `synthesize`, and every request failed with
+ * "Kokoro session not initialized". Chromium (web + WebView2) dedupes it, so
+ * the failure only reproduced on Linux desktop — invisible to web CI.
+ *
+ * `worker.rolldownOptions.output.inlineDynamicImports` (see vite.config.ts)
+ * collapses each worker to one file and removes the possibility entirely. The
+ * emitted shape is platform-independent, so this check fails on any runner.
+ */
+const findSplitWorkers = (workersDir: string): string[] => {
+  if (!existsSync(workersDir)) {
+    return [];
+  }
+  const offenders: string[] = [];
+  // Any sibling chunk directory at all is the symptom: inlineDynamicImports
+  // means a code-split worker can never emit one.
+  const chunksDir = join(workersDir, 'chunks');
+  if (existsSync(chunksDir) && collectChunks(chunksDir).length > 0) {
+    offenders.push(
+      `${short(chunksDir)} — worker code-splitting is enabled; set ` +
+        '`worker.rolldownOptions.output.inlineDynamicImports: true` in vite.config.ts',
+    );
+  }
+  for (const entry of readdirSync(workersDir)) {
+    const path = join(workersDir, entry);
+    if (statSync(path).isFile() && entry.endsWith('.js')) {
+      offenders.push(...scanWorkerFile(path));
+    }
+  }
+  return offenders;
+};
+
+const splitWorkers = findSplitWorkers(join(bundleDir, 'workers'));
+
+if (splitWorkers.length > 0) {
+  // biome-ignore lint/suspicious/noConsole: build script reports to stdout/stderr
+  console.error(
+    [
+      '',
+      `✗ check_bundle: ${splitWorkers.length} split-worker violation(s).`,
+      '',
+      'Each Web Worker must be a single self-contained file. A code-split worker',
+      'can close a module cycle through a dynamic import, which re-evaluates the',
+      'worker entry and silently replaces its `self.onmessage` with one bound to',
+      'fresh (empty) module state. On WebKitGTK (Linux Tauri) the symptom is',
+      'TTS reporting "Kokoro session not initialized" for every request, while',
+      'the web and Windows builds keep working.',
+      '',
+      'Fix: inline the worker bundle (vite.config.ts → worker.rolldownOptions',
+      '.output.inlineDynamicImports).',
+      '',
+      'Violations:',
+      ...splitWorkers.map((line) => `  - ${line}`),
+      '',
+    ].join('\n'),
+  );
+  process.exit(1);
+}
 
 /**
  * Investigated-and-cleared false alarms for {@link findUnboundNamespaceGetters}.

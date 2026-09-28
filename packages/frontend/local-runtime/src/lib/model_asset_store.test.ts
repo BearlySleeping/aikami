@@ -41,3 +41,29 @@ test('subscriber failures do not escape or prevent later notifications', async (
   expect(state.status).toBe('not-downloaded');
   expect(healthyListener).toHaveBeenCalledTimes(1);
 });
+
+for (const [bundleId, legacyKey] of [
+  ['kokoro-82m', 'aikami-voice-model/manifest-v1'],
+  ['qwen3-0.6b', 'aikami-text-model/manifest-v1'],
+]) {
+  test(`remove clears the historical manifest for ${bundleId}`, async () => {
+    const bundle = { ...TEST_BUNDLE, id: bundleId, assets: [] };
+    const entries = new Set([bundle.manifestKey, legacyKey, 'unrelated-manifest']);
+    const original = Object.getOwnPropertyDescriptor(globalThis, 'caches');
+    Object.defineProperty(globalThis, 'caches', {
+      configurable: true,
+      value: { open: async () => ({ delete: async (key: string) => entries.delete(key) }) },
+    });
+    try {
+      const store = new ModelAssetStore({ bundles: { [bundleId]: bundle } });
+      await store.remove(bundleId);
+      expect([...entries]).toEqual(['unrelated-manifest']);
+    } finally {
+      if (original) {
+        Object.defineProperty(globalThis, 'caches', original);
+      } else {
+        Reflect.deleteProperty(globalThis, 'caches');
+      }
+    }
+  });
+}

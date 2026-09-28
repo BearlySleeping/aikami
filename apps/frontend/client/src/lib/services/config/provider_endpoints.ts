@@ -470,6 +470,14 @@ export const PROVIDER_MODEL_FETCH: Record<string, ModelFetchConfig> = {
     url: 'https://api.mistral.ai/v1/models',
     parseResponse: parseRawArray,
   },
+  nanogpt: {
+    auth: OPENAI_COMPAT_AUTH,
+    chatBaseUrl: 'https://api.nano-gpt.com/api/v1',
+    url: 'https://api.nano-gpt.com/api/v1/models',
+    // NanoGPT returns the OpenAI list shape and, on its richer response mode,
+    // a `name` alongside each `id` — fall back to the id when it is absent.
+    parseResponse: (json) => parseDataArray(json, 'name'),
+  },
   ollama: {
     auth: NO_AUTH,
     chatTest: ollamaChatTest,

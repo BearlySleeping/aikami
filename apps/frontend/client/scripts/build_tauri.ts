@@ -109,7 +109,18 @@ logger.info(
 );
 
 // 1. Web bundle — vite loads .env.{mode} for the selected mode.
-run('vite build', 'bunx', ['vite', 'build', '--mode', mode], { cwd: CLIENT_DIR });
+//
+// AIKAMI_DESKTOP_BUILD must be set for THIS build, or vite.config.ts aliases
+// every `@tauri-apps/*` import to `lib/stubs/tauri_stub.ts` (which exports
+// only a default `{}`). A desktop bundle built without the flag therefore
+// ships with no Tauri plugin JS at all: `appDataDir`/`readTextFile`/
+// `info(...)` destructured off the stub are `undefined`, and every call site
+// fails at runtime with `TypeError: x is not a function`. The stub is meant
+// for browser builds only, where those paths are never reached.
+run('vite build', 'bunx', ['vite', 'build', '--mode', mode], {
+  cwd: CLIENT_DIR,
+  env: { ...process.env, AIKAMI_DESKTOP_BUILD: 'true' },
+});
 
 // 1b. Guard the emitted chunk graph. A static-import cycle between chunks
 //     breaks module evaluation order and only shows up at runtime — the

@@ -94,6 +94,8 @@ export const modelTestUnavailableError = (
   return 'No endpoint configured — set a base URL';
 };
 
+export { normalizeEndpoint } from './ai_provider_account';
+
 /**
  * Returns a capability-unique label: the requested name as-is when unused,
  * otherwise the next "Name 2", "Name 3", … slot.

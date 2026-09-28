@@ -151,6 +151,9 @@ test.describe('Site pages — download section', () => {
       for (let i = 0; i < linkCount; i += 1) {
         const href = await links.nth(i).getAttribute('href');
         expect(href).toContain('releases/latest/download/aikami.');
+        // Downloads open in a new tab — the landing page must stay put
+        await expect(links.nth(i)).toHaveAttribute('target', '_blank');
+        await expect(links.nth(i)).toHaveAttribute('rel', /noopener/);
       }
 
       // Every card keeps a secondary "View releases" link

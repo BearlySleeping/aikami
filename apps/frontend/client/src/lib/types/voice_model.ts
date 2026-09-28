@@ -19,4 +19,22 @@ export type TtsStatus =
 
 /** Lifecycle of the on-demand voice model download. Type alias for backward compat. */
 export type VoiceModelState = LocalModelState;
+
+/**
+ * Result of a speech request.
+ *
+ * `speak()` used to resolve `void` for four materially different situations
+ * — audio scheduled, cancelled by a newer request, no engine installed, and
+ * merely accepted — so callers reported "queued" for a request that then
+ * failed. Expected non-play states are values here; only a genuine failure
+ * rejects.
+ */
+export type SpeakOutcome =
+  /** Audio is scheduled on the AudioContext. */
+  | { readonly kind: 'scheduled' }
+  /** Superseded by a newer request, or stopped by the user. Not an error. */
+  | { readonly kind: 'cancelled' }
+  /** No engine could run it (model not installed, TTS off, still loading). */
+  | { readonly kind: 'unavailable'; readonly status: TtsStatus };
+
 export type { EngineBackend };

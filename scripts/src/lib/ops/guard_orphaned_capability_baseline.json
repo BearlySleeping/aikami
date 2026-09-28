@@ -112,13 +112,12 @@
   },
   "apps/frontend/client/src/lib/services/audio/tts_service.svelte.ts": {
     "counts": {
-      "orphans": 4
+      "orphans": 3
     },
     "identities": [
       "orphans:TtsService.checkKokoroServer",
       "orphans:TtsService.isDemoMode",
-      "orphans:TtsService.playAudioBuffer",
-      "orphans:TtsService.updateSpatialPosition"
+      "orphans:TtsService.playAudioBuffer"
     ]
   },
   "apps/frontend/client/src/lib/services/auth/auth_service.svelte.ts": {

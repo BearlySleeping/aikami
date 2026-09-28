@@ -326,6 +326,63 @@ describe('OpenAI-compatible text adapter — streaming', () => {
   });
 });
 
+describe('OpenAI-compatible text adapter — custom endpoint resolution', () => {
+  test('a bare-host custom base URL gets the /v1 segment', async () => {
+    const { fetchFn, calls } = createSseFetchMock();
+    const adapter = createOpenAiCompatibleTextAdapter({ fetchFn });
+
+    await adapter.generateText({
+      resolution: resolution({ provider: 'custom', endpoint: 'https://api.example.test' }),
+      signal: signal(),
+      messages: [{ role: 'user', content: 'Hi' }],
+    });
+
+    expect(calls[0].url).toBe('https://api.example.test/v1/chat/completions');
+  });
+
+  test('a custom base URL that already names a path is used verbatim', async () => {
+    const { fetchFn, calls } = createSseFetchMock();
+    const adapter = createOpenAiCompatibleTextAdapter({ fetchFn });
+
+    await adapter.generateText({
+      resolution: resolution({ provider: 'custom', endpoint: 'https://api.example.test/api/v1' }),
+      signal: signal(),
+      messages: [{ role: 'user', content: 'Hi' }],
+    });
+
+    expect(calls[0].url).toBe('https://api.example.test/api/v1/chat/completions');
+  });
+
+  test('a trailing slash on a bare host does not produce a double /v1', async () => {
+    const { fetchFn, calls } = createSseFetchMock();
+    const adapter = createOpenAiCompatibleTextAdapter({ fetchFn });
+
+    await adapter.generateText({
+      resolution: resolution({ provider: 'custom', endpoint: 'https://api.example.test/' }),
+      signal: signal(),
+      messages: [{ role: 'user', content: 'Hi' }],
+    });
+
+    expect(calls[0].url).toBe('https://api.example.test/v1/chat/completions');
+  });
+
+  test('a custom endpoint sends the stored key as a bearer token', async () => {
+    const { fetchFn, calls } = createSseFetchMock();
+    const adapter = createOpenAiCompatibleTextAdapter({
+      fetchFn,
+      getApiKey: (provider) => (provider === 'custom' ? 'custom-key' : undefined),
+    });
+
+    await adapter.generateText({
+      resolution: resolution({ provider: 'custom', endpoint: 'https://api.example.test/v1' }),
+      signal: signal(),
+      messages: [{ role: 'user', content: 'Hi' }],
+    });
+
+    expect(calls[0].headers.Authorization).toBe('Bearer custom-key');
+  });
+});
+
 describe('OpenAI-compatible text adapter — structured extraction', () => {
   const characterSchema = {
     type: 'object',
