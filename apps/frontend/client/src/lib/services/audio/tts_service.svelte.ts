@@ -7,11 +7,18 @@ import {
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services/base';
 import type { VoiceParams } from '@aikami/types';
-import type { TtsBackend, TtsStatus, VoiceInfo } from '$types';
+import type { SpeakOutcome, TtsBackend, TtsStatus, VoiceInfo } from '$types';
 import { configService } from '../config/config_service.svelte.ts';
 import { runtimeConfigService } from '../config/runtime_config_service.svelte.ts';
 import { audioContextManager } from './audio_context_manager';
 import { audioService } from './audio_service.svelte.ts';
+import {
+  fetchKokoroVoices,
+  probeKokoroServer,
+  requestKokoroSpeech,
+} from './kokoro_server_client.ts';
+import { KokoroWorkerClient } from './kokoro_worker_client.ts';
+import { resolveTtsPlan, type TtsPlan } from './tts_backend_plan.ts';
 import { voiceModelService } from './voice_model_service.svelte.ts';
 
 /** Options used to construct the text-to-speech service. */
@@ -20,54 +27,6 @@ export type TtsServiceOptions = TtsOptions;
 const isTauriRuntime = (): boolean =>
   typeof window !== 'undefined' &&
   (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ !== undefined; // guard-ignore lint/type-safety/casting: custom window property for Tauri detection
-
-/**
- * Local engine hosts the packaged Tauri CSP admits (AC-9 — connect-src
- * enumerates the local ports, no wildcards). Non-localhost voice URLs would
- * be silently CSP-blocked in the desktop webview, so they are rejected with
- * a warning instead (C-389 CR). Browser builds are unrestricted.
- */
-/**
- * Registry IDs whose server speaks the exact Kokoro-shaped
- * `/v1/audio/speech` + `/v1/voices` surface this runtime implements
- * end-to-end (request shape AND health-check). Cloud providers advertised
- * in the registry (ElevenLabs, OpenAI TTS) use different real APIs that
- * this runtime does not implement yet — sending them the Kokoro request
- * shape would silently fail or, worse, appear to "work" against the wrong
- * endpoint. Their stored configuration is preserved; playback is reported
- * as unsupported instead.
- */
-const SUPPORTED_SERVER_VOICE_PROVIDERS = new Set(['kokoro', 'voicevox', 'fish-speech']);
-
-const isLocalhostUrl = (url: string): boolean => {
-  try {
-    const parsed = new URL(url);
-    return (
-      parsed.hostname === 'localhost' ||
-      parsed.hostname === '127.0.0.1' ||
-      parsed.hostname === '[::1]' ||
-      parsed.hostname === '::1'
-    );
-  } catch {
-    return false;
-  }
-};
-
-/**
- * Whether a Bearer credential may be sent to this endpoint. HTTPS protects it
- * in transit; plain HTTP does not, so the key is only allowed over loopback,
- * where the request never leaves the machine. A stored connection can hold any
- * URL — nothing upstream validates the protocol — so this is checked at the
- * point of transmission rather than trusted from configuration.
- */
-const canCarryCredential = (url: string): boolean => {
-  try {
-    const parsed = new URL(url);
-    return parsed.protocol === 'https:' || isLocalhostUrl(url);
-  } catch {
-    return false;
-  }
-};
 
 type TtsOptions = BaseFrontendClassOptions;
 
@@ -120,17 +79,22 @@ export type TtsServiceInterface = BaseFrontendClassInterface & {
 
   /**
    * Converts text to speech and plays the resulting audio immediately.
-   * Fetches the full WAV from the Kokoro REST endpoint and schedules
-   * gapless playback through the Web Audio API.
+   *
+   * Waits for an in-flight {@link initialize} rather than refusing, so a
+   * click during the ~7s cold model load is honoured instead of dropped.
+   * Resolves with a {@link SpeakOutcome}; rejects only on a genuine failure.
    *
    * @param options.text The text to convert to speech.
    * @param options.voiceId Optional voice ID to use (defaults to {@link selectedVoice}).
    */
-  speak(options: { text: string; voiceId?: string }): Promise<void>;
+  speak(options: { text: string; voiceId?: string }): Promise<SpeakOutcome>;
 
   /**
    * Stops any currently playing audio, aborts the in-progress synthesis
    * request, and resets state.
+   *
+   * A superseded request resolves as `{ kind: 'cancelled' }` rather than
+   * hanging or pretending audio played.
    */
   stop(): void;
 
@@ -170,41 +134,28 @@ export type TtsServiceInterface = BaseFrontendClassInterface & {
 
   /**
    * Initializes the native Kokoro TTS Web Worker.
-   * Spawns a dedicated worker that loads the 82M Kokoro model via WebGPU.
-   * Must be called before {@link synthesize}.
+   * Spawns a dedicated worker that loads the 82M Kokoro model.
+   *
+   * Single-flight: concurrent callers share one load. Resolves when the
+   * engine is actually ready (not merely when the message was posted), and
+   * never rejects — inspect {@link status} for the outcome. Safe for
+   * `void this._tts.initialize()`.
    */
   initialize(): Promise<void>;
 
   /**
-   * Synthesizes text to speech.
+   * Synthesizes text to speech, using an explicit Kokoro voice key.
    *
-   * Routes to the Kokoro REST server (docker/local dev, detected by
-   * {@link checkKokoroServer}) or the WebGPU worker (browser-native
-   * fallback, kokoro-js offline synthesis).
-   *
-   * @param options.text — The text to synthesize.
-   * @param options.voice — The Kokoro voice key (e.g., 'af_bella').
+   * A thin alias of {@link speak}; kept because the combat and settings
+   * surfaces address voices by Kokoro id rather than by {@link selectedVoice}.
    */
-  synthesize(options: { text: string; voice: string }): Promise<void>;
-
-  /**
-   * Updates the spatial position of the active TTS stream.
-   *
-   * Reserved for spatial audio. The previous PannerNode-based
-   * implementation was tied to the removed SharedArrayBuffer streaming
-   * pipeline; playback now goes straight to the destination, so this is
-   * a no-op.
-   *
-   * @param options.x — World-space X coordinate.
-   * @param options.y — World-space Y coordinate.
-   */
-  updateSpatialPosition(options: { x: number; y: number }): void;
+  synthesize(options: { text: string; voice: string }): Promise<SpeakOutcome>;
 
   /**
    * Converts raw PCM Float32Array data into an AudioBuffer and schedules
    * gapless playback through the Web Audio API.
    *
-   * Used by the WebGPU worker path (kokoro-js offline synthesis).
+   * Used by the worker path (kokoro-js offline synthesis).
    *
    * @param options.pcmData — Raw PCM audio samples.
    * @param options.sampleRate — Sample rate in Hz (e.g., 24000).
@@ -256,25 +207,30 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
   selectedVoice = $state('af_heart');
   ttsVolume = $state(1);
 
-  private _worker: Worker | null = null; // kokoro-js worker (browser TTS)
   private _kokoroServerUrl: string | undefined; // server-mode TTS URL (C-389)
   private _voiceSpeed: number | undefined; // from the narrator-voice connection's VoiceParams, when resolved
   private _voiceApiKey: string | undefined; // credential for a cloud server-mode voice provider (e.g. OpenAI TTS)
-  private _abortController: AbortController | undefined;
   private _currentAudio: HTMLAudioElement | null = null;
   private _ttsGain: GainNode | undefined; // volume control for synthesized speech
+
   /**
-   * The worker request whose completion is still wanted. Every speak() calls
-   * stop() first, so a second request can be posted while the worker is still
-   * synthesizing the first — without an id, that first 'complete' would
-   * resolve the second caller and play the wrong audio. resolve/reject
-   * are absent for fire-and-forget synthesize() calls, which still need the
-   * id so their audio is played and a stale one is not.
+   * The in-browser engine, or null for server mode / no engine.
+   *
+   * The client object is its own identity key: readiness cannot be recorded
+   * for a worker that has been replaced, and a superseded worker is
+   * unreachable by construction.
    */
-  private _activeWorkerRequest:
-    | { id: number; resolve?: () => void; reject?: (error: Error) => void }
-    | undefined;
-  private _workerRequestSeq = 0;
+  private _engine: KokoroWorkerClient | null = null;
+  /**
+   * Governs the current engine's whole lifetime. `reset()` aborts it, which
+   * terminates a worker even mid-load — the fix for an in-flight
+   * `initialize()` resuming after a reset and spawning a second engine.
+   */
+  private _lifetime = new AbortController();
+  /** The single in-flight `initialize()`. Concurrent callers join it. */
+  private _flight: Promise<void> | null = null;
+  /** The utterance currently being produced; `stop()` aborts it. */
+  private _utterance: AbortController | undefined;
 
   // --- Playback state (gapless scheduling, word tracking) ---
   private _streamEnded = false;
@@ -322,9 +278,27 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
   }
 
   /** @inheritdoc */
+  /**
+   * Records a worker's 'ready' for the CURRENT generation only.
+   *
+   * The worker id is retained because a later "session not initialized" can
+   * only mean the request crossed into a different instance, and that is only
+   * provable by comparing ids.
+   */
+  /**
+   * Tears the engine down.
+   *
+   * Aborting the lifetime is what makes this safe mid-load: a worker still
+   * fetching the 92 MB model is terminated, and an `initialize()` still
+   * awaiting configuration cannot resume and spawn a second one.
+   */
   reset(): void {
-    this._worker?.terminate();
-    this._worker = null;
+    this.stop();
+    this._lifetime.abort(new DOMException('TTS reset', 'AbortError'));
+    this._lifetime = new AbortController();
+    this._engine?.dispose();
+    this._engine = null;
+    this._flight = null;
     this._kokoroServerUrl = undefined;
     this.isKokoroServerAvailable = false;
     this.status = 'uninitialized';
@@ -339,118 +313,83 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
       return;
     }
     try {
-      const response = await fetch(`${baseUrl.replace(/\/+$/, '')}/v1/voices`, {
-        headers: this._authHeaders(),
+      const voices = await fetchKokoroVoices({
+        baseUrl: baseUrl.replace(/\/+$/, ''),
+        apiKey: this._voiceApiKey,
       });
-      if (!response.ok) {
-        this.error('loadVoices:fetch-failed', { status: response.status });
-        return;
-      }
-
-      const data = (await response.json()) as { voices?: VoiceInfo[] };
-      if (data.voices && data.voices.length > 0) {
-        this.voices = data.voices;
-        this.debug('loadVoices', { count: this.voices.length });
+      if (voices) {
+        this.voices = voices;
+        this.debug('loadVoices', { count: voices.length });
       }
     } catch (error) {
       this.error('loadVoices:failed', error);
     }
   }
 
-  async speak(options: { text: string; voiceId?: string }): Promise<void> {
-    const { text, voiceId } = options;
-
-    if (!text.trim()) {
-      return;
+  async speak(options: { text: string; voiceId?: string }): Promise<SpeakOutcome> {
+    if (!options.text.trim()) {
+      return { kind: 'unavailable', status: this.status };
     }
 
-    if (this.status === 'not-downloaded') {
-      this.debug('speak:not-downloaded', {
-        hint: 'Download the voice model from Settings → Audio first.',
-      });
-      return;
+    // A click during the cold model load must be honoured, not dropped: join
+    // the in-flight initialize and speak once it lands. This is what removed
+    // the "click Test TTS twice" requirement.
+    if (this._flight) {
+      await this._flight;
     }
-
-    if (this.status === 'disabled') {
-      this.debug('speak:disabled');
-      return;
-    }
-
-    const voice = voiceId ?? this.selectedVoice;
-
-    // Same backend dispatch as synthesize() — preview and gameplay must
-    // never diverge on which engine actually produces the audio.
-    if (this.backend === 'server' && this.isKokoroServerAvailable && this._kokoroServerUrl) {
-      await this._synthesizeViaServer({ text, voice });
-      return;
-    }
-
-    if (this._worker && this.status === 'ready') {
-      await this._speakViaWorker({ text, voice });
-      return;
-    }
-
-    this.debug('speak:not-ready', {
-      status: this.status,
-      backend: this.backend,
-      hasWorker: !!this._worker,
-    });
-  }
-
-  /**
-   * Worker-backed speak(): posts the synthesize request and awaits the
-   * worker's 'complete'/'error' message so callers (voice previews) can
-   * know when playback has actually been scheduled — the same worker
-   * message protocol {@link synthesize} drives, just made awaitable.
-   */
-  private async _speakViaWorker(options: { text: string; voice: string }): Promise<void> {
+    // Supersede: a newer request cancels the previous one rather than letting
+    // both play (synthesize() previously failed to do this, so utterances
+    // overlapped).
     this.stop();
+
+    if (this.status === 'not-downloaded' || this.status === 'disabled') {
+      return { kind: 'unavailable', status: this.status };
+    }
+    if (this.status !== 'ready') {
+      this.debug('speak:not-ready', { status: this.status, backend: this.backend });
+      return { kind: 'unavailable', status: this.status };
+    }
+
+    const voice = options.voiceId ?? this.selectedVoice;
+    const utterance = new AbortController();
+    this._utterance = utterance;
+    const { signal } = utterance;
     this.isSynthesizing = true;
-    const id = ++this._workerRequestSeq;
     try {
-      await new Promise<void>((resolve, reject) => {
-        this._activeWorkerRequest = { id, resolve, reject };
-        this._worker?.postMessage({
-          action: 'synthesize',
-          text: options.text,
-          voice: options.voice,
-          requestId: id,
-        });
-      });
-    } catch (error) {
-      this.error('speak:worker-failed', error);
-      // Rethrow so an awaiting caller (the voice preview error handler) sees
-      // the failure instead of hanging on a swallowed rejection.
+      // Server dispatch and worker dispatch are the same decision as
+      // synthesize() — preview and gameplay must never diverge.
+      if (this.backend === 'server' && this._kokoroServerUrl) {
+        await this._synthesizeViaServer({ text: options.text, voice, signal });
+      } else if (this._engine) {
+        const result = await this._engine.synthesize({ text: options.text, voice, signal });
+        signal.throwIfAborted();
+        audioContextManager.unlock();
+        this._nextStartTime = 0;
+        await this.playAudioBuffer(result);
+      } else {
+        return { kind: 'unavailable', status: this.status };
+      }
+      return { kind: 'scheduled' };
+    } catch (error: unknown) {
+      if (signal.aborted) {
+        return { kind: 'cancelled' };
+      }
       throw error;
     } finally {
-      // Only clear when this request is still the active one — a newer
-      // speak() that superseded it owns the slot now.
-      if (this._activeWorkerRequest?.id === id) {
+      if (this._utterance === utterance) {
+        this._utterance = undefined;
         this.isSynthesizing = false;
-        this._activeWorkerRequest = undefined;
       }
     }
   }
 
   stop(): void {
-    // Abort in-progress synthesis fetch
-    const controller = this._abortController;
-    if (controller) {
-      controller.abort();
-      this._abortController = undefined;
-    }
-
-    // Settle a pending worker-backed speak() so it never hangs a caller.
-    // Clearing the slot also makes the in-flight worker response stale, so a
-    // completion that arrives after stop() plays nothing. The request is
-    // RESOLVED, not rejected: stop() is always a cancellation or supersede
-    // (a newer speak() calls stop() first), and surfacing it as an error made
-    // rapid back-to-back speak() calls log a spurious
-    // 'stop() called before synthesis completed'.
-    if (this._activeWorkerRequest) {
-      this._activeWorkerRequest.resolve?.();
-      this._activeWorkerRequest = undefined;
-    }
+    // Abort the in-flight utterance. The client rejects it with the abort
+    // reason and tells the worker to skip generating it, so a superseded
+    // request costs no forward pass and the caller settles as 'cancelled'
+    // rather than hanging.
+    this._utterance?.abort(new DOMException('TTS stopped', 'AbortError'));
+    this._utterance = undefined;
 
     // Stop HTMLAudioElement playback
     if (this._currentAudio) {
@@ -572,91 +511,112 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
 
   // ── Kokoro TTS ──
 
-  async initialize(): Promise<void> {
-    if (this.status !== 'uninitialized') {
-      this.debug('initialize:skipped', { status: this.status });
-      return;
+  /**
+   * Brings an engine up, single-flight.
+   *
+   * Three properties this buys, all of which the previous version lacked:
+   *
+   * 1. **One load, however many callers.** The in-flight promise is stored
+   *    synchronously, so app boot, a settings page mounting, and a Test TTS
+   *    click can no longer each spawn a worker. Before, `status` was claimed
+   *    ~90 lines after the guard across several `await`s, so concurrent
+   *    callers all passed the guard and each leaked a full 7-second model
+   *    load.
+   * 2. **Resolves when the engine is actually ready**, not when the
+   *    `initialize` message was posted. `await initialize()` is therefore
+   *    meaningful, and a click during load can be honoured.
+   * 3. **Never rejects**, so the several `void this._tts.initialize()`
+   *    call sites are safe; the outcome is in {@link status}.
+   */
+  initialize(): Promise<void> {
+    if (this._flight) {
+      return this._flight;
     }
+    if (this.status === 'ready' || this.status === 'disabled') {
+      return Promise.resolve();
+    }
+    const signal = this._lifetime.signal;
+    const flight: Promise<void> = this._runInit(signal)
+      .catch((error: unknown) => {
+        if (!signal.aborted) {
+          this._fail(error);
+        }
+      })
+      .finally(() => {
+        if (this._flight === flight) {
+          this._flight = null;
+        }
+      });
+    this._flight = flight;
+    return flight;
+  }
 
-    // C-389: resolve the runtime engine config first — TTS mode and the
-    // server URL come from config.json, never from a baked-in default.
+  private async _runInit(signal: AbortSignal): Promise<void> {
+    // Claimed synchronously, before the first await, so a concurrent caller
+    // joins this flight instead of starting a second one.
+    this.status = 'initializing';
+    this.errorMessage = null;
+
+    // C-389: the runtime engine config comes from config.json, never a
+    // baked-in default. C-463: prefer the `narrator-voice` role's
+    // connection, falling back to runtimeConfigService unchanged when no
+    // voice role resolves (the local-stack path).
     await runtimeConfigService.loadConfig();
+    signal.throwIfAborted();
 
-    // C-463 wiring: prefer the `narrator-voice` role's connection for the
-    // server URL and voice params. Fall back to runtimeConfigService
-    // unchanged when no voice role resolves — that is the local-stack path
-    // and the common case today.
     const roleResolution = configService.resolveRole('narrator-voice');
     const voiceParams = roleResolution?.params as VoiceParams | undefined;
-    const mode = roleResolution?.endpoint ? 'server' : runtimeConfigService.getVoiceTtsMode();
-    const serverUrl = roleResolution?.endpoint || runtimeConfigService.getVoiceTtsUrl();
     if (voiceParams?.voiceId) {
       this.selectedVoice = voiceParams.voiceId;
     }
     this._voiceSpeed = voiceParams?.speed;
     this._voiceApiKey = roleResolution?.apiKey || undefined;
 
-    // AC (voice.tts.mode = disabled): TTS is off; nothing is probed.
-    if (mode === 'disabled') {
+    const plan: TtsPlan = resolveTtsPlan({
+      mode: roleResolution?.endpoint ? 'server' : runtimeConfigService.getVoiceTtsMode(),
+      serverUrl: roleResolution?.endpoint || runtimeConfigService.getVoiceTtsUrl(),
+      providerId: roleResolution?.provider,
+      apiKey: this._voiceApiKey,
+      isDesktop: isTauriRuntime(),
+    });
+
+    if (plan.kind === 'disabled') {
       this.status = 'disabled';
       this.backend = 'unavailable';
       this.info('initialize:disabled');
       return;
     }
-
-    // The Kokoro-shaped OpenAI-compatible speech request this runtime sends
-    // is only implemented for providers that actually speak that shape.
-    // A stored connection for an unsupported provider (e.g. ElevenLabs, a
-    // different request/response format entirely) is preserved as-is, but
-    // reported honestly as unsupported rather than silently POSTed the
-    // wrong request shape and misread as "unreachable".
-    const registryId = roleResolution?.provider;
-    if (mode === 'server' && registryId && !SUPPORTED_SERVER_VOICE_PROVIDERS.has(registryId)) {
-      this.status = 'error';
-      this.backend = 'unavailable';
-      this.errorMessage = `${registryId} is not yet supported by the local speech runtime. The configuration is saved, but voice playback for this provider is unavailable.`;
-      this.warn('initialize:unsupported-voice-provider', { provider: registryId });
-      return;
-    }
-
-    // A credential must never be sent over a cleartext non-loopback link.
-    // Silently dropping the key would produce a confusing 401 instead, so
-    // the endpoint is rejected with an explanation and the key is discarded.
-    if (mode === 'server' && serverUrl && this._voiceApiKey && !canCarryCredential(serverUrl)) {
-      this._voiceApiKey = undefined;
-      this.status = 'error';
-      this.backend = 'unavailable';
-      this.errorMessage =
-        'This voice server needs an API key but is configured over plain http://. Use https:// (or a localhost address) so the key is not sent in the clear.';
-      this.warn('initialize:insecure-voice-endpoint-with-credential');
-      return;
-    }
-
-    // Server mode: probe ONLY the configured URL (AC-7 — no blind
-    // localhost probing). Unreachable → fall through to browser TTS.
-    if (mode === 'server' && serverUrl) {
-      if (isTauriRuntime() && !isLocalhostUrl(serverUrl)) {
-        // C-389 CR: the packaged CSP cannot admit arbitrary hosts (AC-9);
-        // reject a non-localhost voice URL here so the user sees a clear
-        // warning instead of a confusing CSP violation in the webview.
-        this.warn('initialize:server-url-not-allowed-in-tauri', { url: serverUrl });
-      } else {
-        this._kokoroServerUrl = serverUrl.replace(/\/+$/, '');
-        await this.checkKokoroServer();
-        if (this.isKokoroServerAvailable) {
-          this.status = 'ready';
-          this.backend = 'server';
-          this.debug('initialize:server-ready', { url: this._kokoroServerUrl });
-          return;
-        }
-        this.warn('initialize:server-unreachable', { url: this._kokoroServerUrl });
-        this._kokoroServerUrl = undefined;
+    if (plan.kind === 'terminal') {
+      // Discard a credential we have just refused to transmit.
+      if (plan.message.includes('API key')) {
+        this._voiceApiKey = undefined;
       }
+      this.status = 'error';
+      this.backend = 'unavailable';
+      this.errorMessage = plan.message;
+      this.warn('initialize:terminal-plan', { message: plan.message });
+      return;
+    }
+    if (plan.kind === 'server') {
+      this._kokoroServerUrl = plan.url;
+      this._voiceApiKey = plan.apiKey;
+      await this.checkKokoroServer();
+      signal.throwIfAborted();
+      if (this.isKokoroServerAvailable) {
+        this.status = 'ready';
+        this.backend = 'server';
+        this.debug('initialize:server-ready', { url: this._kokoroServerUrl });
+        return;
+      }
+      // Unreachable → fall through to the in-browser engine (AC-7: only the
+      // configured URL is ever probed, never a blind localhost scan).
+      this.warn('initialize:server-unreachable', { url: this._kokoroServerUrl });
+      this._kokoroServerUrl = undefined;
     }
 
-    // Browser mode: the voice model must have been downloaded explicitly
-    // (AC-4b — never implicit). No model → report not-downloaded and stop.
+    // AC-4b: the model is never downloaded implicitly.
     const modelState = await voiceModelService.checkStatus();
+    signal.throwIfAborted();
     if (modelState.status !== 'ready') {
       this.status = 'not-downloaded';
       this.backend = 'unavailable';
@@ -664,210 +624,70 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
       return;
     }
 
-    // Spawn the worker and load the model from the pre-warmed local cache.
-    this.status = 'initializing';
-    this.errorMessage = null;
-
-    try {
-      this._worker = new Worker(new URL('./kokoro_worker.ts', import.meta.url), {
-        type: 'module',
-      });
-
-      this._worker.onmessage = (event: MessageEvent) => {
-        const payload = event.data as {
-          type: 'ready' | 'complete' | 'error';
-          backend?: 'webgpu' | 'wasm';
-          pcmData?: Float32Array;
-          sampleRate?: number;
-          message?: string;
-          requestId?: number;
-        };
-
-        switch (payload.type) {
-          case 'ready':
-            this.status = 'ready';
-            this.backend = payload.backend ?? 'wasm';
-            this.info('initialize:ready', { backend: this.backend });
-            break;
-
-          case 'complete': {
-            const active = this._activeWorkerRequest;
-            if (!active || payload.requestId !== active.id) {
-              // A superseded or stopped request finishing late. Playing it
-              // would emit audio the user already cancelled.
-              this.debug('kokoro:complete-stale', { requestId: payload.requestId });
-              break;
-            }
-            if (payload.pcmData && payload.sampleRate !== undefined) {
-              this.debug('kokoro:complete', {
-                pcmLength: payload.pcmData.length,
-                sampleRate: payload.sampleRate,
-                durationSec: (payload.pcmData.length / payload.sampleRate).toFixed(2),
-              });
-              audioContextManager.unlock();
-              this._nextStartTime = 0;
-              this.playAudioBuffer({
-                pcmData: payload.pcmData,
-                sampleRate: payload.sampleRate,
-              });
-            }
-            if (active.resolve) {
-              // Awaitable speak(): resolve, but leave the slot in place for
-              // _speakViaWorker's finally — clearing it here would prevent
-              // that finally from resetting isSynthesizing.
-              active.resolve();
-            } else {
-              // Fire-and-forget synthesize(): nothing awaits, so the slot is
-              // released here.
-              this._activeWorkerRequest = undefined;
-            }
-            break;
-          }
-
-          case 'error': {
-            const active = this._activeWorkerRequest;
-            if (payload.requestId !== undefined && payload.requestId !== active?.id) {
-              this.debug('kokoro:error-stale', { requestId: payload.requestId });
-              break;
-            }
-            this.status = 'error';
-            this.backend = 'unavailable';
-            this.errorMessage = payload.message ?? 'Kokoro worker error';
-            this.error('kokoro:worker-error', { message: this.errorMessage });
-            if (active?.reject) {
-              // Awaitable speak(): reject so the caller's catch (voice preview
-              // error handler) can surface it. The slot stays for its finally.
-              active.reject(new Error(this.errorMessage));
-            } else {
-              this._activeWorkerRequest = undefined;
-            }
-            break;
-          }
-
-          default:
-            break;
+    // ORT runtime assets come from the `aikami-dist` plane under a
+    // version-pinned path (the shared seam owns version and location). The
+    // backend is chosen by the worker: the main thread and the worker are
+    // different contexts, and probing here only delayed the load.
+    const started = await KokoroWorkerClient.start({
+      wasmPath: resolveOrtBaseUrl(import.meta.env.PUBLIC_ORT_WASM_URL as string | undefined),
+      signal,
+      onFailure: (failure) => {
+        // Identity-checked: a failure from an engine we already replaced
+        // must not fail the one now in use.
+        if (this._engine === failure.client) {
+          this._engine = null;
+          this._fail(failure.error);
         }
-      };
-
-      this._worker.onerror = (error: ErrorEvent) => {
-        this.status = 'error';
-        this.backend = 'unavailable';
-        this.errorMessage = error.message || 'Unknown worker error';
-        this.error('kokoro:worker-onerror', { message: this.errorMessage });
-        this._activeWorkerRequest?.reject?.(new Error(this.errorMessage));
-        this._activeWorkerRequest = undefined;
-      };
-
-      // ORT runtime assets are served from the `aikami-dist` distribution
-      // plane under a version-pinned path (the shared ORT seam owns the
-      // version and location). The worker receives the resolved base so it
-      // configures the exact same runtime as embeddings/text generation. TTS
-      // is installed on demand, so the wasm is fetched at init like the model.
-      const wasmPath = resolveOrtBaseUrl(import.meta.env.PUBLIC_ORT_WASM_URL as string | undefined);
-      this._worker.postMessage({
-        action: 'initialize',
-        wasmPath,
-        device: (await this._preferWebGpu()) ? 'webgpu' : 'wasm',
-        modelId: 'onnx-community/Kokoro-82M-ONNX',
-        revision: 'f46687f7e41512228ae953af24a11b2640ea0f22',
-      });
-    } catch (error: unknown) {
-      this.status = 'error';
-      this.backend = 'unavailable';
-      this.errorMessage = error instanceof Error ? error.message : 'Failed to spawn Kokoro worker';
-      this.error('initialize:failed', error);
-    }
+      },
+    });
+    signal.throwIfAborted();
+    this._engine = started.client;
+    this.backend = started.backend;
+    this.status = 'ready';
   }
 
-  /** Quick WebGPU capability gate (AC-6): adapter request must not hang. */
-  private async _preferWebGpu(): Promise<boolean> {
-    try {
-      const gpu = (navigator as Navigator & { gpu?: { requestAdapter?: () => Promise<unknown> } })
-        .gpu;
-      if (!gpu?.requestAdapter) {
-        return false;
-      }
-      const adapter = await Promise.race([
-        gpu.requestAdapter(),
-        new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), 2000)),
-      ]);
-      return adapter !== undefined && adapter !== null;
-    } catch {
-      return false;
-    }
+  /** Records a fatal engine failure. */
+  private _fail(error: unknown): void {
+    this.status = 'error';
+    this.backend = 'unavailable';
+    this.errorMessage = error instanceof Error ? error.message : String(error);
+    this.error('tts:engine-failed', error);
   }
 
-  async synthesize(options: { text: string; voice: string }): Promise<void> {
-    const { text, voice } = options;
-
-    if (!text.trim()) {
-      return;
-    }
-
-    // AC-4b: never download the model implicitly. If the voice model has
-    // not been downloaded, synthesis is a no-op and the UI directs the
-    // user to the download control.
-    if (this.status === 'not-downloaded') {
-      this.debug('synthesize:not-downloaded', {
-        hint: 'Download the voice model from Settings → Audio first.',
-      });
-      return;
-    }
-
-    if (this.status === 'disabled') {
-      this.debug('synthesize:disabled');
-      return;
-    }
-
-    // Path 1: server mode (config-gated URL — C-389 AC-8)
-    if (this.backend === 'server' && this.isKokoroServerAvailable && this._kokoroServerUrl) {
-      await this._synthesizeViaServer({ text, voice });
-      return;
-    }
-
-    // Path 2: browser worker (WebGPU or WASM — C-389 AC-6)
-    if (!this._worker || this.status !== 'ready') {
-      this.debug('synthesize:not-ready', {
-        status: this.status,
-        backend: this.backend,
-        hasWorker: !!this._worker,
-      });
-      return;
-    }
-
-    const id = ++this._workerRequestSeq;
-    this._activeWorkerRequest = { id };
-    this._worker.postMessage({ action: 'synthesize', text, voice, requestId: id });
+  /**
+   * Synthesizes with an explicit Kokoro voice key.
+   *
+   * A thin alias of {@link speak}. The two had drifted — `synthesize` did
+   * not supersede prior playback, so utterances overlapped, and it resolved
+   * `void` whether or not anything was ever scheduled.
+   */
+  async synthesize(options: { text: string; voice: string }): Promise<SpeakOutcome> {
+    return await this.speak({ text: options.text, voiceId: options.voice });
   }
 
   /**
    * Server path: POSTs the text to the Kokoro REST API, decodes the
    * returned WAV, and plays it through the Web Audio API.
+   *
+   * Throws on a real failure. It used to log and return `undefined`, which
+   * made a dead server indistinguishable from a successful, silent one.
    */
-  private async _synthesizeViaServer(options: { text: string; voice: string }): Promise<void> {
-    const { text, voice } = options;
-
-    // Stop existing playback and reset scheduling state (sourceNodes,
-    // nextStartTime, wordBoundaries) before starting new synthesis, and
-    // abort any in-flight speech request.
-    this.stop();
-
-    const abortController = new AbortController();
-    this._abortController = abortController;
-    const { signal } = abortController;
+  private async _synthesizeViaServer(options: {
+    text: string;
+    voice: string;
+    signal: AbortSignal;
+  }): Promise<void> {
+    const { text, voice, signal } = options;
 
     this.isSynthesizing = true;
-
     try {
       const buffer = await this._requestSpeech({ text, voice, signal });
-      if (signal.aborted) {
-        return;
-      }
+      signal.throwIfAborted();
       if (!buffer) {
-        return;
+        throw new Error('Voice server returned no audio');
       }
 
-      // Resume the AudioContext — game combat flows call this from user
+      // Resume the AudioContext — combat flows call this from user
       // gestures (button clicks), which makes resume() safe.
       const ctx = audioContextManager.context;
       audioContextManager.unlock();
@@ -878,16 +698,14 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
           this.warn('synthesize:audio-context-resume-failed', error);
         }
       }
-      if (signal.aborted) {
-        return;
-      }
+      signal.throwIfAborted();
 
       let audioBuffer: AudioBuffer;
       try {
         audioBuffer = await ctx.decodeAudioData(buffer.slice(0));
       } catch (error) {
         this.error('synthesize:decode-failed', error);
-        return;
+        throw new Error('Voice server returned audio that could not be decoded');
       }
 
       const source = ctx.createBufferSource();
@@ -914,11 +732,9 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
         return;
       }
       this.error('synthesize:server-failed', error);
+      throw error;
     } finally {
       this.isSynthesizing = false;
-      if (this._abortController === abortController) {
-        this._abortController = undefined;
-      }
     }
   }
 
@@ -929,51 +745,26 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
    *
    * @returns The WAV ArrayBuffer, or undefined when the request failed.
    */
-  /** Bearer header for the configured voice server, or nothing when keyless. */
-  private _authHeaders(): Record<string, string> {
-    // biome-ignore lint/style/useNamingConvention: HTTP header name
-    return this._voiceApiKey ? { Authorization: `Bearer ${this._voiceApiKey}` } : {};
-  }
-
   private async _requestSpeech(options: {
     text: string;
     voice: string;
     signal: AbortSignal;
   }): Promise<ArrayBuffer | undefined> {
-    const { text, voice, signal } = options;
-
     if (!this._kokoroServerUrl) {
       return undefined;
     }
 
-    // `pitch` (VoiceParams) has no field in the OpenAI-compatible speech
-    // request body Kokoro serves and is intentionally left unmapped here.
-    const response = await fetch(`${this._kokoroServerUrl}/v1/audio/speech`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...this._authHeaders(),
-      },
-      body: JSON.stringify({
-        model: 'tts-1',
-        input: text,
-        voice,
-        // biome-ignore lint/style/useNamingConvention: API contract field name
-        response_format: 'wav',
-        ...(this._voiceSpeed !== undefined ? { speed: this._voiceSpeed } : {}),
-      }),
-      signal,
+    const buffer = await requestKokoroSpeech({
+      connection: { baseUrl: this._kokoroServerUrl, apiKey: this._voiceApiKey },
+      text: options.text,
+      voice: options.voice,
+      speed: this._voiceSpeed,
+      signal: options.signal,
     });
-
-    if (!response.ok) {
-      this.error('tts:speech-request-failed', {
-        status: response.status,
-        statusText: response.statusText,
-      });
-      return undefined;
+    if (!buffer) {
+      this.error('tts:speech-request-failed', { baseUrl: this._kokoroServerUrl });
     }
-
-    return await response.arrayBuffer();
+    return buffer;
   }
 
   /** @inheritdoc */
@@ -987,30 +778,14 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
       return;
     }
 
-    try {
-      // A GET against the voices listing is a real health check with no
-      // synthesis cost — the previous probe POSTed a full speech request,
-      // paying for audio generation just to learn the server exists.
-      // A server that protects /v1/audio/speech usually protects /v1/voices
-      // with the same credential — an unauthenticated probe would 401 and be
-      // misread as "server unavailable".
-      const response = await fetch(`${url}/v1/voices`, {
-        method: 'GET',
-        headers: this._authHeaders(),
-        signal: AbortSignal.timeout(5000),
-      });
-
-      if (response.ok) {
-        this.isKokoroServerAvailable = true;
-        this.debug('checkKokoroServer:found', { url });
-        return;
-      }
-    } catch {
-      // Server not reachable at the configured URL.
-    }
-
-    this.isKokoroServerAvailable = false;
-    this.debug('checkKokoroServer:not-found', { url });
+    this.isKokoroServerAvailable = await probeKokoroServer({
+      baseUrl: url,
+      apiKey: this._voiceApiKey,
+    });
+    this.debug(
+      this.isKokoroServerAvailable ? 'checkKokoroServer:found' : 'checkKokoroServer:not-found',
+      { url },
+    );
   }
 
   async playAudioBuffer(options: { pcmData: Float32Array; sampleRate: number }): Promise<void> {
@@ -1052,28 +827,12 @@ class TtsService extends BaseFrontendClass<TtsOptions> implements TtsServiceInte
     };
   }
 
-  /**
-   * Updates the spatial position of the active TTS stream.
-   *
-   * No-op — the previous PannerNode-based spatial panning was tied to the
-   * SharedArrayBuffer streaming pipeline (removed). Playback now connects
-   * straight to the AudioContext destination.
-   */
-  updateSpatialPosition(_options: { x: number; y: number }): void {
-    // No-op (see class doc comment).
-  }
-
   // ── Private ──
 
   override async dispose(): Promise<void> {
-    this.stop();
-
-    // Terminate WebGPU worker
-    if (this._worker) {
-      this._worker.terminate();
-      this._worker = null;
-    }
-
+    // reset() also aborts the lifetime, so an initialize() still in flight
+    // cannot resume and spawn an engine we just disposed.
+    this.reset();
     await super.dispose();
   }
 

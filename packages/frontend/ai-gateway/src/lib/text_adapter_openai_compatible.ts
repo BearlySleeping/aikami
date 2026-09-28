@@ -89,6 +89,24 @@ export type OpenAiCompatibleTextAdapterOptions = {
 // ---------------------------------------------------------------------------
 
 /**
+ * An OpenAI-compatible base URL typed as a bare host ("https://api.example.com")
+ * carries no version segment, and `<host>/chat/completions` is a 404 there. The
+ * editor's model test already probes `<root>/v1/chat/completions`, so the runtime
+ * has to agree — otherwise a custom endpoint can pass its own test and then fail
+ * the moment the game calls it. A base that already names a path is used
+ * verbatim; only a host-root base gains `/v1`.
+ */
+const withOpenAiVersionSegment = (base: string): string => {
+  const trimmed = base.replace(/\/+$/, '');
+  try {
+    const { pathname } = new URL(trimmed);
+    return pathname === '/' || pathname === '' ? `${trimmed}/v1` : trimmed;
+  } catch {
+    return trimmed;
+  }
+};
+
+/**
  * Creates the OpenAI-compatible chat-completions text adapter.
  * Register the same instance for both `offline` and `byok` text modes.
  */
@@ -137,7 +155,7 @@ export const createOpenAiCompatibleTextAdapter = (
       return `${base}/api/chat`;
     }
 
-    const base = endpoint.replace(/\/$/, '');
+    const base = withOpenAiVersionSegment(endpoint);
     return base.endsWith('/chat/completions') ? base : `${base}/chat/completions`;
   };
 

@@ -85,6 +85,49 @@ const simulateWorkerMessage = (payload: unknown): void => {
   }
 };
 
+/** Resolves once the mock Worker has actually been constructed. */
+const waitForWorkerConstruction = async (): Promise<void> => {
+  for (let attempt = 0; attempt < 200; attempt++) {
+    if (workerMockState.instances.length > 0) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  throw new Error('worker was never constructed');
+};
+
+/** The instance id the mock worker reports; every response must carry it. */
+const TEST_INSTANCE_ID = 'wtest';
+
+/**
+ * Drives the real `initialize()` to a ready engine against the mock Worker.
+ *
+ * `initialize()` now resolves when the worker reports `ready` (not when the
+ * message is posted), so the message cannot be emitted from inside an
+ * `await initialize()` — that ordering is what these tests used to rely on.
+ */
+const startEngine = async (
+  ttsService: import('./tts_service.svelte.ts').TtsServiceInterface,
+  backend: 'wasm' | 'webgpu' = 'wasm',
+): Promise<void> => {
+  const voiceModel = await import('./voice_model_service.svelte.ts');
+  const voiceModelSvc = voiceModel.voiceModelService as unknown as Service;
+  // Restored before returning: voiceModelService is a shared singleton, and a
+  // permanently-stubbed 'ready' made a later test that expects the model NOT
+  // to be downloaded take the worker path and hang waiting for 'ready'.
+  const originalCheckStatus = voiceModelSvc.checkStatus;
+  voiceModelSvc.checkStatus = mock(async () => ({ status: 'ready' }));
+  Object.defineProperty(navigator, 'gpu', { value: undefined, configurable: true });
+  try {
+    const initPromise = ttsService.initialize();
+    await waitForWorkerConstruction();
+    simulateWorkerMessage({ type: 'ready', backend, instanceId: TEST_INSTANCE_ID });
+    await initPromise;
+  } finally {
+    voiceModelSvc.checkStatus = originalCheckStatus;
+  }
+};
+
 // ---------------------------------------------------------------------------
 // Shared state resets
 // ---------------------------------------------------------------------------
@@ -96,12 +139,11 @@ const resetTtsService = async (): Promise<{
 }> => {
   const mod = await import('./tts_service.svelte.ts');
   const svc = mod.ttsService as unknown as Service;
-  svc.status = 'uninitialized';
-  svc.errorMessage = null;
-  svc.backend = 'unavailable';
-  svc._worker = null;
-  svc._kokoroServerUrl = undefined;
-  svc.isKokoroServerAvailable = false;
+  // reset() is the public teardown: it aborts the lifetime (so an in-flight
+  // initialize cannot resume and spawn an engine), disposes the worker
+  // client, and clears server-mode state. Reaching into private fields here
+  // left the new _engine/_flight/_lifetime state behind between tests.
+  (mod.ttsService as unknown as { reset: () => void }).reset();
   // A resolved narrator-voice role mutates selectedVoice directly
   // (tts_service.svelte.ts sets it from the connection's voiceId); without
   // resetting it here, a later test with no role resolved inherits whatever
@@ -192,7 +234,10 @@ describe('TtsService — C-389 config-driven TTS', () => {
     voiceModelSvc.checkStatus = mock(async () => ({ status: 'ready' }));
 
     try {
-      await ttsService.initialize();
+      // Do NOT await: initialize() resolves on the worker's 'ready', which
+      // only arrives once the initialize message has been posted.
+      const initPromise = ttsService.initialize();
+      await waitForWorkerConstruction();
 
       expect(workerMockState.instances.length).toBeGreaterThan(0);
       const initCall = (workerMockState.postMessage as ReturnType<typeof mock>).mock.calls[0]?.[0];
@@ -200,6 +245,12 @@ describe('TtsService — C-389 config-driven TTS', () => {
       expect(initCall.wasmPath).toContain('/ort/');
       expect(initCall.modelId).toBe('onnx-community/Kokoro-82M-ONNX');
       expect(initCall.revision).not.toBe('main');
+      // The worker picks the backend: probing on the main thread delayed the
+      // 7s model load and probed the wrong context.
+      expect(initCall.device).toBe('auto');
+
+      simulateWorkerMessage({ type: 'ready', backend: 'wasm', instanceId: TEST_INSTANCE_ID });
+      await initPromise;
     } finally {
       voiceModelSvc.checkStatus = originalCheckStatus;
     }
@@ -216,10 +267,7 @@ describe('TtsService — C-389 config-driven TTS', () => {
     Object.defineProperty(navigator, 'gpu', { value: undefined, configurable: true });
 
     try {
-      const initPromise = ttsService.initialize();
-      await new Promise((r) => setTimeout(r, 10));
-      simulateWorkerMessage({ type: 'ready', backend: 'wasm' });
-      await initPromise;
+      await startEngine(ttsService, 'wasm');
 
       expect(ttsService.status).toBe('ready');
       expect(ttsService.backend).toBe('wasm');
@@ -231,16 +279,11 @@ describe('TtsService — C-389 config-driven TTS', () => {
   test('synthesize() posts synthesize message when the worker is ready', async () => {
     setupFetchSpy();
     const { ttsService } = await resetTtsService();
-    (ttsService as unknown as Service).status = 'ready';
-    (ttsService as unknown as Service).backend = 'wasm';
-    (ttsService as unknown as Service)._worker = {
-      postMessage: workerMockState.postMessage,
-    } as unknown as Worker;
+    await startEngine(ttsService, 'wasm');
 
-    await ttsService.synthesize({
-      text: 'Hello world.',
-      voice: 'af_bella',
-    });
+    // Not awaited: the promise settles when the worker completes, which the
+    // assertion below then simulates.
+    void ttsService.synthesize({ text: 'Hello world.', voice: 'af_bella' });
 
     // requestId correlates the response with this request — a stale
     // completion from a superseded synthesis must not play.
@@ -274,13 +317,7 @@ describe('TtsService — C-389 config-driven TTS', () => {
     restoreCheckStatus = () => {
       voiceModelSvc.checkStatus = originalCheckStatus;
     };
-    voiceModelSvc.checkStatus = mock(async () => ({ status: 'ready' }));
-    Object.defineProperty(navigator, 'gpu', { value: undefined, configurable: true });
-
-    const initPromise = ttsService.initialize();
-    await new Promise((r) => setTimeout(r, 10));
-    simulateWorkerMessage({ type: 'ready', backend: 'wasm' });
-    await initPromise;
+    await startEngine(ttsService, 'wasm');
 
     const playSpy = mock(async () => {});
     (ttsService as unknown as Service).playAudioBuffer = playSpy;
@@ -294,9 +331,9 @@ describe('TtsService — C-389 config-driven TTS', () => {
   test('a superseded synthesis completing late plays nothing', async () => {
     const { ttsService, playSpy } = await initializeWorkerBackedService();
 
-    await ttsService.synthesize({ text: 'first', voice: 'af_bella' });
+    void ttsService.synthesize({ text: 'first', voice: 'af_bella' });
     const firstId = lastRequestId();
-    await ttsService.synthesize({ text: 'second', voice: 'af_bella' });
+    void ttsService.synthesize({ text: 'second', voice: 'af_bella' });
     expect(lastRequestId()).not.toBe(firstId);
 
     // The first request finishes after the second was posted.
@@ -313,9 +350,11 @@ describe('TtsService — C-389 config-driven TTS', () => {
   test('a completion arriving after stop() plays nothing', async () => {
     const { ttsService, playSpy } = await initializeWorkerBackedService();
 
-    await ttsService.synthesize({ text: 'cancelled', voice: 'af_bella' });
+    const pending = ttsService.synthesize({ text: 'cancelled', voice: 'af_bella' });
     const id = lastRequestId();
     ttsService.stop();
+    // A stopped request settles as cancelled rather than hanging.
+    expect(await pending).toEqual({ kind: 'cancelled' });
 
     simulateWorkerMessage({
       type: 'complete',
@@ -330,7 +369,7 @@ describe('TtsService — C-389 config-driven TTS', () => {
   test('the matching completion does play', async () => {
     const { ttsService, playSpy } = await initializeWorkerBackedService();
 
-    await ttsService.synthesize({ text: 'current', voice: 'af_bella' });
+    const pending = ttsService.synthesize({ text: 'current', voice: 'af_bella' });
 
     simulateWorkerMessage({
       type: 'complete',
@@ -339,6 +378,7 @@ describe('TtsService — C-389 config-driven TTS', () => {
       requestId: lastRequestId(),
     });
 
+    expect(await pending).toEqual({ kind: 'scheduled' });
     expect(playSpy).toHaveBeenCalled();
   });
 
@@ -564,5 +604,195 @@ describe('TtsService — C-389 config-driven TTS', () => {
     // Neither stored state nor the live gain changed.
     expect(ttsService.ttsVolume).toBe(0.4);
     expect(gain.gain.value).toBe(gainBefore);
+  });
+  // -----------------------------------------------------------------------
+  // Lifecycle: single-flight, cancellation, and honest outcomes
+  // -----------------------------------------------------------------------
+
+  test('concurrent initialize() calls construct exactly one worker', async () => {
+    // Regression guard: status used to be claimed ~90 lines after the guard,
+    // across several awaits, so every concurrent caller passed the guard and
+    // spawned its own worker — each leaking a full 7-second model load.
+    setupFetchSpy();
+    const { ttsService } = await resetTtsService();
+    const voiceModel = await import('./voice_model_service.svelte.ts');
+    const voiceModelSvc = voiceModel.voiceModelService as unknown as Service;
+    const original = voiceModelSvc.checkStatus;
+    voiceModelSvc.checkStatus = mock(async () => ({ status: 'ready' }));
+    try {
+      const first = ttsService.initialize();
+      const second = ttsService.initialize();
+      const third = ttsService.initialize();
+      await waitForWorkerConstruction();
+      simulateWorkerMessage({ type: 'ready', backend: 'wasm', instanceId: TEST_INSTANCE_ID });
+      await Promise.all([first, second, third]);
+
+      expect(workerMockState.instances.length).toBe(1);
+      expect(ttsService.status).toBe('ready');
+    } finally {
+      voiceModelSvc.checkStatus = original;
+    }
+  });
+
+  test('speak() during a cold load is honoured once the engine is ready', async () => {
+    // The reported UX bug: clicking Test TTS before initialization finished
+    // was dropped, so the user had to click a second time.
+    setupFetchSpy();
+    const { ttsService } = await resetTtsService();
+    const voiceModel = await import('./voice_model_service.svelte.ts');
+    const voiceModelSvc = voiceModel.voiceModelService as unknown as Service;
+    const original = voiceModelSvc.checkStatus;
+    voiceModelSvc.checkStatus = mock(async () => ({ status: 'ready' }));
+    (ttsService as unknown as Service).playAudioBuffer = mock(async () => {});
+    try {
+      const init = ttsService.initialize();
+      await waitForWorkerConstruction();
+
+      // Clicked while still initializing — must not be refused.
+      const speaking = ttsService.speak({ text: 'queued during load' });
+      let settled = false;
+      void speaking.then(() => {
+        settled = true;
+      });
+      await new Promise((r) => setTimeout(r, 20));
+      expect(settled).toBe(false);
+
+      simulateWorkerMessage({ type: 'ready', backend: 'wasm', instanceId: TEST_INSTANCE_ID });
+      await init;
+
+      const synth = (workerMockState.postMessage as ReturnType<typeof mock>).mock.calls
+        .map((call) => call[0] as { action?: string })
+        .findLast((msg) => msg.action === 'synthesize');
+      expect(synth).toBeDefined();
+
+      simulateWorkerMessage({
+        type: 'complete',
+        pcmData: new Float32Array([0.1]),
+        sampleRate: 24000,
+        requestId: synth?.requestId as number,
+      });
+      expect(await speaking).toEqual({ kind: 'scheduled' });
+    } finally {
+      voiceModelSvc.checkStatus = original;
+    }
+  });
+
+  test('stop() settles a pending speak() as cancelled instead of hanging', async () => {
+    const { ttsService } = await resetTtsService();
+    await startEngine(ttsService, 'wasm');
+
+    const pending = ttsService.speak({ text: 'stop me' });
+    ttsService.stop();
+
+    expect(await pending).toEqual({ kind: 'cancelled' });
+  });
+
+  test('a second speak() cancels the first rather than overlapping', async () => {
+    const { ttsService } = await resetTtsService();
+    await startEngine(ttsService, 'wasm');
+    (ttsService as unknown as Service).playAudioBuffer = mock(async () => {});
+
+    const first = ttsService.speak({ text: 'one' });
+    const firstId = lastRequestId();
+    const second = ttsService.speak({ text: 'two' });
+
+    // Superseding must tell the worker to skip the utterance, not generate
+    // it and throw the audio away.
+    expect(workerMockState.postMessage).toHaveBeenCalledWith({
+      action: 'cancel',
+      requestId: firstId,
+    });
+    expect(await first).toEqual({ kind: 'cancelled' });
+
+    simulateWorkerMessage({
+      type: 'complete',
+      pcmData: new Float32Array([0.1]),
+      sampleRate: 24000,
+      requestId: lastRequestId(),
+    });
+    expect(await second).toEqual({ kind: 'scheduled' });
+  });
+
+  test('a per-request error rejects that speak() but keeps the engine ready', async () => {
+    const { ttsService } = await resetTtsService();
+    await startEngine(ttsService, 'wasm');
+
+    const pending = ttsService.speak({ text: 'bad voice' });
+    simulateWorkerMessage({
+      type: 'error',
+      name: 'Error',
+      message: 'Voice "nope" not found.',
+      instanceId: TEST_INSTANCE_ID,
+      requestId: lastRequestId(),
+    });
+
+    // Only this request fails; the caller's catch surfaces the real reason.
+    let rejection: unknown;
+    try {
+      await pending;
+    } catch (error: unknown) {
+      rejection = error;
+    }
+    expect(rejection).toBeInstanceOf(Error);
+    expect((rejection as Error).message).toContain('not found');
+    // A one-bad-request failure must not cost a 7-second reload.
+    expect(ttsService.status).toBe('ready');
+  });
+
+  test('an engine-level error (no requestId) fails the engine', async () => {
+    const { ttsService } = await resetTtsService();
+    await startEngine(ttsService, 'wasm');
+
+    simulateWorkerMessage({
+      type: 'error',
+      name: 'Error',
+      message: 'Kokoro model load timed out',
+      instanceId: TEST_INSTANCE_ID,
+    });
+
+    expect(ttsService.status).toBe('error');
+    expect(ttsService.backend).toBe('unavailable');
+    expect(ttsService.errorMessage).toContain('timed out');
+  });
+
+  test('a worker module instance change is fatal, not a silent stale worker', async () => {
+    // The bug this whole refactor traces back to: a code-split worker whose
+    // module graph closes a cycle evaluates its entry twice, so the router
+    // that answers is bound to an empty `session`. That must be one precise
+    // error, not a stream of "Kokoro session not initialized".
+    const { ttsService } = await resetTtsService();
+    await startEngine(ttsService, 'wasm');
+
+    simulateWorkerMessage({
+      type: 'complete',
+      pcmData: new Float32Array([0.1]),
+      sampleRate: 24000,
+      requestId: 999,
+      instanceId: 'a-different-instance',
+    });
+
+    expect(ttsService.status).toBe('error');
+    expect(ttsService.errorMessage).toContain('instance changed');
+  });
+
+  test('reset() during a cold load prevents the engine from ever coming up', async () => {
+    setupFetchSpy();
+    const { ttsService } = await resetTtsService();
+    const voiceModel = await import('./voice_model_service.svelte.ts');
+    const voiceModelSvc = voiceModel.voiceModelService as unknown as Service;
+    const original = voiceModelSvc.checkStatus;
+    voiceModelSvc.checkStatus = mock(async () => ({ status: 'ready' }));
+    try {
+      const init = ttsService.initialize();
+      await waitForWorkerConstruction();
+      ttsService.reset();
+      simulateWorkerMessage({ type: 'ready', backend: 'wasm', instanceId: TEST_INSTANCE_ID });
+      await init;
+
+      // The aborted flight must not publish a usable engine.
+      expect(ttsService.status).toBe('uninitialized');
+    } finally {
+      voiceModelSvc.checkStatus = original;
+    }
   });
 });

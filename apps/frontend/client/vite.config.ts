@@ -399,6 +399,29 @@ export default defineConfig(({ command, mode }) => {
       // ES module format. IIFE/UMD worker builds do not support code-splitting
       // dynamic imports.
       format: 'es',
+      rolldownOptions: {
+        // Each worker must be ONE self-contained file. Code-splitting a
+        // worker produces a module graph inside the worker global, and that
+        // graph can close a cycle: kokoro_worker statically imports the
+        // transformers chunk, and the chunk holding kokoro-js (reached via
+        // `await import('kokoro-js')`) statically imports BACK into the
+        // worker entry. The entry body then evaluates a second time, which
+        // re-runs `self.onmessage = ...` with a FRESH module-scope `session`
+        // that is still null. Symptom: the worker that reported `ready` is not
+        // the worker that answers `synthesize`, and every request fails with
+        // "Kokoro session not initialized".
+        //
+        // Chromium (web + WebView2) dedupes the re-imported entry; WebKitGTK
+        // (Linux Tauri, served from `tauri://localhost`) does not, so the bug
+        // only reproduces on Linux desktop. Inlining removes the back-edge
+        // entirely, on every platform.
+        //
+        // Cost is nil: these workers exist only to load their engine
+        // immediately, so the lazy split bought nothing. Inlined
+        // `import('onnxruntime-web/webgpu')` / `import('kokoro-js')` still
+        // code-split in the MAIN app build, where that matters.
+        output: { inlineDynamicImports: true },
+      },
       // Worker bundles use their own plugin pipeline (`worker.plugins`), NOT
       // the top-level `config.plugins`. The ORT externalization must be
       // registered here as well or worker-owned ORT assets (kokoro_worker,

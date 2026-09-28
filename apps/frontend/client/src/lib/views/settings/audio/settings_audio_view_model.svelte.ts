@@ -44,7 +44,8 @@ export type SettingsAudioTtsCapabilities = {
   setTtsVolume(volume: number): void;
   initialize(): Promise<void>;
   reset(): void;
-  synthesize(options: { text: string; voice: string }): Promise<void>;
+  /** Resolves with a `SpeakOutcome`; rejects only on a genuine failure. */
+  synthesize(options: { text: string; voice: string }): Promise<unknown>;
   stop(): void;
 };
 
@@ -121,6 +122,19 @@ export type SettingsAudioViewModelInterface = BaseViewModelInterface & {
   stopTts(): void;
   /** Whether TTS audio is currently playing. */
   readonly isTtsPlaying: boolean;
+  /**
+   * True while a Test TTS request is in flight (including the wait for the
+   * speech runtime to finish loading). The button reflects this so a click
+   * that IS being honoured does not look ignored.
+   */
+  readonly isTtsBusy: boolean;
+  /**
+   * Voice-model section status line (model + speech runtime state).
+   *
+   * Separate from {@link feedback}, which is the transient result of the last
+   * action and renders under Test Playback.
+   */
+  readonly voiceModelFeedback: string | null;
 };
 
 // ---------------------------------------------------------------------------
@@ -153,6 +167,8 @@ class SettingsAudioViewModel
   private readonly _voiceModel: SettingsAudioVoiceModelCapabilities;
   private readonly _runtimeConfig: SettingsAudioRuntimeConfigCapabilities;
   private readonly _playSceneBgm: (scene: 'explore' | 'combat') => Promise<void>;
+  /** Guards against a second Test TTS while one is in flight. */
+  private _testTtsBusy = false;
 
   constructor(options: SettingsAudioViewModelOptions) {
     super(options);
@@ -342,38 +358,120 @@ class SettingsAudioViewModel
     return this._tts.isPlaying;
   }
 
+  get isTtsBusy(): boolean {
+    return this._testTtsBusy;
+  }
+
+  /**
+   * Status line for the voice-model section.
+   *
+   * Deliberately separate from {@link feedback}, which is the result of the
+   * last *action* and renders under Test Playback — reusing it here printed
+   * every action result twice and made a runtime failure look like a
+   * voice-model problem.
+   */
+  get voiceModelFeedback(): string | null {
+    if (this._tts.status === 'error' && this._tts.errorMessage) {
+      return `TTS failed: ${this._tts.errorMessage}`;
+    }
+    if (this.voiceModelState.status !== 'ready') {
+      return 'Voice model not downloaded yet.';
+    }
+    if (this._tts.status === 'initializing') {
+      return 'Loading speech runtime…';
+    }
+    if (this._tts.status === 'ready') {
+      return `Speech runtime ready (${this._tts.backend}).`;
+    }
+    return null;
+  }
+
   async testTts(): Promise<void> {
+    if (this._testTtsBusy) {
+      return;
+    }
+    this._testTtsBusy = true;
+    try {
+      await this._runTestTts();
+    } finally {
+      this._testTtsBusy = false;
+    }
+  }
+
+  private async _runTestTts(): Promise<void> {
     // The TTS service only probes the Kokoro server once, during initialize().
     // If the voice server started after Settings opened (or was briefly down),
     // re-discover it so server-mode synthesis actually works instead of
-    // silently falling back to the browser worker.
+    // silently falling back to the browser engine.
     const mode = this._runtimeConfig.getVoiceTtsMode();
     const serverUrl = this._runtimeConfig.getVoiceTtsUrl();
     if (mode === 'server' && serverUrl && !this._tts.isKokoroServerAvailable) {
       this.feedback = 'Probing voice server…';
       this._tts.reset();
-      await this._tts.initialize().catch(() => {});
     }
 
-    if (this._tts.status !== 'ready') {
-      this.feedback = 'TTS not ready — download the voice model first.';
-      return;
+    // Bring the engine up without blocking on it. The cold Kokoro load takes
+    // several seconds, and a click during that window used to be dropped —
+    // the user had to click again. The service now joins the in-flight load,
+    // so this await returns as soon as the engine is genuinely usable.
+    //
+    // `status` is re-read into a local after the await: it is declared
+    // `readonly` on the capability, so TypeScript would otherwise keep the
+    // pre-await narrowing and conclude 'ready' is unreachable.
+    const readyNow = (): TtsStatus => this._tts.status;
+    if (readyNow() !== 'ready') {
+      this.feedback = 'Loading speech runtime…';
+      await this._tts.initialize();
+      const afterInit = readyNow();
+      if (afterInit === 'error') {
+        this.feedback = `TTS failed: ${this._tts.errorMessage ?? 'unknown error'}`;
+        return;
+      }
+      if (afterInit === 'not-downloaded') {
+        this.feedback = 'TTS not ready — download the voice model first.';
+        return;
+      }
+      if (afterInit !== 'ready') {
+        this.feedback = 'TTS is disabled in the voice settings.';
+        return;
+      }
     }
 
     this.feedback = 'Speaking test phrase…';
-    await this._tts.synthesize({
-      text: SettingsAudioViewModel._ttsTestText,
-      voice: this._tts.selectedVoice,
-    });
-    // synthesize() resolves once the request is queued, not when playback
-    // finishes — so report that playback started rather than claiming
-    // completion. Surface real failures instead of always claiming success.
-    if (this._tts.errorMessage) {
-      this.feedback = `TTS failed: ${this._tts.errorMessage}`;
-    } else if (this._tts.isPlaying) {
-      this.feedback = 'TTS test playing…';
-    } else {
-      this.feedback = 'TTS test queued.';
+    try {
+      const outcome = await this._tts.synthesize({
+        text: SettingsAudioViewModel._ttsTestText,
+        voice: this._tts.selectedVoice,
+      });
+      this.feedback = SettingsAudioViewModel._outcomeMessage(outcome);
+    } catch (error: unknown) {
+      this.feedback = `TTS failed: ${error instanceof Error ? error.message : String(error)}`;
+    }
+  }
+
+  /**
+   * Maps a {@link SpeakOutcome} to one honest line of UI copy.
+   *
+   * Takes `unknown` because the capability deliberately does not widen to the
+   * concrete outcome union — an unexpected shape must not crash the settings
+   * page.
+   */
+  private static _outcomeMessage(outcome: unknown): string {
+    const kind =
+      typeof outcome === 'object' && outcome !== null && 'kind' in outcome
+        ? String((outcome as { kind: unknown }).kind)
+        : 'unknown';
+    const status =
+      typeof outcome === 'object' && outcome !== null && 'status' in outcome
+        ? String((outcome as { status: unknown }).status)
+        : 'unknown';
+    switch (kind) {
+      case 'scheduled':
+        return 'TTS test playing…';
+      case 'cancelled':
+        return 'TTS test stopped before it finished.';
+      default:
+        return `TTS unavailable (${status}).`;
     }
   }
 

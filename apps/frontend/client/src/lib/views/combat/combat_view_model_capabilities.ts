@@ -129,7 +129,12 @@ export type CombatTextCapabilities = {
 
 /** Text-to-speech used for enemy taunts and gatekeeping narration. */
 export type CombatTtsCapabilities = {
-  synthesize(options: { text: string; voice: string }): Promise<void>;
+  /**
+   * Resolves with a `SpeakOutcome`; rejects only on a genuine failure.
+   * Combat treats any resolution as handled and only logs a rejection, so
+   * the concrete outcome type is not part of this capability.
+   */
+  synthesize(options: { text: string; voice: string }): Promise<unknown>;
 };
 
 /** Dice notation resolution for queued rolls. */

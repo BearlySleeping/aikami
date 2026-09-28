@@ -44,6 +44,14 @@ type ProviderDescriptor = {
   description: string;
   needsKey: boolean;
   needsUrl?: boolean;
+  /**
+   * Whether this provider ACCEPTS a credential without requiring one. The
+   * user-supplied-endpoint entries (`custom`, `openai-compat`) serve both a
+   * local keyless server and a hosted API behind a key, and nothing in the
+   * registry can tell them apart ahead of time — so the key field is shown
+   * and left optional instead of being hidden from every custom endpoint.
+   */
+  optionalKey?: boolean;
   isLocal: boolean;
   /** Fixed cloud API origin, e.g. 'https://api.openai.com'. Omitted for local/custom-URL and region-varying providers. */
   apiBaseUrl?: string;
@@ -127,6 +135,17 @@ export const TEXT_PROVIDERS = [
     capabilities: ['text'],
   },
   {
+    id: 'nanogpt',
+    label: 'NanoGPT',
+    description: 'Pay-per-prompt OpenAI-compatible gateway to many models',
+    needsKey: true,
+    isLocal: false,
+    apiBaseUrl: 'https://api.nano-gpt.com',
+    verificationStrategy: 'cloud_header_auth',
+    supportsModelDiscovery: true,
+    capabilities: ['text'],
+  },
+  {
     id: 'ollama',
     label: 'Ollama (local)',
     description: 'Local LLM server',
@@ -162,8 +181,9 @@ export const TEXT_PROVIDERS = [
   {
     id: 'custom',
     label: 'Custom API',
-    description: 'OpenAI-compatible endpoint',
+    description: 'Any OpenAI-compatible endpoint — key optional',
     needsKey: false,
+    optionalKey: true,
     needsUrl: true,
     isLocal: false,
     verificationStrategy: 'openai_compat',
@@ -327,8 +347,9 @@ export const IMAGE_PROVIDERS = [
   {
     id: 'openai-compat',
     label: 'OpenAI Compatible',
-    description: 'OpenAI-compatible image API',
+    description: 'OpenAI-compatible image API — key optional',
     needsKey: false,
+    optionalKey: true,
     needsUrl: true,
     isLocal: false,
     verificationStrategy: 'openai_compat',
@@ -412,6 +433,24 @@ export const providerNeedsUrl = (registryId: string): boolean => {
  */
 export const providerNeedsKey = (registryId: string): boolean =>
   findProviderDescriptor(registryId)?.needsKey ?? false;
+
+/**
+ * Whether the connection editor should show an API key field for a provider —
+ * required (`needsKey`) or accepted-but-optional (`optionalKey`). Asking for
+ * "does this provider need a key?" and rendering the field from the answer
+ * hides the field on every custom endpoint, which is how a user with a valid
+ * key for their own API ends up with nowhere to paste it.
+ */
+export const providerAcceptsKey = (
+  registryId: string,
+  capability?: ProviderCapability,
+): boolean => {
+  const descriptor = findProviderDescriptor(registryId, capability);
+  if (!descriptor) {
+    return false;
+  }
+  return descriptor.needsKey || ('optionalKey' in descriptor && descriptor.optionalKey === true);
+};
 
 /**
  * Get the verification strategy for a provider. C-481.

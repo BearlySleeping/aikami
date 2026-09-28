@@ -123,6 +123,33 @@ describe('resolveChatTestRequest', () => {
     expect(body.messages).toEqual([{ role: 'user', content: 'hi' }]);
   });
 
+  test('nanogpt uses the OpenAI-compatible chat endpoint', () => {
+    const request = resolveChatTestRequest({
+      registryId: 'nanogpt',
+      model: 'anthropic/claude-opus-4.6',
+      apiKey: 'ngpt-test-key',
+    });
+
+    expect(request?.url).toBe('https://api.nano-gpt.com/api/v1/chat/completions');
+    expect(request?.headers.Authorization).toBe('Bearer ngpt-test-key');
+  });
+
+  test('a custom endpoint with a key is probed as an OpenAI-compatible account', async () => {
+    const fetchMock = mock(async () => Response.json({ object: 'list', data: [] }));
+    globalThis.fetch = fetchMock;
+
+    const models = await fetchModelsFromProvider({
+      config: PROVIDER_MODEL_FETCH.custom,
+      apiKey: 'custom-key',
+      baseUrl: 'https://api.example.test',
+    });
+
+    expect(models).toEqual([]);
+    const [url, init] = fetchMock.mock.calls[0] as [URL, RequestInit];
+    expect(String(url)).toBe('https://api.example.test/v1/models');
+    expect((init.headers as Record<string, string>).Authorization).toBe('Bearer custom-key');
+  });
+
   test('google builds a generateContent request with a query key', () => {
     const request = resolveChatTestRequest({
       registryId: 'google',
@@ -199,6 +226,34 @@ describe('resolveChatTestRequest', () => {
 
   test('an unknown provider yields no request', () => {
     expect(resolveChatTestRequest({ registryId: 'does-not-exist', model: 'x' })).toBeUndefined();
+  });
+});
+
+describe('nanogpt model discovery', () => {
+  test('parses the OpenAI list shape and prefers a returned display name', async () => {
+    const fetchMock = mock(async () =>
+      Response.json({
+        object: 'list',
+        data: [
+          { id: 'openai/gpt-5.6-sol', name: 'GPT 5.6 Sol' },
+          { id: 'anthropic/claude-opus-4.6' },
+        ],
+      }),
+    );
+    globalThis.fetch = fetchMock;
+
+    const models = await fetchModelsFromProvider({
+      config: PROVIDER_MODEL_FETCH.nanogpt,
+      apiKey: 'ngpt-test-key',
+    });
+
+    expect(models).toEqual([
+      { id: 'openai/gpt-5.6-sol', name: 'GPT 5.6 Sol' },
+      { id: 'anthropic/claude-opus-4.6', name: 'anthropic/claude-opus-4.6' },
+    ]);
+    const [url, init] = fetchMock.mock.calls[0] as [URL, RequestInit];
+    expect(String(url)).toBe('https://api.nano-gpt.com/api/v1/models');
+    expect((init.headers as Record<string, string>).Authorization).toBe('Bearer ngpt-test-key');
   });
 });
 

@@ -4,7 +4,7 @@
 // (C-465) with a status board, provider tree, roles drawer, voice/image
 // panels, and generation-parameter disclosure.
 
-import { type GenParamPreset, providerNeedsKey } from '@aikami/constants';
+import { type GenParamPreset, providerAcceptsKey, providerNeedsKey } from '@aikami/constants';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
@@ -49,6 +49,7 @@ import {
   type CapabilityStatusEntry,
   connectionStatusDescriptor,
 } from './ai_connection_status.svelte';
+import { writeEditedConnection, writeNewConnection } from './ai_connection_writer';
 import {
   type CapabilitySetupPrefill,
   defaultParamsForCapability,
@@ -56,7 +57,6 @@ import {
   type EditorDraft,
   type KeyConflictPrompt,
   modelTestUnavailableError,
-  uniqueConnectionLabel,
 } from './ai_draft_editor';
 import { EditorOperation } from './ai_editor_operations';
 import {
@@ -71,12 +71,14 @@ import {
   imagePreviewUrlFor,
 } from './ai_image_section';
 import { runDraftModelTest } from './ai_model_testing';
+import { planProviderAccount } from './ai_provider_account';
 import {
   registryEntryFor,
   registryForCapability,
   registryLabel,
   registryNeedsUrl,
 } from './ai_provider_registry';
+
 import { buildProviderTree, type ProviderTreeEntry } from './ai_provider_tree';
 import {
   ALL_ROLES,
@@ -164,7 +166,12 @@ export type AiSettingsViewModelInterface = BaseViewModelInterface & {
   readonly isFetchingModels: boolean;
   readonly fetchModelsError: string | undefined;
   readonly canFetchModels: boolean;
+  /** Whether the editor should show an API key field for the selected provider. */
   readonly needsApiKey: boolean;
+  /** Whether that field is a suggestion rather than a requirement (user-supplied endpoints). */
+  readonly apiKeyIsOptional: boolean;
+  /** Placeholder for the key field, stating what leaving it empty means. */
+  readonly apiKeyPlaceholder: string;
   readonly needsUrl: boolean;
   readonly isLocalProvider: boolean;
   /** Whether the selected provider is a bundled local binary (Kokoro) rather than a server endpoint. */
@@ -592,11 +599,20 @@ export class AiSettingsViewModel
   }
 
   get needsApiKey(): boolean {
-    const regEntry = registryEntryFor(this.draft.capability, this.draft.registryId);
-    if (!regEntry) {
-      return true;
-    }
-    return !regEntry.isLocal && regEntry.needsKey;
+    // An id the registry no longer knows (a removed provider, a hand-edited
+    // config) may still own a stored credential. Falling back to "show the
+    // field" is the only way the user can still see or correct it.
+    return registryEntryFor(this.draft.capability, this.draft.registryId)
+      ? providerAcceptsKey(this.draft.registryId, this.draft.capability)
+      : true;
+  }
+
+  get apiKeyIsOptional(): boolean {
+    return this.needsApiKey && !providerNeedsKey(this.draft.registryId);
+  }
+
+  get apiKeyPlaceholder(): string {
+    return this.apiKeyIsOptional ? 'Leave empty if the endpoint needs no key' : 'Enter API key';
   }
 
   get needsUrl(): boolean {
@@ -1048,6 +1064,12 @@ export class AiSettingsViewModel
     if (field === 'apiKey' || field === 'baseUrl' || field === 'model') {
       this._invalidateDraftModelTest();
     }
+    // Typing the endpoint decides WHICH account this draft is: retype an
+    // existing custom URL and the draft joins that account (its stored key
+    // applies), type a new one and it becomes a new account on save.
+    if (field === 'baseUrl' && typeof value === 'string') {
+      this.draft = { ...this.draft, providerId: this._accountForDraft().existing?.id };
+    }
   }
 
   setModelQuery(value: string): void {
@@ -1081,8 +1103,18 @@ export class AiSettingsViewModel
     this.isModelDropdownOpen = false;
     this.fetchModelsError = undefined;
 
-    // Check if a provider with this registryId already exists
-    const existingProvider = this._findProviderByRegistry(registryId);
+    // Does an account already exist for the provider being switched to? For a
+    // provider that takes a user-supplied URL the id alone is not an account —
+    // the draft has to be matched against the endpoint, which is why an
+    // endpoint-scoped switch here resolves to no account and leaves the URL
+    // field empty for the user to fill in.
+    const existingProvider = planProviderAccount({
+      providers: this._config.getProviders(),
+      registryId,
+      baseUrl: this.draft.baseUrl,
+      apiKey: undefined,
+      endpointScoped: registryNeedsUrl(this.draft.capability, registryId),
+    }).existing;
     const prefillKey = existingProvider?.credential ?? '';
 
     // Detect key conflict: if user had a different key and now switches
@@ -1169,138 +1201,35 @@ export class AiSettingsViewModel
   ): Promise<void> {
     this.saveError = undefined;
 
-    const reg = this.draft.registryId;
-    const cap = this.draft.capability;
-    const requestedLabel = this.draft.label?.trim() || registryLabel(reg) || reg;
-    const label = this.draft.isEditing
-      ? requestedLabel
-      : uniqueConnectionLabel(
-          requestedLabel,
-          this._connectionsForCapability(cap).map((connection) => connection.label?.trim()),
-        );
-    const model = this.draft.model;
-    let savedConnectionId: ConnectionId | undefined;
+    const forceSeparate = conflictPrompt?.resolveSeparate === true;
+    const writeContext = {
+      config: this._config,
+      draft: this.draft,
+      endpointScoped: this.needsUrl,
+      genParams: this._genParamsDraft,
+      credentialOverride: forceSeparate ? conflictPrompt?.newKey : undefined,
+      forceSeparate,
+      isDefaultClaimed: (capability: ConnectionCapability) =>
+        Boolean(this._config.state.defaultByCapability?.[capability]),
+      onAccountChanged: (providerId: string) => this._clearTestResultsForProvider(providerId),
+    };
 
-    if (this.draft.isEditing && this.draft.editingConnectionId) {
-      savedConnectionId = this.draft.editingConnectionId;
-      // Update existing connection
-      const conn = this._config.getAiConnection(this.draft.editingConnectionId);
-      if (!conn) {
-        return;
-      }
+    const editingId = this.draft.editingConnectionId;
+    const result =
+      this.draft.isEditing && editingId
+        ? writeEditedConnection({ ...writeContext, connectionId: editingId })
+        : writeNewConnection(writeContext);
+    const savedConnectionId = result.connectionId as ConnectionId | undefined;
 
-      // Resolve the provider this connection should point at after the edit.
-      // Switching the provider dropdown must actually repoint the connection
-      // (reusing the matching account when one exists) — never leave the saved
-      // row on the old provider while the editor shows the new one.
-      const currentProvider = this._config.getProvider(conn.providerId);
-      const registryChanged = this.draft.registryId !== currentProvider?.registryId;
-      let targetProviderId = conn.providerId;
-      let targetProvider = currentProvider;
-
-      if (registryChanged) {
-        targetProvider = this._findProviderByRegistry(this.draft.registryId);
-        if (targetProvider) {
-          targetProviderId = targetProvider.id;
-        } else {
-          targetProviderId = this._config.addProvider({
-            registryId: this.draft.registryId,
-            label: registryLabel(this.draft.registryId) ?? this.draft.registryId,
-            credential: this.draft.apiKey || undefined,
-            baseUrl: this.draft.baseUrl?.trim() || undefined,
-            source: 'stored',
-          });
-          targetProvider = this._config.getProvider(targetProviderId);
-        }
-      }
-
-      // Endpoint and credential live on the provider account, so an edit to
-      // the Server URL must be written there too — and it invalidates results
-      // measured against the previous account.
-      if (targetProvider) {
-        const providerPatch: Partial<Omit<AiProvider, 'id'>> = {};
-        const nextBaseUrl = this.draft.baseUrl?.trim() || undefined;
-        if (nextBaseUrl !== targetProvider.baseUrl) {
-          providerPatch.baseUrl = nextBaseUrl;
-        }
-        if (this.draft.apiKey && this.draft.apiKey !== targetProvider.credential) {
-          providerPatch.credential = this.draft.apiKey;
-        }
-        if (Object.keys(providerPatch).length > 0) {
-          this._config.updateProvider(targetProvider.id, providerPatch);
-          // P03 AC-4: the account is shared by every connection on this
-          // provider, so a rotation invalidates the sibling rows' results too.
-          this._clearTestResultsForProvider(targetProvider.id);
-        }
-      }
-
-      const patch: Partial<Omit<AiConnection, 'id' | 'createdAt'>> = { label, model };
-      if (targetProviderId !== conn.providerId) {
-        patch.providerId = targetProviderId;
-      }
-      // AC-8: params are included in the patch ONLY when the Advanced
-      // disclosure was actually edited — opening it alone must never write
-      // a default value into a connection that never had one.
-      if (conn.capability === 'text' && Object.keys(this._genParamsDraft).length > 0) {
-        patch.params = { ...(conn.params as TextParams), ...this._genParamsDraft } as TextParams;
-      }
-      this._config.updateAiConnection(this.draft.editingConnectionId, patch);
-      // Invalidate stale test result on edit (endpoint or credential may have changed)
-      this._clearTestResult(this.draft.editingConnectionId);
-    } else {
-      // Resolve or create provider
-      let providerId: string | undefined;
-      if (conflictPrompt?.resolveSeparate) {
-        providerId = this._config.addProvider({
-          registryId: reg,
-          label: registryLabel(reg) ?? reg,
-          credential: conflictPrompt.newKey,
-          baseUrl: this.draft.baseUrl || undefined,
-          source: 'stored',
-        });
-      } else {
-        const existingProvider = this.draft.providerId
-          ? this._config.getProvider(this.draft.providerId)
-          : this._findProviderByRegistry(reg);
-        if (existingProvider) {
-          providerId = existingProvider.id;
-          if (this.draft.apiKey && this.draft.apiKey !== existingProvider.credential) {
-            this._config.updateProvider(existingProvider.id, { credential: this.draft.apiKey });
-          }
-        } else {
-          providerId = this._config.addProvider({
-            registryId: reg,
-            label: registryLabel(reg) ?? reg,
-            credential: this.draft.apiKey || undefined,
-            baseUrl: this.draft.baseUrl || undefined,
-            source: 'stored',
-          });
-        }
-      }
-
-      // Create the new connection
-      if (providerId) {
-        const defaultParams = defaultParamsForCapability(cap);
-        const params =
-          cap === 'text' && Object.keys(this._genParamsDraft).length > 0
-            ? ({ ...(defaultParams as TextParams), ...this._genParamsDraft } as TextParams)
-            : defaultParams;
-        const connectionId = this._config.addAiConnection({
-          providerId,
-          capability: cap,
-          label,
-          model,
-          params: params as TextParams | ImageParams | VoiceParams,
-        });
-        if (!this._config.state.defaultByCapability?.[cap]) {
-          this._config.setDefaultConnection(connectionId);
-        }
-        savedConnectionId = connectionId;
-      }
+    // An edit may have moved the endpoint or rotated the key, so a result
+    // measured against the previous account no longer describes this row. This
+    // runs BEFORE the carry below, which republishes the probe that cleared
+    // the save gate for the row as it now stands.
+    if (this.draft.isEditing && editingId) {
+      this._clearTestResult(editingId);
     }
-
     // Carry the probe that cleared the save gate onto the saved row, so the
-    // status board shows what we just measured instead of "not checked".
+    // status board shows what we measured instead of "not checked".
     if (savedConnectionId && this.draftTestResult?.ok) {
       this._status.setResult(savedConnectionId, this.draftTestResult);
     }
@@ -1520,9 +1449,9 @@ export class AiSettingsViewModel
    * editing an existing connection (the editor never prefills the secret).
    */
   private _draftAsProvider(): AiProvider {
-    const existing = this.draft.providerId
-      ? this._config.getProvider(this.draft.providerId)
-      : this._findProviderByRegistry(this.draft.registryId);
+    const existing =
+      (this.draft.providerId ? this._config.getProvider(this.draft.providerId) : undefined) ??
+      this._accountForDraft().existing;
     const credential = this.draft.apiKey?.trim() || existing?.credential;
     return {
       id: existing?.id ?? 'draft',
@@ -1564,7 +1493,7 @@ export class AiSettingsViewModel
       return;
     }
 
-    const existing = this._findProviderByRegistry(reg);
+    const existing = this._accountForDraft().existing;
     const apiKey = existing?.credential ?? this.draft.apiKey;
     const { generation } = this._modelDiscovery.begin();
     this.isFetchingModels = true;
@@ -1719,6 +1648,17 @@ export class AiSettingsViewModel
 
   private _findProviderByRegistry(registryId: string): AiProvider | undefined {
     return this._config.getProviders().find((p) => p.registryId === registryId);
+  }
+
+  /** The stored account the current draft continues, if any. */
+  private _accountForDraft() {
+    return planProviderAccount({
+      providers: this._config.getProviders(),
+      registryId: this.draft.registryId,
+      baseUrl: this.draft.baseUrl,
+      apiKey: this.draft.apiKey,
+      endpointScoped: this.needsUrl,
+    });
   }
 
   private _connectionsForProvider(providerId: string): AiConnection[] {

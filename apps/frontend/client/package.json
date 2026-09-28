@@ -19,6 +19,7 @@
     "tauri:dev": "tauri dev",
     "tauri:run": "bun run ../../../scripts/src/lib/ops/run_tauri.ts",
     "dev:tauri": "bun run build:emulator && cd src-tauri && cargo build && ./target/debug/aikami",
+    "dev:tauri-server": "bun scripts/dev_tauri.ts",
     "deploy": "bun run scripts/deploy.ts",
     "build:tauri": "bun scripts/build_tauri.ts",
     "build:tauri-web": "bun scripts/build_tauri.ts --web-only",

@@ -95,6 +95,16 @@ export const modelTestUnavailableError = (
 };
 
 /**
+ * Normalizes a user-supplied endpoint for identity comparison: no trailing
+ * slash, and no trailing `/v1`. Both spellings name the same OpenAI-compatible
+ * root — the runtime appends `/v1` to a bare host, and the model-list URL is
+ * built as `<root>/v1/models` — so treating them as different accounts would
+ * hand the same server a second provider row every time the user retypes it.
+ */
+export const normalizeEndpoint = (baseUrl: string | undefined): string =>
+  (baseUrl ?? '').trim().replace(/\/+$/, '').replace(/\/v1$/, '');
+
+/**
  * Returns a capability-unique label: the requested name as-is when unused,
  * otherwise the next "Name 2", "Name 3", … slot.
  */
