@@ -37,17 +37,17 @@
   },
   "devDependencies": {
     "@astrojs/check": "0.9.10",
-    "@astrojs/mdx": "8.0.1",
-    "@astrojs/partytown": "2.1.7",
+    "@astrojs/mdx": "8.0.2",
+    "@astrojs/partytown": "2.1.8",
     "@astrojs/sitemap": "3.7.4",
     "@tailwindcss/vite": "4.3.3",
-    "@unlighthouse/cli": "0.18.0",
-    "astro": "7.3.3",
+    "@unlighthouse/cli": "0.18.1",
+    "astro": "7.3.5",
     "astro-compress": "2.4.3",
     "astro-robots-txt": "1.0.0",
     "lighthouse": "13.5.0",
     "tailwindcss": "4.3.3",
-    "vite": "8.3.0",
-    "wrangler": "4.136.2"
+    "vite": "8.3.1",
+    "wrangler": "4.142.0"
   }
 }

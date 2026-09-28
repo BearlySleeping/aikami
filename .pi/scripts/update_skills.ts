@@ -281,8 +281,10 @@ async function main() {
   }
 
   // 3. Bootstrap MCP bridge registrations (C-321)
-  const mcpConfigPath = join(PI_DIR, 'mcp.json');
-  if (existsSync(mcpConfigPath)) {
+  const mcpConfigPath = ['mcp-adapter.json', 'mcp.json']
+    .map((name) => join(PI_DIR, name))
+    .find((path) => existsSync(path));
+  if (mcpConfigPath) {
     const mcpRaw = await readFile(mcpConfigPath, 'utf-8');
     const mcpConfig = JSON.parse(mcpRaw);
     const servers = mcpConfig.mcpServers;

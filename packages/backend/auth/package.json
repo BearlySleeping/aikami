@@ -18,7 +18,7 @@
     "@aikami/constants": "workspace:*",
     "@aikami/schemas": "workspace:*",
     "@aikami/types": "workspace:*",
-    "better-auth": "1.7.5",
+    "better-auth": "1.7.6",
     "drizzle-orm": "0.45.3"
   },
   "devDependencies": {

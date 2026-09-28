@@ -123,7 +123,7 @@
     "@google-cloud/secret-manager": "7.1.0",
     "@moonrepo/cli": "2.5.5",
     "@types/bun": "1.4.2",
-    "@types/node": "26.6.2",
+    "@types/node": "26.6.3",
     "@typescript/native-preview": "7.0.0-dev.20260707.2",
     "syncpack": "15.3.3",
     "typescript": "6.0.3"

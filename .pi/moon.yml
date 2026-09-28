@@ -25,7 +25,7 @@ fileGroups:
     - 'package.json'
     - 'tsconfig.json'
     - 'moon.yml'
-    - 'mcp.json'
+    - 'mcp-adapter.json'
     - 'settings.json'
   entry:
     - 'scripts/update_skills.ts'
