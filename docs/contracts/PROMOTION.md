@@ -1,10 +1,10 @@
 # Feature Promotion Matrix
 
-> Auto-generated: 2026-09-16
+> Auto-generated: 2026-09-28
 
 Tracks which features have progressed from dev sandboxes through production integration to release readiness.
 
-**Summary**: 9 sandbox, 27 integrated, 2 release_verified, 199 unassessed (active only; 119 archived contracts excluded)
+**Summary**: 9 sandbox, 32 integrated, 2 release_verified, 213 unassessed (active only; 119 archived contracts excluded)
 
 ## 🚀 Release Verified
 
@@ -44,6 +44,11 @@ Tracks which features have progressed from dev sandboxes through production inte
 | C-248 | Autonomous Npc Behavior Schedules | 🏁 completed | v1 | full |
 | C-249 | Music Dj Audio Player | 🏁 completed | v1 | full |
 | C-312 | Restore Planning Promotion And Release Truth | 🛠️ implemented | v2 | full |
+| C-551 | Management Content Game Ui Roles | 🛠️ implemented | v2 | thin |
+| C-556 | Companion Restore Clamp | 🛠️ implemented | v1 | thin |
+| C-558 | Emberwatch Loaded Content Identity | 🔄 in_progress | v2 | thin |
+| C-561 | Emberwatch Prop Coherence Pass | 🔄 in_progress | v2 | thin |
+| C-562 | Emberwatch Five Map Polish Adoption | 🔄 in_progress | v2 | thin |
 
 ## 🧪 Sandbox
 
@@ -244,7 +249,7 @@ Tracks which features have progressed from dev sandboxes through production inte
 | C-520 | Versioned Image Workflows And Asset Preparation | 🛠️ implemented | v1 | full |
 | C-521 | Music Sfx Generation And Audio Preparation | 🛠️ implemented | v1 | full |
 | C-522 | Hub And Client Generation Runner Access | 🛠️ implemented | v1 | full |
-| C-523 | Emberwatch Asset Pilot And Offline Integration | 🛠️ implemented | v1 | full |
+| C-523 | Emberwatch Asset Pilot And Offline Integration | 🔄 in_progress | v1 | full |
 | C-524 | Optional Hosted Asset Provider Comparison | 🛠️ implemented | v1 | full |
 | C-527 | Coherent Play Shell And Management Navigation | 🛠️ implemented | v2 | full |
 | C-528 | Player Hud Presets And Layout Editor | 🛠️ implemented | v2 | full |
@@ -262,4 +267,18 @@ Tracks which features have progressed from dev sandboxes through production inte
 | C-540 | Resolve the `check_bundle.ts` facade-getter suppression | ⏳ not_started (no contract file) | v1 | full |
 | C-541 | Migrate client and hub off deprecated `kit.alias` | ⏳ not_started (no contract file) | v1 | full |
 | C-542 | Tauri OPFS `sqlite3_vfs` persistence | ⏳ not_started (no contract file) | v1 | full |
+| C-545 | Emberwatch Baseline And Ambient Parity | 🛠️ implemented | v2 | thin |
+| C-546 | Emberwatch Bridge Assembly | 🛠️ implemented | v2 | thin |
+| C-547 | Dialogue Stage | 🛠️ implemented | v2 | thin |
+| C-548 | Emberwatch Release Atlas Integrity | 🛠️ implemented | v2 | thin |
+| C-549 | Village Crossing And Grass Restraint | 🛠️ implemented | v1 | thin |
+| C-550 | Emberwatch House Assembly | 🛠️ implemented | v1 | thin |
+| C-552 | Emberwatch Terrain Pass | 🛠️ implemented | v1 | thin |
+| C-553 | Emberwatch House Rollout | 🛠️ implemented | v1 | thin |
+| C-555 | Exploration Hud | ⏳ not_started | v1 | full |
+| C-557 | Release Plan Test Timeout | 🛠️ implemented | v1 | thin |
+| C-559 | Semantic Terrain Edges | 🔄 in_progress | v1 | full |
+| C-560 | Fresh Worktree Dx Hardening | 🛠️ implemented | v2 | full |
+| C-563 | Emberwatch Final Acceptance | 🔄 in_progress | v2 | thin |
+| C-564 | Ai Critical Path Deadline Telemetry | 🛠️ implemented | v1 | thin |
 

@@ -28,8 +28,20 @@ let gatewayChunks: string[] = [];
 let gatewayStructured: unknown;
 let gatewayError: unknown;
 let blockUntilAbort = false;
+/** The routing `resolveText` reports, so policy can be exercised per test. */
+let gatewayRouting: Record<string, unknown> = {
+  capability: 'text',
+  mode: 'offline',
+  provider: 'local-qwen3',
+  model: '',
+  endpoint: '',
+};
 
 const mockAiGatewayService = {
+  resolveText: mock((options?: { model?: string; task?: string }) => ({
+    ...gatewayRouting,
+    ...(options?.model === undefined ? {} : { model: options.model }),
+  })),
   generateText: mock(async (options: Record<string, unknown>) => {
     gatewayGenerateCalls.push(options);
     const { onChunk, onResolve, signal, model } = options as {
@@ -90,6 +102,8 @@ let localSubmitOutput = '';
 let localSubmitError: unknown;
 let localSubmitCalls = 0;
 let localEnsureLoadedCalls = 0;
+/** Model the fake engine claims to serve; drives readiness. */
+let localServedModels: string[] = ['local-qwen3'];
 
 const mockLocalPool = {
   ensureLoaded: mock(async () => {
@@ -105,10 +119,27 @@ const mockLocalPool = {
     }
     return { type: 'text', output: localSubmitOutput, latencyMs: 1, ok: true };
   }),
+  readiness: {
+    state: 'ready' as const,
+    get servedModelIds() {
+      return localServedModels;
+    },
+    confirmedModelIds: [] as string[],
+  },
+  canServeLocal: mock((model?: string) => {
+    if (model === undefined || model.trim().length === 0) {
+      return true;
+    }
+    return localServedModels.some((id) => id.toLowerCase() === model.toLowerCase());
+  }),
 };
 
 mock.module('./local_task_pool_service.svelte.ts', () => ({
-  localTaskPoolService: { pool: mockLocalPool },
+  localTaskPoolService: {
+    pool: mockLocalPool,
+    readiness: mockLocalPool.readiness,
+    canServeLocal: mockLocalPool.canServeLocal,
+  },
   __esModule: true,
 }));
 
@@ -127,6 +158,13 @@ const resetGatewayMocks = (): void => {
   gatewayStructured = undefined;
   gatewayError = undefined;
   blockUntilAbort = false;
+  gatewayRouting = {
+    capability: 'text',
+    mode: 'offline',
+    provider: 'local-qwen3',
+    model: '',
+    endpoint: '',
+  };
 };
 
 // ---------------------------------------------------------------------------
@@ -459,7 +497,7 @@ describe('TextGenerationService — cancelAll', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Tests: local-first micro-tasks
+// Tests: local-first micro-tasks — policy resolved BEFORE any local spend
 // ---------------------------------------------------------------------------
 
 describe('TextGenerationService — local-first micro-tasks', () => {
@@ -469,6 +507,7 @@ describe('TextGenerationService — local-first micro-tasks', () => {
     localSubmitError = undefined;
     localSubmitCalls = 0;
     localEnsureLoadedCalls = 0;
+    localServedModels = ['local-qwen3'];
   });
 
   test('uses the local pool and skips the gateway for a localFirst task', async () => {
@@ -519,5 +558,143 @@ describe('TextGenerationService — local-first micro-tasks', () => {
 
     expect(localEnsureLoadedCalls).toBe(0);
     expect(gatewayGenerateCalls).toHaveLength(1);
+  });
+
+  test('honours an explicit model override instead of substituting a local one', async () => {
+    const service = await loadService();
+    gatewayStructured = { ok: true };
+
+    await service.extractStructure({
+      schema: RelationshipOutputSchema as unknown as Record<string, unknown>, // guard-ignore lint/type-safety/casting: TypeBox schema to the generic record the service accepts
+      schemaName: 'Relationship',
+      prompt: 'hi',
+      model: 'deepseek-chat',
+      task: 'agent-relationship',
+    });
+
+    // The caller pinned which model answers. Answering from a different
+    // on-device bundle would make that pin a lie.
+    expect(localEnsureLoadedCalls).toBe(0);
+    expect(gatewayGenerateCalls).toHaveLength(1);
+    expect(gatewayGenerateCalls[0].model).toBe('deepseek-chat');
+  });
+
+  test('skips the local attempt when the configured route is a cloud provider', async () => {
+    const service = await loadService();
+    gatewayStructured = { ok: true };
+    gatewayRouting = {
+      capability: 'text',
+      mode: 'byok',
+      provider: 'openrouter',
+      model: 'some/model',
+      endpoint: 'https://api.openrouter.ai',
+    };
+
+    await service.extractStructure({
+      schema: RelationshipOutputSchema as unknown as Record<string, unknown>, // guard-ignore lint/type-safety/casting: TypeBox schema to the generic record the service accepts
+      schemaName: 'Relationship',
+      prompt: 'hi',
+      task: 'agent-relationship',
+    });
+
+    // The task did not ask for an on-device detour, so it does not get one.
+    expect(localEnsureLoadedCalls).toBe(0);
+    expect(gatewayGenerateCalls).toHaveLength(1);
+  });
+
+  test('skips the local attempt when the engine does not serve the routed model', async () => {
+    const service = await loadService();
+    gatewayStructured = { ok: true };
+    gatewayRouting = {
+      capability: 'text',
+      mode: 'offline',
+      provider: 'local-qwen3',
+      model: 'qwen3-32b',
+      endpoint: '',
+    };
+    localServedModels = ['qwen3-0.6b'];
+
+    await service.extractStructure({
+      schema: RelationshipOutputSchema as unknown as Record<string, unknown>, // guard-ignore lint/type-safety/casting: TypeBox schema to the generic record the service accepts
+      schemaName: 'Relationship',
+      prompt: 'hi',
+      task: 'agent-relationship',
+    });
+
+    // Readiness is per model: a live engine that cannot serve this one is not a
+    // reason to pay a cold load and a failed generation.
+    expect(localEnsureLoadedCalls).toBe(0);
+    expect(gatewayGenerateCalls).toHaveLength(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Tests: one shared deadline per logical request
+// ---------------------------------------------------------------------------
+
+describe('TextGenerationService — shared end-to-end deadline', () => {
+  beforeEach(() => {
+    resetGatewayMocks();
+    localSubmitOutput = '';
+    localSubmitError = undefined;
+    localSubmitCalls = 0;
+    localEnsureLoadedCalls = 0;
+    localServedModels = ['local-qwen3'];
+  });
+
+  test('passes the caller deadline to the gateway rather than minting a new one', async () => {
+    const service = await loadService();
+    gatewayStructured = { ok: true };
+    const deadlineAt = Date.now() + 4_000;
+
+    await service.extractStructure({
+      schema: RelationshipOutputSchema as unknown as Record<string, unknown>, // guard-ignore lint/type-safety/casting: TypeBox schema to the generic record the service accepts
+      schemaName: 'Relationship',
+      prompt: 'hi',
+      task: 'agent-relationship',
+      deadlineAt,
+    });
+
+    expect(gatewayRouting.mode).toBe('offline');
+    // The combat decision service's clock and the request's clock are the same
+    // instant rather than two budgets stacked end to end.
+    const signal = gatewayGenerateCalls[0].signal as AbortSignal;
+    expect(signal).toBeInstanceOf(AbortSignal);
+  });
+
+  test('an expired caller deadline never opens a local attempt', async () => {
+    const service = await loadService();
+    gatewayStructured = { ok: true };
+
+    await service.extractStructure({
+      schema: RelationshipOutputSchema as unknown as Record<string, unknown>, // guard-ignore lint/type-safety/casting: TypeBox schema to the generic record the service accepts
+      schemaName: 'Relationship',
+      prompt: 'hi',
+      task: 'agent-relationship',
+      deadlineAt: Date.now() - 1,
+    });
+
+    // There is no window left, so no attempt is started — starting work that is
+    // guaranteed to be discarded is strictly worse than going straight to the
+    // configured route.
+    expect(localEnsureLoadedCalls).toBe(0);
+    expect(gatewayGenerateCalls).toHaveLength(1);
+  });
+
+  test('a background task with no budget is not given an invented deadline', async () => {
+    const service = await loadService();
+    gatewayStructured = { ok: true };
+
+    // `agent-schedule` declares no budget, so the request runs unbounded rather
+    // than being cut off by a stopwatch it never asked for.
+    await service.extractStructure({
+      schema: CyoaChoiceResultSchema as unknown as Record<string, unknown>, // guard-ignore lint/type-safety/casting: TypeBox schema to the generic record the service accepts
+      schemaName: 'Cyoa',
+      prompt: 'hi',
+      task: 'agent-schedule',
+    });
+
+    expect(gatewayGenerateCalls).toHaveLength(1);
+    expect(gatewayGenerateCalls[0].signal.aborted).toBe(false);
   });
 });

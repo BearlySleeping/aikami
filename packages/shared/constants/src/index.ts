@@ -55,6 +55,7 @@ export * from './lib/regex.ts';
 export * from './lib/router.ts';
 export * from './lib/slash_commands.ts';
 export * from './lib/studio.ts';
+export * from './lib/text_pricing.ts';
 export * from './lib/text_task.ts';
 export * from './lib/transform.ts';
 export * from './lib/voice_config.ts';

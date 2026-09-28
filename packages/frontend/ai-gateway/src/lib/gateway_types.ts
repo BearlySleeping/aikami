@@ -51,12 +51,35 @@ export type AiTextGenerationOptions = {
   onResolve?: (resolution: AiModeResolution) => void;
 };
 
+/**
+ * Token usage for one call, with the provenance needed to trust it.
+ *
+ * `source` is the whole point of this type. `provider` means the numbers came
+ * from the provider's own accounting and are what will be billed.
+ * `estimated` means they were derived from character counts — useful for
+ * budgeting, never a substitute for a bill. A span that reports estimated
+ * tokens as if they were provider-reported would make cache savings and cost
+ * figures indistinguishable from fiction.
+ */
+export type AiTextUsage = {
+  /** Uncached input tokens, as reported or estimated. */
+  readonly inputTokens: number;
+  /** Output tokens, as reported or estimated. */
+  readonly outputTokens: number;
+  /** Provider-reported cached input tokens; omitted when unknown. */
+  readonly cachedTokens?: number;
+  /** Whether these numbers came from the provider or from an estimate. */
+  readonly source: 'provider' | 'estimated';
+};
+
 /** Result of a gateway text-generation call. */
 export type AiTextGenerationResult = {
   /** Full accumulated text. */
   text: string;
   /** Parsed structured object when a schema was provided. */
   structured?: unknown;
+  /** Token usage, when the provider reported it or an estimate was derived. */
+  usage?: AiTextUsage;
 };
 
 /** Options for a gateway image-generation call. */
@@ -153,6 +176,18 @@ export type AiDetector = (options: { signal: AbortSignal }) => Promise<AiDetecti
 export type AiProviderGateway = {
   /** Resolves which (mode, provider) serves a capability right now. */
   resolveMode(capability: AiCapability): AiModeResolution;
+  /**
+   * Resolves text routing WITHOUT dispatching a call.
+   *
+   * A caller that must decide something before it spends a call — whether an
+   * on-device attempt is allowed for this task, or which connection a request
+   * would reach — needs the same resolution `generateText` would compute, not a
+   * re-derivation of its own. The two must not disagree, so this is the exact
+   * resolution the dispatch path uses, including task role routing and explicit
+   * model/endpoint overrides. Never throws: a resolver failure surfaces as a
+   * typed gateway error, exactly as it would on the dispatch path.
+   */
+  resolveText(options?: { model?: string; endpoint?: string; task?: TextTask }): AiModeResolution;
   /** Detects capability availability with a bounded timeout. Never throws. */
   detect(capability: AiCapability): Promise<AiDetectionResult>;
   /** Generates text (streaming via onChunk, structured via schema). */

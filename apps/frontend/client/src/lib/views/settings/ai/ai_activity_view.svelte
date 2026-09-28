@@ -69,6 +69,10 @@ const { viewModel }: Props = $props();
       </div>
       <p class="text-sm text-base-content/60 mb-4">
         Rolling log of the last {viewModel.activitySummary.count} text-generation calls.
+        Content-free metadata only — prompts, replies and credentials are never recorded here. Token
+        counts are labelled <span class="font-mono">provider</span> when they come from the
+        provider's own accounting and <span class="font-mono">est</span> when they are a
+        character-count estimate.
       </p>
 
       <div class="grid grid-cols-4 gap-2 mb-4 text-sm">
@@ -77,16 +81,51 @@ const { viewModel }: Props = $props();
           <span class="font-mono">{viewModel.activitySummary.count}</span>
         </div>
         <div class="stat card card-bordered border-base-300 bg-base-100 p-3">
-          <span class="text-base-content/50 text-xs">Median</span>
-          <span class="font-mono">{viewModel.activitySummary.medianTotalMs}ms</span>
+          <span class="text-base-content/50 text-xs">p50</span>
+          <span class="font-mono">{viewModel.activitySummary.latency.p50Ms}ms</span>
         </div>
         <div class="stat card card-bordered border-base-300 bg-base-100 p-3">
-          <span class="text-base-content/50 text-xs">Est. tokens</span>
-          <span class="font-mono">{viewModel.activitySummary.totalTokens}</span>
+          <span class="text-base-content/50 text-xs">p95 / p99</span>
+          <span class="font-mono">
+            {viewModel.activitySummary.latency.p95Ms ?? '—'}
+            /
+            {viewModel.activitySummary
+              .latency.p99Ms ?? '—'}ms
+          </span>
         </div>
         <div class="stat card card-bordered border-base-300 bg-base-100 p-3">
           <span class="text-base-content/50 text-xs">Errors</span>
           <span class="font-mono">{viewModel.activitySummary.errorCount}</span>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-4 gap-2 mb-4 text-sm">
+        <div class="stat card card-bordered border-base-300 bg-base-100 p-3">
+          <span class="text-base-content/50 text-xs">Over budget</span>
+          <span class="font-mono">{viewModel.activitySummary.counters.deadlineExceeded}</span>
+        </div>
+        <div class="stat card card-bordered border-base-300 bg-base-100 p-3">
+          <span class="text-base-content/50 text-xs">Cancelled</span>
+          <span class="font-mono">{viewModel.activitySummary.counters.cancelled}</span>
+        </div>
+        <div class="stat card card-bordered border-base-300 bg-base-100 p-3">
+          <span class="text-base-content/50 text-xs">Cache hits</span>
+          <span class="font-mono">
+            {viewModel.activitySummary.counters.cacheHits['in-flight-dedup'] +
+              viewModel.activitySummary.counters.cacheHits['exact-result'] +
+              viewModel.activitySummary.counters.cacheHits['provider-prompt-cache']}
+          </span>
+        </div>
+        <div class="stat card card-bordered border-base-300 bg-base-100 p-3">
+          <span class="text-base-content/50 text-xs">Est. cost</span>
+          <span class="font-mono">
+            {#if viewModel.activitySummary.estimatedCostUsd !== undefined}
+              ${viewModel.activitySummary.estimatedCostUsd.toFixed(4)}
+            {:else}
+              unknown ({viewModel.activitySummary.unpricedCount}
+              unpriced)
+            {/if}
+          </span>
         </div>
       </div>
 
@@ -97,7 +136,8 @@ const { viewModel }: Props = $props();
               <span class="font-mono w-28">task</span>
               <span class="font-mono">calls</span>
               <span class="font-mono">median</span>
-              <span class="font-mono">median ttft</span>
+              <span class="font-mono">p95</span>
+              <span class="font-mono">p99</span>
               <span class="font-mono">errors</span>
             </div>
             {#each viewModel.taskRows as row (row.task)}
@@ -105,7 +145,8 @@ const { viewModel }: Props = $props();
                 <span class="font-mono w-28 truncate">{row.task}</span>
                 <span class="font-mono">{row.count}</span>
                 <span class="font-mono">{row.medianTotalLabel}</span>
-                <span class="font-mono">{row.medianTtftLabel}</span>
+                <span class="font-mono">{row.p95Label}</span>
+                <span class="font-mono">{row.p99Label}</span>
                 <span class="font-mono">{row.errorCount}</span>
               </div>
             {/each}
@@ -125,6 +166,13 @@ const { viewModel }: Props = $props();
                 <span class="font-mono">{row.totalLabel}</span>
                 <span class="font-mono text-base-content/50">{row.ttftLabel}</span>
                 <span class="font-mono">{row.tokenLabel}</span>
+                <span class="font-mono text-base-content/50">{row.tokenSourceLabel}</span>
+                {#if row.cacheLabel !== undefined}
+                  <span class="badge badge-ghost badge-xs">{row.cacheLabel}</span>
+                {/if}
+                {#if row.deadlineLabel !== undefined}
+                  <span class="badge badge-warning badge-xs">{row.deadlineLabel}</span>
+                {/if}
                 {#if row.showError}
                   <span class="badge badge-error badge-xs">error</span>
                 {/if}

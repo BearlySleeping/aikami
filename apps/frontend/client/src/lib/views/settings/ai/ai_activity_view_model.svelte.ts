@@ -45,6 +45,12 @@ export type AiActivityRow = {
   ttftLabel: string;
   tokenLabel: string;
   showError: boolean;
+  /** Whether the token figures are the provider's own accounting or an estimate. */
+  tokenSourceLabel: string;
+  /** Deadline outcome for the call, when it ran under a shared budget. */
+  deadlineLabel?: string;
+  /** Cache layer that served or shaped the call. */
+  cacheLabel?: string;
 };
 
 /** One per-task activity aggregate, formatted for the view. */
@@ -54,6 +60,8 @@ export type AiActivityTaskRow = {
   medianTotalLabel: string;
   medianTtftLabel: string;
   errorCount: number;
+  p95Label: string;
+  p99Label: string;
 };
 
 // ---------------------------------------------------------------------------
@@ -131,6 +139,13 @@ class AiActivityViewModel
       ttftLabel: span.ttftMs === undefined ? '—' : `${span.ttftMs}ms ttft`,
       tokenLabel: `${span.promptTokens + span.completionTokens} tok`,
       showError: !span.ok,
+      // The provenance travels with the number: a provider's own accounting and
+      // a 4-chars-per-token estimate are not the same claim.
+      tokenSourceLabel: span.tokenSource === 'provider' ? 'provider' : 'est',
+      ...(span.deadlineExceeded === true ? { deadlineLabel: 'over budget' } : {}),
+      ...(span.cacheLayer === undefined || span.cacheLayer === 'none'
+        ? {}
+        : { cacheLabel: span.cacheLayer }),
     }));
   }
 
@@ -145,6 +160,10 @@ class AiActivityViewModel
       medianTotalLabel: `${row.medianTotalMs}ms`,
       medianTtftLabel: row.medianTtftMs === undefined ? '—' : `${row.medianTtftMs}ms`,
       errorCount: row.errorCount,
+      // A percentile is shown only when the sample count supports it; an
+      // unsupported one is absent, not approximated into looking measured.
+      p95Label: row.latency.p95Ms === undefined ? '—' : `${row.latency.p95Ms}ms`,
+      p99Label: row.latency.p99Ms === undefined ? '—' : `${row.latency.p99Ms}ms`,
     }));
   }
 

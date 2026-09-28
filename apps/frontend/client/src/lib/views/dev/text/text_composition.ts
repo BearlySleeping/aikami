@@ -6,16 +6,17 @@
 // service registry.
 
 import type { BaseViewModelOptions } from '@aikami/frontend/services/base';
-import { configService, textGenerationService } from '$services';
+import { configService, textGenerationService, textTelemetryService } from '$services';
 import { createTextViewModel, type TextViewModelInterface } from './text_view_model.svelte';
 
 /**
- * Builds the text ViewModel wired to the production config and text-generation
- * singletons.
+ * Builds the text ViewModel wired to the production config, text-generation and
+ * telemetry singletons.
  */
 export const getTextViewModel = (options: BaseViewModelOptions): TextViewModelInterface =>
   createTextViewModel({
     ...options,
     config: configService,
     textGeneration: textGenerationService,
+    telemetry: textTelemetryService,
   });

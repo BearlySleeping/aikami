@@ -112,6 +112,10 @@ export const createAiProviderGateway = (options: AiProviderGatewayOptions): AiPr
       return resolveNormalized({ capability });
     },
 
+    resolveText(options2 = {}) {
+      return resolveNormalized({ capability: 'text', ...options2 });
+    },
+
     async detect(capability): Promise<AiDetectionResult> {
       const detector = detectors[capability];
       const checkedAt = new Date().toISOString();

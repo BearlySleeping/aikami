@@ -81,6 +81,10 @@ class AiGatewayService
     return this._gateway.resolveMode(capability);
   }
 
+  resolveText(options?: { model?: string; endpoint?: string; task?: TextTask }): AiModeResolution {
+    return this._gateway.resolveText(options);
+  }
+
   async detect(capability: AiCapability): Promise<AiDetectionResult> {
     return this._gateway.detect(capability);
   }

@@ -11,7 +11,7 @@
 
 import type { AiChatMessage, AiModeResolution } from '@aikami/types';
 import { createAiGatewayError, toAiGatewayError } from './errors.ts';
-import type { AiTextAdapter, AiTextGenerationResult } from './gateway_types.ts';
+import type { AiTextAdapter, AiTextGenerationResult, AiTextUsage } from './gateway_types.ts';
 import {
   GATEWAY_FETCH_TIMEOUT_MS,
   GATEWAY_FIRST_CHUNK_TIMEOUT_MS,
@@ -110,6 +110,121 @@ const withOpenAiVersionSegment = (base: string): string => {
  * Creates the OpenAI-compatible chat-completions text adapter.
  * Register the same instance for both `offline` and `byok` text modes.
  */
+/** True when a value is a finite, non-negative integer token count. */
+const isTokenCount = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isFinite(value) && value >= 0;
+
+/** The outcome of reading a non-streaming completion body. */
+type JsonCompletionRead =
+  | { kind: 'ok'; text: string; usage?: AiTextUsage }
+  | { kind: 'non-json' }
+  | { kind: 'aborted'; error: unknown };
+
+/**
+ * Reads the text and any token accounting off a non-streaming completion body.
+ *
+ * Cancellation is distinguished from a non-JSON body because they call for
+ * opposite responses: an abort must propagate, while a 200 the provider filled
+ * with prose it should not have is a recoverable shape mismatch. Conflating
+ * them would either swallow a cancellation or retry one.
+ */
+const readJsonCompletion = async (response: Response): Promise<JsonCompletionRead> => {
+  let payload: unknown;
+  try {
+    payload = await response.json();
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      (error.name === 'AbortError' || error.message.includes('aborted'))
+    ) {
+      return { kind: 'aborted', error };
+    }
+    return { kind: 'non-json' };
+  }
+  const data = payload as {
+    choices?: Array<{ message?: { content?: string } }>;
+    message?: { content?: string };
+  };
+  const reported = readBodyUsage(payload);
+  return {
+    kind: 'ok',
+    text: data.choices?.[0]?.message?.content ?? data.message?.content ?? '',
+    ...(reported === undefined ? {} : { usage: reported }),
+  };
+};
+
+/**
+ * Reads token accounting off a non-streaming OpenAI-compatible body.
+ *
+ * Two shapes exist in the wild: the OpenAI `{ usage: { … } }` block, and
+ * Ollama's native `{ prompt_eval_count, eval_count }`. Both are the provider's
+ * own accounting; neither is our estimate. A body carrying neither reports
+ * nothing, so an absent count stays unknown instead of becoming zero.
+ */
+const readBodyUsage = (payload: unknown): AiTextUsage | undefined => {
+  if (typeof payload !== 'object' || payload === null) {
+    return undefined;
+  }
+  return readOpenAiUsage(payload) ?? readOllamaUsage(payload);
+};
+
+/**
+ * The accounting blocks an OpenAI-compatible body may carry, in the providers'
+ * own field names.
+ */
+type UsagePayload = {
+  // biome-ignore lint/style/useNamingConvention: OpenAI API contract field name
+  prompt_tokens?: unknown;
+  // biome-ignore lint/style/useNamingConvention: OpenAI API contract field name
+  completion_tokens?: unknown;
+  // biome-ignore lint/style/useNamingConvention: OpenAI API contract field name
+  prompt_tokens_details?: { cached_tokens?: unknown };
+  // biome-ignore lint/style/useNamingConvention: Ollama API contract field name
+  prompt_eval_count?: unknown;
+  // biome-ignore lint/style/useNamingConvention: Ollama API contract field name
+  eval_count?: unknown;
+};
+
+/** Reads the OpenAI `{ usage: { … } }` accounting block, when complete. */
+const readOpenAiUsage = (payload: object): AiTextUsage | undefined => {
+  const usage = (payload as { usage?: unknown }).usage;
+  if (typeof usage !== 'object' || usage === null) {
+    return undefined;
+  }
+  const counts = usage as UsagePayload;
+  if (!isTokenCount(counts.prompt_tokens) || !isTokenCount(counts.completion_tokens)) {
+    return undefined;
+  }
+  const details = counts.prompt_tokens_details;
+  const cachedTokens =
+    typeof details === 'object' && details !== null && isTokenCount(details.cached_tokens)
+      ? details.cached_tokens
+      : undefined;
+  return {
+    inputTokens: counts.prompt_tokens,
+    outputTokens: counts.completion_tokens,
+    ...(cachedTokens === undefined ? {} : { cachedTokens }),
+    source: 'provider',
+  };
+};
+
+/** Reads Ollama's native `prompt_eval_count` / `eval_count` counters. */
+const readOllamaUsage = (payload: object): AiTextUsage | undefined => {
+  const counts = payload as UsagePayload;
+  if (!isTokenCount(counts.prompt_eval_count) || !isTokenCount(counts.eval_count)) {
+    return undefined;
+  }
+  return {
+    inputTokens: counts.prompt_eval_count,
+    outputTokens: counts.eval_count,
+    source: 'provider',
+  };
+};
+
+/**
+ * Creates an OpenAI-compatible chat-completions text adapter.
+ * Register the same instance for both `offline` and `byok` text modes.
+ */
 export const createOpenAiCompatibleTextAdapter = (
   options?: OpenAiCompatibleTextAdapterOptions,
 ): AiTextAdapter => {
@@ -199,8 +314,10 @@ export const createOpenAiCompatibleTextAdapter = (
   const buildBody = (options2: {
     resolution: AiModeResolution;
     messages: AiChatMessage[];
+    /** Whether to ask the provider for a trailing token-accounting frame. */
+    requestUsage?: boolean;
   }): Record<string, unknown> => {
-    const { resolution, messages } = options2;
+    const { resolution, messages, requestUsage = false } = options2;
     // Ollama native /api/chat works best with stream: false.
     // stream: true returns NDJSON which the SSE parser can't handle.
     // Also disable streaming when response_format is used — many providers
@@ -210,6 +327,12 @@ export const createOpenAiCompatibleTextAdapter = (
       model: resolution.model,
       messages: messages.map((m) => ({ role: m.role, content: m.content })),
       stream,
+      ...(stream && requestUsage
+        ? {
+            // biome-ignore lint/style/useNamingConvention: OpenAI API contract field name
+            stream_options: { include_usage: true },
+          }
+        : {}),
       ...buildGenerationParams(resolution),
     };
   };
@@ -307,12 +430,13 @@ export const createOpenAiCompatibleTextAdapter = (
     const { resolution, messages, signal, onChunk } = options2;
 
     let accumulated = '';
+    let usage: AiTextUsage | undefined;
     const deliver = (text: string): void => {
       accumulated += text;
       onChunk?.(text);
     };
 
-    const body = buildBody({ resolution, messages });
+    const body = buildBody({ resolution, messages, requestUsage: true });
 
     // Ollama native /api/chat with stream: false returns a plain JSON
     // response, not SSE. Parse it directly instead of streaming.
@@ -330,13 +454,13 @@ export const createOpenAiCompatibleTextAdapter = (
 
           onEvent?.('fetch-ok', { status: response.status, stream: false });
 
-          const data = (await response.json()) as {
-            message?: { content?: string };
-          };
+          const payload = await response.json();
+          const data = payload as { message?: { content?: string } };
           const text = data.message?.content ?? '';
+          const ollamaUsage = readBodyUsage(payload);
           onChunk?.(text);
           onEvent?.('done', { chunkCount: text.length > 0 ? 1 : 0 });
-          return { text };
+          return ollamaUsage === undefined ? { text } : { text, usage: ollamaUsage };
         },
       });
     }
@@ -365,11 +489,14 @@ export const createOpenAiCompatibleTextAdapter = (
           firstChunkTimeoutMs,
           idleTimeoutMs,
           onEvent,
+          onUsage: (reported) => {
+            usage = reported;
+          },
         });
       },
     });
 
-    return { text: accumulated };
+    return usage === undefined ? { text: accumulated } : { text: accumulated, usage };
   };
 
   /** Structured extraction with native response_format + system-prompt fallback. */
@@ -426,6 +553,7 @@ export const createOpenAiCompatibleTextAdapter = (
     }
 
     let accumulated = '';
+    let usage: AiTextUsage | undefined;
     const deliver = (text: string): void => {
       accumulated += text;
       onChunk?.(text);
@@ -435,52 +563,53 @@ export const createOpenAiCompatibleTextAdapter = (
 
     // One structured-request attempt. `accumulated` is reset per attempt so a
     // retry (C-499 AC-2) starts from an empty buffer.
-    const runStructuredAttempt = async (): Promise<StructuredOutcome> => {
-      accumulated = '';
-      return withRequestScope({
+    const runStructuredAttempt = async (): Promise<StructuredOutcome> =>
+      await withRequestScope({
         signal,
         run: async (requestSignal): Promise<StructuredOutcome> => {
           const response = await streamCompletion({ resolution, body, requestSignal });
-
-          if (!response.ok) {
-            const errorText = await response.text().catch(() => 'Unknown error');
-            onEvent?.('fetch-failed', { status: response.status });
-
-            // Provider rejected structured output — fall back to the
-            // system-prompt approach via a plain streaming completion.
-            if (response.status === 400) {
-              return { fallback: 'http-400' };
-            }
-
-            throw new Error(`Provider HTTP ${response.status}: ${errorText}`);
+          const failure = await classifyFailure(response);
+          if (failure !== undefined) {
+            return failure;
           }
 
           // Structured requests force stream: false, so successful responses
           // are always handled as plain JSON rather than SSE.
-          let text = '';
-          try {
-            const data = (await response.json()) as {
-              choices?: Array<{ message?: { content?: string } }>;
-              message?: { content?: string };
-            };
-            text = data.choices?.[0]?.message?.content ?? data.message?.content ?? '';
-          } catch (err) {
-            // Rethrow abort/timeout errors so cancellation propagates correctly
-            if (
-              err instanceof Error &&
-              (err.name === 'AbortError' || err.message.includes('aborted'))
-            ) {
-              throw err;
-            }
+          const read = await readJsonCompletion(response);
+          if (read.kind === 'aborted') {
+            // Rethrow abort/timeout errors so cancellation propagates correctly.
+            throw read.error;
+          }
+          if (read.kind === 'non-json') {
             // Provider returned 200 but the body wasn't JSON — it likely
             // ignored stream:false. Fall back to the system-prompt approach.
             return { fallback: 'non-json-200' };
           }
-          deliver(text);
-          onEvent?.('done', { chunkCount: text.length > 0 ? 1 : 0 });
+          usage = read.usage ?? usage;
+          deliver(read.text);
+          onEvent?.('done', { chunkCount: read.text.length > 0 ? 1 : 0 });
           return {};
         },
       });
+
+    /**
+     * Classifies a non-OK structured response.
+     *
+     * Returns the fallback outcome for a 400 (the provider rejected structured
+     * output, so the system-prompt path takes over) and `undefined` for a 2xx.
+     * Any other non-OK status throws, having already emitted `fetch-failed` —
+     * a server error is not something a differently-shaped request will fix.
+     */
+    const classifyFailure = async (response: Response): Promise<StructuredOutcome | undefined> => {
+      if (response.ok) {
+        return undefined;
+      }
+      const errorText = await response.text().catch(() => 'Unknown error');
+      onEvent?.('fetch-failed', { status: response.status });
+      if (response.status === 400) {
+        return { fallback: 'http-400' };
+      }
+      throw new Error(`Provider HTTP ${response.status}: ${errorText}`);
     };
 
     // C-499 AC-2: an empty 200 body (chunkCount 0) is transient for some
@@ -500,25 +629,36 @@ export const createOpenAiCompatibleTextAdapter = (
       outcome = await runStructuredAttempt();
     }
 
-    if (outcome.fallback === 'http-400' || outcome.fallback === 'non-json-200') {
+    if (outcome.fallback !== undefined) {
       onEvent?.('structured-fallback', { reason: outcome.fallback });
       const fallback = await generatePlain({
         resolution,
         messages: structuredMessages,
         signal,
       });
-      return parseStructured({ accumulated: fallback.text, schema, schemaName });
+      // The plain fallback spent its own tokens; they are what was billed.
+      return parseStructured({
+        accumulated: fallback.text,
+        schema,
+        schemaName,
+        usage: fallback.usage,
+      });
     }
 
     try {
-      return parseStructured({ accumulated, schema, schemaName });
+      return parseStructured({ accumulated, schema, schemaName, usage });
     } catch (parseError) {
       // Provider returned 200 but the output wasn't valid JSON — likely a
       // provider that doesn't support structured output. Fall back to the
       // system-prompt approach via a plain streaming completion.
       onEvent?.('structured-fallback', { reason: String(parseError) });
       const fallback = await generatePlain({ resolution, messages: structuredMessages, signal });
-      return parseStructured({ accumulated: fallback.text, schema, schemaName });
+      return parseStructured({
+        accumulated: fallback.text,
+        schema,
+        schemaName,
+        usage: fallback.usage,
+      });
     }
   };
 
@@ -527,15 +667,18 @@ export const createOpenAiCompatibleTextAdapter = (
     accumulated: string;
     schema: Record<string, unknown>;
     schemaName: string;
+    usage?: AiTextUsage;
   }): AiTextGenerationResult => {
-    const { accumulated, schema, schemaName } = options2;
+    const { accumulated, schema, schemaName, usage } = options2;
     const cleaned = sanitizeJsonResponse(accumulated);
     const parsed = JSON.parse(cleaned);
     const isValid = validateAgainstSchema({ schema, parsed });
     if (!isValid) {
       onEvent?.('validation-failed', { schemaName });
     }
-    return { text: accumulated, structured: parsed };
+    return usage === undefined
+      ? { text: accumulated, structured: parsed }
+      : { text: accumulated, structured: parsed, usage };
   };
 
   return {
