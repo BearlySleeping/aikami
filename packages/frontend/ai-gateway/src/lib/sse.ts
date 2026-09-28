@@ -13,7 +13,7 @@ import type { AiTextUsage } from './gateway_types.ts';
 
 /** True when a value is a finite, non-negative number. */
 const isCount = (value: unknown): value is number =>
-  typeof value === 'number' && Number.isFinite(value) && value >= 0;
+  typeof value === 'number' && Number.isInteger(value) && value >= 0;
 
 /** The OpenAI-compatible accounting block, in the provider's own field names. */
 type OpenAiUsagePayload = {
@@ -163,12 +163,10 @@ export const readChatSseStream = async (options: {
             }>;
           };
 
-          // The accounting frame carries no choices; read it before the
-          // choice guard would `continue` past it.
+          // Usage may arrive alone or alongside a content delta.
           const usage = readUsage(parsed);
           if (usage !== undefined) {
             onUsage?.(usage);
-            continue;
           }
 
           const token = parsed.choices?.[0]?.delta?.content;

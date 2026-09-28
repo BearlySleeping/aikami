@@ -427,11 +427,7 @@ const SCHEMA_PLACEHOLDER = 'Paste a JSON Schema here...';
             </div>
             <div class="stat bg-base-100 p-2">
               <span class="text-base-content/50">Cache hits</span>
-              <span class="font-mono" data-testid="diag-cache"
-                >{viewModel.diagnostics.counters.cacheHits['in-flight-dedup'] +
-                  viewModel.diagnostics.counters.cacheHits['exact-result'] +
-                  viewModel.diagnostics.counters.cacheHits['provider-prompt-cache']}</span
-              >
+              <span class="font-mono" data-testid="diag-cache">{viewModel.cacheHitTotal}</span>
             </div>
             <div class="stat bg-base-100 p-2">
               <span class="text-base-content/50">Est. cost</span>

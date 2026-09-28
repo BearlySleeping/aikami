@@ -53,6 +53,37 @@ describe('estimateTextCostUsd', () => {
     expect(estimate.pricingVersion).toBeUndefined();
   });
 
+  test.each(['ollama', 'local-tasks'])(
+    '%s is a free local route for unlisted models',
+    (provider) => {
+      expect(isLocalTextRoute(provider)).toBe(true);
+      expect(
+        estimateTextCostUsd({ provider, model: 'unlisted', inputTokens: 1_000, outputTokens: 100 })
+          .usd,
+      ).toBe(0);
+    },
+  );
+
+  test('local-prefixed cloud providers use normal model pricing', () => {
+    expect(
+      estimateTextCostUsd({
+        provider: 'localai-cloud',
+        model: 'priced/model',
+        inputTokens: 1_000_000,
+        outputTokens: 1_000_000,
+        table,
+      }).usd,
+    ).toBe(18);
+    expect(
+      estimateTextCostUsd({
+        provider: 'localai-cloud',
+        model: 'unlisted',
+        inputTokens: 1,
+        outputTokens: 1,
+      }).usd,
+    ).toBeUndefined();
+  });
+
   test('a local route costs nothing regardless of the model id', () => {
     const estimate = estimateTextCostUsd({
       provider: 'local-qwen3',

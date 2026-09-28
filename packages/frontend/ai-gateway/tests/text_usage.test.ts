@@ -61,6 +61,43 @@ describe('Streaming usage — provider accounting', () => {
     });
   });
 
+  test('delivers content carried in the same frame as usage', async () => {
+    const usageFrame = JSON.parse(sseUsage({ promptTokens: 10, completionTokens: 2 }).slice(6));
+    const { fetchFn } = createSseFetchMock({
+      chunks: [
+        `data: ${JSON.stringify({ ...usageFrame, choices: [{ delta: { content: 'Hello' } }] })}\n\n`,
+        SSE_DONE,
+      ],
+    });
+    const chunks: string[] = [];
+    const result = await createOpenAiCompatibleTextAdapter({ fetchFn }).generateText({
+      resolution: resolution(),
+      signal: signal(),
+      messages: [{ role: 'user', content: 'Hi' }],
+      onChunk: (chunk) => chunks.push(chunk),
+    });
+    expect(chunks).toEqual(['Hello']);
+    expect(result.text).toBe('Hello');
+    expect(result.usage?.inputTokens).toBe(10);
+  });
+
+  test.each([-1, 1.5])('rejects invalid SSE token count %i', async (count) => {
+    const { fetchFn } = createSseFetchMock({
+      chunks: [
+        sseChunk('Hi'),
+        sseUsage({ promptTokens: count, completionTokens: count }),
+        SSE_DONE,
+      ],
+    });
+    const result = await createOpenAiCompatibleTextAdapter({ fetchFn }).generateText({
+      resolution: resolution(),
+      signal: signal(),
+      messages: [{ role: 'user', content: 'Hi' }],
+    });
+    expect(result.text).toBe('Hi');
+    expect(result.usage).toBeUndefined();
+  });
+
   test('carries cached prompt tokens when the provider reports them', async () => {
     const { fetchFn } = createSseFetchMock({
       chunks: [
@@ -168,6 +205,47 @@ describe('Non-streaming usage — provider accounting', () => {
 
     expect(result.structured).toEqual({ ok: true });
     expect(result.usage).toEqual({ inputTokens: 300, outputTokens: 25, source: 'provider' });
+  });
+
+  test.each([-1, 1.5])('rejects invalid JSON token count %i', async (count) => {
+    const { fetchFn } = createJsonFetchMock({
+      content: '{"ok":true}',
+      usage: { openAi: { promptTokens: count, completionTokens: count } },
+    });
+    const result = await createOpenAiCompatibleTextAdapter({ fetchFn }).generateText({
+      resolution: resolution(),
+      signal: signal(),
+      messages: [{ role: 'user', content: 'Hi' }],
+      schema: { type: 'object' },
+      schemaName: 'Ok',
+    });
+    expect(result.structured).toEqual({ ok: true });
+    expect(result.usage).toBeUndefined();
+  });
+
+  test('structured retry discards earlier whitespace and usage', async () => {
+    let attempts = 0;
+    const first = createJsonFetchMock({
+      content: ' ',
+      usage: { openAi: { promptTokens: 300, completionTokens: 1 } },
+    });
+    const second = createJsonFetchMock({ content: '{"ok":true}' });
+    const adapter = createOpenAiCompatibleTextAdapter({
+      fetchFn: async (...args) => {
+        attempts++;
+        return (attempts === 1 ? first.fetchFn : second.fetchFn)(...args);
+      },
+    });
+    const result = await adapter.generateText({
+      resolution: resolution(),
+      signal: signal(),
+      messages: [{ role: 'user', content: 'Hi' }],
+      schema: { type: 'object' },
+      schemaName: 'Ok',
+    });
+    expect(attempts).toBe(2);
+    expect(result.text).toBe('{"ok":true}');
+    expect(result.usage).toBeUndefined();
   });
 
   test('reads Ollama-native eval counts', async () => {

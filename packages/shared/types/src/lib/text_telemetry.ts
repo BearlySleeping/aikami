@@ -1,8 +1,6 @@
-// apps/frontend/client/src/lib/types/text_telemetry.ts
+// packages/shared/types/src/lib/text_telemetry.ts
 //
-// Client-local telemetry shapes for the rolling LLM call buffer. These are
-// UI-layer projections, not cross-boundary data, so they live in the app's
-// local types.
+// Shared telemetry contracts for the rolling LLM call buffer and diagnostics.
 //
 // The span records the whole critical path of ONE logical request — routing,
 // queueing, generation, parsing, application — plus the identity needed to
@@ -73,6 +71,8 @@ export type TextTelemetrySpan = {
   ok: boolean;
   /** Normalized error code when `ok` is false. */
   errorCode?: string;
+  /** A local attempt gave way to the configured gateway route. */
+  fallback?: boolean;
   /**
    * Identity of the logical request this call belongs to. Every retry, local
    * attempt and fallback attempt of one request shares it, which is what makes

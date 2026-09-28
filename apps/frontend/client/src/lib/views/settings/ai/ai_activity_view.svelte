@@ -111,9 +111,7 @@ const { viewModel }: Props = $props();
         <div class="stat card card-bordered border-base-300 bg-base-100 p-3">
           <span class="text-base-content/50 text-xs">Cache hits</span>
           <span class="font-mono">
-            {viewModel.activitySummary.counters.cacheHits['in-flight-dedup'] +
-              viewModel.activitySummary.counters.cacheHits['exact-result'] +
-              viewModel.activitySummary.counters.cacheHits['provider-prompt-cache']}
+            {viewModel.cacheHitTotal}
           </span>
         </div>
         <div class="stat card card-bordered border-base-300 bg-base-100 p-3">

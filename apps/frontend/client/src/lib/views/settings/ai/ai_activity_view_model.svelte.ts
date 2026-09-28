@@ -9,9 +9,13 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services/base';
-import type { AiConnection, RoleAssignments } from '@aikami/types';
+import type {
+  AiConnection,
+  RoleAssignments,
+  TextTelemetrySpan,
+  TextTelemetrySummary,
+} from '@aikami/types';
 import type { TextTelemetryServiceInterface } from '$services';
-import type { TextTelemetrySpan, TextTelemetrySummary } from '$types';
 import { buildTaskRoutingRows, type TaskRoutingRow } from './ai_roles';
 
 // ---------------------------------------------------------------------------
@@ -79,6 +83,8 @@ export type AiActivityViewModelInterface = BaseViewModelInterface & {
   readonly activityRows: readonly AiActivityRow[];
   /** Aggregate stats over the current buffer. */
   readonly activitySummary: TextTelemetrySummary;
+  /** Cache hits across the three measured cache layers. */
+  readonly cacheHitTotal: number;
   /** Per-task aggregates formatted for display. */
   readonly taskRows: readonly AiActivityTaskRow[];
   /** Whether any per-task rows exist. */
@@ -147,6 +153,11 @@ class AiActivityViewModel
         ? {}
         : { cacheLabel: span.cacheLayer }),
     }));
+  }
+
+  get cacheHitTotal(): number {
+    const hits = this._telemetry.summary.counters.cacheHits;
+    return hits['in-flight-dedup'] + hits['exact-result'] + hits['provider-prompt-cache'];
   }
 
   get activitySummary(): TextTelemetrySummary {

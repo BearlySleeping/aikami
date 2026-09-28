@@ -9,13 +9,13 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services/base';
+import type { TextTelemetrySummary } from '@aikami/types';
 import { page } from '$app/state';
 import type {
   ConfigServiceInterface,
   TextGenerationServiceInterface,
   TextTelemetryServiceInterface,
 } from '$services';
-import type { TextTelemetrySummary } from '$types';
 
 // ── Capability contracts ────────────────────────────────────────────────
 
@@ -97,6 +97,8 @@ export type TextViewModelInterface = BaseViewModelInterface & {
    * or the reply.
    */
   readonly diagnostics: TextTelemetrySummary;
+  /** Cache hits across the three measured cache layers. */
+  readonly cacheHitTotal: number;
   /** Recorded spans, newest first — one row per logical call. */
   readonly diagnosticRows: readonly TextDiagnosticRow[];
   /** Clears the diagnostic buffer so the next call is measured alone. */
@@ -177,6 +179,11 @@ class TextViewModel extends BaseViewModel<TextViewModelOptions> implements TextV
   // ── Diagnostics (issue #382) ──────────────────────────────────────────
 
   /** @inheritdoc */
+  get cacheHitTotal(): number {
+    const hits = this._telemetry.summary.counters.cacheHits;
+    return hits['in-flight-dedup'] + hits['exact-result'] + hits['provider-prompt-cache'];
+  }
+
   get diagnostics(): TextTelemetrySummary {
     return this._telemetry.summary;
   }

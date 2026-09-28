@@ -24,7 +24,7 @@ import type { EngineBridge } from '@aikami/frontend/engine';
 // Type-only: erased at build time, so this never pulls the (dynamically
 // imported) engine back into a static import graph.
 import type { ContentPackLoaderInterface } from '@aikami/frontend/engine/sim';
-import type { TextTelemetrySpan, TextTelemetrySummary } from '$types';
+import type { TextTelemetrySpan, TextTelemetrySummary } from '@aikami/types';
 import { textTelemetryService } from '../ai/text_telemetry_service.svelte.ts';
 import { getActiveAudioCue } from '../audio/audio_asset_resolver.ts';
 import {

@@ -24,7 +24,7 @@
 //
 // Contract: C-507, issue #382 P0
 
-import { estimateTextCostUsd, TEXT_PRICING_VERSION, type TextTask } from '@aikami/constants';
+import { TEXT_PRICING_VERSION, type TextTask } from '@aikami/constants';
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
@@ -37,7 +37,8 @@ import type {
   TextTelemetrySpan,
   TextTelemetrySummary,
   TextTelemetryTaskSummary,
-} from '$types';
+} from '@aikami/types';
+import { textTelemetryPricing } from './text_telemetry_pricing.ts';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -137,7 +138,6 @@ class TextTelemetryService
 {
   private _spans = $state<TextTelemetrySpan[]>([]);
   private _nextId = 1;
-
   get spans(): ReadonlyArray<TextTelemetrySpan> {
     return this._spans;
   }
@@ -213,9 +213,7 @@ class TextTelemetryService
       errors: spans.filter((span) => !span.ok).length,
       deadlineExceeded: spans.filter((span) => span.deadlineExceeded === true).length,
       cancelled: spans.filter((span) => span.errorCode === 'cancelled').length,
-      // A fallback is any call that reported a degraded error code rather than
-      // succeeding: the caller used a different answer than the one requested.
-      fallbacks: spans.filter((span) => span.errorCode === 'fallback').length,
+      fallbacks: spans.filter((span) => span.fallback === true).length,
       cacheHits,
       maxQueueDepth,
     };
@@ -234,7 +232,7 @@ class TextTelemetryService
     let total = 0;
     let unpricedCount = 0;
     for (const span of spans) {
-      const estimate = estimateTextCostUsd({
+      const estimate = textTelemetryPricing.estimate({
         provider: span.provider,
         model: span.model,
         inputTokens: span.promptTokens,

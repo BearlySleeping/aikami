@@ -100,6 +100,25 @@ describe('resolveLocalFirstPolicy', () => {
     ).toEqual({ allowed: false, reason: 'not-ready' });
   });
 
+  test.each(['servedModelIds', 'confirmedModelIds'] as const)(
+    'matches normalized path aliases in %s',
+    (field) => {
+      expect(
+        resolveLocalFirstPolicy({
+          resolution: { ...localRouting, model: 'org/Qwen3' },
+          preset: TEXT_TASK_PRESETS['agent-relationship'],
+          hasExplicitModel: false,
+          readiness: {
+            state: 'ready',
+            servedModelIds: ['other'],
+            confirmedModelIds: [],
+            [field]: [' qwen3 '],
+          },
+        }).allowed,
+      ).toBe(true);
+    },
+  );
+
   test('refuses when the engine is known to be unavailable', () => {
     expect(
       resolveLocalFirstPolicy({

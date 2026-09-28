@@ -73,6 +73,8 @@ export type TextCostEstimate = {
 const LOCAL_ROUTE_PROVIDERS: ReadonlySet<string> = new Set([
   'local-qwen3',
   'local',
+  'local-tasks',
+  'ollama',
   'llamacpp',
   'ooba',
 ]);
@@ -112,7 +114,7 @@ export const estimateTextCostUsd = (options: {
 
   // A local route is free of marginal provider spend even when its price is
   // not in the table (an arbitrary sidecar model id, for instance).
-  if (isLocalTextRoute(providerId) || providerId.startsWith('local')) {
+  if (isLocalTextRoute(providerId)) {
     return { usd: 0, source: 'local', pricingVersion: undefined };
   }
 

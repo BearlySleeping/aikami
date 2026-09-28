@@ -112,7 +112,7 @@ const withOpenAiVersionSegment = (base: string): string => {
  */
 /** True when a value is a finite, non-negative integer token count. */
 const isTokenCount = (value: unknown): value is number =>
-  typeof value === 'number' && Number.isFinite(value) && value >= 0;
+  typeof value === 'number' && Number.isInteger(value) && value >= 0;
 
 /** The outcome of reading a non-streaming completion body. */
 type JsonCompletionRead =
@@ -585,7 +585,8 @@ export const createOpenAiCompatibleTextAdapter = (
             // ignored stream:false. Fall back to the system-prompt approach.
             return { fallback: 'non-json-200' };
           }
-          usage = read.usage ?? usage;
+          accumulated = '';
+          usage = read.usage;
           deliver(read.text);
           onEvent?.('done', { chunkCount: read.text.length > 0 ? 1 : 0 });
           return {};

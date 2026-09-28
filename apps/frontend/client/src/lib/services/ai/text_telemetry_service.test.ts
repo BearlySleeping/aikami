@@ -7,8 +7,9 @@
 // separated by layer, token provenance survives, and a cost total is withheld
 // rather than silently under-reporting.
 
-import { beforeEach, describe, expect, test } from 'bun:test';
+import { beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import { estimateTextCostUsd, estimateTextTokens, TEXT_PRICING_VERSION } from '@aikami/constants';
+import { textTelemetryPricing } from './text_telemetry_pricing.ts';
 import { textTelemetryService } from './text_telemetry_service.svelte.ts';
 
 const baseSpan = {
@@ -144,13 +145,20 @@ describe('TextTelemetryService — counters', () => {
       errorCode: 'cancelled',
       totalMs: 200,
     });
-    textTelemetryService.record({ ...baseSpan, ok: false, errorCode: 'fallback', totalMs: 300 });
+    textTelemetryService.record({ ...baseSpan, fallback: true, totalMs: 300 });
+    textTelemetryService.record({
+      ...baseSpan,
+      fallback: true,
+      ok: false,
+      errorCode: 'provider_unreachable',
+    });
 
     const { counters } = textTelemetryService.summary;
-    expect(counters.calls).toBe(3);
+    expect(counters.calls).toBe(4);
     expect(counters.deadlineExceeded).toBe(1);
     expect(counters.cancelled).toBe(1);
-    expect(counters.fallbacks).toBe(1);
+    expect(counters.fallbacks).toBe(2);
+    expect(textTelemetryService.spans[0].errorCode).toBe('provider_unreachable');
   });
 
   test('keeps cache hits separated by layer', () => {
@@ -203,19 +211,27 @@ describe('TextTelemetryService — token provenance and cost', () => {
     expect(estimated.cachedTokens).toBeUndefined();
   });
 
-  test('publishes a cost total only when every span is priced', () => {
-    textTelemetryService.record({
-      ...baseSpan,
-      provider: 'local-qwen3',
-      model: 'local-qwen3',
-      promptTokens: 4_000,
-      completionTokens: 4_000,
-    });
-
-    const summary = textTelemetryService.summary;
-    expect(summary.unpricedCount).toBe(0);
-    expect(summary.estimatedCostUsd).toBe(0);
-    expect(summary.pricingVersion).toBe(TEXT_PRICING_VERSION);
+  test('sums zero-cost local and billed spans exactly', () => {
+    const pricing = spyOn(textTelemetryPricing, 'estimate').mockImplementation((options) =>
+      estimateTextCostUsd({
+        ...options,
+        table: { 'test/model': { inputPerMillionUsd: 3, outputPerMillionUsd: 15 } },
+      }),
+    );
+    try {
+      textTelemetryService.record({ ...baseSpan, provider: 'local-tasks', model: 'unlisted' });
+      textTelemetryService.record({
+        ...baseSpan,
+        promptTokens: 1_000_000,
+        completionTokens: 1_000_000,
+      });
+      const summary = textTelemetryService.summary;
+      expect(summary.unpricedCount).toBe(0);
+      expect(summary.estimatedCostUsd).toBe(18);
+      expect(summary.pricingVersion).toBe(TEXT_PRICING_VERSION);
+    } finally {
+      pricing.mockRestore();
+    }
   });
 
   test('withholds the total rather than under-reporting an unpriced model', () => {

@@ -86,7 +86,7 @@ export const createAiRequestDeadline = (options?: {
       reason = 'deadline';
       controller.abort();
     },
-    Math.max(1, hardDeadlineMs),
+    Math.max(1, deadlineAt - Date.now()),
   );
 
   if (callerSignal) {

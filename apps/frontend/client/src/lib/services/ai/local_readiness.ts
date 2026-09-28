@@ -60,7 +60,7 @@ export type LocalReadinessController = {
 };
 
 /** True when a model id matches a served/confirmed id, tolerating path prefixes. */
-const matchesModel = (candidate: string, wanted: string): boolean => {
+export const matchesModel = (candidate: string, wanted: string): boolean => {
   const left = candidate.trim().toLowerCase();
   const right = wanted.trim().toLowerCase();
   if (left.length === 0 || right.length === 0) {

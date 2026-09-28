@@ -53,6 +53,20 @@ describe('createAiRequestDeadline', () => {
     deadline.dispose();
   });
 
+  test.each([950, 1_050])('aborts promptly when started %i ms ago', async (elapsed) => {
+    const deadline = createAiRequestDeadline({
+      startedAt: Date.now() - elapsed,
+      hardDeadlineMs: 1_000,
+    });
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      expect(deadline.signal.aborted).toBe(true);
+      expect(deadline.stopReason()).toBe('deadline');
+    } finally {
+      deadline.dispose();
+    }
+  });
+
   test('propagates a caller abort and reports it as a cancellation', async () => {
     const caller = new AbortController();
     const deadline = createAiRequestDeadline({

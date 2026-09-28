@@ -16,6 +16,7 @@
 
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
 import { CyoaChoiceResultSchema, RelationshipOutputSchema } from '@aikami/schemas';
+import { textTelemetryService } from './text_telemetry_service.svelte.ts';
 
 // $state and $derived are polyfilled globally via test_setup.ts
 
@@ -98,6 +99,8 @@ mock.module('./ai_gateway_service.svelte.ts', () => ({
 // Mock: localTaskPoolService (local-first micro-task path)
 // ---------------------------------------------------------------------------
 
+let localBlockUntilAbort = false;
+let localSignal: AbortSignal | undefined;
 let localSubmitOutput = '';
 let localSubmitError: unknown;
 let localSubmitCalls = 0;
@@ -106,8 +109,19 @@ let localEnsureLoadedCalls = 0;
 let localServedModels: string[] = ['local-qwen3'];
 
 const mockLocalPool = {
-  ensureLoaded: mock(async () => {
+  ensureLoaded: mock(async (signal: AbortSignal) => {
     localEnsureLoadedCalls++;
+    localSignal = signal;
+    if (localBlockUntilAbort) {
+      await new Promise<void>((resolve) => {
+        if (signal.aborted) {
+          resolve();
+          return;
+        }
+        signal.addEventListener('abort', () => resolve(), { once: true });
+      });
+      throw new DOMException('Aborted', 'AbortError');
+    }
     if (localSubmitError) {
       throw localSubmitError;
     }
@@ -158,6 +172,9 @@ const resetGatewayMocks = (): void => {
   gatewayStructured = undefined;
   gatewayError = undefined;
   blockUntilAbort = false;
+  localBlockUntilAbort = false;
+  localSignal = undefined;
+  textTelemetryService.clear();
   gatewayRouting = {
     capability: 'text',
     mode: 'offline',
@@ -501,7 +518,8 @@ describe('TextGenerationService — cancelAll', () => {
 // ---------------------------------------------------------------------------
 
 describe('TextGenerationService — local-first micro-tasks', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    await (await loadService()).dispose();
     resetGatewayMocks();
     localSubmitOutput = '';
     localSubmitError = undefined;
@@ -543,6 +561,8 @@ describe('TextGenerationService — local-first micro-tasks', () => {
     expect(localEnsureLoadedCalls).toBe(1);
     expect(localSubmitCalls).toBe(0);
     expect(gatewayGenerateCalls).toHaveLength(1);
+    expect(textTelemetryService.spans[0].fallback).toBe(true);
+    expect(textTelemetryService.summary.counters.fallbacks).toBe(1);
   });
 
   test('skips the local pool for a cloud-only task', async () => {
@@ -633,7 +653,8 @@ describe('TextGenerationService — local-first micro-tasks', () => {
 // ---------------------------------------------------------------------------
 
 describe('TextGenerationService — shared end-to-end deadline', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    await (await loadService()).dispose();
     resetGatewayMocks();
     localSubmitOutput = '';
     localSubmitError = undefined;
@@ -644,42 +665,101 @@ describe('TextGenerationService — shared end-to-end deadline', () => {
 
   test('passes the caller deadline to the gateway rather than minting a new one', async () => {
     const service = await loadService();
-    gatewayStructured = { ok: true };
-    const deadlineAt = Date.now() + 4_000;
-
-    await service.extractStructure({
-      schema: RelationshipOutputSchema as unknown as Record<string, unknown>, // guard-ignore lint/type-safety/casting: TypeBox schema to the generic record the service accepts
-      schemaName: 'Relationship',
+    blockUntilAbort = true;
+    const deadlineAt = Date.now() + 60;
+    const request = service.extractStructure({
+      schema: { type: 'object' },
+      schemaName: 'Deadline',
       prompt: 'hi',
-      task: 'agent-relationship',
+      model: 'explicit-model',
       deadlineAt,
     });
-
-    expect(gatewayRouting.mode).toBe('offline');
-    // The combat decision service's clock and the request's clock are the same
-    // instant rather than two budgets stacked end to end.
-    const signal = gatewayGenerateCalls[0].signal as AbortSignal;
-    expect(signal).toBeInstanceOf(AbortSignal);
+    await expect(request).rejects.toThrow('Aborted');
+    const signal = gatewayGenerateCalls[0].signal;
+    if (!(signal instanceof AbortSignal)) {
+      throw new Error('Missing gateway signal');
+    }
+    expect(signal.aborted).toBe(true);
+    expect(Date.now() - deadlineAt).toBeGreaterThanOrEqual(-5);
+    expect(Date.now() - deadlineAt).toBeLessThan(150);
+    expect(textTelemetryService.spans[0].deadlineExceeded).toBe(true);
   });
 
-  test('an expired caller deadline never opens a local attempt', async () => {
+  test('an expired caller deadline dispatches neither local nor gateway work', async () => {
     const service = await loadService();
-    gatewayStructured = { ok: true };
-
-    await service.extractStructure({
-      schema: RelationshipOutputSchema as unknown as Record<string, unknown>, // guard-ignore lint/type-safety/casting: TypeBox schema to the generic record the service accepts
-      schemaName: 'Relationship',
-      prompt: 'hi',
-      task: 'agent-relationship',
-      deadlineAt: Date.now() - 1,
-    });
-
-    // There is no window left, so no attempt is started — starting work that is
-    // guaranteed to be discarded is strictly worse than going straight to the
-    // configured route.
+    await expect(
+      service.extractStructure({
+        schema: { type: 'object' },
+        schemaName: 'Deadline',
+        prompt: 'hi',
+        task: 'agent-relationship',
+        deadlineAt: Date.now() - 1,
+      }),
+    ).rejects.toThrow('Request deadline exceeded');
     expect(localEnsureLoadedCalls).toBe(0);
-    expect(gatewayGenerateCalls).toHaveLength(1);
+    expect(gatewayGenerateCalls).toHaveLength(0);
+    expect(textTelemetryService.spans[0].deadlineExceeded).toBe(true);
   });
+
+  test.each([-1, 30])(
+    'streamChat rejects deadline cancellation with %i ms left',
+    async (remaining) => {
+      const service = await loadService();
+      blockUntilAbort = true;
+      await expect(
+        service.streamChat({
+          messages: [{ role: 'user', content: 'hi' }],
+          onChunk: () => {},
+          deadlineAt: Date.now() + remaining,
+        }),
+      ).rejects.toMatchObject({ name: 'AbortError' });
+      expect(gatewayGenerateCalls).toHaveLength(remaining < 0 ? 0 : 1);
+      expect(textTelemetryService.spans[0].deadlineExceeded).toBe(true);
+      expect(textTelemetryService.spans[0].errorCode).toBe('cancelled');
+    },
+  );
+
+  test('deadline aborts local loading without cooling down the route', async () => {
+    const service = await loadService();
+    localBlockUntilAbort = true;
+    const options = {
+      schema: { type: 'object' },
+      schemaName: 'Local',
+      prompt: 'hi',
+      task: 'agent-relationship' as const,
+    };
+    await expect(
+      service.extractStructure({ ...options, deadlineAt: Date.now() + 30 }),
+    ).rejects.toThrow();
+    expect(localSignal?.aborted).toBe(true);
+    expect(gatewayGenerateCalls).toHaveLength(0);
+    localBlockUntilAbort = false;
+    localSubmitOutput = '{}';
+    await service.extractStructure(options);
+    expect(localEnsureLoadedCalls).toBe(2);
+    expect(gatewayGenerateCalls).toHaveLength(0);
+  });
+
+  test('a local timeout falls back without cooling down the route', async () => {
+    const service = await loadService();
+    localBlockUntilAbort = true;
+    gatewayStructured = { ok: true };
+    const options = {
+      schema: { type: 'object' },
+      schemaName: 'Local',
+      prompt: 'hi',
+      task: 'agent-relationship' as const,
+    };
+    await service.extractStructure(options);
+    expect(localSignal?.aborted).toBe(true);
+    expect(gatewayGenerateCalls).toHaveLength(1);
+    expect(textTelemetryService.spans[0].fallback).toBe(true);
+    localBlockUntilAbort = false;
+    localSubmitOutput = '{}';
+    await service.extractStructure(options);
+    expect(localEnsureLoadedCalls).toBe(2);
+    expect(gatewayGenerateCalls).toHaveLength(1);
+  }, 10_000);
 
   test('a background task with no budget is not given an invented deadline', async () => {
     const service = await loadService();

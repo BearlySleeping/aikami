@@ -255,9 +255,10 @@ class TextGenerationService
     signal?: AbortSignal;
   }): AiRequestDeadline {
     if (options.deadlineAt !== undefined) {
+      const startedAt = Date.now();
       return createAiRequestDeadline({
-        startedAt: Date.now(),
-        hardDeadlineMs: Math.max(0, options.deadlineAt - Date.now()),
+        startedAt,
+        hardDeadlineMs: Math.max(0, options.deadlineAt - startedAt),
         ...(options.signal === undefined ? {} : { callerSignal: options.signal }),
       });
     }
@@ -269,6 +270,14 @@ class TextGenerationService
       hardDeadlineMs: budgetMs,
       ...(options.signal === undefined ? {} : { callerSignal: options.signal }),
     });
+  }
+
+  /** Recognizes expiry even before the deadline timer has had a turn to fire. */
+  private _deadlineExceeded(deadline?: AiRequestDeadline): boolean {
+    return (
+      deadline?.stopReason() === 'deadline' ||
+      (deadline?.stopReason() !== 'caller-abort' && deadline?.expired() === true)
+    );
   }
 
   /** Records one completed call into the rolling telemetry buffer. */
@@ -286,6 +295,7 @@ class TextGenerationService
     requestId?: string;
     parentRequestId?: string;
     deadline?: AiRequestDeadline;
+    fallback?: boolean;
     usage?: { inputTokens: number; outputTokens: number; cachedTokens?: number };
   }): void {
     const {
@@ -302,13 +312,14 @@ class TextGenerationService
       requestId,
       parentRequestId,
       deadline,
+      fallback,
       usage,
     } = options;
     let errorCode: string | undefined;
     if (isAiGatewayError(error)) {
       errorCode = error.code;
     } else if (error) {
-      errorCode = 'error';
+      errorCode = this._isCancellation(error) ? 'cancelled' : 'error';
     }
     textTelemetryService.record({
       task,
@@ -330,7 +341,8 @@ class TextGenerationService
       ...(errorCode === undefined ? {} : { errorCode }),
       ...(requestId === undefined ? {} : { requestId }),
       ...(parentRequestId === undefined ? {} : { parentRequestId }),
-      deadlineExceeded: deadline?.stopReason() === 'deadline',
+      fallback,
+      deadlineExceeded: this._deadlineExceeded(deadline),
       ...(deadline === undefined ? {} : { deadlineRemainingMs: deadline.remainingMs() }),
     });
   }
@@ -354,15 +366,13 @@ class TextGenerationService
     deadline: AiRequestDeadline;
     resolution: AiModeResolution;
     allowLocal: boolean;
+    onAttempt: () => void;
   }): Promise<unknown | undefined> {
     const { prompt, systemPrompt, schema, task, signal, deadline, resolution, allowLocal } =
       options;
     const preset = task === undefined ? undefined : TEXT_TASK_PRESETS[task];
     const routeKey = `${resolution.provider}|${resolution.model ?? ''}|local-tasks`;
-    if (!allowLocal || preset?.localFirst !== true) {
-      return undefined;
-    }
-    if (this._inCooldown(routeKey)) {
+    if (!allowLocal || preset?.localFirst !== true || this._inCooldown(routeKey)) {
       return undefined;
     }
     // Readiness is per model: a served-model list that omits the model this
@@ -375,10 +385,22 @@ class TextGenerationService
       return undefined;
     }
 
+    options.onAttempt();
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), window);
+    let localTimedOut = false;
+    const timeoutId = setTimeout(() => {
+      localTimedOut = true;
+      controller.abort();
+    }, window);
     const onExternalAbort = (): void => controller.abort(signal.reason);
     signal.addEventListener('abort', onExternalAbort, { once: true });
+    const onDeadlineAbort = (): void => controller.abort(deadline.signal.reason);
+    deadline.signal.addEventListener('abort', onDeadlineAbort, { once: true });
+    if (signal.aborted) {
+      onExternalAbort();
+    } else if (deadline.signal.aborted) {
+      onDeadlineAbort();
+    }
 
     try {
       await localTaskPoolService.pool.ensureLoaded(controller.signal);
@@ -403,15 +425,15 @@ class TextGenerationService
       this._clearCooldown(routeKey);
       return parsed;
     } catch {
-      // Caller cancellation is not a local-engine failure; don't penalize it,
-      // and do not extend a cooldown a healthy alternative would also pay.
-      if (!signal.aborted) {
+      // Caller cancellation and exhausted time windows do not prove an engine failure.
+      if (!signal.aborted && !deadline.signal.aborted && !deadline.expired() && !localTimedOut) {
         this._coolDown(routeKey);
       }
       return undefined;
     } finally {
       clearTimeout(timeoutId);
       signal.removeEventListener('abort', onExternalAbort);
+      deadline.signal.removeEventListener('abort', onDeadlineAbort);
     }
   }
 
@@ -444,6 +466,9 @@ class TextGenerationService
     }
     messages.push({ role: 'user', content: prompt });
 
+    if (deadline.expired()) {
+      throw new DOMException('Request deadline exceeded', 'AbortError');
+    }
     const result = await aiGatewayService.generateText({
       messages,
       schema,
@@ -492,6 +517,9 @@ class TextGenerationService
     const promptChars = messages.reduce((sum, message) => sum + message.content.length, 0);
 
     try {
+      if (deadline.expired()) {
+        throw new DOMException('Request deadline exceeded', 'AbortError');
+      }
       const result = await aiGatewayService.generateText({
         messages,
         onChunk: (chunk) => {
@@ -541,6 +569,9 @@ class TextGenerationService
       });
       if (this._isCancellation(error)) {
         this.debug('streamChat:aborted');
+        if (this._deadlineExceeded(deadline)) {
+          throw error;
+        }
         return;
       }
       this.error('streamChat:failed', error);
@@ -589,6 +620,8 @@ class TextGenerationService
     const startedAt = new Date().toISOString();
     let resolution: AiModeResolution | undefined;
     const promptChars = prompt.length + (systemPrompt?.length ?? 0);
+    let localAttempted = false;
+    let fallback = false;
     const shared = {
       start,
       startedAt,
@@ -601,6 +634,9 @@ class TextGenerationService
     };
 
     try {
+      if (deadline.expired()) {
+        throw new DOMException('Request deadline exceeded', 'AbortError');
+      }
       // ── Resolve policy BEFORE spending anything ─────────────────────
       //
       // The local attempt is opportunistic, so it may only run when the
@@ -618,6 +654,9 @@ class TextGenerationService
         signal: abortController.signal,
         deadline,
         resolution: routing,
+        onAttempt: () => {
+          localAttempted = true;
+        },
         allowLocal: resolveLocalFirstPolicy({
           resolution: routing,
           preset: task === undefined ? undefined : TEXT_TASK_PRESETS[task],
@@ -636,6 +675,11 @@ class TextGenerationService
         return localResult;
       }
 
+      if (deadline.expired()) {
+        throw new DOMException('Request deadline exceeded', 'AbortError');
+      }
+      throwIfAlreadyAborted(abortController.signal);
+      fallback = localAttempted;
       const result = await this._generateStructured({
         schema,
         schemaName,
@@ -653,6 +697,7 @@ class TextGenerationService
       this.debug('extractStructure:done', { schemaName });
       this._recordSpan({
         ...shared,
+        fallback,
         resolution,
         completionChars:
           result.structured === undefined ? 0 : JSON.stringify(result.structured).length,
@@ -663,6 +708,7 @@ class TextGenerationService
     } catch (error: unknown) {
       this._recordSpan({
         ...shared,
+        fallback,
         resolution,
         completionChars: 0,
         ok: false,

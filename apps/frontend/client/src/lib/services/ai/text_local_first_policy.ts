@@ -26,7 +26,7 @@
 
 import type { TextTaskPreset } from '@aikami/constants';
 import type { AiModeResolution } from '@aikami/types';
-import type { LocalReadiness } from './local_readiness.ts';
+import { type LocalReadiness, matchesModel } from './local_readiness.ts';
 
 /** Whether a route is served by an on-device engine. */
 const isLocalRoute = (resolution: AiModeResolution): boolean =>
@@ -43,14 +43,9 @@ const isNotRefuted = (readiness: LocalReadiness, model: string | undefined): boo
   if (model === undefined || model.trim().length === 0) {
     return true;
   }
-  const wanted = model.trim().toLowerCase();
   // A model the engine itself listed, or one a generation already confirmed, is
   // servable. An empty list is absence of proof, not a refusal.
-  if (
-    readiness.confirmedModelIds.some(
-      (id) => id.toLowerCase() === wanted || id.toLowerCase().endsWith(`/${wanted}`),
-    )
-  ) {
+  if (readiness.confirmedModelIds.some((id) => matchesModel(id, model))) {
     return true;
   }
   if (readiness.servedModelIds.length === 0) {
@@ -58,9 +53,7 @@ const isNotRefuted = (readiness: LocalReadiness, model: string | undefined): boo
   }
   // A non-empty served list that omits the model IS a refusal: the engine told
   // us what it serves, and this is not on the list.
-  return readiness.servedModelIds.some(
-    (id) => id.toLowerCase() === wanted || id.toLowerCase().endsWith(`/${wanted}`),
-  );
+  return readiness.servedModelIds.some((id) => matchesModel(id, model));
 };
 
 /**

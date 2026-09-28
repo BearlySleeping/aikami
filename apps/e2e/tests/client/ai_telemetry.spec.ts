@@ -24,27 +24,21 @@
 //
 // Run: bun run --cwd apps/e2e test -- --project=client --grep ai_telemetry
 
-import { expect, test } from '@playwright/test';
+import type { TextTelemetrySpan, TextTelemetrySummary } from '@aikami/types';
+import { expect, type Page, test } from '@playwright/test';
 
-type TextCacheLayer = 'none' | 'in-flight-dedup' | 'exact-result' | 'provider-prompt-cache';
-
-type TelemetrySummary = {
-  count: number;
-  errorCount: number;
-  latency: { count: number; p50Ms: number; p95Ms?: number; p99Ms?: number };
-  counters: {
-    calls: number;
-    errors: number;
-    deadlineExceeded: number;
-    cancelled: number;
-    fallbacks: number;
-    cacheHits: Record<TextCacheLayer, number>;
-    maxQueueDepth: number;
-  };
-  estimatedCostUsd?: number;
-  unpricedCount: number;
-  pricingVersion?: string;
-};
+const readTelemetry = async (page: Page) =>
+  page.evaluate(() => {
+    const globals: Window & {
+      __AIKAMI_TEST__?: {
+        getTextTelemetry(): { spans: readonly TextTelemetrySpan[]; summary: TextTelemetrySummary };
+      };
+    } = window;
+    if (!globals.__AIKAMI_TEST__) {
+      throw new Error('Text telemetry test seam is unavailable');
+    }
+    return globals.__AIKAMI_TEST__.getTextTelemetry();
+  });
 
 /**
  * Fields whose values could carry narrative, player content or credentials.
@@ -70,7 +64,7 @@ const CONTENT_BEARING_KEYS = [
   'secret',
 ];
 
-const readDiagnostics = async (page: import('@playwright/test').Page) => ({
+const readDiagnostics = async (page: Page) => ({
   calls: Number(await page.getByTestId('diag-calls').innerText()),
   p95: await page.getByTestId('diag-p95').innerText(),
   p99: await page.getByTestId('diag-p99').innerText(),
@@ -163,6 +157,22 @@ test.describe('Telemetry buffer shape (issue #382 P0)', () => {
     await page.getByRole('button', { name: /Generate/i }).click();
     await expect(page.getByTestId('diag-calls')).not.toHaveText('0', { timeout: 30_000 });
 
+    const { spans } = await readTelemetry(page);
+    expect(spans.length).toBeGreaterThan(0);
+    for (const span of spans) {
+      for (const key of Object.keys(span)) {
+        expect(CONTENT_BEARING_KEYS).not.toContain(key.toLowerCase());
+      }
+    }
+  });
+
+  test('rendered rows contain metadata without the prompt', async ({ page }) => {
+    await page.goto('/dev/text', { waitUntil: 'domcontentloaded' });
+    await expect(page.getByTestId('text-diagnostics')).toBeVisible({ timeout: 20_000 });
+    await page.getByPlaceholder('Enter your prompt here...').fill('Sentinel phrase 12345');
+    await page.getByRole('button', { name: /Generate/i }).click();
+    await expect(page.getByTestId('diag-calls')).not.toHaveText('0', { timeout: 30_000 });
+
     // The sentinel phrase was typed into the prompt, so if any content leaked
     // into a diagnostic row it would be here.
     const rows = page.getByTestId('diag-row');
@@ -178,33 +188,28 @@ test.describe('Telemetry buffer shape (issue #382 P0)', () => {
 });
 
 test.describe('Telemetry span schema (issue #382 P0)', () => {
-  test('an empty summary zeroes counters and attributes cache hits by layer', () => {
-    // A mirror of the service contract at the schema level, so the per-layer
-    // split is checked even when no call has been made in this lane.
-    const empty = {
-      count: 0,
-      errorCount: 0,
-      latency: { count: 0, p50Ms: 0 },
-      counters: {
-        calls: 0,
-        errors: 0,
-        deadlineExceeded: 0,
-        cancelled: 0,
-        fallbacks: 0,
-        cacheHits: {
-          none: 0,
-          'in-flight-dedup': 0,
-          'exact-result': 0,
-          'provider-prompt-cache': 0,
-        } satisfies Record<TextCacheLayer, number>,
-        maxQueueDepth: 0,
+  test('an empty summary zeroes counters and attributes cache hits by layer', async ({ page }) => {
+    await page.goto('/dev/text', { waitUntil: 'domcontentloaded' });
+    await expect(page.getByTestId('text-diagnostics')).toBeVisible({ timeout: 20_000 });
+    const { spans, summary } = await readTelemetry(page);
+    expect(spans).toEqual([]);
+    expect(summary.count).toBe(0);
+    expect(summary.errorCount).toBe(0);
+    expect(summary.counters).toEqual({
+      calls: 0,
+      errors: 0,
+      deadlineExceeded: 0,
+      cancelled: 0,
+      fallbacks: 0,
+      cacheHits: {
+        none: 0,
+        'in-flight-dedup': 0,
+        'exact-result': 0,
+        'provider-prompt-cache': 0,
       },
-      unpricedCount: 0,
-    } satisfies TelemetrySummary;
-
-    // Three mechanisms with three different economics stay distinguishable: a
-    // local response-cache hit is NOT a provider prompt-cache hit.
-    expect(Object.keys(empty.counters.cacheHits)).toHaveLength(4);
-    expect(empty.latency.p95Ms).toBeUndefined();
+      maxQueueDepth: 0,
+    });
+    expect(summary.latency).toEqual({ count: 0, p50Ms: 0 });
+    expect(summary.unpricedCount).toBe(0);
   });
 });
