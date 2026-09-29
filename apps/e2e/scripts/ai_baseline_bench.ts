@@ -50,6 +50,7 @@ const parseArgs = (
   endpoint: string;
   model: string;
   reps: number;
+  sweepSamples: number;
   batchSize: number;
   label: string;
   skipCold: boolean;
@@ -62,6 +63,7 @@ const parseArgs = (
     endpoint: readFlag('endpoint') ?? 'http://localhost:11434/v1',
     model: readFlag('model') ?? 'ornith-1.5:9b',
     reps: Number(readFlag('reps') ?? 5),
+    sweepSamples: Number(readFlag('sweep-samples') ?? 7),
     batchSize: Number(readFlag('batch') ?? 6),
     label: readFlag('label') ?? 'current',
     skipCold: argv.includes('--skip-cold'),
@@ -98,9 +100,15 @@ type WireCall = {
  * like it had measured token cost.
  *
  * Note what the native shape cannot give: Ollama's `/api/chat` response has no
- * cached-token field, so provider-side prefix-cache hits are UNOBSERVABLE on
- * this route. `cachedTokens` is therefore left undefined rather than guessed —
- * the same rule the client's own telemetry follows.
+ * cached-token field, so PROVIDER PREFIX-CACHE BEHAVIOUR IS UNOBSERVABLE ON
+ * THIS ROUTE. That is a limitation of this provider's telemetry, not a general
+ * fact about provider prompt caching — providers that expose cache usage report
+ * it, and benchmarking one of those is legitimate. It is also unrelated to
+ * Aikami's own result caching and to the in-flight dedup in #411, which are
+ * separate mechanisms measured separately.
+ *
+ * `cachedTokens` is therefore left undefined rather than guessed — the same rule
+ * the client's own telemetry follows.
  */
 const readUsage = (body: unknown, row: { -readonly [K in keyof WireCall]: WireCall[K] }): void => {
   const record = body as Record<string, unknown>;
@@ -236,6 +244,53 @@ type BatchClientReport = {
 /** Where the settle hook is keyed, so a summary can await outstanding bodies. */
 type SettleableSink = { readonly rows: WireCall[]; readonly settle: () => Promise<void> };
 
+/** One batch of identical structured calls, as the seam reports it. */
+type BatchRequest = {
+  readonly count: number;
+  readonly prompt: string;
+  readonly systemPrompt: string;
+  readonly schemaName: string;
+};
+
+/**
+ * Runs one batch and FAILS if nothing succeeded.
+ *
+ * `runStructuredBatchBenchmark` uses `Promise.allSettled`, so an all-failed
+ * batch still resolves normally with `succeededCalls: 0`. Without this guard an
+ * unreachable provider, a missing model or a routing regression produces a
+ * scenario row full of confident-looking zeros — a "median" computed over an
+ * empty set, which is exactly the shape of a valid measurement of nothing.
+ *
+ * A benchmark that cannot tell a fast call from a failed one is worse than no
+ * benchmark, so this throws with the reason rather than reporting a number.
+ */
+const runCheckedBatch = async (
+  page: Page,
+  input: BatchRequest,
+  context: { scenario: string; detail: string },
+): Promise<BatchClientReport> => {
+  const report = (await page.evaluate(
+    (batch) =>
+      (
+        window as unknown as {
+          __AIKAMI_TEST__: {
+            benchmarkIdenticalStructuredBatch(o: unknown): Promise<unknown>;
+          };
+        }
+      ).__AIKAMI_TEST__.benchmarkIdenticalStructuredBatch(batch),
+    input,
+  )) as BatchClientReport;
+
+  if (report.succeededCalls === 0) {
+    throw new Error(
+      `${context.scenario}: all ${report.requestedCalls} call(s) failed (${context.detail}). ` +
+        'A scenario with no successful call cannot produce a latency measurement, so the run ' +
+        'is aborted rather than reported.',
+    );
+  }
+  return report;
+};
+
 const summarizeWire = async (sink: SettleableSink): Promise<Record<string, unknown>> => {
   await sink.settle();
   const rows = sink.rows;
@@ -246,8 +301,16 @@ const summarizeWire = async (sink: SettleableSink): Promise<Record<string, unkno
   return {
     providerRequests: rows.length,
     failed: rows.filter((row) => row.status >= 400).length,
-    medianMs: percentile(durations, 0.5) ?? 0,
-    p95Ms: percentile(durations, 0.95) ?? 0,
+    // `null`, not `0`, when nothing was observed. A zero here would render as
+    // "the call took 0 ms", which is a measurement of nothing and reads like a
+    // result. Every consumer must be able to tell "not measured" from "fast".
+    medianMs: percentile(durations, 0.5) ?? null,
+    p95Ms: percentile(durations, 0.95) ?? null,
+    // Spread, so a ratio between two scenarios can be judged against this
+    // run's own noise instead of being reported as if it were exact.
+    minMs: durations.length === 0 ? null : Math.round(Math.min(...durations)),
+    maxMs: durations.length === 0 ? null : Math.round(Math.max(...durations)),
+    samples: durations.length,
     totalPromptTokens: promptTokens.reduce((sum, value) => sum + value, 0),
     totalCompletionTokens: rows.reduce((sum, row) => sum + (row.completionTokens ?? 0), 0),
     totalCachedTokens: rows.reduce((sum, row) => sum + (row.cachedTokens ?? 0), 0),
@@ -381,6 +444,13 @@ const seedProviderConnection = async (page: Page): Promise<void> => {
 
 // ── Environment manifest ───────────────────────────────────────────────────
 
+/**
+ * Runs a fixed, literal command.
+ *
+ * `CONFIG` is never interpolated into these strings. The only user-supplied
+ * value that used to reach a shell was the endpoint, and it now goes through
+ * `fetch` instead (see `collectEnvironment`).
+ */
 const sh = (command: string, fallback = ''): string => {
   try {
     return execFileSync('sh', ['-lc', command], { encoding: 'utf8' }).trim();
@@ -432,12 +502,18 @@ const collectEnvironment = async (): Promise<Record<string, unknown>> => {
     modelQuantization: modelEntry?.details?.quantization_level,
     modelContextLength: modelEntry?.details?.context_length,
     modelBytesOnDisk: modelEntry?.size,
-    ollamaVersion: sh(`curl -s ${ollamaBase}/api/version | head -c 200`),
+    // Via fetch, not the shell: `CONFIG.endpoint` is user-supplied argv and
+    // interpolating it into `sh -lc` would execute whatever it contains.
+    ollamaVersion: await fetch(`${ollamaBase}/api/version`)
+      .then((response) => response.text())
+      .then((body) => body.slice(0, 200).trim())
+      .catch(() => 'unavailable'),
     cpuModel: sh("lscpu | sed -n 's/^Model name: *//p' | head -1"),
     cpuCores: sh('nproc'),
     totalMemoryGb: sh('awk \'/MemTotal/ {printf "%.1f", $2/1048576}\' /proc/meminfo'),
     gpu: sh("lspci 2>/dev/null | grep -iE 'vga|3d|display' | head -2"),
     repetitions: CONFIG.reps,
+    sweepSamples: CONFIG.sweepSamples,
     batchSize: CONFIG.batchSize,
   };
 };
@@ -460,7 +536,8 @@ const renderHeader = (report: Record<string, unknown>): string[] => {
     `**Hardware:** ${String(environment.cpuModel)} × ${String(environment.cpuCores)} cores, `,
     `${String(environment.totalMemoryGb)}GB RAM  `,
     `**GPU:** ${String(environment.gpu) || 'none detected'}  `,
-    `**Repetitions:** ${String(environment.repetitions)} (batch ${String(environment.batchSize)})`,
+    `**Repetitions:** ${String(environment.repetitions)} sequential, ` +
+      `${String(environment.sweepSamples)} per context point, batch ${String(environment.batchSize)}`,
   ];
 };
 
@@ -472,6 +549,9 @@ const renderHeader = (report: Record<string, unknown>): string[] => {
  * carries no cached-token field at all, so a `0` there would be a fabricated
  * measurement of something the provider never said.
  */
+/** Formats a millisecond figure, keeping "not measured" visibly distinct. */
+const ms = (value: unknown): string => (value === null ? 'not measured' : `${String(value)} ms`);
+
 const renderWireTable = (summary: Record<string, unknown>): string[] => {
   const shapes = (summary.usageShapes as string[] | undefined) ?? [];
   const cacheCell = shapes.includes('openai')
@@ -481,8 +561,8 @@ const renderWireTable = (summary: Record<string, unknown>): string[] => {
     '| metric | value |',
     '|---|---|',
     `| provider HTTP requests | ${String(summary.providerRequests)} |`,
-    `| median | ${String(summary.medianMs)} ms |`,
-    `| p95 | ${String(summary.p95Ms)} ms |`,
+    `| median | ${ms(summary.medianMs)} |`,
+    `| p95 | ${ms(summary.p95Ms)} |`,
     `| prompt tokens | ${String(summary.totalPromptTokens)} |`,
     `| completion tokens | ${String(summary.totalCompletionTokens)} |`,
     `| provider-cached prompt tokens | ${cacheCell} |`,
@@ -507,12 +587,12 @@ const renderSizeRows = (bySize: Record<string, unknown>[] | undefined): string[]
   }
   return [
     '',
-    '| prompt repeats | median ms | prompt tokens | completion tokens |',
+    '| prompt repeats | median | prompt tok/call | completion tok/call |',
     '|---|---|---|---|',
     ...bySize.map(
       (point) =>
-        `| ${String(point.promptRepeats)} | ${String(point.medianMs)} | ` +
-        `${String(point.totalPromptTokens)} | ${String(point.totalCompletionTokens)} |`,
+        `| ${String(point.promptRepeats)} | ${ms(point.medianMs)} | ` +
+        `${String(point.promptTokensPerCall)} | ${String(point.completionTokensPerCall)} |`,
     ),
   ];
 };
@@ -621,25 +701,23 @@ const main = async (): Promise<void> => {
     }).catch(() => undefined);
     console.log('→ S1 cold start (model evicted) …');
     const from = markStart();
-    await page.evaluate(
-      (input) =>
-        (
-          window as unknown as {
-            __AIKAMI_TEST__: {
-              benchmarkIdenticalStructuredBatch(o: unknown): Promise<unknown>;
-            };
-          }
-        ).__AIKAMI_TEST__.benchmarkIdenticalStructuredBatch(input),
+    const batch = await runCheckedBatch(
+      page,
       {
         count: 1,
         prompt: dialoguePrompt({ identity: 1, repeats: 1 }),
         systemPrompt: SYSTEM_PROMPT,
         schemaName: 'SceneEnvelope',
       },
+      {
+        scenario: 'S1 cold-start',
+        detail: 'the model was just evicted, so a failure here is a provider or routing problem',
+      },
     );
     scenarios['S1 cold-start'] = {
       description: 'First call after evicting the model: load + prefill + generate.',
       wire: await summarizeWire(slice(from)),
+      client: { wallClockMs: Math.round(batch.wallClockMs) },
     };
   }
 
@@ -647,27 +725,27 @@ const main = async (): Promise<void> => {
   console.log(`→ S2 warm sequential ×${CONFIG.reps} …`);
   {
     const from = markStart();
+    const wallClock: number[] = [];
     for (let index = 0; index < CONFIG.reps; index++) {
-      await page.evaluate(
-        (input) =>
-          (
-            window as unknown as {
-              __AIKAMI_TEST__: {
-                benchmarkIdenticalStructuredBatch(o: unknown): Promise<unknown>;
-              };
-            }
-          ).__AIKAMI_TEST__.benchmarkIdenticalStructuredBatch(input),
+      const batch = await runCheckedBatch(
+        page,
         {
           count: 1,
           prompt: dialoguePrompt({ identity: index + 2, repeats: 1 }),
           systemPrompt: SYSTEM_PROMPT,
           schemaName: 'SceneEnvelope',
         },
+        { scenario: `S2 warm-sequential call ${index + 1}`, detail: 'warm model, single call' },
       );
+      wallClock.push(batch.wallClockMs);
     }
     scenarios['S2 warm-sequential'] = {
       description: 'Sequential distinct calls — the shape of ordinary play.',
       wire: await summarizeWire(slice(from)),
+      client: {
+        callsSucceeded: `${CONFIG.reps}/${CONFIG.reps}`,
+        clientMedianMs: Math.round(percentile(wallClock, 0.5) ?? 0),
+      },
     };
   }
 
@@ -681,16 +759,9 @@ const main = async (): Promise<void> => {
     // non-monotonic curve that looked like a real measurement of nothing.
     for (const repeats of [1, 4, 16, 64]) {
       const pointFrom = markStart();
-      for (let sample = 0; sample < 3; sample++) {
-        await page.evaluate(
-          (input) =>
-            (
-              window as unknown as {
-                __AIKAMI_TEST__: {
-                  benchmarkIdenticalStructuredBatch(o: unknown): Promise<unknown>;
-                };
-              }
-            ).__AIKAMI_TEST__.benchmarkIdenticalStructuredBatch(input),
+      for (let sample = 0; sample < CONFIG.sweepSamples; sample++) {
+        await runCheckedBatch(
+          page,
           {
             count: 1,
             // Identity varies per sample so the provider's own prefix cache is
@@ -699,10 +770,24 @@ const main = async (): Promise<void> => {
             systemPrompt: SYSTEM_PROMPT,
             schemaName: 'SceneEnvelope',
           },
+          { scenario: `S3 context-sweep x${repeats}`, detail: 'warm model, single call' },
         );
       }
       const point = await summarizeWire(slice(pointFrom));
-      rows.push({ promptRepeats: repeats, ...point });
+      const requestCount = point.providerRequests as number;
+      rows.push({
+        promptRepeats: repeats,
+        samplesPerPoint: CONFIG.sweepSamples,
+        // Per-call figures, so a changing request count cannot quietly inflate
+        // a "cost" column on a sweep that is meant to isolate one variable.
+        promptTokensPerCall: Math.round(
+          (point.totalPromptTokens as number) / Math.max(1, requestCount),
+        ),
+        completionTokensPerCall: Math.round(
+          (point.totalCompletionTokens as number) / Math.max(1, requestCount),
+        ),
+        ...point,
+      });
     }
     scenarios['S3 context-sweep'] = {
       description: 'Growing prompt against a warm model — prefill scaling.',
@@ -715,22 +800,19 @@ const main = async (): Promise<void> => {
   console.log(`→ S4 identical-concurrent ×${CONFIG.batchSize} …`);
   {
     const from = markStart();
-    const client = (await page.evaluate(
-      (input) =>
-        (
-          window as unknown as {
-            __AIKAMI_TEST__: {
-              benchmarkIdenticalStructuredBatch(o: unknown): Promise<unknown>;
-            };
-          }
-        ).__AIKAMI_TEST__.benchmarkIdenticalStructuredBatch(input),
+    const client = await runCheckedBatch(
+      page,
       {
         count: CONFIG.batchSize,
         prompt: dialoguePrompt({ identity: 3, repeats: 1 }),
         systemPrompt: SYSTEM_PROMPT,
         schemaName: 'SceneEnvelope',
       },
-    )) as BatchClientReport;
+      {
+        scenario: 'S4 identical-concurrent',
+        detail: 'a partial failure here would understate the coalescing benefit',
+      },
+    );
     const scenario = slice(from);
     scenarios['S4 identical-concurrent'] = {
       description:
@@ -752,23 +834,17 @@ const main = async (): Promise<void> => {
   {
     const from = markStart();
     const startedAt = Date.now();
-    await Promise.all(
+    const outcomes = await Promise.all(
       Array.from({ length: CONFIG.batchSize }, (_, index) =>
-        page.evaluate(
-          (input) =>
-            (
-              window as unknown as {
-                __AIKAMI_TEST__: {
-                  benchmarkIdenticalStructuredBatch(o: unknown): Promise<unknown>;
-                };
-              }
-            ).__AIKAMI_TEST__.benchmarkIdenticalStructuredBatch(input),
+        runCheckedBatch(
+          page,
           {
             count: 1,
             prompt: dialoguePrompt({ identity: index + 20, repeats: 1 }),
             systemPrompt: SYSTEM_PROMPT,
             schemaName: 'SceneEnvelope',
           },
+          { scenario: `S5 distinct-concurrent call ${index + 1}`, detail: 'contention test' },
         ),
       ),
     );
@@ -777,7 +853,10 @@ const main = async (): Promise<void> => {
         `${CONFIG.batchSize} DIFFERENT calls at once. The issue warns against assuming ` +
         'more parallel local requests are faster; sum-of-call-time vs wall clock shows it.',
       wire: await summarizeWire(slice(from)),
-      client: { wallClockMs: Date.now() - startedAt },
+      client: {
+        wallClockMs: Date.now() - startedAt,
+        callsSucceeded: `${outcomes.reduce((sum, r) => sum + r.succeededCalls, 0)}/${CONFIG.batchSize}`,
+      },
     };
   }
 
@@ -838,10 +917,10 @@ const main = async (): Promise<void> => {
 
   console.log(`\n✓ wrote ${join(OUT_DIR, 'report.md')}`);
   for (const [id, scenario] of Object.entries(scenarios)) {
-    const summary = scenario.wire as Record<string, number>;
+    const summary = scenario.wire as Record<string, unknown>;
     console.log(
       `  ${id.padEnd(26)} ${String(summary.providerRequests).padStart(3)} req  ` +
-        `median ${String(summary.medianMs).padStart(6)}ms  p95 ${String(summary.p95Ms).padStart(6)}ms`,
+        `median ${ms(summary.medianMs).padStart(12)}  p95 ${ms(summary.p95Ms).padStart(12)}`,
     );
   }
 };

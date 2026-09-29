@@ -85,11 +85,14 @@ export type StructuredBatchBenchmarkReport = {
  * can be cross-checked — if the client claims one attempt while the wire shows
  * N, something is wrong that neither number shows alone.
  *
- * That cross-check has already earned its place. The first version of this read
- * the telemetry buffer with `slice(before)`, but the buffer is NEWEST-FIRST
- * (`[entry, ...spans]`), so it sliced the wrong end and reported zero coalesced
- * spans on a run that coalesced all five. The wire count was right throughout,
- * which is why the harness does not trust the client's own accounting.
+ * That cross-check has already earned its place twice over. The first version
+ * read the buffer with `slice(before)`, but it is NEWEST-FEST
+ * (`[entry, ...spans]`), so that sliced the wrong end and reported zero
+ * coalesced spans on a run that coalesced all five. The second attempt fixed
+ * the direction but still used a LENGTH delta, which reads as zero once the
+ * 100-entry cap is reached and the length stops moving. Both times the WIRE
+ * count was right, which is precisely why the harness does not trust the
+ * client's own accounting.
  *
  * Every call runs the PRODUCTION `extractStructure`, so local-first routing, the
  * shared deadline and in-flight coalescing all apply as they do in the game.
@@ -97,7 +100,17 @@ export type StructuredBatchBenchmarkReport = {
 export const runStructuredBatchBenchmark = async (
   options: StructuredBatchBenchmarkOptions,
 ): Promise<StructuredBatchBenchmarkReport> => {
-  const before = textTelemetryService.spans.length;
+  // Boundary by span ID, not by buffer length.
+  //
+  // `TextTelemetryService` prepends and caps the buffer at 100 entries, so once
+  // it is full its LENGTH NEVER CHANGES and a length delta silently reads as
+  // zero new spans. `id` is a monotonic counter assigned at record time, so the
+  // highest id seen before the batch is a boundary that stays correct whether
+  // the buffer is empty, partly full or saturated.
+  const highestIdBefore = textTelemetryService.spans.reduce(
+    (highest, span) => Math.max(highest, span.id),
+    0,
+  );
   const startedAt = performance.now();
   const schema = {
     type: 'object',
@@ -122,8 +135,7 @@ export const runStructuredBatchBenchmark = async (
     ),
   );
   const wallClockMs = performance.now() - startedAt;
-  const after = textTelemetryService.spans.length;
-  const newSpans = textTelemetryService.spans.slice(0, after - before);
+  const newSpans = textTelemetryService.spans.filter((span) => span.id > highestIdBefore);
   return {
     requestedCalls: outcomes.length,
     succeededCalls: outcomes.filter((outcome) => outcome.status === 'fulfilled').length,

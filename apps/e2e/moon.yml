@@ -95,8 +95,11 @@ tasks:
       - '@group(tests)'
       - '@group(sources)'
   # Issue #382 AC-1: the reproducible before/after AI baseline. Needs a running
-  # client and a reachable text provider, so it is never in the CI graph — the
-  # committed report under `.evidence/382-baseline/` is the artifact.
+  # client and a reachable text provider, so it is never in the CI graph.
+  #
+  # The committed artifact is docs/audits/382-ai-baseline-report.md. Each run
+  # writes raw per-call data to .evidence/382-baseline/<label>/, which is
+  # gitignored and never published.
   bench-ai-baseline:
     command: 'bun run scripts/ai_baseline_bench.ts'
     options:

@@ -28,7 +28,7 @@ Monorepo: SvelteKit Client × Cloudflare Workers backend (D1 + R2 + Better Auth)
 ## audits/
 
 - [Issue #382 — reproducible AI baseline (AC-1)](audits/382-ai-baseline-report.md)
-- [Agent-trigger usage audit — issue #382 P1 slice 3](audits/agent-trigger-usage.md)
+- [Agent-pipeline reachability audit — issue #382 P1 slice 3](audits/agent-trigger-usage.md)
 ## contracts/
 
 - [AI vendor directories](contracts/archived/C-001-remove-ai-vendor-dirs.md)
