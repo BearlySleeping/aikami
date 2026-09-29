@@ -15,6 +15,7 @@
     "test:game": "playwright test --project=game",
     "test:visual": "bun run src/visual/runner.ts",
     "lpc:smoke": "bun run scripts/lpc_smoke.ts",
+    "bench:ai-baseline": "bun run scripts/ai_baseline_bench.ts",
     "test:release-gate": "playwright test tests/client/release_gate.spec.ts --project=client",
     "test:release-gate:offline": "playwright test tests/client/release_gate.spec.ts --project=client-offline",
     "test:release-gate:keyboard": "playwright test tests/client/release_gate.spec.ts --project=client-keyboard",

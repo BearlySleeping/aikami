@@ -2,7 +2,7 @@
 
 > **AI-first entry point.** Read this file first.
 > Generated: 2026-09-29
-> Files: 503 across 10 categories
+> Files: 506 across 11 categories
 
 ## Quick Start (Read These First)
 
@@ -25,6 +25,11 @@ Monorepo: SvelteKit Client × Cloudflare Workers backend (D1 + R2 + Better Auth)
 - [Known Limitations & TODOs](architecture/limitations.md)
 - [Object Storage Layout — Buckets, Keys, and Enforcement](architecture/object-storage-layout.md)
 - [Semantic map authoring — foundation and deferred compiler design](architecture/semantic_map_authoring.md)
+## audits/
+
+- [Issue #382 — reproducible AI baseline (AC-1)](audits/382-ai-baseline-report.md)
+- [Where #382's next slice should go — measurement-first triage](audits/382-next-slice-proposal.md)
+- [Agent-pipeline reachability audit — issue #382 P1 slice 3](audits/agent-trigger-usage.md)
 ## contracts/
 
 - [AI vendor directories](contracts/archived/C-001-remove-ai-vendor-dirs.md)

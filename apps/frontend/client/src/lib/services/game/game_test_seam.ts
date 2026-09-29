@@ -24,8 +24,6 @@ import type { EngineBridge } from '@aikami/frontend/engine';
 // Type-only: erased at build time, so this never pulls the (dynamically
 // imported) engine back into a static import graph.
 import type { ContentPackLoaderInterface } from '@aikami/frontend/engine/sim';
-import type { TextTelemetrySpan, TextTelemetrySummary } from '@aikami/types';
-import { textTelemetryService } from '../ai/text_telemetry_service.svelte.ts';
 import { getActiveAudioCue } from '../audio/audio_asset_resolver.ts';
 import {
   buildEncounterRosterFromContentPack,
@@ -35,6 +33,11 @@ import { equipmentService } from './equipment_service.svelte.ts';
 import type { GameEngineServiceInterface } from './game_engine_service.svelte';
 import type { GameModeServiceInterface } from './game_mode_service.svelte';
 import type { GameOverlayServiceInterface } from './game_overlay_service.svelte';
+import {
+  readResolvedTextRouting,
+  readTextTelemetry,
+  runStructuredBatchBenchmark,
+} from './game_test_seam_text_probes.ts';
 import { inventoryService } from './inventory_service.svelte.ts';
 import type { NpcDialogueServiceInterface } from './npc_dialogue_service.svelte';
 import { partyRosterService } from './party_roster_service.svelte.ts';
@@ -713,31 +716,9 @@ export const installGameTestSeam = (deps: GameTestSeamOptions): void => {
           overlay: gameOverlayService.activeOverlay,
           mode: gameModeService.currentMode,
         }),
-        /**
-         * Issue #382: reads the rolling text-telemetry buffer, so an E2E can
-         * assert the CRITICAL PATH of a real turn — routing, deadline outcome,
-         * token provenance — rather than inferring it from what rendered.
-         *
-         * Content-free by construction: the buffer holds metadata only, so
-         * returning it cannot leak a prompt or a reply into a test report.
-         */
-        getTextTelemetry: (): {
-          spans: ReadonlyArray<TextTelemetrySpan>;
-          summary: TextTelemetrySummary;
-        } => ({ spans: textTelemetryService.spans, summary: textTelemetryService.summary }),
-        /** The last routing the gateway resolved for a text call. */
-        getResolvedTextRouting: (): { provider: string; model: string; endpoint: string } => {
-          const routing = (globalThis as Record<string, unknown>).__text_service_resolved_routing;
-          if (typeof routing !== 'object' || routing === null) {
-            return { provider: '', model: '', endpoint: '' };
-          }
-          const record = routing as Record<string, unknown>;
-          return {
-            provider: typeof record.provider === 'string' ? record.provider : '',
-            model: typeof record.model === 'string' ? record.model : '',
-            endpoint: typeof record.endpoint === 'string' ? record.endpoint : '',
-          };
-        },
+        benchmarkIdenticalStructuredBatch: runStructuredBatchBenchmark,
+        getTextTelemetry: readTextTelemetry,
+        getResolvedTextRouting: readResolvedTextRouting,
         /**
          * C-549 evidence seam: resolve authored NPC ids to the live entity ids
          * so a same-camera capture can assert which NPC state it photographed.
