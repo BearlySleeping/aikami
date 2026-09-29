@@ -2,10 +2,21 @@
 
 **Status:** measurement only. No behaviour, routing, scheduling or configuration
 change is made or proposed for implementation in this PR.
-**Stack on:** #412 (the reproducible baseline harness). Base `main` at `ce5a1db58`.
-**Model:** `ornith-1.5:9b` (9B, Q4_K_M), Ollama 0.34.3, native `/api/chat`,
-**CPU-only** on an i9-14900HX / 32 cores / 31 GB.
+
+**Provenance.** The runs below were captured on the client build at
+`ce5a1db58` (the `main` this work started from), with #412's harness unmerged in
+the same working tree. This branch was later rebased onto the merged #412
+(`8bc03c899`); **the rebased tree is byte-identical for every file these numbers
+came from**, and every figure was re-verified after the rebase. The measurements
+belong to `ce5a1db58`; the PR base is `8bc03c899`.
+
+**Configuration measured.** `ornith-1.5:9b` (9B, Q4_K_M), Ollama 0.34.3, native
+`/api/chat`, **CPU-only** on an i9-14900HX / 32 cores / 31 GB.
 **Raw:** `.evidence/382-baseline/prod-path/report.{md,json}`
+
+> Every magnitude in this report is a property of **this** model, runtime, machine
+> and workload. They are not hardware constants and do not transfer to other
+> models, GPU or fewer-core machines, longer conversations, or cloud providers.
 
 ---
 
@@ -38,12 +49,16 @@ calls), from the provider's **own** counters:
 
 Three things this settles that #412 could not:
 
-1. **Generation is ~96% of provider time. Prefill is ~1.6%.** On this hardware
-   with this workload, shrinking prompts cannot move player-visible latency. This
-   is now measured on the production path rather than inferred from a synthetic
-   sweep, and it agrees with #412's unresolved result.
-2. **Client-side overhead is ~7 ms per turn** — queueing, HTTP and parsing are
-   not a bottleneck. There is nothing to win in the client.
+1. **Generation is ~96% of provider time. Prefill is ~1.6%.** On this Ollama /
+   model / hardware dialogue workload, provider-reported prefill is a small share
+   of provider time, so **prompt reduction is not currently demonstrated as a
+   high-value latency lever for this configuration.** This does **not** generalize
+   to longer contexts, other models or hardware, or cloud token cost, where input
+   tokens are charged per token and the arithmetic inverts. It is also measured
+   on the production path rather than inferred from a synthetic sweep, and it
+   agrees with #412's unresolved result.
+2. **Client-side overhead is ~7 ms per turn** on this configuration — queueing,
+   HTTP and parsing are not the bottleneck here.
 3. **TTFT is 5.0–6.9 s, which is 46–59% of the whole turn.** The first narrative
    token takes nearly half the total wait. This is *not* a network or prefill
    effect — it is generation, on a model that emits reasoning tokens the client
@@ -393,7 +408,7 @@ something bolted onto a latency harness. Listed below.
 | item | reason |
 |---|---|
 | Envelope output-size / schema fix | **This PR is measurement-only.** The bottleneck is demonstrated; the fix is a separate PR. |
-| Bounded background concurrency / interactive priority | **Now justified** by §3, but not implemented here. Proposed as the second optimisation PR. |
+| Any contention mechanism (serialize, defer, prioritise, bound) | **Deferred until after the envelope fix.** §3 demonstrates the bottleneck but not the fix: every turn is currently floored by the 6 s failed envelope, so the experiment must be rerun at burst widths 1 / 2 / 4 before a mechanism is chosen. The bound is deliberately not pre-decided. |
 | Combat measurement | Requires enabling a flag-disabled feature. |
 | Provider prompt-cache telemetry | Unobservable on this route; not worth cloud spend to chart. |
 | Frame-time measurement | No clean probe exists; see §6. |
@@ -422,46 +437,79 @@ something bolted onto a latency harness. Listed below.
 
 Every opportunity observed, classified.
 
-### 🔴 Demonstrated bottleneck → **propose the smallest fix next**
+### 🔴 Demonstrated bottleneck #1 — the next implementation PR
 
-**The `envelope` call is aborted at its budget on every turn.** Evidence: 0 of
-23 succeeded, all aborted at 5 999–6 001 ms; client log
-`dialogue:call-failed ms: 6002`; measured
-decode 34.8 ms/token over 74 calls; 6 000 ms affords ≈170 completion tokens;
-6 000 ms of provider compute discarded per turn; the player receives deterministic
-fallback choices instead of model-authored ones. The requirement itself is
-unmeasured — no envelope completes, so only the capacity is known.
+**The `envelope` call is aborted at its budget on every turn.** Evidence: 0 of 23
+succeeded, all aborted at 5 999–6 001 ms; client log
+`dialogue:call-failed { path: turn-envelope, ms: 6002 }`; measured decode
+34.8 ms/token over 74 calls; a 6 000 ms budget affords ≈170 completion tokens;
+6 000 ms of provider compute discarded per turn; the player receives
+deterministic fallback choices instead of model-authored ones. The call's
+*requirement* is unmeasured — no envelope completes, so only capacity is known.
 
-**Proposed smallest implementation PR (not written here), three candidate fixes
-ordered by evidence strength:**
+**Proposed next implementation PR: call-2 envelope extraction schema reduction.**
 
-1. **Stop making the envelope re-emit the narrative.** The schema *requires* a
-   `narrative` field the client already has verbatim. Dropping that field from the
-   request schema removes the duplication that is consuming the budget. Smallest
-   change, directly measurable, and the duplication is *demonstrated* in the
-   request payload.
-2. Only if (1) is insufficient: re-derive the envelope budget from a **measured**
-   per-task decode rate rather than a fixed constant, so the budget reflects what
-   the hardware can actually produce.
-3. Only if (1) and (2) fail: the envelope may not fit the interactive budget on
-   slow local hardware, and degrading to the deterministic choice path
-   *immediately* — rather than after 6 s of wasted generation — is the honest
-   behaviour.
+Call 2 stops being an "AI dialogue envelope" and becomes what it actually is —
+metadata extraction from prose call 1 has already produced. Introduce a
+call-2-specific schema and leave `NpcDialogueAiEnvelopeSchema` intact for
+compatibility:
 
-Expected benefit is falsifiable: **envelope success rate 0/23 → nonzero**, and
-turn wall clock down by up to 6 000 ms per turn.
+```ts
+{ command?: NpcDialogueCommand, choices?: NpcDialogueChoice[] }
+```
+
+The streamed call-1 narrative remains authoritative and is **not** regenerated by
+call 2. See the schema ownership audit above for why B (a new call-2 schema)
+rather than mutating the shared one.
+
+**Falsifiable before/after criteria:**
+
+- envelope success: **0/23 → meaningful, reliable success** across the corpus;
+- envelope completion tokens materially reduced;
+- envelope latency materially reduced;
+- overall turn latency reduced;
+- the original streamed narrative remains authoritative;
+- command and choice validation and preconditions unchanged;
+- malformed/timeout fallback remains safe;
+- no routing, deadline or privacy semantics weakened.
+
+**If removing the narrative echo solves the problem, stop there. Do not increase
+the deadline unnecessarily** — a larger budget would mask the duplication rather
+than remove it, and #410's single absolute-deadline semantics must be preserved.
+
+### 🔴 Demonstrated bottleneck #2 — fix #1 first, then re-measure
 
 **The `MAP_LOADED` NPC prefetch burst delays interactive dialogue ~6.4×.** Evidence:
-10/10 valid samples, 19 background summarization calls counted from client
-telemetry, TTFT median 6 353 → 40 886 ms, distributions barely overlapping. The
-burst is production code on a production event with no priority separation from
-interactive work.
+10/10 valid samples, 19 background `summarization` calls counted from client
+telemetry, every sample with at least one background request still active when
+dialogue began, TTFT median 6 353 → 40 886 ms, and 9 of 10 overlapped samples
+slower than every quiet sample. The burst is production code on a production
+event with no priority separation from interactive work.
 
-**Proposed smallest implementation PR (not written here):** give background
-`summarization` work bounded concurrency and lower priority than interactive
-tasks, so a prefetch burst cannot share generation with a player-visible call.
-The measurement already shows the interactive call is generation-bound (§1), so
-this is a scheduling change, not a caching one.
+**No mechanism is proposed here, and the concurrency bound is deliberately left
+undecided.** The reason is ordering, not indecision: *every dialogue turn in this
+experiment is floored by the 6 000 ms failed envelope call from bottleneck #1.*
+That constant does not vary with load, so it suppresses part of the contention
+signal. Fixing the envelope materially changes the experiment.
+
+Candidate mechanisms, none yet chosen:
+
+- serialize NPC background prefetch;
+- pause or defer `summarization` while interactive inference is active;
+- explicit interactive/background priority;
+- bounded per-runtime concurrency;
+- something simpler the architecture already supports.
+
+**Sequence:** land the envelope fix, then rerun this measurement at burst widths
+**1 NPC, 2 NPCs and 4 NPCs (the production maximum)**, counting actual
+`summarization` calls rather than candidates offered, and only then choose the
+smallest mechanism that protects interactive latency.
+
+The data may well invalidate a concurrency bound chosen in advance. If a single
+background summarization alongside dialogue is already severely harmful, lowering
+a bound from 4 to 2 would not help and prioritisation or deferral would be the
+correct design. If width 1 is acceptable and width 2+ collapses, a simple bound
+suffices. The post-envelope data should decide, not this report.
 
 ### 🟡 Measured; impact or applicability unresolved
 
@@ -503,8 +551,13 @@ this is a scheduling change, not a caching one.
 
 No priority queue. No scheduler. No per-provider concurrency limit. No batching.
 No NPC fingerprint caching. No prompt compression. No provider prompt-cache
-controls. No combat prefetch. No agent wiring. No budget change. **Measurement
-first**, as scoped.
+controls. No combat prefetch. No agent wiring. No budget change. **No envelope
+schema change either** — the call-2 schema reduction is proposed in §9 and is a
+separate PR. **Measurement first**, as scoped.
+
+The ordering matters: the envelope fix lands first, and the contention
+measurement is rerun afterwards at burst widths 1 / 2 / 4, because the 6 s
+envelope floor currently suppresses part of the contention signal.
 
 ## Reproducing
 
