@@ -45,6 +45,8 @@ export type CombatIntentServiceOptions = BaseFrontendClassOptions & {
       prompt: string;
       systemPrompt?: string;
       signal?: AbortSignal;
+      /** Absolute epoch ms by which the call must finish. */
+      deadlineAt?: number;
     }): Promise<unknown>;
   };
   /** Soft deadline in ms — defaults to the §18 budget (1.5 s). */
@@ -124,6 +126,11 @@ class CombatIntentService
 
     const controller = new AbortController();
     this._controllers.set(requestId, controller);
+    // ONE absolute deadline for the whole interpretation: both attempts, the
+    // local attempt and the gateway call draw from it, so a retry cannot extend
+    // the time the player waits (issue #382 P0).
+    const startedAt = Date.now();
+    const deadlineAt = startedAt + this._hardDeadlineMs;
     const hardTimer = setTimeout(() => {
       controller.abort();
     }, this._hardDeadlineMs);
@@ -133,7 +140,7 @@ class CombatIntentService
       let lastFailure: IntentInterpreterResult = { ok: false, reason: 'unparseable' };
 
       for (let attempt = 1; attempt <= this._maxAttempts; attempt++) {
-        const raw = await this._requestDraft(prompt, controller);
+        const raw = await this._requestDraft(prompt, controller, deadlineAt);
         if (raw === TIMED_OUT || raw === undefined) {
           // A timeout, an abort or a provider error: fall back immediately
           // rather than making the player wait out the hard deadline.
@@ -237,6 +244,7 @@ class CombatIntentService
   private async _requestDraft(
     prompt: string,
     controller: AbortController,
+    deadlineAt: number,
   ): Promise<unknown | typeof TIMED_OUT> {
     const call = this._text.extractStructure({
       // guard-ignore lint/type-safety/casting: TypeBox schema handed to the AI gateway as its JSON-schema record.
@@ -245,6 +253,10 @@ class CombatIntentService
       prompt,
       systemPrompt: buildCombatIntentSystemPrompt(),
       signal: controller.signal,
+      // ONE clock: the soft race below and the call itself expire together, so
+      // a cold local load cannot leave the provider running past the fallback
+      // the player is already looking at (issue #382 P0).
+      deadlineAt,
     });
     return await new Promise<unknown | typeof TIMED_OUT>((resolve) => {
       const timer = setTimeout(() => {

@@ -37,6 +37,7 @@ export type {
   AiTextAdapter,
   AiTextGenerationOptions,
   AiTextGenerationResult,
+  AiTextUsage,
   AiVoiceAdapter,
   AiVoiceGenerationOptions,
   AiVoiceGenerationResult,

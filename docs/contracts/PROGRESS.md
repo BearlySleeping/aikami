@@ -1,8 +1,8 @@
 # Contract Implementation Progress
 
-## Status Summary (Auto-generated: 2026-09-16)
+## Status Summary (Auto-generated: 2026-09-28)
 
-**297 active (10 without contract file), 119 archived, 0 duplicates**
+**318 active (10 without contract file), 119 archived, 0 duplicates**
 
 ### Active Contracts
 
@@ -284,7 +284,7 @@
 | C-520 | Versioned Image Workflows And Asset Preparation | 🛠️ implemented | — | v1 | full |
 | C-521 | Music Sfx Generation And Audio Preparation | 🛠️ implemented | — | v1 | full |
 | C-522 | Hub And Client Generation Runner Access | 🛠️ implemented | — | v1 | full |
-| C-523 | Emberwatch Asset Pilot And Offline Integration | 🛠️ implemented | — | v1 | full |
+| C-523 | Emberwatch Asset Pilot And Offline Integration | 🔄 in_progress | — | v1 | full |
 | C-524 | Optional Hosted Asset Provider Comparison | 🛠️ implemented | — | v1 | full |
 | C-525 | Combat 05 Natural Language Intent And Confirmation Ux | ✅ verified | ❓ `—` | v2 | full |
 | C-526 | Combat 06 Companion And Enemy Llm Intent Agents | 🛠️ implemented | ❓ `—` | v2 | full |
@@ -305,6 +305,27 @@
 | C-541 | Migrate client and hub off deprecated `kit.alias` | ⏳ not_started (no contract file) | — | — | full |
 | C-542 | Tauri OPFS `sqlite3_vfs` persistence | ⏳ not_started (no contract file) | — | — | full |
 | C-543 | Production Management Workspace And Hud Correction | 🛠️ implemented | ❓ `integrated` (production routes wired; E2E + visual lanes authored and to be run in CI) | v1 | full |
+| C-544 | Deterministic Particle Weather Fx | 🛠️ implemented | ❓ `sandbox` | v2 | full |
+| C-545 | Emberwatch Baseline And Ambient Parity | 🛠️ implemented | — | v2 | thin |
+| C-546 | Emberwatch Bridge Assembly | 🛠️ implemented | — | v2 | thin |
+| C-547 | Dialogue Stage | 🛠️ implemented | — | v2 | thin |
+| C-548 | Emberwatch Release Atlas Integrity | 🛠️ implemented | — | v2 | thin |
+| C-549 | Village Crossing And Grass Restraint | 🛠️ implemented | — | v1 | thin |
+| C-550 | Emberwatch House Assembly | 🛠️ implemented | — | v1 | thin |
+| C-551 | Management Content Game Ui Roles | 🛠️ implemented | 🔗 integrated | v2 | thin |
+| C-552 | Emberwatch Terrain Pass | 🛠️ implemented | — | v1 | thin |
+| C-553 | Emberwatch House Rollout | 🛠️ implemented | — | v1 | thin |
+| C-554 | Pause Settings Session Actions | 🛠️ implemented | ❓ none — implementation only; no deploy, publish, promote or sync --apply | v1 | thin |
+| C-555 | Exploration Hud | ⏳ not_started | — | v1 | full |
+| C-556 | Companion Restore Clamp | 🛠️ implemented | 🔗 integrated | v1 | thin |
+| C-557 | Release Plan Test Timeout | 🛠️ implemented | — | v1 | thin |
+| C-558 | Emberwatch Loaded Content Identity | 🔄 in_progress | 🔗 integrated | v2 | thin |
+| C-559 | Semantic Terrain Edges | 🔄 in_progress | — | v1 | full |
+| C-560 | Fresh Worktree Dx Hardening | 🛠️ implemented | — | v2 | full |
+| C-561 | Emberwatch Prop Coherence Pass | 🔄 in_progress | 🔗 integrated | v2 | thin |
+| C-562 | Emberwatch Five Map Polish Adoption | 🔄 in_progress | 🔗 integrated | v2 | thin |
+| C-563 | Emberwatch Final Acceptance | 🔄 in_progress | — | v2 | thin |
+| C-564 | Ai Critical Path Deadline Telemetry | 🛠️ implemented | — | v1 | thin |
 
 ---
 

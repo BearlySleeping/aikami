@@ -12,6 +12,30 @@ export const sseChunk = (text: string): string =>
 /** SSE end-of-stream signal. */
 export const SSE_DONE = 'data: [DONE]\n\n';
 
+/**
+ * Builds the trailing OpenAI-compatible token-accounting frame.
+ *
+ * Providers send it only when asked (`stream_options.include_usage`), which is
+ * why its absence must mean "unknown" rather than "zero".
+ */
+export const sseUsage = (options: {
+  promptTokens: number;
+  completionTokens: number;
+  cachedTokens?: number;
+}): string => {
+  const usage: Record<string, unknown> = {
+    // biome-ignore lint/style/useNamingConvention: OpenAI API contract field name
+    prompt_tokens: options.promptTokens,
+    // biome-ignore lint/style/useNamingConvention: OpenAI API contract field name
+    completion_tokens: options.completionTokens,
+  };
+  if (options.cachedTokens !== undefined) {
+    // biome-ignore lint/style/useNamingConvention: OpenAI API contract field name
+    usage.prompt_tokens_details = { cached_tokens: options.cachedTokens };
+  }
+  return `data: ${JSON.stringify({ usage })}\n\n`;
+};
+
 /** Creates a ReadableStream that emits the given SSE lines then closes. */
 export const syntheticSseBody = (chunks: string[]): ReadableStream<Uint8Array> => {
   const encoder = new TextEncoder();
@@ -98,8 +122,18 @@ export const createJsonFetchMock = (options?: {
   content?: string;
   status?: number;
   statusBody?: string;
+  /**
+   * Token accounting merged into the response body, in each provider's own
+   * shape. Omit it to model a provider that reports no accounting at all.
+   */
+  usage?: {
+    /** OpenAI-shaped `{ prompt_tokens, completion_tokens }`. */
+    openAi?: { promptTokens: number; completionTokens: number; cachedTokens?: number };
+    /** Ollama-native `{ prompt_eval_count, eval_count }`. */
+    ollama?: { promptTokens: number; outputTokens: number };
+  };
 }): { fetchFn: typeof fetch; calls: CapturedFetch[] } => {
-  const { content = 'Hello from JSON mock', status = 200, statusBody = '' } = options ?? {};
+  const { content = 'Hello from JSON mock', status = 200, statusBody = '', usage } = options ?? {};
   const calls: CapturedFetch[] = [];
 
   const fetchFn = ((input: string | URL | Request, init?: RequestInit): Promise<Response> => {
@@ -125,7 +159,7 @@ export const createJsonFetchMock = (options?: {
     }
 
     return Promise.resolve(
-      new Response(JSON.stringify({ message: { content } }), {
+      new Response(JSON.stringify({ message: { content }, ...usageFields(usage) }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       }),
@@ -133,6 +167,34 @@ export const createJsonFetchMock = (options?: {
   }) as typeof fetch;
 
   return { fetchFn, calls };
+};
+
+/** Serializes a mock's token accounting into each provider's own field names. */
+const usageFields = (usage?: {
+  openAi?: { promptTokens: number; completionTokens: number; cachedTokens?: number };
+  ollama?: { promptTokens: number; outputTokens: number };
+}): Record<string, unknown> => {
+  const fields: Record<string, unknown> = {};
+  if (usage?.openAi !== undefined) {
+    const openAi: Record<string, unknown> = {
+      // biome-ignore lint/style/useNamingConvention: OpenAI API contract field name
+      prompt_tokens: usage.openAi.promptTokens,
+      // biome-ignore lint/style/useNamingConvention: OpenAI API contract field name
+      completion_tokens: usage.openAi.completionTokens,
+    };
+    if (usage.openAi.cachedTokens !== undefined) {
+      openAi.prompt_tokens_details = {
+        // biome-ignore lint/style/useNamingConvention: OpenAI API contract field name
+        cached_tokens: usage.openAi.cachedTokens,
+      };
+    }
+    fields.usage = openAi;
+  }
+  if (usage?.ollama !== undefined) {
+    fields.prompt_eval_count = usage.ollama.promptTokens;
+    fields.eval_count = usage.ollama.outputTokens;
+  }
+  return fields;
 };
 
 /** A mixed-mode gateway config fixture: text offline + image byok + voice offline. */

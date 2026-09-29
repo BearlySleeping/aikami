@@ -4,8 +4,7 @@
 // no service singletons, no module mocks.
 
 import { describe, expect, mock, test } from 'bun:test';
-import type { AiConnection, RoleAssignments } from '@aikami/types';
-import type { TextTelemetrySpan } from '$types';
+import type { AiConnection, RoleAssignments, TextTelemetrySpan } from '@aikami/types';
 import { createAiActivityViewModel } from './ai_activity_view_model.svelte';
 
 const makeConnection = (overrides: Partial<AiConnection>): AiConnection => ({

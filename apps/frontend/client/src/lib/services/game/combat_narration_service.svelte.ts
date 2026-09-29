@@ -58,6 +58,14 @@ export type CombatNarrationServiceOptions = BaseFrontendClassOptions & {
       systemPrompt?: string;
       signal?: AbortSignal;
       task?: string;
+      /**
+       * Absolute epoch ms by which the whole call must finish — the narrator's
+       * own budget deadline, so its clock and the request's clock agree
+       * (issue #382 P0).
+       */
+      deadlineAt?: number;
+      /** Correlates the call with the encounter turn that caused it. */
+      requestId?: string;
     }): Promise<unknown>;
   };
   /** Soft deadline in ms — defaults to the §18 budget (1.5 s). */
@@ -201,6 +209,10 @@ class CombatNarrationService
             prompt,
             signal: transport.signal,
             task: TASK,
+            // ONE clock: narration is post-resolution and bounded by the same
+            // §18 budget as the decision it describes.
+            deadlineAt: budget.deadlineAt,
+            requestId: request.narrationId,
           }),
       });
 

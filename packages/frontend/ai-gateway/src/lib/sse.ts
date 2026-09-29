@@ -5,6 +5,52 @@
 // delivery order, first-chunk timeout, idle timeout) are identical.
 // Contract: C-320 AC-2
 
+import type { AiTextUsage } from './gateway_types.ts';
+
+// ---------------------------------------------------------------------------
+// Usage extraction
+// ---------------------------------------------------------------------------
+
+/** True when a value is a finite, non-negative number. */
+const isCount = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isInteger(value) && value >= 0;
+
+/** The OpenAI-compatible accounting block, in the provider's own field names. */
+type OpenAiUsagePayload = {
+  // biome-ignore lint/style/useNamingConvention: OpenAI API contract field name
+  prompt_tokens?: unknown;
+  // biome-ignore lint/style/useNamingConvention: OpenAI API contract field name
+  completion_tokens?: unknown;
+  // biome-ignore lint/style/useNamingConvention: OpenAI API contract field name
+  prompt_tokens_details?: { cached_tokens?: unknown };
+};
+
+/** Reads `usage` off an OpenAI-compatible payload, or `undefined` when absent. */
+const readUsage = (payload: unknown): AiTextUsage | undefined => {
+  if (typeof payload !== 'object' || payload === null) {
+    return undefined;
+  }
+  const usage = (payload as { usage?: unknown }).usage;
+  if (typeof usage !== 'object' || usage === null) {
+    return undefined;
+  }
+  const counts = usage as OpenAiUsagePayload;
+  if (!isCount(counts.prompt_tokens) || !isCount(counts.completion_tokens)) {
+    return undefined;
+  }
+  const details = counts.prompt_tokens_details;
+  const cachedTokens =
+    typeof details === 'object' && details !== null && isCount(details.cached_tokens)
+      ? details.cached_tokens
+      : undefined;
+  return {
+    inputTokens: counts.prompt_tokens,
+    outputTokens: counts.completion_tokens,
+    ...(cachedTokens === undefined ? {} : { cachedTokens }),
+    source: 'provider',
+  };
+};
+
 /** Timeout for the entire fetch+stream operation (90 seconds). */
 export const GATEWAY_FETCH_TIMEOUT_MS = 90_000;
 
@@ -23,6 +69,12 @@ export const GATEWAY_IDLE_TIMEOUT_MS = 5_000;
  *
  * Each line is `data: {"id":"...","choices":[{"delta":{"content":"token"}}]}`.
  * The stream ends with `data: [DONE]`.
+ *
+ * OpenAI-compatible providers report token accounting on a trailing frame
+ * (`usage`, sometimes gated behind `stream_options.include_usage`). The reader
+ * surfaces it through `onUsage` so the caller can tell a provider's own numbers
+ * from its own character-count estimate. A frame without `usage` simply reports
+ * nothing — silence means "unknown", never "zero".
  */
 export const readChatSseStream = async (options: {
   body: ReadableStream<Uint8Array>;
@@ -32,6 +84,8 @@ export const readChatSseStream = async (options: {
   idleTimeoutMs?: number;
   /** Optional debug hook, e.g. ('done', { chunkCount }). */
   onEvent?: (event: string, data?: Record<string, unknown>) => void;
+  /** Receives provider-reported token usage when the stream carries it. */
+  onUsage?: (usage: AiTextUsage) => void;
 }): Promise<void> => {
   const {
     body,
@@ -40,6 +94,7 @@ export const readChatSseStream = async (options: {
     firstChunkTimeoutMs = GATEWAY_FIRST_CHUNK_TIMEOUT_MS,
     idleTimeoutMs = GATEWAY_IDLE_TIMEOUT_MS,
     onEvent,
+    onUsage,
   } = options;
 
   const reader = body.getReader();
@@ -108,12 +163,13 @@ export const readChatSseStream = async (options: {
             }>;
           };
 
-          const choice = parsed.choices?.[0];
-          if (!choice) {
-            continue;
+          // Usage may arrive alone or alongside a content delta.
+          const usage = readUsage(parsed);
+          if (usage !== undefined) {
+            onUsage?.(usage);
           }
 
-          const token = choice.delta?.content;
+          const token = parsed.choices?.[0]?.delta?.content;
           if (token) {
             hasReceivedContent = true;
             onChunk(token);

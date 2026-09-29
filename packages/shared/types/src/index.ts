@@ -101,3 +101,5 @@ export * from './lib/project/project.ts';
 export * from './lib/runtime/runtime_engine_config.ts';
 export * from './lib/storage_seam.ts';
 export * from './lib/studio/studio.ts';
+
+export type * from './lib/text_telemetry.ts';

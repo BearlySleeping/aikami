@@ -75,6 +75,17 @@ export type TextTaskPreset = {
   localFirst: boolean;
   /** Whether this task is a candidate for a batched combined analysis call. */
   batchable: boolean;
+  /**
+   * End-to-end budget in ms for ONE logical request, or `undefined` for work
+   * whose deadline is the encounter/campaign lifetime rather than a player's
+   * attention span.
+   *
+   * The budget is absolute and shared: routing, queueing, model load, prefill,
+   * generation, retry and fallback all draw from it, and no layer may restart
+   * it. Latency-sensitive tasks carry one so a cold local attempt cannot
+   * consume the budget the configured gateway path still needs.
+   */
+  budgetMs?: number;
 };
 
 /**
@@ -112,6 +123,9 @@ export const TEXT_TASK_PRESETS: Record<TextTask, TextTaskPreset> = {
     streamable: false,
     localFirst: true,
     batchable: false,
+    // §18 budget: the engine already falls back at 1.5 s, so the request must
+    // be finished well inside that for the fallback to be the cheaper path.
+    budgetMs: 4_000,
   },
   /**
    * AI combat decisions (C-526). Structured selectors only, so it mirrors
@@ -126,6 +140,10 @@ export const TEXT_TASK_PRESETS: Record<TextTask, TextTaskPreset> = {
     streamable: false,
     localFirst: true,
     batchable: false,
+    // Matches the decision service's §18 hard budget, so the deadline the
+    // engine enforces and the deadline the transport enforces are the same
+    // instant rather than two budgets stacked end to end.
+    budgetMs: 4_000,
   },
   /**
    * Combat outcome narration (C-526 Q6). Bounded prose that rephrases the
@@ -140,6 +158,9 @@ export const TEXT_TASK_PRESETS: Record<TextTask, TextTaskPreset> = {
     streamable: false,
     localFirst: true,
     batchable: false,
+    // Bounded prose shown after the blow lands. Past this the authored
+    // template narration is the better outcome than a truncated sentence.
+    budgetMs: 4_000,
   },
   envelope: {
     role: 'structured',
@@ -149,6 +170,8 @@ export const TEXT_TASK_PRESETS: Record<TextTask, TextTaskPreset> = {
     streamable: false,
     localFirst: true,
     batchable: false,
+    // The player is waiting to see their choices; a late envelope is a stall.
+    budgetMs: 6_000,
   },
   summarization: {
     role: 'summarization',
