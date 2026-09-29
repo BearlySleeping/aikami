@@ -39,6 +39,11 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { chromium, type Page, type Response } from 'playwright';
 import { EMULATOR_PORTS } from '../src/config';
+import type { DialogueTurnProbe, WireWindow } from './ai_baseline_production_scenarios.ts';
+import {
+  runPrefetchContentionScenario,
+  runProductionDialogueScenario,
+} from './ai_baseline_production_scenarios.ts';
 
 // ── Configuration ──────────────────────────────────────────────────────────
 
@@ -51,9 +56,16 @@ const parseArgs = (
   model: string;
   reps: number;
   sweepSamples: number;
+  contentionReps: number;
   batchSize: number;
   label: string;
   skipCold: boolean;
+  productionDialogue: boolean;
+  productionContention: boolean;
+  probeNpcId: string;
+  probeNpcName: string;
+  prefetchNpcIds: readonly string[];
+  prefetchNpcNames: Readonly<Record<string, string>>;
 } => {
   const readFlag = (name: string): string | undefined => {
     const index = argv.indexOf(`--${name}`);
@@ -64,9 +76,30 @@ const parseArgs = (
     model: readFlag('model') ?? 'ornith-1.5:9b',
     reps: Number(readFlag('reps') ?? 5),
     sweepSamples: Number(readFlag('sweep-samples') ?? 7),
+    // The A/B needs more samples than the other scenarios to say anything: its
+    // effect size is small and its variance is large, so n=3 could not resolve
+    // it and the sign of the delta changed between runs.
+    contentionReps: Number(readFlag('p2-reps') ?? 10),
     batchSize: Number(readFlag('batch') ?? 6),
     label: readFlag('label') ?? 'current',
     skipCold: argv.includes('--skip-cold'),
+    // The production scenarios need authored NPCs, so they are opt-in: a
+    // synthetic-only run must still work on a pack with no dialogue wired.
+    productionDialogue: !argv.includes('--no-production'),
+    productionContention: !argv.includes('--no-production'),
+    // `village_elder` is the authored NPC on the starting map, so the
+    // production dialogue path is exercised against real pack content.
+    probeNpcId: readFlag('npc') ?? 'village_elder',
+    probeNpcName: readFlag('npc-name') ?? 'Village Elder',
+    // Burst width is configurable because it is a real production knob:
+    // `prefetchForNpcs` slices to NPC_MEMORY_MAP_PREFETCH_LIMIT (4). Only NPCs
+    // the player has actually talked to are prefetched, so the effective burst
+    // is also gated on conversation history.
+    prefetchNpcIds: (readFlag('prefetch-npcs') ?? 'village_elder,rollo_grasper')
+      .split(',')
+      .map((id) => id.trim())
+      .filter((id) => id.length > 0),
+    prefetchNpcNames: JSON.parse(readFlag('prefetch-names') ?? '{"village_elder":"Village Elder"}'),
   };
 };
 
@@ -88,6 +121,31 @@ type WireCall = {
   readonly cachedTokens?: number;
   /** Which response shape the token counts came from, when they were readable. */
   readonly usageShape?: 'openai' | 'ollama-native';
+  /**
+   * Provider-reported phase split, in milliseconds.
+   *
+   * These are the provider's OWN counters, not estimates. Ollama's native
+   * `/api/chat` reports `load_duration`, `prompt_eval_duration`,
+   * `eval_duration` and `total_duration` in nanoseconds, which is enough to
+   * separate model load, prefill and generation without inventing precision.
+   *
+   * Left `undefined` on routes that do not report them: an absent counter is
+   * recorded as unknown, never as zero, because "the provider said 0 ms" and
+   * "the provider said nothing" are different claims.
+   */
+  readonly modelLoadMs?: number;
+  readonly prefillMs?: number;
+  readonly generationMs?: number;
+  /** The provider's own total, for comparison against the client-observed one. */
+  readonly providerTotalMs?: number;
+  /**
+   * The request was issued and then aborted before a response arrived.
+   *
+   * Its duration is real provider time that produced nothing, which is exactly
+   * the cost a benchmark must not lose.
+   */
+  readonly aborted?: boolean;
+  readonly failureText?: string;
 };
 
 /**
@@ -110,26 +168,63 @@ type WireCall = {
  * `cachedTokens` is therefore left undefined rather than guessed — the same rule
  * the client's own telemetry follows.
  */
+/** Assigns a number only when the provider actually sent one. */
+const assignNumber = (
+  row: { -readonly [K in keyof WireCall]: WireCall[K] },
+  key: 'promptTokens' | 'completionTokens' | 'cachedTokens',
+  value: unknown,
+): void => {
+  if (typeof value === 'number') {
+    row[key] = value;
+  }
+};
+
+/** Reads the OpenAI-compatible `usage` block, when the response carries one. */
+const readOpenAiUsage = (
+  record: Record<string, unknown>,
+  row: { -readonly [K in keyof WireCall]: WireCall[K] },
+): boolean => {
+  const usage = record.usage as Record<string, unknown> | undefined;
+  if (usage === undefined || usage === null) {
+    return false;
+  }
+  const details = usage.prompt_tokens_details as { cached_tokens?: number } | undefined;
+  assignNumber(row, 'promptTokens', usage.prompt_tokens);
+  assignNumber(row, 'completionTokens', usage.completion_tokens);
+  assignNumber(row, 'cachedTokens', details?.cached_tokens);
+  row.usageShape = 'openai';
+  return true;
+};
+
 const readUsage = (body: unknown, row: { -readonly [K in keyof WireCall]: WireCall[K] }): void => {
   const record = body as Record<string, unknown>;
-  const usage = record.usage as Record<string, unknown> | undefined;
-  if (usage !== undefined && usage !== null) {
-    const details = usage.prompt_tokens_details as { cached_tokens?: number } | undefined;
-    if (typeof usage.prompt_tokens === 'number') {
-      row.promptTokens = usage.prompt_tokens;
-    }
-    if (typeof usage.completion_tokens === 'number') {
-      row.completionTokens = usage.completion_tokens;
-    }
-    if (typeof details?.cached_tokens === 'number') {
-      row.cachedTokens = details.cached_tokens;
-    }
-    row.usageShape = 'openai';
+  if (readOpenAiUsage(record, row)) {
     return;
   }
   if (typeof record.prompt_eval_count === 'number') {
     row.promptTokens = record.prompt_eval_count;
     row.usageShape = 'ollama-native';
+    // Ollama reports its phase breakdown in NANOSECONDS. Converting here keeps
+    // every number in this file in milliseconds and avoids a unit mix-up that
+    // would silently report prefill as a million times too large.
+    const nanos = (value: unknown): number | undefined =>
+      typeof value === 'number' ? Math.round(value / 1e6) : undefined;
+    const load = nanos(record.load_duration);
+    const prefill = nanos(record.prompt_eval_duration);
+    const generation = nanos(record.eval_duration);
+    const total = nanos(record.total_duration);
+    if (load !== undefined) {
+      row.modelLoadMs = load;
+    }
+    if (prefill !== undefined) {
+      row.prefillMs = prefill;
+    }
+    if (generation !== undefined) {
+      row.generationMs = generation;
+    }
+    if (total !== undefined) {
+      row.providerTotalMs = total;
+    }
   }
   if (typeof record.eval_count === 'number') {
     row.completionTokens = record.eval_count;
@@ -151,11 +246,39 @@ const attachWireCapture = (page: Page, endpointHost: string, sink: WireCall[]): 
   // these settle. `summarizeWire` awaits them; without that, the token columns
   // race the summary and silently read as zero.
   const bodyReads: Promise<void>[] = [];
+  // Rows whose body has been read. Identity-based, because the row object is
+  // pushed to the sink and then enriched in place.
+  const bodyRead = new WeakSet<object>();
 
   page.on('request', (request) => {
     if (request.url().includes(endpointHost)) {
       pending.set(request, performance.now());
     }
+  });
+
+  // 🔴 An ABORTED request fires `requestfailed`, never `response`.
+  //
+  // Without this listener a request that was issued, consumed real provider
+  // time and was then thrown away is INVISIBLE to the wire log. That is the
+  // worst possible failure for a benchmark: it reported 0 provider requests for
+  // a call that demonstrably reached the provider and burned its whole budget
+  // there. Aborted calls are recorded with their duration and no token counts,
+  // because the provider sent none.
+  page.on('requestfailed', (request) => {
+    const startedAtMs = pending.get(request);
+    if (startedAtMs === undefined) {
+      return;
+    }
+    pending.delete(request);
+    sink.push({
+      url: request.url(),
+      status: 0,
+      startedAtMs,
+      durationMs: performance.now() - startedAtMs,
+      streamed: false,
+      aborted: true,
+      failureText: request.failure()?.errorText ?? 'unknown',
+    } as WireCall);
   });
 
   page.on('response', (response: Response) => {
@@ -167,7 +290,12 @@ const attachWireCapture = (page: Page, endpointHost: string, sink: WireCall[]): 
 
     const headers = response.headers();
     const contentType = headers['content-type'] ?? '';
-    const streamed = contentType.includes('event-stream');
+    // Ollama's NATIVE surface streams as `application/x-ndjson`, not SSE. The
+    // first version of this check only looked for `event-stream`, which
+    // mislabelled every streamed local call as non-streamed — and, because a
+    // mislabelled call took the non-streamed body-read path, silently lost its
+    // token counts and phase durations.
+    const streamed = contentType.includes('event-stream') || contentType.includes('x-ndjson');
     const row: {
       -readonly [K in keyof WireCall]: WireCall[K];
     } = {
@@ -179,20 +307,55 @@ const attachWireCapture = (page: Page, endpointHost: string, sink: WireCall[]): 
     };
 
     if (!streamed) {
+      const target = row as object;
       bodyReads.push(
         response
           .json()
           .then((body: unknown) => {
             readUsage(body, row);
+            bodyRead.add(target);
           })
-          .catch(() => undefined),
+          // A body that cannot be read still counts as settled: the row keeps
+          // its absent token counts, which is the honest rendering.
+          .catch(() => undefined)
+          .then(() => {
+            bodyRead.add(target);
+          }),
       );
+    } else {
+      bodyRead.add(row as object);
     }
 
     sink.push(row as WireCall);
   });
 
-  wireSettler.set(sink, () => Promise.all(bodyReads).then(() => undefined));
+  /**
+   * Waits until this sink has stopped growing AND every body read seen so far
+   * has finished.
+   *
+   * `Promise.all(bodyReads)` alone is NOT enough: it snapshots the array, and
+   * Playwright delivers `response` over CDP asynchronously — a request whose
+   * response the page has already consumed can still be un-recorded when a
+   * scenario summarizes. That produced a cold-start row reporting
+   * `usageShapes: ['none']` and no phase split for a call whose body was read
+   * moments later. So this also waits for the log to stop growing.
+   */
+  wireSettler.set(sink, async () => {
+    // Start at -1 so the FIRST iteration always waits: an empty sink trivially
+    // satisfies `every`, and returning immediately on an empty log is exactly
+    // how a call that was still being recorded got summarized as having no
+    // token accounting.
+    let previousCount = -1;
+    for (let attempt = 0; attempt < 40; attempt++) {
+      await Promise.all(bodyReads);
+      const stable = sink.length > 0 && sink.length === previousCount;
+      if (stable && sink.every((row) => bodyRead.has(row))) {
+        return;
+      }
+      previousCount = sink.length;
+      await new Promise((done) => setTimeout(done, 25));
+    }
+  });
 };
 
 /**
@@ -207,6 +370,14 @@ const wireSettler = new WeakMap<WireCall[], () => Promise<void>>();
 
 /** The production `extractStructure` surface the envelope task uses. */
 const SYSTEM_PROMPT = 'Summarize the scene for a JRPG. JSON only.';
+
+/**
+ * The player line the production dialogue scenario sends.
+ *
+ * Fixed so every run of every commit is comparable, and written to be ordinary
+ * dialogue rather than a prompt engineered to be cheap or fast.
+ */
+const PLAYER_LINE = 'What happened to the caravan that never reached the mill?';
 
 const SCENE_SENTENCE =
   'A hooded stranger steps into the tavern and asks about the missing caravan. ' +
@@ -241,8 +412,18 @@ type BatchClientReport = {
   readonly sampleResult: { readonly spansRecorded: number; readonly coalescedSpans: number };
 };
 
-/** Where the settle hook is keyed, so a summary can await outstanding bodies. */
-type SettleableSink = { readonly rows: WireCall[]; readonly settle: () => Promise<void> };
+/**
+ * A scenario's window of the wire log.
+ *
+ * `rows` is a FUNCTION, not a snapshot. A snapshot taken before `settle()` runs
+ * silently omits any call whose `response` event was still in flight — which is
+ * how a cold-start row reported no token accounting for a call whose body was
+ * read a moment later. Reading lazily, after the settle, closes that window.
+ */
+type SettleableSink = {
+  readonly rows: () => WireCall[];
+  readonly settle: () => Promise<void>;
+};
 
 /** One batch of identical structured calls, as the seam reports it. */
 type BatchRequest = {
@@ -293,7 +474,7 @@ const runCheckedBatch = async (
 
 const summarizeWire = async (sink: SettleableSink): Promise<Record<string, unknown>> => {
   await sink.settle();
-  const rows = sink.rows;
+  const rows = sink.rows();
   const durations = rows.map((row) => row.durationMs);
   const promptTokens = rows.flatMap((row) =>
     row.promptTokens === undefined ? [] : [row.promptTokens],
@@ -301,6 +482,12 @@ const summarizeWire = async (sink: SettleableSink): Promise<Record<string, unkno
   return {
     providerRequests: rows.length,
     failed: rows.filter((row) => row.status >= 400).length,
+    // Issued, consumed provider time, and thrown away. Counted separately
+    // because these are the calls a latency-only view hides completely.
+    aborted: rows.filter((row) => row.aborted === true).length,
+    abortedMs: Math.round(
+      rows.filter((row) => row.aborted === true).reduce((total, row) => total + row.durationMs, 0),
+    ),
     // `null`, not `0`, when nothing was observed. A zero here would render as
     // "the call took 0 ms", which is a measurement of nothing and reads like a
     // result. Every consumer must be able to tell "not measured" from "fast".
@@ -318,6 +505,45 @@ const summarizeWire = async (sink: SettleableSink): Promise<Record<string, unkno
     // measurements. Reported so a zero is never mistaken for a free call.
     rowsWithUsage: rows.filter((row) => row.promptTokens !== undefined).length,
     usageShapes: [...new Set(rows.map((row) => row.usageShape ?? 'none'))],
+    ...phaseSplit(rows),
+  };
+};
+
+/**
+ * Sums the provider's own phase counters.
+ *
+ * Reported as `undefined` when the provider reported none, so a route without
+ * this telemetry yields "unknown" rather than a zero that reads as "no time
+ * spent". `clientOverheadMs` is the client's wall clock minus the provider's
+ * own total, which is where HTTP, queueing and parsing live — the phases the
+ * provider cannot see.
+ */
+const phaseSplit = (rows: readonly WireCall[]): Record<string, unknown> => {
+  const sum = (pick: (row: WireCall) => number | undefined): number | undefined => {
+    let total = 0;
+    let seen = false;
+    for (const row of rows) {
+      const value = pick(row);
+      if (value !== undefined) {
+        total += value;
+        seen = true;
+      }
+    }
+    return seen ? total : undefined;
+  };
+  const clientTotal = rows.reduce((total, row) => total + row.durationMs, 0);
+  const providerTotal = sum((row) => row.providerTotalMs);
+  return {
+    providerLoadMs: sum((row) => row.modelLoadMs),
+    providerPrefillMs: sum((row) => row.prefillMs),
+    providerGenerationMs: sum((row) => row.generationMs),
+    providerTotalMs: providerTotal,
+    clientTotalMs: Math.round(clientTotal),
+    // Negative is possible when the client measures less than the provider
+    // reports (clock skew, or a response read before the provider finished its
+    // accounting), so it is reported as-is rather than clamped to zero.
+    clientOverheadMs:
+      providerTotal === undefined ? undefined : Math.round(clientTotal - providerTotal),
   };
 };
 
@@ -514,6 +740,7 @@ const collectEnvironment = async (): Promise<Record<string, unknown>> => {
     gpu: sh("lspci 2>/dev/null | grep -iE 'vga|3d|display' | head -2"),
     repetitions: CONFIG.reps,
     sweepSamples: CONFIG.sweepSamples,
+    contentionReps: CONFIG.contentionReps,
     batchSize: CONFIG.batchSize,
   };
 };
@@ -552,6 +779,17 @@ const renderHeader = (report: Record<string, unknown>): string[] => {
 /** Formats a millisecond figure, keeping "not measured" visibly distinct. */
 const ms = (value: unknown): string => (value === null ? 'not measured' : `${String(value)} ms`);
 
+/**
+ * Same, for a figure that is `undefined` when the provider did not report it.
+ *
+ * "unknown" is the honest rendering. Zero would assert that the phase took no
+ * time, which is a claim about a counter the provider never sent.
+ */
+const known = (value: unknown): string =>
+  value === undefined || value === null
+    ? 'unknown (provider reported none)'
+    : `${String(value)} ms`;
+
 const renderWireTable = (summary: Record<string, unknown>): string[] => {
   const shapes = (summary.usageShapes as string[] | undefined) ?? [];
   const cacheCell = shapes.includes('openai')
@@ -569,6 +807,14 @@ const renderWireTable = (summary: Record<string, unknown>): string[] => {
     `| responses with token counts | ${String(summary.rowsWithUsage)} |`,
     `| token accounting shape | ${shapes.join(', ') || 'none'} |`,
     `| failed requests | ${String(summary.failed)} |`,
+    `| aborted requests (provider time wasted) | ${String(summary.aborted ?? 0)} |`,
+    `| aborted request ms | ${known(summary.abortedMs ?? 0)} |`,
+    `| provider model-load ms | ${known(summary.providerLoadMs)} |`,
+    `| provider prefill ms | ${known(summary.providerPrefillMs)} |`,
+    `| provider generation ms | ${known(summary.providerGenerationMs)} |`,
+    `| provider total ms | ${known(summary.providerTotalMs)} |`,
+    `| client total ms | ${known(summary.clientTotalMs)} |`,
+    `| client overhead ms (queue + http + parse) | ${known(summary.clientOverheadMs)} |`,
   ];
 };
 
@@ -597,25 +843,244 @@ const renderSizeRows = (bySize: Record<string, unknown>[] | undefined): string[]
   ];
 };
 
+/** Per-sample turn rows, for the production dialogue scenario. */
+const renderTurnRows = (turns: Record<string, unknown>[] | undefined): string[] => {
+  if (turns === undefined) {
+    return [];
+  }
+  return [
+    '',
+    '| # | wall clock | ttft | source | schema valid | narrative non-empty | choices |',
+    '|---|---|---|---|---|---|---|',
+    ...turns.map(
+      (turn, index) =>
+        `| ${index + 1} | ${known(turn.wallClockMs)} | ${known(turn.ttftMs)} | ` +
+        `${String(turn.source)} | ${String(turn.schemaValid)} | ` +
+        `${String(turn.narrativeNonEmpty)} | ${String(turn.choiceCount)} |`,
+    ),
+  ];
+};
+
+/** The A/B contention comparison, with the delta stated explicitly. */
+const renderContentionRows = (scenario: Record<string, unknown>): string[] => {
+  const quiet = scenario.quietTurns as Record<string, unknown>[] | undefined;
+  const busy = scenario.overlappedTurns as Record<string, unknown>[] | undefined;
+  if (quiet === undefined || busy === undefined) {
+    return [];
+  }
+  const quietMedian = percentile(
+    quiet.map((row) => Number(row.wallClockMs)),
+    0.5,
+  );
+  const busyMedian = percentile(
+    busy.map((row) => Number(row.wallClockMs)),
+    0.5,
+  );
+  const median = (rows: Record<string, unknown>[]): number | undefined =>
+    percentile(
+      rows.flatMap((row) => (row.ttftMs === undefined ? [] : [Number(row.ttftMs)])),
+      0.5,
+    );
+  const spread = (rows: Record<string, unknown>[]): number | undefined =>
+    percentile(
+      rows.flatMap((row) => (row.ttftMs === undefined ? [] : [Number(row.ttftMs)])),
+      1,
+    );
+  const quietTtft = median(quiet);
+  const busyTtft = median(busy);
+  const describe = (a: number | undefined, b: number | undefined): string => {
+    if (a === undefined || b === undefined) {
+      return 'unknown';
+    }
+    const delta = b - a;
+    return `${delta >= 0 ? '+' : ''}${delta} ms (${((b / Math.max(1, a) - 1) * 100).toFixed(0)}%)`;
+  };
+  const totalBackground = busy.reduce(
+    (total, row) => total + Number(row.backgroundSummarizationRequests ?? 0),
+    0,
+  );
+  const invalid = busy.filter((row) => row.valid !== true).length;
+  return [
+    '',
+    `**Samples: ${String(busy.length)}, of which ${String(invalid)} invalid. ` +
+      `Background summarization calls actually recorded: ${String(totalBackground)} ` +
+      `(mean ${(totalBackground / Math.max(1, busy.length)).toFixed(1)} per sample).**`,
+    '',
+    `**Interactive dialogue, total wall clock:** ${String(quietMedian)} ms quiet vs ` +
+      `${String(busyMedian)} ms overlapping the burst — delta ` +
+      `${describe(quietMedian, busyMedian)}.`,
+    '',
+    `**Time to first token (the contention-sensitive metric):** ${String(quietTtft)} ms quiet ` +
+      `vs ${String(busyTtft)} ms overlapping — delta ${describe(quietTtft, busyTtft)}.`,
+    '',
+    `Quiet TTFT spread ${String(spread(quiet))} ms, overlapped ${String(spread(busy))} ms. ` +
+      'A delta smaller than the spread is not resolvable at this sample size.',
+    '',
+    '| # | quiet turn | quiet ttft | overlapping turn | overlapping ttft | NPCs offered | background calls | still running at dialogue start | valid |',
+    '|---|---|---|---|---|---|---|---|---|',
+    ...quiet.map(
+      (row, index) =>
+        `| ${index + 1} | ${known(row.wallClockMs)} | ${known(row.ttftMs)} | ` +
+        `${known(busy[index]?.wallClockMs)} | ${known(busy[index]?.ttftMs)} | ` +
+        `${String(busy[index]?.burstCandidates ?? '?')} | ` +
+        `${String(busy[index]?.backgroundSummarizationRequests ?? '?')} | ` +
+        `${String(busy[index]?.backgroundRequestsStillRunningAtDialogueStart ?? '?')} | ` +
+        `${String(busy[index]?.valid ?? '?')} |`,
+    ),
+  ];
+};
+
 const renderMarkdown = (report: Record<string, unknown>): string => {
   const scenarios = report.scenarios as Record<string, Record<string, unknown>>;
   const lines: string[] = [...renderHeader(report), '', '## Scenarios', ''];
 
   for (const [id, scenario] of Object.entries(scenarios)) {
-    lines.push(
-      `### ${id}`,
-      '',
-      `${String(scenario.description)}`,
-      '',
-      ...renderWireTable(scenario.wire as Record<string, unknown>),
-      ...renderClientRows(scenario.client as Record<string, unknown> | undefined),
-      ...renderSizeRows(scenario.bySize as Record<string, unknown>[] | undefined),
-      '',
-    );
+    // The A/B scenario aggregates per-sample, so a single flat table would be
+    // meaningless for it.
+    const isContention = scenario.quietTurns !== undefined;
+    lines.push(`### ${id}`, '', `${String(scenario.description)}`, '');
+    if (!isContention) {
+      lines.push(
+        ...renderWireTable(scenario.wire as Record<string, unknown>),
+        ...renderClientRows(scenario.client as Record<string, unknown> | undefined),
+        ...renderSizeRows(scenario.bySize as Record<string, unknown>[] | undefined),
+        ...renderTurnRows(scenario.turns as Record<string, unknown>[] | undefined),
+        '',
+      );
+      continue;
+    }
+    lines.push(...renderContentionRows(scenario), '');
   }
 
   return `${lines.join('\n')}\n`;
 };
+
+// ── Production scenario wiring ──────────────────────────────────────────────
+
+/**
+ * The run's wire log, and the settle hook for outstanding response bodies.
+ *
+ * Module scope because the production scenarios need the same windowing as the
+ * main body; a closure would make it unreachable from the extracted module.
+ */
+let wireLog: WireCall[] = [];
+let wireSettle: () => Promise<void> = (): Promise<void> => Promise.resolve();
+
+const wireMark = (): number => wireLog.length;
+
+const wireSlice = (from: number): SettleableSink => ({
+  rows: () => wireLog.slice(from),
+  settle: () => wireSettle(),
+});
+
+/** Calls `runDialogueTurn` on the seam. */
+const runProductionTurn = async (page: Page, playerLine: string): Promise<DialogueTurnProbe> =>
+  (await page.evaluate(
+    (input) =>
+      (
+        window as unknown as {
+          __AIKAMI_TEST__: { runDialogueTurn(o: unknown): Promise<unknown> };
+        }
+      ).__AIKAMI_TEST__.runDialogueTurn(input),
+    { npcId: CONFIG.probeNpcId, npcName: CONFIG.probeNpcName, playerLine },
+  )) as DialogueTurnProbe;
+
+/** Restores returning-NPC memory before opening the burst wire window. */
+const prepareProductionBurst = async (
+  page: Page,
+  input: { npcIds: readonly string[]; npcNames: Readonly<Record<string, string>> },
+): Promise<void> => {
+  await page.evaluate((payload) => {
+    if (!('__AIKAMI_TEST__' in window)) {
+      throw new Error('AI baseline test seam is unavailable');
+    }
+    const seam = window.__AIKAMI_TEST__;
+    if (
+      typeof seam !== 'object' ||
+      !seam ||
+      !('prepareNpcPrefetch' in seam) ||
+      typeof seam.prepareNpcPrefetch !== 'function'
+    ) {
+      throw new Error('AI baseline prefetch setup is unavailable');
+    }
+    seam.prepareNpcPrefetch(payload);
+  }, input);
+};
+
+/** Calls `runNpcPrefetchBurst` on the seam. */
+const runProductionBurst = async (
+  page: Page,
+  input: { npcIds: readonly string[] },
+): Promise<{ candidates: number; dispatchMs: number }> =>
+  (await page.evaluate(
+    (payload) =>
+      (
+        window as unknown as {
+          __AIKAMI_TEST__: { runNpcPrefetchBurst(o: unknown): Promise<unknown> };
+        }
+      ).__AIKAMI_TEST__.runNpcPrefetchBurst(payload),
+    { npcIds: input.npcIds },
+  )) as { candidates: number; dispatchMs: number };
+
+/**
+ * Adapts the harness's wire capture to what the scenario module needs.
+ *
+ * The window helpers are closure-scoped to a run, so they are threaded through
+ * rather than re-derived per scenario.
+ */
+/**
+ * Counts client telemetry spans carrying one task.
+ *
+ * Read from the EXISTING telemetry buffer rather than a second instrumentation
+ * path. Counting by `task` is what makes the background fan-out exact: a wire
+ * count could not distinguish a background `summarization` call from a
+ * `dialogue` call inside the same window.
+ */
+const countSpans = async (page: Page, task: string): Promise<number> =>
+  (await page.evaluate((wanted) => {
+    const seam = (
+      window as unknown as {
+        __AIKAMI_TEST__?: { getTextTelemetry?(): { spans: ReadonlyArray<{ task?: string }> } };
+      }
+    ).__AIKAMI_TEST__;
+    const spans = seam?.getTextTelemetry?.().spans ?? [];
+    return spans.filter((span) => span.task === wanted).length;
+  }, task)) as number;
+
+/**
+ * Waits for background spans to land and reports how many arrived.
+ *
+ * The NPC opener refresh is fire-and-forget, so after the interactive turn
+ * finishes some of its calls may not yet be recorded. This waits for them
+ * AFTER the interactive measurement, so it cannot contaminate dialogue timing.
+ * A bounded wait, because a call that never arrives is itself the answer.
+ */
+const awaitSummarizationSpans = async (page: Page, before: number): Promise<number> => {
+  for (let attempt = 0; attempt < 40; attempt++) {
+    const total = await countSpans(page, 'summarization');
+    if (total > before) {
+      // Give any sibling call a brief chance to land too, so the count is the
+      // burst's fan-out rather than "however many happened to be first".
+      await new Promise((done) => setTimeout(done, 250));
+      return (await countSpans(page, 'summarization')) - before;
+    }
+    await new Promise((done) => setTimeout(done, 250));
+  }
+  return (await countSpans(page, 'summarization')) - before;
+};
+
+const productionWire = (): WireWindow => ({
+  mark: wireMark,
+  slice: wireSlice,
+  summarize: (from: number) => summarizeWire(wireSlice(from)),
+  rowsBefore: (from: number, boundaryMs: number) =>
+    wireLog.slice(from).filter((row) => row.startedAtMs <= boundaryMs),
+  countSpans,
+  awaitSummarizationSpans,
+  runTurn: runProductionTurn,
+  prepareBurst: prepareProductionBurst,
+  runBurst: runProductionBurst,
+});
 
 // ── Main ───────────────────────────────────────────────────────────────────
 
@@ -635,21 +1100,22 @@ const main = async (): Promise<void> => {
 
   const environment = await collectEnvironment();
   const wire: WireCall[] = [];
+  wireLog = wire;
   const scenarios: Record<string, Record<string, unknown>> = {};
 
   const browser = await chromium.launch();
   const context = await browser.newContext();
   const page = await context.newPage();
   attachWireCapture(page, new URL(CONFIG.endpoint).host, wire);
+  // Must come AFTER attachWireCapture: the settle hook is registered there, so
+  // reading it earlier silently yields a no-op and every scenario summarizes
+  // before its response bodies have landed.
+  wireSettle = wireSettler.get(wire) ?? ((): Promise<void> => Promise.resolve());
 
   // A scenario is a SLICE of the wire log plus the settle hook, so a summary
   // can wait for that slice's response bodies instead of racing them.
-  const settle = wireSettler.get(wire) ?? ((): Promise<void> => Promise.resolve());
-  const markStart = (): number => wire.length;
-  const slice = (from: number): SettleableSink => ({
-    rows: wire.slice(from),
-    settle: () => Promise.all([settle()]).then(() => undefined),
-  });
+  const markStart = (): number => wireMark();
+  const slice = (from: number): SettleableSink => wireSlice(from);
 
   console.log(`→ booting ${GAME_URL} …`);
   await seedProviderConnection(page);
@@ -858,6 +1324,32 @@ const main = async (): Promise<void> => {
         callsSucceeded: `${outcomes.reduce((sum, r) => sum + r.succeededCalls, 0)}/${CONFIG.batchSize}`,
       },
     };
+  }
+
+  // ── P1/P2: production scenarios ─────────────────────────────────────
+  //
+  // Everything above drives `extractStructure` directly. That is the surface
+  // #411's coalescer guards, but it is NOT what a player waits on: a real turn
+  // goes through `NpcDialogueService.generateTurn`, which performs the C-401
+  // two-call split and then applies the result.
+  if (CONFIG.productionDialogue) {
+    console.log(`→ P1 production dialogue turn ×${CONFIG.reps} …`);
+    scenarios['P1 production-dialogue'] = await runProductionDialogueScenario({
+      page,
+      wire: productionWire(),
+      playerLine: PLAYER_LINE,
+      repetitions: CONFIG.reps,
+    });
+
+    console.log('→ P2 prefetch-contention A/B …');
+    scenarios['P2 prefetch-contention-A/B'] = await runPrefetchContentionScenario({
+      page,
+      wire: productionWire(),
+      playerLine: PLAYER_LINE,
+      repetitions: CONFIG.contentionReps,
+      npcIds: CONFIG.prefetchNpcIds,
+      npcNames: CONFIG.prefetchNpcNames,
+    });
   }
 
   // ── Client telemetry (secondary; absent before #410) ─────────────────

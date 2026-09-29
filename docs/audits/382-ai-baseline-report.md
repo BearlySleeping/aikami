@@ -153,10 +153,6 @@ totals on both commits** (23 317 prompt tokens), medians 24 ms apart. The harnes
 is demonstrably measuring the same work on both sides, which is what licenses
 reading S4 as signal.
 
-S3 is the strongest control: identical request count, identical token totals,
-medians 341 ms apart against a ±1 s noise band. The harness is measuring the
-same work on both sides.
-
 **Noise band.** Run-to-run variance on this 9B CPU model is roughly ±1 s, which
 is comparable to a whole warm call — and it is visible *within* a single
 scenario, where the baseline's own S4 p95 is 1.8× its median. Across repeated
