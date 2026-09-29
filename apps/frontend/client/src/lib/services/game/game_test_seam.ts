@@ -34,6 +34,11 @@ import type { GameEngineServiceInterface } from './game_engine_service.svelte';
 import type { GameModeServiceInterface } from './game_mode_service.svelte';
 import type { GameOverlayServiceInterface } from './game_overlay_service.svelte';
 import {
+  prepareNpcPrefetchProbe,
+  runDialogueTurnProbe,
+  runNpcPrefetchBurstProbe,
+} from './game_test_seam_dialogue_probes.ts';
+import {
   readResolvedTextRouting,
   readTextTelemetry,
   runStructuredBatchBenchmark,
@@ -717,6 +722,9 @@ export const installGameTestSeam = (deps: GameTestSeamOptions): void => {
           mode: gameModeService.currentMode,
         }),
         benchmarkIdenticalStructuredBatch: runStructuredBatchBenchmark,
+        runDialogueTurn: runDialogueTurnProbe,
+        prepareNpcPrefetch: prepareNpcPrefetchProbe,
+        runNpcPrefetchBurst: runNpcPrefetchBurstProbe,
         getTextTelemetry: readTextTelemetry,
         getResolvedTextRouting: readResolvedTextRouting,
         /**
