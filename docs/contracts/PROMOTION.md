@@ -1,10 +1,10 @@
 # Feature Promotion Matrix
 
-> Auto-generated: 2026-09-28
+> Auto-generated: 2026-09-29
 
 Tracks which features have progressed from dev sandboxes through production integration to release readiness.
 
-**Summary**: 9 sandbox, 32 integrated, 2 release_verified, 213 unassessed (active only; 119 archived contracts excluded)
+**Summary**: 9 sandbox, 32 integrated, 2 release_verified, 214 unassessed (active only; 119 archived contracts excluded)
 
 ## 🚀 Release Verified
 
@@ -281,4 +281,5 @@ Tracks which features have progressed from dev sandboxes through production inte
 | C-560 | Fresh Worktree Dx Hardening | 🛠️ implemented | v2 | full |
 | C-563 | Emberwatch Final Acceptance | 🔄 in_progress | v2 | thin |
 | C-564 | Ai Critical Path Deadline Telemetry | 🛠️ implemented | v1 | thin |
+| C-565 | In Flight Structured Request Coalescing | 🛠️ implemented | v1 | thin |
 

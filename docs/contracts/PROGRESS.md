@@ -1,8 +1,8 @@
 # Contract Implementation Progress
 
-## Status Summary (Auto-generated: 2026-09-28)
+## Status Summary (Auto-generated: 2026-09-29)
 
-**318 active (10 without contract file), 119 archived, 0 duplicates**
+**319 active (10 without contract file), 119 archived, 0 duplicates**
 
 ### Active Contracts
 
@@ -326,6 +326,7 @@
 | C-562 | Emberwatch Five Map Polish Adoption | 🔄 in_progress | 🔗 integrated | v2 | thin |
 | C-563 | Emberwatch Final Acceptance | 🔄 in_progress | — | v2 | thin |
 | C-564 | Ai Critical Path Deadline Telemetry | 🛠️ implemented | — | v1 | thin |
+| C-565 | In Flight Structured Request Coalescing | 🛠️ implemented | — | v1 | thin |
 
 ---
 

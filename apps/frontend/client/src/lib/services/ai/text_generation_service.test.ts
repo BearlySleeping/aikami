@@ -29,6 +29,8 @@ let gatewayChunks: string[] = [];
 let gatewayStructured: unknown;
 let gatewayError: unknown;
 let blockUntilAbort = false;
+/** Holds the NEXT gateway call open, so in-flight behaviour is observable. */
+let gatewayGate: { promise: Promise<void>; release: () => void } | undefined;
 /** The routing `resolveText` reports, so policy can be exercised per test. */
 let gatewayRouting: Record<string, unknown> = {
   capability: 'text',
@@ -45,6 +47,13 @@ const mockAiGatewayService = {
   })),
   generateText: mock(async (options: Record<string, unknown>) => {
     gatewayGenerateCalls.push(options);
+    // A test may hold every gateway call open to observe what happens while a
+    // request is genuinely in flight.
+    if (gatewayGate) {
+      const gate = gatewayGate;
+      gatewayGate = undefined;
+      await gate.promise;
+    }
     const { onChunk, onResolve, signal, model } = options as {
       onChunk?: (text: string) => void;
       onResolve?: (resolution: unknown) => void;
@@ -166,6 +175,16 @@ const loadService = async () => {
   return mod.textGenerationService as import('./text_generation_service.svelte.ts').TextGenerationServiceInterface;
 };
 
+/** Holds the next gateway call open until the returned release is invoked. */
+const holdGateway = (): (() => void) => {
+  let release = (): void => {};
+  const promise = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  gatewayGate = { promise, release };
+  return () => release();
+};
+
 const resetGatewayMocks = (): void => {
   gatewayGenerateCalls = [];
   gatewayChunks = [];
@@ -175,6 +194,7 @@ const resetGatewayMocks = (): void => {
   localBlockUntilAbort = false;
   localSignal = undefined;
   textTelemetryService.clear();
+  gatewayGate = undefined;
   gatewayRouting = {
     capability: 'text',
     mode: 'offline',
@@ -645,6 +665,162 @@ describe('TextGenerationService — local-first micro-tasks', () => {
     // reason to pay a cold load and a failed generation.
     expect(localEnsureLoadedCalls).toBe(0);
     expect(gatewayGenerateCalls).toHaveLength(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Tests: in-flight coalescing of identical structured requests
+// ---------------------------------------------------------------------------
+
+describe('TextGenerationService — in-flight coalescing', () => {
+  const cloudRoute = (): void => {
+    gatewayRouting = {
+      capability: 'text',
+      mode: 'byok',
+      provider: 'openrouter',
+      model: 'some/model',
+      endpoint: 'https://api.openrouter.ai',
+    };
+  };
+
+  beforeEach(() => {
+    resetGatewayMocks();
+    localSubmitOutput = '';
+    localSubmitError = undefined;
+    localSubmitCalls = 0;
+    localEnsureLoadedCalls = 0;
+    localServedModels = ['local-qwen3'];
+    cloudRoute();
+    gatewayStructured = { ok: true };
+  });
+
+  test('two identical concurrent requests make ONE provider call', async () => {
+    const service = await loadService();
+    const release = holdGateway();
+
+    const first = service.extractStructure({
+      schema: RelationshipOutputSchema as unknown as Record<string, unknown>, // guard-ignore lint/type-safety/casting: TypeBox schema to the generic record the service accepts
+      schemaName: 'Relationship',
+      prompt: 'same question',
+      task: 'agent-relationship',
+    });
+    const second = service.extractStructure({
+      schema: RelationshipOutputSchema as unknown as Record<string, unknown>, // guard-ignore lint/type-safety/casting: TypeBox schema to the generic record the service accepts
+      schemaName: 'Relationship',
+      prompt: 'same question',
+      task: 'agent-relationship',
+    });
+
+    // Let both subscribers attach to the same in-flight attempt.
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(gatewayGenerateCalls).toHaveLength(1);
+
+    release();
+    expect(await first).toEqual({ ok: true });
+    expect(await second).toEqual({ ok: true });
+    // One call, two answers: the duplicate cost nothing.
+    expect(gatewayGenerateCalls).toHaveLength(1);
+  });
+
+  test('a different prompt is not coalesced', async () => {
+    const service = await loadService();
+    const release = holdGateway();
+
+    const first = service.extractStructure({
+      schema: RelationshipOutputSchema as unknown as Record<string, unknown>, // guard-ignore lint/type-safety/casting: TypeBox schema to the generic record the service accepts
+      schemaName: 'Relationship',
+      prompt: 'question one',
+      task: 'agent-relationship',
+    });
+    const second = service.extractStructure({
+      schema: RelationshipOutputSchema as unknown as Record<string, unknown>, // guard-ignore lint/type-safety/casting: TypeBox schema to the generic record the service accepts
+      schemaName: 'Relationship',
+      prompt: 'question two',
+      task: 'agent-relationship',
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    // Two distinct questions are two distinct requests.
+    expect(gatewayGenerateCalls).toHaveLength(2);
+
+    release();
+    await Promise.all([first, second]);
+  });
+
+  test('a different schema is not coalesced even with the same prompt', async () => {
+    const service = await loadService();
+    const release = holdGateway();
+
+    const first = service.extractStructure({
+      schema: RelationshipOutputSchema as unknown as Record<string, unknown>, // guard-ignore lint/type-safety/casting: TypeBox schema to the generic record the service accepts
+      schemaName: 'Relationship',
+      prompt: 'shared',
+      task: 'agent-relationship',
+    });
+    const second = service.extractStructure({
+      schema: CyoaChoiceResultSchema as unknown as Record<string, unknown>, // guard-ignore lint/type-safety/casting: TypeBox schema to the generic record the service accepts
+      schemaName: 'Cyoa',
+      prompt: 'shared',
+      task: 'agent-relationship',
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    // The same prompt under a different schema is a different question, and
+    // merging them would serve one request's answer to the other.
+    expect(gatewayGenerateCalls).toHaveLength(2);
+
+    release();
+    await Promise.allSettled([first, second]);
+  });
+
+  test('cancelling ONE consumer does not cancel the other', async () => {
+    const service = await loadService();
+    const release = holdGateway();
+    const quitter = new AbortController();
+
+    const cancelled = service.extractStructure({
+      schema: RelationshipOutputSchema as unknown as Record<string, unknown>, // guard-ignore lint/type-safety/casting: TypeBox schema to the generic record the service accepts
+      schemaName: 'Relationship',
+      prompt: 'shared question',
+      task: 'agent-relationship',
+      signal: quitter.signal,
+    });
+    const survivor = service.extractStructure({
+      schema: RelationshipOutputSchema as unknown as Record<string, unknown>, // guard-ignore lint/type-safety/casting: TypeBox schema to the generic record the service accepts
+      schemaName: 'Relationship',
+      prompt: 'shared question',
+      task: 'agent-relationship',
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    quitter.abort();
+    await expect(cancelled).rejects.toThrow();
+
+    // The shared call was NOT cancelled: somebody was still waiting for it.
+    release();
+    expect(await survivor).toEqual({ ok: true });
+    expect(gatewayGenerateCalls).toHaveLength(1);
+  });
+
+  test('a request after a settled one is NOT replayed from a cache', async () => {
+    const service = await loadService();
+
+    await service.extractStructure({
+      schema: RelationshipOutputSchema as unknown as Record<string, unknown>, // guard-ignore lint/type-safety/casting: TypeBox schema to the generic record the service accepts
+      schemaName: 'Relationship',
+      prompt: 'sequential',
+      task: 'agent-relationship',
+    });
+    await service.extractStructure({
+      schema: RelationshipOutputSchema as unknown as Record<string, unknown>, // guard-ignore lint/type-safety/casting: TypeBox schema to the generic record the service accepts
+      schemaName: 'Relationship',
+      prompt: 'sequential',
+      task: 'agent-relationship',
+    });
+
+    // This coalesces IN-FLIGHT work only. Reusing a settled answer across calls
+    // is a separate decision with separate correctness requirements.
+    expect(gatewayGenerateCalls).toHaveLength(2);
   });
 });
 
