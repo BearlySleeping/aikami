@@ -187,6 +187,34 @@ export const NpcDialogueAiEnvelopeSchema = Type.Object(
 
 export type NpcDialogueAiEnvelope = Static<typeof NpcDialogueAiEnvelopeSchema>;
 
+/**
+ * C-401 call 2: the shape requested from the model when extracting metadata
+ * from an ALREADY-SPOKEN narrative.
+ *
+ * This is deliberately NOT {@link NpcDialogueAiEnvelopeSchema}. That schema was
+ * introduced for the earlier single-call design, where the model produced the
+ * narrative itself and `narrative` was the primary payload. Under C-401 the
+ * narrative is produced and streamed by call 1, and `_generateAiTurn` already
+ * treats it as authoritative (`the player already read it`). Asking the model to
+ * return it again made call 2 regenerate prose the client already holds.
+ *
+ * Measured on the local configuration in issue #382, that regeneration consumed
+ * the whole call-2 budget: every envelope call hit its 6 000 ms deadline and was
+ * discarded, so the player received deterministically derived choices instead of
+ * model-authored ones. Removing the echo is what makes the call fit.
+ *
+ * The legacy envelope is kept unchanged for compatibility; this is additive.
+ */
+export const NpcDialogueExtractionSchema = Type.Object(
+  {
+    command: Type.Optional(NpcDialogueCommandSchema),
+    choices: Type.Optional(Type.Array(NpcDialogueChoiceSchema, { maxItems: 4 })),
+  },
+  { additionalProperties: false },
+);
+
+export type NpcDialogueExtraction = Static<typeof NpcDialogueExtractionSchema>;
+
 // ---------------------------------------------------------------------------
 // Suggestion Chip — rendered below NPC messages (C-371)
 // ---------------------------------------------------------------------------

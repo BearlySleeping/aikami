@@ -22,8 +22,8 @@ import {
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services/base';
 import {
-  NpcDialogueAiEnvelopeSchema,
   NpcDialogueCommandSchema,
+  NpcDialogueExtractionSchema,
   NpcDialogueTurnSchema,
   NpcIntentAnalysisOutputSchema,
   NpcQuestActivationSchema,
@@ -56,6 +56,10 @@ import { companionReactionService } from './companion_reaction_service.svelte.ts
 import { resolveAccounts } from './dramatic_structure_service';
 import { inventoryService } from './inventory_service.svelte.ts';
 import { narrativeEventService } from './narrative_event_service.svelte.ts';
+import {
+  buildDialogueExtractionSystemPrompt,
+  parseDialogueExtraction,
+} from './npc_dialogue_extraction.ts';
 import { buildNpcPersona } from './npc_dialogue_persona';
 import { partyRosterService } from './party_roster_service.svelte.ts';
 import { questStateService } from './quest_state_service.svelte.ts';
@@ -1001,63 +1005,12 @@ export class NpcDialogueService
   // ── Private: AI generation path ───────────────────────────────────────
 
   /**
-   * Parses and validates the raw structured envelope from the AI response.
-   * Returns a parsed envelope or null if validation fails.
-   */
-  private _parseEnvelope(
-    narrative: string,
-    rawEnvelope: unknown,
-  ): {
-    narrative?: string;
-    command?: NpcDialogueCommand;
-    choices?: NpcDialogueChoice[];
-  } | null {
-    if (!rawEnvelope || typeof rawEnvelope !== 'object') {
-      return null;
-    }
-
-    const env = rawEnvelope as Record<string, unknown>;
-
-    // First attempt: check raw envelope directly
-    if (Value.Check(NpcDialogueAiEnvelopeSchema, env)) {
-      return env as {
-        narrative?: string;
-        command?: NpcDialogueCommand;
-        choices?: NpcDialogueChoice[];
-      };
-    }
-
-    // One repair attempt: try merging with narrative
-    const repaired = {
-      narrative: narrative || (env.narrative as string) || '',
-      command: env.command,
-      choices: env.choices,
-    };
-    if (Value.Check(NpcDialogueAiEnvelopeSchema, repaired)) {
-      this.warn('_generateAiTurn:repaired', {
-        narrativeLength: narrative.length,
-      });
-      return repaired as {
-        narrative?: string;
-        command?: NpcDialogueCommand;
-        choices?: NpcDialogueChoice[];
-      };
-    }
-
-    this.warn('_generateAiTurn:invalid-output', {
-      narrativeLength: narrative.length,
-      envelopeKeys: Object.keys(env),
-    });
-    return null;
-  }
-
-  /**
    * Calls the gateway text generator with the projected context.
    *
    * C-401: split into two calls — call 1 streams plain narrative prose
-   * (no schema, via `onChunk`), call 2 extracts the structured command
-   * envelope from the completed narrative under the TypeBox schema. If
-   * call 2 fails or returns a malformed envelope, the turn degrades to
+   * (no schema, via `onChunk`), call 2 extracts metadata (`command`,
+   * `choices`) from the completed narrative under the TypeBox schema. If
+   * call 2 fails or returns a malformed extraction, the turn degrades to
    * narrative-only with derived choices — the streamed text the player
    * already read is never discarded (AC-7).
    */
@@ -1071,7 +1024,13 @@ export class NpcDialogueService
     const { contextProjection, messages, signal, onChunk } = options;
 
     const narrativeSystemPrompt = this._buildNarrativeSystemPrompt(contextProjection);
-    const extractionSystemPrompt = this._buildExtractionSystemPrompt(contextProjection);
+    // Call 2's prompt asks only for state-changing metadata — never for a
+    // narrative, which call 1 already streamed (C-401, issue #382).
+    const extractionSystemPrompt = buildDialogueExtractionSystemPrompt({
+      persona: contextProjection.persona,
+      npcName: contextProjection.npcName,
+      allowedCommands: contextProjection.allowedCommands,
+    });
 
     // Build adapter messages: system + conversation (bounded window)
     const conversationMessages = messages
@@ -1103,16 +1062,39 @@ export class NpcDialogueService
       );
       this._checkAbort(signal);
 
-      // ── Call 2: extract the command envelope from the narrative ────
+      // 🔴 The streamed narrative is authoritative, and it is the ONLY source of
+      // narrative for this turn. Call 2 returns metadata only, so an empty call 1
+      // can no longer be silently backfilled — and `NpcDialogueTurnSchema.narrative`
+      // permits `''`, which would let a provider that said nothing pass as a
+      // successful AI turn.
+      //
+      // Empty is treated as what it is: call 1 produced nothing, which is a
+      // provider failure. `generateTurn` already documents that provider
+      // failures are surfaced and "never faked with authored dialogue", so this
+      // reuses that existing contract rather than inventing a new one. The check
+      // runs before call 2 because a turn with no narrative can never be a
+      // successful turn, so the extraction would be spent for nothing.
+      if (narrative.trim().length === 0) {
+        this.warn('_generateAiTurn:empty-narrative', { path: 'turn' });
+        // Thrown, not returned: `generateTurn` already maps a non-abort,
+        // non-timeout error to `kind: 'failed'` with `reason: 'provider_error'`.
+        throw new Error('AI dialogue produced no narrative; refusing to report a successful turn');
+      }
+
+      // ── Call 2: extract command metadata from the spoken narrative ──
       this.turnState = { kind: 'awaiting_envelope', text: narrative };
-      let rawEnvelope: unknown;
+      let rawExtraction: unknown;
       try {
-        rawEnvelope = await this._withTimeout(
+        rawExtraction = await this._withTimeout(
           this._extractEnvelope({
             narrative,
             systemPrompt: extractionSystemPrompt,
-            schema: NpcDialogueAiEnvelopeSchema as unknown as Record<string, unknown>, // guard-ignore lint/type-safety/casting: TypeBox schema cast for AI envelope or rAF polyfill
-            schemaName: 'NpcDialogueAiEnvelope',
+            // C-401 call 2 extracts metadata only. The narrative was already
+            // produced and streamed by call 1, and the prompt tells the model
+            // not to return it; asking for it again spent the whole budget
+            // regenerating prose the client already holds (issue #382).
+            schema: NpcDialogueExtractionSchema as unknown as Record<string, unknown>, // guard-ignore lint/type-safety/casting: TypeBox schema cast for AI envelope or rAF polyfill
+            schemaName: 'NpcDialogueExtraction',
             signal,
             path: 'turn-envelope',
             call: 2,
@@ -1127,21 +1109,22 @@ export class NpcDialogueService
       }
       this._checkAbort(signal);
 
-      // ── Parse and validate the structured envelope ────────────────
-      const parsedEnvelope = this._parseEnvelope(narrative, rawEnvelope);
+      // ── Parse and validate the extraction ──────────────────────────
+      const parsed = parseDialogueExtraction(rawExtraction);
 
-      if (!parsedEnvelope) {
-        // Malformed envelope — same AC-7 degrade path.
-        this.warn('_generateAiTurn:malformed-envelope', {
+      if (!parsed.ok) {
+        // Malformed extraction — same AC-7 degrade path.
+        this.warn('_generateAiTurn:invalid-extraction', {
           narrativeLength: narrative.length,
+          reason: parsed.reason,
+          extractionKeys: 'keys' in parsed ? parsed.keys : [],
         });
         return this._assembleNarrativeTurn({ narrative, contextProjection });
       }
 
-      // The streamed narrative is authoritative — the player already read it.
-      const finalNarrative = narrative || parsedEnvelope.narrative || '';
-      const command = parsedEnvelope.command;
-      let choices = this._filterChoices(parsedEnvelope.choices ?? []);
+      const finalNarrative = narrative;
+      const command = parsed.value.command;
+      let choices = this._filterChoices(parsed.value.choices ?? []);
 
       // If no choices came back, derive from context
       if (choices.length === 0) {
@@ -1595,30 +1578,6 @@ export class NpcDialogueService
     );
 
     return lines.join('\n');
-  }
-
-  /**
-   * Builds the system prompt for the envelope extraction call (call 2 of
-   * the C-401 split). Operating on the completed narrative, it asks for the
-   * structured `{narrative, command, choices}` envelope — the same shape the
-   * single-call path used to request.
-   */
-  private _buildExtractionSystemPrompt(projection: DialogueContextProjection): string {
-    return [
-      '[NPC CONTEXT]',
-      projection.persona,
-      `You are ${projection.npcName}, staying in character.`,
-      '',
-      '[EXTRACTION]',
-      'You are given an NPC narrative that was just spoken to the player.',
-      'Extract the structured dialogue envelope from it:',
-      '"narrative" (string, required),',
-      'optionally "command" (one of the allowed actions),',
-      'and optionally "choices" (array of player options, at most 4).',
-      'Each choice has "id", "label", and optionally "command" or "nextDialogueKey".',
-      `Allowed actions: ${projection.allowedCommands.join(', ') || 'none'}.`,
-      'Do not invent new narrative — reuse the given narrative verbatim.',
-    ].join('\n');
   }
 
   // ── Private: precondition derivation ──────────────────────────────────
