@@ -337,7 +337,7 @@ as evidence for the programme.
 
 | Claim | Status |
 |---|---|
-| "Compact projections / transcript trimming are not useful local latency work" | **Not disproven — but also not supported.** An earlier draft of this report asserted it. The powered run could not resolve the effect (1.25× / 1.08×, overlapping ranges). Now **unresolved**, not refuted. |
+| *Withdrawn claim:* "compact projections / transcript trimming are not useful local latency work" | **Not disproven — but also not supported.** An earlier draft of this report asserted it. The powered run could not resolve the effect (1.25× / 1.08×, overlapping ranges). Now **unresolved**, not refuted. |
 | "Provider prompt caching cannot be measured" | **Disproven as stated.** It is unobservable *on the Ollama native route*; providers that expose cache usage do report it. Corrected in the harness and report. |
 
 ### Implemented (by merged work, not by this PR)
