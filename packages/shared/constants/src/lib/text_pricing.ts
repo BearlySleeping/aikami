@@ -24,8 +24,7 @@ import { type TextTask, textTaskPreset } from './text_task.ts';
  * Identifies the price table a cost figure was computed from.
  *
  * Bump this whenever a rate changes, so a recorded figure can always be traced
- * back to the rates that produced it. An unrecognised version is treated as
- * `unknown` by {@link estimateTextCostUsd} rather than silently reused.
+ * back to the rates that produced it.
  */
 export const TEXT_PRICING_VERSION = '2026-09-28.1';
 
@@ -77,6 +76,7 @@ const LOCAL_ROUTE_PROVIDERS: ReadonlySet<string> = new Set([
   'ollama',
   'llamacpp',
   'ooba',
+  'ollama',
 ]);
 
 /** True when a provider is an on-device route rather than a billed endpoint. */
@@ -89,11 +89,9 @@ export const textPricingVersion = (): string => TEXT_PRICING_VERSION;
 /**
  * Estimates the USD cost of one completed text call.
  *
- * Cost is computed ONLY from an explicit token count. When the caller supplies
- * character-derived estimates, the result is still returned but `source` stays
- * `priced` while `tokensAreEstimated` (on the caller's span) records the
- * weaker basis — the two are never conflated, because a 4-chars-per-token
- * approximation is not a bill.
+ * Cost uses the supplied token counts without verifying their source. The
+ * returned `source` describes pricing provenance; callers must separately
+ * record whether their counts are provider-reported or estimated.
  *
  * An unknown model is deliberately left uncosted: inventing a number from a
  * neighbouring model's rate would corrupt every aggregate downstream.

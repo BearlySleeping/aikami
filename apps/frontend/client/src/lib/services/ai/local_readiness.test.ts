@@ -77,6 +77,16 @@ describe('createLocalReadinessController', () => {
     expect(readiness.canServe('')).toBe(true);
   });
 
+  test('an empty served list remains unknown after a ready probe', () => {
+    const readiness = createLocalReadinessController();
+    readiness.served(['qwen3-1b']);
+    readiness.served([]);
+    expect(readiness.current.state).toBe('unknown');
+    expect(readiness.current.servedModelIds).toEqual([]);
+    expect(readiness.current.checkedAt).toBeNumber();
+    expect(readiness.canServe('qwen3-4b')).toBe(true);
+  });
+
   test('records when evidence was gathered', () => {
     const readiness = createLocalReadinessController();
     readiness.served(['qwen3-1b']);

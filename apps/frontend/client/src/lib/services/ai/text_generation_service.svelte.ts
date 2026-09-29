@@ -24,19 +24,14 @@
 //
 // Contract: C-080, C-111, C-320, issue #382 P0
 
-import {
-  estimateTextTokens,
-  TEXT_TASK_PRESETS,
-  type TextTask,
-  textTaskBudgetMs,
-} from '@aikami/constants';
+import { TEXT_TASK_PRESETS, type TextTask, textTaskBudgetMs } from '@aikami/constants';
 import { isAiGatewayError } from '@aikami/frontend/ai-gateway';
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services/base';
-import type { AiModeResolution, TextCacheLayer } from '@aikami/types';
+import type { AiModeResolution } from '@aikami/types';
 import type { TextChatMessage } from '$types';
 import { aiGatewayService } from './ai_gateway_service.svelte.ts';
 import {
@@ -54,7 +49,7 @@ import { localTaskPoolService } from './local_task_pool_service.svelte.ts';
 import type { StructuredCallCoalescer } from './structured_call_coalescer.ts';
 import { createStructuredCallCoalescer } from './structured_call_coalescer.ts';
 import { resolveLocalFirstPolicy } from './text_local_first_policy.ts';
-import { textTelemetryService } from './text_telemetry_service.svelte.ts';
+import { recordTextCall, type TextCallObservation } from './text_telemetry_recorder.ts';
 
 /**
  * How long a local engine that just failed is skipped, tracked PER ROUTE so one
@@ -70,23 +65,6 @@ type CoalescedStructuredResult = {
   structured?: unknown;
   coalesced: boolean;
   usage?: TextUsage;
-};
-
-/**
- * Normalizes a failure into the code a telemetry span carries.
- *
- * A gateway error already carries a code, so it is passed through untouched. A
- * raw error collapses to `cancelled` or `error` — the two states a caller acts on
- * differently, and the only ones the span's vocabulary distinguishes.
- */
-const spanErrorCode = (error: unknown, cancelled: boolean): string | undefined => {
-  if (error === undefined) {
-    return undefined;
-  }
-  if (isAiGatewayError(error)) {
-    return error.code;
-  }
-  return cancelled ? 'cancelled' : 'error';
 };
 
 // ---------------------------------------------------------------------------
@@ -182,6 +160,19 @@ const throwIfAlreadyAborted = (signal?: AbortSignal): void => {
   const error = new Error('Aborted');
   error.name = 'AbortError';
   throw error;
+};
+
+/**
+ * Throws when a shared deadline has already run out.
+ *
+ * Distinct from a caller abort: an exhausted budget must not buy a provider
+ * call, and it must be reported as a timeout rather than a cancellation the user
+ * asked for.
+ */
+const throwIfPastDeadline = (deadline: AiRequestDeadline): void => {
+  if (deadline.expired()) {
+    throw new DOMException('Request deadline exceeded', 'AbortError');
+  }
 };
 
 class TextGenerationService
@@ -299,70 +290,15 @@ class TextGenerationService
     );
   }
 
-  /** Records one completed call into the rolling telemetry buffer. */
-  private _recordSpan(options: {
-    start: number;
-    startedAt: string;
-    resolution?: AiModeResolution;
-    task?: TextTask;
-    streamed: boolean;
-    ttftMs?: number;
-    promptChars: number;
-    completionChars: number;
-    ok: boolean;
-    error?: unknown;
-    requestId?: string;
-    parentRequestId?: string;
-    deadline?: AiRequestDeadline;
-    fallback?: boolean;
-    usage?: TextUsage;
-    /** Which cache layer, if any, served or shaped this call. */
-    cacheLayer?: TextCacheLayer;
-  }): void {
-    const {
-      start,
-      startedAt,
-      resolution,
-      task,
-      streamed,
-      ttftMs,
-      promptChars,
-      completionChars,
-      ok,
-      error,
-      requestId,
-      parentRequestId,
-      deadline,
-      fallback,
-      usage,
-      cacheLayer,
-    } = options;
-    const errorCode = spanErrorCode(error, this._isCancellation(error));
-    textTelemetryService.record({
-      task,
-      provider: resolution?.provider ?? 'unknown',
-      model: resolution?.model ?? '',
-      mode: resolution?.mode ?? 'unknown',
-      streamed,
-      ttftMs,
-      totalMs: Math.round(performance.now() - start),
-      promptTokens: usage?.inputTokens ?? estimateTextTokens(promptChars),
-      completionTokens: usage?.outputTokens ?? estimateTextTokens(completionChars),
-      // The provenance of the counts above. A provider-reported figure and a
-      // character-count estimate are both useful, but only one of them is a
-      // bill — so the span records which one it is holding.
-      tokenSource: usage === undefined ? 'estimated' : 'provider',
-      ...(usage?.cachedTokens === undefined ? {} : { cachedTokens: usage.cachedTokens }),
-      startedAt,
-      ok,
-      ...(errorCode === undefined ? {} : { errorCode }),
-      ...(requestId === undefined ? {} : { requestId }),
-      ...(parentRequestId === undefined ? {} : { parentRequestId }),
-      fallback,
-      deadlineExceeded: this._deadlineExceeded(deadline),
-      ...(deadline === undefined ? {} : { deadlineRemainingMs: deadline.remainingMs() }),
-      ...(cacheLayer === undefined ? {} : { cacheLayer }),
-    });
+  /**
+   * Records one finished call into the rolling telemetry buffer.
+   *
+   * The projection itself lives in `text_telemetry_recorder.ts`; this exists so
+   * the call sites read as one step rather than reaching into the telemetry
+   * service's shape directly.
+   */
+  private _recordSpan(observation: TextCallObservation): void {
+    recordTextCall(observation);
   }
 
   /**
@@ -400,9 +336,6 @@ class TextGenerationService
   /**
    * The configured-route half of a structured request.
    *
-   * Split out of `extractStructure` so the caller's control flow reads as the
-   * two decisions it actually is — "may I go local?" and "what does the
-   * configured route say?" — rather than as one long branch.
    */
   private async _generateStructured(options: {
     schema: Record<string, unknown>;
@@ -560,13 +493,21 @@ class TextGenerationService
     systemPrompt?: string;
     model?: string;
     task?: TextTask;
-    deadlineAt?: number;
     signal: AbortSignal;
     deadline: AiRequestDeadline;
     onResolve: (resolution: AiModeResolution) => void;
   }): Promise<CoalescedStructuredResult> {
-    const { schema, schemaName, prompt, systemPrompt, model, task, deadlineAt, signal, onResolve } =
-      options;
+    const { schema, schemaName, prompt, systemPrompt, model, task, signal, onResolve } = options;
+    // 🔴 The shared work inherits the initiator's ABSOLUTE deadline, including
+    // time already spent on the local attempt. Deriving a fresh one from the
+    // task would silently hand the shared call a whole new budget, so the total
+    // wall-clock cost of a request would grow with every coalesced subscriber.
+    // Only the SIGNAL stays per-caller: inheriting that would let one
+    // subscriber's cancellation kill the work everyone else is waiting for,
+    // which is the exact failure the reference counting exists to prevent.
+    const inheritedDeadlineAt = Number.isFinite(options.deadline.deadlineAt)
+      ? options.deadline.deadlineAt
+      : undefined;
     const outcome = await this._coalescer.run<Omit<CoalescedStructuredResult, 'coalesced'>>({
       identity: {
         task,
@@ -577,10 +518,7 @@ class TextGenerationService
         model,
       },
       signal,
-      // 🔴 The shared work's clock is derived from the TASK alone, never from
-      // this caller's signal. Binding it here would mean this caller leaving
-      // cancels the work every other subscriber is still waiting for.
-      sharedDeadline: () => this._deadlineFor({ task, deadlineAt }),
+      sharedDeadline: () => this._deadlineFor({ deadlineAt: inheritedDeadlineAt, task }),
       call: (sharedSignal, sharedDeadline) =>
         this._generateStructured({
           schema,
@@ -633,33 +571,34 @@ class TextGenerationService
     this._incrementStreamCount();
     const deadline = this._deadlineFor({ deadlineAt, task, signal });
 
-    const start = performance.now();
     const startedAt = new Date().toISOString();
     let resolution: AiModeResolution | undefined;
-    const promptChars = prompt.length + (systemPrompt?.length ?? 0);
     let localAttempted = false;
     let fallback = false;
-    const shared = {
-      start,
+    // One span builder for both outcomes: the success and failure paths differ
+    // only in the last few fields, and spelling the whole shape out twice is how
+    // a field silently ends up recorded on one path and not the other.
+    const span = (
+      extra: Omit<TextCallObservation, 'startedAt' | 'promptChars'>,
+    ): TextCallObservation => ({
+      ...extra,
       startedAt,
-      task,
-      streamed: false,
-      promptChars,
+      promptChars: prompt.length + (systemPrompt?.length ?? 0),
       deadline,
+      task,
       ...(requestId === undefined ? {} : { requestId }),
       ...(parentRequestId === undefined ? {} : { parentRequestId }),
-    };
+    });
 
     try {
-      if (deadline.expired()) {
-        throw new DOMException('Request deadline exceeded', 'AbortError');
-      }
+      throwIfPastDeadline(deadline);
+
       // ── Resolve policy BEFORE spending anything ─────────────────────
       //
       // The local attempt is opportunistic, so it may only run when the
-      // configured routing permits it: no explicit override, and a route that
-      // is actually local. Resolving first is what makes an explicit model
-      // override authoritative instead of advisory.
+      // configured routing permits it: no explicit override, and a route that is
+      // actually local. Resolving first is what makes an explicit model override
+      // authoritative instead of advisory.
       const routing = this._resolveRouting({ model, task });
       resolution = routing;
 
@@ -683,20 +622,26 @@ class TextGenerationService
       });
       if (localResult !== undefined) {
         this.debug('extractStructure:local-first', { schemaName, task });
-        this._recordSpan({
-          ...shared,
-          resolution: { ...routing, mode: 'offline', provider: 'local-tasks', model: '' },
-          completionChars: JSON.stringify(localResult).length,
-          ok: true,
-        });
+        this._recordSpan(
+          span({
+            start: performance.now(),
+            // A local answer names no provider, so the recorded route says so
+            // rather than borrowing the routing that merely permitted it.
+            resolution: { ...routing, mode: 'offline', provider: 'local-tasks', model: '' },
+            streamed: false,
+            completionChars: JSON.stringify(localResult).length,
+            ok: true,
+          }),
+        );
         return localResult;
       }
 
-      if (deadline.expired()) {
-        throw new DOMException('Request deadline exceeded', 'AbortError');
-      }
+      // The local window may have consumed the whole budget; re-check before
+      // spending a provider call on an answer nobody is waiting for.
+      throwIfPastDeadline(deadline);
       throwIfAlreadyAborted(abortController.signal);
       fallback = localAttempted;
+
       const result = await this._runCoalescedStructured({
         schema,
         schemaName,
@@ -704,36 +649,44 @@ class TextGenerationService
         systemPrompt,
         model,
         task,
-        deadlineAt,
         signal: abortController.signal,
         deadline,
         onResolve: (resolved) => {
           resolution = resolved;
         },
       });
+
       this.debug('extractStructure:done', { schemaName, coalesced: result.coalesced });
-      this._recordSpan({
-        ...shared,
-        fallback,
-        resolution,
-        // A structured call can legitimately produce no object; that is a
-        // recorded outcome, not a crash.
-        completionChars:
-          result.structured === undefined ? 0 : JSON.stringify(result.structured).length,
-        ok: true,
-        cacheLayer: result.coalesced ? 'in-flight-dedup' : 'none',
-        ...(result.usage === undefined ? {} : { usage: result.usage }),
-      });
+      this._recordSpan(
+        span({
+          start: performance.now(),
+          resolution,
+          streamed: false,
+          // A structured call can legitimately produce no object; that is a
+          // recorded outcome, not a crash.
+          completionChars:
+            result.structured === undefined ? 0 : JSON.stringify(result.structured).length,
+          ok: true,
+          fallback,
+          cacheLayer: result.coalesced ? 'in-flight-dedup' : 'none',
+          // A coalesced span was PAID FOR by another span. Counting its tokens
+          // again would double the figure, which is the opposite of the point.
+          ...(result.coalesced || result.usage === undefined ? {} : { usage: result.usage }),
+        }),
+      );
       return result.structured;
     } catch (error: unknown) {
-      this._recordSpan({
-        ...shared,
-        fallback,
-        resolution,
-        completionChars: 0,
-        ok: false,
-        error,
-      });
+      this._recordSpan(
+        span({
+          start: performance.now(),
+          resolution,
+          streamed: false,
+          completionChars: 0,
+          ok: false,
+          fallback,
+          error,
+        }),
+      );
       if (this._isCancellation(error)) {
         this.debug('extractStructure:aborted');
         throw error;

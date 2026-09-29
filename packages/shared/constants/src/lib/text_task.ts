@@ -123,8 +123,8 @@ export const TEXT_TASK_PRESETS: Record<TextTask, TextTaskPreset> = {
     streamable: false,
     localFirst: true,
     batchable: false,
-    // §18 budget: the engine already falls back at 1.5 s, so the request must
-    // be finished well inside that for the fallback to be the cheaper path.
+    // §18 budget: 4,000 ms matches the engine decision fallback window.
+    // A caller-supplied deadline preserves time already spent on the turn.
     budgetMs: 4_000,
   },
   /**

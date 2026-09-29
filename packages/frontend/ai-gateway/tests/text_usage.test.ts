@@ -15,13 +15,16 @@ import {
   createAdapterRegistry,
   createAiProviderGateway,
   createOpenAiCompatibleTextAdapter,
+  isAiGatewayError,
 } from '../src/index.ts';
+import { readChatSseStream } from '../src/lib/sse.ts';
 import {
   createJsonFetchMock,
   createSseFetchMock,
   SSE_DONE,
   sseChunk,
   sseUsage,
+  syntheticSseBody,
 } from './helpers.ts';
 
 const resolution = (overrides?: Partial<AiModeResolution>): AiModeResolution => ({
@@ -36,6 +39,32 @@ const resolution = (overrides?: Partial<AiModeResolution>): AiModeResolution => 
 const signal = (): AbortSignal => new AbortController().signal;
 
 describe('Streaming usage — provider accounting', () => {
+  test('delivers content before usage when both share a frame', async () => {
+    const events: string[] = [];
+    await readChatSseStream({
+      body: syntheticSseBody([
+        'data: {"choices":[{"delta":{"content":"hello"}}],"usage":{"prompt_tokens":10,"completion_tokens":2}}\n\n',
+        SSE_DONE,
+      ]),
+      signal: signal(),
+      onChunk: (text) => events.push(text),
+      onUsage: () => events.push('usage'),
+    });
+    expect(events).toEqual(['hello', 'usage']);
+  });
+
+  test('rejects fractional token counts in streaming accounting', async () => {
+    const { fetchFn } = createSseFetchMock({
+      chunks: [sseChunk('Hi'), sseUsage({ promptTokens: 1.5, completionTokens: 2 }), SSE_DONE],
+    });
+    const result = await createOpenAiCompatibleTextAdapter({ fetchFn }).generateText({
+      resolution: resolution(),
+      signal: signal(),
+      messages: [],
+    });
+    expect(result.usage).toBeUndefined();
+  });
+
   test('reports the trailing accounting frame as provider usage', async () => {
     const { fetchFn } = createSseFetchMock({
       chunks: [
@@ -188,6 +217,67 @@ describe('Streaming usage — provider accounting', () => {
 });
 
 describe('Non-streaming usage — provider accounting', () => {
+  test('a retry cannot reuse usage from a discarded empty attempt', async () => {
+    const empty = createJsonFetchMock({
+      content: '',
+      usage: { openAi: { promptTokens: 100, completionTokens: 0 } },
+    });
+    const retry = createJsonFetchMock({ content: '{"ok":true}' });
+    let count = 0;
+    const adapter = createOpenAiCompatibleTextAdapter({
+      fetchFn: Object.assign(
+        (...args: Parameters<typeof fetch>) =>
+          ++count === 1 ? empty.fetchFn(...args) : retry.fetchFn(...args),
+        { preconnect: fetch.preconnect },
+      ),
+    });
+    const result = await adapter.generateText({
+      resolution: resolution(),
+      signal: signal(),
+      messages: [],
+      schema: { type: 'object' },
+      schemaName: 'Ok',
+    });
+    expect(count).toBe(2);
+    expect(result.usage).toBeUndefined();
+  });
+
+  test('combines structured and fallback usage after invalid JSON', async () => {
+    const structured = createJsonFetchMock({
+      content: 'not json',
+      usage: { openAi: { promptTokens: 100, completionTokens: 10, cachedTokens: 30 } },
+    });
+    const fallback = createSseFetchMock({
+      chunks: [
+        sseChunk('{"ok":true}'),
+        sseUsage({ promptTokens: 50, completionTokens: 5, cachedTokens: 20 }),
+        SSE_DONE,
+      ],
+    });
+    let count = 0;
+    const adapter = createOpenAiCompatibleTextAdapter({
+      fetchFn: Object.assign(
+        (...args: Parameters<typeof fetch>) =>
+          ++count === 1 ? structured.fetchFn(...args) : fallback.fetchFn(...args),
+        { preconnect: fetch.preconnect },
+      ),
+    });
+    const result = await adapter.generateText({
+      resolution: resolution(),
+      signal: signal(),
+      messages: [],
+      schema: { type: 'object' },
+      schemaName: 'Ok',
+    });
+    expect(result.structured).toEqual({ ok: true });
+    expect(result.usage).toEqual({
+      inputTokens: 150,
+      outputTokens: 15,
+      cachedTokens: 50,
+      source: 'provider',
+    });
+  });
+
   test('reads the OpenAI usage block from a structured response', async () => {
     const { fetchFn } = createJsonFetchMock({
       content: '{"ok":true}',
@@ -340,6 +430,7 @@ describe('gateway.resolveText — policy without dispatch', () => {
 
     // A caller that must decide something before spending a call gets the same
     // typed failure the dispatch path would have produced.
-    expect(error).toBeInstanceOf(Error);
+    expect(error).toBeDefined();
+    expect(isAiGatewayError(error)).toBe(true);
   });
 });

@@ -109,8 +109,15 @@ const summarizeLatency = (values: number[]): TextLatencyPercentiles => {
   };
 };
 
-/** Zeroed per-layer cache hit counts, as a mutable accumulator. */
-const emptyCacheHitCounts = (): Record<TextCacheLayer, number> => ({
+/**
+ * Zeroed cache hit counts, as a mutable accumulator.
+ *
+ * Keyed wider than {@link TextCacheLayer} on purpose: a provider prompt-prefix
+ * cache discounts TOKENS on a call that was made, so it is derived from the
+ * provider's own cached-token count rather than from the layer that served the
+ * call. Counting it as a layer would credit a mechanism that saved no call.
+ */
+const emptyCacheHitCounts = (): Record<TextCacheLayer | 'provider-prompt-cache', number> => ({
   none: 0,
   'in-flight-dedup': 0,
   'exact-result': 0,
@@ -202,7 +209,8 @@ class TextTelemetryService
 
   /** Call volume, failure mix, cache hits by layer, and queue contention. */
   private _count(spans: ReadonlyArray<TextTelemetrySpan>): TextTelemetryCounters {
-    const cacheHits = emptyCacheHitCounts();
+    const cacheHits: Record<TextCacheLayer | 'provider-prompt-cache', number> =
+      emptyCacheHitCounts();
     let maxQueueDepth = 0;
     for (const span of spans) {
       cacheHits[(span.cacheLayer ?? 'none') as TextCacheLayer] += 1;

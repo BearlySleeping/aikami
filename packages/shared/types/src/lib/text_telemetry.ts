@@ -35,9 +35,7 @@ export type TextCacheLayer =
   /** An in-flight identical request was coalesced onto this one. */
   | 'in-flight-dedup'
   /** A previously stored exact result for the same key was replayed. */
-  | 'exact-result'
-  /** The provider billed cached prompt-prefix tokens (a cost, not a saving). */
-  | 'provider-prompt-cache';
+  | 'exact-result';
 
 /** One recorded LLM call. */
 export type TextTelemetrySpan = {
@@ -69,10 +67,15 @@ export type TextTelemetrySpan = {
   startedAt: string;
   /** Whether the call completed without error. */
   ok: boolean;
+  /**
+   * A local attempt gave way to the configured gateway route.
+   *
+   * Distinct from `errorCode: 'fallback'`, which means the whole call degraded.
+   * This one records that a genuine second route was tried and succeeded.
+   */
+  fallback?: boolean;
   /** Normalized error code when `ok` is false. */
   errorCode?: string;
-  /** A local attempt gave way to the configured gateway route. */
-  fallback?: boolean;
   /**
    * Identity of the logical request this call belongs to. Every retry, local
    * attempt and fallback attempt of one request shares it, which is what makes
@@ -116,7 +119,7 @@ export type TextTelemetryCounters = {
   /** Calls that fell back to a different route than the one attempted first. */
   readonly fallbacks: number;
   /** Calls served from a cache, split BY LAYER. */
-  readonly cacheHits: Readonly<Record<TextCacheLayer, number>>;
+  readonly cacheHits: Readonly<Record<TextCacheLayer | 'provider-prompt-cache', number>>;
   /** Deepest local queue observed, for contention measurement. */
   readonly maxQueueDepth: number;
 };
@@ -143,7 +146,7 @@ export type TextTelemetrySummary = {
   count: number;
   /** Median total duration in ms. */
   medianTotalMs: number;
-  /** Total tokens across all spans, provider-reported and estimated alike. */
+  /** Total tokens across provider calls, excluding coalesced subscribers. */
   totalTokens: number;
   /** Count of failed spans. */
   errorCount: number;

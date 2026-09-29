@@ -116,9 +116,11 @@ leaving cancels the work everyone else is waiting on — reintroducing, inside t
 deduplicator's own caller, the exact failure the reference counting exists to
 prevent.
 
-The shared attempt therefore derives its deadline from the **task alone**, and
-disposes it when the attempt settles rather than when any consumer returns.
-Each consumer's own abort still detaches that consumer.
+The shared attempt keeps the initiator's **absolute deadline**, including time
+already spent locally, using an independent signal. An unbounded initiator
+leaves the shared attempt unbounded. Each consumer's abort or deadline detaches
+that consumer; deadline detachment reports a timeout. The shared deadline is
+disposed when the attempt settles.
 
 ---
 

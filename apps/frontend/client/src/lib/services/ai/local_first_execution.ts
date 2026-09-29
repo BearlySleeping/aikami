@@ -118,7 +118,13 @@ export const runLocalFirstStructured = async (options: {
   resolution: AiModeResolution;
   /** Whether policy permits a local attempt at all. */
   allowLocal: boolean;
-  /** Fired once the attempt is genuinely underway. */
+  /**
+   * Fired once the attempt is genuinely UNDERWAY.
+   *
+   * That is the point where a later gateway call becomes a real second route
+   * rather than a non-event, and it is what lets the caller record the fallback
+   * honestly instead of guessing at it afterwards.
+   */
   onAttempt: () => void;
   cooldown: LocalRouteCooldown;
 }): Promise<unknown | undefined> => {
@@ -167,6 +173,7 @@ export const runLocalFirstStructured = async (options: {
   }
 
   try {
+    options.onAttempt?.();
     await localTaskPoolService.pool.ensureLoaded(controller.signal);
     const fullPrompt = systemPrompt ? `${systemPrompt}\n\n${prompt}` : prompt;
     const result = await localTaskPoolService.pool.submit(

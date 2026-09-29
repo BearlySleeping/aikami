@@ -10,7 +10,7 @@
 import { describe, expect, test } from 'bun:test';
 import { TEXT_TASK_PRESETS } from '@aikami/constants';
 import type { AiModeResolution } from '@aikami/types';
-import type { LocalReadiness } from './local_readiness.ts';
+import { createLocalReadinessController, type LocalReadiness } from './local_readiness.ts';
 import { resolveLocalFirstPolicy } from './text_local_first_policy.ts';
 
 const localRouting: AiModeResolution = {
@@ -45,6 +45,23 @@ const sidecarRouting: AiModeResolution = {
 };
 
 describe('resolveLocalFirstPolicy', () => {
+  test('matches the controller for normalized ids, prefixes and empty evidence', () => {
+    const readiness = createLocalReadinessController();
+    for (const served of [[], [' QWEN3-1B '], ['library/qwen3-1b']]) {
+      readiness.served(served);
+      for (const model of ['', 'Qwen3-1b', 'library/qwen3-1b', 'qwen3-4b']) {
+        expect(
+          resolveLocalFirstPolicy({
+            resolution: { ...localRouting, model },
+            preset: TEXT_TASK_PRESETS['agent-relationship'],
+            hasExplicitModel: false,
+            readiness: readiness.current,
+          }).allowed,
+        ).toBe(readiness.canServe(model));
+      }
+    }
+  });
+
   test('allows a localFirst task whose route is local and has no override', () => {
     expect(
       resolveLocalFirstPolicy({

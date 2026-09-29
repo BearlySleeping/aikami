@@ -6,50 +6,7 @@
 // Contract: C-320 AC-2
 
 import type { AiTextUsage } from './gateway_types.ts';
-
-// ---------------------------------------------------------------------------
-// Usage extraction
-// ---------------------------------------------------------------------------
-
-/** True when a value is a finite, non-negative number. */
-const isCount = (value: unknown): value is number =>
-  typeof value === 'number' && Number.isInteger(value) && value >= 0;
-
-/** The OpenAI-compatible accounting block, in the provider's own field names. */
-type OpenAiUsagePayload = {
-  // biome-ignore lint/style/useNamingConvention: OpenAI API contract field name
-  prompt_tokens?: unknown;
-  // biome-ignore lint/style/useNamingConvention: OpenAI API contract field name
-  completion_tokens?: unknown;
-  // biome-ignore lint/style/useNamingConvention: OpenAI API contract field name
-  prompt_tokens_details?: { cached_tokens?: unknown };
-};
-
-/** Reads `usage` off an OpenAI-compatible payload, or `undefined` when absent. */
-const readUsage = (payload: unknown): AiTextUsage | undefined => {
-  if (typeof payload !== 'object' || payload === null) {
-    return undefined;
-  }
-  const usage = (payload as { usage?: unknown }).usage;
-  if (typeof usage !== 'object' || usage === null) {
-    return undefined;
-  }
-  const counts = usage as OpenAiUsagePayload;
-  if (!isCount(counts.prompt_tokens) || !isCount(counts.completion_tokens)) {
-    return undefined;
-  }
-  const details = counts.prompt_tokens_details;
-  const cachedTokens =
-    typeof details === 'object' && details !== null && isCount(details.cached_tokens)
-      ? details.cached_tokens
-      : undefined;
-  return {
-    inputTokens: counts.prompt_tokens,
-    outputTokens: counts.completion_tokens,
-    ...(cachedTokens === undefined ? {} : { cachedTokens }),
-    source: 'provider',
-  };
-};
+import { readOpenAiUsage } from './structured.ts';
 
 /** Timeout for the entire fetch+stream operation (90 seconds). */
 export const GATEWAY_FETCH_TIMEOUT_MS = 90_000;
@@ -163,17 +120,19 @@ export const readChatSseStream = async (options: {
             }>;
           };
 
-          // Usage may arrive alone or alongside a content delta.
-          const usage = readUsage(parsed);
-          if (usage !== undefined) {
-            onUsage?.(usage);
-          }
-
+          // The content delta and the accounting block are read INDEPENDENTLY:
+          // some providers send usage on its own trailing frame, others attach
+          // it to the last content frame. Short-circuiting on either would drop
+          // the other's half of the same frame.
           const token = parsed.choices?.[0]?.delta?.content;
           if (token) {
             hasReceivedContent = true;
             onChunk(token);
             chunkCount++;
+          }
+          const usage = readOpenAiUsage(parsed);
+          if (usage !== undefined) {
+            onUsage?.(usage);
           }
         } catch {
           // Skip unparseable lines
