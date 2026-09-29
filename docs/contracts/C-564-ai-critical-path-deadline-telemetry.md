@@ -183,6 +183,7 @@ have no consumer outside this branch.
 
 Deliberately not attempted, per the issue's own guidance to stop speculative
 optimization when no bottleneck is demonstrated: agent trigger/fingerprint
-suppression, in-flight deduplication, exact result caching, provider
+suppression, exact result caching, provider
 prompt-cache tuning, combat prefetch tuning, and local concurrency tuning. Each
-needs its own measured baseline first.
+needs its own measured baseline first. In-flight coalescing is implemented in
+C-565 and recorded through the `in-flight-dedup` telemetry layer.

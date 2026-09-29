@@ -1,8 +1,8 @@
 # Aikami Knowledge Index
 
 > **AI-first entry point.** Read this file first.
-> Generated: 2026-09-28
-> Files: 502 across 10 categories
+> Generated: 2026-09-29
+> Files: 503 across 10 categories
 
 ## Quick Start (Read These First)
 
@@ -458,6 +458,7 @@ Monorepo: SvelteKit Client × Cloudflare Workers backend (D1 + R2 + Better Auth)
 - [Contract C-562: Emberwatch five-map polish adoption](contracts/C-562-emberwatch-five-map-polish-adoption.md)
 - [Contract C-563: Emberwatch final acceptance review](contracts/C-563-emberwatch-final-acceptance.md)
 - [C-564 — One critical path: shared deadlines, readiness-aware local execution, and honest telemetry](contracts/C-564-ai-critical-path-deadline-telemetry.md)
+- [C-565 — In-flight coalescing of identical structured requests](contracts/C-565-in-flight-structured-request-coalescing.md)
 - [Contracts — Aikami Feature Development](contracts/INDEX.md)
 - [MVP Contract Backlog — C-400 … C-419](contracts/MVP_BACKLOG.md)
 - [Contract Implementation Archive](contracts/PROGRESS_ARCHIVE.md)

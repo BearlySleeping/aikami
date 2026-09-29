@@ -6,6 +6,7 @@
 // Contract: C-320 AC-2
 
 import { schemaCheck } from '@aikami/schemas';
+import type { AiTextUsage } from './gateway_types.ts';
 
 /** Compiles TypeBox schemas into strict JSON Schema dictionaries with caching. */
 export type SchemaCompiler = {
@@ -174,3 +175,71 @@ export const validateAgainstSchema = (options: {
   schema: Record<string, unknown>;
   parsed: unknown;
 }): boolean => schemaCheck(options.schema, options.parsed);
+
+// ---------------------------------------------------------------------------
+// Token accounting
+// ---------------------------------------------------------------------------
+
+/**
+ * True when a value is a plausible token count.
+ *
+ * Integers only: a fractional count is a provider bug or a different quantity
+ * wearing the same field name, and recording it as "the provider said 1.5
+ * tokens" would put a fabricated figure into the cost column.
+ */
+const isCount = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isFinite(value) && Number.isInteger(value) && value >= 0;
+
+/**
+ * The OpenAI-compatible accounting block, in the providers' own field names.
+ *
+ * Lives here, beside the other payload-reading helpers, because two very
+ * different readers need it: the non-streaming response bodies and the trailing
+ * SSE accounting frame. A copy in each would drift, and a drifted cost figure is
+ * worse than no cost figure.
+ */
+type OpenAiUsagePayload = {
+  // biome-ignore lint/style/useNamingConvention: OpenAI API contract field name
+  prompt_tokens?: unknown;
+  // biome-ignore lint/style/useNamingConvention: OpenAI API contract field name
+  completion_tokens?: unknown;
+  // biome-ignore lint/style/useNamingConvention: OpenAI API contract field name
+  prompt_tokens_details?: { cached_tokens?: unknown };
+};
+
+/**
+ * Reads provider-reported token accounting off an OpenAI-compatible payload.
+ *
+ * `inputTokens` is the provider's TOTAL prompt count, which already includes
+ * any cached portion — so a consumer pricing it must subtract `cachedTokens`
+ * rather than add them.
+ *
+ * Returns `undefined` when the body carries no accounting, or carries an
+ * incomplete or non-numeric block. A partial count is not a smaller count, and
+ * reporting a fabricated zero would make "not measured" indistinguishable from
+ * "this was free".
+ */
+export const readOpenAiUsage = (payload: unknown): AiTextUsage | undefined => {
+  if (typeof payload !== 'object' || payload === null) {
+    return undefined;
+  }
+  const usage = (payload as { usage?: unknown }).usage;
+  if (typeof usage !== 'object' || usage === null) {
+    return undefined;
+  }
+  const counts = usage as OpenAiUsagePayload;
+  if (!isCount(counts.prompt_tokens) || !isCount(counts.completion_tokens)) {
+    return undefined;
+  }
+  const details = counts.prompt_tokens_details;
+  const cachedTokens =
+    typeof details === 'object' && details !== null && isCount(details.cached_tokens)
+      ? details.cached_tokens
+      : undefined;
+  return {
+    inputTokens: counts.prompt_tokens,
+    outputTokens: counts.completion_tokens,
+    ...(cachedTokens === undefined ? {} : { cachedTokens }),
+    source: 'provider',
+  };
+};

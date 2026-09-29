@@ -83,7 +83,7 @@ export type AiActivityViewModelInterface = BaseViewModelInterface & {
   readonly activityRows: readonly AiActivityRow[];
   /** Aggregate stats over the current buffer. */
   readonly activitySummary: TextTelemetrySummary;
-  /** Cache hits across the three measured cache layers. */
+  /** Cache hits across all measured layers. */
   readonly cacheHitTotal: number;
   /** Per-task aggregates formatted for display. */
   readonly taskRows: readonly AiActivityTaskRow[];
@@ -156,7 +156,7 @@ class AiActivityViewModel
   }
 
   get cacheHitTotal(): number {
-    const hits = this._telemetry.summary.counters.cacheHits;
+    const hits = this.activitySummary.counters.cacheHits;
     return hits['in-flight-dedup'] + hits['exact-result'] + hits['provider-prompt-cache'];
   }
 

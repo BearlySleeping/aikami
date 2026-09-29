@@ -143,6 +143,26 @@ test.describe('AI critical-path telemetry (issue #382 P0)', () => {
     await expect(panel).toContainText(/character-count estimate/i);
     await expect(panel).toContainText(/Prompts, replies and credentials are never recorded/i);
   });
+
+  test('a repeated call is counted per call, not coalesced into one', async ({ page }) => {
+    // The same request fired twice in a row. Coalescing only ever merges calls
+    // that are SIMULTANEOUSLY in flight, so the second (sequential) call must
+    // still be recorded — otherwise the activity view would under-report real
+    // spend, which is the failure mode a result cache would introduce here.
+    await page.getByPlaceholder('Enter your prompt here...').fill('repeat me');
+    await page.getByRole('button', { name: /Generate/i }).click();
+    await expect(page.getByTestId('diag-calls')).toHaveText('1', { timeout: 30_000 });
+
+    await page.getByPlaceholder('Enter your prompt here...').fill('repeat me');
+    await page.getByRole('button', { name: /Generate/i }).click();
+    await expect(page.getByTestId('diag-calls')).toHaveText('2', { timeout: 30_000 });
+
+    // Two calls is two samples — still below the percentile threshold, so p95
+    // stays absent rather than being computed from noise.
+    const after = await readDiagnostics(page);
+    expect(after.calls).toBe(2);
+    expect(after.p95).toBe('—');
+  });
 });
 
 test.describe('Telemetry buffer shape (issue #382 P0)', () => {

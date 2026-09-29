@@ -60,13 +60,37 @@ export type LocalReadinessController = {
 };
 
 /** True when a model id matches a served/confirmed id, tolerating path prefixes. */
-export const matchesModel = (candidate: string, wanted: string): boolean => {
+const matchesModel = (candidate: string, wanted: string): boolean => {
   const left = candidate.trim().toLowerCase();
   const right = wanted.trim().toLowerCase();
   if (left.length === 0 || right.length === 0) {
     return false;
   }
   return left === right || left.endsWith(`/${right}`) || right.endsWith(`/${left}`);
+};
+
+/** Applies the same readiness and model matching rules to every local decision. */
+export const canServeLocalModel = (options: {
+  readiness: LocalReadiness;
+  model?: string;
+}): boolean => {
+  const { readiness, model } = options;
+  if (readiness.state === 'unavailable') {
+    return false;
+  }
+  if (model === undefined || model.trim().length === 0) {
+    // No model was named and nothing has failed: the engine is still
+    // allowed one attempt, which is what establishes evidence either way.
+    return true;
+  }
+  if (readiness.state === 'unknown') {
+    // A liveness-only probe is not proof for an unnamed-model engine.
+    return readiness.servedModelIds.length === 0;
+  }
+  return (
+    readiness.confirmedModelIds.some((id) => matchesModel(id, model)) ||
+    readiness.servedModelIds.some((id) => matchesModel(id, model))
+  );
 };
 
 /** Creates the model-specific local readiness controller. */
@@ -80,7 +104,7 @@ export const createLocalReadinessController = (): LocalReadinessController => {
 
     served(modelIds) {
       state = {
-        state: 'ready',
+        state: modelIds.length === 0 ? 'unknown' : 'ready',
         servedModelIds: [...modelIds],
         confirmedModelIds: state.confirmedModelIds,
         checkedAt: Date.now(),
@@ -109,22 +133,7 @@ export const createLocalReadinessController = (): LocalReadinessController => {
     },
 
     canServe(model) {
-      if (state.state === 'unavailable') {
-        return false;
-      }
-      if (model === undefined || model.trim().length === 0) {
-        // No model was named and nothing has failed: the engine is still
-        // allowed one attempt, which is what establishes evidence either way.
-        return true;
-      }
-      if (state.state === 'unknown') {
-        // A liveness-only probe is not proof for an unnamed-model engine.
-        return state.servedModelIds.length === 0;
-      }
-      return (
-        state.confirmedModelIds.some((id) => matchesModel(id, model)) ||
-        state.servedModelIds.some((id) => matchesModel(id, model))
-      );
+      return canServeLocalModel({ readiness: state, model });
     },
   };
 };

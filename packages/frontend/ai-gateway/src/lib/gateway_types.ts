@@ -62,7 +62,7 @@ export type AiTextGenerationOptions = {
  * figures indistinguishable from fiction.
  */
 export type AiTextUsage = {
-  /** Uncached input tokens, as reported or estimated. */
+  /** Total input tokens, including any cachedTokens, as reported or estimated. */
   readonly inputTokens: number;
   /** Output tokens, as reported or estimated. */
   readonly outputTokens: number;
@@ -184,8 +184,8 @@ export type AiProviderGateway = {
    * would reach — needs the same resolution `generateText` would compute, not a
    * re-derivation of its own. The two must not disagree, so this is the exact
    * resolution the dispatch path uses, including task role routing and explicit
-   * model/endpoint overrides. Resolver failures throw an `AiGatewayException`
-   * typed gateway error, exactly as they do on the dispatch path.
+   * model/endpoint overrides. Resolver failures throw a typed AiGatewayException,
+   * exactly as they would on the dispatch path.
    */
   resolveText(options?: { model?: string; endpoint?: string; task?: TextTask }): AiModeResolution;
   /** Detects capability availability with a bounded timeout. Never throws. */

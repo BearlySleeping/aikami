@@ -18,7 +18,12 @@ import {
   GATEWAY_IDLE_TIMEOUT_MS,
   readChatSseStream,
 } from './sse.ts';
-import { createSchemaCompiler, sanitizeJsonResponse, validateAgainstSchema } from './structured.ts';
+import {
+  createSchemaCompiler,
+  readOpenAiUsage,
+  sanitizeJsonResponse,
+  validateAgainstSchema,
+} from './structured.ts';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -112,7 +117,65 @@ const withOpenAiVersionSegment = (base: string): string => {
  */
 /** True when a value is a finite, non-negative integer token count. */
 const isTokenCount = (value: unknown): value is number =>
-  typeof value === 'number' && Number.isInteger(value) && value >= 0;
+  typeof value === 'number' && Number.isFinite(value) && Number.isInteger(value) && value >= 0;
+
+/** Ollama's native counters, in its own field names. */
+type OllamaUsagePayload = {
+  // biome-ignore lint/style/useNamingConvention: Ollama API contract field name
+  prompt_eval_count?: unknown;
+  // biome-ignore lint/style/useNamingConvention: Ollama API contract field name
+  eval_count?: unknown;
+};
+
+/**
+ * Reads Ollama's native `prompt_eval_count` / `eval_count` counters.
+ *
+ * Adapter-local because only a non-streaming body carries them: the Ollama
+ * path never streams, so the SSE reader has no use for them.
+ */
+const readOllamaUsage = (payload: object): AiTextUsage | undefined => {
+  const counts = payload as OllamaUsagePayload;
+  if (!isTokenCount(counts.prompt_eval_count) || !isTokenCount(counts.eval_count)) {
+    return undefined;
+  }
+  return {
+    inputTokens: counts.prompt_eval_count,
+    outputTokens: counts.eval_count,
+    source: 'provider',
+  };
+};
+
+/**
+ * Sums the accounting of a structured attempt and its plain-text fallback.
+ *
+ * When a structured call is rejected and the adapter retries as plain prose, the
+ * provider BILLED both requests. Keeping only the fallback's numbers would
+ * under-report real spend by whatever the discarded attempt cost, so both are
+ * counted. The `source` degrades to `estimated` if only one side was the
+ * provider's own figure, because a sum of mixed provenance is not purely
+ * provider-reported.
+ */
+const combineUsage = (options: {
+  structured?: AiTextUsage;
+  fallback?: AiTextUsage;
+}): AiTextUsage | undefined => {
+  const { structured, fallback } = options;
+  if (structured === undefined) {
+    return fallback;
+  }
+  if (fallback === undefined) {
+    return structured;
+  }
+  return {
+    inputTokens: structured.inputTokens + fallback.inputTokens,
+    outputTokens: structured.outputTokens + fallback.outputTokens,
+    ...(structured.cachedTokens === undefined && fallback.cachedTokens === undefined
+      ? {}
+      : { cachedTokens: (structured.cachedTokens ?? 0) + (fallback.cachedTokens ?? 0) }),
+    source:
+      structured.source === 'provider' && fallback.source === 'provider' ? 'provider' : 'estimated',
+  };
+};
 
 /** The outcome of reading a non-streaming completion body. */
 type JsonCompletionRead =
@@ -169,58 +232,9 @@ const readBodyUsage = (payload: unknown): AiTextUsage | undefined => {
 };
 
 /**
- * The accounting blocks an OpenAI-compatible body may carry, in the providers'
- * own field names.
+ * Creates an OpenAI-compatible chat-completions text adapter.
+ * Register the same instance for both `offline` and `byok` text modes.
  */
-type UsagePayload = {
-  // biome-ignore lint/style/useNamingConvention: OpenAI API contract field name
-  prompt_tokens?: unknown;
-  // biome-ignore lint/style/useNamingConvention: OpenAI API contract field name
-  completion_tokens?: unknown;
-  // biome-ignore lint/style/useNamingConvention: OpenAI API contract field name
-  prompt_tokens_details?: { cached_tokens?: unknown };
-  // biome-ignore lint/style/useNamingConvention: Ollama API contract field name
-  prompt_eval_count?: unknown;
-  // biome-ignore lint/style/useNamingConvention: Ollama API contract field name
-  eval_count?: unknown;
-};
-
-/** Reads the OpenAI `{ usage: { … } }` accounting block, when complete. */
-const readOpenAiUsage = (payload: object): AiTextUsage | undefined => {
-  const usage = (payload as { usage?: unknown }).usage;
-  if (typeof usage !== 'object' || usage === null) {
-    return undefined;
-  }
-  const counts = usage as UsagePayload;
-  if (!isTokenCount(counts.prompt_tokens) || !isTokenCount(counts.completion_tokens)) {
-    return undefined;
-  }
-  const details = counts.prompt_tokens_details;
-  const cachedTokens =
-    typeof details === 'object' && details !== null && isTokenCount(details.cached_tokens)
-      ? details.cached_tokens
-      : undefined;
-  return {
-    inputTokens: counts.prompt_tokens,
-    outputTokens: counts.completion_tokens,
-    ...(cachedTokens === undefined ? {} : { cachedTokens }),
-    source: 'provider',
-  };
-};
-
-/** Reads Ollama's native `prompt_eval_count` / `eval_count` counters. */
-const readOllamaUsage = (payload: object): AiTextUsage | undefined => {
-  const counts = payload as UsagePayload;
-  if (!isTokenCount(counts.prompt_eval_count) || !isTokenCount(counts.eval_count)) {
-    return undefined;
-  }
-  return {
-    inputTokens: counts.prompt_eval_count,
-    outputTokens: counts.eval_count,
-    source: 'provider',
-  };
-};
-
 /**
  * Creates an OpenAI-compatible chat-completions text adapter.
  * Register the same instance for both `offline` and `byok` text modes.
@@ -561,12 +575,12 @@ export const createOpenAiCompatibleTextAdapter = (
 
     type StructuredOutcome = { fallback: 'http-400' | 'non-json-200' } | { fallback?: undefined };
 
-    // One structured-request attempt. `accumulated` is reset per attempt so a
-    // retry (C-499 AC-2) starts from an empty buffer.
+    // Reset usage per attempt so a retry cannot retain discarded accounting.
     const runStructuredAttempt = async (): Promise<StructuredOutcome> =>
       await withRequestScope({
         signal,
         run: async (requestSignal): Promise<StructuredOutcome> => {
+          usage = undefined;
           const response = await streamCompletion({ resolution, body, requestSignal });
           const failure = await classifyFailure(response);
           if (failure !== undefined) {
@@ -637,12 +651,12 @@ export const createOpenAiCompatibleTextAdapter = (
         messages: structuredMessages,
         signal,
       });
-      // The plain fallback spent its own tokens; they are what was billed.
+      // Both attempts spent tokens; preserve their combined accounting.
       return parseStructured({
         accumulated: fallback.text,
         schema,
         schemaName,
-        usage: fallback.usage,
+        usage: combineUsage({ structured: usage, fallback: fallback.usage }),
       });
     }
 
@@ -658,7 +672,7 @@ export const createOpenAiCompatibleTextAdapter = (
         accumulated: fallback.text,
         schema,
         schemaName,
-        usage: fallback.usage,
+        usage: combineUsage({ structured: usage, fallback: fallback.usage }),
       });
     }
   };

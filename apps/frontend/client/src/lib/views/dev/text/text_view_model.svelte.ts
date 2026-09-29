@@ -97,7 +97,7 @@ export type TextViewModelInterface = BaseViewModelInterface & {
    * or the reply.
    */
   readonly diagnostics: TextTelemetrySummary;
-  /** Cache hits across the three measured cache layers. */
+  /** Cache hits across all measured layers. */
   readonly cacheHitTotal: number;
   /** Recorded spans, newest first — one row per logical call. */
   readonly diagnosticRows: readonly TextDiagnosticRow[];
@@ -180,7 +180,7 @@ class TextViewModel extends BaseViewModel<TextViewModelOptions> implements TextV
 
   /** @inheritdoc */
   get cacheHitTotal(): number {
-    const hits = this._telemetry.summary.counters.cacheHits;
+    const hits = this.diagnostics.counters.cacheHits;
     return hits['in-flight-dedup'] + hits['exact-result'] + hits['provider-prompt-cache'];
   }
 
