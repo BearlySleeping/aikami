@@ -2,7 +2,7 @@
 
 > **AI-first entry point.** Read this file first.
 > Generated: 2026-09-30
-> Files: 508 across 11 categories
+> Files: 509 across 11 categories
 
 ## Quick Start (Read These First)
 
@@ -29,6 +29,7 @@ Monorepo: SvelteKit Client × Cloudflare Workers backend (D1 + R2 + Better Auth)
 
 - [Issue #382 — reproducible AI baseline (AC-1)](audits/382-ai-baseline-report.md)
 - [Issue #382 — C-401 call-2 envelope extraction: schema reduction and result](audits/382-envelope-extraction-report.md)
+- [Issue #382 — C-401 call-2 envelope: reasoning control](audits/382-envelope-reasoning-control-report.md)
 - [Where #382's next slice should go — measurement-first triage](audits/382-next-slice-proposal.md)
 - [Issue #382 — where the production critical path actually goes](audits/382-production-path-report.md)
 - [Agent-pipeline reachability audit — issue #382 P1 slice 3](audits/agent-trigger-usage.md)

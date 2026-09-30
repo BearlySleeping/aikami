@@ -16,13 +16,13 @@ is **not** the fix: on the measured configuration the extraction path still
 completes **0 of 5** attempts, every one discarded at its 6 000 ms deadline — the
 same 0/23 rate #413 measured before the change.
 
-The bottleneck is not the output the schema asked for. It is the model's
-**reasoning channel**, and on the route the client actually uses there is no
-measured way to turn that channel off.
+The bottleneck is the model's **reasoning channel**. A control for it exists and
+is reachable from the production route — but that finding required correcting a
+false premise in the previous draft of this report, so it is documented in full
+under *Why it still fails* rather than asserted here.
 
 Per the stop rule in the task brief, no timeout increase, no routing rule, no
-caching, no scheduler and no prewarming were added. The smallest next step is
-proposed at the end and is **not** implemented here.
+caching, no scheduler and no prewarming were added.
 
 ---
 
@@ -168,49 +168,102 @@ never issued.
 
 The wire log cannot answer this — an aborted request has no body to read token
 counts from. `apps/e2e/scripts/ai_envelope_thinking_probe.ts` therefore asks the
-provider directly, reproducing the production request exactly (same schemas,
-same prompts, same `maxTokens: 800`, and the same absence of `format`, because
-the gateway deliberately sends no `response_format` to Ollama).
+provider directly.
 
 ```
 bun run --cwd apps/e2e probe:ai-envelope-thinking
 ```
 
-Two runs, both preserved at
-`.evidence/382-baseline/envelope-thinking/both-runs.json`:
+### 🔴 Correction: the production route is native `/api/chat`, not `/v1`
 
-| probe | surface | run 1 | run 2 |
-|---|---|---|---|
-| extraction schema (as shipped) | native `/api/chat` | 9 716 ms / 247 tok / 849 reasoning chars / **no budget** | 18 944 ms / 800 tok (capped) / 3 498 chars / **no budget** |
-| legacy envelope (pre-PR) | native `/api/chat` | 17 534 ms / 460 tok / 1 035 chars / **no budget** | 14 691 ms / 800 tok (capped) / 3 311 chars / **no budget** |
-| extraction schema, `think: false` | native `/api/chat` | **4 396 ms / 122 tok / 0 chars / budget met** | **3 377 ms / 186 tok / 0 chars / budget met** |
-| extraction, default | `/v1` (the client's route) | 29 056 ms / 800 tok / empty / **no budget** | 13 827 ms / 800 tok / empty / **no budget** |
-| extraction, `think: false` | `/v1` (the client's route) | 28 289 ms / 800 tok / truncated / **no budget** | 19 858 ms / 800 tok / empty / **no budget** |
+An earlier draft of this section stated that the client talks to Ollama through
+`/v1/chat/completions`, and drew from it the conclusion that "`think: false` is
+accepted but ignored on the route the client uses, so it is not a fix".
 
-**Stable across both runs:**
+**That premise was wrong, and the conclusion built on it does not hold.** Three
+independent checks agree:
 
-1. **The shipped extraction never completes inside the budget on either
-   surface** — 4/4 probes over, every time. This is the finding that matters and
-   it is not in doubt.
-2. **Reasoning tokens are what the budget is spent on.** Disabling the channel
-   takes the same request from "over budget, no answer" to **3 377–4 396 ms with
-   a valid JSON answer**, using 122–186 completion tokens. 122–186 tokens is under
-   a quarter of the 800-token allowance, so **`maxTokens` is not the constraint
-   either**; the model was never trying to use it.
-3. **`think: false` does not work on the route the client uses.** `/v1` accepts
-   it without error and then ignores it: completion still hits the 800-token cap
-   and the answer comes back empty or truncated at `{"choices":[`. So "send
-   `think: false`" is not a fix — it is a fix for a surface the client does not
-   speak to. Any next step must first find a control this route honours.
+1. `resolveChatUrl` in
+   `packages/frontend/ai-gateway/src/lib/text_adapter_openai_compatible.ts`
+   routes `resolution.provider === 'ollama'` to `${base}/api/chat`, stripping
+   any stored `/v1` suffix. Only other providers reach
+   `${base}/chat/completions`.
+2. Every wire call captured by the two production benchmarks went to
+   `http://localhost:11434/api/chat` — 97/97 in `prod-path`, 43/43 in
+   `envelope-fix` — even though the connection is configured with the endpoint
+   `http://localhost:11434/v1`.
+3. `/v1/chat/completions` is reachable in this repo from exactly three places:
+   the dev-only chat view bypass, the Settings *provider test* URL, and this
+   probe. None of them is the dialogue path.
 
-**Not stable, and therefore not claimed:** with reasoning enabled the model's
-output length varies by more than 3× between otherwise identical calls (247 then
-800 completion tokens; reasoning 849 then 3 498 characters), and the ordering
-between the two schemas **reversed** between runs (shipped 9 716 ms vs legacy
-17 534 ms, then shipped 18 944 ms vs legacy 14 691 ms). A single run therefore
-cannot support any claim that the reduced schema is faster. An earlier draft of
-this report did claim roughly half the work, on the strength of run 1 alone; that
-claim is withdrawn. See *What the schema reduction did and did not achieve*.
+So `think: false` is not "a fix for a surface the client does not speak to". It
+is a fix for **the** surface the client speaks to, and the measurements below
+show it working there.
+
+A second, smaller error came from the same place: the probe was sending
+`options: { num_predict: 800, temperature: 0.3 }`, because
+`buildGenerationParams` returns `{}` for Ollama — so the production `/api/chat`
+body carries **no** `options` at all. The 800-token cap in the runs below is an
+artefact of the probe, not a production constraint, and the probe was
+reproducibly measuring a different request than the one that fails. The probe
+now sends the production body.
+
+### Measured reasoning control, per surface
+
+Every variant repeated, because with reasoning on this model's output length
+varies by more than 3× between identical calls. Raw evidence:
+`.evidence/382-baseline/envelope-thinking/` (`sweep-reps3.json`,
+`highrep-native-thinkfalse.json`,
+`highrep-v1-reasoning-effort-none.json`).
+
+| variant | n | within 6 000 ms | schema-valid | median ms | max ms | median completion tok | reasoning chars |
+|---|---|---|---|---|---|---|---|
+| **`/api/chat`, production body (the real route)** | 3 | **0** | 2 (late) | 31 355 | 36 524 | 1 572 | 7 311 |
+| **`/api/chat` + `think: false`** | 8 | **8** | **8** | 2 412 | 5 085 | 121 | **0** |
+| `/api/chat` + `reasoning_effort: "none"` | 3 | 0 | 2 | 14 626 | 34 899 | 766 | 6 948 |
+| `/api/chat`, legacy envelope prompt (pre-#414) | 3 | 0 | 2 (late) | 19 208 | 35 455 | 971 | 7 101 |
+| `/v1` default | 3 | 0 | 1 | 15 501 | 15 533 | 800 (cap) | 3 238 |
+| `/v1` + `think: false` | 3 | 0 | 1 | 15 613 | 16 082 | 800 (cap) | 3 180 |
+| `/v1` + `reasoning_effort: "none"` | 8 | **8** | 6 | 2 498 | 5 090 | 126 | **0** |
+| `/v1` + `reasoning_effort: "minimal"` | 3 | 0 | 0 | 15 621 | 15 695 | 800 (cap) | 3 463 |
+| `/v1` + `chat_template_kwargs.enable_thinking: false` | 3 | 0 | 0 | 15 511 | 15 597 | 800 (cap) | 3 460 |
+
+**What the installed Ollama 0.34.3 actually supports** (measured, not assumed,
+and not taken from a review comment):
+
+- `think: false` on native `/api/chat` — **honoured.** 0 reasoning characters,
+  every answer inside the budget.
+- `think: false` on `/v1/chat/completions` — **accepted and ignored.**
+- `reasoning_effort: "none"` on `/v1/chat/completions` — **honoured.** The
+  review claim that Ollama maps it to `Think=false` is correct, verified
+  independently here at n=11 across two runs.
+- `reasoning_effort: "none"` on native `/api/chat` — **accepted and ignored.**
+- `reasoning_effort: "minimal"` — **not** a "lower it" dial. It leaves
+  reasoning fully on: 3 463 reasoning characters, every call over budget. Only
+  the exact value `none` switches the channel off.
+- `chat_template_kwargs: { enable_thinking: false }` — **not forwarded.** The
+  model's own template *does* branch on `enable_thinking` (visible in
+  `/api/show`), but `/v1` does not pass the field through.
+
+The lesson worth keeping: **a 200 response is not a honoured field.** Ollama
+accepts all six spellings without error and honours exactly two of them, and
+the two it honours are not the two a reader would guess. Any claim that a
+provider "supports" a control has to be re-measured against the installed
+version.
+
+### The diagnosis, stated correctly
+
+1. **The shipped extraction never completes inside the budget on the production
+   route** — 0/3 with reasoning on, and 0/5 in each of the two production
+   benchmarks. Not in doubt.
+2. **The reasoning channel is what the budget is spent on.** The model's
+   answer is 67–265 completion tokens; with reasoning on, the same requests
+   spend 1 500+ median completion tokens and 7 000 reasoning characters, and
+   miss the deadline every time. `maxTokens` is not the constraint either — the
+   model was never trying to fill it.
+3. **A control exists, and it is reachable from production.** `think: false` on
+   the native route is 8/8 within budget and 8/8 schema-valid, median 2.4 s.
+   This is the answer to the question the previous draft called unanswerable.
 
 ### What the schema reduction did and did not achieve
 
@@ -219,19 +272,20 @@ the client already holds, so the output is smaller in principle, the client no
 longer needs a repair path, and the contract is now honest about what call 2 is
 for. Prompt tokens are stably lower: 2 233–2 235 against the legacy 2 276.
 
-**Did not:** measurably speed up the path. Both schemas reach the 800-token cap
-and both miss the deadline; run-to-run reasoning length swamps the difference.
-The reduction is retained because it is correct and strictly reduces the work
-requested, not because it was shown to be the fix. It was tested as the fix and
-it is not the fix.
+**Did not:** measurably speed up the path. With reasoning on, both schemas
+miss the deadline and the run-to-run reasoning length swamps the difference
+(31 355 ms for the shipped schema, 19 208 ms for the legacy one, with the
+ordering reversing between runs). The reduction is retained because it is
+correct and strictly reduces the work requested, not because it was shown to be
+the fix. It was tested as the fix and it is not the fix.
 
 ### Can the extraction be reduced further, without losing correctness?
 
-No, not meaningfully. With reasoning off the answer is 122–186 completion tokens
-— `{"choices": [...]}` with at most two entries, and no command where the
-narrative implied none. There is no output left to remove. Prompt size is not the
-constraint either: 2 233 prompt tokens are a small fraction of the 3 377–4 396 ms
-total. What remains is reasoning, not schema, not prompt, and not budget.
+No, not meaningfully. With reasoning off the answer is 67–265 completion tokens
+— `{"choices": [...]}` with at most four entries, plus a command where the
+narrative implied one. There is no output left to remove. Prompt size is not the
+constraint either: ~2 235 prompt tokens are a small fraction of the 2.4 s
+median. What remains is reasoning, not schema, not prompt, and not budget.
 
 ---
 
@@ -358,33 +412,45 @@ rediscovered as if they were findings:
 
 ---
 
-## Smallest next step (proposed, not implemented)
+## Smallest next step (answered; implementation is a separate PR)
 
-**Establish whether the reasoning channel can be disabled through `/v1`.** This
-is one falsifiable question and it gates everything else. Four candidate
-mechanisms, none of them assumed to work:
+**The question is settled, and the answer is that no new mechanism is needed.**
+`think: false` on the native `/api/chat` route the client already uses is
+honoured by the installed Ollama 0.34.3, and it is the only thing that has to
+change. The four candidate mechanisms in the previous draft of this section are
+all unnecessary:
 
-1. Test `reasoning_effort: "none"` on `/v1/chat/completions` first. Ollama maps
-   this to `Think=false`; measure JSON parsing, schema validity and latency
-   using the same extraction request before evaluating the other mechanisms;
-2. Ollama's `/api/set` or model-level parameter for the reasoning channel,
-   applied once at load;
-3. a chat-template parameter carried on the request in a form `/v1` forwards;
-4. a different (non-reasoning) model for the `envelope` task — which would be a
-   routing change, and therefore its own hypothesis with its own evidence.
+1. `reasoning_effort: "none"` on `/v1` — works (n=11), but `/v1` is not the
+   dialogue route, so it is the answer to a question nobody asked;
+2. `/api/set` or a model-level parameter — unnecessary, the request field is
+   honoured;
+3. a chat-template parameter forwarded through `/v1` — measured, not forwarded;
+4. a different non-reasoning model — unnecessary, and it would be a routing and
+   quality decision with a mandatory download. Rejected on the evidence, not
+   on taste.
 
-The gate for all four is the same measurement the probe provides: a valid JSON
-answer matching the extraction schema that completes inside 6 000 ms **on `/v1`**,
-with the streamed narrative unchanged. Raising `budgetMs` is not among the
-candidates, because 122–186 completion tokens at the observed 35–38 ms/token is ~3.4–4.4 s — the
-request already fits the existing budget once reasoning is off. If no mechanism
-exists, that is itself the finding, and the honest conclusion becomes that a
-reasoning model is the wrong tool for a 122-token structured extraction.
+What the change should look like is deliberately small, because the mistake a
+general reasoning framework invites is a silent change to player-facing prose:
+
+- a **semantic** preference (`reasoning: 'none'`) on the *task preset*, set on
+  `envelope` only — `dialogue` and `narration` keep the provider default;
+- an **optional** connection-level override in `TextParams.reasoning`, which
+  wins over the task, so explicit user configuration is never overrules;
+- an **additive provider capability** declaring which spelling a provider
+  actually honours, absent for every unmeasured provider;
+- the **adapter** as the only place that knows a spelling, translating the
+  preference into `think: false` or `reasoning_effort: "none"` and emitting
+  nothing at all when the provider declares no control.
+
+The gate is the measurement this report already provides: a schema-valid
+answer inside the unchanged 6 000 ms budget on the production route, with the
+narrative provably untouched. Raising `budgetMs` remains off the table — the
+request fits the existing budget with the channel off, so there is nothing to
+buy.
 
 ## #382 status
 
-Issue #382 stays **open**. Of its acceptance criteria, the call-2 envelope work
-is now *correct but not yet fast*: the schema no longer asks for work it does not
-need, and the remaining failure is characterised and attributed. Contention
-scheduling, prewarming, context compression and provider caching are untouched
-and still outstanding.
+Issue #382 stays **open**. Contention scheduling, prewarming, context
+compression and provider caching are untouched and still outstanding. The
+call-2 envelope is now *correct* and, with reasoning control, *fast* — but the
+reasoning-control implementation is deliberately not in this PR.
