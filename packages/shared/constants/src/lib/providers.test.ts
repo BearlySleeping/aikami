@@ -1,7 +1,12 @@
 // packages/shared/constants/src/lib/providers.test.ts
 
 import { describe, expect, test } from 'bun:test';
-import { findProviderDescriptor, providerAcceptsKey, providerNeedsKey } from './providers.ts';
+import {
+  findProviderDescriptor,
+  getTextReasoningControl,
+  providerAcceptsKey,
+  providerNeedsKey,
+} from './providers.ts';
 
 describe('findProviderDescriptor', () => {
   test('resolves duplicate OpenAI metadata by capability', () => {
@@ -48,5 +53,23 @@ describe('providerAcceptsKey', () => {
 
   test('an unknown provider id claims nothing', () => {
     expect(providerAcceptsKey('nope')).toBe(false);
+  });
+});
+
+describe('getTextReasoningControl', () => {
+  test('Ollama declares the native `think` control, which is the one measured to work', () => {
+    expect(getTextReasoningControl('ollama')).toBe('ollama-native-think');
+  });
+
+  test('a provider that has not been measured declares nothing', () => {
+    // Not "false" and not a guessed spelling: absent, so the adapter omits the
+    // field and the request is byte-identical to the pre-change one.
+    expect(getTextReasoningControl('llamacpp')).toBeUndefined();
+    expect(getTextReasoningControl('ooba')).toBeUndefined();
+    expect(getTextReasoningControl('openrouter')).toBeUndefined();
+  });
+
+  test('an unknown provider id declares nothing rather than throwing', () => {
+    expect(getTextReasoningControl('definitely-not-a-provider')).toBeUndefined();
   });
 });

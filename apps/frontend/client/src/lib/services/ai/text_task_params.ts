@@ -15,6 +15,13 @@ import type { TextParams } from '@aikami/types';
  * their connection cap still gets it honored). `temperature` is task-owned —
  * each task encodes its own sampling intent.
  *
+ * The reasoning-channel preference deliberately does NOT live here. It is a
+ * property of the call, not of the saved connection, so it rides on
+ * `AiModeResolution.reasoning` instead. Putting it in `TextParams` would have
+ * made it a persisted, migratable connection field that no settings control
+ * can reach — API surface whose only reachable effect was to switch the fix
+ * back off, by hand-editing stored JSON.
+ *
  * A task-less call resolves to the active text provider (the narration role),
  * so it gets the narration preset rather than dropping the preset entirely.
  */

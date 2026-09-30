@@ -12,7 +12,7 @@
 // re-check providers.
 // Contract: C-320
 
-import { TEXT_TASK_PRESETS, type TextTask } from '@aikami/constants';
+import { getTextReasoningControl, TEXT_TASK_PRESETS, type TextTask } from '@aikami/constants';
 import {
   type AiImageGenerationOptions,
   type AiImageGenerationResult,
@@ -115,6 +115,11 @@ class AiGatewayService
       getApiKey: (provider) => this._getTextApiKey(provider),
       supportsStructuredOutput: (provider) => this._supportsStructuredOutput(provider),
       getDefaultEndpoint: (provider) => this._getDefaultTextEndpoint(provider),
+      // The provider registry is the single declaration of which reasoning
+      // control a provider honours. Reading it here — rather than hard-coding a
+      // provider id in the adapter — is what keeps an unmeasured provider on the
+      // unchanged request path.
+      getReasoningControl: (provider) => getTextReasoningControl(provider),
       onSchemaCacheSize: (size) => {
         (globalThis as Record<string, unknown>).__text_service_compiled_schema_cache_size = size;
       },
@@ -256,6 +261,7 @@ class AiGatewayService
           model: match.model,
           endpoint: explicitEndpoint ?? matchProvider.baseUrl ?? '',
           params: this._applyTaskPreset(match.params as TextParams, task),
+          task,
         });
       }
       // Model not found in connections — use it verbatim with the active provider/endpoint
@@ -265,6 +271,7 @@ class AiGatewayService
         model: explicitModel,
         endpoint: explicitEndpoint ?? resolved.endpoint,
         params: this._applyTaskPreset(resolved.params as TextParams | undefined, task),
+        task,
       });
     }
 
@@ -279,6 +286,7 @@ class AiGatewayService
           model: roleResolved.model,
           endpoint: explicitEndpoint ?? roleResolved.endpoint,
           params: this._applyTaskPreset(roleResolved.params as TextParams | undefined, task),
+          task,
         });
       }
     }
@@ -289,6 +297,7 @@ class AiGatewayService
       model: resolved.model,
       endpoint: explicitEndpoint ?? resolved.endpoint,
       params: this._applyTaskPreset(resolved.params as TextParams | undefined, task),
+      task,
     });
   }
 
@@ -317,8 +326,15 @@ class AiGatewayService
     model: string;
     endpoint: string;
     params?: TextParams;
+    task?: TextTask;
   }): AiModeResolution {
-    const { provider, model, endpoint, params } = options;
+    const { provider, model, endpoint, params, task } = options;
+    // The task's reasoning preference rides on the RESOLUTION rather than on
+    // the connection's params, so there is exactly one owner and no call site
+    // can forget to pass it. A task-less call has no preference and therefore
+    // sends nothing — the provider default, which is what player-facing prose
+    // wants.
+    const reasoning = task === undefined ? undefined : TEXT_TASK_PRESETS[task].reasoning;
     return {
       capability: 'text',
       mode: resolveTextProviderMode({ provider, endpoint }),
@@ -326,6 +342,7 @@ class AiGatewayService
       model,
       endpoint,
       params,
+      ...(reasoning === undefined ? {} : { reasoning }),
     };
   }
 
