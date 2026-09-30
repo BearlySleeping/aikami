@@ -41,11 +41,44 @@ export type DialogueTurnProbe = {
   readonly schemaValid: boolean;
   /** Number of choices the turn carried (schema bounds this to 0..4). */
   readonly choiceCount: number;
+  /**
+   * The choice ids, verbatim. Reported raw rather than pre-classified: the
+   * deterministic fallback is a fixed pair (`talk`, `leave`), so a consumer can
+   * identify it exactly, but a model that happened to author those same ids
+   * would be indistinguishable. The raw ids let the report state that bound
+   * instead of hiding it behind a boolean.
+   */
+  readonly choiceIds: readonly string[];
+  /** Whether a command survived extraction AND the precondition whitelist. */
+  readonly commandExtracted: boolean;
+  /**
+   * Whether extraction was rejected, so the turn kept only the narrative.
+   *
+   * `undefined` when the service exposes no `warn` — which is the case when a
+   * test drives the probe with a stub. That is reported as "not observable"
+   * rather than as `false`, because `false` means "extraction was accepted" and
+   * a benchmark that cannot tell those apart would report every stubbed turn as
+   * a successful extraction.
+   */
+  readonly extractionDegraded: boolean | undefined;
+  /** As {@link DialogueTurnProbe.extractionDegraded}. */
+  readonly commandDenied: boolean | undefined;
   /** Whether the narrative was non-empty. */
   readonly narrativeNonEmpty: boolean;
 };
 
 const validateTurn = (turn: NpcDialogueTurn): boolean => Value.Check(NpcDialogueTurnSchema, turn);
+
+/**
+ * Structured logging lives on the service CLASS, not on the public interface
+ * `npcDialogueService` is typed as — `warn` is not part of the seam's contract.
+ * A guard states that narrowing once, here, instead of asserting through
+ * `unknown` at each use.
+ */
+type DialogueLogger = { warn: (...args: unknown[]) => void };
+
+const exposesWarn = (service: object): service is DialogueLogger =>
+  typeof (service as Partial<DialogueLogger>).warn === 'function';
 
 /**
  * Runs one real dialogue turn through `NpcDialogueService.generateTurn`.
@@ -63,18 +96,50 @@ export const runDialogueTurnProbe = async (options: {
   const startedAt = performance.now();
   let ttftMs: number | undefined;
   const controller = new AbortController();
-  const turn = await npcDialogueService.generateTurn({
-    npcId: options.npcId,
-    npcName: options.npcName,
-    messages: [
-      ...(options.history ?? []),
-      { role: 'player' as const, content: options.playerLine },
-    ],
-    signal: controller.signal,
-    onChunk: () => {
-      ttftMs ??= performance.now() - startedAt;
-    },
-  });
+  // The service reports its own outcome through `warn`, so the probe reads it
+  // there rather than adding a counter to production code purely for the
+  // benchmark. `warn` lives on the service CLASS, not on the interface the
+  // singleton is typed as, so it is narrowed through a guard. A test that drives
+  // the probe with a stub has no `warn`; that yields `undefined` for the
+  // warn-derived fields, which is reported as "not observable" rather than as
+  // `false`. `warn` is restored in a `finally` so a rejected turn cannot leave
+  // the seam patched.
+  const observed: { event: string; path?: unknown }[] = [];
+  const seam = exposesWarn(npcDialogueService) ? npcDialogueService : undefined;
+  const originalWarn = seam?.warn;
+  if (seam && originalWarn) {
+    seam.warn = (...args: unknown[]) => {
+      const [event, detail] = args;
+      if (typeof event !== 'string') {
+        return;
+      }
+      const path =
+        typeof detail === 'object' && detail !== null
+          ? (detail as { path?: unknown }).path
+          : undefined;
+      observed.push({ event, path });
+    };
+  }
+  let turn: NpcDialogueTurn;
+  try {
+    turn = await npcDialogueService.generateTurn({
+      npcId: options.npcId,
+      npcName: options.npcName,
+      messages: [
+        ...(options.history ?? []),
+        { role: 'player' as const, content: options.playerLine },
+      ],
+      signal: controller.signal,
+      onChunk: () => {
+        ttftMs ??= performance.now() - startedAt;
+      },
+    });
+  } finally {
+    if (seam && originalWarn) {
+      seam.warn = originalWarn;
+    }
+  }
+  const observable = seam !== undefined && originalWarn !== undefined;
   return {
     wallClockMs: performance.now() - startedAt,
     ttftMs,
@@ -82,6 +147,19 @@ export const runDialogueTurnProbe = async (options: {
     source: turn.source,
     schemaValid: validateTurn(turn),
     choiceCount: turn.choices.length,
+    choiceIds: turn.choices.map((choice) => choice.id),
+    commandExtracted: turn.command !== undefined,
+    extractionDegraded: observable
+      ? observed.some(
+          ({ event, path }) =>
+            event === '_generateAiTurn:invalid-extraction' ||
+            event === '_generateAiTurn:turn-validation-failed' ||
+            (event === 'dialogue:call-failed' && path === 'turn-envelope'),
+        )
+      : undefined,
+    commandDenied: observable
+      ? observed.some(({ event }) => event === '_generateAiTurn:command-denied')
+      : undefined,
     narrativeNonEmpty: turn.narrative.trim().length > 0,
   };
 };

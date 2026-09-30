@@ -222,6 +222,17 @@ type DialogueTurnState =
 No persisted schema changes. `NpcDialogueAiEnvelopeSchema` is unchanged — it
 now constrains call 2 instead of the single combined call.
 
+> **Superseded in part (issue #382).** Constraining call 2 with
+> `NpcDialogueAiEnvelopeSchema` did not work: it required a `narrative` and the
+> prompt asked the model to reproduce call 1's prose verbatim, so call 2 spent
+> its whole budget regenerating text the client already held as authoritative.
+> On the configuration measured in #413, 0/23 call-2 envelopes finished inside
+> their 6 000 ms budget. Call 2 is now constrained by the additive
+> `NpcDialogueExtractionSchema` (`command?`, `choices?`, no narrative).
+> `NpcDialogueAiEnvelopeSchema` is retained unchanged and now has no production
+> consumer. The streaming decision below still stands — and is reinforced,
+> since metadata extraction has nothing to stream.
+
 ## Quality Requirements
 
 - **Offline/degraded mode**: local models are the primary target; they are the

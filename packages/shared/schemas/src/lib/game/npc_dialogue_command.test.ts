@@ -10,6 +10,7 @@ import {
   NpcDialogueAiEnvelopeSchema,
   NpcDialogueChoiceSchema,
   NpcDialogueCommandSchema,
+  NpcDialogueExtractionSchema,
   NpcDialogueTurnSchema,
 } from './npc_dialogue_command.ts';
 
@@ -188,5 +189,61 @@ describe('NpcDialogueAiEnvelopeSchema', () => {
         command: { kind: 'giveItem', itemId: 'anything', quantity: -5 },
       }),
     ).toBe(false);
+  });
+});
+
+describe('NpcDialogueExtractionSchema (C-401 call 2)', () => {
+  test('accepts an empty object — no command and no choices is a valid outcome', () => {
+    expect(Value.Check(NpcDialogueExtractionSchema, {})).toBe(true);
+  });
+
+  test('accepts command-only and choices-only output', () => {
+    expect(
+      Value.Check(NpcDialogueExtractionSchema, {
+        command: { kind: 'giveItem', itemId: 'wardShard', quantity: 1 },
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(NpcDialogueExtractionSchema, { choices: [{ id: 'thanks', label: 'Thank you' }] }),
+    ).toBe(true);
+  });
+
+  test('does NOT accept a narrative — call 2 must not regenerate call-1 prose', () => {
+    // The whole point of the call-2 schema: the narrative was already streamed
+    // by call 1, and asking the model to return it again spent the budget
+    // (issue #382). A response carrying one is malformed here, not salvaged.
+    expect(Value.Check(NpcDialogueExtractionSchema, { narrative: 'Hello there.' })).toBe(false);
+    expect(
+      Value.Check(NpcDialogueExtractionSchema, { narrative: 'x', command: { kind: 'skillCheck' } }),
+    ).toBe(false);
+  });
+
+  test('rejects unknown fields and invalid command payloads', () => {
+    expect(
+      Value.Check(NpcDialogueExtractionSchema, {
+        command: { kind: 'skillCheck' },
+        systemPrompt: 'leak',
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(NpcDialogueExtractionSchema, {
+        command: { kind: 'giveItem', itemId: 'anything', quantity: -5 },
+      }),
+    ).toBe(false);
+  });
+
+  test('enforces the schema-level choice bound of 4', () => {
+    const four = Array.from({ length: 4 }, (_, index) => ({ id: `c${index}`, label: `L${index}` }));
+    expect(Value.Check(NpcDialogueExtractionSchema, { choices: four })).toBe(true);
+    expect(
+      Value.Check(NpcDialogueExtractionSchema, { choices: [...four, { id: 'c4', label: 'L4' }] }),
+    ).toBe(false);
+  });
+
+  test('the legacy envelope schema is unchanged and still requires a narrative', () => {
+    // Compatibility guard: option B is additive, so the old shape must keep
+    // behaving exactly as it did for any other (future) consumer.
+    expect(Value.Check(NpcDialogueAiEnvelopeSchema, { narrative: 'x' })).toBe(true);
+    expect(Value.Check(NpcDialogueAiEnvelopeSchema, {})).toBe(false);
   });
 });

@@ -108,6 +108,17 @@ tasks:
       - '@group(tests)'
       - '@group(sources)'
       - 'scripts/ai_baseline_bench.ts'
+  # Asks the provider directly what the C-401 call-2 budget is spent on, and
+  # whether the reasoning channel can be disabled on the route the client uses.
+  # No browser and no client: the wire log cannot answer this, because a call
+  # that is cut off at its deadline never receives a body to read tokens from.
+  probe-ai-envelope-thinking:
+    command: 'bun run probe:ai-envelope-thinking'
+    options:
+      runInCI: false
+    inputs:
+      - '@group(sources)'
+      - 'scripts/ai_envelope_thinking_probe.ts'
   test-site:
     command: 'bun run test:site'
     options:
