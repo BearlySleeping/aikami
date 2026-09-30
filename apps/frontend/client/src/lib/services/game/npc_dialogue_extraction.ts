@@ -15,9 +15,9 @@
 // extracts state-changing metadata only. The narrative is never returned,
 // never repaired, and never authoritative here — call 1 owns it.
 //
-// This module is deliberately pure: the caller supplies the narrative length
-// used for log context, and decides what to do with a rejection. Nothing in
-// here knows about the turn lifecycle, deadlines, or cancellation.
+// This module is deliberately pure: it neither reads the turn state nor
+// decides what a rejection means. The caller logs the rejection and chooses
+// the degrade path. Nothing in here knows about deadlines or cancellation.
 
 import { NpcDialogueExtractionSchema } from '@aikami/schemas';
 import type { NpcDialogueChoice, NpcDialogueCommand } from '@aikami/types';
@@ -81,10 +81,9 @@ export function buildDialogueExtractionSystemPrompt(context: DialogueExtractionC
  *
  * There is no repair path, and that is the point. The previous parser made one
  * repair attempt that merged the call-1 narrative into a malformed payload so
- * the envelope's required `narrative` field could be satisfied. With a metadata
- * -only schema there is nothing left to repair, so unknown fields and stray
- * output are rejected outright and the caller degrades to the streamed
- * narrative (AC-7).
+ * the envelope's required `narrative` field could be satisfied. A metadata-only
+ * schema has nothing left to repair, so unknown fields and stray output are
+ * rejected outright and the caller degrades to the streamed narrative (AC-7).
  *
  * An empty object is VALID: "this narrative implies no command and no choice" is
  * a real, common outcome, not a failure.

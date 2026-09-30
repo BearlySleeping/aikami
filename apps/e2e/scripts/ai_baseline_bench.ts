@@ -37,7 +37,7 @@
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { chromium, type Page, type Response } from 'playwright';
+import { chromium, type Page, type Request as PwRequest, type Response } from 'playwright';
 import { EMULATOR_PORTS } from '../src/config';
 import type { DialogueTurnProbe, WireWindow } from './ai_baseline_production_scenarios.ts';
 import {
@@ -86,7 +86,12 @@ const parseArgs = (
     // The production scenarios need authored NPCs, so they are opt-in: a
     // synthetic-only run must still work on a pack with no dialogue wired.
     productionDialogue: !argv.includes('--no-production'),
-    productionContention: !argv.includes('--no-production'),
+    // P1 and P2 are separable on purpose. P2 drives the real `MAP_LOADED`
+    // prefetch burst, so it fails outright when the provider is saturated —
+    // and because the report is written once at the end, that failure would
+    // discard P1's measurements too. A run that only needs the dialogue turn
+    // can therefore ask for P1 alone.
+    productionContention: !argv.includes('--no-production') && !argv.includes('--no-contention'),
     // `village_elder` is the authored NPC on the starting map, so the
     // production dialogue path is exercised against real pack content.
     probeNpcId: readFlag('npc') ?? 'village_elder',
@@ -116,6 +121,16 @@ type WireCall = {
   readonly startedAtMs: number;
   readonly durationMs: number;
   readonly streamed: boolean;
+  /**
+   * Whether the request asked for schema-constrained output — i.e. C-401
+   * call 2 (metadata extraction) rather than call 1 (streamed narrative).
+   *
+   * Recorded from the request body so it is present on aborted requests too,
+   * which is precisely where `streamed` cannot be trusted: an aborted request
+   * never reaches the response handler and is recorded with `streamed: false`
+   * no matter how it was issued.
+   */
+  readonly structured: boolean;
   readonly promptTokens?: number;
   readonly completionTokens?: number;
   readonly cachedTokens?: number;
@@ -249,10 +264,52 @@ const attachWireCapture = (page: Page, endpointHost: string, sink: WireCall[]): 
   // Rows whose body has been read. Identity-based, because the row object is
   // pushed to the sink and then enriched in place.
   const bodyRead = new WeakSet<object>();
+  /** Requests that carried a schema constraint, i.e. C-401 call 2. */
+  const structuredRequests = new Map<PwRequest, boolean>();
+
+  /**
+   * Whether a provider request asked for schema-constrained output.
+   *
+   * Read from the request body, because that is the one signal present on BOTH
+   * the successful and the aborted path — and the aborted path is exactly the
+   * case this harness most needs to classify.
+   *
+   * Two markers, because neither alone is sufficient. A `format` /
+   * `response_format` field identifies a constrained request where the provider
+   * is sent one — but the gateway deliberately sends NEITHER to Ollama (it
+   * documents that the local provider ignores them), so on the local route the
+   * only trace of the schema is the gateway's own schema instruction, appended
+   * to the system messages. Checking only the field would report every local
+   * structured call as unstructured.
+   */
+  const carriesSchemaConstraint = (request: PwRequest): boolean => {
+    const body = request.postDataJSON() as Record<string, unknown> | null;
+    if (body === null || typeof body !== 'object') {
+      return false;
+    }
+    if (body.format !== undefined || body.response_format !== undefined) {
+      return true;
+    }
+    const messages = body.messages;
+    if (!Array.isArray(messages)) {
+      return false;
+    }
+    return messages.some(
+      (message) =>
+        typeof (message as { content?: unknown })?.content === 'string' &&
+        (message as { content: string }).content.includes('structured data extraction tool'),
+    );
+  };
 
   page.on('request', (request) => {
     if (request.url().includes(endpointHost)) {
-      pending.set(request, performance.now());
+      const startedAtMs = performance.now();
+      pending.set(request, startedAtMs);
+      // Which of the C-401 two calls is this? NOT by `streamed` — an aborted
+      // request never reaches the response handler, so it is recorded with
+      // `streamed: false` regardless of how it was issued, and a buffered
+      // narrative looks identical to a structured extraction.
+      structuredRequests.set(request, carriesSchemaConstraint(request));
     }
   });
 
@@ -276,6 +333,7 @@ const attachWireCapture = (page: Page, endpointHost: string, sink: WireCall[]): 
       startedAtMs,
       durationMs: performance.now() - startedAtMs,
       streamed: false,
+      structured: structuredRequests.get(request) ?? false,
       aborted: true,
       failureText: request.failure()?.errorText ?? 'unknown',
     } as WireCall);
@@ -304,6 +362,7 @@ const attachWireCapture = (page: Page, endpointHost: string, sink: WireCall[]): 
       startedAtMs,
       durationMs: performance.now() - startedAtMs,
       streamed,
+      structured: structuredRequests.get(response.request()) ?? false,
     };
 
     if (!streamed) {
@@ -1341,15 +1400,17 @@ const main = async (): Promise<void> => {
       repetitions: CONFIG.reps,
     });
 
-    console.log('→ P2 prefetch-contention A/B …');
-    scenarios['P2 prefetch-contention-A/B'] = await runPrefetchContentionScenario({
-      page,
-      wire: productionWire(),
-      playerLine: PLAYER_LINE,
-      repetitions: CONFIG.contentionReps,
-      npcIds: CONFIG.prefetchNpcIds,
-      npcNames: CONFIG.prefetchNpcNames,
-    });
+    if (CONFIG.productionContention) {
+      console.log('→ P2 prefetch-contention A/B …');
+      scenarios['P2 prefetch-contention-A/B'] = await runPrefetchContentionScenario({
+        page,
+        wire: productionWire(),
+        playerLine: PLAYER_LINE,
+        repetitions: CONFIG.contentionReps,
+        npcIds: CONFIG.prefetchNpcIds,
+        npcNames: CONFIG.prefetchNpcNames,
+      });
+    }
   }
 
   // ── Client telemetry (secondary; absent before #410) ─────────────────

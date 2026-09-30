@@ -18,7 +18,17 @@
 
 import type { Page } from 'playwright';
 
-/** What one production dialogue turn reported, as the seam returns it. */
+/**
+ * What one production dialogue turn reported, as the seam returns it.
+ *
+ * Mirrors `DialogueTurnProbe` from the client's test seam. The fields added for
+ * issue #382 (`choiceIds`, `commandExtracted`, `extractionDegraded`,
+ * `commandDenied`) are what separate "the model produced choices" from "the
+ * client fell back to its fixed pair", and "a command was extracted" from "a
+ * command was extracted and then dropped by the precondition whitelist". A
+ * benchmark that cannot tell those apart reports the fallback's result as if it
+ * were the model's.
+ */
 export type DialogueTurnProbe = {
   readonly wallClockMs: number;
   readonly ttftMs: number | undefined;
@@ -26,6 +36,16 @@ export type DialogueTurnProbe = {
   readonly schemaValid: boolean;
   readonly narrativeNonEmpty: boolean;
   readonly choiceCount: number;
+  readonly choiceIds: readonly string[];
+  readonly commandExtracted: boolean;
+  /**
+   * `undefined` when the probe could not observe the service's own outcome log.
+   * Counted separately from `false`: `false` means extraction was accepted, and
+   * averaging an unobservable sample in with the observed ones would report it as
+   * a success it never was.
+   */
+  readonly extractionDegraded: boolean | undefined;
+  readonly commandDenied: boolean | undefined;
 };
 
 /** One provider request's timing, as the wire log records it. */
@@ -78,6 +98,64 @@ const recordTurn = async (
     schemaValid: probe.schemaValid,
     narrativeNonEmpty: probe.narrativeNonEmpty,
     choiceCount: probe.choiceCount,
+    choiceIds: probe.choiceIds,
+    commandExtracted: probe.commandExtracted,
+    extractionDegraded: probe.extractionDegraded,
+    commandDenied: probe.commandDenied,
+  };
+};
+
+/**
+ * Splits a scenario's provider requests by which C-401 call made them.
+ *
+ * The two calls are distinguished by whether the request asked for
+ * schema-constrained output, recorded from the request body — present on
+ * aborted requests too, which is the case that matters. Aggregating them hides
+ * the very thing issue #382 is about: a 6 s discarded extraction and a 4 s
+ * narrative look alike in a single median, but only one of them is wasted work.
+ */
+const summarizeByCall = async (
+  wire: WireWindow,
+  from: number,
+): Promise<Record<string, unknown>> => {
+  const slice = wire.slice(from);
+  await slice.settle();
+  const rows = slice.rows() as ReadonlyArray<{
+    readonly structured: boolean;
+    readonly durationMs: number;
+    readonly status: number;
+    readonly aborted?: boolean;
+    readonly promptTokens?: number;
+    readonly completionTokens?: number;
+  }>;
+  const describe = (group: typeof rows) => {
+    const durations = group.map((row) => row.durationMs);
+    const aborted = group.filter((row) => row.aborted === true).length;
+    return {
+      attempts: group.length,
+      failed: group.filter((row) => row.status >= 400).length,
+      // Issued, consumed provider time, and produced nothing. This is the
+      // number that shows whether the extraction path is viable at all.
+      aborted,
+      abortedMs: Math.round(
+        group
+          .filter((row) => row.aborted === true)
+          .reduce((total, row) => total + row.durationMs, 0),
+      ),
+      totalMs: Math.round(durations.reduce((total, value) => total + value, 0)),
+      minMs: durations.length === 0 ? null : Math.round(Math.min(...durations)),
+      maxMs: durations.length === 0 ? null : Math.round(Math.max(...durations)),
+      completionTokens: group.reduce((total, row) => total + (row.completionTokens ?? 0), 0),
+      promptTokens: group.reduce((total, row) => total + (row.promptTokens ?? 0), 0),
+      // Every aborted row is one discarded request, so `attempts - aborted` is
+      // the most a client could possibly have obtained. A viable path is one
+      // where this is close to `attempts`.
+      completed: group.length - aborted,
+    };
+  };
+  return {
+    narrative: describe(rows.filter((row) => row.structured !== true)),
+    extraction: describe(rows.filter((row) => row.structured === true)),
   };
 };
 
@@ -100,11 +178,41 @@ export const runProductionDialogueScenario = async (options: {
       ),
     );
   }
+  // An unobservable turn is reported as its own count so the success rate below
+  // can only ever be computed over turns that were actually observed.
+  const unobservable = turns.filter((turn) => turn.extractionDegraded === undefined).length;
   return {
     description:
       'A real player dialogue turn via NpcDialogueService.generateTurn — the streamed ' +
       '`dialogue` call plus the `envelope` extraction, as the player experiences it.',
     wire: await options.wire.summarize(from),
+    byCall: await summarizeByCall(options.wire, from),
+    extractionOutcome: {
+      turns: turns.length,
+      observed: turns.length - unobservable,
+      unobservable,
+      degraded: turns.filter((turn) => turn.extractionDegraded === true).length,
+      accepted: turns.filter((turn) => turn.extractionDegraded === false).length,
+      aiAuthoredChoices: turns.filter(
+        (turn) =>
+          turn.extractionDegraded === false &&
+          Array.isArray(turn.choiceIds) &&
+          !(
+            turn.choiceIds.length === 2 &&
+            turn.choiceIds[0] === 'talk' &&
+            turn.choiceIds[1] === 'leave'
+          ),
+      ).length,
+      deterministicFallbackChoices: turns.filter(
+        (turn) =>
+          Array.isArray(turn.choiceIds) &&
+          turn.choiceIds.length === 2 &&
+          turn.choiceIds[0] === 'talk' &&
+          turn.choiceIds[1] === 'leave',
+      ).length,
+      commandExtracted: turns.filter((turn) => turn.commandExtracted === true).length,
+      commandDeniedByPreconditions: turns.filter((turn) => turn.commandDenied === true).length,
+    },
     turns,
   };
 };
