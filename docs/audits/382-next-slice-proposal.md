@@ -4,6 +4,13 @@
 call-graph audit of the real production AI surface.
 **Date:** 2026-09-29
 
+> **Superseded for the contention question.** The `MAP_LOADED` prefetch A/B this
+> document proposes was run, after the #415 envelope fix, as a burst-WIDTH SWEEP
+> rather than a paired A/B. See
+> [`382-contention-remeasure-report.md`](382-contention-remeasure-report.md).
+> The call-graph findings below still stand; the "proposed next PR" section is
+> kept for the reasoning, not as a plan.
+
 ---
 
 ## The question #412 could not answer

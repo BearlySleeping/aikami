@@ -30,6 +30,7 @@
 //   bun run --cwd apps/e2e bench:ai-baseline
 //   bun run --cwd apps/e2e bench:ai-baseline -- --model ornith-1.5:9b --reps 5
 //   bun run --cwd apps/e2e bench:ai-baseline -- --label pr-411 --skip-cold
+//   bun run --cwd apps/e2e bench:ai-baseline -- --no-production --p2-widths 0,1,2,4 --p2-reps 16
 //
 // Requires: the client dev server (bun run herdr:start client) and an
 // OpenAI-compatible text provider. Default endpoint is a local Ollama.
@@ -39,11 +40,26 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { chromium, type Page, type Request as PwRequest, type Response } from 'playwright';
 import { EMULATOR_PORTS } from '../src/config';
+import { openCheckpoint } from './ai_baseline_checkpoint.ts';
+import { frameProbe, installFrameProbe } from './ai_baseline_frame_probe.ts';
 import type { DialogueTurnProbe, WireWindow } from './ai_baseline_production_scenarios.ts';
 import {
-  runPrefetchContentionScenario,
+  buildWidthOrder,
+  type ClientSpan,
+  runPrefetchWidthSweepScenario,
   runProductionDialogueScenario,
 } from './ai_baseline_production_scenarios.ts';
+import { renderMarkdown } from './ai_baseline_report.ts';
+import { runSyntheticScenarios } from './ai_baseline_synthetic_scenarios.ts';
+
+/**
+ * Formats a millisecond figure for the console summary.
+ *
+ * Duplicated from the report module rather than exported from it: presentation
+ * helpers and console helpers are different jobs, and one line of arithmetic
+ * is cheaper than coupling the harness to a renderer's internals.
+ */
+const ms = (value: unknown): string => (value === null ? 'not measured' : `${String(value)} ms`);
 
 // ── Configuration ──────────────────────────────────────────────────────────
 
@@ -57,9 +73,22 @@ const parseArgs = (
   reps: number;
   sweepSamples: number;
   contentionReps: number;
+  widthSweepWidths: readonly number[];
+  widthSweepReps: number;
+  backgroundCapMs: number;
   batchSize: number;
   label: string;
   skipCold: boolean;
+  /** Continue a sweep that was cut short, from its per-sample checkpoint. */
+  resumeP2: boolean;
+  /**
+   * Run ONLY the width sweep.
+   *
+   * A resume does not need the synthetic scenarios or P1 re-measured — they are
+   * not what the resumed run is about, and re-running them costs minutes of the
+   * same contended provider. The first invocation runs the full report.
+   */
+  p2Only: boolean;
   productionDialogue: boolean;
   productionContention: boolean;
   probeNpcId: string;
@@ -76,13 +105,28 @@ const parseArgs = (
     model: readFlag('model') ?? 'ornith-1.5:9b',
     reps: Number(readFlag('reps') ?? 5),
     sweepSamples: Number(readFlag('sweep-samples') ?? 7),
-    // The A/B needs more samples than the other scenarios to say anything: its
-    // effect size is small and its variance is large, so n=3 could not resolve
-    // it and the sign of the delta changed between runs.
-    contentionReps: Number(readFlag('p2-reps') ?? 10),
+    // The width sweep needs more samples per width than the other scenarios to
+    // say anything: the effect size is small and the variance is large, so n=3
+    // could not resolve it and the sign of the delta changed between runs.
+    //
+    // This is samples PER WIDTH — the total is widths x reps. The default is a
+    // multiple of the width count so the counterbalanced sequence closes whole
+    // blocks; with 4 widths, 12 reps = 48 samples = 12 blocks of 4.
+    contentionReps: Number(readFlag('p2-reps') ?? 12),
+    widthSweepWidths: (readFlag('p2-widths') ?? '0,1,2,4')
+      .split(',')
+      .map((value) => Number(value.trim()))
+      .filter((value) => Number.isInteger(value) && value >= 0),
+    widthSweepReps: Number(readFlag('p2-reps') ?? 12),
+    // How long a background burst is given to finish AFTER the interactive turn
+    // has already been measured. A burst that outlives this is reported as
+    // unfinished rather than quietly counted as complete.
+    backgroundCapMs: Number(readFlag('p2-bg-cap-ms') ?? 240_000),
     batchSize: Number(readFlag('batch') ?? 6),
     label: readFlag('label') ?? 'current',
     skipCold: argv.includes('--skip-cold'),
+    resumeP2: argv.includes('--p2-resume'),
+    p2Only: argv.includes('--p2-only'),
     // The production scenarios need authored NPCs, so they are opt-in: a
     // synthetic-only run must still work on a pack with no dialogue wired.
     productionDialogue: !argv.includes('--no-production'),
@@ -97,14 +141,27 @@ const parseArgs = (
     probeNpcId: readFlag('npc') ?? 'village_elder',
     probeNpcName: readFlag('npc-name') ?? 'Village Elder',
     // Burst width is configurable because it is a real production knob:
-    // `prefetchForNpcs` slices to NPC_MEMORY_MAP_PREFETCH_LIMIT (4). Only NPCs
-    // the player has actually talked to are prefetched, so the effective burst
-    // is also gated on conversation history.
-    prefetchNpcIds: (readFlag('prefetch-npcs') ?? 'village_elder,rollo_grasper')
+    // `prefetchForNpcs` sorts the map's remembered NPCs by `lastTalkedAt`, slices
+    // to `NPC_MEMORY_MAP_PREFETCH_LIMIT` (4) and then loops `_prefetchOpener`
+    // per record. Four is therefore the production MAXIMUM, read from
+    // `packages/shared/constants/src/lib/npc_memory.ts` at this commit.
+    //
+    // The pool deliberately EXCLUDES the dialogue probe NPC. Production does
+    // include the NPC a player is talking to, but keeping it out means every
+    // provider request in a measured window is unambiguously either background
+    // or interactive, decided by a MEASURED time boundary rather than by asking
+    // which NPC a prompt happened to mention.
+    prefetchNpcIds: (
+      readFlag('prefetch-npcs') ?? 'rollo_grasper,innkeeper_sella,smith_orra,cartographer_ivo'
+    )
       .split(',')
       .map((id) => id.trim())
       .filter((id) => id.length > 0),
-    prefetchNpcNames: JSON.parse(readFlag('prefetch-names') ?? '{"village_elder":"Village Elder"}'),
+    prefetchNpcNames: JSON.parse(
+      readFlag('prefetch-names') ??
+        '{"rollo_grasper":"Rollo the Grasper","innkeeper_sella":"Innkeeper Sella",' +
+          '"smith_orra":"Smith Orra","cartographer_ivo":"Cartographer Ivo"}',
+    ),
   };
 };
 
@@ -119,6 +176,16 @@ type WireCall = {
   readonly url: string;
   readonly status: number;
   readonly startedAtMs: number;
+  /**
+   * Wall clock from request to response HEADERS.
+   *
+   * For a STREAMED request that is time-to-first-byte, NOT the full call: an
+   * Ollama NDJSON narrative fires `response` when the stream opens, so this row
+   * measures the narrative's TTFT and silently under-reports its completion.
+   * Full per-call durations therefore come from the client's own telemetry
+   * spans, which record `totalMs` for the whole logical request. This row is
+   * still the authoritative record of REQUEST COUNT and of phase counters.
+   */
   readonly durationMs: number;
   readonly streamed: boolean;
   /**
@@ -161,6 +228,20 @@ type WireCall = {
    */
   readonly aborted?: boolean;
   readonly failureText?: string;
+  /**
+   * The reasoning-control field the request actually carried, verbatim.
+   *
+   * Recorded from the request body because the whole point of the #382
+   * contention re-measurement is to establish that the #415 envelope fix is
+   * ACTIVE in the measured calls. Reading it off the body makes that a
+   * measurement; assuming it from the source would make it a claim.
+   *
+   * `undefined` means the field was absent, which is a distinct fact from
+   * `false` and from a string: a route that silently dropped the control would
+   * render as "no reasoning field" rather than as "reasoning off".
+   */
+  readonly thinkField?: unknown;
+  readonly reasoningEffortField?: unknown;
 };
 
 /**
@@ -266,6 +347,40 @@ const attachWireCapture = (page: Page, endpointHost: string, sink: WireCall[]): 
   const bodyRead = new WeakSet<object>();
   /** Requests that carried a schema constraint, i.e. C-401 call 2. */
   const structuredRequests = new Map<PwRequest, boolean>();
+  /** The reasoning-control fields each request carried, verbatim. */
+  const reasoningFields = new Map<PwRequest, { think?: unknown; effort?: unknown }>();
+
+  const readReasoningFields = (request: PwRequest): { think?: unknown; effort?: unknown } => {
+    const body = request.postDataJSON() as Record<string, unknown> | null;
+    if (body === null || typeof body !== 'object') {
+      return {};
+    }
+    const record: { think?: unknown; effort?: unknown } = {};
+    if ('think' in body) {
+      record.think = body.think;
+    }
+    if ('reasoning_effort' in body) {
+      record.effort = body.reasoning_effort;
+    }
+    return record;
+  };
+
+  /** Copies the recorded reasoning fields onto a wire row. */
+  const applyReasoning = (
+    request: PwRequest,
+    row: { -readonly [K in keyof WireCall]: WireCall[K] },
+  ): void => {
+    const fields = reasoningFields.get(request);
+    if (fields === undefined) {
+      return;
+    }
+    if ('think' in fields) {
+      row.thinkField = fields.think;
+    }
+    if ('effort' in fields) {
+      row.reasoningEffortField = fields.effort;
+    }
+  };
 
   /**
    * Whether a provider request asked for schema-constrained output.
@@ -310,6 +425,7 @@ const attachWireCapture = (page: Page, endpointHost: string, sink: WireCall[]): 
       // `streamed: false` regardless of how it was issued, and a buffered
       // narrative looks identical to a structured extraction.
       structuredRequests.set(request, carriesSchemaConstraint(request));
+      reasoningFields.set(request, readReasoningFields(request));
     }
   });
 
@@ -337,6 +453,10 @@ const attachWireCapture = (page: Page, endpointHost: string, sink: WireCall[]): 
       aborted: true,
       failureText: request.failure()?.errorText ?? 'unknown',
     } as WireCall);
+    const abortedRow = sink[sink.length - 1] as {
+      -readonly [K in keyof WireCall]: WireCall[K];
+    };
+    applyReasoning(request, abortedRow);
   });
 
   page.on('response', (response: Response) => {
@@ -364,6 +484,7 @@ const attachWireCapture = (page: Page, endpointHost: string, sink: WireCall[]): 
       streamed,
       structured: structuredRequests.get(response.request()) ?? false,
     };
+    applyReasoning(response.request(), row);
 
     if (!streamed) {
       const target = row as object;
@@ -427,9 +548,6 @@ const wireSettler = new WeakMap<WireCall[], () => Promise<void>>();
 
 // ── Scenarios ──────────────────────────────────────────────────────────────
 
-/** The production `extractStructure` surface the envelope task uses. */
-const SYSTEM_PROMPT = 'Summarize the scene for a JRPG. JSON only.';
-
 /**
  * The player line the production dialogue scenario sends.
  *
@@ -437,21 +555,6 @@ const SYSTEM_PROMPT = 'Summarize the scene for a JRPG. JSON only.';
  * dialogue rather than a prompt engineered to be cheap or fast.
  */
 const PLAYER_LINE = 'What happened to the caravan that never reached the mill?';
-
-const SCENE_SENTENCE =
-  'A hooded stranger steps into the tavern and asks about the missing caravan. ' +
-  'The innkeeper goes quiet. Return a one-sentence summary and the mood. ';
-
-/**
- * Builds a prompt of a chosen approximate character length.
- *
- * `identity` and `repeats` are separate on purpose. An earlier version folded
- * them into one index, which silently clamped every sweep point to the same
- * size and made the context-length scenario a flat line that looked like a
- * valid measurement of nothing.
- */
-const dialoguePrompt = (options: { identity: number; repeats: number }): string =>
-  `Turn ${options.identity}. ${SCENE_SENTENCE.repeat(options.repeats)}`;
 
 const percentile = (values: readonly number[], fraction: number): number | undefined => {
   if (values.length === 0) {
@@ -793,225 +896,37 @@ const collectEnvironment = async (): Promise<Record<string, unknown>> => {
       .then((response) => response.text())
       .then((body) => body.slice(0, 200).trim())
       .catch(() => 'unavailable'),
+    // Model residency. `/api/ps` is the only place Ollama reports whether the
+    // model is actually loaded and on what — a cold vs warm run is a different
+    // experiment, and `size_vram === 0` is what tells them apart.
+    ollamaResidentModels: await fetch(`${ollamaBase}/api/ps`)
+      .then((response) => response.json() as Promise<Record<string, unknown>>)
+      .catch(() => undefined),
+    // Not exposed by any Ollama endpoint; recorded so the reader knows whether
+    // the default applied rather than being left to assume it.
+    ollamaNumThreadEnv: process.env.OLLAMA_NUM_THREADS ?? 'unset (server default)',
     cpuModel: sh("lscpu | sed -n 's/^Model name: *//p' | head -1"),
     cpuCores: sh('nproc'),
     totalMemoryGb: sh('awk \'/MemTotal/ {printf "%.1f", $2/1048576}\' /proc/meminfo'),
-    gpu: sh("lspci 2>/dev/null | grep -iE 'vga|3d|display' | head -2"),
+    // 🔴 GPU identity is recorded from BOTH lspci and nvidia-smi, and the
+    // provider's own residency record is captured above. A single source is not
+    // enough: on this host `lspci` reports no display adapter at all while
+    // `nvidia-smi` reports a fully loaded compute GPU, so a report that trusted
+    // lspci alone would describe the machine as CPU-only while the provider ran
+    // on a GPU. Which device served the tokens changes what a contention
+    // number means, so the reader is given both and the provider's own view.
+    gpu: sh('nvidia-smi --query-gpu=name,memory.total --format=csv,noheader 2>/dev/null | head -1'),
+    gpuPci: sh("lspci 2>/dev/null | grep -iE 'vga|3d|display' | head -2"),
+    gpuComputeApps: sh(
+      'nvidia-smi --query-compute-apps=process_name,used_memory --format=csv,noheader 2>/dev/null',
+    ),
     repetitions: CONFIG.reps,
     sweepSamples: CONFIG.sweepSamples,
-    contentionReps: CONFIG.contentionReps,
+    contentionReps: CONFIG.widthSweepReps,
+    widthSweepWidths: CONFIG.widthSweepWidths,
+    backgroundCapMs: CONFIG.backgroundCapMs,
     batchSize: CONFIG.batchSize,
   };
-};
-
-// ── Report rendering ───────────────────────────────────────────────────────
-
-/** The markdown header: hardware and model identity for one run. */
-const renderHeader = (report: Record<string, unknown>): string[] => {
-  const environment = report.environment as Record<string, unknown>;
-  const gigabytes = (Number(environment.modelBytesOnDisk) || 0) / 1e9;
-  return [
-    `# #382 AI baseline — \`${String(report.label)}\``,
-    '',
-    `**Commit:** \`${String(environment.gitSha)}\` (${String(environment.gitDescribe)})  `,
-    `**Measured:** ${String(environment.measuredAt)}  `,
-    `**Endpoint:** \`${String(environment.endpoint)}\`  `,
-    `**Model:** \`${String(environment.model)}\` — ${String(environment.modelParameters)} `,
-    `${String(environment.modelQuantization)}, ctx ${String(environment.modelContextLength)}, `,
-    `${gigabytes.toFixed(1)}GB on disk  `,
-    `**Hardware:** ${String(environment.cpuModel)} × ${String(environment.cpuCores)} cores, `,
-    `${String(environment.totalMemoryGb)}GB RAM  `,
-    `**GPU:** ${String(environment.gpu) || 'none detected'}  `,
-    `**Repetitions:** ${String(environment.repetitions)} sequential, ` +
-      `${String(environment.sweepSamples)} per context point, batch ${String(environment.batchSize)}`,
-  ];
-};
-
-/**
- * Renders one scenario's wire summary.
- *
- * "0 cached tokens" and "cached tokens are not reported on this route" are
- * different claims and only one can be true. The native Ollama chat response
- * carries no cached-token field at all, so a `0` there would be a fabricated
- * measurement of something the provider never said.
- */
-/** Formats a millisecond figure, keeping "not measured" visibly distinct. */
-const ms = (value: unknown): string => (value === null ? 'not measured' : `${String(value)} ms`);
-
-/**
- * Same, for a figure that is `undefined` when the provider did not report it.
- *
- * "unknown" is the honest rendering. Zero would assert that the phase took no
- * time, which is a claim about a counter the provider never sent.
- */
-const known = (value: unknown): string =>
-  value === undefined || value === null
-    ? 'unknown (provider reported none)'
-    : `${String(value)} ms`;
-
-const renderWireTable = (summary: Record<string, unknown>): string[] => {
-  const shapes = (summary.usageShapes as string[] | undefined) ?? [];
-  const cacheCell = shapes.includes('openai')
-    ? String(summary.totalCachedTokens)
-    : 'unobservable — provider reported no cached-token field on this route';
-  return [
-    '| metric | value |',
-    '|---|---|',
-    `| provider HTTP requests | ${String(summary.providerRequests)} |`,
-    `| median | ${ms(summary.medianMs)} |`,
-    `| p95 | ${ms(summary.p95Ms)} |`,
-    `| prompt tokens | ${String(summary.totalPromptTokens)} |`,
-    `| completion tokens | ${String(summary.totalCompletionTokens)} |`,
-    `| provider-cached prompt tokens | ${cacheCell} |`,
-    `| responses with token counts | ${String(summary.rowsWithUsage)} |`,
-    `| token accounting shape | ${shapes.join(', ') || 'none'} |`,
-    `| failed requests | ${String(summary.failed)} |`,
-    `| aborted requests (provider time wasted) | ${String(summary.aborted ?? 0)} |`,
-    `| aborted request ms | ${known(summary.abortedMs ?? 0)} |`,
-    `| provider model-load ms | ${known(summary.providerLoadMs)} |`,
-    `| provider prefill ms | ${known(summary.providerPrefillMs)} |`,
-    `| provider generation ms | ${known(summary.providerGenerationMs)} |`,
-    `| provider total ms | ${known(summary.providerTotalMs)} |`,
-    `| client total ms | ${known(summary.clientTotalMs)} |`,
-    `| client overhead ms (queue + http + parse) | ${known(summary.clientOverheadMs)} |`,
-  ];
-};
-
-/** Renders the client's own view of a scenario, when the seam reported one. */
-const renderClientRows = (extra: Record<string, unknown> | undefined): string[] => {
-  if (extra === undefined) {
-    return [];
-  }
-  return Object.entries(extra).map(([key, value]) => `| client ${key} | ${String(value)} |`);
-};
-
-/** Renders the per-size breakdown of the context sweep, when present. */
-const renderSizeRows = (bySize: Record<string, unknown>[] | undefined): string[] => {
-  if (bySize === undefined) {
-    return [];
-  }
-  return [
-    '',
-    '| prompt repeats | median | prompt tok/call | completion tok/call |',
-    '|---|---|---|---|',
-    ...bySize.map(
-      (point) =>
-        `| ${String(point.promptRepeats)} | ${ms(point.medianMs)} | ` +
-        `${String(point.promptTokensPerCall)} | ${String(point.completionTokensPerCall)} |`,
-    ),
-  ];
-};
-
-/** Per-sample turn rows, for the production dialogue scenario. */
-const renderTurnRows = (turns: Record<string, unknown>[] | undefined): string[] => {
-  if (turns === undefined) {
-    return [];
-  }
-  return [
-    '',
-    '| # | wall clock | ttft | source | schema valid | narrative non-empty | choices |',
-    '|---|---|---|---|---|---|---|',
-    ...turns.map(
-      (turn, index) =>
-        `| ${index + 1} | ${known(turn.wallClockMs)} | ${known(turn.ttftMs)} | ` +
-        `${String(turn.source)} | ${String(turn.schemaValid)} | ` +
-        `${String(turn.narrativeNonEmpty)} | ${String(turn.choiceCount)} |`,
-    ),
-  ];
-};
-
-/** The A/B contention comparison, with the delta stated explicitly. */
-const renderContentionRows = (scenario: Record<string, unknown>): string[] => {
-  const quiet = scenario.quietTurns as Record<string, unknown>[] | undefined;
-  const busy = scenario.overlappedTurns as Record<string, unknown>[] | undefined;
-  if (quiet === undefined || busy === undefined) {
-    return [];
-  }
-  const quietMedian = percentile(
-    quiet.map((row) => Number(row.wallClockMs)),
-    0.5,
-  );
-  const busyMedian = percentile(
-    busy.map((row) => Number(row.wallClockMs)),
-    0.5,
-  );
-  const median = (rows: Record<string, unknown>[]): number | undefined =>
-    percentile(
-      rows.flatMap((row) => (row.ttftMs === undefined ? [] : [Number(row.ttftMs)])),
-      0.5,
-    );
-  const spread = (rows: Record<string, unknown>[]): number | undefined =>
-    percentile(
-      rows.flatMap((row) => (row.ttftMs === undefined ? [] : [Number(row.ttftMs)])),
-      1,
-    );
-  const quietTtft = median(quiet);
-  const busyTtft = median(busy);
-  const describe = (a: number | undefined, b: number | undefined): string => {
-    if (a === undefined || b === undefined) {
-      return 'unknown';
-    }
-    const delta = b - a;
-    return `${delta >= 0 ? '+' : ''}${delta} ms (${((b / Math.max(1, a) - 1) * 100).toFixed(0)}%)`;
-  };
-  const totalBackground = busy.reduce(
-    (total, row) => total + Number(row.backgroundSummarizationRequests ?? 0),
-    0,
-  );
-  const invalid = busy.filter((row) => row.valid !== true).length;
-  return [
-    '',
-    `**Samples: ${String(busy.length)}, of which ${String(invalid)} invalid. ` +
-      `Background summarization calls actually recorded: ${String(totalBackground)} ` +
-      `(mean ${(totalBackground / Math.max(1, busy.length)).toFixed(1)} per sample).**`,
-    '',
-    `**Interactive dialogue, total wall clock:** ${String(quietMedian)} ms quiet vs ` +
-      `${String(busyMedian)} ms overlapping the burst — delta ` +
-      `${describe(quietMedian, busyMedian)}.`,
-    '',
-    `**Time to first token (the contention-sensitive metric):** ${String(quietTtft)} ms quiet ` +
-      `vs ${String(busyTtft)} ms overlapping — delta ${describe(quietTtft, busyTtft)}.`,
-    '',
-    `Quiet TTFT spread ${String(spread(quiet))} ms, overlapped ${String(spread(busy))} ms. ` +
-      'A delta smaller than the spread is not resolvable at this sample size.',
-    '',
-    '| # | quiet turn | quiet ttft | overlapping turn | overlapping ttft | NPCs offered | background calls | still running at dialogue start | valid |',
-    '|---|---|---|---|---|---|---|---|---|',
-    ...quiet.map(
-      (row, index) =>
-        `| ${index + 1} | ${known(row.wallClockMs)} | ${known(row.ttftMs)} | ` +
-        `${known(busy[index]?.wallClockMs)} | ${known(busy[index]?.ttftMs)} | ` +
-        `${String(busy[index]?.burstCandidates ?? '?')} | ` +
-        `${String(busy[index]?.backgroundSummarizationRequests ?? '?')} | ` +
-        `${String(busy[index]?.backgroundRequestsStillRunningAtDialogueStart ?? '?')} | ` +
-        `${String(busy[index]?.valid ?? '?')} |`,
-    ),
-  ];
-};
-
-const renderMarkdown = (report: Record<string, unknown>): string => {
-  const scenarios = report.scenarios as Record<string, Record<string, unknown>>;
-  const lines: string[] = [...renderHeader(report), '', '## Scenarios', ''];
-
-  for (const [id, scenario] of Object.entries(scenarios)) {
-    // The A/B scenario aggregates per-sample, so a single flat table would be
-    // meaningless for it.
-    const isContention = scenario.quietTurns !== undefined;
-    lines.push(`### ${id}`, '', `${String(scenario.description)}`, '');
-    if (!isContention) {
-      lines.push(
-        ...renderWireTable(scenario.wire as Record<string, unknown>),
-        ...renderClientRows(scenario.client as Record<string, unknown> | undefined),
-        ...renderSizeRows(scenario.bySize as Record<string, unknown>[] | undefined),
-        ...renderTurnRows(scenario.turns as Record<string, unknown>[] | undefined),
-        '',
-      );
-      continue;
-    }
-    lines.push(...renderContentionRows(scenario), '');
-  }
-
-  return `${lines.join('\n')}\n`;
 };
 
 // ── Production scenario wiring ──────────────────────────────────────────────
@@ -1088,54 +1003,121 @@ const runProductionBurst = async (
  * rather than re-derived per scenario.
  */
 /**
- * Counts client telemetry spans carrying one task.
+ * Counts the client's own telemetry spans for one task, recorded AFTER a cursor.
  *
  * Read from the EXISTING telemetry buffer rather than a second instrumentation
- * path. Counting by `task` is what makes the background fan-out exact: a wire
- * count could not distinguish a background `summarization` call from a
- * `dialogue` call inside the same window.
+ * path, and counted by MONOTONIC ID rather than by buffer total.
+ *
+ * 🔴 Why the cursor and not a total. `textTelemetryService` is a 100-entry ring
+ * buffer. Past 100 calls in a run, "how many spans carry task X" stops growing
+ * — a new span evicts an old one — so a before/after delta of two such totals
+ * reads ZERO for a burst that demonstrably fired, and reports it as a sample
+ * with no contention. That is the exact failure the previous harness made
+ * (documented in the #413 report) and it must not be reintroduced. Ids are
+ * monotonic, so counting spans above a cursor is eviction-independent.
  */
-const countSpans = async (page: Page, task: string): Promise<number> =>
-  (await page.evaluate((wanted) => {
-    const seam = (
-      window as unknown as {
-        __AIKAMI_TEST__?: { getTextTelemetry?(): { spans: ReadonlyArray<{ task?: string }> } };
-      }
-    ).__AIKAMI_TEST__;
-    const spans = seam?.getTextTelemetry?.().spans ?? [];
-    return spans.filter((span) => span.task === wanted).length;
-  }, task)) as number;
+const countSpansSince = async (page: Page, task: string, cursor: number): Promise<number> =>
+  (await page.evaluate(
+    (input) => {
+      const seam = (
+        window as unknown as {
+          __AIKAMI_TEST__?: {
+            getTextTelemetry?(): { spans: ReadonlyArray<{ id?: number; task?: string }> };
+          };
+        }
+      ).__AIKAMI_TEST__;
+      const spans = seam?.getTextTelemetry?.().spans ?? [];
+      return spans.filter((span) => (span.id ?? 0) > input.cursor && span.task === input.task)
+        .length;
+    },
+    { task, cursor },
+  )) as number;
 
 /**
- * Waits for background spans to land and reports how many arrived.
+ * Waits for a background burst to finish landing, and reports how many calls
+ * actually arrived.
  *
  * The NPC opener refresh is fire-and-forget, so after the interactive turn
  * finishes some of its calls may not yet be recorded. This waits for them
  * AFTER the interactive measurement, so it cannot contaminate dialogue timing.
- * A bounded wait, because a call that never arrives is itself the answer.
+ *
+ * The wait ends on STABILITY — the count holding steady across consecutive polls
+ * once the expected fan-out has been reached — not on a fixed sleep, so a slow
+ * burst is waited out and a fast one is not padded. A burst that never reaches
+ * the expected fan-out still returns, with whatever did land, because a burst
+ * that did not fire is itself the finding.
  */
-const awaitSummarizationSpans = async (page: Page, before: number): Promise<number> => {
-  for (let attempt = 0; attempt < 40; attempt++) {
-    const total = await countSpans(page, 'summarization');
-    if (total > before) {
-      // Give any sibling call a brief chance to land too, so the count is the
-      // burst's fan-out rather than "however many happened to be first".
-      await new Promise((done) => setTimeout(done, 250));
-      return (await countSpans(page, 'summarization')) - before;
-    }
-    await new Promise((done) => setTimeout(done, 250));
+const settleBackground = async (
+  page: Page,
+  task: string,
+  cursor: number,
+  expected: number,
+  capMs: number,
+): Promise<number> => {
+  if (expected === 0) {
+    return 0;
   }
-  return (await countSpans(page, 'summarization')) - before;
+  const deadline = Date.now() + capMs;
+  let previous = -1;
+  let stablePolls = 0;
+  while (Date.now() < deadline) {
+    const total = await countSpansSince(page, task, cursor);
+    if (total === previous) {
+      stablePolls += 1;
+    } else {
+      stablePolls = 0;
+    }
+    if (total >= expected && stablePolls >= 2) {
+      return total;
+    }
+    previous = total;
+    await new Promise((done) => setTimeout(done, 400));
+  }
+  return await countSpansSince(page, task, cursor);
 };
+
+/** The highest telemetry span id currently buffered, used as a window cursor. */
+const telemetryCursor = async (page: Page): Promise<number> =>
+  (await page.evaluate(() => {
+    const seam = (
+      window as unknown as {
+        __AIKAMI_TEST__?: { getTextTelemetry?(): { spans: ReadonlyArray<{ id?: number }> } };
+      }
+    ).__AIKAMI_TEST__;
+    const spans = seam?.getTextTelemetry?.().spans ?? [];
+    return spans.reduce((max, span) => Math.max(max, span.id ?? 0), 0);
+  })) as number;
+
+/**
+ * Reads the client's own telemetry spans recorded after a cursor.
+ *
+ * The second, independent source. The wire log proves how many HTTP requests
+ * went out; this proves how many LOGICAL calls the client believes it made,
+ * with the per-call `totalMs` the wire cannot give for a streamed request. When
+ * the two counts disagree the disagreement is the finding, not a rounding error.
+ */
+const spansAfter = async (page: Page, cursor: number): Promise<readonly ClientSpan[]> =>
+  (await page.evaluate((after) => {
+    const seam = (
+      window as unknown as {
+        __AIKAMI_TEST__?: { getTextTelemetry?(): { spans: unknown[] } };
+      }
+    ).__AIKAMI_TEST__;
+    const spans = (seam?.getTextTelemetry?.().spans ?? []) as ReadonlyArray<{ id?: number }>;
+    // The buffer is newest-first, so it is reversed into call order here rather
+    // than at every consumer.
+    return spans.filter((span) => (span.id ?? 0) > after).sort((a, b) => (a.id ?? 0) - (b.id ?? 0));
+  }, cursor)) as readonly ClientSpan[];
 
 const productionWire = (): WireWindow => ({
   mark: wireMark,
   slice: wireSlice,
   summarize: (from: number) => summarizeWire(wireSlice(from)),
-  rowsBefore: (from: number, boundaryMs: number) =>
-    wireLog.slice(from).filter((row) => row.startedAtMs <= boundaryMs),
-  countSpans,
-  awaitSummarizationSpans,
+  rowsFrom: (from: number) => wireLog.slice(from),
+  countSpansSince,
+  settleBackground,
+  telemetryCursor,
+  spansAfter,
   runTurn: runProductionTurn,
   prepareBurst: prepareProductionBurst,
   runBurst: runProductionBurst,
@@ -1216,173 +1198,25 @@ const main = async (): Promise<void> => {
   // Routing is only recorded once a call has actually resolved, so this is
   // read at the END of the run rather than here.
 
-  // ── S1: cold start (model not resident) ──────────────────────────────
-  if (!CONFIG.skipCold) {
-    const ollamaBase = CONFIG.endpoint.replace(/\/v1\/?$/, '');
-    await fetch(`${ollamaBase}/api/generate`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ model: CONFIG.model, keep_alive: 0 }),
-    }).catch(() => undefined);
-    console.log('→ S1 cold start (model evicted) …');
-    const from = markStart();
-    const batch = await runCheckedBatch(
-      page,
-      {
-        count: 1,
-        prompt: dialoguePrompt({ identity: 1, repeats: 1 }),
-        systemPrompt: SYSTEM_PROMPT,
-        schemaName: 'SceneEnvelope',
-      },
-      {
-        scenario: 'S1 cold-start',
-        detail: 'the model was just evicted, so a failure here is a provider or routing problem',
-      },
-    );
-    scenarios['S1 cold-start'] = {
-      description: 'First call after evicting the model: load + prefill + generate.',
-      wire: await summarizeWire(slice(from)),
-      client: { wallClockMs: Math.round(batch.wallClockMs) },
-    };
-  }
-
-  // ── S2: warm sequential (the ordinary turn) ──────────────────────────
-  console.log(`→ S2 warm sequential ×${CONFIG.reps} …`);
-  {
-    const from = markStart();
-    const wallClock: number[] = [];
-    for (let index = 0; index < CONFIG.reps; index++) {
-      const batch = await runCheckedBatch(
+  // ── S1–S5: synthetic scenarios (the #411 coalescing axis) ────────────
+  if (!CONFIG.p2Only) {
+    Object.assign(
+      scenarios,
+      await runSyntheticScenarios({
         page,
-        {
-          count: 1,
-          prompt: dialoguePrompt({ identity: index + 2, repeats: 1 }),
-          systemPrompt: SYSTEM_PROMPT,
-          schemaName: 'SceneEnvelope',
-        },
-        { scenario: `S2 warm-sequential call ${index + 1}`, detail: 'warm model, single call' },
-      );
-      wallClock.push(batch.wallClockMs);
-    }
-    scenarios['S2 warm-sequential'] = {
-      description: 'Sequential distinct calls — the shape of ordinary play.',
-      wire: await summarizeWire(slice(from)),
-      client: {
-        callsSucceeded: `${CONFIG.reps}/${CONFIG.reps}`,
-        clientMedianMs: Math.round(percentile(wallClock, 0.5) ?? 0),
-      },
-    };
-  }
-
-  // ── S3: context-length sweep (prefill scaling) ───────────────────────
-  console.log('→ S3 context sweep …');
-  {
-    const from = markStart();
-    const rows: Record<string, unknown>[] = [];
-    // Each point is repeated and MEDIANED. A single sample per size on a 9B
-    // CPU model is dominated by decode noise — an early run produced a
-    // non-monotonic curve that looked like a real measurement of nothing.
-    for (const repeats of [1, 4, 16, 64]) {
-      const pointFrom = markStart();
-      for (let sample = 0; sample < CONFIG.sweepSamples; sample++) {
-        await runCheckedBatch(
-          page,
-          {
-            count: 1,
-            // Identity varies per sample so the provider's own prefix cache is
-            // not what is being timed; the SIZE is the variable under test.
-            prompt: dialoguePrompt({ identity: 1000 + repeats * 10 + sample, repeats }),
-            systemPrompt: SYSTEM_PROMPT,
-            schemaName: 'SceneEnvelope',
-          },
-          { scenario: `S3 context-sweep x${repeats}`, detail: 'warm model, single call' },
-        );
-      }
-      const point = await summarizeWire(slice(pointFrom));
-      const requestCount = point.providerRequests as number;
-      rows.push({
-        promptRepeats: repeats,
-        samplesPerPoint: CONFIG.sweepSamples,
-        // Per-call figures, so a changing request count cannot quietly inflate
-        // a "cost" column on a sweep that is meant to isolate one variable.
-        promptTokensPerCall: Math.round(
-          (point.totalPromptTokens as number) / Math.max(1, requestCount),
-        ),
-        completionTokensPerCall: Math.round(
-          (point.totalCompletionTokens as number) / Math.max(1, requestCount),
-        ),
-        ...point,
-      });
-    }
-    scenarios['S3 context-sweep'] = {
-      description: 'Growing prompt against a warm model — prefill scaling.',
-      wire: await summarizeWire(slice(from)),
-      bySize: rows,
-    };
-  }
-
-  // ── S4: identical concurrent structured calls (the #411 axis) ─────────
-  console.log(`→ S4 identical-concurrent ×${CONFIG.batchSize} …`);
-  {
-    const from = markStart();
-    const client = await runCheckedBatch(
-      page,
-      {
-        count: CONFIG.batchSize,
-        prompt: dialoguePrompt({ identity: 3, repeats: 1 }),
-        systemPrompt: SYSTEM_PROMPT,
-        schemaName: 'SceneEnvelope',
-      },
-      {
-        scenario: 'S4 identical-concurrent',
-        detail: 'a partial failure here would understate the coalescing benefit',
-      },
+        endpoint: CONFIG.endpoint,
+        model: CONFIG.model,
+        reps: CONFIG.reps,
+        sweepSamples: CONFIG.sweepSamples,
+        batchSize: CONFIG.batchSize,
+        includeColdStart: !CONFIG.skipCold,
+        markStart,
+        slice,
+        summarizeWire,
+        runCheckedBatch,
+        log: console.log,
+      }),
     );
-    const scenario = slice(from);
-    scenarios['S4 identical-concurrent'] = {
-      description:
-        `${CONFIG.batchSize} byte-identical structured calls fired at once. Provider ` +
-        'requests below the requested count mean the client collapsed them.',
-      wire: await summarizeWire(scenario),
-      client: {
-        requestedCalls: client.requestedCalls,
-        succeededCalls: client.succeededCalls,
-        wallClockMs: Math.round(client.wallClockMs),
-        spansRecorded: client.sampleResult.spansRecorded,
-        coalescedSpans: client.sampleResult.coalescedSpans,
-      },
-    };
-  }
-
-  // ── S5: distinct concurrent calls (local throughput) ─────────────────
-  console.log(`→ S5 distinct-concurrent ×${CONFIG.batchSize} …`);
-  {
-    const from = markStart();
-    const startedAt = Date.now();
-    const outcomes = await Promise.all(
-      Array.from({ length: CONFIG.batchSize }, (_, index) =>
-        runCheckedBatch(
-          page,
-          {
-            count: 1,
-            prompt: dialoguePrompt({ identity: index + 20, repeats: 1 }),
-            systemPrompt: SYSTEM_PROMPT,
-            schemaName: 'SceneEnvelope',
-          },
-          { scenario: `S5 distinct-concurrent call ${index + 1}`, detail: 'contention test' },
-        ),
-      ),
-    );
-    scenarios['S5 distinct-concurrent'] = {
-      description:
-        `${CONFIG.batchSize} DIFFERENT calls at once. The issue warns against assuming ` +
-        'more parallel local requests are faster; sum-of-call-time vs wall clock shows it.',
-      wire: await summarizeWire(slice(from)),
-      client: {
-        wallClockMs: Date.now() - startedAt,
-        callsSucceeded: `${outcomes.reduce((sum, r) => sum + r.succeededCalls, 0)}/${CONFIG.batchSize}`,
-      },
-    };
   }
 
   // ── P1/P2: production scenarios ─────────────────────────────────────
@@ -1391,7 +1225,7 @@ const main = async (): Promise<void> => {
   // #411's coalescer guards, but it is NOT what a player waits on: a real turn
   // goes through `NpcDialogueService.generateTurn`, which performs the C-401
   // two-call split and then applies the result.
-  if (CONFIG.productionDialogue) {
+  if (CONFIG.productionDialogue && !CONFIG.p2Only) {
     console.log(`→ P1 production dialogue turn ×${CONFIG.reps} …`);
     scenarios['P1 production-dialogue'] = await runProductionDialogueScenario({
       page,
@@ -1399,16 +1233,40 @@ const main = async (): Promise<void> => {
       playerLine: PLAYER_LINE,
       repetitions: CONFIG.reps,
     });
+  }
 
-    if (CONFIG.productionContention) {
-      console.log('→ P2 prefetch-contention A/B …');
-      scenarios['P2 prefetch-contention-A/B'] = await runPrefetchContentionScenario({
+  // P2 is gated on `productionContention` alone and NOT on `p2Only`: a resumed
+  // sweep runs nothing else, so gating it on the full report would make
+  // `--p2-only --p2-resume` silently measure nothing.
+  if (CONFIG.productionContention) {
+    {
+      await installFrameProbe(page);
+      const checkpoint = openCheckpoint({
+        dir: OUT_DIR,
+        order: buildWidthOrder(CONFIG.widthSweepWidths, CONFIG.widthSweepReps),
+        widths: CONFIG.widthSweepWidths,
+        repetitionsPerWidth: CONFIG.widthSweepReps,
+        resume: CONFIG.resumeP2,
+        onResume: (reused) => {
+          console.log(`→ resuming P2 from ${String(reused)} checkpointed samples`);
+        },
+      });
+      console.log(
+        `→ P2 prefetch-contention width sweep ${CONFIG.widthSweepWidths.join('/')} ` +
+          `×${CONFIG.widthSweepReps} …`,
+      );
+      scenarios['P2 prefetch-width-sweep'] = await runPrefetchWidthSweepScenario({
         page,
         wire: productionWire(),
         playerLine: PLAYER_LINE,
-        repetitions: CONFIG.contentionReps,
-        npcIds: CONFIG.prefetchNpcIds,
+        npcPool: CONFIG.prefetchNpcIds,
         npcNames: CONFIG.prefetchNpcNames,
+        widths: CONFIG.widthSweepWidths,
+        repetitions: CONFIG.widthSweepReps,
+        backgroundCapMs: CONFIG.backgroundCapMs,
+        frames: frameProbe(),
+        priorSamples: checkpoint.priorSamples,
+        onSample: checkpoint.onSample,
       });
     }
   }
