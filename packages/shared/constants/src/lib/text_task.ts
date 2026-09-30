@@ -6,7 +6,7 @@
 // the connection params. This is the single source of truth for "how should
 // this kind of call be configured".
 
-import type { AiRole, TextParams } from '@aikami/types';
+import type { AiReasoning, AiRole, TextParams } from '@aikami/types';
 
 /**
  * Baseline generation params used when a task resolves to a connection that
@@ -75,6 +75,26 @@ export type TextTaskPreset = {
   localFirst: boolean;
   /** Whether this task is a candidate for a batched combined analysis call. */
   batchable: boolean;
+  /**
+   * Whether this task wants the model's reasoning channel.
+   *
+   * `undefined` means "the provider's default", which is what every
+   * player-facing creative task wants — narrative quality is the product, and
+   * reasoning is often part of producing it.
+   *
+   * `'none'` is for bounded MECHANICAL extraction: a task whose entire output
+   * is a short JSON object derived from text the model has already produced.
+   * There the reasoning is pure cost — measured on the local configuration
+   * (issue #382, C-401 call 2), a reasoning model spent 6 000+ ms and 1 500+
+   * tokens on an envelope whose answer is 120 tokens of JSON, and returned
+   * nothing inside the budget. With the channel off the same request returned
+   * valid JSON in a median of 2.4 s.
+   *
+   * A connection may override this (`TextParams.reasoning`); see
+   * `mergeTaskPresetParams`. The preference is advisory: a provider that
+   * cannot honour it ignores it.
+   */
+  reasoning?: AiReasoning;
   /**
    * End-to-end budget in ms for ONE logical request, or `undefined` for work
    * whose deadline is the encounter/campaign lifetime rather than a player's
@@ -172,6 +192,13 @@ export const TEXT_TASK_PRESETS: Record<TextTask, TextTaskPreset> = {
     batchable: false,
     // The player is waiting to see their choices; a late envelope is a stall.
     budgetMs: 6_000,
+    // This is metadata extraction from a narrative call 1 already streamed and
+    // the client already shows. The reasoning channel is what spent the whole
+    // 6 000 ms: 0 of 5 measured extractions completed before #382 turned it
+    // off, at 1 500+ median completion tokens for a ~120-token answer.
+    // `dialogue` and `narration` deliberately keep the default — this must not
+    // touch player-facing prose.
+    reasoning: 'none',
   },
   summarization: {
     role: 'summarization',

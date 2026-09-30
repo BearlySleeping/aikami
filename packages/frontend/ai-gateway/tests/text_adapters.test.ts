@@ -713,3 +713,199 @@ describe('OpenAI-compatible text adapter — structured extraction', () => {
     }
   });
 });
+
+describe('OpenAI-compatible text adapter — reasoning control', () => {
+  const params: AiModeResolution['params'] = {
+    temperature: 0.3,
+    topP: 0.9,
+    topK: 40,
+    repetitionPenalty: 1.1,
+    presencePenalty: 0,
+    maxTokens: 800,
+    contextSize: 4096,
+  };
+
+  /** An Ollama resolution, which resolves to native `/api/chat`. */
+  const ollamaResolution = (overrides?: Partial<AiModeResolution>): AiModeResolution =>
+    resolution({
+      mode: 'offline',
+      provider: 'ollama',
+      endpoint: 'http://10.0.0.5:11434/v1',
+      params,
+      reasoning: 'none',
+      ...overrides,
+    });
+
+  /** An OpenAI-compatible provider, which resolves to `/v1/chat/completions`. */
+  const compatResolution = (overrides?: Partial<AiModeResolution>): AiModeResolution =>
+    resolution({ provider: 'openrouter', params, reasoning: 'none', ...overrides });
+
+  test('sends `think: false` for Ollama, the spelling its NATIVE surface honours', async () => {
+    const { fetchFn, calls } = createJsonFetchMock({ content: '{"choices":[]}' });
+    const adapter = createOpenAiCompatibleTextAdapter({
+      fetchFn,
+      getReasoningControl: () => 'ollama-native-think',
+    });
+
+    await adapter.generateText({
+      resolution: ollamaResolution(),
+      signal: signal(),
+      messages: [{ role: 'user', content: 'Extract the envelope' }],
+    });
+
+    expect(calls[0].url).toBe('http://10.0.0.5:11434/api/chat');
+    expect(calls[0].body.think).toBe(false);
+    expect(calls[0].body.reasoning_effort).toBeUndefined();
+  });
+
+  test('sends `reasoning_effort: "none"` for an OpenAI-compatible provider', async () => {
+    const { fetchFn, calls } = createSseFetchMock();
+    const adapter = createOpenAiCompatibleTextAdapter({
+      fetchFn,
+      getReasoningControl: (provider) =>
+        provider === 'openrouter' ? 'openai-compat-reasoning-effort' : undefined,
+    });
+
+    await adapter.generateText({
+      resolution: compatResolution(),
+      signal: signal(),
+      messages: [{ role: 'user', content: 'Extract the envelope' }],
+    });
+
+    expect(calls[0].url).toBe('https://openrouter.ai/api/v1/chat/completions');
+    expect(calls[0].body.reasoning_effort).toBe('none');
+    expect(calls[0].body.think).toBeUndefined();
+  });
+
+  test('DROPS a control measured on a surface the provider is not being sent over', async () => {
+    // The drift hazard this guards: `reasoningControl` names a (provider,
+    // SURFACE) pairing. If `ollama` is ever routed through `/v1`, the native
+    // spelling would be accepted with a 200 and silently ignored — reintroducing
+    // exactly the 6-second failure this measures. Dropping is the safe answer.
+    const { fetchFn, calls } = createSseFetchMock();
+    const adapter = createOpenAiCompatibleTextAdapter({
+      fetchFn,
+      getReasoningControl: () => 'ollama-native-think',
+    });
+
+    await adapter.generateText({
+      // A non-ollama provider that nonetheless declares the native control.
+      resolution: compatResolution(),
+      signal: signal(),
+      messages: [{ role: 'user', content: 'Extract the envelope' }],
+    });
+
+    expect(calls[0].url).toBe('https://openrouter.ai/api/v1/chat/completions');
+    expect('think' in calls[0].body).toBe(false);
+    expect('reasoning_effort' in calls[0].body).toBe(false);
+  });
+
+  test('DROPS the compat control when the provider resolves to the native surface', async () => {
+    const { fetchFn, calls } = createJsonFetchMock({ content: '{"choices":[]}' });
+    const adapter = createOpenAiCompatibleTextAdapter({
+      fetchFn,
+      getReasoningControl: () => 'openai-compat-reasoning-effort',
+    });
+
+    await adapter.generateText({
+      resolution: ollamaResolution(),
+      signal: signal(),
+      messages: [{ role: 'user', content: 'Extract the envelope' }],
+    });
+
+    expect(calls[0].url).toBe('http://10.0.0.5:11434/api/chat');
+    expect('reasoning_effort' in calls[0].body).toBe(false);
+    expect('think' in calls[0].body).toBe(false);
+  });
+
+  test('omits the field entirely for a provider that declares no control', async () => {
+    const { fetchFn, calls } = createJsonFetchMock({ content: '{"choices":[]}' });
+    // No getReasoningControl at all — the default is "no provider can be asked".
+    const adapter = createOpenAiCompatibleTextAdapter({ fetchFn });
+
+    await adapter.generateText({
+      resolution: ollamaResolution(),
+      signal: signal(),
+      messages: [{ role: 'user', content: 'Extract the envelope' }],
+    });
+
+    // Deterministic unsupported fallback: byte-identical to the old body.
+    expect('think' in calls[0].body).toBe(false);
+    expect('reasoning_effort' in calls[0].body).toBe(false);
+  });
+
+  test('a provider without a control keeps its generation params intact', async () => {
+    const { fetchFn, calls } = createSseFetchMock();
+    const adapter = createOpenAiCompatibleTextAdapter({
+      fetchFn,
+      getReasoningControl: () => undefined,
+    });
+
+    await adapter.generateText({
+      resolution: compatResolution(),
+      signal: signal(),
+      messages: [{ role: 'user', content: 'Hi' }],
+    });
+
+    expect(calls[0].body.max_tokens).toBe(800);
+    expect(calls[0].body.temperature).toBe(0.3);
+  });
+
+  test('leaves reasoning entirely alone unless the call asked for it', async () => {
+    const { fetchFn, calls } = createJsonFetchMock({ content: '{"choices":[]}' });
+    const adapter = createOpenAiCompatibleTextAdapter({
+      fetchFn,
+      getReasoningControl: () => 'ollama-native-think',
+    });
+
+    // No `reasoning` on the resolution — the player-facing dialogue case.
+    await adapter.generateText({
+      resolution: ollamaResolution({ reasoning: undefined }),
+      signal: signal(),
+      messages: [{ role: 'user', content: 'Tell me a story about the mill' }],
+    });
+
+    // Absence is the point. `think: true` is NOT semantically equivalent to
+    // leaving the provider alone, and sending it would change model behaviour.
+    expect('think' in calls[0].body).toBe(false);
+    expect('reasoning_effort' in calls[0].body).toBe(false);
+  });
+
+  test('an explicit `default` on the call also means "send nothing"', async () => {
+    const { fetchFn, calls } = createJsonFetchMock({ content: '{"choices":[]}' });
+    const adapter = createOpenAiCompatibleTextAdapter({
+      fetchFn,
+      getReasoningControl: () => 'ollama-native-think',
+    });
+
+    await adapter.generateText({
+      resolution: ollamaResolution({ reasoning: 'default' }),
+      signal: signal(),
+      messages: [{ role: 'user', content: 'Hi' }],
+    });
+
+    expect('think' in calls[0].body).toBe(false);
+  });
+
+  test('the preference cannot be smuggled in through the connection params', async () => {
+    // `TextParams` is the persisted connection record and has no `reasoning`
+    // key. Even if a stored connection somehow carried the value, it must not
+    // reach the wire — the call's own task preset is the only owner.
+    const { fetchFn, calls } = createJsonFetchMock({ content: '{"choices":[]}' });
+    const adapter = createOpenAiCompatibleTextAdapter({
+      fetchFn,
+      getReasoningControl: () => 'ollama-native-think',
+    });
+
+    await adapter.generateText({
+      resolution: ollamaResolution({
+        reasoning: undefined,
+        params: { ...params, reasoning: 'none' } as AiModeResolution['params'],
+      }),
+      signal: signal(),
+      messages: [{ role: 'user', content: 'Hi' }],
+    });
+
+    expect('think' in calls[0].body).toBe(false);
+  });
+});

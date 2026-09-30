@@ -55,3 +55,37 @@ describe('mergeTaskPresetParams', () => {
     expect(merged?.maxTokens).toBe(TEXT_TASK_PRESETS.narration.maxTokens);
   });
 });
+
+describe('mergeTaskPresetParams — reasoning is not a connection param', () => {
+  test('the task preference is the ONLY owner, and mergeTaskPresetParams never carries it', () => {
+    // The regression this pins: reasoning is a property of the CALL, not of the
+    // saved connection. If it ever reappears on `TextParams`, a stored
+    // connection could switch the fix back off without the user ever having
+    // configured anything — and nothing in the settings UI can set it, so no
+    // user would understand why it stopped working.
+    expect('reasoning' in mergeTaskPresetParams({ task: 'envelope' })).toBe(false);
+    expect('reasoning' in mergeTaskPresetParams({ task: 'dialogue' })).toBe(false);
+    expect('reasoning' in mergeTaskPresetParams({})).toBe(false);
+  });
+
+  test('the task presets still declare the preference', () => {
+    expect(TEXT_TASK_PRESETS.envelope.reasoning).toBe('none');
+  });
+
+  test('merging leaves the connection params key-free of reasoning', () => {
+    // `mergeTaskPresetParams` spreads the connection, so a stored value WOULD
+    // survive into the merged object. That is harmless because the adapter
+    // reads the resolution's own field, never `params.reasoning` — pinned in
+    // @aikami/frontend-ai-gateway ("the preference cannot be smuggled in
+    // through the connection params"). This test documents that the reason it
+    // is harmless is NOT that the merge filters the key.
+    const smuggled = params({ reasoning: 'none' } as Partial<TextParams>);
+    expect(mergeTaskPresetParams({ params: smuggled, task: 'narration' }).reasoning).toBe('none');
+  });
+
+  test('no player-facing narrative task opts out of reasoning', () => {
+    for (const task of ['narration', 'dialogue', 'combat-narration', 'combat-ai'] as const) {
+      expect(TEXT_TASK_PRESETS[task].reasoning).toBeUndefined();
+    }
+  });
+});

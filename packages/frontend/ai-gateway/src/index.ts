@@ -46,6 +46,12 @@ export { createDelegatingImageAdapter, raceWithAbort } from './lib/image_adapter
 export { createLocalTextAdapter } from './lib/local_text_adapter.ts';
 export { createModeResolver } from './lib/mode_resolver.ts';
 export {
+  buildReasoningParams,
+  type ReasoningControl,
+  resolveChatSurface,
+  type TextApiSurface,
+} from './lib/reasoning_control.ts';
+export {
   GATEWAY_FETCH_TIMEOUT_MS,
   GATEWAY_FIRST_CHUNK_TIMEOUT_MS,
   GATEWAY_IDLE_TIMEOUT_MS,

@@ -13,6 +13,11 @@ import type { AiChatMessage, AiModeResolution } from '@aikami/types';
 import { createAiGatewayError, toAiGatewayError } from './errors.ts';
 import type { AiTextAdapter, AiTextGenerationResult, AiTextUsage } from './gateway_types.ts';
 import {
+  buildReasoningParams,
+  type ReasoningControl,
+  resolveChatSurface,
+} from './reasoning_control.ts';
+import {
   GATEWAY_FETCH_TIMEOUT_MS,
   GATEWAY_FIRST_CHUNK_TIMEOUT_MS,
   GATEWAY_IDLE_TIMEOUT_MS,
@@ -80,6 +85,15 @@ export type OpenAiCompatibleTextAdapterOptions = {
   getExtraHeaders?: (provider: string) => Record<string, string> | undefined;
   /** Debug hook — compiled-schema cache size after each compile. */
   onSchemaCacheSize?: (size: number) => void;
+  /**
+   * Which reasoning control this provider honours, if any.
+   *
+   * Injected rather than imported so the gateway package keeps no dependency on
+   * the client that owns the provider registry, and so a test can declare a
+   * provider's capability without a registry. Absent means "no provider
+   * declares one", which disables the request field entirely.
+   */
+  getReasoningControl?: (provider: string) => ReasoningControl | undefined;
   /** Debug/log hook, e.g. ('streaming', {...}), ('fallback', {...}). */
   onEvent?: (event: string, data?: Record<string, unknown>) => void;
   /** Fetch injection for tests. Defaults to globalThis.fetch. */
@@ -248,6 +262,7 @@ export const createOpenAiCompatibleTextAdapter = (
     getDefaultEndpoint,
     getExtraHeaders,
     onSchemaCacheSize,
+    getReasoningControl = () => undefined,
     onEvent,
     fetchFn,
     fetchTimeoutMs = GATEWAY_FETCH_TIMEOUT_MS,
@@ -279,7 +294,7 @@ export const createOpenAiCompatibleTextAdapter = (
 
     // Ollama uses its native /api/chat endpoint; strip any OpenAI-compatible
     // /v1 suffix that may be stored in the connection baseUrl.
-    if (resolution.provider === 'ollama') {
+    if (resolveChatSurface(resolution) === 'ollama-native') {
       const base = endpoint.replace(/\/v1\/?$/, '').replace(/\/$/, '');
       return `${base}/api/chat`;
     }
@@ -348,6 +363,7 @@ export const createOpenAiCompatibleTextAdapter = (
           }
         : {}),
       ...buildGenerationParams(resolution),
+      ...buildReasoningParams({ resolution, getReasoningControl }),
     };
   };
 

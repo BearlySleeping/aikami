@@ -11,6 +11,7 @@
 import type {
   AiConnectionSchema,
   AiProviderSchema,
+  AiReasoningSchema,
   AiRoleSchema,
   ConnectionCapabilitySchema,
   ImageParamsSchema,
@@ -49,6 +50,9 @@ export type AiRole = Static<typeof AiRoleSchema>;
 
 /** Generation parameters for text connections. */
 export type TextParams = Static<typeof TextParamsSchema>;
+
+/** Reasoning-channel preference for one request. See {@link AiReasoningSchema}. */
+export type AiReasoning = Static<typeof AiReasoningSchema>;
 
 /** Image-generation-specific connection options. */
 export type ImageParams = Static<typeof ImageParamsSchema>;

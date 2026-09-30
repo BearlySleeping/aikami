@@ -37,6 +37,16 @@ export type VerificationStrategy =
   /** No verification strategy defined */
   | 'none';
 
+/**
+ * The (provider, surface) pairing a text provider was MEASURED to honour when
+ * asked for no reasoning.
+ *
+ * The surface qualifier is load-bearing — see `reasoningControl`. The adapter
+ * mirrors this union so it can stay independent of the provider registry; the
+ * two are structurally identical string unions.
+ */
+export type TextReasoningControl = 'ollama-native-think' | 'openai-compat-reasoning-effort';
+
 /** A provider descriptor shared by text, voice, and image provider registries. */
 type ProviderDescriptor = {
   id: string;
@@ -59,6 +69,31 @@ type ProviderDescriptor = {
   verificationStrategy: VerificationStrategy;
   /** Whether this provider supports model discovery/listing. C-481 */
   supportsModelDiscovery: boolean;
+  /**
+   * The (provider, surface) pairing this provider was MEASURED to honour when
+   * asked for no reasoning, and nothing else.
+   *
+   * Additive and measured, not assumed. A claim that a provider honours a
+   * field is not evidence: Ollama 0.34.3 accepts `reasoning_effort` on
+   * `/v1/chat/completions` and honours it, accepts `think` on the same
+   * endpoint and silently ignores it, accepts `reasoning_effort` on native
+   * `/api/chat` and ignores it there, and ignores
+   * `chat_template_kwargs.enable_thinking` on both (issue #382, n=11 each).
+   * Only the two spellings below are verified.
+   *
+   * The value is deliberately surface-qualified, because the pairing is what
+   * was measured. The adapter checks the surface it is about to use against
+   * this declaration and DROPS the control on a mismatch, so a provider that
+   * is later rerouted onto an unmeasured surface keeps the old
+   * byte-identical request body rather than sending a field the provider will
+   * accept with a 200 and ignore.
+   *
+   * Absent means the provider cannot be asked, and the preference is dropped:
+   * the request goes out exactly as it did before, and the task degrades on
+   * its own deadline rather than the call failing because of an unsupported
+   * option.
+   */
+  reasoningControl?: TextReasoningControl;
   /** Which AI capabilities this provider supports. C-481 */
   capabilities: ReadonlyArray<'text' | 'image' | 'voice'>;
 };
@@ -154,6 +189,13 @@ export const TEXT_PROVIDERS = [
     isLocal: true,
     verificationStrategy: 'ollama',
     supportsModelDiscovery: true,
+    // Measured on Ollama 0.34.3, native `/api/chat`, `ornith-1.5:9b`:
+    // `think: false` → 0 reasoning characters, 11/11 answers within the
+    // 6 000 ms envelope budget, 11/11 schema-valid. `reasoning_effort` is
+    // accepted on the same endpoint and does nothing. The surface qualifier is
+    // load-bearing: the adapter will not send this if `ollama` is ever routed
+    // through `/v1`, where the same field is ignored.
+    reasoningControl: 'ollama-native-think',
     capabilities: ['text'],
   },
   {
@@ -194,6 +236,21 @@ export const TEXT_PROVIDERS = [
 
 /** Provider identifier extracted from TEXT_PROVIDERS union. */
 export type TextProvider = (typeof TEXT_PROVIDERS)[number]['id'];
+
+/**
+ * The reasoning control a text provider honours, or `undefined`.
+ *
+ * An accessor rather than a `find` at each call site: `TEXT_PROVIDERS` is
+ * `as const`, so a direct lookup yields a union of the individual entry types
+ * and every caller would have to re-derive "absent means unsupported". This
+ * makes the unsupported case explicit and total — a provider id that is not in
+ * the registry simply has no control, exactly like one that is in it and
+ * declares none.
+ */
+export const getTextReasoningControl = (providerId: string): TextReasoningControl | undefined =>
+  (TEXT_PROVIDERS as ReadonlyArray<ProviderDescriptor>).find(
+    (provider) => provider.id === providerId,
+  )?.reasoningControl;
 
 // ---------------------------------------------------------------------------
 // Voice (TTS) providers

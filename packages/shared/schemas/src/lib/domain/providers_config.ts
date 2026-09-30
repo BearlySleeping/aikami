@@ -55,6 +55,24 @@ export const VoiceArchetypeSchema = Type.Object({
   voiceId: Type.String(),
 });
 
+/**
+ * Whether a request may use the model's reasoning ("thinking") channel.
+ *
+ * `default` leaves it to the provider, which is correct for every
+ * player-facing creative task. `none` asks for the reasoning channel to be
+ * switched off for a request that is a bounded mechanical extraction — the
+ * reasoning spends the whole budget and returns nothing the consumer reads
+ * (issue #382, C-401 call 2).
+ *
+ * It is a SEMANTIC preference, not a wire field. Providers spell the control
+ * differently (`think: false` on Ollama's native API, `reasoning_effort:
+ * "none"` on the OpenAI-compatible surface), and only the adapter knows which
+ * spelling its provider honours. A provider that cannot honour it ignores the
+ * request rather than failing it.
+ */
+export const AiReasoningSchema = Type.Union([Type.Literal('default'), Type.Literal('none')]);
+export type AiReasoning = Static<typeof AiReasoningSchema>;
+
 /** Generation parameters for text connections. */
 export const TextParamsSchema = Type.Object({
   temperature: Type.Number(),

@@ -85,3 +85,21 @@ describe('DEFAULT_TEXT_PARAMS', () => {
     expect(DEFAULT_TEXT_PARAMS.contextSize).toBeGreaterThan(0);
   });
 });
+
+describe('reasoning preference is declared, not inferred', () => {
+  test('exactly one task opts out of the reasoning channel', () => {
+    // A single opt-in is the point: `envelope` is the measured case, and every
+    // other task is player-facing prose or a background task whose quality has
+    // never been measured with reasoning off. Widening this list needs its own
+    // measurement, not a hunch.
+    const optedOut = TEXT_TASKS.filter((task) => TEXT_TASK_PRESETS[task].reasoning === 'none');
+    expect(optedOut).toEqual(['envelope']);
+  });
+
+  test('no preset invents a reasoning value outside the declared union', () => {
+    for (const task of TEXT_TASKS) {
+      const { reasoning } = TEXT_TASK_PRESETS[task];
+      expect(reasoning === undefined || reasoning === 'default' || reasoning === 'none').toBe(true);
+    }
+  });
+});
