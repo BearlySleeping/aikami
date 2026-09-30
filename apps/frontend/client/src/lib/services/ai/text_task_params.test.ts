@@ -79,8 +79,17 @@ describe('mergeTaskPresetParams — reasoning is not a connection param', () => 
     // @aikami/frontend-ai-gateway ("the preference cannot be smuggled in
     // through the connection params"). This test documents that the reason it
     // is harmless is NOT that the merge filters the key.
-    const smuggled = params({ reasoning: 'none' } as Partial<TextParams>);
-    expect(mergeTaskPresetParams({ params: smuggled, task: 'narration' }).reasoning).toBe('none');
+    //
+    // The result is read through an untyped view on purpose: `TextParams` does
+    // not declare `reasoning`, so a typed property access here is a type error
+    // that `bun test` (which strips types) and `client:typecheck` (which does
+    // not cover `*.test.ts`) would both miss.
+    const smuggled = params({ reasoning: 'none' } as Record<string, unknown> as TextParams);
+    const merged: Record<string, unknown> = mergeTaskPresetParams({
+      params: smuggled,
+      task: 'narration',
+    });
+    expect(merged.reasoning).toBe('none');
   });
 
   test('no player-facing narrative task opts out of reasoning', () => {
