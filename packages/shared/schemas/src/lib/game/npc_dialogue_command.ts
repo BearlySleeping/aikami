@@ -198,10 +198,10 @@ export type NpcDialogueAiEnvelope = Static<typeof NpcDialogueAiEnvelopeSchema>;
  * treats it as authoritative (`the player already read it`). Asking the model to
  * return it again made call 2 regenerate prose the client already holds.
  *
- * Measured on the local configuration in issue #382, that regeneration consumed
- * the whole call-2 budget: every envelope call hit its 6 000 ms deadline and was
- * discarded, so the player received deterministically derived choices instead of
- * model-authored ones. Removing the echo is what makes the call fit.
+ * Removing the echo avoids unnecessary output; it does not control the model's
+ * reasoning behavior or guarantee that extraction fits the call-2 budget.
+ * Follow-up measurements in issue #382 still hit the 6 000 ms deadline with
+ * this schema, with reasoning accounting for most of the completion tokens.
  *
  * The legacy envelope is kept unchanged for compatibility; this is additive.
  */

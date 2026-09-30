@@ -28,6 +28,8 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { NpcDialogueAiEnvelopeSchema, NpcDialogueExtractionSchema } from '@aikami/schemas';
+import type { TSchema } from 'typebox';
+import { Value } from 'typebox/value';
 
 /** The provider the client is configured against, by default. */
 const ENDPOINT = process.env.AIKAMI_PROBE_ENDPOINT ?? 'http://127.0.0.1:11434';
@@ -71,6 +73,23 @@ const extractionPrompt = [
   'Omit both fields when the narrative implies neither a command nor a choice.',
 ].join('\n');
 
+/** The production call-2 prompt before #414, paired with the legacy envelope. */
+const legacyPrompt = [
+  '[NPC CONTEXT]',
+  PERSONA,
+  'You are Elder Thalia, staying in character.',
+  '',
+  '[EXTRACTION]',
+  'You are given an NPC narrative that was just spoken to the player.',
+  'Extract the structured dialogue envelope from it:',
+  '"narrative" (string, required),',
+  'optionally "command" (one of the allowed actions),',
+  'and optionally "choices" (array of player options, at most 4).',
+  'Each choice has "id", "label", and optionally "command" or "nextDialogueKey".',
+  `Allowed actions: ${ALLOWED_ACTIONS}.`,
+  'Do not invent new narrative — reuse the given narrative verbatim.',
+].join('\n');
+
 /**
  * The gateway's own schema wrapper.
  *
@@ -79,7 +98,7 @@ const extractionPrompt = [
  * of the prompt: it is the largest single block in the request, and a probe
  * that omitted it would not be measuring production.
  */
-const schemaInstruction = (schema: Record<string, unknown>): string =>
+const schemaInstruction = (schema: TSchema): string =>
   [
     'You are a structured data extraction tool.',
     'Your response MUST be valid JSON that conforms to the following JSON Schema:',
@@ -95,12 +114,31 @@ type ProbeResult = {
   readonly surface: 'native' | 'openai-compatible';
   readonly wallMs: number;
   readonly withinBudget: boolean;
+  readonly jsonParsed: boolean;
+  readonly schemaValid: boolean;
   readonly promptTokens: number;
   readonly completionTokens: number;
   readonly reasoningChars: number;
   readonly answerChars: number;
   readonly answer: string;
   readonly reasoningHead: string;
+};
+
+/** Check the complete answer independently of provider latency. */
+const validateAnswer = ({
+  answer,
+  schema,
+}: {
+  answer: string;
+  schema: TSchema;
+}): Pick<ProbeResult, 'jsonParsed' | 'schemaValid'> => {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(answer);
+  } catch {
+    return { jsonParsed: false, schemaValid: false };
+  }
+  return { jsonParsed: true, schemaValid: Value.Check(schema, parsed) };
 };
 
 const post = async (path: string, body: Record<string, unknown>) => {
@@ -118,14 +156,14 @@ const post = async (path: string, body: Record<string, unknown>) => {
 /** One native `/api/chat` call, which is the only surface that reports thinking. */
 const probeNative = async (
   label: string,
-  schema: Record<string, unknown>,
+  schema: TSchema,
   disableThinking: boolean,
 ): Promise<ProbeResult> => {
   const startedAt = Date.now();
   const body = await post('/api/chat', {
     model: MODEL,
     messages: [
-      { role: 'system', content: extractionPrompt },
+      { role: 'system', content: schema === legacy ? legacyPrompt : extractionPrompt },
       { role: 'system', content: schemaInstruction(schema) },
       { role: 'user', content: NARRATIVE },
     ],
@@ -150,7 +188,8 @@ const probeNative = async (
     completionTokens: Number(body.eval_count ?? 0),
     reasoningChars: reasoning.length,
     answerChars: answer.length,
-    answer: answer.slice(0, 400),
+    answer,
+    ...validateAnswer({ answer, schema }),
     reasoningHead: reasoning.slice(0, 300),
   };
 };
@@ -196,25 +235,14 @@ const probeOpenAiCompatible = async (disableThinking: boolean): Promise<ProbeRes
     completionTokens: Number(usage.completion_tokens ?? 0),
     reasoningChars: (message.reasoning_content ?? '').length,
     answerChars: answer.length,
-    answer: answer.slice(0, 400),
+    answer,
+    ...validateAnswer({ answer, schema: extraction }),
     reasoningHead: (message.reasoning_content ?? '').slice(0, 300),
   };
 };
 
-/**
- * The two schemas, as plain records.
- *
- * The probe serialises them into a prompt and compares them on the wire, so the
- * TypeBox wrapper type is irrelevant here; a narrowing convert states that once
- * instead of asserting through `unknown` at each call site.
- */
-const asSchemaRecord = (schema: unknown): Record<string, unknown> =>
-  typeof schema === 'object' && schema !== null
-    ? (schema as Record<string, unknown>)
-    : ({} as Record<string, unknown>);
-
-const extraction = asSchemaRecord(NpcDialogueExtractionSchema);
-const legacy = asSchemaRecord(NpcDialogueAiEnvelopeSchema);
+const extraction = NpcDialogueExtractionSchema;
+const legacy = NpcDialogueAiEnvelopeSchema;
 
 const results: ProbeResult[] = [];
 results.push(await probeNative('extraction schema (as shipped, #414)', extraction, false));
@@ -229,6 +257,8 @@ for (const result of results) {
   console.log(
     `wall             ${result.wallMs} ms  (budget ${BUDGET_MS} ms → ${result.withinBudget ? 'WITHIN' : 'OVER'})`,
   );
+  console.log(`JSON parsed      ${result.jsonParsed}`);
+  console.log(`schema valid     ${result.schemaValid}`);
   console.log(`prompt tokens    ${result.promptTokens}`);
   console.log(`completion       ${result.completionTokens} tokens (cap ${MAX_TOKENS})`);
   console.log(`reasoning chars  ${result.reasoningChars}`);

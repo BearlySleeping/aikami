@@ -361,19 +361,22 @@ rediscovered as if they were findings:
 ## Smallest next step (proposed, not implemented)
 
 **Establish whether the reasoning channel can be disabled through `/v1`.** This
-is one falsifiable question and it gates everything else. Three candidate
+is one falsifiable question and it gates everything else. Four candidate
 mechanisms, none of them assumed to work:
 
-1. Ollama's `/api/set` or model-level parameter for the reasoning channel,
+1. Test `reasoning_effort: "none"` on `/v1/chat/completions` first. Ollama maps
+   this to `Think=false`; measure JSON parsing, schema validity and latency
+   using the same extraction request before evaluating the other mechanisms;
+2. Ollama's `/api/set` or model-level parameter for the reasoning channel,
    applied once at load;
-2. a chat-template parameter carried on the request in a form `/v1` forwards;
-3. a different (non-reasoning) model for the `envelope` task — which would be a
+3. a chat-template parameter carried on the request in a form `/v1` forwards;
+4. a different (non-reasoning) model for the `envelope` task — which would be a
    routing change, and therefore its own hypothesis with its own evidence.
 
-The gate for all three is the same measurement the probe already provides: an
-extraction that completes inside 6 000 ms **on `/v1`**, with the streamed
-narrative unchanged. Raising `budgetMs` is not among the candidates, because
-122–186 completion tokens at the observed 35–38 ms/token is ~3.4–4.4 s — the
+The gate for all four is the same measurement the probe provides: a valid JSON
+answer matching the extraction schema that completes inside 6 000 ms **on `/v1`**,
+with the streamed narrative unchanged. Raising `budgetMs` is not among the
+candidates, because 122–186 completion tokens at the observed 35–38 ms/token is ~3.4–4.4 s — the
 request already fits the existing budget once reasoning is off. If no mechanism
 exists, that is itself the finding, and the honest conclusion becomes that a
 reasoning model is the wrong tool for a 122-token structured extraction.
