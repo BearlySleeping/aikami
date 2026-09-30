@@ -886,6 +886,25 @@ const logSample = (sample: Record<string, unknown>, index: number, total: number
 };
 
 /**
+ * The order positions a resumed sweep still has to measure.
+ *
+ * 🔴 Named by POSITION, never by "everything after the first N".
+ *
+ * The checkpoint drops harness-error placeholders, so its length is NOT the
+ * number of completed positions. If a browser died at position 20 of 48, the
+ * prior set has 19 entries and a count-based skip re-measures 19 and leaves
+ * position 20 permanently empty — a silently short sweep that still reports a
+ * full total, and still reports a median over it.
+ */
+export const pendingOrderPositions = (
+  order: readonly number[],
+  priorSamples: readonly Record<string, unknown>[],
+): readonly number[] => {
+  const completed = new Set(priorSamples.map((sample) => Number(sample.orderIndex)));
+  return order.map((_, index) => index).filter((index) => !completed.has(index));
+};
+
+/**
  * Runs the MAP_LOADED prefetch contention sweep.
  *
  * The question is whether the real background burst materially raises
@@ -920,11 +939,15 @@ export const runPrefetchWidthSweepScenario = async (options: {
 }): Promise<Record<string, unknown>> => {
   const order = buildWidthOrder(options.widths, options.repetitions);
   const prior = options.priorSamples ?? [];
+  const pending = new Set(pendingOrderPositions(order, prior));
   const samples: Record<string, unknown>[] = [...prior];
-  const invalid: Record<string, unknown>[] = [];
+  // A prior sample that was measured and found invalid is a RESULT, and has to
+  // reach the report. Seeding this from the resumed set keeps `invalidSamples`
+  // and `invalidReasons` describing the whole sweep rather than its last leg.
+  const invalid = prior.filter((sample) => sample.valid !== true);
 
   for (const [index, width] of order.entries()) {
-    if (index < prior.length) {
+    if (!pending.has(index)) {
       continue;
     }
     const sample = await measureOneSample(options, width, index);
@@ -935,6 +958,9 @@ export const runPrefetchWidthSweepScenario = async (options: {
     }
     logSample(sample, index, order.length);
   }
+  // Sorted so the raw per-sample table reads in measurement order even when a
+  // resumed run re-measured positions out of sequence.
+  samples.sort((a, b) => Number(a.orderIndex) - Number(b.orderIndex));
 
   // Aggregates are built from VALID samples only. An invalid sample did not
   // produce the background load it claims, so including it would average a

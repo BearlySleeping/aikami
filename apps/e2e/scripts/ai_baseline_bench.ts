@@ -65,6 +65,32 @@ const ms = (value: unknown): string => (value === null ? 'not measured' : `${Str
 
 const REPO_ROOT = resolve(import.meta.dirname, '../../..');
 
+/**
+ * Parses `--p2-widths`.
+ *
+ * Rejects an invalid token or an empty list instead of filtering them out. A
+ * silent filter turns `--p2-widths 0,1,x,4` into a three-width sweep that
+ * reports itself as a four-width one, which is precisely the kind of quiet
+ * substitution this harness exists to catch.
+ */
+const parseWidths = (raw: string): readonly number[] => {
+  const tokens = raw
+    .split(',')
+    .map((token) => token.trim())
+    .filter((token) => token.length > 0);
+  const widths = tokens.map((token) => Number(token));
+  const invalid = tokens.filter((_, index) => {
+    const value = widths[index] as number;
+    return !Number.isInteger(value) || value < 0;
+  });
+  if (widths.length === 0 || invalid.length > 0) {
+    throw new Error(
+      `--p2-widths must be a comma-separated list of non-negative integers, got "${raw}".`,
+    );
+  }
+  return widths;
+};
+
 const parseArgs = (
   argv: readonly string[],
 ): {
@@ -100,6 +126,36 @@ const parseArgs = (
     const index = argv.indexOf(`--${name}`);
     return index === -1 ? undefined : argv[index + 1];
   };
+  /**
+   * Reads a flag that REQUIRES an operand.
+   *
+   * `--p2-reps` with no value is not the same as omitting it. Treating a
+   * missing operand as absent silently runs the default, which for a
+   * measurement harness means a long run nobody asked for, reported as if it
+   * were the one that was.
+   */
+  const readRequired = (name: string, fallback: string): string => {
+    const index = argv.indexOf(`--${name}`);
+    if (index === -1) {
+      return fallback;
+    }
+    const value = argv[index + 1];
+    if (value === undefined || value.startsWith('--')) {
+      throw new Error(`--${name} requires a value.`);
+    }
+    return value;
+  };
+  /** A positive integer flag, or a loud failure. Never a silent default. */
+  const readPositiveInt = (name: string, fallback: number): number => {
+    const raw = readRequired(name, String(fallback));
+    const value = Number(raw);
+    if (!Number.isInteger(value) || value <= 0) {
+      throw new Error(`--${name} must be a positive integer, got "${raw}".`);
+    }
+    return value;
+  };
+  const widthSweepReps = readPositiveInt('p2-reps', 12);
+  const widthSweepWidths = parseWidths(readRequired('p2-widths', '0,1,2,4'));
   return {
     endpoint: readFlag('endpoint') ?? 'http://localhost:11434/v1',
     model: readFlag('model') ?? 'ornith-1.5:9b',
@@ -112,12 +168,11 @@ const parseArgs = (
     // This is samples PER WIDTH — the total is widths x reps. The default is a
     // multiple of the width count so the counterbalanced sequence closes whole
     // blocks; with 4 widths, 12 reps = 48 samples = 12 blocks of 4.
-    contentionReps: Number(readFlag('p2-reps') ?? 12),
-    widthSweepWidths: (readFlag('p2-widths') ?? '0,1,2,4')
-      .split(',')
-      .map((value) => Number(value.trim()))
-      .filter((value) => Number.isInteger(value) && value >= 0),
-    widthSweepReps: Number(readFlag('p2-reps') ?? 12),
+    // One parse, one source of truth: `contentionReps` mirrors the validated
+    // `widthSweepReps` rather than re-reading the flag.
+    contentionReps: widthSweepReps,
+    widthSweepWidths,
+    widthSweepReps,
     // How long a background burst is given to finish AFTER the interactive turn
     // has already been measured. A burst that outlives this is reported as
     // unfinished rather than quietly counted as complete.

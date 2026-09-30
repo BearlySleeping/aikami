@@ -38,15 +38,48 @@ type Resumed = {
   readonly onSample: (sample: Record<string, unknown>) => void;
 };
 
+/** Parses one JSONL record, or `undefined` when it is not a usable object. */
+const parseRecord = (line: string): CheckpointRecord | undefined => {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(line);
+  } catch {
+    return undefined;
+  }
+  if (typeof parsed !== 'object' || parsed === null) {
+    return undefined;
+  }
+  const record = parsed as CheckpointRecord;
+  return record.kind === 'header' || record.kind === 'sample' ? record : undefined;
+};
+
 const read = (dir: string): { order: readonly number[]; samples: Record<string, unknown>[] } => {
   const path = join(dir, CHECKPOINT_FILE);
   if (!existsSync(path)) {
     return { order: [], samples: [] };
   }
-  const records = readFileSync(path, 'utf8')
+  const lines = readFileSync(path, 'utf8')
     .split('\n')
-    .filter((line) => line.length > 0)
-    .map((line) => JSON.parse(line) as CheckpointRecord);
+    .filter((line) => line.length > 0);
+  const records: CheckpointRecord[] = [];
+  for (const [index, line] of lines.entries()) {
+    const parsed = parseRecord(line);
+    // An INTERRUPTED RUN is the case this module exists for, and a kill landing
+    // inside `appendFileSync` leaves a half-written final line. Losing that one
+    // sample is correct; refusing to resume at all — which is what throwing
+    // would do — discards the hours of samples before it as well. A malformed
+    // line anywhere ELSE is corruption, and is not silently skipped.
+    if (parsed === undefined && index === lines.length - 1) {
+      break;
+    }
+    if (parsed === undefined) {
+      throw new Error(
+        `P2 resume: ${CHECKPOINT_FILE} line ${index + 1} is not a readable record. ` +
+          'The checkpoint is corrupt; start a new --label rather than resuming it.',
+      );
+    }
+    records.push(parsed);
+  }
   return {
     order: records.find((record) => record.kind === 'header')?.order ?? [],
     samples: records

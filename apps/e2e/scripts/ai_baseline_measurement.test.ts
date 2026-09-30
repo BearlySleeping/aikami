@@ -11,7 +11,7 @@
 
 import { describe, expect, test } from 'bun:test';
 import { summarizeFrames } from './ai_baseline_frame_probe.ts';
-import { buildWidthOrder } from './ai_baseline_production_scenarios.ts';
+import { buildWidthOrder, pendingOrderPositions } from './ai_baseline_production_scenarios.ts';
 import { renderMarkdown } from './ai_baseline_report.ts';
 
 describe('buildWidthOrder is counterbalanced, not merely shuffled', () => {
@@ -177,5 +177,34 @@ describe('renderMarkdown does not invent a measurement', () => {
     });
     expect(markdown).toContain('Measurement order');
     expect(markdown).toContain('0,1');
+  });
+});
+
+describe('a resumed sweep re-measures by POSITION, not by count', () => {
+  // The bug this guards: the checkpoint drops harness-error placeholders, so a
+  // count-based skip leaves a permanent hole and reports a full total anyway.
+  test('a hole in the middle is re-measured even though the count is lower', () => {
+    const order = [0, 1, 2, 4, 1, 2, 4, 0];
+    // Positions 0..3 measured, position 4 lost to a dead browser, 5..7 measured.
+    const prior = [0, 1, 2, 3, 5, 6, 7].map((orderIndex) => ({ orderIndex, valid: true }));
+    expect(pendingOrderPositions(order, prior)).toEqual([4]);
+  });
+
+  test('a contiguous suffix needs no guesswork', () => {
+    const order = [0, 1, 2, 4];
+    const prior = [0, 1].map((orderIndex) => ({ orderIndex, valid: true }));
+    expect(pendingOrderPositions(order, prior)).toEqual([2, 3]);
+  });
+
+  test('a fully-measured sweep re-measures nothing', () => {
+    const order = [0, 1, 2, 4];
+    const prior = [0, 1, 2, 3].map((orderIndex) => ({ orderIndex, valid: true }));
+    expect(pendingOrderPositions(order, prior)).toEqual([]);
+  });
+
+  test('a sample measured but INVALID is kept, not re-rolled', () => {
+    const order = [0, 1, 2, 4];
+    const prior = [0, 1, 2, 3].map((orderIndex) => ({ orderIndex, valid: orderIndex !== 3 }));
+    expect(pendingOrderPositions(order, prior)).toEqual([]);
   });
 });
