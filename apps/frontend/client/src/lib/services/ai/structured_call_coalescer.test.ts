@@ -21,7 +21,16 @@ const identity = (overrides: Partial<StructuredCallIdentity> = {}): StructuredCa
   systemPrompt: 'You are a relationship analyst.',
   prompt: 'How did this interaction go?',
   model: undefined,
+  effectiveRoute:
+    'cap=text|mode=byok|provider=test|origin=in-process|model=tiny|params=z|reasoning=z|rev=',
+  scope: 'unscoped',
   ...overrides,
+});
+
+/** A minimal object schema, the shape the old fingerprint collapsed to nothing. */
+const objectSchema = (properties: Record<string, unknown>): Record<string, unknown> => ({
+  type: 'object',
+  properties,
 });
 
 /** A promise plus the handles a test needs to settle it on demand. */
@@ -293,5 +302,347 @@ describe('createStructuredCallCoalescer', () => {
 
     expect(coalescer.inFlightCount).toBe(0);
     await expect(pending).rejects.toThrow();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Schema content identity
+//
+// These are the tests the OLD fingerprint could not pass. `JSON.stringify(
+// schema, Object.keys(schema).sort())` used a replacer ARRAY holding only the
+// root's top-level keys, and a replacer array applies at EVERY depth — so the
+// entire schema body was discarded and every object schema canonicalised to
+// `{"properties":{},"type":"object"}`. All three collisions below were verified
+// EQUAL against the old implementation.
+// ---------------------------------------------------------------------------
+
+describe('createStructuredCallCoalescer — schema content identity', () => {
+  test('schemas differing only in a NESTED enum do not share work', async () => {
+    const coalescer = createStructuredCallCoalescer();
+    const gate = deferred<string>();
+    const call = mock(async () => gate.promise);
+
+    const angry = coalescer.run({
+      identity: identity({
+        schema: objectSchema({
+          mood: objectSchema({ tone: { type: 'string', enum: ['hostile'] } }),
+        }),
+      }),
+      signal: new AbortController().signal,
+      sharedDeadline: createUnboundedAiDeadline,
+      call,
+    });
+    const friendly = coalescer.run({
+      identity: identity({
+        schema: objectSchema({
+          mood: objectSchema({ tone: { type: 'string', enum: ['warm'] } }),
+        }),
+      }),
+      signal: new AbortController().signal,
+      sharedDeadline: createUnboundedAiDeadline,
+      call,
+    });
+
+    expect(call).toHaveBeenCalledTimes(2);
+    gate.resolve('answer');
+    await Promise.all([angry, friendly]);
+  });
+
+  test('schemas differing only in a NESTED constraint do not share work', async () => {
+    const coalescer = createStructuredCallCoalescer();
+    const gate = deferred<string>();
+    const call = mock(async () => gate.promise);
+
+    const short = coalescer.run({
+      identity: identity({
+        schema: objectSchema({
+          bounds: { type: 'object', properties: { n: { type: 'number', maximum: 5 } } },
+        }),
+      }),
+      signal: new AbortController().signal,
+      sharedDeadline: createUnboundedAiDeadline,
+      call,
+    });
+    const long = coalescer.run({
+      identity: identity({
+        schema: objectSchema({
+          bounds: { type: 'object', properties: { n: { type: 'number', maximum: 900 } } },
+        }),
+      }),
+      signal: new AbortController().signal,
+      sharedDeadline: createUnboundedAiDeadline,
+      call,
+    });
+
+    expect(call).toHaveBeenCalledTimes(2);
+    gate.resolve('answer');
+    await Promise.all([short, long]);
+  });
+
+  test('schemas differing only by an EXTRA nested property do not share work', async () => {
+    const coalescer = createStructuredCallCoalescer();
+    const gate = deferred<string>();
+    const call = mock(async () => gate.promise);
+
+    const bare = coalescer.run({
+      identity: identity({ schema: objectSchema({ change: { type: 'string' } }) }),
+      signal: new AbortController().signal,
+      sharedDeadline: createUnboundedAiDeadline,
+      call,
+    });
+    const extended = coalescer.run({
+      identity: identity({
+        schema: objectSchema({ change: { type: 'string' }, delta: { type: 'number' } }),
+      }),
+      signal: new AbortController().signal,
+      sharedDeadline: createUnboundedAiDeadline,
+      call,
+    });
+
+    expect(call).toHaveBeenCalledTimes(2);
+    gate.resolve('answer');
+    await Promise.all([bare, extended]);
+  });
+
+  test('structurally identical nested schemas in a different KEY ORDER still share', async () => {
+    const coalescer = createStructuredCallCoalescer();
+    const gate = deferred<string>();
+    const call = mock(async () => gate.promise);
+
+    const left = coalescer.run({
+      identity: identity({
+        schema: {
+          properties: {
+            outcome: { properties: { ok: { type: 'boolean' } }, type: 'object' },
+            tags: { items: { enum: ['a', 'b'] }, type: 'array' },
+          },
+          type: 'object',
+        },
+      }),
+      signal: new AbortController().signal,
+      sharedDeadline: createUnboundedAiDeadline,
+      call,
+    });
+    const right = coalescer.run({
+      identity: identity({
+        schema: {
+          type: 'object',
+          properties: {
+            tags: { type: 'array', items: { enum: ['a', 'b'] } },
+            outcome: { type: 'object', properties: { ok: { type: 'boolean' } } },
+          },
+        },
+      }),
+      signal: new AbortController().signal,
+      sharedDeadline: createUnboundedAiDeadline,
+      call,
+    });
+
+    // Key order is not semantic in JSON Schema. Reordering must not defeat
+    // sharing, or every caller with a different property order pays again.
+    expect(call).toHaveBeenCalledTimes(1);
+    gate.resolve('answer');
+    expect((await left).value).toBe('answer');
+    expect((await right).value).toBe('answer');
+  });
+
+  test('array ORDER is semantic: a reordered `required` list is a different request', async () => {
+    const coalescer = createStructuredCallCoalescer();
+    const gate = deferred<string>();
+    const call = mock(async () => gate.promise);
+
+    const ab = coalescer.run({
+      identity: identity({
+        schema: {
+          type: 'object',
+          required: ['a', 'b'],
+          properties: { a: { type: 'string' }, b: { type: 'string' } },
+        },
+      }),
+      signal: new AbortController().signal,
+      sharedDeadline: createUnboundedAiDeadline,
+      call,
+    });
+    const ba = coalescer.run({
+      identity: identity({
+        schema: {
+          type: 'object',
+          required: ['b', 'a'],
+          properties: { a: { type: 'string' }, b: { type: 'string' } },
+        },
+      }),
+      signal: new AbortController().signal,
+      sharedDeadline: createUnboundedAiDeadline,
+      call,
+    });
+
+    expect(call).toHaveBeenCalledTimes(2);
+    gate.resolve('answer');
+    await Promise.all([ab, ba]);
+  });
+
+  test('a literal type change (`1` vs `"1"`) is a different request', async () => {
+    const coalescer = createStructuredCallCoalescer();
+    const gate = deferred<string>();
+    const call = mock(async () => gate.promise);
+
+    const numeric = coalescer.run({
+      identity: identity({
+        schema: { type: 'object', properties: { v: { const: 1 } } },
+      }),
+      signal: new AbortController().signal,
+      sharedDeadline: createUnboundedAiDeadline,
+      call,
+    });
+    const textual = coalescer.run({
+      identity: identity({
+        schema: { type: 'object', properties: { v: { const: '1' } } },
+      }),
+      signal: new AbortController().signal,
+      sharedDeadline: createUnboundedAiDeadline,
+      call,
+    });
+
+    expect(call).toHaveBeenCalledTimes(2);
+    gate.resolve('answer');
+    await Promise.all([numeric, textual]);
+  });
+
+  test('a schema with no canonical form runs ALONE rather than sharing a placeholder', async () => {
+    const coalescer = createStructuredCallCoalescer();
+    // Two DIFFERENT self-referencing graphs. Neither has a JSON representation,
+    // so neither has a canonical content identity. Assigning them a shared
+    // fallback would make them collide — and would also make every other
+    // uncanonicalizable schema collide with them.
+    const firstSchema: Record<string, unknown> = { type: 'object', properties: { a: {} } };
+    (firstSchema.properties as Record<string, unknown>).self = firstSchema;
+    const secondSchema: Record<string, unknown> = { type: 'object', properties: { b: {} } };
+    (secondSchema.properties as Record<string, unknown>).self = secondSchema;
+
+    const first = coalescer.run({
+      identity: identity({ schema: firstSchema }),
+      signal: new AbortController().signal,
+      sharedDeadline: createUnboundedAiDeadline,
+      call: async () => 'first',
+    });
+    const second = coalescer.run({
+      identity: identity({ schema: secondSchema }),
+      signal: new AbortController().signal,
+      sharedDeadline: createUnboundedAiDeadline,
+      call: async () => 'second',
+    });
+
+    expect((await first).value).toBe('first');
+    expect((await second).value).toBe('second');
+    expect(coalescer.coalescedCount).toBe(0);
+    expect(coalescer.unshareableCount).toBe(2);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Route, revision and scope
+//
+// The shared attempt runs the INITIATOR's route. Identity therefore has to say
+// whose route it is, or a settings change hands one caller another's answer.
+// ---------------------------------------------------------------------------
+
+describe('createStructuredCallCoalescer — route and scope identity', () => {
+  const route = (over: string): string => `cap=text|mode=byok|provider=ollama${over}`;
+
+  test('a different effective route does NOT share, even with identical prompts', async () => {
+    const coalescer = createStructuredCallCoalescer();
+    const gate = deferred<string>();
+    const call = mock(async () => gate.promise);
+
+    const oldSettings = coalescer.run({
+      identity: identity({ effectiveRoute: route('|origin=http://a:11434') }),
+      signal: new AbortController().signal,
+      sharedDeadline: createUnboundedAiDeadline,
+      call,
+    });
+    const newSettings = coalescer.run({
+      identity: identity({ effectiveRoute: route('|origin=http://b:11434') }),
+      signal: new AbortController().signal,
+      sharedDeadline: createUnboundedAiDeadline,
+      call,
+    });
+
+    // A settings change must not join an in-flight request aimed at the OLD
+    // route. Sharing here would silently serve the old model's answer.
+    expect(call).toHaveBeenCalledTimes(2);
+    gate.resolve('answer');
+    await Promise.all([oldSettings, newSettings]);
+  });
+
+  test('a different connection revision does NOT share', async () => {
+    const coalescer = createStructuredCallCoalescer();
+    const gate = deferred<string>();
+    const call = mock(async () => gate.promise);
+
+    const before = coalescer.run({
+      identity: identity({ effectiveRoute: route('|rev=1') }),
+      signal: new AbortController().signal,
+      sharedDeadline: createUnboundedAiDeadline,
+      call,
+    });
+    const after = coalescer.run({
+      identity: identity({ effectiveRoute: route('|rev=2') }),
+      signal: new AbortController().signal,
+      sharedDeadline: createUnboundedAiDeadline,
+      call,
+    });
+
+    expect(call).toHaveBeenCalledTimes(2);
+    gate.resolve('answer');
+    await Promise.all([before, after]);
+  });
+
+  test('a different scope (campaign) does NOT share', async () => {
+    const coalescer = createStructuredCallCoalescer();
+    const gate = deferred<string>();
+    const call = mock(async () => gate.promise);
+
+    const campaignA = coalescer.run({
+      identity: identity({ scope: 'campaign_a' }),
+      signal: new AbortController().signal,
+      sharedDeadline: createUnboundedAiDeadline,
+      call,
+    });
+    const campaignB = coalescer.run({
+      identity: identity({ scope: 'campaign_b' }),
+      signal: new AbortController().signal,
+      sharedDeadline: createUnboundedAiDeadline,
+      call,
+    });
+
+    expect(call).toHaveBeenCalledTimes(2);
+    gate.resolve('answer');
+    await Promise.all([campaignA, campaignB]);
+  });
+
+  test('a LATE follower still joins an attempt that is already running', async () => {
+    const coalescer = createStructuredCallCoalescer();
+    const gate = deferred<string>();
+    const call = mock(async () => gate.promise);
+
+    const first = coalescer.run({
+      identity: identity({ scope: 'campaign_a' }),
+      signal: new AbortController().signal,
+      sharedDeadline: createUnboundedAiDeadline,
+      call,
+    });
+    // Joined after `first` had already subscribed, but before it settled.
+    const late = coalescer.run({
+      identity: identity({ scope: 'campaign_a' }),
+      signal: new AbortController().signal,
+      sharedDeadline: createUnboundedAiDeadline,
+      call,
+    });
+
+    expect(call).toHaveBeenCalledTimes(1);
+    gate.resolve('answer');
+    expect((await late).coalesced).toBe(true);
+    expect((await first).coalesced).toBe(false);
+    expect((await first).value).toBe('answer');
   });
 });

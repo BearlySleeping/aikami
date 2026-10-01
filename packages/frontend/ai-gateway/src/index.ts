@@ -58,10 +58,14 @@ export {
   readChatSseStream,
 } from './lib/sse.ts';
 export {
+  canonicalSchemaFingerprint,
   createSchemaCompiler,
   enforceStrictSchema,
+  isCanonicalizableSchema,
+  SCHEMA_COMPILER_VERSION,
   type SchemaCompiler,
   sanitizeJsonResponse,
+  UncanonicalizableSchemaError,
   validateAgainstSchema,
 } from './lib/structured.ts';
 export {

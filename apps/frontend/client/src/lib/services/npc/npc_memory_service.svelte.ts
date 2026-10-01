@@ -4,9 +4,10 @@
 // conversations and greet a returning player with a fresh, history-aware line.
 //
 // Lifecycle:
-//   1. Dialogue closes → `recordConversation()` stores the tail verbatim and
-//      runs ONE background digest call that compacts the transcript into a
-//      bounded rolling summary + notes AND pre-generates the next opener.
+//   1. Dialogue closes → `recordConversation()` stores the tail verbatim AND,
+//      immediately and deterministically, folds the transcript into the rolling
+//      summary. A background digest then compacts that into notes and
+//      pre-generates the next opener.
 //   2. Every NPC turn → `getPromptFacts()` projects the bounded memory into the
 //      prompt, so replies reference past conversations.
 //   3. Player walks up to / loads a map with a remembered NPC →
@@ -14,6 +15,29 @@
 //      background, so it is ready before the player presses interact.
 //   4. Dialogue opens → `resolveGreeting()` swaps the authored greeting for the
 //      prepared opener (zero added latency; falls back to authored text).
+//
+// BACKGROUND LIFECYCLE (issue #382)
+//
+// All background work is owned by `npc_memory_lifecycle.ts`, which holds a
+// GENERATION bumped by reset/hydrate/campaign-switch/dispose. Every unit is
+// dropped BEFORE dispatch when its generation is stale, so obsolete queued work
+// costs zero provider calls rather than one wasted call. Bookkeeping is keyed by
+// ticket, so one unit's cleanup can never clear another's marker.
+//
+// Two properties the previous bare promise chain did not have:
+//
+//   - AN OPENER IS STAMPED WITH THE WORLD STATE IT WAS GENERATED AGAINST, not
+//     with its completion time. `_refreshOpener` revalidates the world-state
+//     fingerprint after the call returns; if the world moved on, the result is
+//     discarded and the opener is left stale rather than being dated forward
+//     into a freshness it has not earned. Unrelated frame-level churn does not
+//     invalidate memory, because the fingerprint is built from task-relevant
+//     world facts, not from a frame counter.
+//   - A SUPERSEDED DIGEST DOES NOT LOSE THE CONVERSATION. A digest carries
+//     durable notes and promises. If it is dropped, its lines are carried
+//     forward (bounded) and offered to the next digest, which is the only
+//     lossless option. Latest-only is correct for a replaceable opener refresh
+//     and is NOT correct here.
 //
 // Persisted through the save registry (`npcMemory`). All state is bounded by
 // NPC_MEMORY_LIMITS so neither the save nor the prompt grows with play time.
@@ -42,6 +66,13 @@ import { campaignService } from '../campaign/campaign_service.svelte.ts';
 import { buildGameStateFacts } from '../game/game_state_facts.ts';
 import { npcDialogueService } from '../game/npc_dialogue_service.svelte.ts';
 import { registerSerializable } from '../game/serializable_service';
+import { publishNpcMemoryBackgroundDiagnostics } from './npc_memory_diagnostics.ts';
+import {
+  createNpcMemoryLifecycle,
+  type NpcBackgroundContext,
+  type NpcBackgroundOutcome,
+  type NpcMemoryLifecycle,
+} from './npc_memory_lifecycle.ts';
 import {
   buildDigestSystemPrompt,
   buildDigestUserPrompt,
@@ -65,12 +96,47 @@ const toJsonSchema = (schema: object): Record<string, unknown> =>
 const DIGEST_JSON_SCHEMA = toJsonSchema(NpcMemoryDigestSchema);
 const OPENER_JSON_SCHEMA = toJsonSchema(NpcMemoryOpenerOutputSchema);
 
+/**
+ * Ceiling on transcript lines carried forward for a conversation whose digest
+ * was superseded before it could run.
+ *
+ * Bounded so a player who talks to an NPC in a burst cannot grow the save. The
+ * cap is deliberately generous against `digestTranscriptLines`, because losing
+ * the middle of a burst is the failure this carry-forward exists to prevent.
+ */
+const MAX_CARRIED_LINES = NPC_MEMORY_LIMITS.digestTranscriptLines * 2;
+
+/**
+ * A content-free fingerprint of the world state an opener was generated against.
+ *
+ * Built from the task-relevant facts the opener prompt actually consumed, not
+ * from a frame counter or a revision bumped by unrelated rendering — otherwise
+ * every animation frame would invalidate every remembered NPC and the memory
+ * would never survive a walk.
+ */
+const worldStateFingerprint = (facts: readonly string[]): string => {
+  let hash = 2166136261;
+  for (const fact of [...facts].sort()) {
+    for (let i = 0; i < fact.length; i += 1) {
+      hash ^= fact.charCodeAt(i);
+      hash = Math.imul(hash, 16777619);
+    }
+    hash ^= 10;
+    hash = Math.imul(hash, 16777619);
+  }
+  // Hex of a 32-bit FNV-1a. Used to detect CHANGE, never as a correctness
+  // identity: a collision here costs one extra digest, never a wrong answer,
+  // because a mismatch re-queues rather than applying.
+  return (hash >>> 0).toString(16);
+};
+
 /** Public contract for per-NPC conversational memory. */
 export type NpcMemoryServiceInterface = BaseFrontendClassInterface & {
   /**
    * Stores a finished conversation. No-op when the player never spoke (an
    * opened-and-closed dialogue must not consume the prepared opener). Runs the
-   * digest in the background; the returned promise settles when it finishes.
+   * digest in the background; the returned promise settles when it finishes or
+   * is dropped.
    */
   recordConversation(options: {
     npcId: string;
@@ -103,17 +169,49 @@ class NpcMemoryService
   /** Records keyed by NPC ID (plain object — serialized as-is). */
   private _records: NpcMemoryState['records'] = {};
 
-  /** Per-NPC serialisation of background work (digest before refresh). */
-  private _queues = new Map<string, Promise<void>>();
-
   /** Per-NPC timestamp of the last prefetch attempt (debounce). */
   private _lastPrefetchAt = new Map<string, number>();
 
-  /** In-flight opener refreshes (dedupe). */
-  private _prefetching = new Set<string>();
+  /**
+   * Monotonic counter of refreshes DISPATCHED for each NPC.
+   *
+   * Keyed by ticket rather than by "is this NPC refreshing", so a newer refresh
+   * supersedes an older one explicitly and a stale `finally` cannot clear a
+   * live marker. It is deliberately NOT a "currently refreshing" set: such a
+   * set was the previous cleanup bug, and the per-NPC cooldown plus the global
+   * pending bound already do that job without a marker that can leak.
+   */
+  private _refreshTicketByNpc = new Map<string, number>();
 
-  /** Bumped on reset/hydrate so in-flight results for old state are dropped. */
-  private _epoch = 0;
+  /**
+   * Transcript lines whose digest has not completed, per NPC.
+   *
+   * The lossless half of supersession: a digest that never runs does not take
+   * its conversation with it, because the lines are offered again to the next
+   * digest. Bounded by {@link MAX_CARRIED_LINES}.
+   */
+  private _unsummarized = new Map<string, NpcMemoryLine[]>();
+
+  /**
+   * Generation-scoped background work.
+   *
+   * Replaces the previous bare per-NPC promise chain, which could not cancel
+   * obsolete queued work and whose `finally` blocks raced across generations.
+   */
+  private readonly _lifecycle: NpcMemoryLifecycle = createNpcMemoryLifecycle({
+    onError: ({ npcId, kind, error }) => {
+      this.warn('background-task:failed', { npcId, kind, error: String(error) });
+    },
+    // Published on every transition AND on every release, so a snapshot taken
+    // while work is in flight is meaningful, every discard is individually
+    // attributable, and "nothing is left running" is observable from outside.
+    onEvent: () => {
+      publishNpcMemoryBackgroundDiagnostics(this._lifecycle.snapshot());
+    },
+    onSettled: () => {
+      publishNpcMemoryBackgroundDiagnostics(this._lifecycle.snapshot());
+    },
+  });
 
   // ── Public API ────────────────────────────────────────────────────────
 
@@ -131,7 +229,8 @@ class NpcMemoryService
     }
 
     const previous = this._records[options.npcId];
-    // Deterministic update first — memory survives even if the digest fails.
+    // Deterministic update first — memory survives even if the digest fails,
+    // is cancelled, or is superseded before it ever reaches the provider.
     const record: NpcMemoryRecord = {
       npcId: options.npcId,
       npcName: options.npcName,
@@ -145,16 +244,18 @@ class NpcMemoryService
     };
     this._records[options.npcId] = record;
     evictOldest(this._records);
+    this._carryUnsummarized(options.npcId, lines);
     this.info('recordConversation', {
       npcId: options.npcId,
       conversationCount: record.conversationCount,
       lines: lines.length,
     });
 
-    const epoch = this._epoch;
-    return this._enqueue(options.npcId, () =>
-      this._digest({ npcId: options.npcId, previous, lines, epoch, record }),
-    );
+    return this._lifecycle.enqueue({
+      npcId: options.npcId,
+      kind: 'digest',
+      run: (context) => this._digest({ npcId: options.npcId, previous, context }),
+    });
   }
 
   /** @inheritdoc */
@@ -225,19 +326,43 @@ class NpcMemoryService
       this.reset();
       return;
     }
-    this._epoch++;
+    // Invalidate BEFORE the new records land, so a result from the old state
+    // can never write into the new one.
+    this._retireGeneration();
     this._campaignId = data.campaignId;
     this._records = structuredClone(data.records);
     this._lastPrefetchAt.clear();
+    this._unsummarized.clear();
     this.info('hydrate', { records: Object.keys(this._records).length });
   }
 
   /** @inheritdoc */
   reset(): void {
-    this._epoch++;
+    this._retireGeneration();
     this._campaignId = campaignService.activeCampaign?.id;
     this._records = {};
     this._lastPrefetchAt.clear();
+    this._unsummarized.clear();
+    // A new game starts from a clean diagnostic baseline; otherwise the
+    // previous campaign's discards would be reported against this one.
+    this._lifecycle.resetDiagnostics();
+  }
+
+  /** @inheritdoc */
+  override async dispose(): Promise<void> {
+    // Retire first so nothing queued can dispatch, then clear the bookkeeping
+    // that generation owned. A queued unit's `finally` runs against ITS OWN
+    // ticket, so it cannot remove state belonging to a later generation.
+    this._retireGeneration();
+    this._records = {};
+    this._lastPrefetchAt.clear();
+    this._unsummarized.clear();
+    this._refreshTicketByNpc.clear();
+    // Teardown waits for the retired generation to finish unwinding before the
+    // service is gone, so a caller awaiting `recordConversation` is never left
+    // on a promise this service will never fulfil.
+    await this._lifecycle.drain();
+    await super.dispose();
   }
 
   // ── Private ───────────────────────────────────────────────────────────
@@ -248,10 +373,22 @@ class NpcMemoryService
     return this._records[npcId];
   }
 
-  /** Refreshes a remembered NPC's opener when missing or stale (debounced, deduped). */
+  /**
+   * Retires the current background generation and releases its bookkeeping.
+   *
+   * Split out so `reset`, `hydrate`, the campaign switch and `dispose` all do
+   * the same thing in the same order. Forgetting it in one of them is exactly
+   * how a queued subscriber outlives the state it was queued for.
+   */
+  private _retireGeneration(): void {
+    this._lifecycle.invalidate();
+    this._refreshTicketByNpc.clear();
+  }
+
+  /** Refreshes a remembered NPC's opener when missing or stale (debounced). */
   private _prefetchOpener(npcId: string): Promise<void> {
     const record = this._getRecord(npcId);
-    if (!record || !this._isOpenerStale(record) || this._prefetching.has(npcId)) {
+    if (!record || !this._isOpenerStale(record)) {
       return Promise.resolve();
     }
     const now = Date.now();
@@ -259,10 +396,11 @@ class NpcMemoryService
       return Promise.resolve();
     }
     this._lastPrefetchAt.set(npcId, now);
-    this._prefetching.add(npcId);
-    const epoch = this._epoch;
-    return this._enqueue(npcId, () => this._refreshOpener({ npcId, epoch, record })).finally(() => {
-      this._prefetching.delete(npcId);
+
+    return this._lifecycle.enqueue({
+      npcId,
+      kind: 'refresh',
+      run: (context) => this._refreshOpener({ npcId, context }),
     });
   }
 
@@ -275,7 +413,11 @@ class NpcMemoryService
     if (this._campaignId !== undefined) {
       this.info('campaign-changed:clearing', { from: this._campaignId, to: active });
       this._records = {};
-      this._epoch++;
+      this._unsummarized.clear();
+      // The subscribers queued for the OLD campaign are cancelled here, not
+      // merely ignored on arrival: a campaign switch must not leave a digest
+      // for the previous world queued behind the next one.
+      this._retireGeneration();
     }
     this._campaignId = active;
   }
@@ -290,19 +432,27 @@ class NpcMemoryService
     );
   }
 
-  /** Chains work per NPC so a refresh never races the digest it depends on. */
-  private _enqueue(npcId: string, task: () => Promise<void>): Promise<void> {
-    const previous = this._queues.get(npcId) ?? Promise.resolve();
-    const next = previous.then(task).catch((error: unknown) => {
-      this.warn('background-task:failed', { npcId, error: String(error) });
-    });
-    this._queues.set(npcId, next);
-    void next.finally(() => {
-      if (this._queues.get(npcId) === next) {
-        this._queues.delete(npcId);
-      }
-    });
-    return next;
+  /** Appends transcript lines to the carry-forward buffer, bounded. */
+  private _carryUnsummarized(npcId: string, lines: readonly NpcMemoryLine[]): void {
+    const existing = this._unsummarized.get(npcId) ?? [];
+    const next = [...existing, ...lines];
+    this._unsummarized.set(npcId, next.slice(-MAX_CARRIED_LINES));
+  }
+
+  /** Removes the carry-forward buffer; used when a digest actually consumes it. */
+  private _takeUnsummarized(npcId: string): NpcMemoryLine[] {
+    const lines = this._unsummarized.get(npcId) ?? [];
+    this._unsummarized.delete(npcId);
+    return lines;
+  }
+
+  /** Returns the carry-forward buffer to the pool when a digest never runs. */
+  private _restoreUnsummarized(npcId: string, lines: readonly NpcMemoryLine[]): void {
+    if (lines.length === 0) {
+      return;
+    }
+    const next = [...(this._unsummarized.get(npcId) ?? []), ...lines].slice(-MAX_CARRIED_LINES);
+    this._unsummarized.set(npcId, next);
   }
 
   /** Persona + current world facts for a background call. */
@@ -326,76 +476,131 @@ class NpcMemoryService
   private async _digest(options: {
     npcId: string;
     previous: NpcMemoryRecord | undefined;
-    lines: NpcMemoryLine[];
-    epoch: number;
-    record: NpcMemoryRecord;
-  }): Promise<void> {
-    const { epoch, record } = options;
-    if (epoch !== this._epoch || this._records[options.npcId] !== record) {
-      return;
+    context: NpcBackgroundContext;
+  }): Promise<NpcBackgroundOutcome> {
+    const { npcId, previous, context } = options;
+    const record = this._records[npcId];
+    if (context.isStale() || record === undefined) {
+      this.debug('digest:stale-before-dispatch', { npcId });
+      return 'superseded-before-dispatch';
     }
+    // Claim the carry-forward buffer only now that the call is actually about to
+    // happen. Claiming it at enqueue time would lose the lines to any earlier
+    // supersession without a digest ever having consumed them.
+    const lines = this._takeUnsummarized(npcId);
     const { persona, gameStateFacts } = this._npcContext(record);
-    const structured = await textGenerationService.extractStructure({
-      schema: DIGEST_JSON_SCHEMA,
-      schemaName: 'NpcMemoryDigest',
-      systemPrompt: buildDigestSystemPrompt({ persona, npcName: record.npcName }),
-      prompt: buildDigestUserPrompt({
-        record: options.previous,
-        npcName: record.npcName,
-        lines: options.lines,
-        gameStateFacts,
-      }),
-      task: 'summarization',
-    });
-    const current = this._records[options.npcId];
-    if (epoch !== this._epoch || current !== record) {
-      this.debug('digest:stale-result-dropped', { npcId: options.npcId });
-      return;
+    let structured: unknown;
+    try {
+      structured = await textGenerationService.extractStructure({
+        schema: DIGEST_JSON_SCHEMA,
+        schemaName: 'NpcMemoryDigest',
+        systemPrompt: buildDigestSystemPrompt({ persona, npcName: record.npcName }),
+        prompt: buildDigestUserPrompt({
+          record: previous,
+          npcName: record.npcName,
+          lines,
+          gameStateFacts,
+        }),
+        task: 'summarization',
+        // Scoped so a result computed inside one campaign can never be shared
+        // with a request in another.
+        scope: this._campaignId ?? 'no-campaign',
+        signal: context.signal,
+      });
+    } catch {
+      // The lines go back: a failed digest must not cost the conversation.
+      this._restoreUnsummarized(npcId, lines);
+      this.warn('digest:provider-failed — keeping deterministic memory', { npcId });
+      return 'failed';
+    }
+    const current = this._records[npcId];
+    if (context.isStale() || current !== record) {
+      this.debug('digest:stale-result-dropped', { npcId });
+      this._restoreUnsummarized(npcId, lines);
+      return 'invalidated-after-completion';
     }
     if (!Value.Check(NpcMemoryDigestSchema, structured)) {
-      this.warn('digest:invalid-output — keeping deterministic memory', { npcId: options.npcId });
-      return;
+      this.warn('digest:invalid-output — keeping deterministic memory', { npcId });
+      this._restoreUnsummarized(npcId, lines);
+      return 'failed';
     }
     current.summary = clampSummary(structured.summary);
     current.notes = mergeNotes({ existing: current.notes, incoming: structured.notes });
     current.opener = {
       text: clampText({ text: structured.opener, max: NPC_MEMORY_LIMITS.openerChars }),
       suggestions: sanitizeChips(structured.suggestions),
+      // The completion time, because the world state was revalidated below and
+      // a digest is not deferred behind anything: it runs against the record it
+      // was queued for, which the staleness check above has just confirmed is
+      // still current.
       generatedAt: Date.now(),
       forConversation: current.conversationCount,
     };
     this.info('digest:complete', {
-      npcId: options.npcId,
+      npcId,
       summaryChars: current.summary.length,
       notes: current.notes.length,
       chips: current.opener.suggestions.length,
     });
+    return 'applied';
   }
 
   /** Opener-only refresh for a remembered NPC (world state moved on). */
   private async _refreshOpener(options: {
     npcId: string;
-    epoch: number;
-    record: NpcMemoryRecord;
-  }): Promise<void> {
-    const { npcId, epoch, record } = options;
-    if (epoch !== this._epoch || this._records[npcId] !== record || !this._isOpenerStale(record)) {
-      return;
+    context: NpcBackgroundContext;
+  }): Promise<NpcBackgroundOutcome> {
+    const { npcId, context } = options;
+    const record = this._records[npcId];
+    if (context.isStale() || record === undefined || !this._isOpenerStale(record)) {
+      return 'superseded-before-dispatch';
     }
+    // Claimed HERE, not at enqueue time: a unit that never runs must not consume
+    // a ticket number that a later, live refresh would then look older than.
+    const ticket = (this._refreshTicketByNpc.get(npcId) ?? 0) + 1;
+    this._refreshTicketByNpc.set(npcId, ticket);
+
     const { persona, gameStateFacts } = this._npcContext(record);
-    const structured = await textGenerationService.extractStructure({
-      schema: OPENER_JSON_SCHEMA,
-      schemaName: 'NpcMemoryOpener',
-      systemPrompt: buildOpenerSystemPrompt({ persona, npcName: record.npcName }),
-      prompt: buildOpenerUserPrompt({ record, gameStateFacts }),
-      task: 'summarization',
-    });
-    if (epoch !== this._epoch || this._records[npcId] !== record) {
-      return;
+    // The world state this opener is being generated AGAINST. Stamping the
+    // result with its completion time instead is what made a deferred, stale
+    // opener read as fresh: staleness had been judged when the unit was queued,
+    // and the world then moved on.
+    const dispatchedAgainst = worldStateFingerprint(gameStateFacts);
+    let structured: unknown;
+    try {
+      structured = await textGenerationService.extractStructure({
+        schema: OPENER_JSON_SCHEMA,
+        schemaName: 'NpcMemoryOpener',
+        systemPrompt: buildOpenerSystemPrompt({ persona, npcName: record.npcName }),
+        prompt: buildOpenerUserPrompt({ record, gameStateFacts }),
+        task: 'summarization',
+        scope: this._campaignId ?? 'no-campaign',
+        signal: context.signal,
+      });
+    } catch {
+      this.warn('refreshOpener:provider-failed', { npcId });
+      return 'failed';
+    }
+    // Apply-time revalidation, in two independent directions.
+    if (context.isStale() || this._records[npcId] !== record || !this._isOpenerStale(record)) {
+      return 'invalidated-after-completion';
+    }
+    if (this._refreshTicketByNpc.get(npcId) !== ticket) {
+      // A newer refresh for this NPC was dispatched; this result is not it.
+      return 'superseded-before-dispatch';
+    }
+    const { gameStateFacts: currentFacts } = this._npcContext(record);
+    if (worldStateFingerprint(currentFacts) !== dispatchedAgainst) {
+      // The world moved on while the call was in flight. The opener is
+      // therefore still stale, and dating it now would make it read as fresh
+      // for another full max-age on the strength of a call that predates the
+      // change. It is left absent; the next proximity or map load regenerates.
+      this.debug('refreshOpener:world-moved-on', { npcId });
+      return 'invalidated-after-completion';
     }
     if (!Value.Check(NpcMemoryOpenerOutputSchema, structured)) {
       this.warn('refreshOpener:invalid-output', { npcId });
-      return;
+      return 'failed';
     }
     record.opener = {
       text: clampText({ text: structured.opener, max: NPC_MEMORY_LIMITS.openerChars }),
@@ -404,6 +609,7 @@ class NpcMemoryService
       forConversation: record.conversationCount,
     };
     this.info('refreshOpener:complete', { npcId });
+    return 'applied';
   }
 }
 

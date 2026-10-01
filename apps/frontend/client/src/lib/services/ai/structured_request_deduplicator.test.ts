@@ -17,6 +17,11 @@ const key = (overrides: Partial<StructuredRequestKey> = {}): StructuredRequestKe
   systemPrompt: 'You are a relationship analyst.',
   prompt: 'How did this interaction go?',
   model: undefined,
+  // The shared attempt runs the INITIATOR's route and lives inside the
+  // INITIATOR's partition, so both are part of the key. See the route/scope
+  // block in `structured_call_coalescer.test.ts` for the behavioural gates.
+  effectiveRoute: 'cap=text|mode=byok|provider=test|origin=in-process|rev=1',
+  scope: 'campaign_a',
   ...overrides,
 });
 

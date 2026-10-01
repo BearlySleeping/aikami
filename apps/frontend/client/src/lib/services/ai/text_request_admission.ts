@@ -67,70 +67,21 @@
 // THE CONTENTION DOMAIN — AND ITS LIMITS
 //
 // Scheduling is scoped to the resource that actually contends, not to all AI
-// globally. The key is `provider + endpoint ORIGIN`; see
-// {@link textContentionDomain}. Model is deliberately NOT part of it: two
-// models served by one Ollama endpoint share one GPU, which is the measured
-// failure mode. Conversely two providers on different origins are never merged,
-// so an independent device is not serialized behind an unrelated one.
+// globally. The key is derived in `text_contention_domain.ts`; this module only
+// consumes it. Model is deliberately NOT part of the key: two models served by
+// one Ollama endpoint share one GPU, which is the measured failure mode.
 //
-// This is a heuristic about physical devices, and the boundary it draws is
-// stated rather than assumed: same origin ⇒ assumed same process ⇒ assumed
-// same compute; different origin ⇒ assumed independent. Two DIFFERENT provider
-// ids on the SAME origin are NOT merged, because a provider id names a
-// configured route and two routes on one host may be separate daemons.
+// 🔴 A DISTINCT PORT IS NOT A DISTINCT DEVICE, and no key here can prove a
+// device mapping that the route does not expose. That assumption, the
+// evidence-based `resourceGroup` merge, and the measurement gap behind it are
+// stated in full at the top of that module — read it before changing this key.
 //
 // Contract: issue #382, "Add bounded concurrency and priority queues per
 // provider/local device. Interactive work gets precedence".
 
 import { type TextTask, textTaskPriority } from '@aikami/constants';
 import type { AiModeResolution } from '@aikami/types';
-
-// ---------------------------------------------------------------------------
-// Contention domain
-// ---------------------------------------------------------------------------
-
-/**
- * Reduces an endpoint URL to its ORIGIN — scheme, host and port.
- *
- * Path and query are dropped on purpose. `/api/chat` and
- * `/v1/chat/completions` on the same host are two request shapes into ONE
- * server process, and one server process owns one set of accelerators. Treating
- * them as different domains would let a background request on one surface and
- * an interactive request on the other run concurrently against the same GPU —
- * which is precisely the collision #416 measured.
- *
- * The port is KEPT: two Ollama daemons on one host on different ports are two
- * devices with two pools, and serializing them would be the "unnecessarily
- * serialized independent domains" failure.
- */
-const endpointOrigin = (endpoint: string | undefined): string => {
-  const trimmed = (endpoint ?? '').trim();
-  if (trimmed.length === 0) {
-    // No HTTP surface: the route is the in-process/on-device pool, which names
-    // itself through its provider id and has no origin to add.
-    return 'in-process';
-  }
-  try {
-    const url = new URL(trimmed);
-    return `${url.protocol}//${url.host}`;
-  } catch {
-    // An endpoint that is not a URL is still a stable identity string; using it
-    // verbatim is better than collapsing it into everyone else's key.
-    return trimmed.replace(/\/+$/, '').toLowerCase();
-  }
-};
-
-/**
- * The contention domain key for a resolved text route.
- *
- * The SMALLEST stable key derived from the effective routing that still names
- * the contended resource. Content-free: a provider id and an origin, never a
- * prompt, a model or any player data.
- */
-const textContentionDomain = (resolution: AiModeResolution): string => {
-  const provider = resolution.provider.trim().toLowerCase();
-  return `${provider.length > 0 ? provider : 'unknown'}|${endpointOrigin(resolution.endpoint)}`;
-};
+import { textContentionDomain } from './text_contention_domain.ts';
 
 // ---------------------------------------------------------------------------
 // Lease
@@ -705,6 +656,16 @@ export type ServiceInferenceAdmission = {
     routing: AiModeResolution;
     task?: TextTask;
     signal: AbortSignal;
+    /**
+     * An explicit shared-resource identity for this route.
+     *
+     * When several configured routes are aliases of ONE device or one managed
+     * runtime, naming the same group unites them into a single contention
+     * domain. This is the only merge performed on evidence rather than on
+     * inference — see the module header for why a distinct port cannot do
+     * this job. Content-free, and never derived from a secret.
+     */
+    resourceGroup?: string;
     onQueueExit?: (observation: QueueExit) => void;
   }): Promise<TextAdmissionLease>;
   /** Content-free counters. */
@@ -759,10 +720,11 @@ export const createServiceInferenceAdmission = (options?: {
       routing: AiModeResolution;
       task?: TextTask;
       signal: AbortSignal;
+      resourceGroup?: string;
       onQueueExit?: (observation: QueueExit) => void;
     }): Promise<TextAdmissionLease> {
       const pending = gate.acquire({
-        domain: textContentionDomain(input.routing),
+        domain: textContentionDomain(input.routing, input.resourceGroup),
         priority: textTaskPriority(input.task),
         signal: input.signal,
         ...(input.onQueueExit === undefined ? {} : { onExit: input.onQueueExit }),
