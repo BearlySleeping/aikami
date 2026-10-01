@@ -29,6 +29,16 @@ let gatewayChunks: string[] = [];
 let gatewayStructured: unknown;
 let gatewayError: unknown;
 let blockUntilAbort = false;
+/**
+ * Simulated provider work, so a test can make a call take MEASURABLE time.
+ *
+ * The point of the duration tests is that a call which really took time reports
+ * that time. Without a delay in the mock there is nothing to measure, and the
+ * assertion would pass against the very bug it exists to catch.
+ */
+let gatewayDelayMs = 0;
+/** Provider-reported usage the mock should return, when a test sets it. */
+let gatewayUsage: { inputTokens: number; outputTokens: number } | undefined;
 /** Holds the NEXT gateway call open, so in-flight behaviour is observable. */
 let gatewayGate: { promise: Promise<void>; release: () => void } | undefined;
 /** The routing `resolveText` reports, so policy can be exercised per test. */
@@ -60,6 +70,26 @@ const mockAiGatewayService = {
       signal?: AbortSignal;
       model?: string;
     };
+
+    // Stands in for real inference time. Abort-aware, so a deadline test can
+    // still cut it short.
+    if (gatewayDelayMs > 0) {
+      await new Promise<void>((resolve) => {
+        if (signal?.aborted === true) {
+          resolve();
+          return;
+        }
+        const timer = setTimeout(resolve, gatewayDelayMs);
+        signal?.addEventListener(
+          'abort',
+          () => {
+            clearTimeout(timer);
+            resolve();
+          },
+          { once: true },
+        );
+      });
+    }
 
     if (gatewayError) {
       throw gatewayError;
@@ -94,7 +124,11 @@ const mockAiGatewayService = {
       throw error;
     }
 
-    return { text: gatewayChunks.join(''), structured: gatewayStructured };
+    return {
+      text: gatewayChunks.join(''),
+      structured: gatewayStructured,
+      ...(gatewayUsage === undefined ? {} : { usage: gatewayUsage }),
+    };
   }),
   cancelAll: mock(() => {}),
 };
@@ -114,6 +148,8 @@ let localSubmitOutput = '';
 let localSubmitError: unknown;
 let localSubmitCalls = 0;
 let localEnsureLoadedCalls = 0;
+/** Simulated on-device work, for the local-first duration test. */
+let localDelayMs = 0;
 /** Model the fake engine claims to serve; drives readiness. */
 let localServedModels: string[] = ['local-qwen3'];
 
@@ -137,6 +173,11 @@ const mockLocalPool = {
   }),
   submit: mock(async () => {
     localSubmitCalls++;
+    if (localDelayMs > 0) {
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, localDelayMs);
+      });
+    }
     if (localSubmitError) {
       throw localSubmitError;
     }
@@ -191,6 +232,9 @@ const resetGatewayMocks = (): void => {
   gatewayStructured = undefined;
   gatewayError = undefined;
   blockUntilAbort = false;
+  gatewayDelayMs = 0;
+  gatewayUsage = undefined;
+  localDelayMs = 0;
   localBlockUntilAbort = false;
   localSignal = undefined;
   textTelemetryService.clear();
@@ -952,5 +996,170 @@ describe('TextGenerationService — shared end-to-end deadline', () => {
 
     expect(gatewayGenerateCalls).toHaveLength(1);
     expect(gatewayGenerateCalls[0].signal.aborted).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Tests: structured-call DURATION telemetry (#382)
+//
+// The defect these cover: `extractStructure` passed `start: performance.now()`
+// AFTER its awaits, and `recordTextCall` derives `totalMs` as
+// `performance.now() - start`. Every structured call therefore reported its own
+// duration as ~0 ms. #416 found a 4 s provider call logged as 0.
+// ---------------------------------------------------------------------------
+
+/** The most recent recorded span, newest-first as the buffer is ordered. */
+const lastSpan = () => textTelemetryService.spans[0];
+
+const durationSchema = {
+  type: 'object',
+  properties: { ok: { type: 'boolean' } },
+};
+
+describe('TextGenerationService — structured-call duration telemetry', () => {
+  beforeEach(async () => {
+    await (await loadService()).dispose();
+    resetGatewayMocks();
+    localSubmitOutput = '';
+    localSubmitError = undefined;
+    localServedModels = ['local-qwen3'];
+  });
+
+  test('a provider call that takes measurable time no longer records 0 ms', async () => {
+    const service = await loadService();
+    gatewayStructured = { ok: true };
+    gatewayDelayMs = 40;
+
+    await service.extractStructure({
+      schema: durationSchema,
+      schemaName: 'DurationProbe',
+      prompt: 'go',
+      task: 'envelope',
+    });
+
+    // Before the fix this was `0`: the clock was read after the work finished.
+    expect(lastSpan().totalMs).toBeGreaterThanOrEqual(40);
+  });
+
+  test('a FAILED provider call reports the same real elapsed time as a successful one', async () => {
+    const service = await loadService();
+    gatewayStructured = { ok: true };
+    gatewayDelayMs = 40;
+
+    await service.extractStructure({
+      schema: durationSchema,
+      schemaName: 'DurationProbe',
+      prompt: 'go',
+      task: 'envelope',
+    });
+    const succeededMs = lastSpan().totalMs;
+
+    // The failure path shares the ONE logical start rather than minting its
+    // own clock, which is how the success path ended up at 0 in the first place.
+    gatewayError = new Error('provider exploded');
+    await expect(
+      service.extractStructure({
+        schema: durationSchema,
+        schemaName: 'DurationProbe',
+        prompt: 'go',
+        task: 'envelope',
+      }),
+    ).rejects.toThrow();
+
+    expect(lastSpan().ok).toBe(false);
+    expect(lastSpan().totalMs).toBeGreaterThanOrEqual(40);
+    expect(lastSpan().totalMs).toBeGreaterThan(0);
+    expect(succeededMs).toBeGreaterThan(0);
+  });
+
+  test('a local-first success records real elapsed time, not 0', async () => {
+    const service = await loadService();
+    localSubmitOutput = '{"change":"improve","magnitude":3,"reason":"kind"}';
+    localDelayMs = 30;
+
+    await service.extractStructure({
+      schema: RelationshipOutputSchema as unknown as Record<string, unknown>, // guard-ignore lint/type-safety/casting: TypeBox schema to the generic record the service accepts
+      schemaName: 'Relationship',
+      prompt: 'hi',
+      task: 'agent-relationship',
+    });
+
+    // The local path is a different outcome, not a different clock: it reported
+    // 0 ms for exactly the same reason the provider path did.
+    expect(lastSpan().provider).toBe('local-tasks');
+    expect(lastSpan().ok).toBe(true);
+    expect(lastSpan().totalMs).toBeGreaterThanOrEqual(30);
+  });
+
+  test('duration telemetry does not disturb token provenance', async () => {
+    const service = await loadService();
+    gatewayStructured = { ok: true };
+    gatewayDelayMs = 20;
+    // No provider usage reported → the estimate is labelled as an estimate.
+    await service.extractStructure({
+      schema: durationSchema,
+      schemaName: 'DurationProbe',
+      prompt: 'go',
+      task: 'envelope',
+    });
+    expect(lastSpan().tokenSource).toBe('estimated');
+    expect(lastSpan().promptTokens).toBeGreaterThan(0);
+
+    // Provider-reported usage still WINS over the estimate, unchanged by the
+    // start-capture fix — which touched timing only.
+    textTelemetryService.clear();
+    gatewayUsage = { inputTokens: 111, outputTokens: 22 };
+    await service.extractStructure({
+      schema: durationSchema,
+      schemaName: 'DurationProbe',
+      prompt: 'go',
+      task: 'envelope',
+    });
+    expect(lastSpan().tokenSource).toBe('provider');
+    expect(lastSpan().promptTokens).toBe(111);
+    expect(lastSpan().completionTokens).toBe(22);
+    expect(lastSpan().totalMs).toBeGreaterThanOrEqual(20);
+  });
+
+  test('a queued request records queue wait inside totalMs AND as queueMs', async () => {
+    gatewayStructured = { ok: true };
+
+    // Admission does not exist yet in this commit, so this asserts the SPAN's
+    // contract: a caller that supplies queue measurements has them carried
+    // through the recorder without being dropped.
+    const { recordTextCall } = await import('./text_telemetry_recorder.ts');
+    recordTextCall({
+      start: performance.now() - 500,
+      startedAt: new Date().toISOString(),
+      streamed: false,
+      promptChars: 40,
+      completionChars: 8,
+      ok: true,
+      queueMs: 480,
+      queueDepth: 3,
+    });
+
+    expect(lastSpan().queueMs).toBe(480);
+    expect(lastSpan().queueDepth).toBe(3);
+    // totalMs is measured from the same `start`, so the queue wait is already
+    // inside it rather than reported alongside a sanitised total.
+    expect(lastSpan().totalMs).toBeGreaterThanOrEqual(480);
+    expect(textTelemetryService.summary.counters.maxQueueDepth).toBe(3);
+  });
+
+  test('a call that never queued carries no queueMs rather than a fabricated zero', async () => {
+    const service = await loadService();
+    gatewayStructured = { ok: true };
+    gatewayDelayMs = 15;
+
+    await service.extractStructure({
+      schema: durationSchema,
+      schemaName: 'DurationProbe',
+      prompt: 'go',
+      task: 'envelope',
+    });
+
+    expect(lastSpan().queueMs).toBeUndefined();
+    expect(lastSpan().queueDepth).toBeUndefined();
   });
 });

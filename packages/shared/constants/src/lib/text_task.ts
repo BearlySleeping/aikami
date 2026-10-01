@@ -90,9 +90,13 @@ export type TextTaskPreset = {
    * nothing inside the budget. With the channel off the same request returned
    * valid JSON in a median of 2.4 s.
    *
-   * A connection may override this (`TextParams.reasoning`); see
-   * `mergeTaskPresetParams`. The preference is advisory: a provider that
-   * cannot honour it ignores it.
+   * The TASK PRESET IS THE ONLY OWNER of this preference. It deliberately is
+   * NOT a connection-level control: #415 removed the persisted
+   * `TextParams.reasoning` field, so there is nothing on a saved connection for
+   * it to override and `mergeTaskPresetParams` never carries it (asserted by
+   * `text_task_params.test.ts`). Changing the product's reasoning behaviour is
+   * therefore a change to this preset, not to a user's stored connection.
+   * The preference is advisory: a provider that cannot honour it ignores it.
    */
   reasoning?: AiReasoning;
   /**

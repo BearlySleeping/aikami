@@ -567,6 +567,23 @@ class TextGenerationService
     } = options;
     throwIfAlreadyAborted(signal);
 
+    // 🔴 ONE logical start, captured BEFORE any work is done.
+    //
+    // `recordTextCall` derives `totalMs` as `performance.now() - start`. Reading
+    // `start` AFTER an await made every structured call report its duration as
+    // ~0 ms — envelope, summarization, agent micro-tasks, the untasked calls:
+    // all of them measured as instantaneous, because the clock was read once
+    // the clock had already finished running. #416 caught it because a 4 s
+    // provider call was being logged as 0.
+    //
+    // It is taken here, ahead of controller linking, deadline construction,
+    // routing resolution, admission, the local-first attempt, the coalesced
+    // provider call and every fallback — because ALL of those are the call's
+    // critical path. Success, local-first success, provider success and failure
+    // all report against this one value; a second clock per outcome would let
+    // one of them drift back to zero without anything noticing.
+    const start = performance.now();
+
     const { controller: abortController, cleanup } = this._linkController(signal);
     this._incrementStreamCount();
     const deadline = this._deadlineFor({ deadlineAt, task, signal });
@@ -624,7 +641,7 @@ class TextGenerationService
         this.debug('extractStructure:local-first', { schemaName, task });
         this._recordSpan(
           span({
-            start: performance.now(),
+            start,
             // A local answer names no provider, so the recorded route says so
             // rather than borrowing the routing that merely permitted it.
             resolution: { ...routing, mode: 'offline', provider: 'local-tasks', model: '' },
@@ -659,7 +676,7 @@ class TextGenerationService
       this.debug('extractStructure:done', { schemaName, coalesced: result.coalesced });
       this._recordSpan(
         span({
-          start: performance.now(),
+          start,
           resolution,
           streamed: false,
           // A structured call can legitimately produce no object; that is a
@@ -678,7 +695,7 @@ class TextGenerationService
     } catch (error: unknown) {
       this._recordSpan(
         span({
-          start: performance.now(),
+          start,
           resolution,
           streamed: false,
           completionChars: 0,

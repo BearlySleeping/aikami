@@ -57,6 +57,17 @@ export type TextCallObservation = {
   usage?: { inputTokens: number; outputTokens: number; cachedTokens?: number };
   /** Which cache layer, if any, served or shaped this call. */
   cacheLayer?: TextCacheLayer;
+  /**
+   * Milliseconds spent waiting for admission to expensive inference, from
+   * joining the contention domain's queue to being admitted. Already included
+   * in `totalMs`; carried separately so queueing is observable on its own.
+   */
+  queueMs?: number;
+  /**
+   * Requests ahead of this one in its contention domain's admission queue at
+   * the instant it joined — the entry snapshot, never re-sampled.
+   */
+  queueDepth?: number;
 };
 
 /**
@@ -95,7 +106,7 @@ const spanErrorCode = (error: unknown, cancelled: boolean): string | undefined =
  * cannot introduce latency or a second source of truth about what happened.
  */
 export const recordTextCall = (observation: TextCallObservation): void => {
-  const { resolution, task, streamed, ttftMs, deadline, usage } = observation;
+  const { resolution, task, streamed, ttftMs, deadline, usage, queueMs, queueDepth } = observation;
   // A raw `AbortError` from a caller is a cancellation; an `AiGatewayException`
   // carries its own code and does not need classifying.
   const isAbortError = (observation.error as { name?: string } | undefined)?.name === 'AbortError';
@@ -126,5 +137,10 @@ export const recordTextCall = (observation: TextCallObservation): void => {
     deadlineExceeded: deadlineExceeded(deadline),
     ...(deadline === undefined ? {} : { deadlineRemainingMs: deadline.remainingMs() }),
     ...(observation.cacheLayer === undefined ? {} : { cacheLayer: observation.cacheLayer }),
+    // Queueing is part of the critical path, so it is inside `totalMs` by
+    // construction (the span's start is captured before admission). It is
+    // recorded again here only so the wait is visible as its own quantity.
+    ...(queueMs === undefined ? {} : { queueMs }),
+    ...(queueDepth === undefined ? {} : { queueDepth }),
   });
 };
