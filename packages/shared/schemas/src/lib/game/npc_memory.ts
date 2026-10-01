@@ -41,6 +41,19 @@ export const NpcMemoryOpenerSchema = Type.Object(
     generatedAt: Type.Number(),
     /** `conversationCount` the opener was generated for (invalidates on a new talk). */
     forConversation: Type.Integer({ minimum: 0 }),
+    /**
+     * Fingerprint of the projected world state this opener was generated
+     * AGAINST (issue #382).
+     *
+     * OPTIONAL and additive: a save written before this field existed
+     * hydrates without it, and an absent fingerprint never matches a computed
+     * one — so an old save REFRESHES rather than serving a greeting it cannot
+     * prove is current. The safe direction is the expensive one.
+     *
+     * Content-free: a 32-bit hash of the task-relevant world facts. It is not
+     * a credential, a player name or any prompt text.
+     */
+    worldFingerprint: Type.Optional(Type.String()),
   },
   { additionalProperties: false },
 );

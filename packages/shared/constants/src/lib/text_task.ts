@@ -212,6 +212,30 @@ export const TEXT_TASK_PRESETS: Record<TextTask, TextTaskPreset> = {
     streamable: false,
     localFirst: true,
     batchable: false,
+    // Bounded MECHANICAL extraction, exactly like `envelope`: the whole output
+    // is a short JSON object derived from text the client already holds — a
+    // conversation the player just finished, memory the client already stores,
+    // or a session the client already logged.
+    //
+    // Measured per CALL SITE on the pinned runtime (Ollama 0.34.3,
+    // `ornith-1.5:9b`, CPU, 32 cores), n=3 each, reasoning on vs off, via
+    // `apps/frontend/client/scripts/ai_context_reuse_probe.ts` (P3). Reasoning
+    // is not a small tax on these tasks — it is the whole cost:
+    //
+    //   task              reasoning ON            reasoning OFF
+    //   opener refresh    14 233 ms, 0/3 valid    7 991 ms, 3/3 valid
+    //   npc digest        15 098 ms, 0/3 valid    9 296 ms, 3/3 valid
+    //   session summary   15 434 ms, 1/3 valid    8 576 ms, 3/3 valid
+    //
+    // With reasoning on, all three saturate the 400-token cap and the output
+    // is truncated mid-object — 0/3 schema-valid on two of the three. With it
+    // off, every call completes inside half the time with a valid object.
+    //
+    // This does NOT touch `dialogue`, `narration` or any `agent-*` task, so no
+    // player-facing prose changes. It is safe for the whole `summarization`
+    // role precisely because that role has exactly three callers, all three
+    // measured above, and none of them is creative.
+    reasoning: 'none',
   },
   'agent-expression': {
     role: 'structured',

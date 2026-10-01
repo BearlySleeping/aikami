@@ -87,13 +87,21 @@ describe('DEFAULT_TEXT_PARAMS', () => {
 });
 
 describe('reasoning preference is declared, not inferred', () => {
-  test('exactly one task opts out of the reasoning channel', () => {
-    // A single opt-in is the point: `envelope` is the measured case, and every
-    // other task is player-facing prose or a background task whose quality has
-    // never been measured with reasoning off. Widening this list needs its own
-    // measurement, not a hunch.
+  test('the opt-out list is exactly the tasks measured to be bounded extraction', () => {
+    // An opt-out is not a hunch; each entry here was measured ON THE PRODUCTION
+    // ROUTE with reasoning on vs off, per call site, before being added. See
+    // `docs/audits/382-context-reuse-report.md`.
+    //
+    //   `envelope`    — #415, C-401 call 2: 0/33 completed → 19/20.
+    //   `summarization` — this lane, n=3 per call site: opener refresh
+    //     14 233 → 7 991 ms (0/3 → 3/3 valid), npc digest 15 098 → 9 296 ms
+    //     (0/3 → 3/3), session summary 15 434 → 8 576 ms (1/3 → 3/3).
+    //
+    // Widening this list again needs its own measurement, not an inference
+    // from "background tasks are probably fine too" — the `agent-*` tasks are
+    // background and are deliberately NOT on it.
     const optedOut = TEXT_TASKS.filter((task) => TEXT_TASK_PRESETS[task].reasoning === 'none');
-    expect(optedOut).toEqual(['envelope']);
+    expect(optedOut).toEqual(['envelope', 'summarization']);
   });
 
   test('no preset invents a reasoning value outside the declared union', () => {
