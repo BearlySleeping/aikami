@@ -90,6 +90,27 @@ describe('canonicalSchemaFingerprint', () => {
     expect(isCanonicalizableSchema(cyclic)).toBe(false);
   });
 
+  test('rejects non-plain objects without reading their properties', () => {
+    const inherited = Object.create({ inherited: true });
+    Object.defineProperty(inherited, 'value', {
+      enumerable: true,
+      get: () => {
+        throw new Error('must not read');
+      },
+    });
+    for (const value of [new Date(), new Map(), new Set(), /pattern/, inherited]) {
+      expect(() => canonicalSchemaFingerprint({ const: value })).toThrow(
+        UncanonicalizableSchemaError,
+      );
+      expect(isCanonicalizableSchema({ const: value })).toBe(false);
+    }
+  });
+
+  test('null-prototype records share the identity of plain records', () => {
+    const record = Object.assign(Object.create(null), { type: 'string' });
+    expect(canonicalSchemaFingerprint(record)).toBe(canonicalSchemaFingerprint({ type: 'string' }));
+  });
+
   test('a shared structure is not mistaken for a cycle', () => {
     // The same child object referenced twice is a DAG, not a cycle: a JSON
     // encoder expands it, so it has a canonical form.
@@ -179,10 +200,12 @@ describe('createSchemaCompiler', () => {
 
   test('the cache is bounded and evicts the least recently compiled', () => {
     const compiler = createSchemaCompiler({ maxEntries: 2 });
-    compiler.compile({ schema: objectSchema({ a: {} }), schemaName: 'A' });
+    const firstA = compiler.compile({ schema: objectSchema({ a: {} }), schemaName: 'A' });
     compiler.compile({ schema: objectSchema({ b: {} }), schemaName: 'B' });
-    compiler.compile({ schema: objectSchema({ c: {} }), schemaName: 'C' });
+    const firstC = compiler.compile({ schema: objectSchema({ c: {} }), schemaName: 'C' });
     expect(compiler.size).toBe(2);
+    expect(compiler.compile({ schema: objectSchema({ a: {} }), schemaName: 'A' })).not.toBe(firstA);
+    expect(compiler.compile({ schema: objectSchema({ c: {} }), schemaName: 'C' })).toBe(firstC);
   });
 
   test('a schema with no canonical form still compiles, but never shares', () => {

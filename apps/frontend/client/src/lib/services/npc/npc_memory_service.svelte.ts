@@ -489,6 +489,7 @@ class NpcMemoryService
     // supersession without a digest ever having consumed them.
     const lines = this._takeUnsummarized(npcId);
     const { persona, gameStateFacts } = this._npcContext(record);
+    const dispatchedAgainst = worldStateFingerprint(gameStateFacts);
     let structured: unknown;
     try {
       structured = await textGenerationService.extractStructure({
@@ -508,15 +509,19 @@ class NpcMemoryService
         signal: context.signal,
       });
     } catch {
-      // The lines go back: a failed digest must not cost the conversation.
-      this._restoreUnsummarized(npcId, lines);
+      // Preserve failed conversations only within their original generation.
+      if (!context.isStale()) {
+        this._restoreUnsummarized(npcId, lines);
+      }
       this.warn('digest:provider-failed — keeping deterministic memory', { npcId });
       return 'failed';
     }
     const current = this._records[npcId];
     if (context.isStale() || current !== record) {
       this.debug('digest:stale-result-dropped', { npcId });
-      this._restoreUnsummarized(npcId, lines);
+      if (!context.isStale()) {
+        this._restoreUnsummarized(npcId, lines);
+      }
       return 'invalidated-after-completion';
     }
     if (!Value.Check(NpcMemoryDigestSchema, structured)) {
@@ -526,21 +531,20 @@ class NpcMemoryService
     }
     current.summary = clampSummary(structured.summary);
     current.notes = mergeNotes({ existing: current.notes, incoming: structured.notes });
-    current.opener = {
-      text: clampText({ text: structured.opener, max: NPC_MEMORY_LIMITS.openerChars }),
-      suggestions: sanitizeChips(structured.suggestions),
-      // The completion time, because the world state was revalidated below and
-      // a digest is not deferred behind anything: it runs against the record it
-      // was queued for, which the staleness check above has just confirmed is
-      // still current.
-      generatedAt: Date.now(),
-      forConversation: current.conversationCount,
-    };
+    const { gameStateFacts: currentFacts } = this._npcContext(current);
+    if (worldStateFingerprint(currentFacts) === dispatchedAgainst) {
+      current.opener = {
+        text: clampText({ text: structured.opener, max: NPC_MEMORY_LIMITS.openerChars }),
+        suggestions: sanitizeChips(structured.suggestions),
+        generatedAt: Date.now(),
+        forConversation: current.conversationCount,
+      };
+    }
     this.info('digest:complete', {
       npcId,
       summaryChars: current.summary.length,
       notes: current.notes.length,
-      chips: current.opener.suggestions.length,
+      chips: current.opener?.suggestions.length ?? 0,
     });
     return 'applied';
   }

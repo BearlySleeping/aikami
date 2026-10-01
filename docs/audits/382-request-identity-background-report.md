@@ -141,7 +141,7 @@ dependency. Recorded here so the integration owner sees it explicitly.
   first (fails on current code), then key-order sharing, cyclic/unsupported
   bypass, route/credential/scope separation, late followers, cancellation
   matrix. The existing six-to-one subscriber-cancellation test must stay green.
-* `schema_compiler.test.ts` (new, ai-gateway) — same name/different schema,
+* `structured.test.ts` (new, ai-gateway) — same name/different schema,
   identical reuse, nested `$ref`/combinators, caller mutation, bounded memory.
 * `npc_memory_lifecycle.test.ts` (new) — virtual clock only, no real sleeps:
   replace/two-rapid/world-fact-change/map-switch/campaign A→B with the same NPC

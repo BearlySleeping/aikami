@@ -226,6 +226,7 @@ export const createNpcMemoryLifecycle = (options?: {
   let generation = 0;
   let ticketSeq = 0;
   let pending = 0;
+  let pendingRefreshes = 0;
   let pendingHighWaterMark = 0;
   /** Enqueue time per TICKET, never per NPC — see the ticket note in the header. */
   const enqueuedAt = new Map<number, number>();
@@ -283,8 +284,16 @@ export const createNpcMemoryLifecycle = (options?: {
   };
 
   /** Detaches a unit's own bookkeeping. Never touches another unit's. */
-  const release = (npcId: string, ticket: number, chain: Promise<void>): void => {
+  const release = (
+    npcId: string,
+    kind: NpcBackgroundKind,
+    ticket: number,
+    chain: Promise<void>,
+  ): void => {
     pending = Math.max(0, pending - 1);
+    if (kind === 'refresh') {
+      pendingRefreshes = Math.max(0, pendingRefreshes - 1);
+    }
     enqueuedAt.delete(ticket);
     running.delete(ticket);
     // Identity-compared: an older chain settling must not delete the newer
@@ -302,7 +311,7 @@ export const createNpcMemoryLifecycle = (options?: {
       const ticket = ticketSeq;
       const at = now();
 
-      if (kind === 'refresh' && pending >= maxPendingRefreshes) {
+      if (kind === 'refresh' && pendingRefreshes >= maxPendingRefreshes) {
         // Replaceable work, dropped with an explicit outcome rather than
         // queued behind an unbounded backlog.
         record(npcId, kind, 'overloaded', at, at);
@@ -315,6 +324,9 @@ export const createNpcMemoryLifecycle = (options?: {
       // `pending: 0`, and "nothing is left running" would be indistinguishable
       // from "nothing has started".
       pending += 1;
+      if (kind === 'refresh') {
+        pendingRefreshes += 1;
+      }
       pendingHighWaterMark = Math.max(pendingHighWaterMark, pending);
       enqueuedAt.set(ticket, at);
       counters.requested += 1;
@@ -344,13 +356,7 @@ export const createNpcMemoryLifecycle = (options?: {
           record(npcId, kind, outcome, at, now());
         } catch (error: unknown) {
           // The unit owns its own failure reporting; the chain must not break.
-          options?.onEvent?.({
-            npcId,
-            kind,
-            outcome: 'failed',
-            ageMs: Math.max(0, now() - at),
-          });
-          counters.failed += 1;
+          record(npcId, kind, 'failed', at, now());
           options?.onError?.({ npcId, kind, error });
         }
       };
@@ -359,7 +365,7 @@ export const createNpcMemoryLifecycle = (options?: {
       chain = previous.then(task).catch(() => undefined);
       chains.set(npcId, chain);
       const settled = chain.finally(() => {
-        release(npcId, ticket, chain);
+        release(npcId, kind, ticket, chain);
       });
       return settled;
     },

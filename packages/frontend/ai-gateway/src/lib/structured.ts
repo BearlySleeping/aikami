@@ -94,6 +94,10 @@ const canonicalize = (value: unknown, ancestors: Set<object>): string => {
       const items = node.map((item) => canonicalize(item, ancestors));
       return `[${items.length}(${items.join(',')})]`;
     }
+    const prototype = Object.getPrototypeOf(node);
+    if (prototype !== Object.prototype && prototype !== null) {
+      throw new UncanonicalizableSchemaError('non-plain object');
+    }
     const record = node as Record<string, unknown>;
     // Sort by code unit so the order is total and stable across engines.
     const keys = Object.keys(record).sort();
@@ -118,7 +122,7 @@ const canonicalize = (value: unknown, ancestors: Set<object>): string => {
  * served to another. The string is long, and only compared.
  *
  * @throws {UncanonicalizableSchemaError} for cycles, functions, symbols,
- *   bigints and non-finite numbers.
+ *   bigints, non-finite numbers and non-plain objects.
  */
 export const canonicalSchemaFingerprint = (schema: unknown): string =>
   canonicalize(schema, new Set<object>());

@@ -15,15 +15,13 @@
 //
 // Not a credential, not a fingerprint of one, and not anything a log line should
 // ever print. It is assembled from the same fields the gateway dispatches with:
-// the resolved mode, the provider id, the endpoint ORIGIN, the model, and the
+// the resolved mode, the provider id, the endpoint destination, the model, and the
 // effective generation/reasoning settings. A connection whose API key changes
 // while nothing else does is NOT distinguishable here, and that gap is stated
 // rather than papered over — a caller with a settings owner that can supply a
 // revision passes it as `configRevision`.
 //
-// Endpoints are reduced to their origin on purpose: `/api/chat` and
-// `/v1/chat/completions` on one host are two request shapes into one server
-// process. Path differences are not a different destination.
+// Paths and queries distinguish destinations served by the same origin.
 //
 // Contract: issue #382 P1
 
@@ -32,10 +30,8 @@ import type { AiModeResolution } from '@aikami/types';
 import type { StructuredCallIdentity } from './structured_call_coalescer.ts';
 
 /**
- * Scheme + host + port, or the trimmed input when it is not a URL, or
+ * Scheme + host + port + normalized path + query, or the trimmed input when invalid, or
  * `in-process` for a route with no HTTP surface.
- *
- * Never the path or query: those change per request shape, not per route.
  */
 const endpointOrigin = (endpoint: string | undefined): string => {
   const trimmed = (endpoint ?? '').trim();
@@ -44,7 +40,7 @@ const endpointOrigin = (endpoint: string | undefined): string => {
   }
   try {
     const url = new URL(trimmed);
-    return `${url.protocol}//${url.host}`;
+    return `${url.protocol}//${url.host}${url.pathname}${url.search}`;
   } catch {
     return trimmed.replace(/\/+$/, '').toLowerCase();
   }

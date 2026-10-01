@@ -205,6 +205,30 @@ describe('NpcMemoryLifecycle — bounds and outcomes', () => {
     expect(lifecycle.snapshot().pending).toBe(0);
   });
 
+  test('digest backlog does not consume or release refresh capacity', async () => {
+    const lifecycle = createNpcMemoryLifecycle({ maxPendingRefreshes: 1 });
+    const digestGate = deferred<NpcBackgroundOutcome>();
+    const refreshGate = deferred<NpcBackgroundOutcome>();
+    const digest = lifecycle.enqueue({ npcId: 'a', kind: 'digest', run: () => digestGate.promise });
+    const refresh = lifecycle.enqueue({
+      npcId: 'b',
+      kind: 'refresh',
+      run: () => refreshGate.promise,
+    });
+    expect(lifecycle.snapshot().pending).toBe(2);
+    expect(lifecycle.snapshot().overloaded).toBe(0);
+    digestGate.resolve('applied');
+    await digest;
+    await lifecycle.enqueue({ npcId: 'c', kind: 'refresh', run: async () => 'applied' });
+    expect(lifecycle.snapshot().overloaded).toBe(1);
+    refreshGate.resolve('applied');
+    await refresh;
+    await lifecycle.enqueue({ npcId: 'c', kind: 'refresh', run: async () => 'applied' });
+    expect(lifecycle.snapshot().overloaded).toBe(1);
+    expect(lifecycle.snapshot().applied).toBe(3);
+    expect(lifecycle.snapshot().pending).toBe(0);
+  });
+
   test('a DIGEST is never dropped for being late', async () => {
     const lifecycle = createNpcMemoryLifecycle({ maxPendingRefreshes: 1 });
     const gate = deferred<void>();
@@ -259,7 +283,15 @@ describe('NpcMemoryLifecycle — bounds and outcomes', () => {
 
   test('a throwing unit is contained and counted, and the chain continues', async () => {
     const onError = mock((_detail: unknown) => {});
-    const lifecycle = createNpcMemoryLifecycle({ onError });
+    const failuresAtPublication: number[] = [];
+    const lifecycle = createNpcMemoryLifecycle({
+      onError,
+      onEvent: (event) => {
+        if (event.outcome === 'failed') {
+          failuresAtPublication.push(lifecycle.snapshot().failed);
+        }
+      },
+    });
     await Promise.all([
       lifecycle.enqueue({
         npcId: 'ivo',
@@ -271,6 +303,8 @@ describe('NpcMemoryLifecycle — bounds and outcomes', () => {
       lifecycle.enqueue({ npcId: 'ivo', kind: 'digest', run: async () => 'applied' }),
     ]);
     expect(onError).toHaveBeenCalledTimes(1);
+    expect(failuresAtPublication).toEqual([1]);
+    expect(lifecycle.events().filter((event) => event.outcome === 'failed')).toHaveLength(1);
     expect(lifecycle.snapshot().failed).toBe(1);
     // The chain did not break: the follower still ran.
     expect(lifecycle.snapshot().applied).toBe(1);

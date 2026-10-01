@@ -84,12 +84,18 @@ const settleUntilIdle = async (): Promise<void> => {
 };
 
 /** A promise the test resolves on demand, standing in for a slow provider. */
-const deferred = (): { promise: Promise<unknown>; resolve: (value: unknown) => void } => {
+const deferred = (): {
+  promise: Promise<unknown>;
+  resolve: (value: unknown) => void;
+  reject: (error: unknown) => void;
+} => {
   let resolve: (value: unknown) => void = () => {};
-  const promise = new Promise((res) => {
+  let reject: (error: unknown) => void = () => {};
+  const promise = new Promise((res, rej) => {
     resolve = res;
+    reject = rej;
   });
-  return { promise, resolve };
+  return { promise, resolve, reject };
 };
 
 const DIGEST = {
@@ -510,9 +516,7 @@ describe('NpcMemoryService — deferred background work', () => {
   });
 
   it('a superseded conversation’s lines are carried into the next digest', async () => {
-    // The first digest never runs: `reset` retires its generation before it
-    // dispatches. Its conversation must not vanish — the next digest has to be
-    // offered BOTH transcripts, or the promise the player heard is lost.
+    // Replacing the record in the same generation must preserve both transcripts.
     const pending = deferred();
     gate = pending.promise;
     const doomed = npcMemoryService.recordConversation({
@@ -521,21 +525,72 @@ describe('NpcMemoryService — deferred background work', () => {
       messages: talk('I promised you the map.'),
     });
     await settle();
-    npcMemoryService.reset();
-    pending.resolve(DIGEST);
-
     gate = undefined;
     extractStructure.mockClear();
-    await npcMemoryService.recordConversation({
+    const next = npcMemoryService.recordConversation({
       npcId: 'ivo',
       npcName: 'Ivo',
       messages: talk('And I will be back.'),
     });
-    await doomed;
+    pending.resolve(DIGEST);
+    await Promise.all([doomed, next]);
     await settleUntilIdle();
 
     const call = extractStructure.mock.calls.at(-1)?.[0] as { prompt: string } | undefined;
     expect(call?.prompt).toContain('I promised you the map.');
     expect(call?.prompt).toContain('And I will be back.');
+  });
+  for (const transition of ['reset', 'campaign-switch'] as const) {
+    for (const outcome of ['success', 'failure'] as const) {
+      it(`${transition} keeps retired transcript lines out after digest ${outcome}`, async () => {
+        const pending = deferred();
+        gate = pending.promise;
+        const old = npcMemoryService.recordConversation({
+          npcId: 'ivo',
+          npcName: 'Ivo',
+          messages: talk('Retired secret promise'),
+        });
+        await settle();
+        if (transition === 'reset') {
+          npcMemoryService.reset();
+        } else {
+          campaign.activeCampaign = { id: 'campaign_b' };
+        }
+        gate = undefined;
+        const next = npcMemoryService.recordConversation({
+          npcId: 'ivo',
+          npcName: 'Ivo',
+          messages: talk('Current conversation'),
+        });
+        if (outcome === 'success') {
+          pending.resolve(DIGEST);
+        } else {
+          pending.reject(new Error('provider failed'));
+        }
+        await Promise.all([old, next]);
+        const call = extractStructure.mock.calls.at(-1)?.[0] as { prompt: string } | undefined;
+        expect(call?.prompt).toContain('Current conversation');
+        expect(call?.prompt).not.toContain('Retired secret promise');
+      });
+    }
+  }
+
+  it('applies digest memory but leaves the opener absent when world facts change in flight', async () => {
+    const pending = deferred();
+    gate = pending.promise;
+    const conversation = npcMemoryService.recordConversation({
+      npcId: 'ivo',
+      npcName: 'Ivo',
+      messages: talk('Hello'),
+    });
+    await settle();
+    worldFacts = ['Gold: 50'];
+    pending.resolve(DIGEST);
+    await conversation;
+    expect(recordOf('ivo')?.summary).toBe(DIGEST.summary);
+    expect(recordOf('ivo')?.notes).toEqual(DIGEST.notes);
+    expect(recordOf('ivo')?.opener).toBeUndefined();
+    expect(diagnostics()?.applied).toBe(1);
+    expect(diagnostics()?.failed).toBe(0);
   });
 });
