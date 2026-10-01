@@ -7,8 +7,16 @@
 | Base SHA | `98df13ddc041e58c1d501363240d727e23935b96` (`origin/main`) |
 | Head SHA | see PR |
 | Branch | `feat/381-optional-decision-runtime` |
-| PR | **draft** |
+| PR | #421 — review-ready; live routing remains NO-GO |
 | Recommendation | **NO-GO for live routing stands.** Ship the readiness foundation; route nothing. |
+
+> **Status of this PR.** The lane initially opened as a draft, because the
+> go/no-go rule for a NO-GO branch said to open a draft PR stating the missing
+> evidence. The readiness foundation itself is now complete and review-ready, so
+> it was promoted to normal review. **The missing live-model evidence remains a
+> blocker for enabling automatic decision routing and for closing #381 — not a
+> blocker for merging this isolated foundation.** The safety gates are unchanged
+> by that promotion; nothing here was weakened to make the PR look complete.
 
 ---
 
@@ -20,6 +28,10 @@ found no backend and no passing pilot — in which case do not fabricate a
 rollout, finish the readiness/validation/setup foundation behind an explicit
 experimental opt-in with the gameplay preference disabled, and open a draft PR
 saying what evidence is missing.
+
+> That draft-opening instruction was satisfied as written. What follows is the
+> same NO-GO conclusion, and it is unchanged: the missing live evidence blocks
+> **live routing**, which is a different thing from blocking this foundation.
 
 **The previous lane found neither.** C-566 (#419, merged) closed with an
 explicit **NO-GO**, and re-probing the environment today reproduced its result
@@ -202,6 +214,15 @@ there is no way to read a skip as a success.
    real proof.
 6. **C-566's measurement caveats still hold**: 59 authored cases, one author,
    one language, no inter-annotator agreement, no real transcripts by design.
+7. **Not-ready classification reads adapter prose.** `DecisionCapability`
+   exposes `notReadyReason` as a string (C-566's seam), so
+   `stateForNotReady` classifies the specific state — old runtime, missing
+   checkpoint, absent capability — by matching that prose. It is correct for
+   every reason this module produces (each is pinned by a test), but a
+   differently-worded third-party adapter could be classified as `unreachable`
+   rather than the more precise state. The fix is a typed reason on the adapter
+   seam, which would change C-566's published `DecisionCapability` contract and
+   is therefore out of scope here.
 
 ## 6. Rollback
 
@@ -214,6 +235,10 @@ block from `decision/index.ts`, and revert the `capability()` body in
 shipping call site imports any of it, so there is nothing else to unwind.
 
 ## 7. Remaining #381 acceptance criteria
+
+**These are NOT required for merging this isolated readiness foundation.** They
+are required before enabling automatic live decision routing, and before #381
+can be closed. They are deferred rollout evidence, tracked by #381.
 
 **Unchanged — #381 stays open.** Still unmet:
 

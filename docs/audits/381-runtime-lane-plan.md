@@ -10,7 +10,8 @@ recorded in the rollout report, not edited away here.
 | Worktree | `/home/sonny/.herdr/worktrees/aikami/feat-381-optional-decision-runtime` (herdr workspace `wPP`) |
 | Refs | Refs #381, Refs #382 (programs — never "Closes") |
 | Contract | `C-567` reserved from the current tree (highest shipped was `C-566`) |
-| PR | **draft**, one PR against `main` |
+| PR | #421, one PR against `main` |
+| PR status | Opened as draft per the NO-GO rule below; promoted to normal review once the foundation was complete and verified |
 | Changed-file budget | hard cap < 100; planned ~16; see §6 for why this is far below the 60–85 target |
 
 ---
@@ -57,9 +58,14 @@ Nothing in the environment changed, so the recommendation stands.
 
 **⇒ This lane takes the NO-GO branch.** It ships the readiness/validation/setup
 foundation behind an explicit experimental opt-in with the **gameplay preference
-disabled**, and opens a **draft** PR stating the missing evidence. It does not
+disabled**, and opened a **draft** PR stating the missing evidence. It does not
 download or package a runtime to make the PR larger, and it does not wire a
 decision backend into any shipping call site.
+
+> **Follow-up.** Once the foundation was complete and verified, the PR was
+> promoted to normal review. The NO-GO above is unchanged and still governs
+> **live routing**: the missing evidence blocks enabling decision routing and
+> closing #381, not merging the readiness foundation.
 
 ## 2. What this lane therefore delivers
 
