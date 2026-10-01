@@ -5,6 +5,7 @@
 // Contract: C-320 AC-4
 
 import type { AiCapability, AiGatewayError, AiGatewayErrorCode, AiMode } from '@aikami/types';
+import type { GatewayTimeoutKind } from './deadline.ts';
 
 /**
  * Typed error thrown by every gateway call. Structurally satisfies the
@@ -32,6 +33,17 @@ export class AiGatewayException extends Error implements AiGatewayError {
   /** Original error, for debugging. Never logged with secrets. */
   readonly originalError?: unknown;
 
+  /**
+   * Which bound stopped a `timeout` failure, when the code is `timeout`.
+   *
+   * The normalised vocabulary has a single `timeout` code, but "the caller's
+   * end-to-end budget ran out", "nothing visible arrived after the headers" and
+   * "the stream stalled mid-answer" are three different facts that a caller
+   * degrades from differently — and that a report must not average together.
+   * Absent on every non-timeout code, so its presence is itself meaningful.
+   */
+  readonly timeoutKind?: GatewayTimeoutKind;
+
   constructor(options: {
     code: AiGatewayErrorCode;
     capability: AiCapability;
@@ -39,6 +51,7 @@ export class AiGatewayException extends Error implements AiGatewayError {
     message: string;
     provider?: string;
     originalError?: unknown;
+    timeoutKind?: GatewayTimeoutKind;
   }) {
     super(options.message);
     this.name = 'AiGatewayException';
@@ -48,6 +61,7 @@ export class AiGatewayException extends Error implements AiGatewayError {
     this.provider = options.provider;
     this.retryable = isRetryableGatewayCode(options.code);
     this.originalError = options.originalError;
+    this.timeoutKind = options.timeoutKind;
   }
 }
 
@@ -61,7 +75,25 @@ export const createAiGatewayError = (options: {
   message: string;
   provider?: string;
   originalError?: unknown;
+  timeoutKind?: GatewayTimeoutKind;
 }): AiGatewayException => new AiGatewayException(options);
+
+/**
+ * Whether a failure is a cancellation rather than a fault.
+ *
+ * Broader than the name suggests on purpose. A stream that ended because the
+ * caller's deadline ran out, and one that ended because the user navigated
+ * away, are both "this generation will never be used" — but the first is a
+ * budget the caller must grow and the second is not a problem at all. Keeping
+ * them apart is the caller's decision, not this predicate's, so this only
+ * answers the cancellation half and leaves `timeoutKind` to the caller.
+ */
+export const isCancellationFailure = (error: unknown): boolean => {
+  if (isAiGatewayError(error)) {
+    return error.code === 'cancelled';
+  }
+  return isAbortError(error);
+};
 
 /**
  * Type guard for AiGatewayException.

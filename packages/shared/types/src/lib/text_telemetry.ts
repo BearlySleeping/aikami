@@ -22,6 +22,28 @@ import type { TextTask } from '@aikami/constants';
 export type TextTokenSource = 'provider' | 'estimated';
 
 /**
+ * Which wire shape actually carried a generation.
+ *
+ * Added because `streamed` alone cannot carry the distinction that matters for
+ * a latency claim. A `buffered-json` route has NO first-content time at all —
+ * the whole body is awaited before any text exists — so a completion measured
+ * on that route must never be presented as a time-to-first-token. Naming the
+ * shape makes the difference visible in the record rather than in prose
+ * explaining it.
+ */
+export type TextTransportShape = 'ndjson-stream' | 'sse-stream' | 'buffered-json';
+
+/** How one dispatched provider attempt ended. */
+export type TextAttemptOutcome =
+  | 'completed'
+  | 'empty'
+  | 'invalid'
+  | 'unsupported'
+  | 'error'
+  | 'cancelled'
+  | 'timeout';
+
+/**
  * Why a cache answered, or which layer was consulted.
  *
  * The layers are kept distinct on purpose: a local response-cache hit is NOT a
@@ -51,6 +73,48 @@ export type TextTelemetrySpan = {
   mode: string;
   /** Whether the call streamed tokens. */
   streamed: boolean;
+  /**
+   * Which wire shape carried the generation.
+   *
+   * `buffered-json` means there was no first-content time to measure, and any
+   * `ttftMs` alongside it would be meaningless. Recorded explicitly so a
+   * reader never has to infer the difference from a single boolean.
+   */
+  transport?: TextTransportShape;
+  /**
+   * Milliseconds to the first VISIBLE content fragment.
+   *
+   * Distinct from `ttftMs`, which is the first frame of any kind. On a
+   * reasoning model the first frames carry the thinking channel with an empty
+   * content field, so the two can differ by seconds; publishing the frame time
+   * as "time to first token" would understate what the player waits by an order
+   * of magnitude.
+   */
+  firstVisibleContentMs?: number;
+  /**
+   * How many provider attempts this logical call DISPATCHED.
+   *
+   * Greater than 1 means the provider was billed more than once: an empty-body
+   * retry, a structured fallback, a plain-text rescue. Recorded because the
+   * spend happened whether or not the caller looked at the discarded output.
+   */
+  attemptCount?: number;
+  /**
+   * The token counts do not cover the whole dispatched attempt.
+   *
+   * Known numbers plus an unknown remainder. Summed into a cost column as if it
+   * were complete, this makes a truncated generation look like a cheap one.
+   */
+  partialUsage?: boolean;
+  /**
+   * Where the cached-token count came from.
+   *
+   * `'unknown'` is a recorded value, not an omission: the runtime did not
+   * supply the counter. Never inferred from latency.
+   */
+  cachedSource?: 'provider' | 'unknown';
+  /** The provider's own termination reason, e.g. `stop` or `length`. */
+  doneReason?: string;
   /** Time to first streamed token, when observed. */
   ttftMs?: number;
   /** Total wall-clock duration. */
@@ -152,6 +216,25 @@ export type TextTelemetryCounters = {
   readonly cancelled: number;
   /** Calls that fell back to a different route than the one attempted first. */
   readonly fallbacks: number;
+  /**
+   * Provider attempts DISPATCHED across the buffer.
+   *
+   * Compared against `calls`, this is the retry/fallback rate. It exceeds
+   * `calls` whenever a logical request spent more than one provider bill, which
+   * is the number a cost investigation needs first.
+   */
+  readonly attempts: number;
+  /** Spans whose token counts do not cover the whole attempt. */
+  readonly partialUsage: number;
+  /**
+   * Calls served by an on-device route.
+   *
+   * These cost nothing in PROVIDER BILLING, which is a fact about the route and
+   * not a claim that the inference was free: the electricity and the hardware
+   * are real. Counted separately so a zero-bill route is never read as a
+   * saving, and never silently dropped from a cost total.
+   */
+  readonly localCalls: number;
   /** Calls served from a cache, split BY LAYER. */
   readonly cacheHits: Readonly<Record<TextCacheLayer | 'provider-prompt-cache', number>>;
   /** Deepest local queue observed, for contention measurement. */
@@ -168,6 +251,14 @@ export type TextTelemetryTaskSummary = {
   medianTotalMs: number;
   /** Median time-to-first-token in ms, when any span measured one. */
   medianTtftMs?: number;
+  /**
+   * Median time to first VISIBLE content, when any span measured one.
+   *
+   * Reported separately from `medianTtftMs` and never pooled with it: a
+   * thinking model's first frame arrives long before its first word, so
+   * averaging the two would produce a number that describes no call anyone made.
+   */
+  medianFirstVisibleContentMs?: number;
   /** Count of failed spans for this task. */
   errorCount: number;
   /** Latency percentiles for this task. */
@@ -196,4 +287,14 @@ export type TextTelemetrySummary = {
   unpricedCount: number;
   /** Price table version the cost figures came from. */
   pricingVersion?: string;
+  /**
+   * USD spent on PROVIDER BILLING only.
+   *
+   * Excludes on-device inference entirely. It is `undefined` while any span is
+   * uncosted, and it is never a claim about total resource cost: local
+   * inference has a real electricity and hardware cost that this number does
+   * not attempt to estimate, because estimating it would be inventing a dollar
+   * figure for something nobody measured.
+   */
+  providerBillingUsd?: number;
 };

@@ -49,6 +49,40 @@ export type AiTextGenerationOptions = {
   mode?: AiMode;
   /** Debug hook — receives the resolution computed at the gateway boundary. */
   onResolve?: (resolution: AiModeResolution) => void;
+  /**
+   * Absolute epoch ms by which this logical request must be finished.
+   *
+   * ADDITIVE and optional, so no existing caller changes. When present it is
+   * adopted VERBATIM and becomes the only logical budget: dispatch, headers,
+   * first visible content, the idle watchdog, the body read, parse and
+   * validation, empty-body backoff and any retry all draw it down. When absent
+   * the adapter keeps a finite safety limit for direct callers — that limit is
+   * a watchdog, not a budget, and is named as one in its failures.
+   *
+   * This exists because the transport previously had no way to learn a caller's
+   * budget: it minted a fresh timer per request scope, so a 120 s dialogue
+   * budget was cut at 90 s and a 4 s combat budget was served for 90 s.
+   * Issue #382 P0.
+   */
+  deadlineAt?: number;
+  /**
+   * Receives one event per DISPATCHED provider attempt.
+   *
+   * Fires for every attempt, including empty-body retries, schema-invalid
+   * responses and structured fallbacks — the provider billed each of them, and
+   * an accounting boundary that only saw the surviving attempt under-reports
+   * real spend. Additive and optional; no consumer is required to use it.
+   */
+  onAttempt?: (event: AiTransportAttemptEvent) => void;
+  /**
+   * Identity of the LOGICAL request, when the caller already owns one.
+   *
+   * Supplied by a coalescer so every subscriber waiting on one dispatch shares
+   * a single identity — and therefore a single set of attempt events, and a
+   * single provider bill in the record. Omitted by an ordinary caller, which
+   * then gets a minted one.
+   */
+  requestId?: string;
 };
 
 /**
@@ -70,6 +104,113 @@ export type AiTextUsage = {
   readonly cachedTokens?: number;
   /** Whether these numbers came from the provider or from an estimate. */
   readonly source: 'provider' | 'estimated';
+  /**
+   * Where the cached count came from, stated explicitly.
+   *
+   * `'unknown'` is a real, recorded value: it means the runtime did not supply
+   * the counter, which is a different fact from "this call reused no cache".
+   * Ollama 0.34.3 does supply `prompt_eval_cached_count`; a runtime that does
+   * not must stay unknown rather than defaulting to zero, because a zero would
+   * be read as a measured absence of reuse.
+   *
+   * Never inferred from latency: a fast prompt can be a cache hit or a tiny
+   * prompt, and guessing which is how a fabricated saving enters a report.
+   */
+  readonly cachedSource?: 'provider' | 'unknown';
+  /**
+   * These counters do NOT cover the whole dispatched attempt.
+   *
+   * Set when the stream ended before its completion frame, or when the numbers
+   * came from a superseded attempt. Known numbers plus an unknown remainder must
+   * be reported as partial — presenting them as a complete total is how a
+   * truncated generation looks like a cheap one.
+   */
+  readonly partial?: boolean;
+};
+
+/** Which wire shape actually carried a generation. */
+export type AiTransportShape =
+  /** Ollama native `/api/chat` with `stream:true` — newline-delimited JSON. */
+  | 'ndjson-stream'
+  /** OpenAI-compatible SSE. */
+  | 'sse-stream'
+  /**
+   * A whole body awaited before any content existed.
+   *
+   * No first-content time is definable on this shape. It is named explicitly
+   * so a buffered completion can never be presented as a first-token
+   * measurement — the two are different quantities and only the first one is a
+   * latency the player experiences.
+   */
+  | 'buffered-json';
+
+/** How one dispatched attempt ended. */
+export type AiAttemptOutcome =
+  | 'completed'
+  /** Reached its completion signal with usable content. */
+  | 'empty'
+  /** Completed, but produced no content. */
+  | 'invalid'
+  /** Content arrived and failed the original schema. */
+  | 'unsupported'
+  /** The provider rejected the request shape. */
+  | 'error'
+  | 'cancelled'
+  | 'timeout';
+
+/**
+ * What an ADAPTER reports about one dispatched attempt.
+ *
+ * The same facts as {@link AiTransportAttemptEvent} minus identity, because
+ * identity is assigned by the gateway. Splitting the two is what makes "one
+ * provider bill, N subscribers" expressible: the adapter reports the attempt
+ * once per dispatch, and the gateway stamps the logical request's identity onto
+ * every consumer of it.
+ */
+export type AiTransportAttemptDraft = Omit<AiTransportAttemptEvent, 'attemptId' | 'requestId'>;
+
+/**
+ * One dispatched provider attempt, from dispatch to settlement.
+ *
+ * The unit of real spend. A logical request may dispatch several of these —
+ * an empty-body retry, a structured fallback, a plain-text rescue — and they
+ * are ONE provider bill shared by however many callers were waiting on it. A
+ * per-subscriber view of this event would multiply measured spend by the number
+ * of consumers, so `attemptId` is the identity that deduplicates.
+ */
+export type AiTransportAttemptEvent = {
+  /** Unique per dispatched attempt, including retries within one request. */
+  readonly attemptId: string;
+  /** Identity of the LOGICAL request this attempt belongs to, when known. */
+  readonly requestId?: string;
+  readonly provider: string;
+  /**
+   * Resolved model, or absent when the resolution carried none.
+   *
+   * Optional rather than defaulted: an unresolved model is a real state, and
+   * substituting a placeholder string would put a fabricated model name into a
+   * pricing lookup.
+   */
+  readonly model?: string;
+  readonly mode: string;
+  /** Whether this attempt asked for narrative or a schema-constrained object. */
+  readonly kind: 'narrative' | 'structured';
+  /** Which wire shape carried it. */
+  readonly transport: AiTransportShape;
+  /** Epoch ms the attempt was dispatched. */
+  readonly startedAt: number;
+  /** Present once the attempt settles. Absent while in flight. */
+  readonly outcome?: AiAttemptOutcome;
+  /** Milliseconds to the first VISIBLE content fragment. Absent if none came. */
+  readonly firstContentMs?: number;
+  /** Milliseconds from dispatch to settlement. */
+  readonly totalMs?: number;
+  /** Token accounting for THIS attempt, including a discarded one. */
+  readonly usage?: AiTextUsage;
+  /** The provider's own termination reason, e.g. `stop` or `length`. */
+  readonly doneReason?: string;
+  /** Content arrived but the stream ended before its completion frame. */
+  readonly truncated?: boolean;
 };
 
 /** Result of a gateway text-generation call. */
@@ -126,6 +267,22 @@ export type AiAdapterContext = {
   resolution: AiModeResolution;
   /** Combined cancellation signal (caller signal + gateway cancelAll). */
   signal: AbortSignal;
+  /**
+   * The caller's absolute end-to-end instant, forwarded unchanged.
+   *
+   * Optional so an existing adapter signature keeps compiling; a field a
+   * transport cannot see is a budget it cannot honour.
+   */
+  deadlineAt?: number;
+  /**
+   * Optional per-attempt accounting hook, forwarded unchanged.
+   *
+   * Typed WITHOUT `attemptId`/`requestId` on purpose: identity belongs to the
+   * gateway, which counts one ordinal per dispatch within one logical request.
+   * An adapter that minted its own identity would let two layers number the
+   * same attempt differently, and the mismatch is invisible in the output.
+   */
+  onAttempt?: (event: AiTransportAttemptDraft) => void;
 };
 
 /** Adapter contract for text generation. */

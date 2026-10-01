@@ -25,7 +25,10 @@ import {
   COMBAT_INTENT_UNTRUSTED_CLOSE,
   COMBAT_INTENT_UNTRUSTED_OPEN,
 } from './combat_intent_prompt';
-import { getCombatIntentService } from './combat_intent_service.svelte';
+import {
+  type CombatIntentServiceOptions,
+  getCombatIntentService,
+} from './combat_intent_service.svelte';
 import type { CombatIntentRequest } from './types/combat_intent.ts';
 
 // ── Fixtures ───────────────────────────────────────────────────────────────
@@ -232,7 +235,13 @@ describe('CombatIntentService.interpret (AC-2)', () => {
     const { calls, service } = makeService(() => new Promise(() => {}), { softDeadlineMs: 5 });
     const result = await service.interpret(requestOf());
     expect(result).toEqual({ ok: false, reason: 'unparseable' });
-    expect(calls[0]?.signal?.aborted).toBe(false);
+    // ABORTED, not merely abandoned. This assertion used to require `false`:
+    // the race resolved as a timeout and the provider call was left running
+    // with nothing to stop it. The player got their deterministic fallback
+    // immediately either way, so the failure looked correct while the runtime
+    // kept generating a response nobody would read — real GPU time locally, a
+    // real bill on BYOK. Issue #382.
+    expect(calls[0]?.signal?.aborted).toBe(true);
   });
 
   it('aborts the provider request at the hard deadline', async () => {
@@ -442,5 +451,219 @@ describe('combat intent prompts are injection-safe (AC-8)', () => {
     const result = await service.interpret(requestOf());
     expect(result).toEqual({ ok: false, reason: 'unparseable' });
     expect(calls.length).toBe(2);
+  });
+});
+
+// ── Request lifetime (issue #382) ──────────────────────────────────────────
+//
+// The soft race used to resolve without aborting anything, each attempt got a
+// FRESH soft deadline, and a duplicate `requestId` overwrote the first
+// operation's controller in a map — orphaning it so it could neither be
+// cancelled nor reasoned about. Each test below names the behaviour it would
+// have failed against.
+
+describe('CombatIntentService request lifetime', () => {
+  /** A provider that IGNORES its abort signal, the way a real runtime does. */
+  const stubbornProvider = () => {
+    const calls: StubCall[] = [];
+    const releases: Array<() => void> = [];
+    const extractStructure = (options: {
+      schema: Record<string, unknown>;
+      schemaName: string;
+      prompt: string;
+      systemPrompt?: string;
+      signal?: AbortSignal;
+      deadlineAt?: number;
+    }): Promise<unknown> => {
+      calls.push({
+        schemaName: options.schemaName,
+        prompt: options.prompt,
+        ...(options.signal === undefined ? {} : { signal: options.signal }),
+      });
+      // Deliberately does not reject on abort: cancelling the HTTP request does
+      // not interrupt a GPU kernel, so the call really does keep running.
+      return new Promise((resolve) => {
+        releases.push(() => resolve(validDraft()));
+      });
+    };
+    return { calls, releases, extractStructure };
+  };
+
+  const serviceOver = (
+    extractStructure: CombatIntentServiceOptions['text']['extractStructure'],
+    overrides: { softDeadlineMs?: number; hardDeadlineMs?: number } = {},
+  ) =>
+    getCombatIntentService({
+      className: 'CombatIntentLifetimeTest',
+      enableAutoDebug: false,
+      text: { extractStructure },
+      ...overrides,
+    });
+
+  it('a provider that ignores abort still cannot produce a usable late result', async () => {
+    const { calls, releases, extractStructure } = stubbornProvider();
+    const service = serviceOver(extractStructure, { softDeadlineMs: 5, hardDeadlineMs: 500 });
+
+    const result = await service.interpret(requestOf());
+
+    // The fallback is the player's, immediately.
+    expect(result).toEqual({ ok: false, reason: 'unparseable' });
+    expect(calls[0]?.signal?.aborted).toBe(true);
+
+    // The provider finishes afterwards, as a real runtime would. The race has
+    // already settled, so this CANNOT become a model-driven result.
+    releases[0]?.();
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    expect(await service.interpret(requestOf({ requestId: 'request-2' }))).toBeDefined();
+  });
+
+  it('falls back through the DETERMINISTIC parser, never through a second model call', async () => {
+    const { calls, extractStructure } = stubbornProvider();
+    const service = serviceOver(extractStructure, { softDeadlineMs: 5, hardDeadlineMs: 500 });
+
+    const result = await service.interpretWithFallback(requestOf({ text: 'defend' }));
+
+    // Ordinary engine mechanics must not be routed through a model: the parser
+    // is the authority, and exactly one model call was spent trying.
+    expect(calls.length).toBe(1);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.intent.source).toBe('fallback_parser');
+    }
+  });
+
+  it('draws ONE soft budget across attempts rather than restarting it', async () => {
+    let attempt = 0;
+    const service = serviceOver(
+      () => {
+        attempt += 1;
+        const mine = attempt;
+        return new Promise((resolve) => {
+          // Both attempts take 20 ms. The first answer is invalid, which is
+          // what triggers the retry; the second WOULD have been valid.
+          setTimeout(() => resolve(mine === 1 ? { nonsense: true } : validDraft()), 20);
+        });
+      },
+      { softDeadlineMs: 30, hardDeadlineMs: 500 },
+    );
+
+    const startedAt = Date.now();
+    const result = await service.interpret(requestOf());
+    const elapsed = Date.now() - startedAt;
+
+    // The retry was attempted, but it only had the 10 ms the first attempt
+    // left — not a fresh 30 ms. Before, each attempt raced its own soft
+    // deadline, so this returned a model result at ~40 ms and the player waited
+    // twice the budget they were promised.
+    expect(attempt).toBe(2);
+    expect(result).toEqual({ ok: false, reason: 'unparseable' });
+    expect(elapsed).toBeLessThan(38);
+  });
+
+  it('a slow first attempt followed by a VALID retry is abandoned, not honoured', async () => {
+    let attempt = 0;
+    const service = serviceOver(
+      () => {
+        attempt += 1;
+        return new Promise((resolve) => {
+          setTimeout(() => resolve(validDraft()), 40);
+        });
+      },
+      { softDeadlineMs: 10, hardDeadlineMs: 500 },
+    );
+
+    // The retry WOULD have been valid. It arrives after the soft budget is
+    // spent, and the player is already looking at the deterministic parser.
+    const result = await service.interpret(requestOf());
+    expect(attempt).toBeLessThanOrEqual(1);
+    expect(result).toEqual({ ok: false, reason: 'unparseable' });
+  });
+
+  it('a slow first attempt followed by an INVALID draft retries once, within budget', async () => {
+    let attempt = 0;
+    const service = serviceOver(
+      () => {
+        attempt += 1;
+        return new Promise((resolve) => {
+          // First answer is invalid and slow; the second is valid and prompt.
+          setTimeout(
+            () => resolve(attempt === 1 ? { nonsense: true } : validDraft()),
+            attempt === 1 ? 5 : 0,
+          );
+        });
+      },
+      { softDeadlineMs: 200, hardDeadlineMs: 500 },
+    );
+
+    const result = await service.interpret(requestOf());
+    expect(attempt).toBe(2);
+    expect(result.ok).toBe(true);
+  });
+
+  it('a duplicate requestId supersedes deterministically and leaves nothing running', async () => {
+    const { calls, releases, extractStructure } = stubbornProvider();
+    const service = serviceOver(extractStructure, { softDeadlineMs: 1000, hardDeadlineMs: 2000 });
+
+    const first = service.interpret(requestOf());
+    // Same requestId, second interpretation. The FIRST must be aborted — it
+    // used to be overwritten in the controller map and left running with
+    // nothing able to cancel it.
+    const second = service.interpret(requestOf());
+
+    expect(calls[0]?.signal?.aborted).toBe(true);
+    expect(calls[1]?.signal?.aborted).toBe(false);
+    // Both are still owned, so a cancel can reach either.
+    expect(service.activeRequestCount).toBe(2);
+
+    releases[0]?.();
+    releases[1]?.();
+    expect((await first).ok).toBe(false);
+    expect((await second).ok).toBe(true);
+    expect(service.activeRequestCount).toBe(0);
+  });
+
+  it('cancel reaches EVERY live operation, not only the newest for that id', async () => {
+    const { calls, extractStructure } = stubbornProvider();
+    const service = serviceOver(extractStructure, { softDeadlineMs: 1000, hardDeadlineMs: 2000 });
+
+    const first = service.interpret(requestOf());
+    const second = service.interpret(requestOf());
+    expect(service.activeRequestCount).toBe(2);
+
+    service.cancel('request-1');
+    // The superseded one was already aborted; `cancel` must reach the other.
+    expect(calls.every((call) => call.signal?.aborted === true)).toBe(true);
+    expect(service.activeRequestCount).toBe(0);
+    expect((await first).ok).toBe(false);
+    expect((await second).ok).toBe(false);
+  });
+
+  it('cancelAll aborts everything and clears ownership', async () => {
+    const { calls, extractStructure } = stubbornProvider();
+    const service = serviceOver(extractStructure, { softDeadlineMs: 1000, hardDeadlineMs: 2000 });
+
+    const first = service.interpret(requestOf());
+    const second = service.interpret(requestOf({ requestId: 'request-2' }));
+    expect(service.activeRequestCount).toBe(2);
+
+    service.cancelAll();
+    expect(calls.every((call) => call.signal?.aborted === true)).toBe(true);
+    expect(service.activeRequestCount).toBe(0);
+    expect((await first).ok).toBe(false);
+    expect((await second).ok).toBe(false);
+  });
+
+  it('releases every attempt controller when the interpretation settles', async () => {
+    const { calls, extractStructure } = stubbornProvider();
+    const service = serviceOver(extractStructure, { softDeadlineMs: 1000, hardDeadlineMs: 2000 });
+
+    const pending = service.interpret(requestOf());
+    expect(calls[0]?.signal?.aborted).toBe(false);
+    service.cancel('request-1');
+    await pending;
+
+    // Nothing left running once the caller has its answer.
+    expect(calls[0]?.signal?.aborted).toBe(true);
+    expect(service.activeRequestCount).toBe(0);
   });
 });

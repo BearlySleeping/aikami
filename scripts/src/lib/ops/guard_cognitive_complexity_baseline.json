@@ -872,19 +872,13 @@
   "packages/frontend/ai-gateway/src/lib/sse.ts": {
     "counts": {
       "excessive": 1,
-      "worst": 24
+      "worst": 20
     }
   },
   "packages/frontend/ai-gateway/src/lib/structured.ts": {
     "counts": {
       "excessive": 2,
       "worst": 23
-    }
-  },
-  "packages/frontend/ai-gateway/src/lib/text_adapter_openai_compatible.ts": {
-    "counts": {
-      "excessive": 1,
-      "worst": 16
     }
   },
   "packages/frontend/engine/src/__tests__/emberwatch_content_audit.test.ts": {

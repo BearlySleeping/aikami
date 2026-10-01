@@ -596,3 +596,33 @@ Both are recorded because both cost real time and neither is a code bug:
   trap that produced a `/emberwatch/manifest.json` 404 in earlier work did not
   apply. No local config was created, moved or altered, and nothing needs
   restoring.
+
+---
+
+## Appended interpretation correction (2026-10-01, #382 native transport)
+
+**Nothing above is edited.** This is an appended note, added by
+[`382-native-transport-report.md`](382-native-transport-report.md), because the
+figures above are correct measurements of the wrong quantity on one specific
+route — and the distinction matters enough to state where the number was read.
+
+Any **TTFT** figure in this report that came from an **Ollama native narrative
+call** was, on that route, a **buffered completion time and not a
+time-to-first-token**. The adapter sent `stream: false`, awaited the whole body,
+and fired a single `onChunk` at the end; Ollama does not send response headers
+until that body is ready. Measured again on the same pinned runtime (0.34.3,
+`ornith-1.5:9b`, warm, uncontended): headers at 6 386 ms against a total of
+6 387 ms. No first-content time existed on that route — not a slow one, none.
+
+What this does and does not change:
+
+- **Contention conclusions stand.** They compare one buffered route against
+  itself across widths, and a uniform offset does not reorder a width sweep.
+- **Absolute TTFT values on that route are not time-to-first-token** and must not
+  be quoted as such, or compared against a provider that genuinely streams.
+- The narrative path now streams natively, so **future** measurements on this
+  route are real. The historical figures are not restated.
+
+Durations for the *structured* (envelope) call are unaffected: that path was and
+remains buffered by design, because a schema-constrained object is parsed as one
+value.

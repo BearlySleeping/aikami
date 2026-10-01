@@ -19,7 +19,12 @@
 
 import { estimateTextTokens, type TextTask } from '@aikami/constants';
 import { isAiGatewayError } from '@aikami/frontend/ai-gateway';
-import type { AiModeResolution, TextCacheLayer } from '@aikami/types';
+import type {
+  AiModeResolution,
+  TextAttemptOutcome,
+  TextCacheLayer,
+  TextTransportShape,
+} from '@aikami/types';
 import type { AiRequestDeadline } from './ai_request_deadline.ts';
 import { textTelemetryService } from './text_telemetry_service.svelte.ts';
 
@@ -47,7 +52,14 @@ export type TextCallObservation = {
   error?: unknown;
   /** A local attempt gave way to the configured gateway route. */
   fallback?: boolean;
-  /** Identity of the logical request this call belongs to. */
+  /**
+   * Identity of the logical request this call belongs to.
+   *
+   * A coalescer supplies the SAME id for every subscriber waiting on one
+   * dispatch, so their attempt events collapse onto ONE provider bill instead
+   * of multiplying measured spend by the number of consumers. This is what
+   * makes "one bill, N waiters" expressible at all.
+   */
   requestId?: string;
   /** The turn this call is nested under. */
   parentRequestId?: string;
@@ -68,6 +80,30 @@ export type TextCallObservation = {
    * the instant it joined — the entry snapshot, never re-sampled.
    */
   queueDepth?: number;
+  /**
+   * Per-attempt facts observed by the transport.
+   *
+   * Filled from `AiTransportAttemptEvent`s, which fire for EVERY dispatched
+   * attempt — including empty-body retries, schema-invalid responses and
+   * structured fallbacks. The provider billed each of them, so an accounting
+   * boundary that only saw the surviving attempt under-reports real spend.
+   */
+  attempts?: ReadonlyArray<{
+    kind: 'narrative' | 'structured';
+    transport: TextTransportShape;
+    outcome?: TextAttemptOutcome;
+    firstContentMs?: number;
+    totalMs?: number;
+    usage?: {
+      inputTokens: number;
+      outputTokens: number;
+      cachedTokens?: number;
+      cachedSource?: 'provider' | 'unknown';
+      partial?: boolean;
+    };
+    doneReason?: string;
+    truncated?: boolean;
+  }>;
 };
 
 /**
@@ -99,6 +135,46 @@ const spanErrorCode = (error: unknown, cancelled: boolean): string | undefined =
   return cancelled ? 'cancelled' : 'error';
 };
 
+/** One attempt as the recorder sees it. */
+type RecordedAttempt = NonNullable<TextCallObservation['attempts']>[number];
+
+/**
+ * Reduces the transport's per-attempt events to the few numbers a span can hold.
+ *
+ * The full per-attempt list stays on the transport's own event stream; a span is
+ * a summary, and a summary that silently dropped the DISCARDED attempts would
+ * understate the bill. Every field is optional-by-absence for the same reason
+ * the transport's are: a runtime that did not report something is unknown, not
+ * zero.
+ */
+const attemptFacts = (
+  attempts: readonly RecordedAttempt[] | undefined,
+): Record<string, unknown> => {
+  if (attempts === undefined || attempts.length === 0) {
+    return {};
+  }
+  const settled = attempts.filter((attempt) => attempt.outcome !== undefined);
+  const firstVisibleContentMs = settled.find(
+    (attempt) => attempt.firstContentMs !== undefined,
+  )?.firstContentMs;
+  const doneReason = [...settled].reverse().find((a) => a.doneReason !== undefined)?.doneReason;
+  const cachedKnown = attempts.some((a) => a.usage?.cachedSource === 'provider');
+  return {
+    // A `buffered-json` route has no first-content time at all, so naming the
+    // shape is what stops a buffered completion from being read as a
+    // time-to-first-token.
+    ...(attempts[0]?.transport === undefined ? {} : { transport: attempts[0].transport }),
+    ...(firstVisibleContentMs === undefined ? {} : { firstVisibleContentMs }),
+    attemptCount: Math.max(1, attempts.length),
+    ...(attempts.some((a) => a.usage?.partial === true) ? { partialUsage: true } : {}),
+    // 'unknown' is recorded explicitly when no attempt reported a cached count,
+    // so a runtime that does not supply the counter is distinguishable from one
+    // that measured zero.
+    cachedSource: cachedKnown ? ('provider' as const) : ('unknown' as const),
+    ...(doneReason === undefined ? {} : { doneReason }),
+  };
+};
+
 /**
  * Records one finished call.
  *
@@ -113,6 +189,7 @@ export const recordTextCall = (observation: TextCallObservation): void => {
   const errorCode = spanErrorCode(observation.error, isAbortError);
 
   textTelemetryService.record({
+    ...attemptFacts(observation.attempts),
     task,
     provider: resolution?.provider ?? 'unknown',
     model: resolution?.model ?? '',
