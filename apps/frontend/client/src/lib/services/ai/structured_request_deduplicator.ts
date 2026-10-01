@@ -48,6 +48,23 @@ export type StructuredRequestKey = {
   prompt: string;
   /** Explicit model override, when the caller pinned one. */
   model: string | undefined;
+  /**
+   * The effective route this request will take: provider, API surface,
+   * generation and reasoning settings, and a non-secret connection revision.
+   *
+   * Part of the key because the shared attempt runs ONE route — the
+   * initiator's. A subscriber whose settings resolved elsewhere would otherwise
+   * join an attempt aimed at a route it is not on and receive that route's
+   * answer. Content-free: never a key, token or credential value.
+   */
+  effectiveRoute: string;
+  /**
+   * The partition the result belongs to (campaign, account, save slot).
+   *
+   * A result computed inside one campaign must not be served to another, and a
+   * campaign switch mid-flight is exactly when that would otherwise happen.
+   */
+  scope: string;
 };
 
 /** One coalesced attempt and its subscriber count. */
@@ -139,7 +156,10 @@ export type StructuredRequestDeduplicator = {
  * Length-prefixed so a boundary can never be forged: with plain concatenation,
  * `("ab", "c")` and `("a", "bc")` would produce the same key and one request's
  * prompt would be served another's answer. The schema fingerprint participates
- * because the same prompt under a different schema is a different question.
+ * because the same prompt under a different schema is a different question;
+ * the effective route participates because the shared attempt runs the
+ * initiator's route; the scope participates because a result belongs to the
+ * partition it was computed in.
  *
  * Module-private: callers supply the fields, not the key. A caller that built
  * its own key string would have to re-derive these rules, and a divergence would
@@ -153,6 +173,8 @@ const structuredRequestKey = (key: StructuredRequestKey): string =>
     key.systemPrompt,
     key.prompt,
     key.model ?? '',
+    key.effectiveRoute,
+    key.scope,
   ]
     .map((part) => `${part.length}:${part}`)
     .join('|');

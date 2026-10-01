@@ -744,14 +744,45 @@ describe('textRequestAdmission — contention domain derivation', () => {
   });
 
   /** Admit one background call on a route and report the domain it ran in. */
-  const domainOf = async (routing: AiModeResolution): Promise<string> => {
+  const domainOf = async (routing: AiModeResolution, resourceGroup?: string): Promise<string> => {
     const gate = build();
-    const lease = await gate.acquire({ routing, task: 'dialogue', signal: signal() });
+    const lease = await gate.acquire({
+      routing,
+      task: 'dialogue',
+      signal: signal(),
+      ...(resourceGroup === undefined ? {} : { resourceGroup }),
+    });
     const domain = lease.domain;
     lease.release();
     gate.cancelAll();
     return domain;
   };
+
+  test('an explicit resource group unites aliases that inference cannot', async () => {
+    // Two daemons on one host, different ports, ONE device. Nothing in the
+    // route says so, and the port cannot prove otherwise — so without an
+    // explicit association these are two domains, and background work on one
+    // can run alongside interactive work on the other. Naming the group is the
+    // evidence-based merge.
+    const portA = resolve('ollama', 'http://127.0.0.1:11434');
+    const portB = resolve('ollama-alt', 'http://127.0.0.1:11435');
+    expect(await domainOf(portA)).not.toBe(await domainOf(portB));
+    expect(await domainOf(portA, 'gpu0')).toBe(await domainOf(portB, 'gpu0'));
+    // A different device stays independent — the merge is evidence-scoped, not
+    // a global serialisation of every local route.
+    expect(await domainOf(portB, 'gpu0')).not.toBe(await domainOf(portB, 'gpu1'));
+  });
+
+  test('a resource group is trimmed, case-folded and carries no route detail', async () => {
+    const routing = resolve('ollama', 'http://127.0.0.1:11434');
+    expect(await domainOf(routing, '  GPU0  ')).toBe(await domainOf(routing, 'gpu0'));
+    // The key names the group and nothing else — no endpoint, no model, and
+    // certainly nothing a connection might carry as a secret.
+    const domain = await domainOf(routing, 'gpu0');
+    expect(domain).toBe('group:gpu0');
+    expect(domain).not.toContain('11434');
+    expect(domain).not.toContain('m');
+  });
 
   test('the same Ollama runtime is ONE domain regardless of model or surface', async () => {
     // The measured failure mode: two models on one endpoint share one GPU, and
@@ -769,7 +800,16 @@ describe('textRequestAdmission — contention domain derivation', () => {
     );
   });
 
-  test('two daemons on different ports are DIFFERENT domains', async () => {
+  test('two daemons on different ports stay separate WITHOUT an explicit resource group', async () => {
+    // 🔴 The key does NOT claim these are different devices. A distinct port
+    // proves a distinct socket and nothing more: two daemons on one host can
+    // front one GPU, and the route exposes no device identity to check with.
+    // Keeping them apart is the deliberate failure mode of an under-informed
+    // heuristic — serializing a genuinely independent second device would cost
+    // latency for a collision that may not exist. `resourceGroup` is the
+    // evidence-based way to merge them when the caller KNOWS they share
+    // hardware; see the test above. No measurement in this repository
+    // separates the two cases, and none is claimed here.
     expect(await domainOf(resolve('ollama', 'http://127.0.0.1:11434'))).not.toBe(
       await domainOf(resolve('ollama', 'http://127.0.0.1:11435')),
     );

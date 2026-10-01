@@ -36,8 +36,12 @@ import { aiGatewayService } from './ai_gateway_service.svelte.ts';
 import type { AiRequestDeadline } from './ai_request_deadline.ts';
 import { createLocalFirstRoute, type LocalFirstRoute } from './local_first_route.ts';
 import { localTaskPoolService } from './local_task_pool_service.svelte.ts';
-import type { StructuredCallCoalescer } from './structured_call_coalescer.ts';
+import type {
+  CoalescedStructuredResult,
+  StructuredCallCoalescer,
+} from './structured_call_coalescer.ts';
 import { createStructuredCallCoalescer } from './structured_call_coalescer.ts';
+import { buildCoalescingIdentity } from './text_effective_route.ts';
 import { resolveLocalFirstPolicy } from './text_local_first_policy.ts';
 import {
   createServiceInferenceAdmission,
@@ -59,16 +63,6 @@ import {
   resetActiveTextRequests,
 } from './text_service_diagnostics.ts';
 import { recordTextCall, type TextCallObservation } from './text_telemetry_recorder.ts';
-
-/** Provider-reported token counts, or a character-count estimate standing in. */
-type TextUsage = { inputTokens: number; outputTokens: number; cachedTokens?: number };
-
-/** What one configured-route structured call produced. */
-type CoalescedStructuredResult = {
-  structured?: unknown;
-  coalesced: boolean;
-  usage?: TextUsage;
-};
 
 // ---------------------------------------------------------------------------
 // Service interface
@@ -136,6 +130,21 @@ export type TextGenerationServiceInterface = BaseFrontendClassInterface & {
     requestId?: string;
     /** The turn this call belongs to, when it is a nested/child call. */
     parentRequestId?: string;
+    /**
+     * The partition this result belongs to — campaign, account, save slot.
+     * Coalescing never crosses it. Optional: a caller with no partition to name
+     * coalesces only with other unscoped callers, so a caller that KNOWS its
+     * campaign must pass it. Never inferred — see `text_effective_route.ts`.
+     */
+    scope?: string;
+    /**
+     * An opaque, non-secret connection-configuration revision, supplied by
+     * whatever owns settings. Without one, the route fields the resolution
+     * already carries are all there is — and those cannot see a credential
+     * that changed while everything else stayed identical. Documented, not
+     * guessed at.
+     */
+    configRevision?: string;
   }): Promise<unknown>;
 
   /** Aborts all active stream connections. */
@@ -449,6 +458,8 @@ class TextGenerationService
     signal: AbortSignal;
     deadline: AiRequestDeadline;
     routing: AiModeResolution;
+    scope: string | undefined;
+    configRevision?: string;
     onResolve: (resolution: AiModeResolution) => void;
     onQueueExit?: (observation: QueueExit) => void;
   }): Promise<CoalescedStructuredResult> {
@@ -461,6 +472,8 @@ class TextGenerationService
       task,
       signal,
       routing,
+      scope,
+      configRevision,
       onResolve,
       onQueueExit,
     } = options;
@@ -475,14 +488,17 @@ class TextGenerationService
       ? options.deadline.deadlineAt
       : undefined;
     const outcome = await this._coalescer.run<Omit<CoalescedStructuredResult, 'coalesced'>>({
-      identity: {
+      identity: buildCoalescingIdentity({
         task,
         schemaName,
         schema,
-        systemPrompt: systemPrompt ?? '',
+        systemPrompt,
         prompt,
         model,
-      },
+        routing,
+        scope,
+        configRevision,
+      }),
       signal,
       sharedDeadline: () => createRequestDeadline({ deadlineAt: inheritedDeadlineAt, task }),
       call: (sharedSignal, sharedDeadline) =>
@@ -495,9 +511,11 @@ class TextGenerationService
           task,
           signal: sharedSignal,
           deadline: sharedDeadline,
-          // Identical requests resolve identically, so the initiator's routing
-          // IS the shared work's routing — there is no ambiguity here for a
-          // second implementation to get wrong.
+          // The shared work runs the INITIATOR's route, unconditionally. That
+          // is the mechanism, not a safe assumption about identical requests —
+          // which is why the initiator's resolved route is captured in the
+          // identity above: a caller whose settings resolved elsewhere never
+          // becomes the initiator of this attempt.
           routing,
           onResolve,
           ...(onQueueExit === undefined ? {} : { onQueueExit }),
@@ -523,6 +541,8 @@ class TextGenerationService
     deadlineAt?: number;
     requestId?: string;
     parentRequestId?: string;
+    scope?: string;
+    configRevision?: string;
   }): Promise<unknown> {
     const {
       schema,
@@ -535,6 +555,8 @@ class TextGenerationService
       deadlineAt,
       requestId,
       parentRequestId,
+      scope,
+      configRevision,
     } = options;
     throwIfAlreadyAborted(signal);
 
@@ -649,6 +671,8 @@ class TextGenerationService
         signal: abortController.signal,
         deadline,
         routing,
+        scope,
+        configRevision,
         onResolve: (resolved) => {
           resolution = resolved;
         },
