@@ -65,7 +65,18 @@ export const createAiProviderGateway = (options: AiProviderGatewayOptions): AiPr
    * therefore per logical request id, and the adapter increments it once per
    * dispatch — including empty-body retries and structured fallbacks.
    */
-  const attemptCounters = new Map<string, number>();
+  const attemptCounters = new Map<string, { ordinal: number; activeCalls: number }>();
+
+  const releaseAttemptCounter = (requestId: string): void => {
+    const counter = attemptCounters.get(requestId);
+    if (counter === undefined) {
+      return;
+    }
+    counter.activeCalls -= 1;
+    if (counter.activeCalls === 0) {
+      attemptCounters.delete(requestId);
+    }
+  };
 
   /**
    * Identity for one logical text request.
@@ -229,12 +240,14 @@ export const createAiProviderGateway = (options: AiProviderGatewayOptions): AiPr
 
       const controller = linkSignal(signal);
       const requestId = resolveRequestId(suppliedRequestId);
+      const counter = attemptCounters.get(requestId) ?? { ordinal: 0, activeCalls: 0 };
+      counter.activeCalls += 1;
+      attemptCounters.set(requestId, counter);
       const wrappedAttempt =
         onAttempt === undefined
           ? undefined
           : (event: AiTransportAttemptDraft): void => {
-              const ordinal = (attemptCounters.get(requestId) ?? 0) + 1;
-              attemptCounters.set(requestId, ordinal);
+              const ordinal = ++counter.ordinal;
               onAttempt({ ...event, attemptId: `${requestId}#${ordinal}`, requestId });
             };
       try {
@@ -257,10 +270,7 @@ export const createAiProviderGateway = (options: AiProviderGatewayOptions): AiPr
         });
       } finally {
         activeControllers.delete(controller);
-        // Dropped here, not before: the adapter has settled, so no further
-        // attempt can follow, and a leaked counter would eventually renumber a
-        // later request that reused the id.
-        attemptCounters.delete(requestId);
+        releaseAttemptCounter(requestId);
       }
     },
 

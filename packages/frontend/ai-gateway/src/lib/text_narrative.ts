@@ -28,6 +28,7 @@ import {
   type AttemptHook,
   assertNativeOutcome,
   assertSseOutcome,
+  failureOutcome,
 } from './text_outcome.ts';
 
 /** Everything the narrative path needs from the adapter that owns it. */
@@ -149,7 +150,7 @@ export const generatePlain = async (options2: {
     },
     readWindow: (requestedMs) => deadline.phaseWindow(requestedMs),
   });
-  assertSseOutcome({ outcome: sseOutcome, resolution, attempt, onAttempt, now });
+  assertSseOutcome({ outcome: sseOutcome, resolution, deadline, attempt, onAttempt, now });
   return settle(accumulated.length === 0 ? 'empty' : 'completed');
 };
 
@@ -215,7 +216,7 @@ const readStreamedNative = async (options2: {
   recordUsage(
     outcome.report.finalFrame === undefined
       ? undefined
-      : readNativeUsage(outcome.report.finalFrame, { partial: outcome.kind !== 'completed' }),
+      : readNativeUsage(outcome.report.finalFrame),
   );
   return settle(outcome.report.narrative.length === 0 ? 'empty' : 'completed');
 };
@@ -238,19 +239,25 @@ const postNarrative = async (options2: {
     onAttempt?.({ ...attempt, outcome: 'error', totalMs: now() - startedAt });
     throw new Error(message);
   };
-  const response = await post({
-    resolution,
-    body: buildBody({
+  let response: Response;
+  try {
+    response = await post({
       resolution,
-      messages,
-      requestUsage: true,
-      stream,
-      nativeOptionsEnabled: deps.nativeOptionsEnabled,
-      getReasoningControl: deps.getReasoningControl,
-      ...(onEvent === undefined ? {} : { onEvent }),
-    }),
-    deadline,
-  });
+      body: buildBody({
+        resolution,
+        messages,
+        requestUsage: true,
+        stream,
+        nativeOptionsEnabled: deps.nativeOptionsEnabled,
+        getReasoningControl: deps.getReasoningControl,
+        ...(onEvent === undefined ? {} : { onEvent }),
+      }),
+      deadline,
+    });
+  } catch (error) {
+    onAttempt?.({ ...attempt, outcome: failureOutcome(error), totalMs: now() - startedAt });
+    throw error;
+  }
   if (!response.ok) {
     const errorText = await response.text().catch(() => 'Unknown error');
     onEvent?.('fetch-failed', { status: response.status });
@@ -280,6 +287,7 @@ const readBufferedNative = async (options2: {
   const { response, attempt, onAttempt, now, deliver, recordUsage, settle } = options2;
   const read = await readJsonCompletion(response);
   if (read.kind === 'aborted') {
+    settle(failureOutcome(read.error));
     throw read.error;
   }
   if (read.kind === 'non-json') {

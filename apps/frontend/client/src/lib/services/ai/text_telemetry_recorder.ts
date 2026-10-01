@@ -19,12 +19,7 @@
 
 import { estimateTextTokens, type TextTask } from '@aikami/constants';
 import { isAiGatewayError } from '@aikami/frontend/ai-gateway';
-import type {
-  AiModeResolution,
-  TextAttemptOutcome,
-  TextCacheLayer,
-  TextTransportShape,
-} from '@aikami/types';
+import type { AiModeResolution, TextAttemptObservation, TextCacheLayer } from '@aikami/types';
 import type { AiRequestDeadline } from './ai_request_deadline.ts';
 import { textTelemetryService } from './text_telemetry_service.svelte.ts';
 
@@ -88,22 +83,7 @@ export type TextCallObservation = {
    * structured fallbacks. The provider billed each of them, so an accounting
    * boundary that only saw the surviving attempt under-reports real spend.
    */
-  attempts?: ReadonlyArray<{
-    kind: 'narrative' | 'structured';
-    transport: TextTransportShape;
-    outcome?: TextAttemptOutcome;
-    firstContentMs?: number;
-    totalMs?: number;
-    usage?: {
-      inputTokens: number;
-      outputTokens: number;
-      cachedTokens?: number;
-      cachedSource?: 'provider' | 'unknown';
-      partial?: boolean;
-    };
-    doneReason?: string;
-    truncated?: boolean;
-  }>;
+  attempts?: readonly TextAttemptObservation[];
 };
 
 /**
@@ -158,7 +138,7 @@ const attemptFacts = (
     (attempt) => attempt.firstContentMs !== undefined,
   )?.firstContentMs;
   const doneReason = [...settled].reverse().find((a) => a.doneReason !== undefined)?.doneReason;
-  const cachedKnown = attempts.some((a) => a.usage?.cachedSource === 'provider');
+  const cachedKnown = attempts.every((a) => a.usage?.cachedTokens !== undefined);
   return {
     // A `buffered-json` route has no first-content time at all, so naming the
     // shape is what stops a buffered completion from being read as a
@@ -167,7 +147,7 @@ const attemptFacts = (
     ...(firstVisibleContentMs === undefined ? {} : { firstVisibleContentMs }),
     attemptCount: Math.max(1, attempts.length),
     ...(attempts.some((a) => a.usage?.partial === true) ? { partialUsage: true } : {}),
-    // 'unknown' is recorded explicitly when no attempt reported a cached count,
+    // 'unknown' is recorded when any attempt lacks a cached count,
     // so a runtime that does not supply the counter is distinguishable from one
     // that measured zero.
     cachedSource: cachedKnown ? ('provider' as const) : ('unknown' as const),

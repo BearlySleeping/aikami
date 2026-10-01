@@ -31,6 +31,7 @@ const fakeClock = (
   return {
     now: () => current,
     setTimer(callback: () => void, ms: number): GatewayTimer {
+      expect(ms).toBeLessThanOrEqual(2_147_483_647);
       const entry = { at: current + ms, callback, live: true };
       timers.push(entry);
       return {
@@ -272,4 +273,33 @@ describe('timeout descriptions are distinguishable', () => {
     expect(messages[1]).toContain('no visible content');
     expect(messages[2]).toContain('stalled');
   });
+});
+
+test('long total and phase timers re-arm until their actual target, then dispose', () => {
+  const maximum = 2_147_483_647;
+  const clock = fakeClock(0);
+  const deadline = createGatewayDeadline({ deadlineAt: maximum + 200, clock });
+  const phase = deadline.phaseWindow(maximum + 100);
+  clock.advance(maximum);
+  expect(deadline.signal.aborted).toBe(false);
+  expect(phase.signal.aborted).toBe(false);
+  expect(clock.pending).toBe(2);
+  clock.advance(100);
+  expect(phase.endedBy()).toBe('phase');
+  expect(deadline.signal.aborted).toBe(false);
+  clock.advance(100);
+  expect(deadline.timeoutKind()).toBe('total_budget');
+  phase.dispose();
+  deadline.dispose();
+  expect(clock.pending).toBe(0);
+
+  const disposable = createGatewayDeadline({ deadlineAt: clock.now() + maximum + 200, clock });
+  const disposablePhase = disposable.phaseWindow(maximum + 100);
+  clock.advance(maximum);
+  disposablePhase.dispose();
+  disposable.dispose();
+  expect(clock.pending).toBe(0);
+  clock.advance(200);
+  expect(disposable.signal.aborted).toBe(false);
+  expect(disposablePhase.signal.aborted).toBe(false);
 });

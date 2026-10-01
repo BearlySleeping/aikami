@@ -33,6 +33,24 @@ export type TextTokenSource = 'provider' | 'estimated';
  */
 export type TextTransportShape = 'ndjson-stream' | 'sse-stream' | 'buffered-json';
 
+/** Content-free facts observed for one dispatched text attempt. */
+export type TextAttemptObservation = {
+  kind: 'narrative' | 'structured';
+  transport: TextTransportShape;
+  outcome?: TextAttemptOutcome;
+  firstContentMs?: number;
+  totalMs?: number;
+  usage?: {
+    inputTokens: number;
+    outputTokens: number;
+    cachedTokens?: number;
+    cachedSource?: TextTelemetrySpan['cachedSource'];
+    partial?: boolean;
+  };
+  doneReason?: string;
+  truncated?: boolean;
+};
+
 /** How one dispatched provider attempt ended. */
 export type TextAttemptOutcome =
   | 'completed'

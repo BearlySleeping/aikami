@@ -80,10 +80,7 @@ describe('SSE reader — protocol completion versus a closed socket', () => {
     expect(outcome.kind).toBe('closed-early');
   });
 
-  test('preserves a trailing usage frame sent AFTER `[DONE]`', async () => {
-    // Some providers put accounting last, after the sentinel. Reading only up
-    // to `[DONE]` throws away the provider's own numbers in favour of an
-    // estimate.
+  test('[DONE] ends the stream and later frames are not read', async () => {
     const outcome = await readChatSseStream({
       body: stallingBody([
         `${sseChunk('Hi')}${SSE_DONE}${sseUsage({ promptTokens: 11, completionTokens: 2 })}`,

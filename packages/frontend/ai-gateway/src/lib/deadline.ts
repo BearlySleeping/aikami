@@ -62,6 +62,41 @@ const systemClock: GatewayClock = {
   },
 };
 
+/** Arms long deadlines in platform-safe chunks without expiring them early. */
+const timerAt = (options: {
+  clock: GatewayClock;
+  targetAt: number;
+  callback: () => void;
+}): GatewayTimer => {
+  let timer: GatewayTimer | undefined;
+  let cancelled = false;
+  const arm = (): void => {
+    if (cancelled || !Number.isFinite(options.targetAt)) {
+      return;
+    }
+    timer = options.clock.setTimer(
+      () => {
+        if (cancelled) {
+          return;
+        }
+        if (options.clock.now() < options.targetAt) {
+          arm();
+          return;
+        }
+        options.callback();
+      },
+      Math.min(2_147_483_647, Math.max(0, options.targetAt - options.clock.now())),
+    );
+  };
+  arm();
+  return {
+    cancel: () => {
+      cancelled = true;
+      timer?.cancel();
+    },
+  };
+};
+
 /**
  * The finite safety limit for a caller that supplies NO deadline.
  *
@@ -172,15 +207,11 @@ export const createGatewayDeadline = (options?: GatewayDeadlineOptions): Gateway
   // No timer at all for a genuinely unbounded request. `setTimeout(Infinity)`
   // overflows to ~1 ms in Node and Bun, which would turn "never times out" into
   // "times out immediately" — the worst possible reading of the intent.
-  const totalTimer: GatewayTimer =
-    bounded || Number.isFinite(watchdogMs)
-      ? clock.setTimer(
-          () => {
-            stop('total_budget', 'total_budget');
-          },
-          Math.max(0, effectiveAt - now()),
-        )
-      : { cancel: () => {} };
+  const totalTimer = timerAt({
+    clock,
+    targetAt: effectiveAt,
+    callback: () => stop('total_budget', 'total_budget'),
+  });
 
   if (callerSignal) {
     if (callerSignal.aborted) {
@@ -239,13 +270,17 @@ export const createGatewayDeadline = (options?: GatewayDeadlineOptions): Gateway
         ended = 'total_budget';
         phaseController.abort(new Error('Total budget exhausted'));
       };
-      const timer = clock.setTimer(() => {
-        if (ended !== undefined) {
-          return;
-        }
-        ended = 'phase';
-        phaseController.abort(new Error(`Phase watchdog fired after ${requestedMs} ms`));
-      }, window);
+      const timer = timerAt({
+        clock,
+        targetAt: now() + window,
+        callback: () => {
+          if (ended !== undefined) {
+            return;
+          }
+          ended = 'phase';
+          phaseController.abort(new Error(`Phase watchdog fired after ${requestedMs} ms`));
+        },
+      });
       if (controller.signal.aborted) {
         ended = 'total_budget';
         phaseController.abort(controller.signal.reason);

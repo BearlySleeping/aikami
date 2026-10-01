@@ -24,7 +24,7 @@
 
 import type { AiModeResolution } from '@aikami/types';
 import { describeTimeout, type GatewayDeadline, type GatewayTimeoutKind } from './deadline.ts';
-import { createAiGatewayError } from './errors.ts';
+import { createAiGatewayError, isAiGatewayError, isCancellationFailure } from './errors.ts';
 import type { AiAttemptOutcome, AiTextUsage, AiTransportShape } from './gateway_types.ts';
 import type { NativeStreamOutcome } from './ndjson.ts';
 import type { ChatSseOutcome } from './sse.ts';
@@ -139,18 +139,33 @@ export const classifyFetchRejection = (options: {
   return error;
 };
 
-/** Reports an interrupted attempt before its call fails. */
-const reportInterrupted = (options: {
+/** Maps a thrown transport failure onto the attempt vocabulary. */
+export const failureOutcome = (error: unknown): AiAttemptOutcome => {
+  if (isAiGatewayError(error) && error.code === 'timeout') {
+    return 'timeout';
+  }
+  return isCancellationFailure(error) ? 'cancelled' : 'error';
+};
+
+/** Reports a failed stream once, before propagating its disposition's error. */
+const assertReported = (options: {
+  assert: () => void;
   attempt: AttemptDraft;
-  onAttempt: AttemptHook | undefined;
+  onAttempt?: AttemptHook;
   now: () => number;
+  truncated: boolean;
 }): void => {
-  options.onAttempt?.({
-    ...options.attempt,
-    outcome: 'error',
-    totalMs: options.now() - options.attempt.startedAt,
-    truncated: true,
-  });
+  try {
+    options.assert();
+  } catch (error) {
+    options.onAttempt?.({
+      ...options.attempt,
+      outcome: failureOutcome(error),
+      totalMs: options.now() - options.attempt.startedAt,
+      ...(options.truncated ? { truncated: true } : {}),
+    });
+    throw error;
+  }
 };
 
 /** A stream that ended without the provider's completion signal. */
@@ -195,8 +210,7 @@ const NATIVE_DISPOSITIONS: Record<
     }
     throw new Error(`Provider error frame: ${outcome.message}`);
   },
-  truncated: ({ resolution, attempt, onAttempt, now }) => {
-    reportInterrupted({ attempt, onAttempt, now });
+  truncated: ({ resolution }) => {
     throw truncatedError(resolution, 'Stream ended before the provider signalled completion');
   },
   'buffer-overflow': ({ resolution }) => {
@@ -210,14 +224,17 @@ const SSE_DISPOSITIONS: Record<
   (options: {
     outcome: ChatSseOutcome;
     resolution: AiModeResolution;
+    deadline: GatewayDeadline;
     attempt: AttemptDraft;
     onAttempt?: AttemptHook;
     now: () => number;
   }) => void
 > = {
   completed: () => {},
-  aborted: ({ resolution }) => {
-    throw cancelledError(resolution);
+  aborted: ({ resolution, deadline }) => {
+    throw deadline.stopReason() === 'caller-abort'
+      ? cancelledError(resolution)
+      : timeoutError({ kind: 'total_budget', resolution });
   },
   'first-chunk-timeout': ({ resolution }) => {
     throw timeoutError({ kind: 'first_content', resolution });
@@ -225,8 +242,7 @@ const SSE_DISPOSITIONS: Record<
   'idle-timeout': ({ resolution }) => {
     throw timeoutError({ kind: 'idle', resolution });
   },
-  'closed-early': ({ resolution, attempt, onAttempt, now }) => {
-    reportInterrupted({ attempt, onAttempt, now });
+  'closed-early': ({ resolution }) => {
     throw truncatedError(resolution, 'Stream closed before the provider signalled completion');
   },
   'callback-failed': ({ outcome }) => {
@@ -251,16 +267,25 @@ export const assertNativeOutcome = (options: {
   onAttempt?: AttemptHook;
   now: () => number;
 }): void => {
-  NATIVE_DISPOSITIONS[options.outcome.kind](options as never);
+  assertReported({
+    ...options,
+    assert: () => NATIVE_DISPOSITIONS[options.outcome.kind](options),
+    truncated: options.outcome.kind === 'truncated',
+  });
 };
 
 /** The same completion policy, applied to the OpenAI-compatible SSE route. */
 export const assertSseOutcome = (options: {
   outcome: ChatSseOutcome;
   resolution: AiModeResolution;
+  deadline: GatewayDeadline;
   attempt: AttemptDraft;
   onAttempt?: AttemptHook;
   now: () => number;
 }): void => {
-  SSE_DISPOSITIONS[options.outcome.kind](options);
+  assertReported({
+    ...options,
+    assert: () => SSE_DISPOSITIONS[options.outcome.kind](options),
+    truncated: options.outcome.kind === 'closed-early',
+  });
 };

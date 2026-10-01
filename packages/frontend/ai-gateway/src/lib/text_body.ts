@@ -20,6 +20,7 @@ import type { AiChatMessage, AiModeResolution } from '@aikami/types';
 import { createAiGatewayError } from './errors.ts';
 import type { AiTextUsage } from './gateway_types.ts';
 import { buildNativeOptions, type NativeOptionsReport } from './native_options.ts';
+import { readNativeUsage } from './native_usage.ts';
 import {
   buildReasoningParams,
   type ReasoningControl,
@@ -243,38 +244,9 @@ export const dispatchFetch = async (options: {
   );
 };
 
-/** True when a value is a finite, non-negative integer token count. */
-const isTokenCount = (value: unknown): value is number =>
-  typeof value === 'number' && Number.isFinite(value) && Number.isInteger(value) && value >= 0;
-
-/** Ollama's native counters, in its own field names. */
-type OllamaUsagePayload = {
-  // biome-ignore lint/style/useNamingConvention: Ollama API contract field name
-  prompt_eval_count?: unknown;
-  // biome-ignore lint/style/useNamingConvention: Ollama API contract field name
-  eval_count?: unknown;
-};
-
-/**
- * Reads Ollama's native counters off a WHOLE body.
- *
- * `cachedSource` is recorded as `'unknown'` here rather than read from
- * `prompt_eval_cached_count`: the streaming path parses that counter properly
- * through `native_usage.ts`, and having this reader guess would give the same
- * quantity two different provenances depending on which transport served it.
- */
-const readBufferedOllamaUsage = (payload: object): AiTextUsage | undefined => {
-  const counts = payload as OllamaUsagePayload;
-  if (!isTokenCount(counts.prompt_eval_count) || !isTokenCount(counts.eval_count)) {
-    return undefined;
-  }
-  return {
-    inputTokens: counts.prompt_eval_count,
-    outputTokens: counts.eval_count,
-    cachedSource: 'unknown',
-    source: 'provider',
-  };
-};
+/** Reads whole-body Ollama accounting with the same validation as streamed frames. */
+const readBufferedOllamaUsage = (payload: object): AiTextUsage | undefined =>
+  readNativeUsage(payload);
 
 /**
  * Reads token accounting off a non-streaming body.

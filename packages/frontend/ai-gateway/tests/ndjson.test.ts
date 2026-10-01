@@ -216,24 +216,26 @@ describe('native NDJSON reader — failure modes', () => {
   test('reports an abort that lands mid-read', async () => {
     const controller = new AbortController();
     // Deliver one frame, then abort before the stream closes.
-    const payload = `${ndjsonFrame({ content: 'partial' })}${NATIVE_DONE()}`;
+    const payload = ndjsonFrame({ content: 'partial' });
     const body = new ReadableStream<Uint8Array>({
       start(streamController): void {
         streamController.enqueue(new TextEncoder().encode(payload));
-        controller.abort(new Error('mid-read abort'));
       },
     });
     const delivered: string[] = [];
     const outcome = await readNativeNdjsonStream({
       body,
       signal: controller.signal,
-      onContent: (text) => delivered.push(text),
+      onContent: (text) => {
+        delivered.push(text);
+        controller.abort(new Error('mid-read abort'));
+      },
     });
 
     // Whatever arrived was delivered — streaming is streaming — but the outcome
     // is an abort, so no caller records this as a completed generation.
     expect(outcome.kind).toBe('aborted');
-    expect(delivered.length).toBeLessThanOrEqual(1);
+    expect(delivered).toEqual(['partial']);
   });
 });
 

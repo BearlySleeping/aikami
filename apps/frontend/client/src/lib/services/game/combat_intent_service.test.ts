@@ -514,7 +514,9 @@ describe('CombatIntentService request lifetime', () => {
     // already settled, so this CANNOT become a model-driven result.
     releases[0]?.();
     await new Promise((resolve) => setTimeout(resolve, 5));
-    expect(await service.interpret(requestOf({ requestId: 'request-2' }))).toBeDefined();
+    expect(result).toEqual({ ok: false, reason: 'unparseable' });
+    expect(calls[0]?.signal?.aborted).toBe(true);
+    expect(service.activeRequestCount).toBe(0);
   });
 
   it('falls back through the DETERMINISTIC parser, never through a second model call', async () => {

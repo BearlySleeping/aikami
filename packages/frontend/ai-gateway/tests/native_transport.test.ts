@@ -605,6 +605,6 @@ describe('native transport — per-attempt accounting', () => {
     expect(seen.map((event) => event.outcome)).toEqual(['empty', 'completed']);
     // The surviving attempt reports ITS OWN counters, not the empty attempt's.
     expect(seen[1]?.usage).toMatchObject({ inputTokens: 7, outputTokens: 2 });
-    expect(result.usage).toMatchObject({ inputTokens: 7, outputTokens: 2 });
+    expect(result.usage).toMatchObject({ inputTokens: 107, outputTokens: 2 });
   });
 });

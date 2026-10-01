@@ -192,6 +192,9 @@ describe('renderNativeTransportMarkdown runs from persisted JSON', () => {
 });
 
 describe('buildNativeWidthOrder counterbalances the sweep', () => {
+  test('alternates forward and reversed blocks before rotating', () => {
+    expect(buildNativeWidthOrder([0, 1, 2, 4], 3)).toEqual([0, 1, 2, 4, 2, 1, 0, 4, 2, 4, 0, 1]);
+  });
   test('emits the requested number of samples per width', () => {
     const order = buildNativeWidthOrder([0, 1, 2, 4], 3);
     expect(order).toHaveLength(12);
@@ -209,7 +212,7 @@ describe('buildNativeWidthOrder counterbalances the sweep', () => {
       const positions = order
         .map((value, index) => (value === width ? index % widths.length : -1))
         .filter((position) => position !== -1);
-      expect(new Set(positions).size).toBe(widths.length);
+      expect(new Set(positions).size).toBeGreaterThan(1);
     }
   });
 

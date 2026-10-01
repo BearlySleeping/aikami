@@ -38,7 +38,7 @@ import {
 } from './structured.ts';
 import { buildBody, readJsonCompletion } from './text_body.ts';
 import { EMPTY_RETRY_BACKOFF_MS } from './text_constants.ts';
-import type { AttemptDraft, AttemptHook } from './text_outcome.ts';
+import { type AttemptDraft, type AttemptHook, failureOutcome } from './text_outcome.ts';
 
 /** How a structured attempt ended. */
 export type StructuredOutcome =
@@ -216,11 +216,6 @@ export const generateStructured = async (options2: {
   /** One dispatched structured attempt, with its own accounting. */
   const attemptOnce = async (): Promise<StructuredOutcome> => {
     state.text = '';
-    // Cleared per attempt on purpose. An empty first attempt and a successful
-    // retry are two provider bills; carrying the first attempt's counters into
-    // the second would attribute the discarded attempt's spend to the surviving
-    // one — and report a total that belongs to neither.
-    state.usage = undefined;
     const startedAt = now();
     const attemptDraft: AttemptDraft = {
       kind: 'structured',
@@ -239,7 +234,13 @@ export const generateStructured = async (options2: {
       });
     };
 
-    const response = await post({ resolution, body, deadline });
+    let response: Response;
+    try {
+      response = await post({ resolution, body, deadline });
+    } catch (error) {
+      settle(failureOutcome(error));
+      throw error;
+    }
     if (!response.ok) {
       onEvent?.('fetch-failed', { status: response.status });
       if (isSchemaShapeRejection(response.status)) {
@@ -257,14 +258,14 @@ export const generateStructured = async (options2: {
 
     const read = await readJsonCompletion(response);
     if (read.kind === 'aborted') {
-      settle('cancelled');
+      settle(failureOutcome(read.error));
       throw read.error;
     }
     if (read.kind === 'non-json') {
       settle('invalid');
       return { kind: 'non-json' };
     }
-    state.usage = read.usage;
+    state.usage = combineNativeUsage({ first: state.usage, second: read.usage });
     deliver(read.text);
     settle(state.text.trim().length === 0 ? 'empty' : 'completed', read.usage);
     return { kind: 'ok' };

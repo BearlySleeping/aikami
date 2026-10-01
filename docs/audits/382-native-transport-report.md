@@ -38,7 +38,7 @@ surviving attempt of a multi-attempt request was accounted for.
 | | Before | After |
 |---|---|---|
 | Native narrative transport | `buffered-json`, one `onChunk` | `ndjson-stream`, each fragment delivered once |
-| Time to first **visible** character (warm, width 0) | **6 386 ms** (headers) | **2 410 ms** (p50, n=2) |
+| Time to first **visible** character (warm, width 0) | **6 386 ms** (headers) | **2 410 ms** (pooled p50, n=3; includes long context) |
 | Configured `maxTokens` on Ollama | ignored | `num_predict`, plus `temperature`/`top_p`/`top_k`/`repeat_penalty` |
 | Fields with no native spelling | silently ignored | **omitted and reported** (`native-options-unmapped`) |
 | Structured extraction | system-prompt only | native `format: <JSON Schema>`, TypeBox still authoritative |
@@ -85,11 +85,22 @@ was left out.
 
 ### Phase-separated sweep, widths 0/1/2/4, 2 reps per width, interleaved
 
-Both transports were driven from **one build** (`nativeStreamingEnabled` toggles
-between them), with a discarded warm-up call first and the transports interleaved
-— the first version of this run ran all buffered samples first, which handed them
-the model load and made them look ~10 s slower. That confound was found, fixed,
-and the run repeated; the discarded run is not quoted.
+`apps/e2e/scripts/ai_baseline_native_transport.ts` calls Ollama's `/api/chat`
+directly and toggles the request body's `stream` field. This measures raw
+Ollama transport; it does not exercise the gateway adapter paths or their
+`nativeStreamingEnabled` option. A warm-up call is discarded, then buffered
+and streamed requests are interleaved.
+
+With `--reps 2`, the sweep produces two samples per transport per width. The
+harness also appends one cold streamed sample and one warm long-context streamed
+sample, both at width 0. Its summary groups by transport, thermal state and
+width, without separating prompt length. Thus the warm streamed width-0 row
+below has **n=3: two sweep samples plus the long-context sample**. The separate
+832-token row is a detail of that same third sample, not an additional sample.
+The raw gitignored evidence is absent from this checkout, so the two-sample
+median cannot be recomputed here; the historical pooled figure is retained and
+labelled accordingly. The corrected alternating width order should be used for
+future runs; these historical measurements have not been rerun.
 
 | transport | thermal | width | n | first-visible n | headers p50 | **first visible p50** | completion p50 |
 |---|---|---|---|---|---|---|---|
@@ -111,12 +122,11 @@ non-streaming request until the whole body is ready, so for that route
 `firstVisibleMs` is the like-for-like figure — both are "time until the first
 visible character".
 
-**The headline.** At width 0: **6 386 ms → 2 410 ms**, a 2.6× reduction in
-time-to-first-visible-character. Under contention the gap widens rather than
-closes: at width 4 the buffered route's first visible content is 20 376 ms while
-the streamed route's is 2 506 ms, because the streamed route's headers return
-immediately and the first tokens can arrive while the queued work ahead of it is
-still draining.
+**Comparison limits.** The recorded width-0 figures are buffered headers
+**6 386 ms** (n=2) and streamed first visible content **2 410 ms** (pooled n=3,
+including the long-context prompt). They do not establish an equal-prompt 2.6×
+adapter speedup. The width-4 recorded figures are 20 376 ms and 2 506 ms; the
+small, unseeded wire samples do not establish a causal explanation for that gap.
 
 **Other measurements from the same run:** 22 895 thinking characters were
 observed and **discarded** — never delivered, never counted as visible content.
@@ -130,7 +140,7 @@ length cap. Zero failures.
 |---|---|
 | `bun moon run frontend-ai-gateway:test` | **207 pass, 0 fail** across 11 files (was 110) |
 | `bun moon run frontend-ai-gateway:typecheck` | clean |
-| `bun moon run client:test` | 4 422 pass, 1 unrelated failure — see Limitations |
+| `bun moon run client:test` | 4 422 pass, 0 fail, as recorded in [PR #420](https://github.com/BearlySleeping/aikami/pull/420) |
 | `bun moon run client:typecheck` | clean (svelte-check, 0 errors) |
 | `bun moon run types:typecheck` | clean |
 | `bun run --cwd apps/e2e test:unit` | **110 pass, 0 fail** |
@@ -159,7 +169,7 @@ decorative:
 
 ## Limitations and what is NOT claimed
 
-- **n = 2 per cell.** Percentiles are therefore suppressed by the harness's own
+- **n = 2 per sweep cell; the warm streamed width-0 summary pools n = 3.** Percentiles are therefore suppressed by the harness's own
   minimum-sample rule; only medians are published. **No p95 or p99 is claimed
   anywhere in this report.** Twelve samples per transport would not justify them
   either.
@@ -188,10 +198,10 @@ decorative:
   measure the applied-turn phase (`appliedTurnMs` is defined and carried but was
   not populated in this run); that needs the client dev server and is the
   natural follow-up.
-- **`report_bundle_budget` fails in `client:test` and is unrelated to this
-  change** — a bundle-size metric, triggered by the client build, naming none of
-  this lane's files. It reproduces on the untouched base and is reported
-  separately rather than folded in.
+- **Historical client-test count reconciled to PR #420:** its description
+  records 4 422 pass / 0 fail. The earlier audit's “1 unrelated failure” and
+  `report_bundle_budget` attribution lacked a retained log here and are removed.
+  This is a correction to the historical report, not a fresh validation result.
 - **Not measured here:** long-context behaviour beyond one 832-token prompt;
   multi-GPU; a BYOK provider (no credentials were used, and none were needed).
 

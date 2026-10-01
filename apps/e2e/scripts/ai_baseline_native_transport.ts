@@ -350,7 +350,7 @@ export const buildNativeWidthOrder = (
 ): readonly number[] => {
   const blocks: number[][] = [];
   for (let rep = 0; rep < repsPerWidth; rep++) {
-    blocks.push(repsPerWidth % 2 === 0 ? [...widths] : [...widths].reverse());
+    blocks.push(rep % 2 === 0 ? [...widths] : [...widths].reverse());
   }
   // Rotate each block by its index so a width does not keep the same ordinal.
   return blocks.flatMap((block, index) =>

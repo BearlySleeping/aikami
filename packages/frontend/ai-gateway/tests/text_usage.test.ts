@@ -220,7 +220,7 @@ describe('Streaming usage — provider accounting', () => {
 });
 
 describe('Non-streaming usage — provider accounting', () => {
-  test('a retry cannot reuse usage from a discarded empty attempt', async () => {
+  test('request usage retains the discarded empty attempt when retry usage is absent', async () => {
     const empty = createJsonFetchMock({
       content: '',
       usage: { openAi: { promptTokens: 100, completionTokens: 0 } },
@@ -242,7 +242,7 @@ describe('Non-streaming usage — provider accounting', () => {
       schemaName: 'Ok',
     });
     expect(count).toBe(2);
-    expect(result.usage).toBeUndefined();
+    expect(result.usage).toMatchObject({ inputTokens: 100, outputTokens: 0 });
   });
 
   test('combines structured and fallback usage after invalid JSON', async () => {
@@ -319,7 +319,7 @@ describe('Non-streaming usage — provider accounting', () => {
     expect(result.usage).toBeUndefined();
   });
 
-  test('structured retry discards earlier whitespace and usage', async () => {
+  test('structured retry discards earlier whitespace but retains billed usage', async () => {
     let attempts = 0;
     const first = createJsonFetchMock({
       content: ' ',
@@ -341,7 +341,7 @@ describe('Non-streaming usage — provider accounting', () => {
     });
     expect(attempts).toBe(2);
     expect(result.text).toBe('{"ok":true}');
-    expect(result.usage).toBeUndefined();
+    expect(result.usage).toMatchObject({ inputTokens: 300, outputTokens: 1 });
   });
 
   // The native route now streams, so its counters arrive on the TERMINATING
