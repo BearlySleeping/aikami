@@ -165,6 +165,39 @@ const spreadCell = (value: unknown): string => {
  * "width 4, TTFT 12 s" and "width 4 that silently fired one call" are different
  * measurements, and only the second one is what a bad harness produces.
  */
+/**
+ * Admission's own ledger for a width sweep.
+ *
+ * Extracted rather than inlined because the sweep renderer already carries
+ * three tables, and a fourth branch ladder inside it pushed the function past
+ * the complexity threshold — which is the guard correctly noticing that the
+ * renderer was doing too much.
+ *
+ * A request WAITING for admission has sent nothing: no wire row, no telemetry
+ * span yet. These columns are the only place such a request can be seen to
+ * exist at all, and "absent from the wire" must never be read as "did not
+ * happen".
+ */
+const renderAdmissionRows = (byWidth: readonly Record<string, unknown>[]): string[] => {
+  const peak = (row: Record<string, unknown>, key: string): string =>
+    String((row[key] as Record<string, number> | undefined)?.max ?? 0);
+  const lines: string[] = [
+    '',
+    '| width | bg queued after burst | bg admitted before dialogue | bg in-flight at dialogue start | queue depth max | bg queue wait ms (min-max) | bg drain ms after turn (min-max) | bg dropped |',
+    '|---|---|---|---|---|---|---|---|',
+  ];
+  for (const row of byWidth) {
+    lines.push(
+      `| ${String(row.width)} | ${peak(row, 'backgroundQueuedAfterBurst')} | ` +
+        `${peak(row, 'backgroundAdmittedBeforeDialogue')} | ` +
+        `${peak(row, 'backgroundInFlightAtDialogueStart')} | ` +
+        `${String(row.queueDepthMax ?? 0)} | ${spreadCell(row.queueWaitMs)} | ` +
+        `${spreadCell(row.backgroundDrainMs)} | ${peak(row, 'backgroundDropped')} |`,
+    );
+  }
+  return lines;
+};
+
 const renderWidthSweepRows = (scenario: Record<string, unknown>): string[] => {
   const byWidth = scenario.byWidth as Record<string, unknown>[] | undefined;
   if (byWidth === undefined) {
@@ -196,9 +229,10 @@ const renderWidthSweepRows = (scenario: Record<string, unknown>): string[] => {
         `${String(extraction.aiAuthoredChoices)} vs ${String(extraction.deterministicFallbackChoices)} |`,
     );
   }
+  lines.push(...renderAdmissionRows(byWidth));
   lines.push(
     '',
-    '| width | call-1 narrative total ms (min–max) | call-1 client-span total ms | call-2 extraction total ms (min–max) | call-2 client-span total ms | bg prefill ms | bg generation ms | bg prompt tok | bg completion tok | bg failed | bg aborted | commands extracted / denied |',
+    '| width | call-1 narrative total ms (min-max) | call-1 client-span total ms | call-2 extraction total ms (min–max) | call-2 client-span total ms | bg prefill ms | bg generation ms | bg prompt tok | bg completion tok | bg failed | bg aborted | commands extracted / denied |',
     '|---|---|---|---|---|---|---|---|---|---|---|---|',
   );
   for (const row of byWidth) {

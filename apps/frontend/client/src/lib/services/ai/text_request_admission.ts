@@ -227,6 +227,16 @@ export type TextRequestAdmission = {
   readonly quietWindowMs: number;
 };
 
+/** How a request left the admission queue. */
+export type QueueExit = {
+  /** Milliseconds spent in the queue, admitted or not. */
+  readonly queueMs: number;
+  /** Requests ahead of it on entry. */
+  readonly queueDepth: number;
+  /** Whether it reached the provider, as opposed to being dropped. */
+  readonly admitted: boolean;
+};
+
 /** One request waiting for admission. */
 type QueuedRequest = {
   readonly domain: string;
@@ -520,6 +530,7 @@ const createTextRequestAdmission = (options?: {
       domain: string;
       priority: 'interactive' | 'background';
       signal: AbortSignal;
+      onExit?: (observation: QueueExit) => void;
     }): Promise<TextAdmissionLease> {
       const { domain, priority, signal } = input;
       const state = stateFor(domain);
@@ -543,6 +554,11 @@ const createTextRequestAdmission = (options?: {
           state.interactiveActive,
         );
         recountTotals();
+        // Reported like any other queue exit, with a MEASURED zero. Interactive
+        // work is admitted immediately, so `queueMs: 0` is a fact about this
+        // call — not an absence of one — and it is what makes `queueMs > 0`
+        // mean something.
+        input.onExit?.({ queueMs: 0, queueDepth: 0, admitted: true });
         return buildLease(domain, 'interactive', now(), 0);
       }
 
@@ -562,26 +578,44 @@ const createTextRequestAdmission = (options?: {
         let request: QueuedRequest;
         const forget = (): void => signal.removeEventListener('abort', onAbort);
         const onAbort = (): void => dropQueued(domain, request, signal.reason);
+        /**
+         * Reports how the request LEFT the queue, on EITHER path.
+         *
+         * Both exits report, because a request that waited eight seconds in a
+         * queue and was then cancelled still waited eight seconds. Recording
+         * only the admitted path would make every cancelled-while-queued call
+         * report no queue time at all, which reads as "it never queued" rather
+         * than "it queued and was dropped".
+         */
+        const exitWith = (admitted: boolean): boolean => {
+          if (settled) {
+            return false;
+          }
+          settled = true;
+          forget();
+          input.onExit?.({
+            queueMs: Math.max(0, Math.round(now() - queuedAt)),
+            queueDepth: ahead,
+            admitted,
+          });
+          return true;
+        };
         request = {
           domain,
           signal,
           queuedAt,
           queueDepth: ahead,
+          // `exitWith` owns the one-shot guard, so the queue report and the
+          // promise settlement can never disagree about which happened first.
           admit: (lease) => {
-            if (settled) {
-              return;
+            if (exitWith(true)) {
+              resolve(lease);
             }
-            settled = true;
-            forget();
-            resolve(lease);
           },
           reject: (reason) => {
-            if (settled) {
-              return;
+            if (exitWith(false)) {
+              reject(reason);
             }
-            settled = true;
-            forget();
-            reject(reason);
           },
         };
         signal.addEventListener('abort', onAbort, { once: true });
@@ -619,12 +653,6 @@ const createTextRequestAdmission = (options?: {
 // Service-facing facade
 // ---------------------------------------------------------------------------
 
-/** Admission facts about one logical call, reported only when MEASURED. */
-export type AdmissionObservation = {
-  queueMs: number;
-  queueDepth: number;
-};
-
 /**
  * Reads an override for the admission quiet window, in ms.
  *
@@ -647,15 +675,15 @@ export type ServiceInferenceAdmission = {
   /**
    * Reserves the contended resource for one call.
    *
-   * `onAdmit` fires ONLY when this call actually entered the gate, so a
-   * coalesced subscriber — which never does — reports nothing rather than
-   * reporting someone else's wait.
+   * `onQueueExit` fires when this call LEAVES the queue — admitted or dropped,
+   * not only the first. A coalesced subscriber never enters the gate, so it
+   * reports nothing rather than reporting someone else's wait.
    */
   acquire(input: {
     routing: AiModeResolution;
     task?: TextTask;
     signal: AbortSignal;
-    onAdmit?: (observation: AdmissionObservation) => void;
+    onQueueExit?: (observation: QueueExit) => void;
   }): Promise<TextAdmissionLease>;
   /** Content-free counters. */
   readonly stats: TextAdmissionStats;
@@ -709,12 +737,13 @@ export const createServiceInferenceAdmission = (options?: {
       routing: AiModeResolution;
       task?: TextTask;
       signal: AbortSignal;
-      onAdmit?: (observation: AdmissionObservation) => void;
+      onQueueExit?: (observation: QueueExit) => void;
     }): Promise<TextAdmissionLease> {
       const pending = gate.acquire({
         domain: textContentionDomain(input.routing),
         priority: textTaskPriority(input.task),
         signal: input.signal,
+        ...(input.onQueueExit === undefined ? {} : { onExit: input.onQueueExit }),
       });
       // Published BEFORE awaiting, because the state worth measuring for a
       // background request is being QUEUED — and that happens synchronously
@@ -722,7 +751,6 @@ export const createServiceInferenceAdmission = (options?: {
       // measurement blind for exactly the window this slice is about.
       publish();
       const lease = await pending;
-      input.onAdmit?.({ queueMs: lease.queueMs, queueDepth: lease.queueDepth });
       publish();
       // Release republishes too. A lease is held for the WHOLE call, so without
       // this the published counters would keep showing it as active after the

@@ -117,7 +117,7 @@ describe('TextGenerationService — inference admission', () => {
     // sanitised duration.
     expect(lastSpan().task).toBe('summarization');
     expect(lastSpan().queueMs).toBeGreaterThanOrEqual(100);
-    expect(lastSpan().totalMs).toBeGreaterThanOrEqual(lastSpan().queueMs ?? 0);
+    expect(lastSpan().totalMs).toBeGreaterThanOrEqual(Number(lastSpan().queueMs ?? 0));
     expect(textTelemetryService.summary.counters.maxQueueDepth).toBeGreaterThanOrEqual(0);
   });
 
@@ -235,9 +235,13 @@ describe('TextGenerationService — inference admission', () => {
     await tick(50);
     expect(mocks.gatewayGenerateCalls).toHaveLength(0);
 
-    // Recorded honestly: it did not run, and it says so.
+    // Recorded honestly: it did not run, and it says so — AND it reports the
+    // queue wait it actually incurred. Recording only the ADMITTED path would
+    // make a call that waited in a queue look like one that never queued.
     expect(lastSpan().ok).toBe(false);
     expect(lastSpan().provider).toBe('openrouter');
+    expect(Number(lastSpan().queueMs ?? -1)).toBeGreaterThanOrEqual(10);
+    expect(lastSpan().queueDepth).toBeGreaterThanOrEqual(0);
   });
 
   test('deadline expiry while queued performs NO provider call', async () => {

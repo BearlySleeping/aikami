@@ -40,8 +40,8 @@ import type { StructuredCallCoalescer } from './structured_call_coalescer.ts';
 import { createStructuredCallCoalescer } from './structured_call_coalescer.ts';
 import { resolveLocalFirstPolicy } from './text_local_first_policy.ts';
 import {
-  type AdmissionObservation,
   createServiceInferenceAdmission,
+  type QueueExit,
   type ServiceInferenceAdmission,
   type TextAdmissionLease,
 } from './text_request_admission.ts';
@@ -203,7 +203,7 @@ class TextGenerationService
     routing: AiModeResolution;
     task?: TextTask;
     signal: AbortSignal;
-    onAdmit?: (observation: AdmissionObservation) => void;
+    onQueueExit?: (observation: QueueExit) => void;
   }) {
     return await this._admission.acquire(options);
   }
@@ -243,7 +243,7 @@ class TextGenerationService
     deadline: AiRequestDeadline;
     routing: AiModeResolution;
     onResolve: (resolution: AiModeResolution) => void;
-    onAdmit?: (observation: AdmissionObservation) => void;
+    onQueueExit?: (observation: QueueExit) => void;
   }): Promise<{
     structured?: unknown;
     usage?: { inputTokens: number; outputTokens: number; cachedTokens?: number };
@@ -259,7 +259,7 @@ class TextGenerationService
       deadline,
       routing,
       onResolve,
-      onAdmit,
+      onQueueExit,
     } = options;
     const messages: TextChatMessage[] = [];
     if (systemPrompt) {
@@ -288,7 +288,7 @@ class TextGenerationService
       routing,
       ...(task === undefined ? {} : { task }),
       signal: AbortSignal.any([signal, deadline.signal]),
-      ...(onAdmit === undefined ? {} : { onAdmit }),
+      ...(onQueueExit === undefined ? {} : { onQueueExit }),
     });
     try {
       // The quiet window may have spent the budget; re-check before paying for
@@ -450,7 +450,7 @@ class TextGenerationService
     deadline: AiRequestDeadline;
     routing: AiModeResolution;
     onResolve: (resolution: AiModeResolution) => void;
-    onAdmit?: (observation: AdmissionObservation) => void;
+    onQueueExit?: (observation: QueueExit) => void;
   }): Promise<CoalescedStructuredResult> {
     const {
       schema,
@@ -462,7 +462,7 @@ class TextGenerationService
       signal,
       routing,
       onResolve,
-      onAdmit,
+      onQueueExit,
     } = options;
     // 🔴 The shared work inherits the initiator's ABSOLUTE deadline, including
     // time already spent on the local attempt. Deriving a fresh one from the
@@ -500,7 +500,7 @@ class TextGenerationService
           // second implementation to get wrong.
           routing,
           onResolve,
-          ...(onAdmit === undefined ? {} : { onAdmit }),
+          ...(onQueueExit === undefined ? {} : { onQueueExit }),
         }),
     });
     return {
@@ -563,12 +563,13 @@ class TextGenerationService
     let resolution: AiModeResolution | undefined;
     let localAttempted = false;
     let fallback = false;
-    // Set only when THIS call was actually admitted. A coalesced subscriber
-    // never runs `_generateStructured`, so it records nothing here — which is
-    // the honest answer: it did not itself measure a queue, and borrowing the
-    // initiator's number would attribute someone else's wait to it.
-    let admission: AdmissionObservation | undefined;
-    const onAdmit = (observation: AdmissionObservation): void => {
+    // Set when this call LEAVES the admission queue — admitted OR dropped. A
+    // coalesced subscriber never runs `_generateStructured`, so it records
+    // nothing here, which is the honest answer: it did not itself measure a
+    // queue, and borrowing the initiator's number would attribute someone
+    // else's wait to it.
+    let admission: QueueExit | undefined;
+    const onQueueExit = (observation: QueueExit): void => {
       admission = observation;
     };
     // One span builder for both outcomes: the success and failure paths differ
@@ -651,7 +652,7 @@ class TextGenerationService
         onResolve: (resolved) => {
           resolution = resolved;
         },
-        onAdmit,
+        onQueueExit,
       });
 
       this.debug('extractStructure:done', { schemaName, coalesced: result.coalesced });
