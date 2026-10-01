@@ -18,6 +18,7 @@ import {
   type SystemOneRequest,
   type SystemOneResponse,
 } from '../dialect.ts';
+import { probeSystemOneBackend } from '../systemone_readiness.ts';
 import type {
   DecisionAnswer,
   DecisionCapability,
@@ -110,13 +111,6 @@ const fromWireAnswer = (
     };
   }
   return undefined;
-};
-
-/** Reads a runtime version string from a probe body. */
-const readVersion = async (response: { text(): Promise<string> }): Promise<string> => {
-  const parsed: unknown = JSON.parse(await response.text());
-  const version = (parsed as { version?: unknown }).version;
-  return typeof version === 'string' ? version : 'unknown';
 };
 
 /** Classifies a thrown transport error against the caller's signal and deadline. */
@@ -299,30 +293,32 @@ export const createSystemOneDecisionAdapter = (
       if (probe?.signal.aborted || budget === 0) {
         return { ...base, notReadyReason: 'probe cancelled or deadline exceeded' };
       }
-      const controller = new AbortController();
-      const onAbort = (): void => controller.abort();
-      probe?.signal.addEventListener('abort', onAbort, { once: true });
-      const timer = setTimeout(() => controller.abort(), budget);
-      try {
-        const response = await transport.fetch(options.endpoints.version, {
-          method: 'GET',
-          headers: {},
-          signal: controller.signal,
-        });
-        if (response.status !== 200) {
-          return {
-            ...base,
-            notReadyReason: `runtime version probe returned HTTP ${response.status}`,
-          };
-        }
-        return { ...base, ready: true, runtime: await readVersion(response) };
-      } catch (error) {
-        const detail = error instanceof Error ? error.message : String(error);
-        return { ...base, notReadyReason: `runtime version probe failed: ${detail}` };
-      } finally {
-        clearTimeout(timer);
-        probe?.signal.removeEventListener('abort', onAbort);
+
+      // C-566 reported `ready: true` as soon as `/api/version` answered 200.
+      // That is the false-ready bug: this machine runs Ollama 0.34.3, whose
+      // version route answers 200 while `/v1/systemone` answers 404. Readiness
+      // now requires the real dialect probe — version floor, then checkpoint
+      // availability, then an advertised decision-scoring capability.
+      //
+      // This still does NOT prove the checkpoint can answer: only a sample
+      // decision does, and `probeDecisionBackend` owns that.
+      const result = await probeSystemOneBackend({
+        transport,
+        endpoints: options.endpoints,
+        model: options.model,
+        budgetMs: budget,
+        signal: probe?.signal ?? new AbortController().signal,
+      });
+
+      if (!result.ok) {
+        return { ...base, runtime: result.runtime, notReadyReason: result.reason };
       }
+      return {
+        ...base,
+        ready: true,
+        runtime: result.runtime,
+        checkpoint: result.listed.name,
+      };
     },
 
     async run(request: DecisionRequest): Promise<DecisionAdapterResponse> {
