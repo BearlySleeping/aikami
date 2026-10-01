@@ -172,6 +172,35 @@ sample pay a ~5 s load that no later sample pays, which is a warm-up artefact
 rather than a contention measurement. Residency is recorded in the manifest
 instead.
 
+### Provenance: this sweep spans two invocations
+
+The 48-sample sweep was **completed across two invocations of the same
+deterministic experiment**, not one. Stated here because the audit has to survive
+independently of the PR conversation:
+
+| | invocation 1 | invocation 2 (resume) |
+|---|---|---|
+| order indices produced (0-based) | 0–40 | 41–47 |
+| samples 1–48 as printed in the raw table | 1–41 | 42–48 |
+| invocation | 1 | 2 |
+
+Invocation 1 lost its browser/dev-server process partway through. It recorded
+the 41 samples it had completed, plus a **harness-error placeholder** at each of
+the seven positions it never reached — placeholders, not measurements, and
+excluded from every aggregate. Invocation 2 resumed the same checkpoint,
+re-measured exactly those seven positions, and wrote them alongside.
+
+Both invocations used the same commit, the same configuration, the same
+deterministic counterbalanced order, the same warm machine and the same model
+residency, and ran minutes apart. Every one of the 48 order positions is covered
+exactly once, 12 per width, all 48 valid. An earlier resume attempt that failed
+because the client dev server was unreachable contributed **no** sample and no
+checkpoint record: it aborted before the checkpoint was opened.
+
+This is what the checkpoint exists for, and the per-sample records carry their
+`invocation`, so the split above is auditable from the raw evidence rather than
+asserted here.
+
 ### A turn that fails is a result, not an error
 
 `generateTurn` deliberately rethrows provider failures ("a broken provider must
@@ -539,7 +568,9 @@ bun run --cwd apps/e2e bench:ai-baseline \
   --skip-cold --reps 5 --p2-reps 12 --p2-widths 0,1,2,4
 
 # a sweep cut short continues from its per-sample checkpoint; the same
-# --p2-widths and --p2-reps are required and a mismatch is refused
+# --p2-widths and --p2-reps are required and a mismatch is refused.
+# THIS IS HOW THE REPORTED RUN WAS PRODUCED: invocation 1 produced order
+# indices 0-40 and invocation 2 produced 41-47 (see "Provenance" above).
 bun run --cwd apps/e2e bench:ai-baseline \
   --label 382-contention-remeasure \
   --p2-only --p2-resume --p2-reps 12 --p2-widths 0,1,2,4
