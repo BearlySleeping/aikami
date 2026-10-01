@@ -147,15 +147,41 @@ const stateForNotReady = (capability: DecisionCapability): DecisionReadinessStat
   if (capability.notReadyState !== undefined) {
     return capability.notReadyState;
   }
+  // Legacy fallback for adapters that supply prose only. PRECEDENCE IS
+  // LOAD-BEARING here: every reason this module emits mentions "version" (they
+  // all come from the version probe), so a version regex checked first would
+  // classify HTTP 401, HTTP 404 and a refused connection as
+  // `unsupported-runtime` — telling a user to upgrade a runtime whose real
+  // problem is bad credentials or a missing route. Transport and auth outcomes
+  // are matched first; unrecognised reasons stay `unreachable`.
   const reason = capability.notReadyReason ?? '';
-  if (/version|too old|below|minimum|floor/i.test(reason)) {
-    return 'unsupported-runtime';
+  if (/cancelled|aborted by (the )?caller/i.test(reason)) {
+    return 'cancelled';
   }
-  if (/not (installed|pulled|present)|no such model|model[- ]missing/i.test(reason)) {
+  if (/deadline|exceed|budget|no time|timed? ?out/i.test(reason)) {
+    return 'deadline-exceeded';
+  }
+  if (/\b(401|403)\b|unauthor|forbidden|credential|token/i.test(reason)) {
+    return 'unauthorized';
+  }
+  if (
+    /\b(404|502|503|504)\b|not found|does not implement|ECONNREFUSED|fetch failed|failed:/i.test(
+      reason,
+    )
+  ) {
+    return 'unreachable';
+  }
+  if (
+    /not (installed|pulled|present)|no such model|model[- ]missing|is not installed/i.test(reason)
+  ) {
     return 'model-missing';
   }
   if (/capability|scoring|does not support/i.test(reason)) {
     return 'capability-missing';
+  }
+  // Only now may a version reading be read as a version reading.
+  if (/version|too old|older than|below|minimum|floor/i.test(reason)) {
+    return 'unsupported-runtime';
   }
   return 'unreachable';
 };

@@ -17,6 +17,7 @@ import {
   compareDottedVersions,
   createSystemOneDecisionAdapter,
   DECISION_SCORING_CAPABILITY_TOKENS,
+  type DecisionAdapter,
   declaresScoring,
   normalizeModelName,
   parseModelListing,
@@ -444,4 +445,86 @@ describe('probe identity and failure boundaries', () => {
       expect(result).toMatchObject({ ok: false, state });
     },
   );
+});
+
+describe('legacy adapters that supply prose only', () => {
+  /**
+   * A backend that predates the typed `notReadyState` seam and reports only a
+   * human-readable reason. The classifier must still be correct for it: these
+   * are the states a UI shows an operator, and a wrong one sends them to fix
+   * something that is not broken.
+   */
+  const proseOnlyAdapter = (reason: string): DecisionAdapter => ({
+    backendId: 'legacy-backend',
+    dialect: 'jev-v1',
+    capability: async () => ({
+      backendId: 'legacy-backend',
+      dialect: 'jev-v1',
+      ready: false,
+      notReadyReason: reason,
+      primitives: ['choice'],
+      maxOptions: 64,
+      maxQuestions: 16,
+      maxContextBytes: 65_536,
+      languages: ['en'],
+    }),
+    run: async () => ({
+      ok: false as const,
+      reason: 'backend-unavailable' as const,
+      detail: reason,
+      queueMs: 0,
+      inferenceMs: 0,
+    }),
+  });
+
+  const classify = async (reason: string): Promise<string> => {
+    const verdict = await probeDecisionBackend({
+      adapter: proseOnlyAdapter(reason),
+      deadlineAt: Date.now() + 1000,
+      signal: neverAborted(),
+      requestId: 'legacy',
+      stateRevision: 0,
+    });
+    return verdict.state;
+  };
+
+  // Every one of these reasons contains the word "version", because they all
+  // come from the version probe. A version-first classifier reported them all
+  // as `unsupported-runtime` — i.e. "upgrade your runtime" for what are
+  // actually credential, routing and connectivity problems.
+  test('auth failures are not reported as an out-of-date runtime', async () => {
+    expect(await classify('runtime version probe returned HTTP 401')).toBe('unauthorized');
+    expect(await classify('runtime version probe returned HTTP 403')).toBe('unauthorized');
+  });
+
+  test('a missing route or refused connection is unreachable', async () => {
+    expect(await classify('runtime version probe returned HTTP 404')).toBe('unreachable');
+    expect(await classify('runtime version probe returned HTTP 502')).toBe('unreachable');
+    expect(await classify('runtime version probe failed: ECONNREFUSED')).toBe('unreachable');
+  });
+
+  test('timeout and cancellation keep their own states', async () => {
+    expect(await classify('probe exceeded its 200 ms slice')).toBe('deadline-exceeded');
+    expect(await classify('cancelled during probe')).toBe('cancelled');
+  });
+
+  test('a genuinely old runtime is still reported as unsupported-runtime', async () => {
+    expect(
+      await classify('runtime 0.34.3 is older than the 0.35.0 floor required by /v1/systemone'),
+    ).toBe('unsupported-runtime');
+  });
+
+  test('a missing checkpoint is still reported as model-missing', async () => {
+    expect(
+      await classify('checkpoint "nimble" is not installed; the runtime lists 14 model(s)'),
+    ).toBe('model-missing');
+  });
+
+  test('an absent scoring capability is still reported as capability-missing', async () => {
+    expect(
+      await classify(
+        'checkpoint "nimble" advertises [completion, tools], none of which is decision scoring',
+      ),
+    ).toBe('capability-missing');
+  });
 });
