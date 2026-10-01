@@ -1,77 +1,73 @@
 // packages/frontend/ai-gateway/src/lib/text_adapter_openai_compatible.ts
 //
-// OpenAI-compatible chat-completions text adapter. Serves both `offline`
-// (Ollama / Ooba / local OpenAI-compatible endpoints) and `byok`
-// (OpenRouter / OpenAI / Gemini / DeepSeek / custom) modes — the transport
-// is identical; endpoint, API key, and headers come from the resolution
-// and injected config.
+// The OpenAI-compatible chat-completions text adapter: configuration, shared
+// per-call collaborators, and dispatch. It serves both `offline` (Ollama / Ooba /
+// local OpenAI-compatible endpoints) and `byok` (OpenRouter / OpenAI / Gemini /
+// DeepSeek / custom) modes — the transport is identical; endpoint, API key, and
+// headers come from the resolution and injected config.
 //
-// Relocated from apps/frontend/client text_generation_service internals.
-// Contract: C-320 AC-2
+// 🔴 THE NATIVE ROUTE IS NO LONGER BUFFERED
+//
+// Ollama's `/api/chat` used to be sent with `stream: false`, the whole body was
+// awaited, and a single `onChunk` fired at the end. Measured on Ollama 0.34.3
+// (`docs/audits/382-native-transport-plan.md`), warm and uncontended: response
+// headers at 6 386 ms against a total of 6 387 ms. That route had NO
+// first-content time at all — not a slow one, none — and no tuning could
+// produce one, because no byte of the answer existed before the byte that ended
+// it. The same run over NDJSON put the first VISIBLE character at 2 410 ms.
+//
+// Plain narrative now streams over the native NDJSON surface. The distinctions
+// that make this honest rather than merely fast:
+//
+//   - only `message.content` is delivered. `message.thinking` is a separate
+//     channel; on the measured model the first frames carried only thinking, so
+//     "first frame" and "first visible content" are different instants. That run
+//     observed 22 895 thinking characters and discarded every one of them —
+//     publishing the frame time as time-to-first-token would have hidden all of
+//     them behind a 94 ms number.
+//   - structured extraction stays BUFFERED. See `text_structured.ts`.
+//
+// This file holds CONFIGURATION and DISPATCH. What goes on the wire lives in
+// `text_body.ts`; what a failure means in `text_outcome.ts`; the two generation
+// paths in `text_narrative.ts` and `text_structured.ts`; the bounded readers in
+// `ndjson.ts` and `sse.ts`; the budget in `deadline.ts`.
+//
+// Contract: C-320 AC-2, issue #382
 
 import type { AiChatMessage, AiModeResolution } from '@aikami/types';
-import { createAiGatewayError, toAiGatewayError } from './errors.ts';
-import type { AiTextAdapter, AiTextGenerationResult, AiTextUsage } from './gateway_types.ts';
 import {
-  buildReasoningParams,
-  type ReasoningControl,
-  resolveChatSurface,
-} from './reasoning_control.ts';
+  createGatewayDeadline,
+  type GatewayClock,
+  type GatewayDeadline,
+  type GatewayPhaseLimits,
+} from './deadline.ts';
+import { toAiGatewayError } from './errors.ts';
+import type {
+  AiTextAdapter,
+  AiTextGenerationResult,
+  AiTransportAttemptDraft,
+} from './gateway_types.ts';
+import type { NativeFormatCapability } from './native_format.ts';
+import type { ReasoningControl } from './reasoning_control.ts';
 import {
   GATEWAY_FETCH_TIMEOUT_MS,
   GATEWAY_FIRST_CHUNK_TIMEOUT_MS,
   GATEWAY_IDLE_TIMEOUT_MS,
-  readChatSseStream,
 } from './sse.ts';
+import { createSchemaCompiler } from './structured.ts';
+import { dispatchFetch } from './text_body.ts';
+import { generatePlain, type PlainDeps } from './text_narrative.ts';
+import type { AttemptHook } from './text_outcome.ts';
 import {
-  createSchemaCompiler,
-  readOpenAiUsage,
-  sanitizeJsonResponse,
-  validateAgainstSchema,
-} from './structured.ts';
+  abortOnEither,
+  cancelledError,
+  classifyFetchRejection,
+  timeoutError,
+} from './text_outcome.ts';
+import { generateStructured, type StructuredDeps } from './text_structured.ts';
 
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-/** Provider requires these headers for ranking/attribution on free models (OpenRouter). */
-export const OPENROUTER_ATTRIBUTION_HEADERS = {
-  'HTTP-Referer': 'https://aikami.app',
-  'X-Title': 'Aikami',
-} as const;
-
-/** Well-known chat-completions base URLs for local providers.
- *  Kept empty: local endpoints resolve at runtime from config.json (C-389)
- *  via the `getDefaultEndpoint` option — the bundle never embeds a
- *  hardcoded engine URL.
- */
-export const DEFAULT_LOCAL_TEXT_ENDPOINTS: Record<string, string> = {} as const;
-
-/**
- * Backoff delay (ms) between the initial structured attempt and its single
- * empty-body retry (C-499 AC-2). Kept short — this is a transient empty
- * completion from local/BYOK providers, not a retry storm.
- */
-export const EMPTY_RETRY_BACKOFF_MS = 200;
-
-/**
- * Ollama VRAM-eviction payload params (C-056 lesson): release the model
- * immediately after generation so image generation can claim VRAM.
- * Formerly mirrored in @aikami/backend/ai (deleted C-324); this is now
- * the canonical copy. Could be promoted to @aikami/constants later.
- */
-export const OLLAMA_VRAM_EVICTION_PARAMS = {
-  // biome-ignore lint/style/useNamingConvention: Ollama API contract field name
-  keep_alive: 0,
-  options: {
-    // biome-ignore lint/style/useNamingConvention: Ollama API contract field name
-    num_parallel: 1,
-  },
-} as const;
-
-// ---------------------------------------------------------------------------
-// Options
-// ---------------------------------------------------------------------------
+export { DEFAULT_LOCAL_TEXT_ENDPOINTS, OPENROUTER_ATTRIBUTION_HEADERS } from './text_body.ts';
+export { EMPTY_RETRY_BACKOFF_MS, OLLAMA_VRAM_EVICTION_PARAMS } from './text_constants.ts';
 
 /** Configuration for the OpenAI-compatible text adapter. */
 export type OpenAiCompatibleTextAdapterOptions = {
@@ -79,6 +75,17 @@ export type OpenAiCompatibleTextAdapterOptions = {
   getApiKey?: (provider: string) => string | undefined;
   /** Whether a provider supports native `response_format: json_schema`. */
   supportsStructuredOutput?: (provider: string) => boolean;
+  /**
+   * Whether a provider accepts a JSON Schema as Ollama's native `format`.
+   *
+   * Separate from `supportsStructuredOutput` because they are different
+   * capabilities on different surfaces: the first is OpenAI's
+   * `response_format: json_schema`, the second is Ollama's `format`. Measured
+   * separately because a provider can have either, both or neither, and
+   * assuming one implies the other is how a schema-constrained request silently
+   * degrades into unconstrained prose.
+   */
+  supportsNativeFormat?: NativeFormatCapability;
   /** Default chat base endpoint per provider, when the resolution has none. */
   getDefaultEndpoint?: (provider: string) => string | undefined;
   /** Extra headers per provider (merged after built-in OpenRouter headers). */
@@ -101,156 +108,141 @@ export type OpenAiCompatibleTextAdapterOptions = {
   fetchTimeoutMs?: number;
   firstChunkTimeoutMs?: number;
   idleTimeoutMs?: number;
+  /** Phase watchdog limits. Defaults mirror the historical constants. */
+  phaseLimits?: Partial<GatewayPhaseLimits>;
+  /** Injectable clock, so deadline behaviour is testable without real time. */
+  clock?: GatewayClock;
+  /**
+   * Whether plain narrative on the native route may stream.
+   *
+   * Defaults to `true`. A caller can turn it off to reproduce the old buffered
+   * behaviour, which is how the before/after comparison in the #382 report was
+   * produced on ONE build rather than two.
+   */
+  nativeStreamingEnabled?: boolean;
+  /**
+   * Whether to send native generation `options` for Ollama.
+   *
+   * Defaults to `true`. Turning them on makes configured limits take effect for
+   * the first time, which can truncate a reasoning model that was previously
+   * unbounded — a real behaviour change, so it is separately switchable.
+   */
+  nativeOptionsEnabled?: boolean;
+  /** Whether to send a native `format` schema for structured extraction. */
+  nativeStructuredFormatEnabled?: boolean;
 };
-
-// ---------------------------------------------------------------------------
-// Adapter factory
-// ---------------------------------------------------------------------------
 
 /**
- * An OpenAI-compatible base URL typed as a bare host ("https://api.example.com")
- * carries no version segment, and `<host>/chat/completions` is a 404 there. The
- * editor's model test already probes `<root>/v1/chat/completions`, so the runtime
- * has to agree — otherwise a custom endpoint can pass its own test and then fail
- * the moment the game calls it. A base that already names a path is used
- * verbatim; only a host-root base gains `/v1`.
+ * Waits `ms` with backoff, drawing on the SHARED budget.
+ *
+ * The wait is `min(backoff, remaining budget)`, and the ONLY things that can
+ * interrupt it are the total budget and a cancellation. A phase watchdog is
+ * deliberately not used: its timer would fire at the same instant as this one
+ * and the race would turn a routine backoff into a spurious `total_budget`.
  */
-const withOpenAiVersionSegment = (base: string): string => {
-  const trimmed = base.replace(/\/+$/, '');
-  try {
-    const { pathname } = new URL(trimmed);
-    return pathname === '/' || pathname === '' ? `${trimmed}/v1` : trimmed;
-  } catch {
-    return trimmed;
+const waitWithBackoff = (options: {
+  ms: number;
+  deadline: GatewayDeadline;
+  resolution: AiModeResolution;
+}): Promise<void> => {
+  const { ms, deadline, resolution } = options;
+  const remaining = deadline.remainingMs();
+  if (remaining <= 0) {
+    return Promise.reject(timeoutError({ kind: 'total_budget', resolution }));
   }
+  return new Promise<void>((resolve, reject) => {
+    const cleanup = (): void => {
+      clearTimeout(timer);
+      deadline.signal.removeEventListener('abort', onAbort);
+    };
+    const onAbort = (): void => {
+      cleanup();
+      reject(
+        deadline.stopReason() === 'caller-abort'
+          ? cancelledError(resolution)
+          : timeoutError({ kind: 'total_budget', resolution }),
+      );
+    };
+    const timer = setTimeout(
+      () => {
+        cleanup();
+        resolve();
+      },
+      Math.min(ms, remaining),
+    );
+    if (deadline.signal.aborted) {
+      onAbort();
+      return;
+    }
+    deadline.signal.addEventListener('abort', onAbort, { once: true });
+  });
 };
+
+/**
+ * Stamps routing onto an attempt the adapter reported.
+ *
+ * Identity is the GATEWAY's to assign. An adapter that minted its own would let
+ * two layers number the same attempt differently, and the mismatch is invisible
+ * in the output.
+ */
+const scopeAttemptHook = (
+  onAttempt: ((event: AiTransportAttemptDraft) => void) | undefined,
+  resolution: AiModeResolution,
+): AttemptHook | undefined =>
+  onAttempt
+    ? (event): void => {
+        const full: AiTransportAttemptDraft = {
+          ...event,
+          provider: resolution.provider,
+          ...(resolution.model === undefined ? {} : { model: resolution.model }),
+          mode: resolution.mode,
+        };
+        onAttempt(full);
+      }
+    : undefined;
+
+/**
+ * Picks the generation path for one call.
+ *
+ * A named function rather than a ternary inside `generateText`, because which
+ * path runs is the single most consequential decision the adapter makes and it
+ * deserves to be readable on one line of real estate.
+ */
+const dispatchText = async (options: {
+  resolution: AiModeResolution;
+  messages: AiChatMessage[];
+  schema?: Record<string, unknown>;
+  schemaName?: string;
+  deadline: GatewayDeadline;
+  plainDeps: PlainDeps;
+  structuredDeps: StructuredDeps;
+  onChunk?: (text: string) => void;
+  scoped?: AttemptHook;
+}): Promise<AiTextGenerationResult> => {
+  const { resolution, messages, schema, schemaName, deadline, plainDeps, structuredDeps } = options;
+  const shared = {
+    resolution,
+    messages,
+    deadline,
+    ...(options.onChunk === undefined ? {} : { onChunk: options.onChunk }),
+    ...(options.scoped === undefined ? {} : { onAttempt: options.scoped }),
+  };
+  return schema && schemaName
+    ? await generateStructured({ ...shared, schema, schemaName, deps: structuredDeps })
+    : await generatePlain({ ...shared, deps: plainDeps });
+};
+
+/** Every failure leaves the adapter as an `AiGatewayException`, never a raw Error. */
+const normalizeAdapterFailure = (error: unknown, resolution: AiModeResolution): Error =>
+  toAiGatewayError({
+    error,
+    capability: 'text',
+    mode: resolution.mode,
+    provider: resolution.provider,
+  });
 
 /**
  * Creates the OpenAI-compatible chat-completions text adapter.
- * Register the same instance for both `offline` and `byok` text modes.
- */
-/** True when a value is a finite, non-negative integer token count. */
-const isTokenCount = (value: unknown): value is number =>
-  typeof value === 'number' && Number.isFinite(value) && Number.isInteger(value) && value >= 0;
-
-/** Ollama's native counters, in its own field names. */
-type OllamaUsagePayload = {
-  // biome-ignore lint/style/useNamingConvention: Ollama API contract field name
-  prompt_eval_count?: unknown;
-  // biome-ignore lint/style/useNamingConvention: Ollama API contract field name
-  eval_count?: unknown;
-};
-
-/**
- * Reads Ollama's native `prompt_eval_count` / `eval_count` counters.
- *
- * Adapter-local because only a non-streaming body carries them: the Ollama
- * path never streams, so the SSE reader has no use for them.
- */
-const readOllamaUsage = (payload: object): AiTextUsage | undefined => {
-  const counts = payload as OllamaUsagePayload;
-  if (!isTokenCount(counts.prompt_eval_count) || !isTokenCount(counts.eval_count)) {
-    return undefined;
-  }
-  return {
-    inputTokens: counts.prompt_eval_count,
-    outputTokens: counts.eval_count,
-    source: 'provider',
-  };
-};
-
-/**
- * Sums the accounting of a structured attempt and its plain-text fallback.
- *
- * When a structured call is rejected and the adapter retries as plain prose, the
- * provider BILLED both requests. Keeping only the fallback's numbers would
- * under-report real spend by whatever the discarded attempt cost, so both are
- * counted. The `source` degrades to `estimated` if only one side was the
- * provider's own figure, because a sum of mixed provenance is not purely
- * provider-reported.
- */
-const combineUsage = (options: {
-  structured?: AiTextUsage;
-  fallback?: AiTextUsage;
-}): AiTextUsage | undefined => {
-  const { structured, fallback } = options;
-  if (structured === undefined) {
-    return fallback;
-  }
-  if (fallback === undefined) {
-    return structured;
-  }
-  return {
-    inputTokens: structured.inputTokens + fallback.inputTokens,
-    outputTokens: structured.outputTokens + fallback.outputTokens,
-    ...(structured.cachedTokens === undefined && fallback.cachedTokens === undefined
-      ? {}
-      : { cachedTokens: (structured.cachedTokens ?? 0) + (fallback.cachedTokens ?? 0) }),
-    source:
-      structured.source === 'provider' && fallback.source === 'provider' ? 'provider' : 'estimated',
-  };
-};
-
-/** The outcome of reading a non-streaming completion body. */
-type JsonCompletionRead =
-  | { kind: 'ok'; text: string; usage?: AiTextUsage }
-  | { kind: 'non-json' }
-  | { kind: 'aborted'; error: unknown };
-
-/**
- * Reads the text and any token accounting off a non-streaming completion body.
- *
- * Cancellation is distinguished from a non-JSON body because they call for
- * opposite responses: an abort must propagate, while a 200 the provider filled
- * with prose it should not have is a recoverable shape mismatch. Conflating
- * them would either swallow a cancellation or retry one.
- */
-const readJsonCompletion = async (response: Response): Promise<JsonCompletionRead> => {
-  let payload: unknown;
-  try {
-    payload = await response.json();
-  } catch (error) {
-    if (
-      error instanceof Error &&
-      (error.name === 'AbortError' || error.message.includes('aborted'))
-    ) {
-      return { kind: 'aborted', error };
-    }
-    return { kind: 'non-json' };
-  }
-  const data = payload as {
-    choices?: Array<{ message?: { content?: string } }>;
-    message?: { content?: string };
-  };
-  const reported = readBodyUsage(payload);
-  return {
-    kind: 'ok',
-    text: data.choices?.[0]?.message?.content ?? data.message?.content ?? '',
-    ...(reported === undefined ? {} : { usage: reported }),
-  };
-};
-
-/**
- * Reads token accounting off a non-streaming OpenAI-compatible body.
- *
- * Two shapes exist in the wild: the OpenAI `{ usage: { … } }` block, and
- * Ollama's native `{ prompt_eval_count, eval_count }`. Both are the provider's
- * own accounting; neither is our estimate. A body carrying neither reports
- * nothing, so an absent count stays unknown instead of becoming zero.
- */
-const readBodyUsage = (payload: unknown): AiTextUsage | undefined => {
-  if (typeof payload !== 'object' || payload === null) {
-    return undefined;
-  }
-  return readOpenAiUsage(payload) ?? readOllamaUsage(payload);
-};
-
-/**
- * Creates an OpenAI-compatible chat-completions text adapter.
- * Register the same instance for both `offline` and `byok` text modes.
- */
-/**
- * Creates an OpenAI-compatible chat-completions text adapter.
  * Register the same instance for both `offline` and `byok` text modes.
  */
 export const createOpenAiCompatibleTextAdapter = (
@@ -259,6 +251,7 @@ export const createOpenAiCompatibleTextAdapter = (
   const {
     getApiKey,
     supportsStructuredOutput,
+    supportsNativeFormat,
     getDefaultEndpoint,
     getExtraHeaders,
     onSchemaCacheSize,
@@ -268,484 +261,113 @@ export const createOpenAiCompatibleTextAdapter = (
     fetchTimeoutMs = GATEWAY_FETCH_TIMEOUT_MS,
     firstChunkTimeoutMs = GATEWAY_FIRST_CHUNK_TIMEOUT_MS,
     idleTimeoutMs = GATEWAY_IDLE_TIMEOUT_MS,
+    phaseLimits,
+    clock,
+    nativeStreamingEnabled = true,
+    nativeOptionsEnabled = true,
+    nativeStructuredFormatEnabled = true,
   } = options ?? {};
 
   const compiler = createSchemaCompiler({ onCacheSize: onSchemaCacheSize });
+  const now = (): number => clock?.now() ?? Date.now();
 
-  /** Resolves the chat completions URL for the resolution. */
-  const resolveChatUrl = (resolution: AiModeResolution): string => {
-    const endpoint =
-      resolution.endpoint && resolution.endpoint.length > 0
-        ? resolution.endpoint
-        : (getDefaultEndpoint?.(resolution.provider) ??
-          DEFAULT_LOCAL_TEXT_ENDPOINTS[resolution.provider]);
-
-    if (!endpoint) {
-      throw createAiGatewayError({
-        code: 'not_configured',
-        capability: 'text',
-        mode: resolution.mode,
-        provider: resolution.provider,
-        message:
-          `No endpoint configured for provider "${resolution.provider}". ` +
-          'Create a Connection in Settings or configure a provider endpoint.',
-      });
-    }
-
-    // Ollama uses its native /api/chat endpoint; strip any OpenAI-compatible
-    // /v1 suffix that may be stored in the connection baseUrl.
-    if (resolveChatSurface(resolution) === 'ollama-native') {
-      const base = endpoint.replace(/\/v1\/?$/, '').replace(/\/$/, '');
-      return `${base}/api/chat`;
-    }
-
-    const base = withOpenAiVersionSegment(endpoint);
-    return base.endsWith('/chat/completions') ? base : `${base}/chat/completions`;
+  /** Effective phase watchdogs. Explicit options win over the phase block. */
+  const phases: GatewayPhaseLimits = {
+    headersMs: phaseLimits?.headersMs ?? fetchTimeoutMs,
+    firstContentMs: phaseLimits?.firstContentMs ?? firstChunkTimeoutMs,
+    idleMs: phaseLimits?.idleMs ?? idleTimeoutMs,
   };
 
-  /** Builds request headers for the resolution. */
-  const buildHeaders = (resolution: AiModeResolution): Record<string, string> => {
-    const apiKey = getApiKey?.(resolution.provider);
-    return {
-      'Content-Type': 'application/json',
-      // biome-ignore lint/style/useNamingConvention: HTTP header field name
-      ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
-      ...(resolution.provider === 'openrouter' ? OPENROUTER_ATTRIBUTION_HEADERS : {}),
-      ...(getExtraHeaders?.(resolution.provider) ?? {}),
-    };
-  };
-
-  /**
-   * Maps the resolved connection's TextParams onto OpenAI-compatible
-   * generation fields — only when the resolution carries params and the
-   * target isn't Ollama, whose native /api/chat takes generation options in
-   * a different shape (its own `options` object, out of scope here).
-   * `contextSize` and `repetitionPenalty` have no OpenAI-compatible
-   * chat-completions field and are intentionally left unmapped.
-   */
-  const buildGenerationParams = (resolution: AiModeResolution): Record<string, unknown> => {
-    const { params, provider } = resolution;
-    if (!params || provider === 'ollama') {
-      return {};
-    }
-    return {
-      temperature: params.temperature,
-      // biome-ignore lint/style/useNamingConvention: OpenAI API contract field name
-      top_p: params.topP,
-      // biome-ignore lint/style/useNamingConvention: OpenAI API contract field name
-      max_tokens: params.maxTokens,
-      // biome-ignore lint/style/useNamingConvention: OpenAI API contract field name
-      presence_penalty: params.presencePenalty,
-    };
-  };
-
-  /** Builds the chat completion body. */
-  const buildBody = (options2: {
-    resolution: AiModeResolution;
-    messages: AiChatMessage[];
-    /** Whether to ask the provider for a trailing token-accounting frame. */
-    requestUsage?: boolean;
-  }): Record<string, unknown> => {
-    const { resolution, messages, requestUsage = false } = options2;
-    // Ollama native /api/chat works best with stream: false.
-    // stream: true returns NDJSON which the SSE parser can't handle.
-    // Also disable streaming when response_format is used — many providers
-    // (DeepSeek, etc.) reject stream:true + response_format with 400.
-    const stream = resolution.provider !== 'ollama';
-    return {
-      model: resolution.model,
-      messages: messages.map((m) => ({ role: m.role, content: m.content })),
-      stream,
-      ...(stream && requestUsage
-        ? {
-            // biome-ignore lint/style/useNamingConvention: OpenAI API contract field name
-            stream_options: { include_usage: true },
-          }
-        : {}),
-      ...buildGenerationParams(resolution),
-      ...buildReasoningParams({ resolution, getReasoningControl }),
-    };
-  };
-
-  /** Performs the streaming fetch and reads the SSE body. */
-  const streamCompletion = async (options2: {
+  /** Posts one body, with the headers window and the shared budget applied. */
+  const post = async (options2: {
     resolution: AiModeResolution;
     body: Record<string, unknown>;
-    requestSignal: AbortSignal;
+    deadline: GatewayDeadline;
   }): Promise<Response> => {
-    const { resolution, body, requestSignal } = options2;
-    const doFetch = fetchFn ?? globalThis.fetch;
-    const chatUrl = resolveChatUrl(resolution);
-
-    return doFetch(chatUrl, {
-      method: 'POST',
-      headers: buildHeaders(resolution),
-      body: JSON.stringify(body),
-      signal: requestSignal,
-    });
-  };
-
-  /**
-   * Runs a request scope with a controller linked to the caller signal for
-   * the WHOLE request lifetime (fetch + SSE read) plus the overall fetch
-   * timeout. Client disconnect must abort the upstream stream immediately
-   * (C-056 VRAM lesson).
-   */
-  const withRequestScope = async <T>(options2: {
-    signal: AbortSignal;
-    run: (requestSignal: AbortSignal) => Promise<T>;
-  }): Promise<T> => {
-    const { signal, run } = options2;
-    const requestController = new AbortController();
-    const onAbort = (): void => requestController.abort(signal.reason);
-    if (signal.aborted) {
-      requestController.abort(signal.reason);
-    } else {
-      signal.addEventListener('abort', onAbort, { once: true });
+    const { resolution, body, deadline } = options2;
+    if (deadline.expired()) {
+      // An exhausted budget must not buy a provider call. Reported as a
+      // timeout, because nobody waited — a cancellation would be a lie.
+      throw timeoutError({ kind: 'total_budget', resolution, elapsedMs: 0 });
     }
-    const timeoutId = setTimeout(
-      () => requestController.abort(new Error('Fetch timed out')),
-      fetchTimeoutMs,
-    );
+    const headerPhase = deadline.phaseWindow(phases.headersMs);
     try {
-      return await run(requestController.signal);
-    } finally {
-      clearTimeout(timeoutId);
-      signal.removeEventListener('abort', onAbort);
-    }
-  };
-
-  /**
-   * Waits `ms` with backoff, but aborts early (rejecting as cancelled) when
-   * the caller's signal fires — a user-cancelled turn must not be swallowed
-   * by the empty-body retry (C-499 AC-2, abort semantics gotcha).
-   */
-  const waitWithBackoff = (options2: {
-    ms: number;
-    signal: AbortSignal;
-    mode: AiModeResolution['mode'];
-    provider: string;
-  }): Promise<void> =>
-    new Promise<void>((resolve, reject) => {
-      const onAbort = (): void => {
-        clearTimeout(timer);
-        reject(
-          createAiGatewayError({
-            code: 'cancelled',
-            capability: 'text',
-            mode: options2.mode,
-            provider: options2.provider,
-            message: 'Aborted',
-          }),
-        );
-      };
-      const timer = setTimeout(() => {
-        options2.signal.removeEventListener('abort', onAbort);
-        resolve();
-      }, options2.ms);
-      if (options2.signal.aborted) {
-        onAbort();
-        return;
-      }
-      options2.signal.addEventListener('abort', onAbort, { once: true });
-    });
-
-  /** Streams a plain chat completion, accumulating text. */
-  const generatePlain = async (options2: {
-    resolution: AiModeResolution;
-    messages: AiChatMessage[];
-    signal: AbortSignal;
-    onChunk?: (text: string) => void;
-  }): Promise<AiTextGenerationResult> => {
-    const { resolution, messages, signal, onChunk } = options2;
-
-    let accumulated = '';
-    let usage: AiTextUsage | undefined;
-    const deliver = (text: string): void => {
-      accumulated += text;
-      onChunk?.(text);
-    };
-
-    const body = buildBody({ resolution, messages, requestUsage: true });
-
-    // Ollama native /api/chat with stream: false returns a plain JSON
-    // response, not SSE. Parse it directly instead of streaming.
-    if (resolution.provider === 'ollama') {
-      return withRequestScope({
-        signal,
-        run: async (requestSignal) => {
-          const response = await streamCompletion({ resolution, body, requestSignal });
-
-          if (!response.ok) {
-            const errorText = await response.text().catch(() => 'Unknown error');
-            onEvent?.('fetch-failed', { status: response.status });
-            throw new Error(`Provider HTTP ${response.status}: ${errorText}`);
-          }
-
-          onEvent?.('fetch-ok', { status: response.status, stream: false });
-
-          const payload = await response.json();
-          const data = payload as { message?: { content?: string } };
-          const text = data.message?.content ?? '';
-          const ollamaUsage = readBodyUsage(payload);
-          onChunk?.(text);
-          onEvent?.('done', { chunkCount: text.length > 0 ? 1 : 0 });
-          return ollamaUsage === undefined ? { text } : { text, usage: ollamaUsage };
-        },
-      });
-    }
-
-    await withRequestScope({
-      signal,
-      run: async (requestSignal) => {
-        const response = await streamCompletion({ resolution, body, requestSignal });
-
-        if (!response.ok) {
-          const errorText = await response.text().catch(() => 'Unknown error');
-          onEvent?.('fetch-failed', { status: response.status });
-          throw new Error(`Provider HTTP ${response.status}: ${errorText}`);
-        }
-
-        onEvent?.('fetch-ok', { status: response.status, stream: body.stream });
-
-        if (!response.body) {
-          throw new Error(`No response body from provider "${resolution.provider}"`);
-        }
-
-        await readChatSseStream({
-          body: response.body,
-          signal: requestSignal,
-          onChunk: deliver,
-          firstChunkTimeoutMs,
-          idleTimeoutMs,
-          onEvent,
-          onUsage: (reported) => {
-            usage = reported;
-          },
-        });
-      },
-    });
-
-    return usage === undefined ? { text: accumulated } : { text: accumulated, usage };
-  };
-
-  /** Structured extraction with native response_format + system-prompt fallback. */
-  const generateStructured = async (options2: {
-    resolution: AiModeResolution;
-    messages: AiChatMessage[];
-    schema: Record<string, unknown>;
-    schemaName: string;
-    signal: AbortSignal;
-    onChunk?: (text: string) => void;
-  }): Promise<AiTextGenerationResult> => {
-    const { resolution, messages, schema, schemaName, signal, onChunk } = options2;
-
-    const compiledSchema = compiler.compile({ schema, schemaName });
-
-    const schemaInstruction = [
-      'You are a structured data extraction tool.',
-      'Your response MUST be valid JSON that conforms to the following JSON Schema:',
-      '```json',
-      JSON.stringify(compiledSchema, null, 2),
-      '```',
-      'Respond ONLY with the JSON object. No markdown fences, no explanations.',
-      'Do not include any properties not defined in the schema.',
-    ].join('\n');
-
-    // Insert the schema instruction before the final user message,
-    // preserving any caller-provided system prompt ordering.
-    const structuredMessages: AiChatMessage[] = [
-      ...messages.slice(0, -1),
-      { role: 'system', content: schemaInstruction },
-      ...messages.slice(-1),
-    ];
-
-    const providerSupportsStructured = supportsStructuredOutput?.(resolution.provider) ?? false;
-
-    const body = buildBody({ resolution, messages: structuredMessages });
-
-    // Structured output is incompatible with streaming on many providers
-    // (DeepSeek, etc. return 400). Disable streaming for structured requests.
-    body.stream = false;
-
-    // Only send response_format for providers that support OpenAI-compatible
-    // structured output. Local providers (Ollama, Ooba) ignore it and return
-    // plain text.
-    if (providerSupportsStructured) {
-      body.response_format = {
-        type: 'json_schema',
-        // biome-ignore lint/style/useNamingConvention: OpenAI API contract field name
-        json_schema: {
-          name: schemaName,
-          schema: compiledSchema,
-        },
-      };
-    }
-
-    let accumulated = '';
-    let usage: AiTextUsage | undefined;
-    const deliver = (text: string): void => {
-      accumulated += text;
-      onChunk?.(text);
-    };
-
-    type StructuredOutcome = { fallback: 'http-400' | 'non-json-200' } | { fallback?: undefined };
-
-    // Reset usage per attempt so a retry cannot retain discarded accounting.
-    const runStructuredAttempt = async (): Promise<StructuredOutcome> =>
-      await withRequestScope({
-        signal,
-        run: async (requestSignal): Promise<StructuredOutcome> => {
-          usage = undefined;
-          const response = await streamCompletion({ resolution, body, requestSignal });
-          const failure = await classifyFailure(response);
-          if (failure !== undefined) {
-            return failure;
-          }
-
-          // Structured requests force stream: false, so successful responses
-          // are always handled as plain JSON rather than SSE.
-          const read = await readJsonCompletion(response);
-          if (read.kind === 'aborted') {
-            // Rethrow abort/timeout errors so cancellation propagates correctly.
-            throw read.error;
-          }
-          if (read.kind === 'non-json') {
-            // Provider returned 200 but the body wasn't JSON — it likely
-            // ignored stream:false. Fall back to the system-prompt approach.
-            return { fallback: 'non-json-200' };
-          }
-          accumulated = '';
-          usage = read.usage;
-          deliver(read.text);
-          onEvent?.('done', { chunkCount: read.text.length > 0 ? 1 : 0 });
-          return {};
-        },
-      });
-
-    /**
-     * Classifies a non-OK structured response.
-     *
-     * Returns the fallback outcome for a 400 (the provider rejected structured
-     * output, so the system-prompt path takes over) and `undefined` for a 2xx.
-     * Any other non-OK status throws, having already emitted `fetch-failed` —
-     * a server error is not something a differently-shaped request will fix.
-     */
-    const classifyFailure = async (response: Response): Promise<StructuredOutcome | undefined> => {
-      if (response.ok) {
-        return undefined;
-      }
-      const errorText = await response.text().catch(() => 'Unknown error');
-      onEvent?.('fetch-failed', { status: response.status });
-      if (response.status === 400) {
-        return { fallback: 'http-400' };
-      }
-      throw new Error(`Provider HTTP ${response.status}: ${errorText}`);
-    };
-
-    // C-499 AC-2: an empty 200 body (chunkCount 0) is transient for some
-    // local/BYOK providers (e.g. openrouter/free). Retry the structured
-    // request once with backoff before falling through to the plain-text
-    // fallback. Non-empty non-JSON responses (`fallback: 'non-json-200'`) and
-    // provider 400s skip the retry — they go straight to the fallback/repair.
-    let outcome = await runStructuredAttempt();
-    if (outcome.fallback === undefined && accumulated.trim().length === 0) {
-      onEvent?.('empty-retry', { attempt: 1 });
-      await waitWithBackoff({
-        ms: EMPTY_RETRY_BACKOFF_MS,
-        signal,
-        mode: resolution.mode,
-        provider: resolution.provider,
-      });
-      outcome = await runStructuredAttempt();
-    }
-
-    if (outcome.fallback !== undefined) {
-      onEvent?.('structured-fallback', { reason: outcome.fallback });
-      const fallback = await generatePlain({
+      return await dispatchFetch({
         resolution,
-        messages: structuredMessages,
-        signal,
+        body,
+        requestSignal: abortOnEither(deadline.signal, headerPhase.signal),
+        ...transportOptions,
       });
-      // Both attempts spent tokens; preserve their combined accounting.
-      return parseStructured({
-        accumulated: fallback.text,
-        schema,
-        schemaName,
-        usage: combineUsage({ structured: usage, fallback: fallback.usage }),
-      });
-    }
-
-    try {
-      return parseStructured({ accumulated, schema, schemaName, usage });
-    } catch (parseError) {
-      // Provider returned 200 but the output wasn't valid JSON — likely a
-      // provider that doesn't support structured output. Fall back to the
-      // system-prompt approach via a plain streaming completion.
-      onEvent?.('structured-fallback', { reason: String(parseError) });
-      const fallback = await generatePlain({ resolution, messages: structuredMessages, signal });
-      return parseStructured({
-        accumulated: fallback.text,
-        schema,
-        schemaName,
-        usage: combineUsage({ structured: usage, fallback: fallback.usage }),
-      });
+    } catch (error) {
+      throw classifyFetchRejection({ error, resolution, deadline, phase: headerPhase });
+    } finally {
+      headerPhase.dispose();
     }
   };
 
-  /** Parses + validates accumulated structured output. */
-  const parseStructured = (options2: {
-    accumulated: string;
-    schema: Record<string, unknown>;
-    schemaName: string;
-    usage?: AiTextUsage;
-  }): AiTextGenerationResult => {
-    const { accumulated, schema, schemaName, usage } = options2;
-    const cleaned = sanitizeJsonResponse(accumulated);
-    const parsed = JSON.parse(cleaned);
-    const isValid = validateAgainstSchema({ schema, parsed });
-    if (!isValid) {
-      onEvent?.('validation-failed', { schemaName });
-    }
-    return usage === undefined
-      ? { text: accumulated, structured: parsed }
-      : { text: accumulated, structured: parsed, usage };
+  /** Per-adapter transport collaborators, assembled once. */
+  const transportOptions = {
+    fetchFn,
+    ...(getApiKey === undefined ? {} : { getApiKey }),
+    ...(getExtraHeaders === undefined ? {} : { getExtraHeaders }),
+    ...(getDefaultEndpoint === undefined ? {} : { getDefaultEndpoint }),
+  };
+
+  const sharedDeps = {
+    onEvent,
+    getReasoningControl,
+    nativeOptionsEnabled,
+    now,
+    post,
+  };
+  const plainDeps: PlainDeps = { phases, ...sharedDeps, nativeStreamingEnabled };
+  const structuredDeps: StructuredDeps = {
+    compiler,
+    supportsStructuredOutput,
+    supportsNativeFormat,
+    nativeStructuredFormatEnabled,
+    waitWithBackoff,
+    generatePlain: (args) => generatePlain({ ...args, deps: plainDeps }),
+    ...sharedDeps,
   };
 
   return {
     provider: 'openai_compatible',
     async generateText(request): Promise<AiTextGenerationResult> {
       const { resolution, signal, messages, onChunk, schema, schemaName } = request;
-
+      const { deadlineAt, onAttempt } = request;
       if (signal.aborted) {
-        throw createAiGatewayError({
-          code: 'cancelled',
-          capability: 'text',
-          mode: resolution.mode,
-          provider: resolution.provider,
-          message: 'Aborted',
-        });
+        throw cancelledError(resolution);
       }
+      // ONE deadline for the whole logical request: dispatch, headers, content,
+      // the idle watchdog, the body read, parse, backoff and retry all draw it
+      // down.
+      const deadline = createGatewayDeadline({
+        ...(deadlineAt === undefined ? {} : { deadlineAt }),
+        callerSignal: signal,
+        watchdogMs: fetchTimeoutMs,
+        ...(clock === undefined ? {} : { clock }),
+      });
+      const scoped = scopeAttemptHook(onAttempt, resolution);
 
       try {
-        if (schema && schemaName) {
-          return await generateStructured({
-            resolution,
-            messages,
-            schema,
-            schemaName,
-            signal,
-            onChunk,
-          });
-        }
-        return await generatePlain({ resolution, messages, signal, onChunk });
-      } catch (error) {
-        throw toAiGatewayError({
-          error,
-          capability: 'text',
-          mode: resolution.mode,
-          provider: resolution.provider,
+        return await dispatchText({
+          resolution,
+          messages,
+          schema,
+          schemaName,
+          deadline,
+          plainDeps,
+          structuredDeps,
+          onChunk,
+          scoped,
         });
+      } catch (error) {
+        throw normalizeAdapterFailure(error, resolution);
+      } finally {
+        // Releases the total timer. Never aborts — a settled request's signal
+        // must stay un-aborted so a late observer sees the truth.
+        deadline.dispose();
       }
     },
   };

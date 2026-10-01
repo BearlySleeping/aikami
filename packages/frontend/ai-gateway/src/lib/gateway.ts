@@ -21,6 +21,7 @@ import type {
   AiTextAdapter,
   AiTextGenerationOptions,
   AiTextGenerationResult,
+  AiTransportAttemptDraft,
   AiVoiceGenerationOptions,
   AiVoiceGenerationResult,
 } from './gateway_types.ts';
@@ -52,6 +53,41 @@ export const createAiProviderGateway = (options: AiProviderGatewayOptions): AiPr
   } = options;
 
   const activeControllers = new Set<AbortController>();
+  let requestSequence = 0;
+  /**
+   * Attempt ordinals, per LOGICAL request.
+   *
+   * `AiTransportAttemptEvent.attemptId` must be unique per DISPATCHED attempt,
+   * including the retries inside one logical request, and must be STABLE for
+   * every consumer of one provider bill. Both properties are needed: an id that
+   * restarts per subscriber makes one bill look like N, and an id that treats a
+   * retry as a new request makes one request look like N. The counter is
+   * therefore per logical request id, and the adapter increments it once per
+   * dispatch — including empty-body retries and structured fallbacks.
+   */
+  const attemptCounters = new Map<string, { ordinal: number; activeCalls: number }>();
+
+  const releaseAttemptCounter = (requestId: string): void => {
+    const counter = attemptCounters.get(requestId);
+    if (counter === undefined) {
+      return;
+    }
+    counter.activeCalls -= 1;
+    if (counter.activeCalls === 0) {
+      attemptCounters.delete(requestId);
+    }
+  };
+
+  /**
+   * Identity for one logical text request.
+   *
+   * A caller that is COALESCING several waiters onto one dispatch passes the
+   * same `requestId` for all of them, so all of their attempt events share one
+   * identity and one bill. Left to mint its own, each subscriber would generate
+   * its own id and measured provider spend would be multiplied by the number of
+   * consumers — the exact distortion #382's accounting criteria forbid.
+   */
+  const resolveRequestId = (supplied?: string): string => supplied ?? `gw-${++requestSequence}`;
 
   /** Creates a controller linked to the caller's signal and tracks it. */
   const linkSignal = (signal?: AbortSignal): AbortController => {
@@ -171,6 +207,9 @@ export const createAiProviderGateway = (options: AiProviderGatewayOptions): AiPr
         signal,
         mode,
         onResolve,
+        deadlineAt,
+        onAttempt,
+        requestId: suppliedRequestId,
       } = options2;
 
       // Resolution happens exactly once, here at the gateway boundary.
@@ -200,6 +239,17 @@ export const createAiProviderGateway = (options: AiProviderGatewayOptions): AiPr
       onDispatch?.(resolution);
 
       const controller = linkSignal(signal);
+      const requestId = resolveRequestId(suppliedRequestId);
+      const counter = attemptCounters.get(requestId) ?? { ordinal: 0, activeCalls: 0 };
+      counter.activeCalls += 1;
+      attemptCounters.set(requestId, counter);
+      const wrappedAttempt =
+        onAttempt === undefined
+          ? undefined
+          : (event: AiTransportAttemptDraft): void => {
+              const ordinal = ++counter.ordinal;
+              onAttempt({ ...event, attemptId: `${requestId}#${ordinal}`, requestId });
+            };
       try {
         return await adapter.generateText({
           resolution,
@@ -208,6 +258,8 @@ export const createAiProviderGateway = (options: AiProviderGatewayOptions): AiPr
           onChunk,
           schema,
           schemaName,
+          ...(deadlineAt === undefined ? {} : { deadlineAt }),
+          ...(wrappedAttempt === undefined ? {} : { onAttempt: wrappedAttempt }),
         });
       } catch (error) {
         throw toAiGatewayError({
@@ -218,6 +270,7 @@ export const createAiProviderGateway = (options: AiProviderGatewayOptions): AiPr
         });
       } finally {
         activeControllers.delete(controller);
+        releaseAttemptCounter(requestId);
       }
     },
 

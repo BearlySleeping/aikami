@@ -20,7 +20,10 @@ import {
 import { readChatSseStream } from '../src/lib/sse.ts';
 import {
   createJsonFetchMock,
+  createNativeNdjsonFetchMock,
   createSseFetchMock,
+  NATIVE_DONE,
+  ndjsonFrame,
   SSE_DONE,
   sseChunk,
   sseUsage,
@@ -217,7 +220,7 @@ describe('Streaming usage — provider accounting', () => {
 });
 
 describe('Non-streaming usage — provider accounting', () => {
-  test('a retry cannot reuse usage from a discarded empty attempt', async () => {
+  test('request usage retains the discarded empty attempt when retry usage is absent', async () => {
     const empty = createJsonFetchMock({
       content: '',
       usage: { openAi: { promptTokens: 100, completionTokens: 0 } },
@@ -239,7 +242,7 @@ describe('Non-streaming usage — provider accounting', () => {
       schemaName: 'Ok',
     });
     expect(count).toBe(2);
-    expect(result.usage).toBeUndefined();
+    expect(result.usage).toMatchObject({ inputTokens: 100, outputTokens: 0 });
   });
 
   test('combines structured and fallback usage after invalid JSON', async () => {
@@ -270,10 +273,13 @@ describe('Non-streaming usage — provider accounting', () => {
       schemaName: 'Ok',
     });
     expect(result.structured).toEqual({ ok: true });
+    // `cachedSource` is additive provenance: both attempts reported a cached
+    // count, so the SUM is provider-reported rather than partly guessed.
     expect(result.usage).toEqual({
       inputTokens: 150,
       outputTokens: 15,
       cachedTokens: 50,
+      cachedSource: 'provider',
       source: 'provider',
     });
   });
@@ -313,7 +319,7 @@ describe('Non-streaming usage — provider accounting', () => {
     expect(result.usage).toBeUndefined();
   });
 
-  test('structured retry discards earlier whitespace and usage', async () => {
+  test('structured retry discards earlier whitespace but retains billed usage', async () => {
     let attempts = 0;
     const first = createJsonFetchMock({
       content: ' ',
@@ -335,12 +341,20 @@ describe('Non-streaming usage — provider accounting', () => {
     });
     expect(attempts).toBe(2);
     expect(result.text).toBe('{"ok":true}');
-    expect(result.usage).toBeUndefined();
+    expect(result.usage).toMatchObject({ inputTokens: 300, outputTokens: 1 });
   });
 
-  test('reads Ollama-native eval counts', async () => {
-    const { fetchFn } = createJsonFetchMock({
-      usage: { ollama: { promptTokens: 42, outputTokens: 7 } },
+  // The native route now streams, so its counters arrive on the TERMINATING
+  // NDJSON frame rather than on a whole buffered body. Measured on Ollama
+  // 0.34.3: `prompt_eval_cached_count` is present, and it is 18 against a
+  // `prompt_eval_count` of 22 on a warm call — so it is parsed rather than
+  // assumed absent, and its absence is reported as unknown rather than zero.
+  test('reads Ollama-native eval counts off the terminating native frame', async () => {
+    const { fetchFn } = createNativeNdjsonFetchMock({
+      lines: [
+        ndjsonFrame({ content: 'Hi' }),
+        NATIVE_DONE({ usage: { promptTokens: 42, evalTokens: 7, cachedTokens: 12 } }),
+      ],
     });
     const adapter = createOpenAiCompatibleTextAdapter({ fetchFn });
 
@@ -350,11 +364,43 @@ describe('Non-streaming usage — provider accounting', () => {
       messages: [{ role: 'user', content: 'Hi' }],
     });
 
-    expect(result.usage).toEqual({ inputTokens: 42, outputTokens: 7, source: 'provider' });
+    expect(result.usage).toEqual({
+      inputTokens: 42,
+      outputTokens: 7,
+      cachedTokens: 12,
+      cachedSource: 'provider',
+      source: 'provider',
+    });
+  });
+
+  test('records an ABSENT native cached counter as unknown, never as zero', async () => {
+    const { fetchFn } = createNativeNdjsonFetchMock({
+      lines: [
+        ndjsonFrame({ content: 'Hi' }),
+        NATIVE_DONE({ usage: { promptTokens: 42, evalTokens: 7 } }),
+      ],
+    });
+    const adapter = createOpenAiCompatibleTextAdapter({ fetchFn });
+
+    const result = await adapter.generateText({
+      resolution: resolution({ provider: 'ollama', endpoint: 'http://localhost:11434' }),
+      signal: signal(),
+      messages: [{ role: 'user', content: 'Hi' }],
+    });
+
+    // A runtime that does not supply the field is UNKNOWN. Defaulting to 0
+    // would read as a measured "this call reused no cache".
+    expect(result.usage).toEqual({
+      inputTokens: 42,
+      outputTokens: 7,
+      cachedSource: 'unknown',
+      source: 'provider',
+    });
+    expect(result.usage?.cachedTokens).toBeUndefined();
   });
 
   test('reports nothing when the body carries no accounting', async () => {
-    const { fetchFn } = createJsonFetchMock();
+    const { fetchFn } = createNativeNdjsonFetchMock();
     const adapter = createOpenAiCompatibleTextAdapter({ fetchFn });
 
     const result = await adapter.generateText({
@@ -363,7 +409,7 @@ describe('Non-streaming usage — provider accounting', () => {
       messages: [{ role: 'user', content: 'Hi' }],
     });
 
-    expect(result.text).toBe('Hello from JSON mock');
+    expect(result.text).toBe('Hello');
     expect(result.usage).toBeUndefined();
   });
 });

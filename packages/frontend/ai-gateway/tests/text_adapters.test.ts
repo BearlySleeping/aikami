@@ -7,7 +7,13 @@
 import { describe, expect, jest, test } from 'bun:test';
 import type { AiModeResolution } from '@aikami/types';
 import { createOpenAiCompatibleTextAdapter, isAiGatewayError } from '../src/index.ts';
-import { createJsonFetchMock, createSseFetchMock, SSE_DONE, sseChunk } from './helpers.ts';
+import {
+  createJsonFetchMock,
+  createNativeNdjsonFetchMock,
+  createSseFetchMock,
+  SSE_DONE,
+  sseChunk,
+} from './helpers.ts';
 
 const resolution = (overrides?: Partial<AiModeResolution>): AiModeResolution => ({
   capability: 'text',
@@ -113,7 +119,7 @@ describe('OpenAI-compatible text adapter — streaming', () => {
   });
 
   test('uses the injected runtime default endpoint for local providers', async () => {
-    const { fetchFn, calls } = createJsonFetchMock();
+    const { fetchFn, calls } = createNativeNdjsonFetchMock();
     const adapter = createOpenAiCompatibleTextAdapter({
       fetchFn,
       // C-389: local endpoints resolve from runtime config via this hook.
@@ -167,11 +173,22 @@ describe('OpenAI-compatible text adapter — streaming', () => {
     }
   });
 
-  // Updated for C-320: Ollama native /api/chat no longer sends VRAM eviction
-  // params — the endpoint uses stream: false which naturally releases VRAM.
-  test('Ollama native endpoint does not send VRAM eviction params', async () => {
-    const { fetchFn, calls } = createJsonFetchMock();
-    const adapter = createOpenAiCompatibleTextAdapter({ fetchFn });
+  // Residency policy is deliberately NOT changed by this lane.
+  //
+  // The old rationale ("`stream: false` naturally releases VRAM") is gone with
+  // the buffered route, and replacing it with an explicit `keep_alive: 0` would
+  // be worse: on a STREAMING request the eviction would fire while the stream is
+  // still being read, pulling the model out from under the call. So the field
+  // stays absent, and the assertion below is that adding streaming did not
+  // quietly start evicting models mid-generation.
+  test('a STREAMING native request carries no VRAM eviction params', async () => {
+    const native = createNativeNdjsonFetchMock();
+    const cloud = createSseFetchMock();
+    let seen = 0;
+    const adapter = createOpenAiCompatibleTextAdapter({
+      fetchFn: ((input: string | URL | Request, init?: RequestInit) =>
+        seen++ === 0 ? native.fetchFn(input, init) : cloud.fetchFn(input, init)) as typeof fetch,
+    });
 
     await adapter.generateText({
       resolution: resolution({
@@ -188,7 +205,12 @@ describe('OpenAI-compatible text adapter — streaming', () => {
       messages: [{ role: 'user', content: 'Hi' }],
     });
 
-    // Ollama native endpoint should NOT include VRAM eviction params.
+    // Read the recordings AFTER both calls — a snapshot taken up front is
+    // empty, and an empty capture asserts nothing.
+    const calls = [...native.calls, ...cloud.calls];
+    // The native call is now genuinely streaming, which is the condition under
+    // which eviction would be harmful.
+    expect(calls[0].body.stream).toBe(true);
     expect(calls[0].body.keep_alive).toBeUndefined();
     expect(calls[0].body.options).toBeUndefined();
     // Non-Ollama providers also skip them.
@@ -245,7 +267,7 @@ describe('OpenAI-compatible text adapter — streaming', () => {
   });
 
   test('does not forward OpenAI-shaped params to Ollama native /api/chat', async () => {
-    const { fetchFn, calls } = createJsonFetchMock();
+    const { fetchFn, calls } = createNativeNdjsonFetchMock();
     const adapter = createOpenAiCompatibleTextAdapter({ fetchFn });
 
     await adapter.generateText({
@@ -693,7 +715,12 @@ describe('OpenAI-compatible text adapter — structured extraction', () => {
       });
 
       await backoffStarted;
-      expect(jest.getTimerCount()).toBe(1);
+      // Two timers, not one: the retry backoff AND the request's total-budget
+      // timer. The budget timer is the point of this change — a request with no
+      // caller deadline still gets a finite safety limit — so its presence here
+      // is the correct new state, and the assertion is on the SUM because what
+      // matters is that the backoff is among them and is cleared below.
+      expect(jest.getTimerCount()).toBe(2);
       controller.abort();
 
       let error: unknown;
@@ -741,7 +768,7 @@ describe('OpenAI-compatible text adapter — reasoning control', () => {
     resolution({ provider: 'openrouter', params, reasoning: 'none', ...overrides });
 
   test('sends `think: false` for Ollama, the spelling its NATIVE surface honours', async () => {
-    const { fetchFn, calls } = createJsonFetchMock({ content: '{"choices":[]}' });
+    const { fetchFn, calls } = createNativeNdjsonFetchMock();
     const adapter = createOpenAiCompatibleTextAdapter({
       fetchFn,
       getReasoningControl: () => 'ollama-native-think',
@@ -801,7 +828,7 @@ describe('OpenAI-compatible text adapter — reasoning control', () => {
   });
 
   test('DROPS the compat control when the provider resolves to the native surface', async () => {
-    const { fetchFn, calls } = createJsonFetchMock({ content: '{"choices":[]}' });
+    const { fetchFn, calls } = createNativeNdjsonFetchMock();
     const adapter = createOpenAiCompatibleTextAdapter({
       fetchFn,
       getReasoningControl: () => 'openai-compat-reasoning-effort',
@@ -819,7 +846,7 @@ describe('OpenAI-compatible text adapter — reasoning control', () => {
   });
 
   test('omits the field entirely for a provider that declares no control', async () => {
-    const { fetchFn, calls } = createJsonFetchMock({ content: '{"choices":[]}' });
+    const { fetchFn, calls } = createNativeNdjsonFetchMock();
     // No getReasoningControl at all — the default is "no provider can be asked".
     const adapter = createOpenAiCompatibleTextAdapter({ fetchFn });
 
@@ -852,7 +879,7 @@ describe('OpenAI-compatible text adapter — reasoning control', () => {
   });
 
   test('leaves reasoning entirely alone unless the call asked for it', async () => {
-    const { fetchFn, calls } = createJsonFetchMock({ content: '{"choices":[]}' });
+    const { fetchFn, calls } = createNativeNdjsonFetchMock();
     const adapter = createOpenAiCompatibleTextAdapter({
       fetchFn,
       getReasoningControl: () => 'ollama-native-think',
@@ -872,7 +899,7 @@ describe('OpenAI-compatible text adapter — reasoning control', () => {
   });
 
   test('an explicit `default` on the call also means "send nothing"', async () => {
-    const { fetchFn, calls } = createJsonFetchMock({ content: '{"choices":[]}' });
+    const { fetchFn, calls } = createNativeNdjsonFetchMock();
     const adapter = createOpenAiCompatibleTextAdapter({
       fetchFn,
       getReasoningControl: () => 'ollama-native-think',
@@ -891,7 +918,7 @@ describe('OpenAI-compatible text adapter — reasoning control', () => {
     // `TextParams` is the persisted connection record and has no `reasoning`
     // key. Even if a stored connection somehow carried the value, it must not
     // reach the wire — the call's own task preset is the only owner.
-    const { fetchFn, calls } = createJsonFetchMock({ content: '{"choices":[]}' });
+    const { fetchFn, calls } = createNativeNdjsonFetchMock();
     const adapter = createOpenAiCompatibleTextAdapter({
       fetchFn,
       getReasoningControl: () => 'ollama-native-think',

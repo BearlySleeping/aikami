@@ -24,7 +24,7 @@
 //
 // Contract: C-507, issue #382 P0
 
-import { TEXT_PRICING_VERSION, type TextTask } from '@aikami/constants';
+import { isLocalTextRoute, TEXT_PRICING_VERSION, type TextTask } from '@aikami/constants';
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
@@ -131,6 +131,9 @@ const emptyCounters = (): TextTelemetryCounters => ({
   deadlineExceeded: 0,
   cancelled: 0,
   fallbacks: 0,
+  attempts: 0,
+  partialUsage: 0,
+  localCalls: 0,
   cacheHits: emptyCacheHitCounts(),
   maxQueueDepth: 0,
 });
@@ -195,11 +198,20 @@ class TextTelemetryService
           .map((span) => span.ttftMs)
           .filter((value): value is number => value !== undefined);
         const medianTtftMs = ttfts.length > 0 ? median(ttfts) : undefined;
+        // Pooled separately from `ttftMs` on purpose. On a reasoning model the
+        // first frame carries the thinking channel, so the first WORD arrives
+        // seconds later; averaging the two would describe no real call.
+        const firstVisible = bucket
+          .map((span) => span.firstVisibleContentMs)
+          .filter((value): value is number => value !== undefined);
+        const medianFirstVisibleContentMs =
+          firstVisible.length > 0 ? median(firstVisible) : undefined;
         return {
           task,
           count: bucket.length,
           medianTotalMs: median(bucket.map((span) => span.totalMs)),
           ...(medianTtftMs === undefined ? {} : { medianTtftMs }),
+          ...(medianFirstVisibleContentMs === undefined ? {} : { medianFirstVisibleContentMs }),
           errorCount: bucket.filter((span) => !span.ok).length,
           latency: summarizeLatency(bucket.map((span) => span.totalMs)),
         };
@@ -222,6 +234,11 @@ class TextTelemetryService
       deadlineExceeded: spans.filter((span) => span.deadlineExceeded === true).length,
       cancelled: spans.filter((span) => span.errorCode === 'cancelled').length,
       fallbacks: spans.filter((span) => span.fallback === true).length,
+      // A span that recorded no attempt count dispatched exactly one attempt,
+      // which is the overwhelmingly common case and must not read as zero.
+      attempts: spans.reduce((sum, span) => sum + (span.attemptCount ?? 1), 0),
+      partialUsage: spans.filter((span) => span.partialUsage === true).length,
+      localCalls: spans.filter((span) => isLocalTextRoute(span.provider)).length,
       cacheHits,
       maxQueueDepth,
     };
@@ -234,6 +251,7 @@ class TextTelemetryService
    */
   private _cost(spans: ReadonlyArray<TextTelemetrySpan>): {
     estimatedCostUsd?: number;
+    providerBillingUsd?: number;
     unpricedCount: number;
     pricingVersion?: string;
   } {
@@ -255,6 +273,11 @@ class TextTelemetryService
     }
     return {
       ...(unpricedCount === 0 ? { estimatedCostUsd: total } : {}),
+      // PROVIDER BILLING only, on purpose. A local route contributes a real
+      // zero here and its electricity and hardware cost is NOT thereby zero —
+      // it is simply not something anybody measured, and inventing a dollar
+      // figure for it would be a fabrication wearing a currency symbol.
+      ...(unpricedCount === 0 ? { providerBillingUsd: total } : {}),
       unpricedCount,
       ...(unpricedCount === 0 ? { pricingVersion: TEXT_PRICING_VERSION } : {}),
     };

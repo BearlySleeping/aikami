@@ -5,6 +5,20 @@
 
 export { type AiAdapterRegistry, createAdapterRegistry } from './lib/adapter_registry.ts';
 export {
+  createGatewayDeadline,
+  createUnboundedGatewayDeadline,
+  DEFAULT_GATEWAY_PHASE_LIMITS,
+  describeTimeout,
+  GATEWAY_UNBOUNDED_WATCHDOG_MS,
+  type GatewayClock,
+  type GatewayDeadline,
+  type GatewayPhaseLimits,
+  type GatewayPhaseWindow,
+  type GatewayStopReason,
+  type GatewayTimeoutKind,
+  type GatewayTimer,
+} from './lib/deadline.ts';
+export {
   DEFAULT_COMFYUI_PING_URL,
   DEFAULT_OLLAMA_NATIVE_URL,
   DEFAULT_OLLAMA_PROXY_PATH,
@@ -21,6 +35,7 @@ export {
   httpStatusToGatewayCode,
   isAbortError,
   isAiGatewayError,
+  isCancellationFailure,
   isRetryableGatewayCode,
   toAiGatewayError,
 } from './lib/errors.ts';
@@ -28,6 +43,7 @@ export { type AiProviderGatewayOptions, createAiProviderGateway } from './lib/ga
 export type {
   AiAdapter,
   AiAdapterContext,
+  AiAttemptOutcome,
   AiDetector,
   AiImageAdapter,
   AiImageGenerationOptions,
@@ -38,6 +54,9 @@ export type {
   AiTextGenerationOptions,
   AiTextGenerationResult,
   AiTextUsage,
+  AiTransportAttemptDraft,
+  AiTransportAttemptEvent,
+  AiTransportShape,
   AiVoiceAdapter,
   AiVoiceGenerationOptions,
   AiVoiceGenerationResult,
@@ -46,15 +65,43 @@ export { createDelegatingImageAdapter, raceWithAbort } from './lib/image_adapter
 export { createLocalTextAdapter } from './lib/local_text_adapter.ts';
 export { createModeResolver } from './lib/mode_resolver.ts';
 export {
+  buildNativeFormat,
+  isSchemaShapeRejection,
+  NATIVE_STRUCTURED_FALLBACK_BUDGET,
+  type NativeFormatCapability,
+  type NativeFormatRequest,
+  type NativeStructuredOutcome,
+} from './lib/native_format.ts';
+export {
+  buildNativeOptions,
+  type NativeOptionField,
+  type NativeOptionsReport,
+  resolveNativeMaxTokens,
+} from './lib/native_options.ts';
+export {
+  combineNativeUsage,
+  type NativePhaseTimings,
+  readNativePhaseTimings,
+  readNativeUsage,
+} from './lib/native_usage.ts';
+export {
+  type NativeStreamOutcome,
+  type NativeStreamReport,
+  NDJSON_MAX_BUFFER_BYTES,
+  readNativeNdjsonStream,
+} from './lib/ndjson.ts';
+export {
   buildReasoningParams,
   type ReasoningControl,
   resolveChatSurface,
   type TextApiSurface,
 } from './lib/reasoning_control.ts';
 export {
+  type ChatSseOutcome,
   GATEWAY_FETCH_TIMEOUT_MS,
   GATEWAY_FIRST_CHUNK_TIMEOUT_MS,
   GATEWAY_IDLE_TIMEOUT_MS,
+  type ReadChatSseOptions,
   readChatSseStream,
 } from './lib/sse.ts';
 export {
@@ -71,6 +118,7 @@ export {
 export {
   createOpenAiCompatibleTextAdapter,
   DEFAULT_LOCAL_TEXT_ENDPOINTS,
+  EMPTY_RETRY_BACKOFF_MS,
   OLLAMA_VRAM_EVICTION_PARAMS,
   OPENROUTER_ATTRIBUTION_HEADERS,
   type OpenAiCompatibleTextAdapterOptions,
