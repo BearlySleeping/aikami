@@ -7,7 +7,7 @@
 // does not declare, not on truncated input, and not on a probability that no
 // measured calibration supports.
 
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, spyOn, test } from 'bun:test';
 import Type from 'typebox';
 import {
   analyzeDecisionSchema,
@@ -15,6 +15,7 @@ import {
   createDeterministicDecisionAdapter,
   type DecisionAbstentionReason,
   type DecisionAdapter,
+  type DecisionCapability,
   type DecisionPlan,
   type DecisionTaskPolicy,
   runDecision,
@@ -158,6 +159,7 @@ describe('runDecision — acceptance', () => {
       stateRevision: 12,
       planCacheHit: true,
     });
+    expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.provenance.planCacheHit).toBe(true);
     }
@@ -165,6 +167,125 @@ describe('runDecision — acceptance', () => {
 });
 
 describe('runDecision — refusals', () => {
+  test.each([
+    [{ primitives: ['choice'] }, 'schema-incompatible'],
+    [{ maxQuestions: 1 }, 'invalid-response'],
+    [{ maxOptions: 3 }, 'invalid-response'],
+    [{ maxContextBytes: 1 }, 'context-too-large'],
+  ] satisfies [Partial<DecisionCapability>, DecisionAbstentionReason][])(
+    'backend capability %j prevents dispatch',
+    async (limits, reason) => {
+      const adapter = pilotAdapter();
+      await reasonOf(
+        run({
+          adapter: {
+            ...adapter,
+            capability: async () => ({ ...(await adapter.capability()), ...limits }),
+            run: async () => {
+              throw new Error('must not dispatch unsupported requests');
+            },
+          },
+        }),
+        reason,
+      );
+    },
+  );
+
+  test('policy limits still apply when backend limits are higher', async () => {
+    await reasonOf(
+      run({ policy: { ...pilotPolicy, limits: { maxOptions: 3 } } }),
+      'invalid-response',
+    );
+  });
+
+  test('the probe receives the caller budget and an expired deadline prevents dispatch', async () => {
+    const adapter = pilotAdapter();
+    const signal = new AbortController().signal;
+    const deadlineAt = Date.now() + 5000;
+    const clock = spyOn(Date, 'now');
+    try {
+      await reasonOf(
+        run({
+          deadlineAt,
+          signal,
+          adapter: {
+            ...adapter,
+            capability: async (probe) => {
+              expect(probe?.deadlineAt).toBe(deadlineAt);
+              expect(probe?.signal).toBe(signal);
+              clock.mockReturnValue(deadlineAt);
+              return adapter.capability();
+            },
+            run: async () => {
+              throw new Error('expired probe must not dispatch');
+            },
+          },
+        }),
+        'deadline-exceeded',
+      );
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
+  test('cancellation during the probe prevents dispatch', async () => {
+    const adapter = pilotAdapter();
+    const controller = new AbortController();
+    await reasonOf(
+      run({
+        signal: controller.signal,
+        adapter: {
+          ...adapter,
+          capability: async () => {
+            controller.abort();
+            return adapter.capability();
+          },
+          run: async () => {
+            throw new Error('cancelled probe must not dispatch');
+          },
+        },
+      }),
+      'cancelled',
+    );
+  });
+
+  test.each([0.89, 0.9, 0.95, 0.98, 1])(
+    'LLM fallback preserves boolean threshold boundaries at %p',
+    async (probability) => {
+      const adapter = pilotAdapter();
+      const result = await run({
+        policy: {
+          ...pilotPolicy,
+          booleanPolicy: { acceptProbability: 0.9, confidentProbability: 0.98, fallback: 'llm' },
+        },
+        adapter: {
+          ...adapter,
+          run: async (request) => {
+            const response = await adapter.run(request);
+            if (!response.ok) {
+              return response;
+            }
+            return {
+              ...response,
+              answers: response.answers.map((answer) =>
+                answer.booleanValue === undefined
+                  ? { ...answer, probabilities: { [answer.optionKey ?? '']: 0.5 } }
+                  : { ...answer, probabilities: { true: probability, false: 1 - probability } },
+              ),
+            };
+          },
+        },
+      });
+      expect(result.ok).toBe(probability >= 0.98);
+      if (!result.ok) {
+        expect(result.reason).toBe(
+          probability < 0.9 ? 'below-accept-threshold' : 'llm-fallback-required',
+        );
+        expect(result.provenance.abstentionReason).toBe(result.reason);
+      }
+    },
+  );
+
   test('a task that has not opted in never reaches the backend', async () => {
     await reasonOf(run({ policy: { ...pilotPolicy, enabled: false } }), 'disabled-by-policy');
   });

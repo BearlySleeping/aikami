@@ -770,4 +770,4 @@ export const analyzeDecisionSchema = (options: {
 };
 
 /** Exposed so callers can reject hostile segments before building a path. */
-export const isUnsafeSegment = safeSegment;
+export const isUnsafeSegment = (segment: string): boolean => !safeSegment(segment);

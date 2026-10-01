@@ -76,7 +76,7 @@ export type DecisionAdapter = {
    * Must reflect a real check. A listening socket is not readiness, and a
    * dialect that parses is not a checkpoint that has answered.
    */
-  capability(): Promise<DecisionCapability>;
+  capability(options?: Pick<DecisionRequest, 'deadlineAt' | 'signal'>): Promise<DecisionCapability>;
   /** Answers one unit. Must honour `deadlineAt` and `signal`. */
   run(request: DecisionRequest): Promise<DecisionAdapterResponse>;
 };

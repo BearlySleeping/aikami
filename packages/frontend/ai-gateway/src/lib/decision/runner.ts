@@ -94,41 +94,47 @@ const abstained = (options: {
 /**
  * Applies the task's boolean policy to one answer.
  *
- * Returns `false` when the answer must be rejected and `undefined` when it is
- * acceptable. The threshold compares the model's stated probability for the
- * ANSWER — not its entropy and not its reported `confidence`, which are
- * different quantities — and the band between accept and confident is where a
- * task chooses between rejecting and falling back.
+ * Returns an abstention reason when the answer must be rejected or routed to
+ * an LLM. Thresholds compare the probability for the answer, not confidence
+ * or entropy. Confident answers are accepted without fallback.
  */
 const booleanAcceptable = (options: {
   answer: DecisionAnswer;
   policy: ReturnType<typeof resolveBooleanPolicy>;
-}): { readonly ok: true } | { readonly ok: false; readonly probability: number } => {
+}): DecisionAbstentionReason | undefined => {
   const { answer, policy } = options;
   if (answer.probabilities === undefined) {
-    return { ok: true };
+    return undefined;
   }
   const probabilities = answer.probabilities;
   const chosen = answer.booleanValue === true ? probabilities.true : probabilities.false;
   if (typeof chosen !== 'number' || !Number.isFinite(chosen) || chosen < 0 || chosen > 1) {
-    return { ok: false, probability: Number.NaN };
+    return 'below-accept-threshold';
   }
   if (chosen >= policy.confidentProbability) {
-    return { ok: true };
+    return undefined;
   }
   if (chosen < policy.acceptProbability) {
-    return { ok: false, probability: chosen };
+    return 'below-accept-threshold';
   }
-  return policy.fallback === 'llm' ? { ok: true } : { ok: false, probability: chosen };
+  return policy.fallback === 'llm' ? 'llm-fallback-required' : 'below-accept-threshold';
 };
 
-/** Readiness and language gate, before anything is dispatched. */
+/** Readiness, primitive and language gates before dispatch. */
 const checkPreflight = (options: {
   capability: DecisionCapability;
+  plan: DecisionPlan;
   policy: DecisionTaskPolicy;
 }): DecisionAbstentionReason | undefined => {
   if (!options.capability.ready) {
     return 'backend-unavailable';
+  }
+  if (
+    options.plan.questions.some(
+      (question) => !options.capability.primitives.includes(question.kind),
+    )
+  ) {
+    return 'schema-incompatible';
   }
   const language = options.policy.language ?? 'en';
   return options.capability.languages.includes(language) ? undefined : 'language-unsupported';
@@ -175,11 +181,15 @@ const booleansAcceptable = (
   plan: DecisionPlan,
   answers: readonly DecisionAnswer[],
   policy: ReturnType<typeof resolveBooleanPolicy>,
-): boolean => {
+): DecisionAbstentionReason | undefined => {
   const byKey = new Map(plan.questions.map((question) => [question.key, question]));
-  return answers
+  const reasons = answers
     .filter((answer) => byKey.get(answer.questionKey)?.kind === 'boolean')
-    .every((answer) => booleanAcceptable({ answer, policy }).ok);
+    .map((answer) => booleanAcceptable({ answer, policy }));
+  // A rejected answer takes precedence over a request for fallback.
+  return reasons.includes('below-accept-threshold')
+    ? 'below-accept-threshold'
+    : reasons.find((reason) => reason !== undefined);
 };
 
 /**
@@ -202,8 +212,17 @@ export const runDecision = async (options: RunDecisionOptions): Promise<Decision
     return abort('cancelled');
   }
 
-  const capability = await options.adapter.capability();
-  const preflight = checkPreflight({ capability, policy: options.policy });
+  const capability = await options.adapter.capability({
+    deadlineAt: options.deadlineAt,
+    signal: options.signal,
+  });
+  if (options.signal.aborted) {
+    return abort('cancelled');
+  }
+  if (Date.now() >= options.deadlineAt) {
+    return abort('deadline-exceeded');
+  }
+  const preflight = checkPreflight({ capability, policy: options.policy, plan: options.plan });
   if (preflight !== undefined) {
     return abstained({
       reason: preflight,
@@ -215,10 +234,16 @@ export const runDecision = async (options: RunDecisionOptions): Promise<Decision
     });
   }
 
+  const limits = { ...DEFAULT_DECISION_LIMITS, ...options.policy.limits };
   const dispatch = buildDecisionDispatch({
     plan: options.plan,
     context: options.context,
-    limits: { ...DEFAULT_DECISION_LIMITS, ...options.policy.limits },
+    limits: {
+      ...limits,
+      maxOptions: Math.min(limits.maxOptions, capability.maxOptions),
+      maxQuestions: Math.min(limits.maxQuestions, capability.maxQuestions),
+      maxContextBytes: Math.min(limits.maxContextBytes, capability.maxContextBytes),
+    },
   });
   if (!dispatch.ok) {
     return abort(
@@ -248,9 +273,14 @@ export const runDecision = async (options: RunDecisionOptions): Promise<Decision
   const observedCheckpoint = collected.checkpoint ?? capability.checkpoint;
   const observedRuntime = collected.runtime ?? capability.runtime;
 
-  if (!booleansAcceptable(options.plan, collected.answers, resolveBooleanPolicy(options.policy))) {
+  const booleanRefusal = booleansAcceptable(
+    options.plan,
+    collected.answers,
+    resolveBooleanPolicy(options.policy),
+  );
+  if (booleanRefusal !== undefined) {
     return abstained({
-      reason: 'below-accept-threshold',
+      reason: booleanRefusal,
       adapter: options.adapter,
       planCacheHit,
       startedAt,

@@ -93,9 +93,23 @@ export const parseSystemOneResponse = (body: unknown): SystemOneResponse | undef
   if (
     typeof record.model !== 'string' ||
     typeof record.answers !== 'object' ||
-    record.answers === null
+    record.answers === null ||
+    Array.isArray(record.answers)
   ) {
     return undefined;
+  }
+  for (const answer of Object.values(record.answers)) {
+    if (
+      typeof answer !== 'object' ||
+      answer === null ||
+      Array.isArray(answer) ||
+      (Object.getPrototypeOf(answer) !== Object.prototype &&
+        Object.getPrototypeOf(answer) !== null) ||
+      !('type' in answer) ||
+      typeof answer.type !== 'string'
+    ) {
+      return undefined;
+    }
   }
   return body as SystemOneResponse;
 };

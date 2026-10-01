@@ -196,7 +196,7 @@ const scoreCase = async (options: {
   }
 
   const isCorrect = predicted === options.testCase.expected;
-  const risky = !isCorrect && predicted !== 'presentEvidence' ? 1 : 0;
+  const risky = isCorrect ? 0 : 1;
   return {
     correct: isCorrect ? 1 : 0,
     positive: 1,
@@ -272,13 +272,14 @@ describe('fixture corpus integrity', () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
-  test('every ambiguous case carries no expected label, and no authored case is blank', () => {
+  test('ambiguous cases carry no label and every non-null label is a pilot option', () => {
+    const options = optionKeysByValue(pilotPlan());
     for (const testCase of [...DEV.cases, ...HELD_OUT.cases]) {
       if (testCase.label === 'ambiguous') {
         expect(testCase.expected).toBeNull();
       }
-      if (testCase.label === 'authored' && testCase.category !== 'negation') {
-        expect(testCase.expected === null || typeof testCase.expected === 'string').toBe(true);
+      if (testCase.expected !== null) {
+        expect(options.has(testCase.expected)).toBe(true);
       }
     }
   });
@@ -323,6 +324,35 @@ describe('evaluation harness — metrics are computed, not asserted by hand', ()
     expect(metrics.coverage).toBeGreaterThan(0);
     expect(metrics.coverage).toBeLessThan(1);
     expect(metrics.legalValueRate).toBe(PILOT_QUALITY_GATE.requireLegalValueRate);
+  });
+
+  test('held-out metrics match the audit report', async () => {
+    const metrics = await score('deterministic-baseline', HELD_OUT.cases);
+    expect(metrics).toMatchObject({
+      cases: 28,
+      positives: 14,
+      answered: 16,
+      answeredPositives: 7,
+      correct: 7,
+      accuracy: 0.5,
+      answeredAccuracy: 1,
+      riskyFalseAcceptances: 9,
+      coverage: 16 / 28,
+      legalValues: 16,
+      legalValueRate: 1,
+    });
+  });
+
+  test('incorrect evidence predictions count as risky while correct ones do not', async () => {
+    const fixture = { ...DEV.cases[0], state: 'Here is the evidence.' };
+    const wrong = await score('deterministic-baseline', [{ ...fixture, expected: 'trade' }]);
+    const correct = await score('deterministic-baseline', [
+      { ...fixture, expected: 'presentEvidence' },
+    ]);
+    expect(wrong.answered).toBe(1);
+    expect(wrong.riskyFalseAcceptances).toBe(1);
+    expect(correct.correct).toBe(1);
+    expect(correct.riskyFalseAcceptances).toBe(0);
   });
 
   test('Brier is computed only over graded distributions, never over one-hot ones', async () => {

@@ -206,6 +206,8 @@ export type DecisionCorrelation = {
   readonly paths: readonly (readonly string[])[];
   /** How the correlation is honoured. `reject` never emits a question. */
   readonly mode: DecisionCorrelationMode;
+  /** Allowed value tuples, in `paths` order. Required for combination mode; staged is unsupported. */
+  readonly legalTuples?: readonly (readonly DecisionLiteral[])[];
 };
 
 /**
@@ -242,7 +244,7 @@ export type DecisionTaskPolicy = {
     readonly acceptProbability: number;
     /** At or above this probability the answer is accepted outright. */
     readonly confidentProbability: number;
-    /** Between the two: accepted only when `fallback` permits it. */
+    /** Between the two: abstain, requesting an LLM fallback when configured. */
     readonly fallback: 'reject' | 'llm';
   };
   /** Limits overriding {@link DEFAULT_DECISION_LIMITS} for this task. */
@@ -304,6 +306,7 @@ export type DecisionAbstentionReason =
   | 'disabled-by-policy'
   | 'backend-unavailable'
   | 'below-accept-threshold'
+  | 'llm-fallback-required'
   | 'invalid-response'
   | 'schema-incompatible'
   | 'deadline-exceeded'

@@ -186,7 +186,14 @@ describe('bindDecisionPolicy — language', () => {
 
 describe('bindDecisionPolicy — correlated fields', () => {
   const correlations = [
-    { paths: [['action'], ['target']] as (readonly string[])[], mode: 'combination' as const },
+    {
+      paths: [['action'], ['target']],
+      mode: 'combination' as const,
+      legalTuples: [
+        ['attack', 'enemy'],
+        ['heal', 'ally'],
+      ],
+    },
   ];
 
   test('uncorrelated fields become one independent group by default', () => {
@@ -210,8 +217,12 @@ describe('bindDecisionPolicy — correlated fields', () => {
     if (binding.ok) {
       const question = binding.plan.questions.find((candidate) => candidate.kind === 'combination');
       expect(question).toBeDefined();
-      // 3 actions x 2 targets = 6 legal tuples, never 2 independent answers.
-      expect(question?.combinationOptions).toHaveLength(6);
+      expect(
+        question?.combinationOptions?.map((option) => option.values.map((entry) => entry.value)),
+      ).toEqual([
+        ['attack', 'enemy'],
+        ['heal', 'ally'],
+      ]);
       expect(question?.combinationOptions?.[0]?.values).toHaveLength(2);
       expect(binding.groups[0]?.dispatch).toBe('combination');
       // The two original questions are gone; they cannot be answered apart.
@@ -259,16 +270,37 @@ describe('bindDecisionPolicy — correlated fields', () => {
     }
   });
 
-  test('staged mode keeps the questions but shares one dispatch unit', () => {
+  test('staged mode is refused until legal tuples can be enforced', () => {
+    expect(
+      codes(fullPolicy({ correlations: [{ paths: [['action'], ['target']], mode: 'staged' }] })),
+    ).toEqual(['correlated-fields-unsupported']);
+  });
+
+  test('combination mode requires explicit matching legal tuples', () => {
+    for (const legalTuples of [undefined, [], [['heal', 'missing']]]) {
+      expect(
+        codes(
+          fullPolicy({
+            correlations: [{ paths: [['action'], ['target']], mode: 'combination', legalTuples }],
+          }),
+        ),
+      ).toEqual(['correlated-fields-unsupported']);
+    }
+  });
+
+  test('a correlation containing a boolean refuses an empty combination', () => {
     const binding = bindDecisionPolicy({
       plan: plan(),
-      policy: fullPolicy({ correlations: [{ paths: [['action'], ['target']], mode: 'staged' }] }),
+      policy: fullPolicy({
+        correlations: [
+          { paths: [['action'], ['urgent']], mode: 'combination', legalTuples: [['attack', true]] },
+        ],
+      }),
     });
-    expect(binding.ok).toBe(true);
-    if (binding.ok) {
-      const staged = binding.groups.find((group) => group.dispatch === 'staged');
-      expect(staged?.questionKeys).toHaveLength(2);
-      expect(binding.plan.questions).toHaveLength(3);
+    expect(binding.ok).toBe(false);
+    if (!binding.ok) {
+      expect(binding.reasons[0]?.code).toBe('correlated-fields-unsupported');
+      expect(binding.reasons[0]?.detail).toContain('only choice fields');
     }
   });
 });

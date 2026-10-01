@@ -148,12 +148,12 @@ as a second line independent of the compiler's own name check.
 Independent `action` and `target` questions permit `heal`+`enemy`: schema-legal,
 game-wrong. Three declared modes:
 
-- `combination` — the compiler expands the legal tuples once (bounded by
-  `maxCombinations`, default 32) and asks for one of them. 3 actions × 2
-  targets = 6 options, not 6 independent pairings to filter later.
-- `staged` — both questions stay, dispatched as one unit inside one deadline.
-- `reject` — the default when a correlation is declared with no handling: no
-  question is emitted at all.
+- `combination` — the compiler bounds the Cartesian product by `maxCombinations`
+  (default 32), then filters it against the task's explicit `legalTuples`, in
+  declared path order. Only matching tuples become options; an empty result is refused.
+- `staged` — refused until staged answers can enforce legal tuples.
+- `reject` — explicitly refuses binding; no question is emitted. The task must
+  declare a mode; `reject` is not an implicit default.
 
 An expansion that would exceed the bound is refused **before** dispatch.
 
@@ -228,9 +228,10 @@ Reproducible setup, for whoever runs this next with a budget:
 # 1. Decision-model runtime (>= 0.35.0; do this on a spare daemon, not a shared one)
 ollama pull nimble
 
-# 2. Point the evaluation adapter at it and run both splits
-AIKAMI_DECISION_DECISION_URL=http://127.0.0.1:11434/v1/systemone \
-AIKAMI_DECISION_VERSION_URL=http://127.0.0.1:11434/api/version \
+# 2. Future work: add an opt-in live evaluation test that consumes
+#    AIKAMI_DECISION_DECISION_URL and AIKAMI_DECISION_VERSION_URL,
+#    skips when unset, and scores both splits. No such consumer exists yet.
+#    This command currently runs only the deterministic evaluation harness:
 bun moon run frontend-ai-gateway:test -- --test-name-pattern 'evaluation'
 
 # 3. Alternative runtimes
@@ -291,7 +292,7 @@ table.
 | Split | Cases | Positives | Answered | Correct | Accuracy | Answered-only accuracy | Risky false accept | Coverage | Legal values | Brier |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | dev | 31 | 13 | 18 | 8 | **0.615** | 1.000 | 10 | 0.581 | 18 / 18 | n/a (one-hot) |
-| held-out | 28 | 14 | 16 | 7 | **0.500** | 1.000 | 9 | 0.571 | 16 / 16 | 0.25 (n=1 graded case) |
+| held-out | 28 | 14 | 16 | 7 | **0.500** | 1.000 | 9 | 0.571 | 16 / 16 | n/a (n=1 graded case) |
 
 Reading:
 

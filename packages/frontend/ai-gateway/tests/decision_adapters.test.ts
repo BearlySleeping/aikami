@@ -8,7 +8,7 @@
 // right one back. It proves nothing about what any model would answer, and the
 // report is written accordingly.
 
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, spyOn, test } from 'bun:test';
 import Type from 'typebox';
 import {
   analyzeDecisionSchema,
@@ -19,7 +19,9 @@ import {
   createSystemOneDecisionAdapter,
   type DecisionPlan,
   type DecisionTaskPolicy,
+  isUnsafeSegment,
   parseSystemOneResponse,
+  runDecision,
   type SystemOneTransport,
 } from '../src/lib/decision/index.ts';
 
@@ -99,7 +101,7 @@ describe('createDecisionPlanCache', () => {
 
   test('an equivalent schema with reordered properties is the same plan', () => {
     const cache = createDecisionPlanCache();
-    cache.analyze({ schema: pilotSchema });
+    const original = cache.analyze({ schema: pilotSchema });
     const reordered = {
       type: 'object',
       properties: {
@@ -116,10 +118,16 @@ describe('createDecisionPlanCache', () => {
       required: ['urgent', 'commandKind'],
       additionalProperties: false,
     };
-    expect(cache.analyze({ schema: reordered }).cacheHit).toBe(false);
+    const reorderedResult = cache.analyze({ schema: reordered });
+    expect(reorderedResult.cacheHit).toBe(false);
     // Reordering `required` changes the content key, but must not change the plan.
-    const a = cache.analyze({ schema: pilotSchema });
-    expect(a.analysis.ok).toBe(true);
+    expect(original.analysis.ok).toBe(true);
+    expect(reorderedResult.analysis.ok).toBe(true);
+    if (original.analysis.ok && reorderedResult.analysis.ok) {
+      expect(reorderedResult.analysis.plan.questions).toEqual(original.analysis.plan.questions);
+      expect(reorderedResult.analysis.plan.constants).toEqual(original.analysis.plan.constants);
+      expect(reorderedResult.analysis.plan.groups).toEqual(original.analysis.plan.groups);
+    }
   });
 
   test('changing one option invalidates the cached plan', () => {
@@ -170,6 +178,7 @@ describe('createDecisionPlanCache', () => {
     const second = cache.bind({ plan, policy: pilotPolicy });
     expect(first.ok).toBe(true);
     expect(second.ok).toBe(true);
+    expect(second).toBe(first);
     const disabled = cache.bind({ plan, policy: { ...pilotPolicy, enabled: false } });
     expect(disabled.ok).toBe(false);
   });
@@ -344,6 +353,122 @@ describe('systemone dialect adapter', () => {
     };
   };
 
+  test('the default transport calls fetch with the global receiver', async () => {
+    const stub = {
+      async fetch(this: unknown) {
+        expect(this).toBe(globalThis);
+        return Response.json({ version: 'test-runtime' });
+      },
+    };
+    const fetch = spyOn(globalThis, 'fetch').mockImplementation(stub.fetch);
+    try {
+      const adapter = createSystemOneDecisionAdapter({
+        endpoints,
+        model: 'nimble',
+        languages: ['en'],
+      });
+      expect((await adapter.capability()).runtime).toBe('test-runtime');
+      expect(fetch).toHaveBeenCalledTimes(1);
+    } finally {
+      fetch.mockRestore();
+    }
+  });
+
+  test.each(['{', '{"model":"nimble","answers":[]}', '{"model":"nimble","answers":{"bad":null}}'])(
+    'malformed response %s is invalid-response',
+    async (body) => {
+      const adapter = createSystemOneDecisionAdapter({
+        endpoints,
+        model: 'nimble',
+        languages: ['en'],
+        transport: { fetch: async () => ({ status: 200, text: async () => body }) },
+      });
+      const response = await adapter.run(request());
+      expect(response.ok).toBe(false);
+      if (!response.ok) {
+        expect(response.reason).toBe('invalid-response');
+      }
+    },
+  );
+
+  test('a fetch failure remains backend-unavailable', async () => {
+    const adapter = createSystemOneDecisionAdapter({
+      endpoints,
+      model: 'nimble',
+      languages: ['en'],
+      transport: {
+        fetch: async () => {
+          throw new Error('offline');
+        },
+      },
+    });
+    const response = await adapter.run(request());
+    expect(response.ok).toBe(false);
+    if (!response.ok) {
+      expect(response.reason).toBe('backend-unavailable');
+    }
+  });
+
+  test('a probe cancelled by its caller aborts the transport', async () => {
+    const controller = new AbortController();
+    const adapter = createSystemOneDecisionAdapter({
+      endpoints,
+      model: 'nimble',
+      languages: ['en'],
+      transport: {
+        fetch: async (_input, init) => {
+          const pending = new Promise<never>((_resolve, reject) => {
+            init.signal.addEventListener('abort', () => reject(new Error('cancelled')), {
+              once: true,
+            });
+          });
+          controller.abort();
+          return pending;
+        },
+      },
+    });
+    const capability = await adapter.capability({
+      deadlineAt: Date.now() + 5000,
+      signal: controller.signal,
+    });
+    expect(capability.ready).toBe(false);
+    expect(capability.notReadyReason).toContain('cancelled');
+  });
+
+  test('provenance uses the probed runtime and the configured checkpoint', async () => {
+    const plan = pilotPlan();
+    const answers = Object.fromEntries(
+      plan.questions.map((question) => [
+        question.key,
+        question.kind === 'boolean'
+          ? { type: 'noul', value: true }
+          : { type: 'choice', choice: question.options?.[0]?.key },
+      ]),
+    );
+    const adapter = createSystemOneDecisionAdapter({
+      endpoints,
+      model: 'nimble',
+      languages: ['en'],
+      transport: stubTransport({
+        routes: {
+          '/api/version': { status: 200, body: { version: 'test-runtime' } },
+          '/v1/systemone': { status: 200, body: { model: 'nimble', answers } },
+        },
+      }),
+    });
+    const result = await runDecision({
+      ...request(),
+      plan,
+      schema: pilotSchema,
+      policy: pilotPolicy,
+      adapter,
+      context: 'buy a lantern',
+    });
+    expect(result.ok).toBe(true);
+    expect(result.provenance.runtime).toBe('test-runtime');
+    expect(result.provenance.checkpoint).toBe('nimble');
+  });
+
   test('a runtime that does not implement the route is reported as not ready, not ready-on-assumption', async () => {
     const transport = stubTransport({ routes: {} });
     const adapter = createSystemOneDecisionAdapter({
@@ -425,6 +550,7 @@ describe('systemone dialect adapter', () => {
     expect(response.ok).toBe(true);
     if (response.ok) {
       expect(response.checkpoint).toBe('nimble');
+      expect(response.runtime).toBeUndefined();
       expect(response.answers.find((answer) => answer.questionKey === kindKey)?.optionKey).toBe(
         'o0',
       );
@@ -556,8 +682,29 @@ describe('parseSystemOneResponse', () => {
     expect(parseSystemOneResponse({ hello: 'world' })).toBeUndefined();
   });
 
+  test('rejects array answer maps and malformed entries, including unused ones', () => {
+    expect(parseSystemOneResponse({ model: 'nimble', answers: [] })).toBeUndefined();
+    for (const answer of [null, [], 1, 'choice', {}, { type: 1 }, new Date()]) {
+      expect(
+        parseSystemOneResponse({
+          model: 'nimble',
+          answers: { good: { type: 'noul', value: true }, bad: answer },
+        }),
+      ).toBeUndefined();
+    }
+  });
+
   test('accepts a well-formed body', () => {
     const parsed = parseSystemOneResponse({ model: 'nimble', answers: {} });
     expect(parsed?.model).toBe('nimble');
+  });
+});
+
+describe('isUnsafeSegment', () => {
+  test('callers can reject hostile path segments and allow ordinary names', () => {
+    for (const segment of ['__proto__', 'constructor', 'prototype']) {
+      expect(isUnsafeSegment(segment)).toBe(true);
+    }
+    expect(isUnsafeSegment('commandKind')).toBe(false);
   });
 });

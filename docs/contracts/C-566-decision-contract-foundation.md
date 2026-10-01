@@ -65,13 +65,15 @@ Supported: booleans, homogeneous finite literal choices (`enum` and TypeBox
 required fixed objects and nested objects, and a bounded local-`$ref` subset
 with cycle and external-ref rejection.
 
-### Correlated fields cannot produce an illegal pairing
+### Correlated choices require explicit legal tuples
 
 Independent `action` and `target` questions permit `heal` + `enemy`: legal under
-the schema, wrong for the game. A task declares `combination`, `staged` or
-`reject` per correlated path set; `combination` expands the legal tuples once
-under a bound, `reject` emits nothing. An over-wide expansion is refused before
-dispatch.
+the schema, wrong for the game. A task must declare a mode per correlated path
+set. `combination` bounds the Cartesian product and filters it against authored
+`legalTuples` in declared path order; only matching tuples become options. An
+empty or over-wide expansion is refused before dispatch. `reject` emits nothing;
+`staged` is refused until it can enforce legal tuples. Correctness depends on
+the task author declaring the correlations and allowed tuples accurately.
 
 ### Thresholds are task metadata
 

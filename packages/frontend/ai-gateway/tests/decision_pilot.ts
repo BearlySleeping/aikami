@@ -69,10 +69,10 @@ export const PILOT_POLICY: DecisionTaskPolicy = {
  * for the pilot, not for "a decision model" in general.
  */
 export const PILOT_QUALITY_GATE = {
-  /** Minimum task accuracy over labelled held-out cases the backend answered. */
+  /** Correct predictions divided by held-out positives; abstentions count as misses. */
   minHeldOutAccuracy: 0.85,
   /**
-   * Maximum share of held-out cases where the backend produced a schema-valid
+   * Maximum share of answered held-out cases with a schema-valid
    * but wrong command kind. Wrong here is expensive: it fires a real game
    * command at a real NPC.
    */
@@ -81,8 +81,8 @@ export const PILOT_QUALITY_GATE = {
    * Minimum share of held-out cases that reach a decision at all.
    *
    * Deliberately modest. Abstention is the safe failure; a backend that only
-   * scores well by abstaining on everything is caught by the accuracy gate,
-   * because accuracy is measured over ANSWERED cases.
+   * answers too few cases fails coverage; abstentions on positives also count
+   * as misses in the accuracy gate.
    */
   minCoverage: 0.5,
   /** Every produced value must satisfy the original schema. */

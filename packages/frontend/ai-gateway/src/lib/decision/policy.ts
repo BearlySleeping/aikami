@@ -108,7 +108,7 @@ type CombinationInput = {
 };
 
 /**
- * Cartesian product of the correlated option lists.
+ * Bounded Cartesian product, filtered to the task's explicit legal tuples.
  *
  * Returns `undefined` the moment the product would exceed the bound, so a wide
  * cross product never reaches the wire — an unbounded expansion is a latency
@@ -117,6 +117,7 @@ type CombinationInput = {
 const expandCombinations = (
   inputs: readonly CombinationInput[],
   maxCombinations: number,
+  legalTuples: readonly (readonly DecisionLiteral[])[],
 ): readonly DecisionCombinationOption[] | undefined => {
   let tuples: { values: { path: readonly string[]; value: DecisionLiteral }[] }[] = [
     { values: [] },
@@ -135,11 +136,19 @@ const expandCombinations = (
     }
     tuples = expanded;
   }
-  return tuples.map((tuple, index) => ({
-    key: `o${index}`,
-    label: '',
-    values: tuple.values,
-  }));
+  return tuples
+    .filter((tuple) =>
+      legalTuples.some(
+        (legal) =>
+          legal.length === tuple.values.length &&
+          tuple.values.every((entry, index) => entry.value === legal[index]),
+      ),
+    )
+    .map((tuple, index) => ({
+      key: `o${index}`,
+      label: '',
+      values: tuple.values,
+    }));
 };
 
 /** Resolves the acceptance policy a task declared, or the conservative default. */
@@ -253,31 +262,27 @@ const applyCorrelations = (options: {
     }
     const label = correlation.paths.map(pathKeyFor).join(' + ');
 
-    if (correlation.mode === 'reject') {
+    if (correlation.mode === 'reject' || correlation.mode === 'staged') {
       return {
         ok: false,
         reasons: [
           {
             code: 'correlated-fields-unsupported',
             path: members[0]?.path ?? [],
-            detail: `fields ${label} are correlated and no handling was declared`,
+            detail: `fields ${label} require combination mode with explicit legal tuples; ${correlation.mode} emits no questions`,
           },
         ],
       };
     }
-    if (correlation.mode === 'staged') {
-      const groupId = `staged:${label}`;
-      working = working.map((question) =>
-        members.some((member) => member.key === question.key) ? { ...question, groupId } : question,
-      );
-      continue;
-    }
-
     const inputs: CombinationInput[] = members.map((question) => ({
       question,
       options: (question.options ?? []).filter((option) => option.description !== undefined),
     }));
-    const tuples = expandCombinations(inputs, options.limits.maxCombinations);
+    const tuples = expandCombinations(
+      inputs,
+      options.limits.maxCombinations,
+      correlation.legalTuples ?? [],
+    );
     if (tuples === undefined) {
       return {
         ok: false,
@@ -285,7 +290,20 @@ const applyCorrelations = (options: {
           {
             code: 'combination-limit-exceeded',
             path: members[0]?.path ?? [],
-            detail: `legal combinations for ${label} exceed the bound of ${options.limits.maxCombinations}; expand deliberately or fall back`,
+            detail: `candidate combinations for ${label} exceed the bound of ${options.limits.maxCombinations}; expand deliberately or fall back`,
+          },
+        ],
+      };
+    }
+
+    if (tuples.length === 0) {
+      return {
+        ok: false,
+        reasons: [
+          {
+            code: 'correlated-fields-unsupported',
+            path: members[0]?.path ?? [],
+            detail: `only choice fields with explicit matching legal tuples can be combined: ${label}`,
           },
         ],
       };

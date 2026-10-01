@@ -194,7 +194,11 @@ describe('registry scan — TypeBox shipping schemas', () => {
     expect(analysis.ok).toBe(true);
     if (analysis.ok) {
       expect(analysis.plan.questions).toHaveLength(1);
-      expect(analysis.plan.questions[0]?.options).toHaveLength(7);
+      const shippingKinds = NpcDialogueCommandSchema.anyOf.map(
+        (branch) => branch.properties.kind.const,
+      );
+      const pilotKinds = analysis.plan.questions[0]?.options?.map((option) => option.value);
+      expect(new Set(pilotKinds)).toEqual(new Set(shippingKinds));
       expect(analysis.plan.constants).toHaveLength(0);
     }
   });

@@ -20,7 +20,7 @@ import { utf8ByteLength } from './util.ts';
 
 /** Why a plan could not be assembled into dispatchable units. */
 export type DecisionDispatchRefusal = {
-  readonly reason: 'context-too-large' | 'question-limit-exceeded';
+  readonly reason: 'context-too-large' | 'question-limit-exceeded' | 'option-limit-exceeded';
   readonly detail: string;
   /** UTF-8 byte length that triggered the refusal. */
   readonly size: number;
@@ -105,6 +105,20 @@ export const buildDecisionDispatch = (options: {
           detail: `group ${group.id} asks ${questions.length} questions; limit is ${limits.maxQuestions}`,
           size: questions.length,
           limit: limits.maxQuestions,
+        },
+      };
+    }
+    const oversized = questions.find(
+      (question) => (question.options?.length ?? 0) > limits.maxOptions,
+    );
+    if (oversized !== undefined) {
+      return {
+        ok: false,
+        refusal: {
+          reason: 'option-limit-exceeded',
+          detail: `question ${oversized.key} exceeds the option limit of ${limits.maxOptions}`,
+          size: oversized.options?.length ?? 0,
+          limit: limits.maxOptions,
         },
       };
     }

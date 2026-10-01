@@ -247,6 +247,15 @@ const answersFrom = (
   return { ok: true, answers };
 };
 
+/** Invalid JSON is a response failure, independent of transport availability. */
+const parseResponseText = (text: string): SystemOneResponse | undefined => {
+  try {
+    return parseSystemOneResponse(JSON.parse(text));
+  } catch {
+    return undefined;
+  }
+};
+
 /** Milliseconds remaining before the absolute deadline, floored at zero. */
 const remainingMs = (deadlineAt: number): number => Math.max(0, deadlineAt - Date.now());
 
@@ -259,14 +268,18 @@ const remainingMs = (deadlineAt: number): number => Math.max(0, deadlineAt - Dat
 export const createSystemOneDecisionAdapter = (
   options: SystemOneAdapterOptions,
 ): DecisionAdapter => {
-  const transport = options.transport ?? ({ fetch } as SystemOneTransport);
+  const transport: SystemOneTransport = options.transport ?? {
+    fetch: (input, init) => globalThis.fetch(input, init),
+  };
   const probeTimeoutMs = options.probeTimeoutMs ?? 2000;
 
   return {
     backendId: `systemone:${options.model}`,
     dialect: SYSTEM_ONE_DIALECT,
 
-    async capability(): Promise<DecisionCapability> {
+    async capability(
+      probe?: Pick<DecisionRequest, 'deadlineAt' | 'signal'>,
+    ): Promise<DecisionCapability> {
       const base: DecisionCapability = {
         backendId: `systemone:${options.model}`,
         dialect: SYSTEM_ONE_DIALECT,
@@ -279,8 +292,17 @@ export const createSystemOneDecisionAdapter = (
         checkpoint: options.model,
       };
 
+      const budget = Math.min(
+        probeTimeoutMs,
+        probe ? remainingMs(probe.deadlineAt) : probeTimeoutMs,
+      );
+      if (probe?.signal.aborted || budget === 0) {
+        return { ...base, notReadyReason: 'probe cancelled or deadline exceeded' };
+      }
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), probeTimeoutMs);
+      const onAbort = (): void => controller.abort();
+      probe?.signal.addEventListener('abort', onAbort, { once: true });
+      const timer = setTimeout(() => controller.abort(), budget);
       try {
         const response = await transport.fetch(options.endpoints.version, {
           method: 'GET',
@@ -299,6 +321,7 @@ export const createSystemOneDecisionAdapter = (
         return { ...base, notReadyReason: `runtime version probe failed: ${detail}` };
       } finally {
         clearTimeout(timer);
+        probe?.signal.removeEventListener('abort', onAbort);
       }
     },
 
@@ -366,11 +389,7 @@ export const createSystemOneDecisionAdapter = (
         if (refusal !== undefined) {
           return refusal;
         }
-        const answered = answersFrom(
-          parseSystemOneResponse(JSON.parse(await response.text())),
-          order,
-          inferenceMs,
-        );
+        const answered = answersFrom(parseResponseText(await response.text()), order, inferenceMs);
         if (!answered.ok) {
           return answered;
         }
@@ -380,7 +399,6 @@ export const createSystemOneDecisionAdapter = (
           queueMs: 0,
           inferenceMs,
           checkpoint: options.model,
-          runtime: options.model,
         };
       } catch (error) {
         return transportFailure({ error, request, started });
