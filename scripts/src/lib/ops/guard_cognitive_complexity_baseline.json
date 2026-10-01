@@ -2012,7 +2012,7 @@
   "scripts/src/lib/herdr/worktree.ts": {
     "counts": {
       "excessive": 4,
-      "worst": 130
+      "worst": 48
     }
   },
   "scripts/src/lib/ops/audit_lpc_coverage.ts": {

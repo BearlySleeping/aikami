@@ -20,20 +20,16 @@
 //
 // The low-level git primitives (runGit, commitAll, pushBranch, ...) remain in
 // scripts/src/lib/agents/git_worktree.ts — do not fork them.
+//
+// Repo identity (which repo a path belongs to, and whether a worktree herdr
+// created is the one we asked for) lives in ./worktree_identity.ts and is
+// re-exported below — read that module before adding another path comparison
+// here.
 
 // biome-ignore-all lint/style/useNamingConvention: HerDr API response field names (snake_case) — must match external API contract
-import { execFileSync, execSync } from 'node:child_process';
-import {
-  cpSync,
-  existsSync,
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  realpathSync,
-  rmSync,
-  symlinkSync,
-} from 'node:fs';
-import { join, resolve } from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { cpSync, existsSync, mkdirSync, realpathSync, rmSync, symlinkSync } from 'node:fs';
+import { join } from 'node:path';
 import {
   baseRefName,
   branchBaseRefName,
@@ -48,7 +44,14 @@ import {
 import { reportInfraIssue } from '../ops/infra_report.ts';
 import { findWorkspace, herdr, herdrJson, TASK_WORKSPACE_PREFIX } from './session.ts';
 import { type ContentBootstrapResult, tryBootstrapWorktreeContent } from './worktree_content.ts';
+import { installWorktreeDeps } from './worktree_deps.ts';
 import { prepareWorktreeEnvironment } from './worktree_environment.ts';
+import {
+  checkoutRepoRootOrUndefined,
+  isWorktreeOfRepo,
+  sameRepoPath,
+  worktreeRepoRoot,
+} from './worktree_identity.ts';
 import { missingWorktreeSeeds, seedWorktreeFiles } from './worktree_seeds.ts';
 import {
   assertManagedWorktreeTarget,
@@ -216,6 +219,7 @@ type WorktreeCreateResult = {
       worktree?: {
         checkout_path: string;
         repo_root: string;
+        repo_key?: string;
       };
     };
     worktree: {
@@ -232,6 +236,8 @@ type WorktreeCreateResult = {
 
 type WorktreeListResult = {
   result: {
+    /** Provenance of the listing — which repo herdr resolved the call against. */
+    source?: { repo_root?: string; repo_key?: string; repo_name?: string };
     worktrees: Array<{
       branch: string;
       path: string;
@@ -265,33 +271,15 @@ type WorktreeOpenResult = {
   };
 };
 
-// ── Helpers ────────────────────────────────────────────────
+// ── Repo identity ──────────────────────────────────────────
+//
+// worktreeRepoRoot / sameRepoPath / checkoutRepoRootOrUndefined live in
+// ./worktree_identity.ts — which repository a path belongs to, and whether two
+// paths are the same one. Re-exported here because `herdr/worktree.ts` is the
+// single import surface for the worktree lifecycle.
+export { checkoutRepoRootOrUndefined, isWorktreeOfRepo, sameRepoPath, worktreeRepoRoot };
 
-/** Root checkout directory of the MAIN repo for a worktree (from .git file). */
-export const worktreeRepoRoot = (checkoutPath: string): string => {
-  try {
-    const gitFile = readFileSync(join(checkoutPath, '.git'), 'utf-8').trim();
-    const m = gitFile.match(/^gitdir:\s*(.+)$/m);
-    if (m?.[1]) {
-      const gitDir = resolve(m[1].trim());
-      // <repo>/.git/worktrees/<name> → repo root is everything before
-      // "/.git/worktrees/". Fall back to walking up 3 levels for other
-      // layouts (<repo>/.git/worktrees/name → ../../.. → <repo>).
-      const idx = gitDir.indexOf('/.git/worktrees/');
-      if (idx !== -1) {
-        return gitDir.slice(0, idx);
-      }
-      return resolve(gitDir, '../../..');
-    }
-  } catch {
-    // Not a linked worktree — fall back to rev-parse.
-  }
-  try {
-    return runGit('rev-parse --show-toplevel', { cwd: checkoutPath });
-  } catch {
-    throw new Error(`Cannot determine repo root for ${checkoutPath}`);
-  }
-};
+// ── Helpers ────────────────────────────────────────────────
 
 const ensureGitRepo = (repoRoot: string): void => {
   try {
@@ -402,6 +390,50 @@ export const createWorktree = async (options: {
     );
   }
 
+  // 🔴 Repo-identity post-condition. `--cwd` is what makes herdr resolve the
+  // right repo, but herdr's answer is not self-verifying: nothing in the
+  // response tells the caller "this is the repo you asked for", so a
+  // resolution that lands on a sibling checkout (the focused workspace was a
+  // different project on the same machine) produces a perfectly
+  // well-formed response — workspace id, tab, pane, checkout path — for a
+  // worktree of the WRONG repository. That is not a loud failure: the agent
+  // gets a workspace, bootstraps it, and every subsequent edit, commit and PR
+  // targets a repo the user never named.
+  //
+  // The check itself is isWorktreeOfRepo (./worktree_identity.ts), which weighs
+  // herdr's declared repo_root against the gitdir the checkout's `.git` file
+  // actually points at — the latter being what git itself will act on.
+  const declaredRepoRoot = r.result.workspace.worktree?.repo_root;
+  const actualRepoRoot = checkoutRepoRootOrUndefined(checkoutPath);
+  if (
+    !isWorktreeOfRepo({
+      checkoutPath,
+      requestedRepoRoot: options.repoRoot,
+      ...(declaredRepoRoot === undefined ? {} : { declaredRepoRoot }),
+    })
+  ) {
+    const observed = actualRepoRoot ?? declaredRepoRoot ?? 'unknown';
+    // Remove the mis-provisioned worktree BEFORE anything else can use it.
+    // Leaving it behind is how the wrong-repo checkout becomes a persistent
+    // artifact under ~/.herdr/worktrees/<other-repo>/ that the next run trips
+    // over — and, if its branch name collides, blocks the retry.
+    await removeWorktree({
+      workspaceId: r.result.workspace.workspace_id,
+      checkoutPath,
+      repoRoot: actualRepoRoot ?? options.repoRoot,
+      force: true,
+    }).catch(() => {});
+    throw new Error(
+      `herdr worktree create built a worktree of the WRONG repository for slug ` +
+        `"${slug}": asked for ${options.repoRoot}, herdr produced a checkout of ` +
+        `${observed} at ${checkoutPath}. The mis-provisioned worktree was ` +
+        'removed. This happens when herdr resolves the command against a ' +
+        'different workspace than the one requested — check that the repo ' +
+        'root passed as `repoRoot` is the real git checkout root (not a ' +
+        'linked worktree or a subdirectory) and that no other repo is focused.',
+    );
+  }
+
   // 🔴 Bootstrap here, in the one function every creation path shares, so a
   // worktree is never left without its gitignored env seeds. The pi
   // `worktree.create` tool and any future caller get this for free; callers
@@ -490,11 +522,38 @@ export const openWorktree = async (options: {
   };
 };
 
-/** List all herdr-tracked worktrees for the repo (with provenance). */
+/**
+ * List all herdr-tracked worktrees for the repo (with provenance).
+ *
+ * 🔴 `repoRoot` is not optional in practice. `herdr worktree list` without
+ * `--cwd` resolves against the server's currently FOCUSED workspace, so an
+ * unscoped call from an agent whose sibling workspace happens to be another
+ * project returns THAT project's worktrees — which then read as "this task
+ * already exists" and make a legitimate create look like a duplicate, or make
+ * `rm`/`pr` target a stranger's checkout. When `repoRoot` is given, entries
+ * herdr reports for a different repo are filtered out rather than trusted, so
+ * a focus leak cannot cross repos even if herdr's own scoping regresses.
+ */
 export const listWorktrees = async (repoRoot?: string): Promise<WorktreeEntry[]> => {
   const args = repoRoot ? ['worktree', 'list', '--cwd', repoRoot] : ['worktree', 'list'];
   const r = await herdrJson<WorktreeListResult>(args, { timeoutMs: 15_000 });
   if (!r?.result?.worktrees) {
+    return [];
+  }
+  // Prefer the per-entry gitdir as the authority (it is what git acts on);
+  // fall back to the listing's declared source repo.
+  const listedRepoRoot =
+    r.result.source?.repo_root ??
+    r.result.worktrees.map((w) => checkoutRepoRootOrUndefined(w.path)).find(Boolean);
+  if (
+    repoRoot !== undefined &&
+    listedRepoRoot !== undefined &&
+    !sameRepoPath(listedRepoRoot, repoRoot)
+  ) {
+    console.warn(
+      `[herdr] worktree list returned worktrees of ${listedRepoRoot} but ${repoRoot} was ` +
+        'requested — ignoring them. herdr resolved the call against a different workspace.',
+    );
     return [];
   }
   return r.result.worktrees.map((w) => ({
@@ -673,174 +732,23 @@ export const bootstrapWorktree = async (options: BootstrapOptions): Promise<Boot
     });
   }
 
-  // ── 5. Seed worktree deps (workaround for bun 1.4.0 Windows bug) ──
-  // 🔴 bun 1.4.0 on Windows fails to install workspace packages with `/` in
-  // their names (e.g. `@aikami/frontend/engine`) with "is not a valid install
-  // folder name". Fix: create node_modules as a real directory, copy .bun cache
-  // from root, create @aikami symlinks to worktree's own source dirs, and
-  // junction per-app node_modules for vite/pixi.js.
-  //
-  // 🔴 This seeding is WINDOWS-ONLY and must stay gated on `win32`. It builds a
-  // deliberately partial tree — `.bun`, `.bin`, `@aikami/*` and per-app
-  // junctions — and never links the ordinary top-level deps (`@types/bun`,
-  // `@types/node`, `typescript`, …) that live as root-level symlinks into
-  // `.bun`. Running it on Linux/macOS (as it did until C-476) left every fresh
-  // worktree with a 3-entry node_modules, so `tsc` could not resolve
-  // `types: ["bun"]` and pre-push validation died with TS2688 — after the
-  // implementer and verifier had both already passed. The `else` branch below
-  // was unreachable on a fresh checkout, because a fresh checkout never has a
-  // node_modules to find. On POSIX the plain install is both correct and fast:
-  // bun hardlinks out of the shared global cache.
-  let installed = false;
-  if (options.install !== false) {
-    const worktreeNodeModules = join(checkoutPath, 'node_modules');
-    if (process.platform === 'win32' && !existsSync(worktreeNodeModules)) {
-      mkdirSync(worktreeNodeModules, { recursive: true });
-      // Junction .bun cache from root (non-workspace deps)
-      // 🔴 cpSync fails with EPERM on symlinks inside the cache. Use junction instead.
-      const rootBunCache = join(repoRoot, 'node_modules', '.bun');
-      if (existsSync(rootBunCache)) {
-        try {
-          symlinkSync(rootBunCache, join(worktreeNodeModules, '.bun'), 'junction');
-        } catch (err: unknown) {
-          console.warn(
-            `⚠️  Could not junction .bun cache: ${err instanceof Error ? err.message : String(err)}`,
-          );
-        }
-      }
-      // Create @aikami symlinks to worktree's own workspace source dirs
-      const aikamiDir = join(worktreeNodeModules, '@aikami');
-      mkdirSync(aikamiDir, { recursive: true });
-      const workspaces =
-        (
-          JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf-8')) as {
-            workspaces?: string[];
-          }
-        ).workspaces ?? [];
-      for (const wsGlob of workspaces) {
-        const base = wsGlob.replace(/\*$/, '');
-        const dir = join(checkoutPath, base);
-        if (!existsSync(dir)) {
-          continue;
-        }
-        for (const entry of readdirSync(dir)) {
-          const pkgPath = join(dir, entry, 'package.json');
-          if (!existsSync(pkgPath)) {
-            continue;
-          }
-          const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8')) as { name?: string };
-          if (!pkg.name?.startsWith('@aikami/')) {
-            continue;
-          }
-          const parts = pkg.name.slice('@aikami/'.length).split('/');
-          const targetDir = join(aikamiDir, ...parts);
-          const srcDir = join(dir, entry);
-          mkdirSync(join(targetDir, '..'), { recursive: true });
-          try {
-            symlinkSync(srcDir, targetDir, 'junction');
-          } catch (err: unknown) {
-            console.warn(
-              `⚠️  Could not link ${pkg.name}: ${err instanceof Error ? err.message : String(err)}`,
-            );
-          }
-        }
-      }
-      // ── node_modules/.bin — required for the pre-commit hook ──
-      // 🔴 Without this the worktree has no `moon`, `biome` or `tsc` on its
-      // resolution path, so `bun run pre-commit` (from .moon/hooks/pre-commit,
-      // which every worktree inherits via the shared core.hooksPath) dies at
-      // step 2 and the implementer agent's own commits go through unchecked.
-      //
-      // A link to root's `.bin` is correct rather than a copy: the shims
-      // inside are RELATIVE symlinks (`moon -> ../@moonrepo/cli/moon.js`), so
-      // they resolve against root's real node_modules where those packages
-      // actually live. Moon still treats the worktree as its own workspace
-      // root — it walks up from cwd for `.moon/`, which the worktree has —
-      // so the checks run against worktree code, not root's.
-      const rootBin = join(repoRoot, 'node_modules', '.bin');
-      const worktreeBin = join(worktreeNodeModules, '.bin');
-      if (existsSync(rootBin) && !existsSync(worktreeBin)) {
-        try {
-          symlinkSync(rootBin, worktreeBin, dirSymlinkType);
-        } catch (err: unknown) {
-          console.warn(
-            `⚠️  Could not link node_modules/.bin (${err instanceof Error ? err.message : String(err)}) — ` +
-              'pre-commit checks will be skipped in this worktree.',
-          );
-        }
-      }
-
-      // Junction per-app node_modules from root (vite, pixi.js, etc.)
-      for (const wsGlob of workspaces) {
-        const base = wsGlob.replace(/\*$/, '');
-        const rootDir = join(repoRoot, base);
-        const worktreeDir = join(checkoutPath, base);
-        if (!existsSync(rootDir) || !existsSync(worktreeDir)) {
-          continue;
-        }
-        for (const entry of readdirSync(rootDir)) {
-          const srcNm = join(rootDir, entry, 'node_modules');
-          const dstNm = join(worktreeDir, entry, 'node_modules');
-          if (existsSync(srcNm) && !existsSync(dstNm)) {
-            try {
-              symlinkSync(srcNm, dstNm, 'junction');
-            } catch {
-              // skip
-            }
-          }
-        }
-      }
-      installed = true;
-    } else {
-      // Every POSIX worktree, and any Windows worktree that already has a
-      // node_modules, installs normally.
-      const timeoutMs = options.installTimeoutMs ?? 180_000;
-      try {
-        execSync('bun install --frozen-lockfile', {
-          cwd: checkoutPath,
-          encoding: 'utf-8',
-          stdio: ['pipe', 'pipe', 'pipe'],
-          timeout: timeoutMs,
-          windowsHide: true,
+  // ── 5-6. Dependencies ───────────────────────────────────────────
+  // The platform-split install strategy and the completeness post-condition
+  // live in ./worktree_deps.ts. They belong side by side on purpose: the
+  // Windows partial-tree workaround and the POSIX plain install are mutually
+  // exclusive, and splitting them across modules is how the Windows path
+  // ended up running on Linux (C-476) and left every fresh worktree with a
+  // 3-entry node_modules.
+  const installed =
+    options.install === false
+      ? false
+      : installWorktreeDeps({
+          checkoutPath,
+          repoRoot,
+          ...(options.installTimeoutMs === undefined
+            ? {}
+            : { installTimeoutMs: options.installTimeoutMs }),
         });
-        installed = true;
-      } catch (err: unknown) {
-        console.warn(
-          `⚠️  bun install failed in ${checkoutPath}. Run it manually: cd ${checkoutPath} && bun install`,
-        );
-        reportInfraIssue({
-          component: 'worktree_bootstrap',
-          operation: 'bun install --frozen-lockfile',
-          error: err,
-          context: { checkoutPath },
-          cwd: repoRoot,
-        });
-      }
-    }
-
-    // ── 6. Post-condition: the dep tree must actually be complete ──
-    // 🔴 The TS2688 failure this guards against was silent: bootstrap reported
-    // success, the implementer and verifier both passed, and the missing deps
-    // only surfaced at pre-push — the most expensive possible place to learn
-    // the worktree was never usable. Diffing against root's own top-level
-    // entries keeps this self-maintaining: it needs no hardcoded package list
-    // and stays correct as dependencies come and go.
-    const missing = missingWorktreeDeps({ checkoutPath, repoRoot });
-    if (missing.length > 0) {
-      console.warn(
-        `⚠️  Incomplete node_modules in ${checkoutPath} — missing ${missing.join(', ')}. ` +
-          `Typecheck will fail (TS2688). Run: cd ${checkoutPath} && bun install`,
-      );
-      reportInfraIssue({
-        component: 'worktree_bootstrap',
-        operation: 'verify node_modules',
-        error: new Error(`Missing top-level node_modules entries: ${missing.join(', ')}`),
-        context: { checkoutPath, missing: missing.join(','), platform: process.platform },
-        cwd: repoRoot,
-      });
-      installed = false;
-    }
-  }
 
   // ── 7. Canonical local content plane ────────────────────────────────
   // Content is generated after install so every generator sees the complete
@@ -851,33 +759,7 @@ export const bootstrapWorktree = async (options: BootstrapOptions): Promise<Boot
   return { installed, missingSeeds, ...(content === undefined ? {} : { content }) };
 };
 
-/**
- * Top-level `node_modules` entries present in the root checkout but absent from
- * the worktree. `@aikami/*` is excluded: worktrees deliberately point those at
- * their own source dirs rather than root's. Dotted entries (`.bun`, `.bin`,
- * `.cache`) are excluded too — they are caches and shim dirs, not deps.
- *
- * `$`-prefixed entries are SvelteKit virtual roots (`$app`, written by
- * `svelte-kit sync`) — generated on demand in whatever checkout first runs
- * `typecheck`/`build`, never installed by `bun install`. Comparing them across
- * checkouts produced a persistent false "Incomplete node_modules — missing
- * $app" warning on every fresh worktree; no npm package name can begin with
- * `$`, so excluding the prefix is safe and self-maintaining.
- */
-export const missingWorktreeDeps = (options: {
-  checkoutPath: string;
-  repoRoot: string;
-}): string[] => {
-  const { checkoutPath, repoRoot } = options;
-  const rootNodeModules = join(repoRoot, 'node_modules');
-  const worktreeNodeModules = join(checkoutPath, 'node_modules');
-  if (!existsSync(rootNodeModules)) {
-    return [];
-  }
-  return readdirSync(rootNodeModules)
-    .filter((entry) => !entry.startsWith('.') && entry !== '@aikami' && !entry.startsWith('$'))
-    .filter((entry) => !existsSync(join(worktreeNodeModules, entry)));
-};
+export { missingWorktreeDeps } from './worktree_deps.ts';
 
 /**
  * Remove a worktree: herdr state + checkout together, then optionally the
