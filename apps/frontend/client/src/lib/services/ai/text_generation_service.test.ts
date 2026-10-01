@@ -912,9 +912,11 @@ describe('TextGenerationService — structured-call duration telemetry', () => {
   test('a queued request records queue wait inside totalMs AND as queueMs', async () => {
     mocks.gatewayStructured = { ok: true };
 
-    // Admission does not exist yet in this commit, so this asserts the SPAN's
-    // contract: a caller that supplies queue measurements has them carried
-    // through the recorder without being dropped.
+    // Exercises the RECORDER's contract directly: a caller that supplies queue
+    // measurements has them carried through to the span. End-to-end admission
+    // behaviour (a real request waiting, being cancelled in the queue, being
+    // admitted) is covered in `text_generation_admission.test.ts`; this asserts
+    // the projection in isolation so a break there is not ambiguous.
     const { recordTextCall } = await import('./text_telemetry_recorder.ts');
     recordTextCall({
       start: performance.now() - 500,
