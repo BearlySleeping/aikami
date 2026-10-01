@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "test": "playwright test",
-    "test:unit": "bun test src/services",
+    "test:unit": "bun test src/services scripts",
     "capture:c550-house": "bun run scripts/capture_c550_house.ts",
     "capture:c553-house-rollout": "bun run scripts/capture_c553_house_rollout.ts",
     "capture:evidence": "bun run scripts/capture_evidence.ts",

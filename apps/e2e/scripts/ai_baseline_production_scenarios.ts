@@ -8,15 +8,15 @@
 //   - P1: a real dialogue turn via `NpcDialogueService.generateTurn`, which
 //     performs the C-401 two-call split (streamed `dialogue` prose, then a
 //     schema-constrained `envelope` extraction) and applies the result;
-//   - P2: an A/B of that same turn with and without the real `MAP_LOADED`
-//     background burst from `prefetchForNpcs`, to test whether unbounded
-//     background fan-out delays interactive work.
+//   - P2: that same turn against the real `MAP_LOADED` background burst from
+//     `prefetchForNpcs`, swept across burst widths.
 //
 // Extracted from the main harness body for two reasons: the module was over the
 // cognitive-complexity threshold, and these scenarios are only meaningful on a
 // pack with authored dialogue — so they need their own opt-in.
 
 import type { Page } from 'playwright';
+import type { FrameProbe } from './ai_baseline_frame_probe.ts';
 
 /**
  * What one production dialogue turn reported, as the seam returns it.
@@ -49,7 +49,53 @@ export type DialogueTurnProbe = {
 };
 
 /** One provider request's timing, as the wire log records it. */
-type WireRow = { readonly startedAtMs: number; readonly durationMs: number };
+type WireRow = {
+  readonly startedAtMs: number;
+  readonly durationMs: number;
+  readonly status: number;
+  readonly streamed: boolean;
+  readonly structured: boolean;
+  readonly aborted?: boolean;
+  readonly url: string;
+  readonly promptTokens?: number;
+  readonly completionTokens?: number;
+  readonly cachedTokens?: number;
+  readonly usageShape?: string;
+  readonly modelLoadMs?: number;
+  readonly prefillMs?: number;
+  readonly generationMs?: number;
+  readonly providerTotalMs?: number;
+  /** The reasoning-control field the request carried, verbatim. */
+  readonly thinkField?: unknown;
+  readonly reasoningEffortField?: unknown;
+};
+
+/**
+ * One of the client's own telemetry spans, as `getTextTelemetry` returns it.
+ *
+ * Read as the SECOND source, alongside the wire log. The wire cannot give the
+ * full duration of a streamed call — its `response` event fires when the stream
+ * opens — so `totalMs` here is what actually answers "how long did call 1 take".
+ */
+export type ClientSpan = {
+  readonly id: number;
+  readonly task?: string;
+  readonly provider?: string;
+  readonly model?: string;
+  readonly mode?: string;
+  readonly streamed?: boolean;
+  readonly ttftMs?: number;
+  readonly totalMs?: number;
+  readonly promptTokens?: number;
+  readonly completionTokens?: number;
+  readonly tokenSource?: string;
+  readonly ok?: boolean;
+  readonly errorCode?: string;
+  readonly cacheLayer?: string;
+  readonly queueDepth?: number;
+  readonly deadlineExceeded?: boolean;
+  readonly deadlineRemainingMs?: number;
+};
 
 /** Collects a scenario's provider requests so they can be summarized in window. */
 export type WireWindow = {
@@ -59,12 +105,36 @@ export type WireWindow = {
     readonly settle: () => Promise<void>;
   };
   readonly summarize: (from: number) => Promise<Record<string, unknown>>;
-  /** Wire rows in a window that started at or before `boundaryMs`. */
-  readonly rowsBefore: (from: number, boundaryMs: number) => readonly WireRow[];
-  /** Counts client telemetry spans for one task. */
-  readonly countSpans: (page: Page, task: string) => Promise<number>;
-  /** Waits for background spans to land and returns how many arrived. */
-  readonly awaitSummarizationSpans: (page: Page, before: number) => Promise<number>;
+  /** Every wire row from `from`, on the harness clock. */
+  readonly rowsFrom: (from: number) => readonly WireRow[];
+  /**
+   * Counts the client's own telemetry spans for one task recorded AFTER a
+   * cursor.
+   *
+   * 🔴 Counted by MONOTONIC SPAN ID, not by "how many spans of this task are in
+   * the buffer". `textTelemetryService` is a 100-entry ring buffer, so once a
+   * long run passes 100 calls the buffer's per-task totals stop rising — a new
+   * span evicts an old one and the count is unchanged. A total-based delta then
+   * reads 0 for a burst that demonstrably fired, which is precisely the
+   * "the harness reported a confident number for an empty condition" failure
+   * this harness exists to prevent. Ids are monotonic, so a cursor is immune.
+   */
+  readonly countSpansSince: (page: Page, task: string, cursor: number) => Promise<number>;
+  /**
+   * Waits for a background burst to finish landing, after the interactive
+   * measurement, and returns how many calls actually arrived.
+   */
+  readonly settleBackground: (
+    page: Page,
+    task: string,
+    cursor: number,
+    expected: number,
+    capMs: number,
+  ) => Promise<number>;
+  /** Highest telemetry span id currently buffered, used to open a window. */
+  readonly telemetryCursor: (page: Page) => Promise<number>;
+  /** The client's own spans recorded after a cursor, in call order. */
+  readonly spansAfter: (page: Page, cursor: number) => Promise<readonly ClientSpan[]>;
   readonly runTurn: (page: Page, playerLine: string) => Promise<DialogueTurnProbe>;
   readonly prepareBurst: (
     page: Page,
@@ -76,22 +146,49 @@ export type WireWindow = {
   ) => Promise<{ candidates: number; dispatchMs: number }>;
 };
 
-/** Records one production turn, aborting if it does not conform. */
+/**
+ * Records one production turn.
+ *
+ * A turn that comes back but does not satisfy the production turn schema is a
+ * failure: the latency of a failed turn is not the latency a player experiences,
+ * so it is recorded as failed rather than averaged in.
+ *
+ * A turn that THROWS is a different failure and is recorded too, not allowed to
+ * end the run. `NpcDialogueService.generateTurn` deliberately rethrows provider
+ * failures ("a broken provider must be visible as an error rather than silently
+ * faked"), so a turn killed by the gateway's 90 s fetch timeout under background
+ * contention arrives as a rejection. That is a player-visible outcome, and it is
+ * the outcome this experiment most needs to be able to count — an earlier run
+ * of this harness aborted on the first one and lost every later sample with it.
+ */
 const recordTurn = async (
   page: Page,
   wire: WireWindow,
   playerLine: string,
   scenario: string,
 ): Promise<Record<string, unknown>> => {
-  const probe = await wire.runTurn(page, playerLine);
-  if (!probe.schemaValid) {
-    throw new Error(
-      `${scenario}: the turn did not satisfy the production turn schema. A turn that does not ` +
-        'validate must not be reported as a latency measurement, because the latency of a failed ' +
-        'turn is not the latency a player experiences.',
-    );
+  const startedAt = performance.now();
+  let probe: DialogueTurnProbe;
+  try {
+    probe = await wire.runTurn(page, playerLine);
+  } catch (error: unknown) {
+    return {
+      turnFailed: true,
+      errorText: String(error).slice(0, 400),
+      wallClockMs: Math.round(performance.now() - startedAt),
+      ttftMs: undefined,
+      source: 'provider_error',
+      schemaValid: false,
+      narrativeNonEmpty: false,
+      choiceCount: 0,
+      choiceIds: [],
+      commandExtracted: false,
+      extractionDegraded: undefined,
+      commandDenied: undefined,
+    };
   }
   return {
+    turnFailed: false,
     wallClockMs: Math.round(probe.wallClockMs),
     ttftMs: probe.ttftMs === undefined ? undefined : Math.round(probe.ttftMs),
     source: probe.source,
@@ -102,7 +199,21 @@ const recordTurn = async (
     commandExtracted: probe.commandExtracted,
     extractionDegraded: probe.extractionDegraded,
     commandDenied: probe.commandDenied,
+    ...(probe.schemaValid
+      ? {}
+      : { invalidTurnReason: `${scenario}: the turn did not satisfy the production turn schema` }),
   };
+};
+
+/** Median of a numeric list, or `null` for an empty one. */
+const median = (values: readonly number[]): number | null => {
+  if (values.length === 0) {
+    return null;
+  }
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  const upper = sorted[middle] as number;
+  return sorted.length % 2 === 1 ? upper : Math.round((upper + (sorted[middle - 1] as number)) / 2);
 };
 
 /**
@@ -113,49 +224,73 @@ const recordTurn = async (
  * aborted requests too, which is the case that matters. Aggregating them hides
  * the very thing issue #382 is about: a 6 s discarded extraction and a 4 s
  * narrative look alike in a single median, but only one of them is wasted work.
+ *
+ * 🔴 This only classifies rows on the DIALOGUE side of a sample. A background
+ * `summarization` call is structured too, so in an overlapped sample the split
+ * is made by the measured time boundary that separates background from
+ * interactive, never by `structured` alone.
  */
+const describeCalls = (group: readonly WireRow[]): Record<string, unknown> => {
+  const durations = group.map((row) => row.durationMs);
+  const aborted = group.filter((row) => row.aborted === true).length;
+  const sum = (pick: (row: WireRow) => number | undefined): number | null => {
+    const values = group.flatMap((row) => {
+      const value = pick(row);
+      return value === undefined ? [] : [value];
+    });
+    return values.length === 0 ? null : values.reduce((total, value) => total + value, 0);
+  };
+  return {
+    attempts: group.length,
+    failed: group.filter((row) => row.status >= 400).length,
+    // Issued, consumed provider time, and produced nothing. This is the
+    // number that shows whether the extraction path is viable at all.
+    aborted,
+    abortedMs: Math.round(
+      group.filter((row) => row.aborted === true).reduce((total, row) => total + row.durationMs, 0),
+    ),
+    // For a STREAMED row this is time-to-headers, not the full call. On the
+    // measured Ollama/native route BOTH dialogue calls are unstreamed
+    // (`streamed: false`, and the wire duration matches the provider's own
+    // `total_duration`), so the wire row is the authoritative full-call
+    // duration. The client's span `totalMs` is reported alongside it because
+    // the two disagree for structured calls — see the report.
+    medianMs: durations.length === 0 ? null : Math.round(median(durations) as number),
+    minMs: durations.length === 0 ? null : Math.round(Math.min(...durations)),
+    maxMs: durations.length === 0 ? null : Math.round(Math.max(...durations)),
+    // Every aborted row is one discarded request, so `attempts - aborted` is the
+    // most a client could possibly have obtained. A viable path is one where
+    // this is close to `attempts`.
+    completed: group.length - aborted,
+    promptTokens: sum((row) => row.promptTokens),
+    completionTokens: sum((row) => row.completionTokens),
+    // `null` where the provider reported none. A zero would assert the phase
+    // took no time, which is a claim about a counter the provider never sent.
+    modelLoadMs: sum((row) => row.modelLoadMs),
+    prefillMs: sum((row) => row.prefillMs),
+    generationMs: sum((row) => row.generationMs),
+    providerTotalMs: sum((row) => row.providerTotalMs),
+    // Whether the request carried the reasoning control, counted rather than
+    // assumed — the #382 contention re-measurement is only valid if the #415
+    // envelope fix is actually active in the calls being measured.
+    withThinkFalse: group.filter((row) => row.thinkField === false).length,
+    withReasoningEffort: group.filter((row) => typeof row.reasoningEffortField === 'string').length,
+    withNoReasoningField: group.filter(
+      (row) => row.thinkField === undefined && row.reasoningEffortField === undefined,
+    ).length,
+  };
+};
+
 const summarizeByCall = async (
   wire: WireWindow,
   from: number,
 ): Promise<Record<string, unknown>> => {
   const slice = wire.slice(from);
   await slice.settle();
-  const rows = slice.rows() as ReadonlyArray<{
-    readonly structured: boolean;
-    readonly durationMs: number;
-    readonly status: number;
-    readonly aborted?: boolean;
-    readonly promptTokens?: number;
-    readonly completionTokens?: number;
-  }>;
-  const describe = (group: typeof rows) => {
-    const durations = group.map((row) => row.durationMs);
-    const aborted = group.filter((row) => row.aborted === true).length;
-    return {
-      attempts: group.length,
-      failed: group.filter((row) => row.status >= 400).length,
-      // Issued, consumed provider time, and produced nothing. This is the
-      // number that shows whether the extraction path is viable at all.
-      aborted,
-      abortedMs: Math.round(
-        group
-          .filter((row) => row.aborted === true)
-          .reduce((total, row) => total + row.durationMs, 0),
-      ),
-      totalMs: Math.round(durations.reduce((total, value) => total + value, 0)),
-      minMs: durations.length === 0 ? null : Math.round(Math.min(...durations)),
-      maxMs: durations.length === 0 ? null : Math.round(Math.max(...durations)),
-      completionTokens: group.reduce((total, row) => total + (row.completionTokens ?? 0), 0),
-      promptTokens: group.reduce((total, row) => total + (row.promptTokens ?? 0), 0),
-      // Every aborted row is one discarded request, so `attempts - aborted` is
-      // the most a client could possibly have obtained. A viable path is one
-      // where this is close to `attempts`.
-      completed: group.length - aborted,
-    };
-  };
+  const rows = slice.rows() as readonly WireRow[];
   return {
-    narrative: describe(rows.filter((row) => row.structured !== true)),
-    extraction: describe(rows.filter((row) => row.structured === true)),
+    narrative: describeCalls(rows.filter((row) => row.structured !== true)),
+    extraction: describeCalls(rows.filter((row) => row.structured === true)),
   };
 };
 
@@ -189,6 +324,10 @@ export const runProductionDialogueScenario = async (options: {
     byCall: await summarizeByCall(options.wire, from),
     extractionOutcome: {
       turns: turns.length,
+      // `generateTurn` deliberately rethrows provider failures, so a turn can be
+      // absent rather than slow. Counted here rather than aborting the run: on
+      // this path a rejected turn is the outcome a player sees.
+      turnsFailedOutright: turns.filter((turn) => turn.turnFailed === true).length,
       observed: turns.length - unobservable,
       unobservable,
       degraded: turns.filter((turn) => turn.extractionDegraded === true).length,
@@ -217,132 +356,645 @@ export const runProductionDialogueScenario = async (options: {
   };
 };
 
-/** One A/B sample: a quiet turn, then a turn overlapping the real burst. */
-const runContentionSample = async (options: {
+// ── P2: MAP_LOADED prefetch contention, swept by burst width ───────────────
+
+/**
+ * One measured sample: prepare memory, optionally fire the real burst, then run
+ * one real dialogue turn.
+ *
+ * Three boundaries are recorded, all on the HARNESS clock, and each answers a
+ * different question:
+ *
+ *   - `windowFrom` — where the sample's wire window opens.
+ *   - `dialogueStart` — taken as late as possible before the turn is issued.
+ *   - `dialogueRequestAt` — the START of the dialogue's first provider request,
+ *     read back off the wire.
+ *
+ * The third is the one contention is actually about. The first two are both
+ * harness-side approximations that sit either side of a `page.evaluate` round
+ * trip, so using either of them would overstate how much background work was
+ * still running when the provider began serving the player.
+ */
+const runWidthSample = async (options: {
   readonly page: Page;
   readonly wire: WireWindow;
   readonly playerLine: string;
-  readonly npcIds: readonly string[];
+  readonly npcPool: readonly string[];
   readonly npcNames: Readonly<Record<string, string>>;
-  readonly index: number;
-}): Promise<{ quiet: Record<string, unknown>; overlapped: Record<string, unknown> }> => {
-  // Every repetition needs remembered NPCs with missing openers. Restore the
-  // snapshot outside the measured window; a digest would create fresh openers
-  // and suppress the very prefetch work this scenario is meant to measure.
+  readonly width: number;
+  readonly orderIndex: number;
+  readonly backgroundCapMs: number;
+  readonly frames: FrameProbe | undefined;
+}): Promise<Record<string, unknown>> => {
+  const label = `P3 sample ${options.orderIndex + 1} (width ${options.width})`;
+
+  // 🔴 Memory is restored for the WHOLE pool before EVERY sample, whatever the
+  // width, and through the production `hydrate` path.
+  //
+  // Two separate mistakes are being avoided here. `recordConversation` awaits a
+  // digest that creates a FRESH opener, after which `prefetchForNpcs` skips that
+  // NPC as not-stale — which is how an earlier "contention" run measured an
+  // empty condition. And hydrating only `width` NPCs would give the dialogue
+  // turn different NPC memory at different widths, so the width would be
+  // confounded with the turn's own context. Hydrating the whole pool every time
+  // makes the dialogue turn's inputs identical at every width, and leaves the
+  // burst as the only variable.
   await options.wire.prepareBurst(options.page, {
-    npcIds: options.npcIds,
+    npcIds: options.npcPool,
     npcNames: options.npcNames,
   });
 
-  const quietFrom = options.wire.mark();
-  const quiet = await recordTurn(
+  // Opened BEFORE the burst is dispatched, so a background call that is
+  // dispatched and settles inside the same tick is still inside the window.
+  const spanCursor = await options.wire.telemetryCursor(options.page);
+  const windowFrom = options.wire.mark();
+
+  let candidates = 0;
+  let dispatchMs = 0;
+  if (options.width > 0) {
+    const burst = await options.wire.runBurst(options.page, {
+      npcIds: options.npcPool.slice(0, options.width),
+    });
+    candidates = burst.candidates;
+    dispatchMs = burst.dispatchMs;
+  }
+
+  const dialogueStart = performance.now();
+  // Sampled across the turn only, so the window is the same length at every
+  // width. A probe window that grew with the background burst would compare
+  // frame cadences over different amounts of time.
+  await options.frames?.reset(options.page);
+  const turn = await recordTurn(options.page, options.wire, options.playerLine, label);
+  const frameResult = await options.frames?.read(options.page);
+
+  // The burst is fire-and-forget, so it is waited out AFTER the interactive
+  // measurement. Waiting before would have measured a background burst that had
+  // already finished.
+  const backgroundSpans = await options.wire.settleBackground(
     options.page,
-    options.wire,
-    options.playerLine,
-    `P2 quiet turn ${options.index + 1}`,
-  );
-  quiet.wire = await options.wire.summarize(quietFrom);
-
-  // 🔴 The burst's actual fan-out is COUNTED, never assumed from the number of
-  // NPCs handed in. `prefetchForNpcs` returns void and dedupes, rate-limits
-  // and staleness-gates internally, so a sample can easily contain no burst at
-  // all — which is exactly what a first attempt did, silently averaging an
-  // empty condition into a latency statistic.
-  //
-  // The count comes from the EXISTING client telemetry, counted by `task`:
-  // summarization spans are the NPC opener refreshes and nothing else issues
-  // that task on this path. Counting spans rather than wire rows is what makes
-  // it exact — a wire count could not tell a background call from a dialogue
-  // call in the same window.
-  const summarizationBefore = await options.wire.countSpans(options.page, 'summarization');
-
-  const burstFrom = options.wire.mark();
-  const dispatch = await options.wire.runBurst(options.page, {
-    npcIds: options.npcIds,
-  });
-  // Captured on the same clock as the wire rows, so background requests can be
-  // separated from dialogue requests by a measured boundary rather than by
-  // guessing from ordering.
-  const dialogueBoundary = performance.now();
-
-  const overlapped = await recordTurn(
-    options.page,
-    options.wire,
-    options.playerLine,
-    `P2 overlapped turn ${options.index + 1}`,
+    'summarization',
+    spanCursor,
+    options.width,
+    options.backgroundCapMs,
   );
 
-  // The burst is fire-and-forget, so its remaining calls may not have landed in
-  // the telemetry yet. Waiting for them is AFTER the interactive measurement,
-  // so it cannot contaminate the dialogue timing.
-  const backgroundRequests = await options.wire.awaitSummarizationSpans(
-    options.page,
-    summarizationBefore,
-  );
+  // Settle the window so every response body has been read and enriched before
+  // anything is counted. Reading before this is what previously produced rows
+  // with no token accounting at all.
+  await options.wire.slice(windowFrom).settle();
+  const rows = options.wire.rowsFrom(windowFrom);
 
-  const backgroundRows = options.wire.rowsBefore(burstFrom, dialogueBoundary);
+  // The dialogue's first provider request, on the same clock as every wire row.
+  // `performance.now()` in the PAGE and in the NODE process are unrelated, so
+  // the page-side probe clock is used only for durations WITHIN the turn.
+  const firstDialogueRow = rows.find((row) => row.startedAtMs >= dialogueStart);
+  const dialogueRequestAt = firstDialogueRow?.startedAtMs;
+  const splitAt = dialogueRequestAt ?? dialogueStart;
+
+  const backgroundRows = rows.filter(
+    (row) => row.startedAtMs >= windowFrom && row.startedAtMs < splitAt,
+  );
+  const dialogueRows = rows.filter((row) => row.startedAtMs >= splitAt);
+
+  // The overlap proof: background work that was still executing at the moment
+  // the provider started serving the player's turn. A background call that
+  // finished before this point is NOT contention and is counted as such.
   const stillRunning = backgroundRows.filter(
-    (row) => row.startedAtMs + row.durationMs > dialogueBoundary,
+    (row) => row.startedAtMs + row.durationMs > splitAt,
   ).length;
 
-  overlapped.burstDispatchMs = Math.round(dispatch.dispatchMs);
-  overlapped.burstCandidates = dispatch.candidates;
-  overlapped.backgroundSummarizationRequests = backgroundRequests;
-  overlapped.backgroundRequestsStillRunningAtDialogueStart = stillRunning;
-  overlapped.wire = await options.wire.summarize(burstFrom);
-  // A sample with no background work is not a contention measurement. It is
-  // recorded as invalid rather than averaged in, so a burst that silently stops
-  // happening cannot masquerade as evidence of no harm.
-  overlapped.valid = backgroundRequests > 0;
-  overlapped.invalidReason =
-    backgroundRequests > 0
-      ? undefined
-      : `no summarization spans were recorded, so this sample contains no burst (${dispatch.candidates} NPCs were offered and all were skipped)`;
-  return { quiet, overlapped };
+  const spans = await options.wire.spansAfter(options.page, spanCursor);
+  const spansFor = (task: string): readonly ClientSpan[] => spans.filter((s) => s.task === task);
+
+  const narrativeSpans = spansFor('dialogue');
+  const extractionSpans = spansFor('envelope');
+  const backgroundClientSpans = spansFor('summarization');
+
+  const invalidReasons: string[] = [];
+  if (options.width === 0) {
+    if (backgroundRows.length > 0 || backgroundSpans > 0) {
+      invalidReasons.push(
+        `the width-0 control produced background work (${String(backgroundRows.length)} wire ` +
+          `requests, ${String(backgroundSpans)} client spans)`,
+      );
+    }
+  } else {
+    // 🔴 Fan-out is COUNTED, never inferred from the candidates offered. A
+    // width-N sample that produced fewer than N real calls is not a
+    // contention measurement, so it is recorded as invalid rather than
+    // averaged into a latency statistic.
+    if (backgroundSpans < options.width) {
+      invalidReasons.push(
+        `only ${String(backgroundSpans)} of ${String(options.width)} intended summarization ` +
+          'calls were recorded by the client',
+      );
+    }
+    if (backgroundRows.length < options.width) {
+      invalidReasons.push(
+        `only ${String(backgroundRows.length)} of ${String(options.width)} summarization ` +
+          'requests reached the provider',
+      );
+    }
+  }
+
+  const turnRecord = turn as Record<string, unknown>;
+  return {
+    orderIndex: options.orderIndex,
+    width: options.width,
+    npcsInPool: options.npcPool.length,
+    npcsOffered: options.width,
+    burstCandidates: candidates,
+    burstDispatchMs: Math.round(dispatchMs),
+    dialogueStartMs: Math.round(dialogueStart),
+    dialogueFirstProviderRequestMs:
+      dialogueRequestAt === undefined ? null : Math.round(dialogueRequestAt - windowFrom),
+
+    // ── Overlap proof: two independent sources, both required to agree ──
+    backgroundProviderRequests: backgroundRows.length,
+    backgroundClientSpans: backgroundSpans,
+    backgroundRequestsStillRunningAtDialogueStart: stillRunning,
+    overlapped: stillRunning > 0,
+
+    // ── Background work ──
+    background: {
+      ...describeCalls(backgroundRows),
+      // Per-call start/finish, so throughput and overlap are auditable rather
+      // than inferred from a median.
+      calls: backgroundRows.map((row, index) => ({
+        index,
+        startedMs: Math.round(row.startedAtMs - windowFrom),
+        durationMs: Math.round(row.durationMs),
+        status: row.status,
+        aborted: row.aborted === true,
+        streamed: row.streamed,
+        promptTokens: row.promptTokens ?? null,
+        completionTokens: row.completionTokens ?? null,
+        modelLoadMs: row.modelLoadMs ?? null,
+        prefillMs: row.prefillMs ?? null,
+        generationMs: row.generationMs ?? null,
+      })),
+      // The client's own per-call durations, for the same work.
+      clientCalls: backgroundClientSpans.map((span) => ({
+        id: span.id,
+        totalMs: span.totalMs ?? null,
+        ok: span.ok ?? null,
+        errorCode: span.errorCode ?? null,
+        promptTokens: span.promptTokens ?? null,
+        completionTokens: span.completionTokens ?? null,
+        tokenSource: span.tokenSource ?? null,
+        cacheLayer: span.cacheLayer ?? null,
+        queueDepth: span.queueDepth ?? null,
+        provider: span.provider ?? null,
+        model: span.model ?? null,
+      })),
+      // Wall clock from the first background request to the last one to finish:
+      // the burst's own throughput, which a per-call median cannot express.
+      spanMs:
+        backgroundRows.length === 0
+          ? null
+          : Math.round(
+              Math.max(...backgroundRows.map((row) => row.startedAtMs + row.durationMs)) -
+                Math.min(...backgroundRows.map((row) => row.startedAtMs)),
+            ),
+    },
+
+    // ── Interactive dialogue ──
+    turn: turnRecord,
+    frames: frameResult ?? {
+      note: 'frame probe not installed; frame-time effect remains unmeasured',
+    },
+    dialogue: {
+      providerRequests: dialogueRows.length,
+      // The client's own per-call view, which — unlike the wire row for a
+      // streamed narrative — covers the WHOLE call.
+      narrative: narrativeSpans.map((span) => ({
+        id: span.id,
+        totalMs: span.totalMs ?? null,
+        ttftMs: span.ttftMs ?? null,
+        promptTokens: span.promptTokens ?? null,
+        completionTokens: span.completionTokens ?? null,
+        tokenSource: span.tokenSource ?? null,
+        ok: span.ok ?? null,
+        errorCode: span.errorCode ?? null,
+        cacheLayer: span.cacheLayer ?? null,
+        provider: span.provider ?? null,
+        model: span.model ?? null,
+      })),
+      extraction: extractionSpans.map((span) => ({
+        id: span.id,
+        totalMs: span.totalMs ?? null,
+        promptTokens: span.promptTokens ?? null,
+        completionTokens: span.completionTokens ?? null,
+        tokenSource: span.tokenSource ?? null,
+        ok: span.ok ?? null,
+        errorCode: span.errorCode ?? null,
+        deadlineExceeded: span.deadlineExceeded ?? null,
+        deadlineRemainingMs: span.deadlineRemainingMs ?? null,
+        cacheLayer: span.cacheLayer ?? null,
+        provider: span.provider ?? null,
+        model: span.model ?? null,
+      })),
+      byCall: {
+        narrative: describeCalls(dialogueRows.filter((row) => row.structured !== true)),
+        extraction: describeCalls(dialogueRows.filter((row) => row.structured === true)),
+      },
+    },
+
+    valid: invalidReasons.length === 0,
+    invalidReason: invalidReasons.length === 0 ? null : invalidReasons.join('; '),
+  };
 };
 
-/** Runs the MAP_LOADED prefetch contention A/B. */
-export const runPrefetchContentionScenario = async (options: {
-  readonly page: Page;
-  readonly wire: WireWindow;
-  readonly playerLine: string;
-  readonly repetitions: number;
-  readonly npcIds: readonly string[];
-  readonly npcNames: Readonly<Record<string, string>>;
-}): Promise<Record<string, unknown>> => {
-  const quietTurns: Record<string, unknown>[] = [];
-  const overlappedTurns: Record<string, unknown>[] = [];
-  for (let index = 0; index < options.repetitions; index++) {
-    const sample = await runContentionSample({
+/**
+ * Builds the measurement order: a fixed counterbalanced sequence.
+ *
+ * `repetitionsPerWidth` is PER WIDTH, so the total is
+ * `widths.length * repetitionsPerWidth`. Reading it as a total is how an
+ * earlier draft of this harness reported n=4 per width while claiming n=16.
+ *
+ * A repeated Latin-square rotation, so within every block of `widths.length`
+ * samples each width appears exactly once and each width's POSITION in the
+ * block advances by one. Every width therefore runs in every ordinal position
+ * the same number of times, which is what stops "the control is always first"
+ * from being a permanent confound on a machine that warms up or throttles.
+ *
+ * Deterministic, not random: a randomised order would be defensible only if
+ * the seed were recorded, and a recorded deterministic order is easier to
+ * re-run and to reason about.
+ */
+export const buildWidthOrder = (
+  widths: readonly number[],
+  repetitionsPerWidth: number,
+): readonly number[] => {
+  const order: number[] = [];
+  const total = widths.length * repetitionsPerWidth;
+  for (let block = 0; block * widths.length < total; block++) {
+    const shift = block % widths.length;
+    for (let index = 0; index < widths.length; index++) {
+      const width = widths[(index + shift) % widths.length];
+      if (width !== undefined) {
+        order.push(width);
+      }
+    }
+  }
+  return order.slice(0, total);
+};
+
+// ── Per-width aggregation ──────────────────────────────────────────────────
+//
+// Split into named steps rather than one wide return object: a width's latency,
+// its background counts and its turn outcomes are three different questions, and
+// each reads on its own.
+
+type Sample = Record<string, unknown>;
+
+/** The turn record, whether it succeeded or the provider failed outright. */
+const turnOf = (sample: Sample): Record<string, unknown> =>
+  (sample.turn ?? {}) as Record<string, unknown>;
+
+/** `true` when `generateTurn` rejected instead of returning a turn. */
+const turnFailed = (sample: Sample): boolean => turnOf(sample).turnFailed === true;
+
+const dialogueOf = (sample: Sample): Record<string, unknown> =>
+  (sample.dialogue ?? {}) as Record<string, unknown>;
+
+const backgroundOf = (sample: Sample): Record<string, unknown> =>
+  (sample.background ?? {}) as Record<string, unknown>;
+
+const framesOf = (sample: Sample): Record<string, unknown> =>
+  (sample.frames ?? {}) as Record<string, unknown>;
+
+/** `{ median, min, max, n }` for a list of observed values. */
+const range = (values: readonly number[]): Record<string, unknown> => ({
+  median: values.length === 0 ? null : Math.round(median(values) as number),
+  min: values.length === 0 ? null : Math.round(Math.min(...values)),
+  max: values.length === 0 ? null : Math.round(Math.max(...values)),
+  n: values.length,
+});
+
+/** Every sample's value for a key, skipping samples that observed none. */
+const observed = (
+  samples: readonly Sample[],
+  pick: (sample: Sample) => unknown,
+): readonly number[] =>
+  samples.flatMap((sample) => {
+    const value = pick(sample);
+    return typeof value === 'number' ? [value] : [];
+  });
+
+/** One of the client's own per-call spans for a dialogue call. */
+const clientCall = (sample: Sample, branch: 'narrative' | 'extraction', key: string): unknown => {
+  const calls = (dialogueOf(sample)[branch] ?? []) as readonly Record<string, unknown>[];
+  return calls[0]?.[key];
+};
+
+/**
+ * Per-sample WIRE duration for one dialogue call.
+ *
+ * The client's own span `totalMs` is reported next to it, never used for it:
+ * `extractStructure` records `start: performance.now()` AFTER its await, so
+ * every structured span in the client's buffer carries `totalMs: 0`. Reading
+ * per-call latency from there would report a 17 s background summarization as
+ * instantaneous. The disagreement is preserved in the sample so the defect
+ * stays visible instead of being quietly worked around.
+ */
+const wireCallMs = (sample: Sample, branch: 'narrative' | 'extraction'): unknown => {
+  const byCall = (dialogueOf(sample).byCall ?? {}) as Record<string, unknown>;
+  const record = byCall[branch] as Record<string, unknown> | undefined;
+  return record?.medianMs;
+};
+
+/** Latency, tokens and frame-cadence distributions for one width. */
+const widthLatency = (samples: readonly Sample[]): Record<string, unknown> => {
+  const succeeded = samples.filter((sample) => !turnFailed(sample));
+  return {
+    ttft: range(observed(succeeded, (sample) => turnOf(sample).ttftMs)),
+    // Wall clock of the turns that RETURNED. A turn that threw has a wall clock
+    // too, but it is the time to give up rather than the time a player waited for
+    // a reply; mixing the two would let a hard failure flatter the median.
+    wall: range(observed(succeeded, (sample) => turnOf(sample).wallClockMs)),
+    wallIncludingFailures: range(observed(samples, (sample) => turnOf(sample).wallClockMs)),
+    turnFailures: samples.filter(turnFailed).length,
+    /** How long a player waited before the turn failed outright. */
+    timeToFailureMs: range(
+      observed(samples.filter(turnFailed), (sample) => turnOf(sample).wallClockMs),
+    ),
+    backgroundCallsPerSample: range(
+      observed(samples, (sample) => sample.backgroundProviderRequests),
+    ),
+    backgroundLatency: range(observed(samples, (sample) => backgroundOf(sample).medianMs)),
+    /** First background request start to last background request finish. */
+    backgroundBurstSpan: range(observed(samples, (sample) => backgroundOf(sample).spanMs)),
+    narrativeTotalMs: range(observed(samples, (sample) => wireCallMs(sample, 'narrative'))),
+    extractionTotalMs: range(observed(samples, (sample) => wireCallMs(sample, 'extraction'))),
+    narrativeTtftMs: range(
+      observed(samples, (sample) => clientCall(sample, 'narrative', 'ttftMs')),
+    ),
+    // The client's own reported durations for the same two calls. Kept because
+    // they disagree with the wire: `totalMs` is 0 for every structured call.
+    clientSpanNarrativeTotalMs: range(
+      observed(samples, (sample) => clientCall(sample, 'narrative', 'totalMs')),
+    ),
+    clientSpanExtractionTotalMs: range(
+      observed(samples, (sample) => clientCall(sample, 'extraction', 'totalMs')),
+    ),
+    // Main-thread cadence over the turn window. See the frame-probe module for
+    // what that does and does not measure.
+    frameMedianMs: range(observed(samples, (sample) => framesOf(sample).frameMedianMs)),
+    frameMaxMs: range(observed(samples, (sample) => framesOf(sample).frameMaxMs)),
+    slowFrames: range(observed(samples, (sample) => framesOf(sample).slowFrames)),
+    longTaskCount: range(observed(samples, (sample) => framesOf(sample).longTaskCount)),
+    longTaskTotalMs: range(observed(samples, (sample) => framesOf(sample).longTaskTotalMs)),
+  };
+};
+
+/** How much background work a width actually produced. */
+const widthBackgroundCounts = (samples: readonly Sample[]): Record<string, unknown> => {
+  const sumBackground = (key: string): number =>
+    samples.reduce((total, sample) => {
+      const value = backgroundOf(sample)[key];
+      return total + (typeof value === 'number' ? value : 0);
+    }, 0);
+  const sum = (key: string): number =>
+    samples.reduce((total, sample) => total + Number(sample[key] ?? 0), 0);
+  return {
+    backgroundProviderRequests: sumBackground('attempts'),
+    backgroundClientSpans: sum('backgroundClientSpans'),
+    backgroundRequestsStillRunningAtDialogueStart: sum(
+      'backgroundRequestsStillRunningAtDialogueStart',
+    ),
+    backgroundFailures: sumBackground('failed'),
+    backgroundAborts: sumBackground('aborted'),
+    backgroundPromptTokens: sumBackground('promptTokens'),
+    backgroundCompletionTokens: sumBackground('completionTokens'),
+    // Provider phase counters for the BACKGROUND work, summed per sample.
+    backgroundPrefillMs: sumBackground('prefillMs'),
+    backgroundGenerationMs: sumBackground('generationMs'),
+    backgroundLoadMs: sumBackground('modelLoadMs'),
+  };
+};
+
+/** One turn's outcome as 0/1 flags, so a width's turns can be summed. */
+const outcomeFlags = (sample: Sample): Record<string, number> => {
+  const turn = turnOf(sample);
+  const ids = Array.isArray(turn.choiceIds) ? (turn.choiceIds as readonly string[]) : [];
+  // The client's deterministic fallback is a fixed pair. A model that happened
+  // to author those same ids would be indistinguishable here, which is why the
+  // raw ids stay in the sample and this is not the only choice signal.
+  const isFallback = ids.length === 2 && ids[0] === 'talk' && ids[1] === 'leave';
+  const accepted = turn.extractionDegraded === false;
+  return {
+    accepted: accepted ? 1 : 0,
+    degraded: turn.extractionDegraded === true ? 1 : 0,
+    unobservable: turn.extractionDegraded === undefined ? 1 : 0,
+    aiAuthoredChoices: accepted && !isFallback ? 1 : 0,
+    deterministicFallbackChoices: isFallback ? 1 : 0,
+    commandExtracted: turn.commandExtracted === true ? 1 : 0,
+    commandDenied: turn.commandDenied === true ? 1 : 0,
+  };
+};
+
+/** Sums 0/1 outcome flags across a width's turns. */
+const sumOutcomeFlags = (outcomes: readonly Record<string, number>[]): Record<string, number> => {
+  const totals: Record<string, number> = { attempts: outcomes.length };
+  for (const [key, value] of Object.entries(outcomes[0] ?? {})) {
+    totals[key] = outcomes.reduce((sum, outcome) => sum + (outcome[key] ?? 0), 0);
+    void value;
+  }
+  // The precondition whitelist's own name, so the report does not have to know
+  // that the probe records it as `commandDenied`.
+  totals.commandDeniedByPreconditions = totals.commandDenied ?? 0;
+  return totals;
+};
+
+/** Extraction outcomes across a width's turns. */
+const widthOutcomes = (samples: readonly Sample[]): Record<string, unknown> => ({
+  extraction: sumOutcomeFlags(samples.map(outcomeFlags)),
+});
+
+/** Per-width aggregate, so a reader can compare widths without re-deriving. */
+const aggregateWidth = (width: number, samples: readonly Sample[]): Record<string, unknown> => ({
+  width,
+  samples: samples.length,
+  validSamples: samples.filter((sample) => sample.valid === true).length,
+  overlappedSamples: samples.filter((sample) => sample.overlapped === true).length,
+  ...widthBackgroundCounts(samples),
+  ...widthLatency(samples),
+  ...widthOutcomes(samples),
+});
+
+/**
+ * Measures one sample, or records why it could not be measured.
+ *
+ * One sample must never end the run. A rejected turn, a background settle that
+ * outlived its cap and an unexpected harness error are all outcomes to be
+ * recorded, because the run's honesty depends on reporting how many samples it
+ * actually got rather than quietly reporting the ones that worked.
+ */
+const measureOneSample = async (
+  options: {
+    readonly page: Page;
+    readonly wire: WireWindow;
+    readonly playerLine: string;
+    readonly npcPool: readonly string[];
+    readonly npcNames: Readonly<Record<string, string>>;
+    readonly backgroundCapMs: number;
+    readonly frames: FrameProbe | undefined;
+  },
+  width: number,
+  orderIndex: number,
+): Promise<Record<string, unknown>> => {
+  try {
+    return await runWidthSample({
       page: options.page,
       wire: options.wire,
       playerLine: options.playerLine,
-      npcIds: options.npcIds,
+      npcPool: options.npcPool,
       npcNames: options.npcNames,
-      index,
+      width,
+      orderIndex,
+      backgroundCapMs: options.backgroundCapMs,
+      frames: options.frames,
     });
-    quietTurns.push(sample.quiet);
-    overlappedTurns.push(sample.overlapped);
+  } catch (error: unknown) {
+    return {
+      orderIndex,
+      width,
+      sampleError: String(error).slice(0, 400),
+      valid: false,
+      invalidReason: `the harness could not complete this sample: ${String(error).slice(0, 200)}`,
+      turn: { turnFailed: true, ttftMs: undefined, wallClockMs: undefined },
+    };
   }
-  const invalid = overlappedTurns.filter((row) => row.valid !== true);
-  if (invalid.length > 0) {
-    // Failing loudly is the point: an underpowered or empty A/B must not be
-    // reported as a latency result. The run stops here rather than publishing
-    // a statistic built on samples that contained no contention.
-    throw new Error(
-      `P2 prefetch contention: ${invalid.length} of ${overlappedTurns.length} overlapped samples ` +
-        'recorded zero background summarization calls, so they measured no contention. ' +
-        `First failure: ${String(invalid[0]?.invalidReason ?? 'unknown')}`,
-    );
+};
+
+/** One console line per sample, carrying the overlap proof next to the latency. */
+const logSample = (sample: Record<string, unknown>, index: number, total: number): void => {
+  const turn = (sample.turn ?? {}) as Record<string, unknown>;
+  const position = `${String(index + 1).padStart(2)}/${String(total)}`;
+  const failed = turn.turnFailed === true ? 'FAILED' : 'ok';
+  const valid = sample.valid === true ? 'valid' : 'INVALID';
+  console.log(
+    `  [P2] #${position} width ${String(sample.width)} ` +
+      `ttft ${String(turn.ttftMs ?? 'n/a')} ms  ` +
+      `wall ${String(turn.wallClockMs ?? 'n/a')} ms  ` +
+      `bg reqs ${String(sample.backgroundProviderRequests ?? 0)}  ` +
+      `bg spans ${String(sample.backgroundClientSpans ?? 0)}  ` +
+      `in-flight ${String(sample.backgroundRequestsStillRunningAtDialogueStart ?? 0)}  ` +
+      `turn ${failed}  ${valid}`,
+  );
+};
+
+/**
+ * The order positions a resumed sweep still has to measure.
+ *
+ * 🔴 Named by POSITION, never by "everything after the first N".
+ *
+ * The checkpoint drops harness-error placeholders, so its length is NOT the
+ * number of completed positions. If a browser died at position 20 of 48, the
+ * prior set has 19 entries and a count-based skip re-measures 19 and leaves
+ * position 20 permanently empty — a silently short sweep that still reports a
+ * full total, and still reports a median over it.
+ */
+export const pendingOrderPositions = (
+  order: readonly number[],
+  priorSamples: readonly Record<string, unknown>[],
+): readonly number[] => {
+  const completed = new Set(priorSamples.map((sample) => Number(sample.orderIndex)));
+  return order.map((_, index) => index).filter((index) => !completed.has(index));
+};
+
+/**
+ * Runs the MAP_LOADED prefetch contention sweep.
+ *
+ * The question is whether the real background burst materially raises
+ * INTERACTIVE latency, and at what width it starts to. Width 0 is the control:
+ * the same turn, the same memory, no burst. Widths above 0 are the real
+ * `prefetchForNpcs` fan-out.
+ */
+export const runPrefetchWidthSweepScenario = async (options: {
+  readonly page: Page;
+  readonly wire: WireWindow;
+  readonly playerLine: string;
+  readonly npcPool: readonly string[];
+  readonly npcNames: Readonly<Record<string, string>>;
+  readonly widths: readonly number[];
+  /** Samples PER WIDTH. The total is `widths.length * repetitions`. */
+  readonly repetitions: number;
+  readonly backgroundCapMs: number;
+  readonly frames: FrameProbe | undefined;
+  /**
+   * Samples already measured by an earlier invocation of the SAME order.
+   *
+   * A width-4 burst can take minutes, and a long sweep can outlive whatever is
+   * running it. Checkpointing each sample as it lands means a truncated run
+   * still yields real data and can be continued, instead of throwing away half
+   * an hour of inference because the last sample did not fit. The order is
+   * regenerated from the same inputs and the prefix is skipped, so a resumed run
+   * is the SAME sequence, not a second experiment.
+   */
+  readonly priorSamples?: readonly Record<string, unknown>[];
+  /** Called after every sample, so the caller can persist it immediately. */
+  readonly onSample?: (sample: Record<string, unknown>) => void;
+}): Promise<Record<string, unknown>> => {
+  const order = buildWidthOrder(options.widths, options.repetitions);
+  const prior = options.priorSamples ?? [];
+  const pending = new Set(pendingOrderPositions(order, prior));
+  const samples: Record<string, unknown>[] = [...prior];
+  // A prior sample that was measured and found invalid is a RESULT, and has to
+  // reach the report. Seeding this from the resumed set keeps `invalidSamples`
+  // and `invalidReasons` describing the whole sweep rather than its last leg.
+  const invalid = prior.filter((sample) => sample.valid !== true);
+
+  for (const [index, width] of order.entries()) {
+    if (!pending.has(index)) {
+      continue;
+    }
+    const sample = await measureOneSample(options, width, index);
+    samples.push(sample);
+    options.onSample?.(sample);
+    if (sample.valid !== true) {
+      invalid.push(sample);
+    }
+    logSample(sample, index, order.length);
   }
+  // Sorted so the raw per-sample table reads in measurement order even when a
+  // resumed run re-measured positions out of sequence.
+  samples.sort((a, b) => Number(a.orderIndex) - Number(b.orderIndex));
+
+  // Aggregates are built from VALID samples only. An invalid sample did not
+  // produce the background load it claims, so including it would average a
+  // narrower burst into a wider one's median — the exact failure that made the
+  // first #413 run report a confident number for an empty condition.
+  const byWidth = options.widths.map((width) =>
+    aggregateWidth(
+      width,
+      samples.filter((sample) => sample.width === width && sample.valid === true),
+    ),
+  );
+
   return {
     description:
-      'A: dialogue alone. B: dialogue overlapping the real MAP_LOADED prefetch burst. ' +
-      'Background fan-out is COUNTED from client telemetry per sample, never assumed from ' +
-      'candidate NPC count. The question is whether the burst materially raises INTERACTIVE latency.',
+      'A real player dialogue turn at burst widths ' +
+      `${options.widths.join(' / ')} of the real MAP_LOADED prefetch burst. ` +
+      'Background fan-out is COUNTED per sample from both the client telemetry buffer and the ' +
+      'wire, never inferred from the number of NPCs offered. Width 0 is the control: the same ' +
+      'turn, the same NPC memory, no burst.',
+    measurementOrder: order,
+    measurementOrderKind: 'repeated Latin-square rotation (see buildWidthOrder)',
+    resumedFromPriorSamples: prior.length,
+    npcPool: options.npcPool,
+    productionPrefetchLimit: 'NPC_MEMORY_MAP_PREFETCH_LIMIT = 4',
+    backgroundCapMs: options.backgroundCapMs,
     wire: { providerRequests: 0, note: 'see per-sample rows' },
-    validSamples: overlappedTurns.length,
-    quietTurns,
-    overlappedTurns,
+    validSamples: samples.filter((sample) => sample.valid === true).length,
+    invalidSamples: invalid.length,
+    invalidReasons: invalid.map((sample) => ({
+      orderIndex: sample.orderIndex,
+      width: sample.width,
+      reason: sample.invalidReason,
+    })),
+    byWidth,
+    samples,
   };
 };
