@@ -2,6 +2,10 @@
   "name": "@aikami/frontend-ai-gateway",
   "license": "MIT",
   "main": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./decision": "./src/lib/decision/index.ts"
+  },
   "scripts": {
     "test": "bun test",
     "lint": "biome lint .",
