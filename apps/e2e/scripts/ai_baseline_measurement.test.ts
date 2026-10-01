@@ -208,3 +208,80 @@ describe('a resumed sweep re-measures by POSITION, not by count', () => {
     expect(pendingOrderPositions(order, prior)).toEqual([]);
   });
 });
+
+/**
+ * The renderer must survive every scenario shape the harness can produce.
+ *
+ * This is a regression, not a hypothetical: the residual experiment returns
+ * per-sample rows and NO aggregated wire summary, and `renderMarkdown` used to
+ * hand that missing summary straight to `renderWireTable`. The result was a
+ * TypeError thrown AFTER `report.json` had been written — so the measurement
+ * was intact and complete, and the only symptom was a missing `report.md` at
+ * the very end of a five-minute run. Silent in the sense that mattered: the
+ * numbers were fine and the artefact was gone.
+ */
+describe('renderMarkdown survives every scenario shape', () => {
+  const header = {
+    environment: { gitSha: 'abc', gitDescribe: 'v0', measuredAt: 'now' },
+    label: 'shape-test',
+  };
+
+  test('a scenario with no aggregated wire summary still renders', () => {
+    const markdown = renderMarkdown({
+      ...header,
+      scenarios: {
+        p3_residual_contention: {
+          description: 'residual',
+          samples: [
+            {
+              index: 0,
+              backgroundReachedProvider: true,
+              backgroundInFlightAtDialogueStart: 1,
+              backgroundProviderRequests: 1,
+              overlapped: true,
+              ttftMs: 21924,
+              wallClockMs: 28486,
+            },
+          ],
+          samplesMeasured: 1,
+          samplesWithBackgroundOnProvider: 1,
+          providerOverlapObserved: 1,
+          ttftMs: { count: 1, median: 21924, min: 21924, max: 21924 },
+          turnFailures: 0,
+        },
+      },
+    });
+
+    expect(markdown).toContain('### p3_residual_contention');
+    expect(markdown).toContain('21924');
+    // The per-sample table is the point of that scenario; losing it silently
+    // would be worse than losing the render.
+    expect(markdown).toContain('| sample | bg reached provider |');
+  });
+
+  test('a width-sweep scenario alongside a residual one renders both', () => {
+    const markdown = renderMarkdown({
+      ...header,
+      scenarios: {
+        sweep: {
+          description: 'sweep',
+          measurementOrder: [0, 1],
+          measurementOrderKind: 'repeated Latin-square',
+          validSamples: 0,
+          samples: [],
+          byWidth: [],
+        },
+        p3_residual_contention: {
+          description: 'residual',
+          samples: [],
+          samplesMeasured: 0,
+          samplesWithBackgroundOnProvider: 0,
+          providerOverlapObserved: 0,
+          turnFailures: 0,
+        },
+      },
+    });
+    expect(markdown).toContain('### sweep');
+    expect(markdown).toContain('### p3_residual_contention');
+  });
+});

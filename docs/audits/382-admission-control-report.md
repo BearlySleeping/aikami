@@ -446,6 +446,21 @@ Stated so the next reader does not have to discover them.
    1011 → 4047`). Verified by stashing this branch and re-running: same numbers,
    pre-existing, not introduced here.
 
+### A defect the run itself caught
+
+The Scenario B run wrote `report.json` and then crashed rendering `report.md`:
+`renderMarkdown` handed the residual scenario's **absent** aggregated wire
+summary straight to `renderWireTable`. The measurement data was complete and
+correct — every number in the Scenario B table above was read from that
+`report.json` — but the human-readable artefact was lost at the end of a
+five-minute run, which is exactly the kind of failure a reviewer would not
+notice unless they re-ran the command themselves.
+
+Fixed, with the residual scenario rendered as its own per-sample table, and
+pinned by two tests that fail against the previous renderer. The three saved
+runs now all render from their existing JSON, so no measurement was repeated to
+produce this fix.
+
 ---
 
 ## Reproducing

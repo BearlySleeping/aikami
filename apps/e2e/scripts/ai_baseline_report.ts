@@ -309,18 +309,61 @@ const renderWidthSweepRows = (scenario: Record<string, unknown>): string[] => {
   return lines;
 };
 
+/**
+ * Renders the already-running-background experiment.
+ *
+ * A deliberately forced ordering, reported on its own and never merged with the
+ * width sweep: these samples are the ones admission CANNOT protect, so they are
+ * the honest boundary of the mechanism rather than evidence for it.
+ */
+const renderResidualRows = (scenario: Record<string, unknown>): string[] => {
+  const samples = (scenario.samples ?? []) as Record<string, unknown>[];
+  const ttft = scenario.ttftMs as Record<string, number> | undefined;
+  return [
+    '',
+    `**${String(scenario.samplesWithBackgroundOnProvider ?? 0)} of ` +
+      `${String(scenario.samplesMeasured ?? 0)} samples had the background request proven ` +
+      'provider-in-flight before dialogue started;** provider overlap was observed in ' +
+      `${String(scenario.providerOverlapObserved ?? 0)}.`,
+    '',
+    `TTFT median (min–max): **${spreadCell(ttft)}**. Turns failed outright: ` +
+      `${String(scenario.turnFailures ?? 0)}.`,
+    '',
+    '| sample | bg reached provider | bg in-flight at dialogue start | bg wire requests | overlapped dialogue | TTFT (ms) | turn wall (ms) |',
+    '|---|---|---|---|---|---|---|',
+    ...samples.map(
+      (sample) =>
+        `| ${String(sample.index)} | ${String(sample.backgroundReachedProvider)} | ` +
+        `${String(sample.backgroundInFlightAtDialogueStart)} | ` +
+        `${String(sample.backgroundProviderRequests)} | ${String(sample.overlapped)} | ` +
+        `${ms(sample.ttftMs)} | ${ms(sample.wallClockMs)} |`,
+    ),
+  ];
+};
+
 export const renderMarkdown = (report: Record<string, unknown>): string => {
   const scenarios = report.scenarios as Record<string, Record<string, unknown>>;
   const lines: string[] = [...renderHeader(report), '', '## Scenarios', ''];
 
   for (const [id, scenario] of Object.entries(scenarios)) {
+    lines.push(`### ${id}`, '', `${String(scenario.description)}`, '');
+
+    // The residual experiment is its own shape: no aggregated wire summary,
+    // because its whole point is a per-sample comparison of one background
+    // request against one turn.
+    if (scenario.samples !== undefined && scenario.byWidth === undefined) {
+      lines.push(...renderResidualRows(scenario), '');
+      continue;
+    }
+
     // The width-sweep scenario aggregates per-width, so a single flat table
     // would be meaningless for it.
-    const isWidthSweep = scenario.byWidth !== undefined;
-    lines.push(`### ${id}`, '', `${String(scenario.description)}`, '');
-    if (!isWidthSweep) {
+    if (scenario.byWidth === undefined) {
+      const wire = scenario.wire as Record<string, unknown> | undefined;
+      if (wire !== undefined) {
+        lines.push(...renderWireTable(wire));
+      }
       lines.push(
-        ...renderWireTable(scenario.wire as Record<string, unknown>),
         ...renderClientRows(scenario.client as Record<string, unknown> | undefined),
         ...renderSizeRows(scenario.bySize as Record<string, unknown>[] | undefined),
         ...renderTurnRows(scenario.turns as Record<string, unknown>[] | undefined),
