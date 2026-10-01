@@ -87,19 +87,11 @@ describe('DEFAULT_TEXT_PARAMS', () => {
 });
 
 describe('reasoning preference is declared, not inferred', () => {
-  test('the opt-out list is exactly the tasks measured to be bounded extraction', () => {
-    // An opt-out is not a hunch; each entry here was measured ON THE PRODUCTION
-    // ROUTE with reasoning on vs off, per call site, before being added. See
-    // `docs/audits/382-context-reuse-report.md`.
-    //
-    //   `envelope`    — #415, C-401 call 2: 0/33 completed → 19/20.
-    //   `summarization` — this lane, n=3 per call site: opener refresh
-    //     14 233 → 7 991 ms (0/3 → 3/3 valid), npc digest 15 098 → 9 296 ms
-    //     (0/3 → 3/3), session summary 15 434 → 8 576 ms (1/3 → 3/3).
-    //
-    // Widening this list again needs its own measurement, not an inference
-    // from "background tasks are probably fine too" — the `agent-*` tasks are
-    // background and are deliberately NOT on it.
+  test('the opt-out list remains limited to envelope and summarization', () => {
+    // Preserve the existing opt-out list. The summarization P3 evidence used
+    // the wrong schemas and has been withdrawn pending a corrected provider
+    // measurement (docs/audits/382-context-reuse-report.md, section 3).
+    // Widening this list needs its own measurement.
     const optedOut = TEXT_TASKS.filter((task) => TEXT_TASK_PRESETS[task].reasoning === 'none');
     expect(optedOut).toEqual(['envelope', 'summarization']);
   });

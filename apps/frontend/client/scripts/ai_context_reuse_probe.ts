@@ -34,7 +34,14 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { NPC_MEMORY_LIMITS } from '@aikami/constants';
+import {
+  NpcMemoryDigestSchema,
+  NpcMemoryOpenerOutputSchema,
+  SessionSummaryOutputSchema,
+} from '@aikami/schemas';
 import type { NpcMemoryRecord } from '@aikami/types';
+import type { TSchema } from 'typebox';
+import { Value } from 'typebox/value';
 import {
   buildDigestSystemPrompt,
   buildDigestUserPrompt,
@@ -332,6 +339,7 @@ const runP2 = (): Record<string, unknown> => {
   samples.push({ atMs: 6 * 60_000 + 1_000, event: 'proximity' });
   samples.push({ atMs: 7 * 60_000, event: 'proximity' });
   samples.push({ atMs: 8 * 60_000, event: 'proximity' });
+  samples.sort((a, b) => a.atMs - b.atMs);
 
   const record = buildRecord();
   const worldFacts = [...WORLD_STATE_FACTS];
@@ -506,7 +514,7 @@ const backgroundTasks = (): Array<{
 const runNativeCall = async (options: {
   system: string;
   user: string;
-  schema: Record<string, unknown>;
+  schema: TSchema;
   think: boolean;
   numPredict: number;
 }): Promise<NativeCallResult> => {
@@ -547,10 +555,7 @@ const runNativeCall = async (options: {
     let valid = false;
     try {
       const parsed: unknown = JSON.parse(content);
-      valid =
-        typeof parsed === 'object' &&
-        parsed !== null &&
-        'opener' in (parsed as Record<string, unknown>);
+      valid = Value.Check(options.schema, parsed);
     } catch {
       valid = false;
     }
@@ -582,26 +587,11 @@ const runNativeCall = async (options: {
   }
 };
 
-const OPENER_SCHEMA: Record<string, unknown> = {
-  type: 'object',
-  properties: {
-    opener: { type: 'string' },
-    suggestions: {
-      type: 'array',
-      items: {
-        type: 'object',
-        properties: {
-          id: { type: 'string' },
-          label: { type: 'string' },
-          intentType: { type: 'string' },
-          prefillText: { type: 'string' },
-        },
-        required: ['id', 'label', 'prefillText'],
-      },
-    },
-  },
-  required: ['opener', 'suggestions'],
-};
+const BACKGROUND_SCHEMAS = {
+  digest: NpcMemoryDigestSchema,
+  opener: NpcMemoryOpenerOutputSchema,
+  summary: SessionSummaryOutputSchema,
+} as const satisfies Record<string, TSchema>;
 
 const runP3 = async (): Promise<Record<string, unknown>> => {
   const results: Array<NativeCallResult & { task: string; rep: number }> = [];
@@ -611,7 +601,7 @@ const runP3 = async (): Promise<Record<string, unknown>> => {
         const result = await runNativeCall({
           system: task.system,
           user: task.user,
-          schema: OPENER_SCHEMA,
+          schema: BACKGROUND_SCHEMAS[task.shape],
           think,
           numPredict: 400,
         });

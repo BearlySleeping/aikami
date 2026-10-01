@@ -91,7 +91,7 @@ describe('background world-state projection', () => {
     const facts = buildGameStateFacts({ npcId: 'nobody' });
     const before = facts.join('\n').length;
     const after = buildBackgroundWorldStateProjection(facts).join('\n').length;
-    expect(after).toBeLessThanOrEqual(before);
+    expect(after).toBeLessThan(before);
     expect(after).toBeGreaterThan(0);
   });
 });

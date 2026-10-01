@@ -9,15 +9,16 @@
 
 ## Headline
 
-Three changes, each measured on the pinned runtime before it was written:
+Three changes were originally reported below. Review found P3 used the wrong
+schemas and a property-presence check; its provider conclusions are withdrawn
+pending a successful corrected rerun (§3).
 
-1. **The `summarization` task now asks for no reasoning.** Measured per call
-   site, reasoning off is roughly **half the latency** and turns truncated,
-   schema-invalid output into valid output. This is the largest single win in
-   the lane.
+1. **The `summarization` task asks for no reasoning.** The preset is unchanged,
+   but the original latency and schema-validity evidence does not establish
+   its benefit for the three task-specific output shapes (§3).
 2. **A stale opener whose inputs have not changed is no longer re-asked of the
-   provider.** 2 of 2 refreshes issued in a 40-minute replay were re-asks of a
-   question whose answer the client already held.
+   provider.** 2 of 3 calls issued in the chronological 40-minute replay had
+   unchanged inputs; one followed a conversation and had changed inputs.
 3. **Background memory prompts stop carrying dialogue-only world facts, and the
    persona stops costing an O(manifest) walk.** The persona alone was
    32–46% of two background system prompts and was re-derived on every call.
@@ -47,10 +48,9 @@ bun run --cwd apps/frontend/client probe:ai-context-reuse -- --only p3 --reps 5
 
 Raw evidence (gitignored, regenerable): `.evidence/382-context-reuse/`.
 
-**Scope of every claim below:** one configuration, CPU-only, n=3 per cell
-where a cell is a provider measurement. A machine half this size will not
-reproduce 8 000 ms. Nothing here is a claim about a cloud provider, a GPU, or
-a different model.
+**Scope:** the environment table describes the original local measurements.
+Their P3 conclusions are withdrawn; the corrected sandbox rerun could not
+connect (§3). P1 and P2 are deterministic probes, not provider benchmarks.
 
 ---
 
@@ -108,7 +108,8 @@ provider saving — a provider is only paid for what it is sent, and re-deriving
 a string locally costs nothing at the wire. The report states it that way
 because conflating the two is how a "cache" gets credited with a saving it did
 not produce. The compiled-prompt cache removes the re-derivation; the provider
-saving in this lane comes from §3 and §4, which are different mechanisms.
+call saving in this replay comes from §4; provider savings in §3 await a
+corrected measurement.
 
 ### 2.3 Context a bounded background task was being handed
 
@@ -137,9 +138,8 @@ renderer:
 | digest (user) | 1 973 chars | 1 670 chars | **−303 (−15.4%)** |
 | opener refresh (user) | 2 190 chars | 1 887 chars | **−303 (−13.8%)** |
 
-5 of 8 facts kept, 3 dropped. In provider prompt tokens that is **−78 tokens
-per background call** (§3.3), which is small next to the reasoning result and
-is reported as small rather than folded into it.
+5 of 8 facts kept, 3 dropped. This deterministic character saving remains
+valid; provider token savings require the corrected measurement in §3.
 
 The classification matches on PREFIX, not on a whole string, so a new value of
 a known dialogue-only family is still dropped — and a fact nobody has seen is
@@ -166,101 +166,49 @@ them, so it is deterministic.
 
 ---
 
-## 3. Background request size (P3, provider) — the largest win
+## 3. Background request size (P3, provider) — corrected validation
 
-Measured on the production route, per call site, reasoning on vs off, **interleaved
-within each run** so that machine drift cannot be mistaken for a treatment
-effect. "Reasoning off" is recorded only when the response actually carries zero
-reasoning characters — a `200` is not a honoured field, and it is not treated as
-one.
+### 3.1 Original measurements withdrawn
 
-### 3.1 Two independent runs, and why only the ratio is quoted
+The original n=3 and n=5 runs sent an opener-only schema for **all three**
+tasks and accepted any parsed object with an `opener` property. They did not
+validate digest `summary`/`notes`, opener suggestions, or session-summary
+`synopsis`/`keyEvents`/`npcInteractions`. Their reported “schema-valid” counts
+are invalid, and the digest/summary latency and token measurements describe
+the wrong constrained output shape. The prior latency ratios and correctness
+conclusions are withdrawn; they cannot justify the shared preset.
 
-| task | metric | run 1 (n=3) | run 2 (n=5) |
-|---|---|---|---|
-| opener refresh | median ms, reasoning ON | 14 233 | **7 565** |
-| opener refresh | median ms, reasoning OFF | 7 991 | **4 232** |
-| NPC digest | median ms, reasoning ON | 15 098 | **7 973** |
-| NPC digest | median ms, reasoning OFF | 9 296 | **4 927** |
-| session summary | median ms, reasoning ON | 15 434 | **8 286** |
-| session summary | median ms, reasoning OFF | 8 576 | **3 616** |
+### 3.2 Corrected probe and rerun (2026-10-01)
 
-**Run 2 is ~1.9× faster in EVERY cell — including the control.** The
-`session-summary` prompt did not change at all between the runs (119 prompt
-tokens in both), and it still got 1.9× faster. That is machine state — thermal
-headroom, page cache, model residency — not anything this lane did.
+P3 selects its request schema from `task.shape`: `NpcMemoryDigestSchema`,
+`NpcMemoryOpenerOutputSchema`, or `SessionSummaryOutputSchema`. The summary
+schema matches the current session summary service's output contract. Every
+parsed completion must pass `Value.Check` against that same TypeBox schema.
+Missing fields, incorrect field types, and invalid suggestion chips fail.
 
-**So the absolute milliseconds are not comparable across runs, and no
-before/after latency claim is made from them.** What *is* comparable is the
-within-run ratio, because the two arms are interleaved and share the machine
-state:
-
-| task | reasoning OFF as a fraction of ON (run 1) | (run 2) |
-|---|---|---|
-| opener refresh | **0.56** | **0.56** |
-| NPC digest | **0.62** | **0.62** |
-| session summary | 0.56 | 0.44 |
-
-The ratio reproduces across two independent runs to within 0.01 on two of the
-three tasks. That is the finding: **turning the reasoning channel off roughly
-halves the wall-clock of all three bounded background tasks.**
-
-### 3.2 The stronger result is not latency at all — it is valid output
+Reran the corrected probe with `--only p3 --reps 3`, interleaving reasoning
+on/off for each task at `http://127.0.0.1:11434`, model `ornith-1.5:9b`:
 
 | task | reasoning ON | reasoning OFF |
 |---|---|---|
-| opener refresh | **0/3 valid**, 0/5 valid · 400 completion tokens (**the cap**) | **3/3 valid**, **5/5 valid** · 208 / 227 tokens |
-| NPC digest | **0/3 valid**, 0/5 valid · 400 completion tokens (**the cap**) | **3/3 valid**, **5/5 valid** · 258 / 252 tokens |
-| session summary | 1/3 valid, 2/5 valid · 400 completion tokens (**the cap**) | **3/3 valid**, **5/5 valid** · 255 / 159 tokens |
+| opener refresh | 0/3 HTTP successes; no completions | 0/3 HTTP successes; no completions |
+| NPC digest | 0/3 HTTP successes; no completions | 0/3 HTTP successes; no completions |
+| session summary | 0/3 HTTP successes; no completions | 0/3 HTTP successes; no completions |
 
-With reasoning on, **every cell saturates the 400-token cap** and the output is
-cut mid-object — the model spends its entire budget reasoning and returns
-truncated JSON. With reasoning off, **every cell is schema-valid at both n**, in
-roughly half the tokens.
+All 18 requests failed to connect: this sandbox has no Ollama listener at the
+configured endpoint. The probe wrote
+`.evidence/382-context-reuse/context-reuse-p3.json` and exited 0, but that is
+**not a successful provider measurement**. Validity rates, latency, token
+savings, and whether the provider honors `think: false` remain **unmeasured**
+with the corrected schemas. Aggregate zeroes for empty successful samples
+must not be read as zero latency or a measured 0% validity rate.
 
-This is not a latency optimisation with a quality trade-off. It is a
-**correctness** result: with reasoning on, these three tasks were mostly
-producing output the client had to discard, and the memory service's
-`failed`/`invalid-output` path was absorbing it.
-
-### 3.3 What the projection itself saved, in tokens
-
-Unlike §3.1, prompt-token counts are directly comparable across the runs because
-they are a property of the request, not of the machine:
-
-| prompt | before | after | saved |
-|---|---|---|---|
-| opener refresh (user) | 845 | 767 | **−78 tok (−9.2%)** |
-| NPC digest (user) | 984 | 906 | **−78 tok (−7.9%)** |
-| session summary | 119 | 119 | **0 — control** |
-
-The `session-summary` row is a deliberate control: that task does not read
-`buildGameStateFacts`, so the projection does not touch it, and it does not.
-The −78 tokens are exactly the 303 characters the projection removes (303/4 ≈
-76), which is the arithmetic the change predicts.
-
-### 3.4 Why the whole `summarization` role, and why that is safe here
-
-The brief forbids changing a shared preset globally for unrelated callers. The
-measurement resolves that: `summarization` has **exactly three callers** — the
-opener refresh, the NPC digest, and the session summary — and **all three are
-bounded mechanical JSON extraction**, all three measured above, none creative.
-There is no unrelated caller to protect.
-
-What is deliberately **not** touched: `dialogue`, `narration`, `combat-*`,
-`persona-create` and every `agent-*` task. The `agent-*` tasks are background
-and are intentionally left on the provider default — "background" is a
-scheduling class, not a statement that reasoning is waste, and widening to them
-would be an inference rather than a measurement.
-
-The preset test was updated to pin the opt-out list to `['envelope',
-'summarization']` with the measurements in the comment, so a third entry cannot
-be added by hunch.
-
-**Honest limit:** this is a local, CPU-only, single-model measurement. On a
-provider that does not declare a reasoning control the adapter emits nothing and
-the preference is ignored — which is the designed behaviour, not a silent
-failure.
+A successful rerun on the pinned runtime is still required before restoring
+claims about the reasoning preference. A synthetic native-response check passed 24 responses: task schemas were
+selected correctly, valid outputs passed, and missing fields, invalid nested
+types, and malformed JSON failed. This verifies probe behavior and cannot
+replace the provider measurement.
+The existing `summarization` preset is unchanged by this review fix.
 
 ---
 
@@ -275,17 +223,25 @@ A 40-minute replay (map loads every 30 s, one conversation, repeated proximity):
 | | |
 |---|---|
 | Samples considered | 86 |
-| Background calls issued | 2 |
-| …whose inputs were **byte-identical** to the call that produced the held opener | **2 (100%)** |
-| …whose inputs had genuinely changed | 0 |
+| Background calls issued | 3 |
+| …whose inputs were **byte-identical** to the call that produced the held opener | **2 (66.7%)** |
+| …whose inputs had genuinely changed | 1 |
+
+Chronological calls occur at 6:00 (conversation end, changed inputs), 21:30
+and 37:00 (unchanged inputs). Samples are sorted by `atMs` before replay.
 
 The opener now carries the fingerprint it was generated **against**, and a
-refresh whose fingerprint still matches re-dates the existing opener instead of
+refresh whose fingerprint and `forConversation` still match the current
+world and `conversationCount` re-dates the existing opener instead of
 re-asking. This is **not** a result cache: nothing a model produced is replayed.
 The existing greeting is still the right answer for the world it was written
 for.
 
-**Three properties that make it safe, each with a regression:**
+**Four properties that make it safe, each with a regression:**
+
+- **A different conversation still refreshes.** Matching world facts cannot
+  make an opener for an earlier conversation reusable. Re-dating preserves
+  the valid opener’s original `forConversation` value.
 
 - **A real world change still refreshes.** The fingerprint is compared, not the
   clock.
@@ -322,7 +278,7 @@ user-visible semantics and produce a real repeat-hit distribution.
 | opener refresh | The prompt deliberately embeds the **previous** greeting and instructs the model never to repeat it. A byte-identical repeat is not merely rare — it is **not the same request**, and replaying a stored opener would return the greeting the prompt was written to avoid. **Non-cacheable.** |
 | `agent-*` | Outside this lane's ownership and outside the measured paths. |
 
-The one task with a **100%** repeat-hit rate is the opener refresh — and that
+The opener path has **2/3 (66.7%)** unchanged-input calls in this replay — and that
 is precisely the task a result cache must **not** serve, for the reason above.
 The measurable repeat was real, but the right response to it was to stop
 asking (§4), not to store the answer.
@@ -358,9 +314,8 @@ numerical:**
    language, policy and acceptable latency — does not hold across NPCs.
 
 **Nothing shipped.** The honest statement is that fewer, smaller requests plus
-server-managed batching is the better trade, and §3's measured result
-(three background tasks each roughly halved by asking for less) is the same
-lesson at a smaller scale.
+server-managed batching is the better trade, while the reasoning-control benefit
+still requires the corrected provider measurement described in §3.
 
 ---
 
@@ -405,8 +360,9 @@ cache. It is reported as such, not as a measured token saving.
 
 ## 9. Tests
 
-Every regression below was confirmed to **fail on the original behaviour** by
-reverting the production file and re-running, not by inspection.
+The table below describes the original lane’s regression coverage. The review
+fix strengthens the equipment and production-fact assertions and adds a
+conversation-mismatch regression; current validation is recorded separately.
 
 | area | cases |
 |---|---|
@@ -416,9 +372,9 @@ reverting the production file and re-running, not by inspection.
 | Keys | persona/name/namespaces/ambiguous-boundary all distinct |
 | Memory service | background call builds **no** full projection; background prompt free of dialogue-only facts; an equipment change is not a world change; unchanged inputs are not re-asked; changed world still refreshes; fingerprint-less save refreshes; **suppression does not weaken in-flight revalidation**; opener stamped with its fingerprint |
 | Narrative prompt | stable blocks precede per-turn blocks; every section retained; stable prefix byte-identical across differing turns; empty action set renders; optional sections appear only when populated |
-| Task preset | the opt-out list is pinned to the two measured tasks, with the numbers in the comment |
+| Task preset | the existing opt-out list is pinned; comments now flag the withdrawn P3 evidence |
 
-**Executed** (each confirmed to run, not to no-op):
+**Historical lane checks** (not results of the review-fix rerun):
 
 | command | result |
 |---|---|
@@ -428,19 +384,32 @@ reverting the production file and re-running, not by inspection.
 | `bun moon run schemas:test --force` | **913 pass, 0 fail** |
 | `bun run scripts/src/lib/ops/run_guards.ts` | **10/10 passed** |
 
+### Review-fix validation (2026-10-01)
+
+- Client `test:unit` package script (with `AIKAMI_INCLUDE_DEV_ROUTES=true`):
+  **4,506 passed, 7 skipped, 2 todo, 0 failed** across 339 files, including
+  equipment-only refresh, conversation mismatch, and strict fact reduction.
+- `client:typecheck`: **0 errors, 0 warnings**.
+- `schemas:test`: **913 passed**; `constants:test`: **242 passed**.
+- Client, schema, and constants lint/format plus schema typecheck: **passed**.
+- Structural guards: **10/10 passed**; `git diff --check`: **passed**.
+- P2: **3 calls, 1 changed-input and 2 unchanged-input**; sorted call times checked.
+- P3 synthetic validation: **24 responses checked** (§3.2). Real provider
+  performance/quality validation remains **blocked** by the unavailable endpoint.
+
 ---
 
 ## 10. Acceptance matrix for #382
 
 | criterion | status |
 |---|---|
-| Reproducible before/after report with task latency, calls, tokens, cache behaviour, estimated/actual cost and quality | **Measured** — §3 gives before/after latency, completion tokens, prompt tokens and valid-output rate per call site; §7 states why no dollar figure is claimable |
+| Reproducible before/after report with task latency, calls, tokens, cache behaviour, estimated/actual cost and quality | **Blocked** — corrected P3 rerun had no successful provider responses; prior task-shape/validity claims withdrawn; §7 states why no dollar figure is claimable |
 | Explicit routing, disabled roles, privacy/cost settings honored on local, gateway, retry, batch and fallback paths | **Passed** — no routing, role, privacy or fallback path edited. `summarization` keeps `role: 'summarization'`; a provider that declares no reasoning control is sent nothing |
 | Deterministic engine authority preserved | **Passed** — no engine path touched; command legality, confirmation and precondition evaluation are unchanged and still run on every extracted command |
 | Player control and perception limits preserved | **Passed** — perception still comes from the witness service; §4's suppression reuses a greeting only for the world it was generated against |
 | No speculative parallel/provider race | **Passed** — no new concurrency. §6 rejects batching |
 | Caching/dedup only where measured | **Passed** — one cache shipped (§2), one proposal retired on measurement (§5) |
-| Summarization only where savings beat extra calls and quality loss | **Passed** — §3 ships the preset; no new summarization LLM call was added, and the projection makes each existing one smaller |
+| Summarization only where savings beat extra calls and quality loss | **Pending corrected measurement** — the preset remains, but §3 does not establish its quality or latency benefit; no new LLM call was added |
 | Required facts and provenance preserved | **Passed** — required facts are protected from the budget and any omission is named in the prompt text |
 | Combat prefetch tuning | **Not applicable** — no combat prefetch exists at this base and no new call-site evidence appeared |
 | A/B/C dependencies used unchanged | **Passed** — coalescing identity, admission, lifecycle and transport untouched |
@@ -459,22 +428,18 @@ evaluation.
 
 ## 11. Limitations and what is NOT claimed
 
-- **One configuration.** Ollama 0.34.3, `ornith-1.5:9b`, CPU-only. Provider
-  cells are n=3 and n=5 in two independent runs. No GPU, no cloud provider, no
-  second model.
-- **Absolute latencies are not comparable across runs.** The second run was
-  ~1.9× faster in every cell *including the unchanged control*, so only
-  within-run ratios and token counts are quoted (§3.1). Anyone reproducing this
-  should expect the same drift and must not compare their absolute numbers to
-  the table in §3.1.
+- **One configuration.** Ollama 0.34.3, `ornith-1.5:9b`, CPU-only. Original provider
+  cells were n=3 and n=5 with flawed schema selection and validation (§3). No
+  GPU, no cloud provider, no second model.
+- **Corrected provider results are unavailable.** All 18 rerun requests failed
+  to connect; no performance or output-quality comparison can be made (§3).
 - **No dollar figure.** Local inference is not billed; that is not a saving.
 - **Provider cached tokens are UNKNOWN** except on this runtime, and are never
   converted to money.
 - **No GPU preemption is claimed.** Aborting an HTTP request does not interrupt
-  a kernel. Nothing in §3 depends on cancellation; the win is asking for less.
-- **A passing mock proves a contract, not provider behaviour.** The §3 numbers
-  come from the real provider on the real route; the unit tests around them
-  prove the wiring, not the latency.
+  a kernel. The corrected P3 rerun establishes no inference savings.
+- **A passing mock proves a contract, not provider behaviour.** Schema checks
+  prove validation wiring; the real provider rerun remains blocked (§3).
 - **The §2.2 repetition is client cost, not provider cost**, and is labelled as
   such wherever it appears.
 - **§8's prefix benefit is latent.** Its realised value is a property of the

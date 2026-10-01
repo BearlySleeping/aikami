@@ -665,19 +665,21 @@ class NpcMemoryService
     // matches the one the opener in hand was generated against, then the memory
     // has not changed and the world has not changed, so the prompt would be
     // byte-identical to the one that produced the greeting the player already
-    // saw. Measured: 2 of 2 refreshes issued in a 40-minute replay were
+    // saw. Measured: 2 of 3 calls issued in a chronological 40-minute replay were
     // re-asks of an unchanged question. Re-asking is not free — it is a full
     // provider call whose answer is a second greeting for the same situation.
     //
     // It is NOT an exact-result cache. Nothing is replayed: the existing opener
     // simply stays, and is re-dated, because it is still the right answer for
     // the world it was generated against. A real world change still refreshes.
-    if (dispatchedAgainst === record.opener?.worldFingerprint) {
+    if (
+      record.opener?.forConversation === record.conversationCount &&
+      dispatchedAgainst === record.opener.worldFingerprint
+    ) {
       this.debug('refreshOpener:inputs-unchanged — re-dating instead of re-asking', { npcId });
       record.opener = {
         ...record.opener,
         generatedAt: Date.now(),
-        forConversation: record.conversationCount,
       };
       return 'applied';
     }

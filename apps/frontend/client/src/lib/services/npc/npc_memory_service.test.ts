@@ -681,15 +681,27 @@ describe('NpcMemoryService — context reuse', () => {
     // The fingerprint describes what the PROMPT consumed. If it described the
     // unprojected list, swapping a lantern for a rope would force a refresh
     // whose answer the model would give identically.
+    worldFacts = ['Gold: 5', 'Inventory: Lantern x1', 'Equipped: Lantern (main hand)'];
     await npcMemoryService.recordConversation({
       npcId: 'ivo',
       npcName: 'Ivo',
       messages: talk('Hello'),
     });
-    const before = recordOf('ivo')?.opener?.worldFingerprint;
-    expect(before).toBeDefined();
+    const original = openerOf('ivo');
+    const aged = { ...original, generatedAt: original.generatedAt - 60 * 60_000 };
+    npcMemoryService.hydrate({
+      campaignId: 'campaign_a',
+      records: { ivo: { ...recordOrFail('ivo'), opener: aged } },
+    });
+    await settleUntilIdle();
     worldFacts = ['Gold: 5', 'Inventory: Lantern x1', 'Equipped: Rope (main hand)'];
-    expect(recordOf('ivo')?.opener?.worldFingerprint).toBe(before);
+    extractStructure.mockClear();
+
+    npcMemoryService.prefetchByName('Ivo');
+    await settleUntilIdle();
+
+    expect(extractStructure).not.toHaveBeenCalled();
+    expect(openerOf('ivo').generatedAt).toBeGreaterThan(aged.generatedAt);
   });
 
   it('a stale opener whose inputs have not changed is NOT re-asked of the provider', async () => {
@@ -716,6 +728,33 @@ describe('NpcMemoryService — context reuse', () => {
     expect(extractStructure).not.toHaveBeenCalled();
     // The greeting the player already has is still the right one.
     expect(recordOf('ivo')?.opener?.text).toBe(aged.text);
+    expect(openerOf('ivo').forConversation).toBe(original.forConversation);
+    expect(openerOf('ivo').generatedAt).toBeGreaterThan(aged.generatedAt);
+  });
+
+  it('an opener for a previous conversation is refreshed even when the world is unchanged', async () => {
+    await npcMemoryService.recordConversation({
+      npcId: 'ivo',
+      npcName: 'Ivo',
+      messages: talk('Hello'),
+    });
+    const record = recordOrFail('ivo');
+    const original = openerOf('ivo');
+    npcMemoryService.hydrate({
+      campaignId: 'campaign_a',
+      records: { ivo: { ...record, conversationCount: record.conversationCount + 1 } },
+    });
+    await settleUntilIdle();
+    extractStructure.mockClear();
+    nextStructured = { opener: 'A greeting for our next conversation.', suggestions: [] };
+
+    npcMemoryService.prefetchByName('Ivo');
+    await settleUntilIdle();
+
+    expect(extractStructure).toHaveBeenCalledTimes(1);
+    expect(openerOf('ivo').text).toBe('A greeting for our next conversation.');
+    expect(openerOf('ivo').forConversation).toBe(record.conversationCount + 1);
+    expect(openerOf('ivo').worldFingerprint).toBe(original.worldFingerprint);
   });
 
   it('a stale opener whose world HAS changed is still refreshed', async () => {
