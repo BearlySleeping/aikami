@@ -8,15 +8,17 @@
 // checkpoint, are both STILL not readiness. Only a real answered decision whose
 // reconstructed value satisfies the original schema is.
 
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, spyOn, test } from 'bun:test';
 import Type from 'typebox';
 import {
+  createSystemOneDecisionAdapter,
   type DecisionAdapter,
   type DecisionAdapterResponse,
   type DecisionCapability,
   type DecisionReadinessVerdict,
+  type DecisionRequest,
   describeDecisionReadiness,
-  PROBE_SCHEMA,
+  PROBE_CONTEXT,
   probeDecisionBackend,
   redactEndpoint,
   redactReason,
@@ -27,7 +29,7 @@ import {
 const answeringAdapter = (
   overrides: {
     capability?: Partial<DecisionCapability>;
-    run?: (request: { context: string }) => DecisionAdapterResponse;
+    run?: (request: DecisionRequest) => DecisionAdapterResponse;
   } = {},
 ): DecisionAdapter => ({
   backendId: 'test-backend',
@@ -46,7 +48,7 @@ const answeringAdapter = (
     ...overrides.capability,
   }),
   run: async (request) =>
-    overrides.run?.({ context: request.unit.state }) ?? {
+    overrides.run?.(request) ?? {
       ok: true,
       // Answer the first choice question with its first option key.
       answers: request.unit.questions.map((question) => ({
@@ -100,21 +102,28 @@ describe('readiness requires an answered, schema-valid sample', () => {
     expect(verdict.observed?.checkpoint).toBe('test-checkpoint');
   });
 
-  test('readiness reports liveness, never correctness', async () => {
-    // The backend answers the WRONG option. It is still ready: it answered, and
-    // the value was legal. Quality is the measurement harness's business, and
-    // conflating the two is exactly how a health check gets reported as a
-    // quality result.
-    const adapter = answeringAdapter({
-      run: () => ({
-        ok: true,
-        answers: [{ questionKey: 'verdict', optionKey: 'not-a-real-key' }],
-        inferenceMs: 1,
-        queueMs: 0,
+  test.each([
+    ['halt', 'ready'],
+    ['not-a-real-key', 'sample-rejected'],
+  ])('readiness for option %s is %s', async (optionKey, state) => {
+    const verdict = await probeWith(
+      answeringAdapter({
+        run: (request) => ({
+          ok: true,
+          answers: [
+            {
+              questionKey: request.unit.questions[0]?.key ?? '',
+              optionKey:
+                request.unit.questions[0]?.options?.find((option) => option.value === optionKey)
+                  ?.key ?? optionKey,
+            },
+          ],
+          inferenceMs: 1,
+          queueMs: 0,
+        }),
       }),
-    });
-    const verdict = await probeWith(adapter);
-    expect(verdict.state).toBe('sample-rejected');
+    );
+    expect(verdict.state).toBe(state);
   });
 
   test('a backend that reports not ready is not ready, whatever the reason', async () => {
@@ -215,13 +224,38 @@ describe('readiness requires an answered, schema-valid sample', () => {
 
 describe('the probe itself carries no player content', () => {
   test('the default probe schema is a closed two-option discriminator', async () => {
-    const verdict = await probeWith(answeringAdapter());
-    expect(verdict.state).toBe('ready');
-    // The probe asks exactly one closed question; it is not a smuggling
-    // vehicle for game state.
-    const answered = answeringAdapter();
-    await probeWith(answered);
-    expect(PROBE_SCHEMA.properties).toBeDefined();
+    let captured: DecisionRequest | undefined;
+    await probeWith(
+      answeringAdapter({
+        run: (request) => {
+          captured = request;
+          return {
+            ok: true,
+            answers: [
+              {
+                questionKey: request.unit.questions[0]?.key ?? '',
+                optionKey: request.unit.questions[0]?.options?.find(
+                  (option) => option.value === 'proceed',
+                )?.key,
+              },
+            ],
+            inferenceMs: 1,
+            queueMs: 0,
+          };
+        },
+      }),
+    );
+    expect(captured?.unit.questions).toHaveLength(1);
+    expect(captured?.unit.questions[0]?.key).toMatch(/^verdict__[a-f0-9]+$/);
+    expect(
+      captured?.plan.questions.find((question) => question.key === captured?.unit.questions[0]?.key)
+        ?.path,
+    ).toEqual(['verdict']);
+    expect(captured?.unit.questions[0]?.options?.map((option) => option.value)).toEqual([
+      'halt',
+      'proceed',
+    ]);
+    expect(captured?.unit.state).toBe(PROBE_CONTEXT);
   });
 });
 
@@ -310,17 +344,40 @@ describe('credential redaction', () => {
 
 describe('the probe never contacts a backend the caller did not supply', () => {
   test('an injected transport is used exclusively', async () => {
+    const endpoints = {
+      version: 'http://configured.test/version',
+      models: 'http://configured.test/models',
+      decision: 'http://configured.test/decision',
+    };
     const seen: string[] = [];
     const transport: SystemOneTransport = {
       fetch: async (input) => {
         seen.push(input);
-        return { status: 200, text: async () => '{}' };
+        const body =
+          input === endpoints.version ? { version: '0.36.1' } : { models: [{ name: 'nimble' }] };
+        return {
+          status: input === endpoints.decision ? 503 : 200,
+          text: async () => JSON.stringify(body),
+        };
       },
     };
-    expect(transport).toBeDefined();
-    // The probe takes an adapter, never a URL: there is nothing to call but
-    // what the caller built.
-    await probeWith(answeringAdapter());
-    expect(seen).toEqual([]);
+    const globalFetch = spyOn(globalThis, 'fetch').mockImplementation(async () => {
+      throw new Error('unexpected global fetch');
+    });
+    try {
+      const verdict = await probeWith(
+        createSystemOneDecisionAdapter({
+          endpoints,
+          model: 'nimble',
+          languages: ['en'],
+          transport,
+        }),
+      );
+      expect(verdict.state).not.toBe('ready');
+      expect(new Set(seen)).toEqual(new Set(Object.values(endpoints)));
+      expect(globalFetch).not.toHaveBeenCalled();
+    } finally {
+      globalFetch.mockRestore();
+    }
   });
 });

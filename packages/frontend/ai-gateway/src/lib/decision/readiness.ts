@@ -140,12 +140,13 @@ const stateForAbstention = (reason: DecisionAbstentionReason): DecisionReadiness
 /**
  * Classifies a backend that reported `ready: false`.
  *
- * The adapter is a seam and its `notReadyReason` is prose, so this maps the
- * shapes we actually produce rather than pretending the probe can read an
- * adapter's mind. Anything unrecognised stays `unreachable` rather than being
- * promoted to a ready-adjacent state.
+ * Prefer the adapter's typed failure. Legacy adapters only supply prose, so
+ * retain reason matching as a fallback; unrecognised reasons stay unreachable.
  */
 const stateForNotReady = (capability: DecisionCapability): DecisionReadinessState => {
+  if (capability.notReadyState !== undefined) {
+    return capability.notReadyState;
+  }
   const reason = capability.notReadyReason ?? '';
   if (/version|too old|below|minimum|floor/i.test(reason)) {
     return 'unsupported-runtime';

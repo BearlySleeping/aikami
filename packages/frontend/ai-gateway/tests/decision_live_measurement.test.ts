@@ -149,8 +149,9 @@ describe('scoring, when a backend is supplied', () => {
     // Answered-only accuracy must be readable beside the gated accuracy, so a
     // reader can see survivorship bias rather than being handed only the
     // flattering number.
-    expect(held?.answeredAccuracy).toBeDefined();
-    expect(held?.accuracy).toBeDefined();
+    expect(held?.answeredAccuracy).toBe(1);
+    expect(held?.accuracy).toBe(0.5);
+    expect(held?.coverage).toBe(1 / 3);
   });
 
   test('every produced value must satisfy the original schema', async () => {
@@ -193,6 +194,9 @@ describe('scoring, when a backend is supplied', () => {
     // Two of the three cases carry an expected label; the ambiguous one must
     // not be scored as a miss or a hit.
     expect(result.splits[0]?.positives).toBe(2);
+    expect(result.splits[0]?.answered).toBe(1);
+    expect(result.splits[0]?.correct).toBe(0);
+    expect(result.splits[0]?.riskyFalseAcceptance).toBe(0);
   });
 });
 
@@ -253,5 +257,83 @@ describe('percentile honesty', () => {
       return;
     }
     expect(result.splits[0]?.latenciesMs.length).toBe(heldOut.length);
+    for (const latency of result.splits[0]?.latenciesMs ?? []) {
+      expect(latency).toBeGreaterThanOrEqual(0);
+    }
+  });
+});
+
+describe('measurement gates', () => {
+  const adapter = createDeterministicDecisionAdapter({
+    rules: { rules: { commandKind: [{ match: ['wares'], value: 'trade', weight: 1 }] } },
+  });
+  const base = { adapter, schema: SCHEMA, policy: POLICY, qualityGate: GATE };
+  const cases = Array.from({ length: MIN_REPETITIONS_FOR_PERCENTILE }, (_, index) =>
+    known(String(index), 'trade', 'wares'),
+  );
+  test('a development split cannot substitute for held-out data', async () => {
+    const result = await runLiveDecisionMeasurement({ ...base, splits: { dev: cases } });
+    expect(result).toMatchObject({
+      status: 'measured',
+      passed: false,
+      gateFailures: ['no held-out split was measured'],
+    });
+  });
+  test('dispatch honors measurement limits', async () => {
+    const result = await runLiveDecisionMeasurement({
+      ...base,
+      splits: { heldout: cases },
+      limits: { maxContextBytes: 1 },
+    });
+    expect(result.status).toBe('measured');
+    if (result.status === 'measured') {
+      expect(result.splits[0]?.answered).toBe(0);
+      expect(result.splits[0]?.abstentions).toHaveProperty('context-too-large');
+    }
+  });
+  test('each latency threshold is checked against its declared condition', async () => {
+    const labelled = cases.flatMap((entry) => [
+      { ...entry, latencyCondition: 'warm' as const },
+      { ...entry, latencyCondition: 'cold' as const },
+    ]);
+    for (const [threshold, label] of [
+      ['maxWarmP50Ms', 'warm p50'],
+      ['maxWarmP95Ms', 'warm p95'],
+      ['maxColdP95Ms', 'cold p95'],
+    ] as const) {
+      const result = await runLiveDecisionMeasurement({
+        ...base,
+        splits: { heldout: labelled },
+        latencyGate: {
+          maxWarmP50Ms: Number.POSITIVE_INFINITY,
+          maxWarmP95Ms: Number.POSITIVE_INFINITY,
+          maxColdP95Ms: Number.POSITIVE_INFINITY,
+          [threshold]: -1,
+        },
+      });
+      expect(result.status).toBe('measured');
+      if (result.status === 'measured') {
+        expect(result.gateFailures).toHaveLength(1);
+        expect(result.gateFailures[0]).toContain(label);
+        expect(result.gateFailures[0]).toContain('> allowed -1');
+      }
+    }
+  });
+  test('missing cold samples fail even when warm measurements pass', async () => {
+    const result = await runLiveDecisionMeasurement({
+      ...base,
+      splits: { heldout: cases.map((entry) => ({ ...entry, latencyCondition: 'warm' })) },
+      latencyGate: {
+        maxWarmP50Ms: Number.POSITIVE_INFINITY,
+        maxWarmP95Ms: Number.POSITIVE_INFINITY,
+        maxColdP95Ms: Number.POSITIVE_INFINITY,
+      },
+    });
+    expect(result.status).toBe('measured');
+    if (result.status === 'measured') {
+      expect(result.gateFailures).toEqual([
+        'cold p95 latency gate could not be evaluated: insufficient labelled samples',
+      ]);
+    }
   });
 });

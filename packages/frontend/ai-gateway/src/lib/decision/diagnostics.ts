@@ -50,6 +50,8 @@ export type DecisionDiagnosticStage =
   | 'policy'
   /** Compiled and bound; the context does not fit the declared bounds. */
   | 'bounds'
+  /** Route preference refused before any backend probe. */
+  | 'preference'
   /** Eligible in principle; backend readiness decided the outcome. */
   | 'readiness'
   /** Eligible and ready. */
@@ -187,14 +189,23 @@ const reportNoBackend = (
     state: 'unreachable',
     reason: 'no decision backend is configured',
   });
+  if (route.ok) {
+    throw new Error('an absent backend cannot resolve a route');
+  }
+  const isReadiness = route.code === 'no-backend' || route.code === 'backend-not-ready';
   return {
     ...refusal(
       options.task,
-      'readiness',
-      'schema and policy are eligible, but no decision backend is configured',
+      isReadiness ? 'readiness' : 'preference',
+      `decision route refused (${route.code}): ${route.detail}`,
     ),
-    refusalCode: route.ok ? undefined : route.code,
-    setupSteps: route.ok ? [] : [{ id: 'decision.setup.noBackend', detail: route.detail }],
+    refusalCode: route.code,
+    setupSteps: [
+      {
+        id: isReadiness ? 'decision.setup.noBackend' : `decision.preference.${route.code}`,
+        detail: route.detail,
+      },
+    ],
   };
 };
 
@@ -205,6 +216,10 @@ const reportWithBackend = async (
   contextBytes: number,
   adapter: DecisionAdapter,
 ): Promise<DecisionDiagnostics> => {
+  const preliminary = reportNoBackend(options, preference, contextBytes);
+  if (preliminary.stage === 'preference') {
+    return preliminary;
+  }
   const verdict = await probeDecisionBackend({
     adapter,
     deadlineAt: options.deadlineAt ?? Date.now() + 10_000,
@@ -223,11 +238,13 @@ const reportWithBackend = async (
         options.task,
         'readiness',
         `decision route refused (${route.code}): ${route.detail}`,
-        verdict.schemaReasons ?? [],
       ),
       capability: verdict.capability,
       refusalCode: route.code,
-      setupSteps: describeDecisionReadiness(verdict).map((step) => ({
+      setupSteps: (verdict.state === 'ready'
+        ? [{ id: `decision.preference.${route.code}`, detail: route.detail }]
+        : describeDecisionReadiness(verdict)
+      ).map((step) => ({
         id: step.id,
         detail: step.detail,
       })),

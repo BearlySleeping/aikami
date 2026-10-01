@@ -144,7 +144,7 @@ the fix.
 
 ### 3.3 Policy-first resolution
 
-`resolveDecisionPreference` checks, in order: explicit override → opt-in →
+`resolveDecisionPreference` checks, in order: preference enablement → task opt-in → explicit override →
 disabled role → cloud/privacy → hard limits → readiness. Readiness is the
 **last** gate, so a ready backend cannot buy its way past policy. The shipped
 preference is `{ enabled: false, tasks: [], allowCloud: false }`; enabling it
@@ -278,7 +278,7 @@ bun run scripts/src/lib/ops/run_guards.ts
 
 ## 9. Changed files
 
-**16** (hard cap 100). Deliberately far below the 60–85 target: on the NO-GO
+**17** (hard cap 100). Deliberately far below the 60–85 target: on the NO-GO
 branch there is no runtime to install, no routing to wire, no pilot to enable
 and no wizard to build, and padding to 60 would mean exactly the prohibited
 filler — mechanical churn or duplicated tests. A correct small PR beats an
@@ -288,7 +288,7 @@ artificially large one.
 - 5 new test files — `tests/decision_{readiness,systemone_readiness,preference,diagnostics,live_measurement}.test.ts`
 - 1 modified module (`systemone_adapter.ts`) and 1 modified test (`decision_adapters.test.ts`) — the correctness fix
 - 1 modified module barrel (`decision/index.ts`)
-- 2 docs — this report, `381-runtime-lane-plan.md`, and `docs/contracts/C-567-decision-runtime-readiness.md`
+- 3 docs — this report, `381-runtime-lane-plan.md`, and `docs/contracts/C-567-decision-runtime-readiness.md`
 
 **Integration hotspots:** none. No root manifest, no `bun.lock`, no shared
 barrel outside this module, no `text_task.ts`, no provider config, no wizard, no

@@ -12,7 +12,7 @@
 // Every test drives an injected transport. A mock proves the CONTRACT, never
 // what any real model would answer.
 
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, spyOn, test } from 'bun:test';
 import {
   compareDottedVersions,
   createSystemOneDecisionAdapter,
@@ -20,6 +20,7 @@ import {
   declaresScoring,
   normalizeModelName,
   parseModelListing,
+  probeDecisionBackend,
   probeSystemOneBackend,
   SYSTEM_ONE_MIN_RUNTIME_VERSION,
   type SystemOneTransport,
@@ -330,4 +331,117 @@ describe('adapter capability — the false-ready regression', () => {
     expect(capability.ready).toBe(true);
     expect(capability.notReadyReason).toBeUndefined();
   });
+});
+
+describe('probe identity and failure boundaries', () => {
+  test('explicit model tags and registry ports remain distinct', async () => {
+    expect(normalizeModelName('nimble:7b')).not.toBe(normalizeModelName('nimble:3b'));
+    expect(normalizeModelName('registry:5000/nimble')).toBe('registry:5000/nimble');
+    expect(normalizeModelName('registry:5000/nimble:latest')).toBe(
+      normalizeModelName('registry:5000/nimble'),
+    );
+    expect(normalizeModelName('registry:5000/nimble')).not.toBe(
+      normalizeModelName('registry:6000/nimble'),
+    );
+    const result = await probeSystemOneBackend({
+      endpoints: ENDPOINTS,
+      model: 'nimble:7b',
+      signal: neverAborted(),
+      budgetMs: 1000,
+      transport: transportOf({
+        [ENDPOINTS.version]: versionRoute('0.36.1'),
+        [ENDPOINTS.models]: tagsRoute([{ name: 'nimble:3b' }]),
+      }),
+    });
+    expect(result).toMatchObject({ ok: false, state: 'model-missing' });
+  });
+  test.each([
+    [401, 'unauthorized'],
+    [403, 'unauthorized'],
+    [503, 'unreachable'],
+  ])('version HTTP %s preserves %s', async (status, state) => {
+    const adapter = createSystemOneDecisionAdapter({
+      endpoints: ENDPOINTS,
+      model: 'nimble',
+      languages: ['en'],
+      transport: transportOf({ [ENDPOINTS.version]: { status, body: {} } }),
+    });
+    const verdict = await probeDecisionBackend({
+      adapter,
+      deadlineAt: Date.now() + 1000,
+      signal: neverAborted(),
+      requestId: 'failure',
+      stateRevision: 0,
+    });
+    expect(verdict.state).toBe(state);
+    expect(verdict.capability?.notReadyState).toBe(state);
+  });
+  test('a failed version transport remains unreachable', async () => {
+    const adapter = createSystemOneDecisionAdapter({
+      endpoints: ENDPOINTS,
+      model: 'nimble',
+      languages: ['en'],
+      transport: {
+        fetch: async () => {
+          throw new Error('connection refused');
+        },
+      },
+    });
+    const verdict = await probeDecisionBackend({
+      adapter,
+      deadlineAt: Date.now() + 1000,
+      signal: neverAborted(),
+      requestId: 'failure',
+      stateRevision: 0,
+    });
+    expect(verdict.state).toBe('unreachable');
+  });
+  test('the listing receives only the budget remaining after the version probe', async () => {
+    let clock = 0;
+    const time = spyOn(performance, 'now').mockImplementation(() => clock);
+    const seen: string[] = [];
+    try {
+      const result = await probeSystemOneBackend({
+        endpoints: ENDPOINTS,
+        model: 'nimble',
+        signal: neverAborted(),
+        budgetMs: 100,
+        transport: {
+          fetch: async (url) => {
+            seen.push(url);
+            clock = 101;
+            return { status: 200, text: async () => JSON.stringify({ version: '0.36.1' }) };
+          },
+        },
+      });
+      expect(result).toMatchObject({ ok: false, state: 'deadline-exceeded' });
+      expect(seen).toEqual([ENDPOINTS.version]);
+    } finally {
+      time.mockRestore();
+    }
+  });
+  test.each(['deadline-exceeded', 'cancelled'] as const)(
+    'in-flight abort reports %s',
+    async (state) => {
+      const controller = new AbortController();
+      const result = await probeSystemOneBackend({
+        endpoints: ENDPOINTS,
+        model: 'nimble',
+        signal: controller.signal,
+        budgetMs: 10,
+        transport: {
+          fetch: async (_url, init) =>
+            new Promise((_resolve, reject) => {
+              init.signal.addEventListener('abort', () => reject(new Error('aborted')), {
+                once: true,
+              });
+              if (state === 'cancelled') {
+                controller.abort();
+              }
+            }),
+        },
+      });
+      expect(result).toMatchObject({ ok: false, state });
+    },
+  );
 });

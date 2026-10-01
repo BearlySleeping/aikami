@@ -74,8 +74,8 @@ and the actual selected checkpoint/runtime reported verbatim.
 ### 2. Explicit experimental opt-in, default off
 
 `DECISION_EXPERIMENTAL_PREFERENCE` is a declared preference with
-`enabled: false`. Resolution order is policy-first: explicit model/connection
-override, then disabled roles, then allowed local/cloud modes, then
+`enabled: false`. Resolution order is policy-first: preference enablement, then task opt-in, then explicit
+model/connection override, then disabled roles, then allowed local/cloud modes, then
 language/context/choice limits, then remaining budget. The preference can never
 enable itself, and an explicitly disabled role is never overridden by the mere
 existence of a ready backend.
@@ -93,6 +93,9 @@ frozen API. No secret material in output.
 splits, with accepted and abstained cases reported separately so a backend
 cannot win by abstaining on everything. It **skips cleanly and says why** when
 unconfigured, and refuses percentile claims below a declared repetition count.
+Latency gates use only held-out cases explicitly labelled `warm` or `cold`;
+the caller must establish that cache condition before each case. Missing
+condition-specific samples fail the corresponding latency gate.
 
 ## Non-goals — the boundary this contract deliberately does not cross
 

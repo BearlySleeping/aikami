@@ -131,7 +131,10 @@ export const compareDottedVersions = (a: string, b: string): number | undefined 
  * model as missing.
  */
 export const normalizeModelName = (name: string): string =>
-  name.trim().toLowerCase().split(':')[0] ?? name.trim().toLowerCase();
+  name
+    .trim()
+    .toLowerCase()
+    .replace(/:latest$/, '');
 
 /**
  * Parses a model listing body.
@@ -243,7 +246,7 @@ const get = async (
   if (options.signal.aborted) {
     return { error: 'cancelled', detail: 'cancelled before probe' };
   }
-  if (options.budgetMs === 0) {
+  if (options.budgetMs <= 0) {
     return { error: 'deadline-exceeded', detail: 'no probe budget left' };
   }
   const controller = new AbortController();
@@ -256,10 +259,20 @@ const get = async (
       headers: {},
       signal: controller.signal,
     });
-    return { status: response.status, body: await safeJson(response) };
+    const body = await safeJson(response);
+    if (options.signal.aborted) {
+      return { error: 'cancelled', detail: 'cancelled during probe' };
+    }
+    if (controller.signal.aborted) {
+      return { error: 'deadline-exceeded', detail: 'probe budget exhausted' };
+    }
+    return { status: response.status, body };
   } catch (error) {
     if (options.signal.aborted) {
       return { error: 'cancelled', detail: 'cancelled during probe' };
+    }
+    if (controller.signal.aborted) {
+      return { error: 'deadline-exceeded', detail: 'probe budget exhausted' };
     }
     return {
       error: 'failed',
@@ -434,11 +447,16 @@ const probeCheckpoint = async (
 export const probeSystemOneBackend = async (
   options: SystemOneProbeOptions,
 ): Promise<SystemOneProbeResult> => {
-  const version = await probeRuntimeVersion(options);
+  const deadlineAt = performance.now() + options.budgetMs;
+  const remainingOptions = (): SystemOneProbeOptions => ({
+    ...options,
+    budgetMs: Math.max(0, deadlineAt - performance.now()),
+  });
+  const version = await probeRuntimeVersion(remainingOptions());
   if (!version.ok) {
     return { ok: false, ...version.failure };
   }
-  const checkpoint = await probeCheckpoint(options, version.runtime);
+  const checkpoint = await probeCheckpoint(remainingOptions(), version.runtime);
   if (!checkpoint.ok) {
     return { ok: false, ...checkpoint.failure };
   }

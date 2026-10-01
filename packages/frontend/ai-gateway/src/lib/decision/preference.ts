@@ -14,8 +14,8 @@
 // The resolution order below is the part worth reviewing. It is policy-first,
 // and every "automatic" step is subordinate to an explicit user choice:
 //
-//   1. explicit override  — the user pinned a model/connection; stop there
-//   2. opt-in             — preference disabled, or task not listed: refuse
+//   1. opt-in             — preference disabled, or task not listed: refuse
+//   2. explicit override  — the user pinned a model/connection
 //   3. disabled role      — an explicitly disabled role is never re-enabled
 //                           merely because a ready backend exists
 //   4. cost/privacy mode  — cloud refused unless explicitly allowed
@@ -115,7 +115,7 @@ export const DECISION_MINIMUM_BUDGET_MS = 250;
 export const resolveDecisionPreference = (
   options: ResolveDecisionPreferenceOptions,
 ): DecisionRouteDecision => {
-  // 2. opt-in, before anything else looks at the backend.
+  // 1. opt-in, before anything else looks at the backend.
   if (!options.preference.enabled) {
     return {
       ok: false,
@@ -131,7 +131,7 @@ export const resolveDecisionPreference = (
     };
   }
 
-  // 1. An explicit override is honoured even for a role the user disabled —
+  // 2. An explicit override is honoured even for a role the user disabled —
   //    pinning a backend is a more specific statement than a blanket disable.
   //    It is still subject to steps 4–6: an explicit pick is not a licence to
   //    spend, truncate or overrun.
@@ -143,7 +143,7 @@ export const resolveDecisionPreference = (
         detail: 'cloud decision backends are not permitted by this preference',
       };
     }
-    return checkedReadiness(options, options.explicitBackendId);
+    return checkedBounds(options) ?? checkedReadiness(options, options.explicitBackendId);
   }
 
   // 3. An explicitly disabled role is never re-enabled by preference.
@@ -164,7 +164,15 @@ export const resolveDecisionPreference = (
     };
   }
 
-  // 5. Bounds, before readiness: a backend cannot make an oversize request fit.
+  return (
+    checkedBounds(options) ?? checkedReadiness(options, options.readiness.capability?.backendId)
+  );
+};
+
+/** Bounds apply to explicit pins and automatic selection alike. */
+const checkedBounds = (
+  options: ResolveDecisionPreferenceOptions,
+): DecisionRouteDecision | undefined => {
   const ceiling = options.preference.maxContextBytes;
   if (ceiling !== undefined && options.contextBytes > ceiling) {
     return {
@@ -182,7 +190,7 @@ export const resolveDecisionPreference = (
     };
   }
 
-  return checkedReadiness(options, options.readiness.capability?.backendId);
+  return undefined;
 };
 
 /**
@@ -200,6 +208,16 @@ const checkedReadiness = (
       ok: false,
       code: backendId === undefined ? 'no-backend' : 'backend-not-ready',
       detail: options.readiness.reason,
+    };
+  }
+  if (
+    options.explicitBackendId !== undefined &&
+    options.readiness.capability?.backendId !== options.explicitBackendId
+  ) {
+    return {
+      ok: false,
+      code: 'backend-not-ready',
+      detail: 'readiness does not belong to the pinned backend',
     };
   }
   if (backendId === undefined) {

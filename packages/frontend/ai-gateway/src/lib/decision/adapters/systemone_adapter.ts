@@ -291,7 +291,11 @@ export const createSystemOneDecisionAdapter = (
         probe ? remainingMs(probe.deadlineAt) : probeTimeoutMs,
       );
       if (probe?.signal.aborted || budget === 0) {
-        return { ...base, notReadyReason: 'probe cancelled or deadline exceeded' };
+        return {
+          ...base,
+          notReadyReason: 'probe cancelled or deadline exceeded',
+          notReadyState: probe?.signal?.aborted ? 'cancelled' : 'deadline-exceeded',
+        };
       }
 
       // C-566 reported `ready: true` as soon as `/api/version` answered 200.
@@ -311,7 +315,12 @@ export const createSystemOneDecisionAdapter = (
       });
 
       if (!result.ok) {
-        return { ...base, runtime: result.runtime, notReadyReason: result.reason };
+        return {
+          ...base,
+          runtime: result.runtime,
+          notReadyReason: result.reason,
+          notReadyState: result.state,
+        };
       }
       return {
         ...base,

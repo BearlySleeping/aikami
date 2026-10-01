@@ -50,6 +50,8 @@ export type MeasurementCase = {
   readonly expected: string | null;
   /** The state text sent to the backend. */
   readonly state: string;
+  /** Caller establishes the cache condition before the case; unlabelled samples cannot satisfy latency gates. */
+  readonly latencyCondition?: 'cold' | 'warm';
 };
 
 /** Frozen quality gates. Not defaulted here — the caller must supply them. */
@@ -93,12 +95,17 @@ export type SplitMeasurement = {
   readonly legalValueRate: number;
   /** Answered but wrong. The expensive failure mode. */
   readonly riskyFalseAcceptance: number;
-  /** End-to-end milliseconds per answered case. */
+  /** End-to-end milliseconds per case, including abstentions. */
   readonly latenciesMs: readonly number[];
   /** Median, or `undefined` with no answered case. */
   readonly medianMs?: number;
   /** Only present when `latenciesMs.length >= MIN_REPETITIONS_FOR_PERCENTILE`. */
   readonly p95Ms?: number;
+  /** Median of explicitly warm samples. */
+  readonly warmMedianMs?: number;
+  /** Warm/cold p95 require the minimum repetitions in that condition. */
+  readonly warmP95Ms?: number;
+  readonly coldP95Ms?: number;
   /** Why a percentile is absent, when it is. */
   readonly percentileUnavailable?: string;
   /** Abstention codes and how often each occurred. */
@@ -141,9 +148,8 @@ export type RunLiveMeasurementOptions = {
   readonly validateValue?: (value: unknown) => boolean;
 };
 
-/** Milliseconds elapsed, monotonic where available. */
-const elapsed = (startedAt: number): number =>
-  typeof performance !== 'undefined' ? performance.now() - startedAt : Date.now() - startedAt;
+/** Monotonic milliseconds for both latency timestamps. */
+const now = (): number => performance.now();
 
 /** Percentile by nearest-rank. Callers gate on repetition count first. */
 const percentile = (sorted: readonly number[], p: number): number => {
@@ -171,6 +177,8 @@ type Tally = {
   positives: number;
   risky: number;
   latencies: number[];
+  warmLatencies: number[];
+  coldLatencies: number[];
   abstentions: Record<string, number>;
 };
 
@@ -190,7 +198,7 @@ const scoreCase = async (
     tally.positives += 1;
   }
 
-  const started = Date.now();
+  const started = now();
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), options.timeoutMs);
 
@@ -200,17 +208,23 @@ const scoreCase = async (
   const result = await runDecision({
     plan: options.plan,
     schema: options.schema,
-    policy: options.policy,
+    policy: { ...options.policy, limits: { ...options.policy.limits, ...options.limits } },
     adapter: options.adapter,
     context: testCase.state,
-    deadlineAt: started + options.timeoutMs,
+    deadlineAt: Date.now() + options.timeoutMs,
     signal: controller.signal,
     requestId: `measure:${options.split}:${testCase.caseId}:${index}`,
     stateRevision: index,
     domainValidate: options.domainValidate,
   });
   clearTimeout(timer);
-  tally.latencies.push(elapsed(started));
+  const latency = now() - started;
+  tally.latencies.push(latency);
+  if (testCase.latencyCondition === 'warm') {
+    tally.warmLatencies.push(latency);
+  } else if (testCase.latencyCondition === 'cold') {
+    tally.coldLatencies.push(latency);
+  }
 
   if (!result.ok) {
     tally.abstentions[result.reason] = (tally.abstentions[result.reason] ?? 0) + 1;
@@ -238,6 +252,8 @@ const scoreCase = async (
 const summarize = (split: string, total: number, tally: Tally): SplitMeasurement => {
   const sorted = [...tally.latencies].sort((a, b) => a - b);
   const reportedMedian = median(sorted);
+  const warm = [...tally.warmLatencies].sort((a, b) => a - b);
+  const cold = [...tally.coldLatencies].sort((a, b) => a - b);
   const hasRepetitions = sorted.length >= MIN_REPETITIONS_FOR_PERCENTILE;
 
   return {
@@ -252,6 +268,9 @@ const summarize = (split: string, total: number, tally: Tally): SplitMeasurement
     legalValueRate: tally.answered === 0 ? 0 : tally.legal / tally.answered,
     riskyFalseAcceptance: tally.answered === 0 ? 0 : tally.risky / tally.answered,
     latenciesMs: tally.latencies,
+    warmMedianMs: median(warm),
+    warmP95Ms: warm.length >= MIN_REPETITIONS_FOR_PERCENTILE ? percentile(warm, 95) : undefined,
+    coldP95Ms: cold.length >= MIN_REPETITIONS_FOR_PERCENTILE ? percentile(cold, 95) : undefined,
     ...(reportedMedian === undefined ? {} : { medianMs: reportedMedian }),
     ...(hasRepetitions
       ? { p95Ms: percentile(sorted, 95) }
@@ -288,6 +307,8 @@ export const measureSplit = async (options: {
     positives: 0,
     risky: 0,
     latencies: [],
+    warmLatencies: [],
+    coldLatencies: [],
     abstentions: {},
   };
   for (const [index, testCase] of options.cases.entries()) {
@@ -309,7 +330,7 @@ const evaluateGates = (
   latencyGate: MeasurementLatencyGate | undefined,
 ): string[] => {
   if (split === undefined) {
-    return ['no split was measured'];
+    return ['no held-out split was measured'];
   }
   const failures: string[] = [];
   if (split.accuracy < gate.minHeldOutAccuracy) {
@@ -331,12 +352,16 @@ const evaluateGates = (
   if (latencyGate === undefined) {
     return failures;
   }
-  // Refusing to gate on an absent percentile is the correct outcome: a latency
-  // gate that silently passes because it could not be evaluated is not a gate.
-  if (split.p95Ms === undefined) {
-    failures.push('latency gate could not be evaluated: too few repetitions for a percentile');
-  } else if (split.p95Ms > latencyGate.maxWarmP95Ms) {
-    failures.push(`warm p95 ${split.p95Ms} ms > allowed ${latencyGate.maxWarmP95Ms} ms`);
+  for (const [label, value, threshold] of [
+    ['warm p50', split.warmMedianMs, latencyGate.maxWarmP50Ms],
+    ['warm p95', split.warmP95Ms, latencyGate.maxWarmP95Ms],
+    ['cold p95', split.coldP95Ms, latencyGate.maxColdP95Ms],
+  ] as const) {
+    if (value === undefined) {
+      failures.push(`${label} latency gate could not be evaluated: insufficient labelled samples`);
+    } else if (value > threshold) {
+      failures.push(`${label} ${value} ms > allowed ${threshold} ms`);
+    }
   }
   return failures;
 };
@@ -360,7 +385,10 @@ export const runLiveDecisionMeasurement = async (
     };
   }
 
-  const analysis = analyzeDecisionSchema({ schema: options.schema, limits: options.limits });
+  const analysis = analyzeDecisionSchema({
+    schema: options.schema,
+    limits: { ...options.policy.limits, ...options.limits },
+  });
   if (!analysis.ok) {
     return {
       status: 'skipped',
@@ -383,7 +411,7 @@ export const runLiveDecisionMeasurement = async (
   // Gates are applied to the held-out split only. The dev split exists to be
   // tuned against; scoring a gate on it is how a threshold gets fitted to the
   // data it is then judged on.
-  const heldOut = splits.find((entry) => entry.split === 'heldout') ?? splits[0];
+  const heldOut = splits.find((entry) => entry.split === 'heldout');
   const gateFailures = evaluateGates(heldOut, options.qualityGate, options.latencyGate);
 
   return {

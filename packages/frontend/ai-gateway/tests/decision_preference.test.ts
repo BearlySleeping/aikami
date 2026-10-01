@@ -210,3 +210,32 @@ describe('the eligible route', () => {
     }
   });
 });
+
+describe('explicit pins retain bounds and backend identity', () => {
+  test('context and budget refusals also apply to explicit pins', () => {
+    expect(
+      resolve({
+        explicitBackendId: 'systemone:nimble',
+        preference: { ...ENABLED, maxContextBytes: 500 },
+      }),
+    ).toMatchObject({ ok: false, code: 'context-limit-exceeded' });
+    expect(
+      resolve({
+        explicitBackendId: 'systemone:nimble',
+        remainingBudgetMs: DECISION_MINIMUM_BUDGET_MS - 1,
+      }),
+    ).toMatchObject({ ok: false, code: 'budget-exceeded' });
+  });
+  test('readiness must identify the pinned backend', () => {
+    expect(resolve({ explicitBackendId: 'other' })).toMatchObject({
+      ok: false,
+      code: 'backend-not-ready',
+    });
+    expect(
+      resolve({
+        explicitBackendId: 'systemone:nimble',
+        readiness: { state: 'ready', reason: 'ok' },
+      }),
+    ).toMatchObject({ ok: false, code: 'backend-not-ready' });
+  });
+});

@@ -120,7 +120,7 @@ describe('the report under the shipped preference', () => {
     // backend readiness makes a task eligible.
     expect(diagnostics.eligible).toBe(false);
     expect(diagnostics.refusalCode).toBe('preference-disabled');
-    expect(diagnostics.stage).toBe('readiness');
+    expect(diagnostics.stage).toBe('preference');
   });
 
   test('a ready backend is reported as eligible only under an explicit opt-in', async () => {
@@ -216,8 +216,58 @@ describe('the report never leaks', () => {
         };
       },
     };
-    await report({ adapter, context: 'SECRET PLAYER TRANSCRIPT' });
+    await report({
+      adapter,
+      context: 'SECRET PLAYER TRANSCRIPT',
+      preference: { enabled: true, tasks: ['npc-command-kind'], allowCloud: false },
+    });
     expect(seenState).toBeDefined();
     expect(seenState).not.toContain('SECRET PLAYER TRANSCRIPT');
   });
+});
+
+test('preference refusals never probe and describe the actual refusal with or without a backend', async () => {
+  let calls = 0;
+  const adapter: DecisionAdapter = {
+    ...READY_ADAPTER,
+    capability: async () => {
+      calls += 1;
+      return READY_ADAPTER.capability();
+    },
+  };
+  const enabled = { enabled: true, tasks: ['npc-command-kind'], allowCloud: false };
+  for (const candidate of [adapter, undefined]) {
+    for (const [overrides, code] of [
+      [{}, 'preference-disabled'],
+      [{ preference: { ...enabled, tasks: [] } }, 'task-not-opted-in'],
+      [{ preference: enabled, roleDisabled: true }, 'role-explicitly-disabled'],
+      [{ preference: enabled, backendKind: 'cloud' }, 'cloud-not-permitted'],
+      [
+        { preference: { ...enabled, maxContextBytes: 1 }, contextBytes: 2 },
+        'context-limit-exceeded',
+      ],
+      [{ preference: enabled, remainingBudgetMs: 0 }, 'budget-exceeded'],
+    ] as const) {
+      const diagnostics = await report({ ...overrides, adapter: candidate });
+      expect(diagnostics.stage).toBe('preference');
+      expect(diagnostics.refusalCode).toBe(code);
+      expect(diagnostics.summary).toContain(code);
+      expect(diagnostics.setupSteps[0]?.id).toBe(`decision.preference.${code}`);
+      expect(diagnostics.schemaReasons).toEqual([]);
+    }
+  }
+  expect(calls).toBe(0);
+});
+
+test('probe schema failures do not become task schema reasons', async () => {
+  const diagnostics = await report({
+    preference: { enabled: true, tasks: ['npc-command-kind'], allowCloud: false },
+    adapter: {
+      ...READY_ADAPTER,
+      capability: async () => ({ ...(await READY_ADAPTER.capability()), languages: [] }),
+    },
+  });
+  expect(diagnostics.stage).toBe('readiness');
+  expect(diagnostics.eligible).toBe(false);
+  expect(diagnostics.schemaReasons).toEqual([]);
 });
