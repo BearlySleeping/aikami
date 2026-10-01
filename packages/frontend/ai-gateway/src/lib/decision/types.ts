@@ -345,6 +345,15 @@ export type DecisionCapability = {
   readonly ready: boolean;
   /** Why the backend is not ready, when it is not. */
   readonly notReadyReason?: string;
+  /** Typed probe failure; prose classification is only a legacy fallback. */
+  readonly notReadyState?:
+    | 'unsupported-runtime'
+    | 'model-missing'
+    | 'capability-missing'
+    | 'unreachable'
+    | 'unauthorized'
+    | 'deadline-exceeded'
+    | 'cancelled';
   /** Question primitives this backend can answer. */
   readonly primitives: readonly DecisionQuestionKind[];
   /** Maximum options in one choice question. */

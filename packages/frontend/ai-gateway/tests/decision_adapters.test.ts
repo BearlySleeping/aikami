@@ -451,7 +451,11 @@ describe('systemone dialect adapter', () => {
       languages: ['en'],
       transport: stubTransport({
         routes: {
-          '/api/version': { status: 200, body: { version: 'test-runtime' } },
+          // C-567: the runtime must now report a parseable version at or above
+          // the dialect floor. C-566 accepted 'test-runtime' here because a
+          // 200 on /api/version was enough to declare readiness, which is the
+          // false-ready bug this test used to encode.
+          '/api/version': { status: 200, body: { version: '0.36.1' } },
           '/v1/systemone': { status: 200, body: { model: 'nimble', answers } },
         },
       }),
@@ -465,7 +469,7 @@ describe('systemone dialect adapter', () => {
       context: 'buy a lantern',
     });
     expect(result.ok).toBe(true);
-    expect(result.provenance.runtime).toBe('test-runtime');
+    expect(result.provenance.runtime).toBe('0.36.1');
     expect(result.provenance.checkpoint).toBe('nimble');
   });
 

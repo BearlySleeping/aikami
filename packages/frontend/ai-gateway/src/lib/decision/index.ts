@@ -86,3 +86,71 @@ export {
   DEFAULT_DECISION_LIMITS,
 } from './types.ts';
 export { pathKeyFor, questionKeyFor, stableStringify, utf8ByteLength } from './util.ts';
+
+// ---------------------------------------------------------------------------
+// C-567 — readiness, experimental preference, diagnostics, live measurement.
+//
+// Additive to the C-566 API frozen in docs/audits/381-decision-evaluation.md
+// §2.3. Nothing here is wired into a shipping call site: the experimental
+// preference ships disabled and there is no decision routing in the game.
+// ---------------------------------------------------------------------------
+
+export type {
+  BuildDecisionDiagnosticsOptions,
+  DecisionDiagnosticStage,
+  DecisionDiagnostics,
+} from './diagnostics.ts';
+export { buildDecisionDiagnostics } from './diagnostics.ts';
+export type {
+  LiveMeasurementResult,
+  MeasurementCase,
+  MeasurementLatencyGate,
+  MeasurementQualityGate,
+  RunLiveMeasurementOptions,
+  SplitMeasurement,
+} from './live_measurement.ts';
+export {
+  MIN_REPETITIONS_FOR_PERCENTILE,
+  measureSplit,
+  runLiveDecisionMeasurement,
+} from './live_measurement.ts';
+export type {
+  DecisionExperimentalPreference,
+  DecisionRouteDecision,
+  DecisionRouteRefusalCode,
+  ResolveDecisionPreferenceOptions,
+} from './preference.ts';
+export {
+  DECISION_EXPERIMENTAL_PREFERENCE,
+  DECISION_MINIMUM_BUDGET_MS,
+  resolveDecisionPreference,
+} from './preference.ts';
+export { PROBE_CONTEXT, PROBE_POLICY, PROBE_SCHEMA, PROBE_TASK_ID } from './probe_case.ts';
+export type {
+  DecisionReadinessProbe,
+  DecisionReadinessState,
+  DecisionReadinessVerdict,
+  DecisionSetupStep,
+  ProbeDecisionBackendOptions,
+} from './readiness.ts';
+export {
+  describeDecisionReadiness,
+  probeDecisionBackend,
+  redactEndpoint,
+  redactReason,
+} from './readiness.ts';
+export type {
+  SystemOneListedModel,
+  SystemOneProbeFailureState,
+  SystemOneProbeOptions,
+  SystemOneProbeResult,
+} from './systemone_readiness.ts';
+export {
+  compareDottedVersions,
+  DECISION_SCORING_CAPABILITY_TOKENS,
+  declaresScoring,
+  normalizeModelName,
+  parseModelListing,
+  probeSystemOneBackend,
+  SYSTEM_ONE_MIN_RUNTIME_VERSION,
+} from './systemone_readiness.ts';
