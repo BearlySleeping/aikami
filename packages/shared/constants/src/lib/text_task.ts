@@ -212,6 +212,17 @@ export const TEXT_TASK_PRESETS: Record<TextTask, TextTaskPreset> = {
     streamable: false,
     localFirst: true,
     batchable: false,
+    // Bounded MECHANICAL extraction, exactly like `envelope`: the whole output
+    // is a short JSON object derived from text the client already holds — a
+    // conversation the player just finished, memory the client already stores,
+    // or a session the client already logged.
+    //
+    // The original P3 measurements used an opener schema for every task and
+    // did not validate complete outputs. Those validity/performance claims
+    // are withdrawn in docs/audits/382-context-reuse-report.md, section 3.
+    // Preserve the existing preference pending a successful rerun with each
+    // task's schema; the corrected probe could not reach the local provider.
+    reasoning: 'none',
   },
   'agent-expression': {
     role: 'structured',

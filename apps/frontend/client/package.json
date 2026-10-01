@@ -13,6 +13,7 @@
     "build:production": "moon run client:build -- --mode production",
     "build:app": "bun scripts/build_client.ts",
     "check:bundle": "bun scripts/check_bundle.ts",
+    "probe:ai-context-reuse": "bun scripts/ai_context_reuse_probe.ts",
     "update:cors": "bun scripts/update_cors.ts",
     "tauri": "tauri",
     "tauri:icon": "tauri icon ../../../assets/default.svg",

@@ -3,6 +3,11 @@
 // Pure helpers for per-NPC conversational memory: transcript capture,
 // bounded compaction, prompt projection and digest/opener prompt building.
 // No state, no I/O — the service owns both and calls into these.
+//
+// The bounds here (summary, notes, last exchange, transcript tail) are NOT
+// new in issue #382's context-reuse lane; they predate it and are preserved
+// deliberately. What that lane adds lives in `npc_prompt_projection.ts`: a
+// compiled-prompt cache and a background-specific world-state projection.
 
 import { NPC_MEMORY_LIMITS } from '@aikami/constants';
 import type {
@@ -177,9 +182,19 @@ export const buildDigestUserPrompt = (options: {
   record: NpcMemoryRecord | undefined;
   npcName: string;
   lines: readonly NpcMemoryLine[];
+  /**
+   * The world-state facts, ALREADY projected for a bounded background task.
+   *
+   * The projection happens in the caller (`npc_prompt_projection.ts`), not
+   * here, so that the classification of "dialogue-only" versus "background"
+   * lives in one place and can be tested against the live fact builder. This
+   * function only renders.
+   */
   gameStateFacts: readonly string[];
+  /** Rendered via `renderBackgroundFacts`, so the bound is observable. */
+  renderFacts: (facts: readonly string[]) => string;
 }): string => {
-  const { record, npcName, lines, gameStateFacts } = options;
+  const { record, npcName, lines, gameStateFacts, renderFacts } = options;
   const transcript = lines
     .slice(-NPC_MEMORY_LIMITS.digestTranscriptLines)
     .map((line) => `${line.role === 'player' ? 'Player' : npcName}: ${line.content}`);
@@ -191,7 +206,7 @@ export const buildDigestUserPrompt = (options: {
     record?.notes.length ? record.notes.map((note) => `- ${note}`).join('\n') : '(none)',
     '',
     '[CURRENT WORLD STATE]',
-    gameStateFacts.length > 0 ? gameStateFacts.join('\n') : '(unknown)',
+    renderFacts(gameStateFacts),
     '',
     '[CONVERSATION JUST FINISHED]',
     ...transcript,
@@ -213,7 +228,10 @@ export const buildOpenerSystemPrompt = (options: { persona: string; npcName: str
 /** User prompt for an opener-only refresh. */
 export const buildOpenerUserPrompt = (options: {
   record: NpcMemoryRecord;
+  /** Already projected for a bounded background task; see the digest builder. */
   gameStateFacts: readonly string[];
+  /** Rendered via `renderBackgroundFacts`, so the bound is observable. */
+  renderFacts: (facts: readonly string[]) => string;
 }): string =>
   [
     ...buildMemoryPromptFacts(options.record),
@@ -222,7 +240,7 @@ export const buildOpenerUserPrompt = (options: {
       : '',
     '',
     '[CURRENT WORLD STATE]',
-    options.gameStateFacts.length > 0 ? options.gameStateFacts.join('\n') : '(unknown)',
+    options.renderFacts(options.gameStateFacts),
   ]
     .filter((line, index, all) => line.length > 0 || index < all.length - 1)
     .join('\n');

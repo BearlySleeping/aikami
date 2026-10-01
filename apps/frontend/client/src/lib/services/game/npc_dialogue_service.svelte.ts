@@ -61,6 +61,7 @@ import {
   parseDialogueExtraction,
 } from './npc_dialogue_extraction.ts';
 import { buildNpcPersona } from './npc_dialogue_persona';
+import { buildNarrativeSystemPrompt } from './npc_dialogue_prompts';
 import { partyRosterService } from './party_roster_service.svelte.ts';
 import { questStateService } from './quest_state_service.svelte.ts';
 import { relationshipService } from './relationship_service.svelte.ts';
@@ -389,6 +390,17 @@ export type NpcDialogueServiceInterface = BaseFrontendClassInterface & {
   }): DialogueContextProjection;
 
   /**
+   * The NPC's persona block alone, with no turn context.
+   *
+   * For background callers (NPC memory digest, opener refresh) that need the
+   * persona and nothing else. {@link buildContext} additionally walks every
+   * account in the content manifest, selects a companion witness, derives
+   * allowed commands and projects a memory window — all of which a background
+   * prompt discards.
+   */
+  buildNpcPersonaForPrompt(options: { npcId: string; npcName: string }): string;
+
+  /**
    * Marks a command as executed for a given turn, preventing re-execution on regenerate.
    */
   markCommandExecuted(turnId: string, kind: NpcDialogueCommandKind): void;
@@ -640,6 +652,27 @@ export class NpcDialogueService
       gameStateFacts: options.gameStateFacts ?? [],
       allowedCommands,
     });
+  }
+
+  /**
+   * The NPC's persona block alone, with no turn context (issue #382).
+   *
+   * The background memory tasks (digest, opener refresh) need the persona and
+   * nothing else. They were calling {@link buildContext} and discarding
+   * everything but `.persona`, which walks every account in every situation of
+   * the content manifest, selects a companion witness, derives allowed
+   * commands and projects a memory window — O(manifest) work per background
+   * call, twice per call (once to dispatch, once to revalidate), for one
+   * string.
+   *
+   * Still `assertConfigured`, still derives from the AUTHORED identity, and
+   * still logs the generic-persona diagnostic. The only thing removed is the
+   * work whose result the caller threw away.
+   */
+  buildNpcPersonaForPrompt(options: { npcId: string; npcName: string }): string {
+    this._assertConfigured();
+    const npc = this._contentProvider!.getNpc(options.npcId);
+    return this._buildPersona({ npcId: options.npcId, npcName: options.npcName, npc });
   }
 
   /** @inheritdoc */
@@ -1530,54 +1563,14 @@ export class NpcDialogueService
   }
 
   /**
-   * Builds the system prompt for the streamed narrative call (call 1 of the
-   * C-401 split). Asks for plain prose — never JSON — so tokens stream as
-   * readable narrative.
+   * The system prompt for the streamed narrative call (call 1).
+   *
+   * Delegates to `buildNarrativeSystemPrompt`, which owns the section order —
+   * and specifically the stable-blocks-first ordering that lets a provider
+   * reuse a prompt prefix. See that module for why.
    */
   private _buildNarrativeSystemPrompt(projection: DialogueContextProjection): string {
-    const lines = [
-      '[NPC CONTEXT]',
-      projection.persona,
-      `Your name is ${projection.npcName}.`,
-      'Stay in character at all times. Respond as the NPC would.',
-      '',
-      'Keep responses concise — 1 to 3 sentences. Be immersive and natural.',
-      'Do not break character. Do not mention being an AI.',
-      "Reply with the NPC's spoken narrative ONLY — plain prose, no JSON.",
-    ];
-
-    if (projection.gameStateFacts.length > 0) {
-      lines.push('', '[GAME STATE]', ...projection.gameStateFacts);
-    }
-
-    if (projection.relationshipFacts && projection.relationshipFacts.length > 0) {
-      lines.push('', '[RELATIONSHIPS]', ...projection.relationshipFacts);
-    }
-
-    if (projection.memory.length > 0) {
-      lines.push('', '[CONVERSATION HISTORY]', ...projection.memory);
-    }
-
-    // C-494 AC-3: witness recall surfaces an event this companion actually
-    // witnessed, in their own voice. Injected as background — the companion
-    // raises it unprompted rather than as a numeric readout.
-    if (projection.companionWitnessed.length > 0) {
-      lines.push(
-        '',
-        '[COMPANION WITNESSED]',
-        ...projection.companionWitnessed,
-        'Bring this up naturally, in your own voice, without being asked.',
-      );
-    }
-
-    lines.push(
-      '',
-      '[ALLOWED ACTIONS]',
-      `In this scene the NPC has these actions available: ${projection.allowedCommands.join(', ') || 'none'}.`,
-      'These are scene context only — do not output actions in your reply.',
-    );
-
-    return lines.join('\n');
+    return buildNarrativeSystemPrompt(projection);
   }
 
   // ── Private: precondition derivation ──────────────────────────────────
