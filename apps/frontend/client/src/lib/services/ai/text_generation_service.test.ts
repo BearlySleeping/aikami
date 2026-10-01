@@ -14,239 +14,17 @@
 //   bun test --preload ./src/lib/test_setup.ts --tsconfig tsconfig.test.json \
 //     src/lib/services/ai/text_generation_service.test.ts
 
-import { beforeEach, describe, expect, mock, test } from 'bun:test';
+import { beforeEach, describe, expect, test } from 'bun:test';
 import { CyoaChoiceResultSchema, RelationshipOutputSchema } from '@aikami/schemas';
+import {
+  holdGateway,
+  loadService,
+  mocks,
+  resetGatewayMocks,
+} from './__tests__/text_generation_service.harness.ts';
 import { textTelemetryService } from './text_telemetry_service.svelte.ts';
 
 // $state and $derived are polyfilled globally via test_setup.ts
-
-// ---------------------------------------------------------------------------
-// Mock: aiGatewayService (the C-320 delegation target)
-// ---------------------------------------------------------------------------
-
-let gatewayGenerateCalls: Array<Record<string, unknown>> = [];
-let gatewayChunks: string[] = [];
-let gatewayStructured: unknown;
-let gatewayError: unknown;
-let blockUntilAbort = false;
-/**
- * Simulated provider work, so a test can make a call take MEASURABLE time.
- *
- * The point of the duration tests is that a call which really took time reports
- * that time. Without a delay in the mock there is nothing to measure, and the
- * assertion would pass against the very bug it exists to catch.
- */
-let gatewayDelayMs = 0;
-/** Provider-reported usage the mock should return, when a test sets it. */
-let gatewayUsage: { inputTokens: number; outputTokens: number } | undefined;
-/** Holds the NEXT gateway call open, so in-flight behaviour is observable. */
-let gatewayGate: { promise: Promise<void>; release: () => void } | undefined;
-/** The routing `resolveText` reports, so policy can be exercised per test. */
-let gatewayRouting: Record<string, unknown> = {
-  capability: 'text',
-  mode: 'offline',
-  provider: 'local-qwen3',
-  model: '',
-  endpoint: '',
-};
-
-const mockAiGatewayService = {
-  resolveText: mock((options?: { model?: string; task?: string }) => ({
-    ...gatewayRouting,
-    ...(options?.model === undefined ? {} : { model: options.model }),
-  })),
-  generateText: mock(async (options: Record<string, unknown>) => {
-    gatewayGenerateCalls.push(options);
-    // A test may hold every gateway call open to observe what happens while a
-    // request is genuinely in flight.
-    if (gatewayGate) {
-      const gate = gatewayGate;
-      gatewayGate = undefined;
-      await gate.promise;
-    }
-    const { onChunk, onResolve, signal, model } = options as {
-      onChunk?: (text: string) => void;
-      onResolve?: (resolution: unknown) => void;
-      signal?: AbortSignal;
-      model?: string;
-    };
-
-    // Stands in for real inference time. Abort-aware, so a deadline test can
-    // still cut it short.
-    if (gatewayDelayMs > 0) {
-      await new Promise<void>((resolve) => {
-        if (signal?.aborted === true) {
-          resolve();
-          return;
-        }
-        const timer = setTimeout(resolve, gatewayDelayMs);
-        signal?.addEventListener(
-          'abort',
-          () => {
-            clearTimeout(timer);
-            resolve();
-          },
-          { once: true },
-        );
-      });
-    }
-
-    if (gatewayError) {
-      throw gatewayError;
-    }
-
-    onResolve?.({
-      provider: 'openrouter',
-      model: model ?? 'test-model',
-      endpoint: 'https://api.openrouter.ai',
-    });
-
-    if (onChunk) {
-      for (const chunk of gatewayChunks) {
-        onChunk(chunk);
-      }
-    }
-
-    // Optional hang used by cancelAll tests: resolve only when aborted.
-    if (blockUntilAbort && signal) {
-      await new Promise<void>((resolve) => {
-        if (signal.aborted) {
-          resolve();
-          return;
-        }
-        signal.addEventListener('abort', () => resolve(), { once: true });
-      });
-    }
-
-    if (signal?.aborted) {
-      const error = new Error('Aborted');
-      error.name = 'AbortError';
-      throw error;
-    }
-
-    return {
-      text: gatewayChunks.join(''),
-      structured: gatewayStructured,
-      ...(gatewayUsage === undefined ? {} : { usage: gatewayUsage }),
-    };
-  }),
-  cancelAll: mock(() => {}),
-};
-
-mock.module('./ai_gateway_service.svelte.ts', () => ({
-  aiGatewayService: mockAiGatewayService,
-  __esModule: true,
-}));
-
-// ---------------------------------------------------------------------------
-// Mock: localTaskPoolService (local-first micro-task path)
-// ---------------------------------------------------------------------------
-
-let localBlockUntilAbort = false;
-let localSignal: AbortSignal | undefined;
-let localSubmitOutput = '';
-let localSubmitError: unknown;
-let localSubmitCalls = 0;
-let localEnsureLoadedCalls = 0;
-/** Simulated on-device work, for the local-first duration test. */
-let localDelayMs = 0;
-/** Model the fake engine claims to serve; drives readiness. */
-let localServedModels: string[] = ['local-qwen3'];
-
-const mockLocalPool = {
-  ensureLoaded: mock(async (signal: AbortSignal) => {
-    localEnsureLoadedCalls++;
-    localSignal = signal;
-    if (localBlockUntilAbort) {
-      await new Promise<void>((resolve) => {
-        if (signal.aborted) {
-          resolve();
-          return;
-        }
-        signal.addEventListener('abort', () => resolve(), { once: true });
-      });
-      throw new DOMException('Aborted', 'AbortError');
-    }
-    if (localSubmitError) {
-      throw localSubmitError;
-    }
-  }),
-  submit: mock(async () => {
-    localSubmitCalls++;
-    if (localDelayMs > 0) {
-      await new Promise<void>((resolve) => {
-        setTimeout(resolve, localDelayMs);
-      });
-    }
-    if (localSubmitError) {
-      throw localSubmitError;
-    }
-    return { type: 'text', output: localSubmitOutput, latencyMs: 1, ok: true };
-  }),
-  readiness: {
-    state: 'ready' as const,
-    get servedModelIds() {
-      return localServedModels;
-    },
-    confirmedModelIds: [] as string[],
-  },
-  canServeLocal: mock((model?: string) => {
-    if (model === undefined || model.trim().length === 0) {
-      return true;
-    }
-    return localServedModels.some((id) => id.toLowerCase() === model.toLowerCase());
-  }),
-};
-
-mock.module('./local_task_pool_service.svelte.ts', () => ({
-  localTaskPoolService: {
-    pool: mockLocalPool,
-    readiness: mockLocalPool.readiness,
-    canServeLocal: mockLocalPool.canServeLocal,
-  },
-  __esModule: true,
-}));
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-const loadService = async () => {
-  const mod = await import('./text_generation_service.svelte.ts');
-  return mod.textGenerationService as import('./text_generation_service.svelte.ts').TextGenerationServiceInterface;
-};
-
-/** Holds the next gateway call open until the returned release is invoked. */
-const holdGateway = (): (() => void) => {
-  let release = (): void => {};
-  const promise = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  gatewayGate = { promise, release };
-  return () => release();
-};
-
-const resetGatewayMocks = (): void => {
-  gatewayGenerateCalls = [];
-  gatewayChunks = [];
-  gatewayStructured = undefined;
-  gatewayError = undefined;
-  blockUntilAbort = false;
-  gatewayDelayMs = 0;
-  gatewayUsage = undefined;
-  localDelayMs = 0;
-  localBlockUntilAbort = false;
-  localSignal = undefined;
-  textTelemetryService.clear();
-  gatewayGate = undefined;
-  gatewayRouting = {
-    capability: 'text',
-    mode: 'offline',
-    provider: 'local-qwen3',
-    model: '',
-    endpoint: '',
-  };
-};
 
 // ---------------------------------------------------------------------------
 // Tests: AC-1 — Delegation & Routing
@@ -255,12 +33,12 @@ const resetGatewayMocks = (): void => {
 describe('TextGenerationService — AC-1: Gateway delegation', () => {
   beforeEach(() => {
     resetGatewayMocks();
-    gatewayChunks = ['Hello'];
+    mocks.gatewayChunks = ['Hello'];
   });
 
   test('streamChat forwards messages and streams chunks from the gateway', async () => {
     const service = await loadService();
-    gatewayChunks = ['Hel', 'lo ', 'World'];
+    mocks.gatewayChunks = ['Hel', 'lo ', 'World'];
 
     let output = '';
     await service.streamChat({
@@ -274,8 +52,8 @@ describe('TextGenerationService — AC-1: Gateway delegation', () => {
     });
 
     expect(output).toBe('Hello World');
-    expect(gatewayGenerateCalls).toHaveLength(1);
-    const call = gatewayGenerateCalls[0];
+    expect(mocks.gatewayGenerateCalls).toHaveLength(1);
+    const call = mocks.gatewayGenerateCalls[0];
     expect(call.messages).toEqual([
       { role: 'user', content: 'Hi' },
       { role: 'assistant', content: 'Hello' },
@@ -293,7 +71,7 @@ describe('TextGenerationService — AC-1: Gateway delegation', () => {
       model: 'deepseek-chat',
     });
 
-    expect(gatewayGenerateCalls[0].model).toBe('deepseek-chat');
+    expect(mocks.gatewayGenerateCalls[0].model).toBe('deepseek-chat');
   });
 
   test('streamChat passes explicit endpoint override to the gateway', async () => {
@@ -305,7 +83,7 @@ describe('TextGenerationService — AC-1: Gateway delegation', () => {
       endpoint: 'http://localhost:8080/v1',
     });
 
-    expect(gatewayGenerateCalls[0].endpoint).toBe('http://localhost:8080/v1');
+    expect(mocks.gatewayGenerateCalls[0].endpoint).toBe('http://localhost:8080/v1');
   });
 
   test('streamChat exposes resolved routing via __text_service_resolved_routing', async () => {
@@ -327,7 +105,7 @@ describe('TextGenerationService — AC-1: Gateway delegation', () => {
 
   test('streamChat rethrows non-cancellation gateway errors', async () => {
     const service = await loadService();
-    gatewayError = new Error('provider_unreachable');
+    mocks.gatewayError = new Error('provider_unreachable');
 
     await expect(
       service.streamChat({
@@ -349,7 +127,7 @@ describe('TextGenerationService — AC-1: Gateway delegation', () => {
     });
 
     // No gateway call should have been made.
-    expect(gatewayGenerateCalls).toHaveLength(0);
+    expect(mocks.gatewayGenerateCalls).toHaveLength(0);
   });
 });
 
@@ -364,7 +142,7 @@ describe('TextGenerationService — AC-2: Token Streaming', () => {
 
   test('should accumulate fragmented tokens', async () => {
     const service = await loadService();
-    gatewayChunks = ['Hel', 'lo ', 'Wor', 'ld!'];
+    mocks.gatewayChunks = ['Hel', 'lo ', 'Wor', 'ld!'];
 
     let output = '';
     await service.streamChat({
@@ -380,7 +158,7 @@ describe('TextGenerationService — AC-2: Token Streaming', () => {
   test('should swallow abort cancellation mid-stream', async () => {
     const service = await loadService();
     const controller = new AbortController();
-    gatewayChunks = ['A', 'B', 'C', 'D'];
+    mocks.gatewayChunks = ['A', 'B', 'C', 'D'];
 
     let output = '';
     const onChunk = (text: string): void => {
@@ -401,7 +179,7 @@ describe('TextGenerationService — AC-2: Token Streaming', () => {
 
   test('should track active stream count', async () => {
     const service = await loadService();
-    gatewayChunks = ['X'];
+    mocks.gatewayChunks = ['X'];
 
     await service.streamChat({
       messages: [{ role: 'user', content: 'Hi' }],
@@ -413,7 +191,7 @@ describe('TextGenerationService — AC-2: Token Streaming', () => {
 
   test('should forward multi-turn conversation messages', async () => {
     const service = await loadService();
-    gatewayChunks = ['Reply'];
+    mocks.gatewayChunks = ['Reply'];
 
     let output = '';
     await service.streamChat({
@@ -428,12 +206,12 @@ describe('TextGenerationService — AC-2: Token Streaming', () => {
     });
 
     expect(output).toBe('Reply');
-    expect(gatewayGenerateCalls[0].messages).toHaveLength(3);
+    expect(mocks.gatewayGenerateCalls[0].messages).toHaveLength(3);
   });
 
   test('should forward system + user messages unchanged', async () => {
     const service = await loadService();
-    gatewayChunks = ['OK'];
+    mocks.gatewayChunks = ['OK'];
 
     await service.streamChat({
       messages: [
@@ -443,7 +221,7 @@ describe('TextGenerationService — AC-2: Token Streaming', () => {
       onChunk: () => {},
     });
 
-    const sentMessages = gatewayGenerateCalls[0].messages as Array<{
+    const sentMessages = mocks.gatewayGenerateCalls[0].messages as Array<{
       role: string;
       content: string;
     }>;
@@ -464,7 +242,7 @@ describe('TextGenerationService — AC-3: Structural Extraction', () => {
 
   test('should return structured output from the gateway', async () => {
     const service = await loadService();
-    gatewayStructured = { name: 'Aragorn', race: 'Human', level: 5 };
+    mocks.gatewayStructured = { name: 'Aragorn', race: 'Human', level: 5 };
 
     const result = await service.extractStructure({
       schema: {
@@ -480,14 +258,14 @@ describe('TextGenerationService — AC-3: Structural Extraction', () => {
     });
 
     expect(result).toEqual({ name: 'Aragorn', race: 'Human', level: 5 });
-    expect(gatewayGenerateCalls).toHaveLength(1);
-    expect(gatewayGenerateCalls[0].schemaName).toBe('TestCharacter');
-    expect(gatewayGenerateCalls[0].schema).toBeDefined();
+    expect(mocks.gatewayGenerateCalls).toHaveLength(1);
+    expect(mocks.gatewayGenerateCalls[0].schemaName).toBe('TestCharacter');
+    expect(mocks.gatewayGenerateCalls[0].schema).toBeDefined();
   });
 
   test('should build system + user messages for extraction prompts', async () => {
     const service = await loadService();
-    gatewayStructured = { ok: true };
+    mocks.gatewayStructured = { ok: true };
 
     await service.extractStructure({
       schema: { type: 'object', properties: { ok: { type: 'boolean' } } },
@@ -496,7 +274,7 @@ describe('TextGenerationService — AC-3: Structural Extraction', () => {
       systemPrompt: 'You are an extraction engine',
     });
 
-    const messages = gatewayGenerateCalls[0].messages as Array<{
+    const messages = mocks.gatewayGenerateCalls[0].messages as Array<{
       role: string;
       content: string;
     }>;
@@ -520,7 +298,7 @@ describe('TextGenerationService — AC-3: Structural Extraction', () => {
 
     await expect(promise).rejects.toThrow();
     // No gateway call should have been made.
-    expect(gatewayGenerateCalls).toHaveLength(0);
+    expect(mocks.gatewayGenerateCalls).toHaveLength(0);
   });
 });
 
@@ -535,8 +313,8 @@ describe('TextGenerationService — cancelAll', () => {
 
   test('should cancel all active streams and reset the stream count', async () => {
     const service = await loadService();
-    blockUntilAbort = true;
-    gatewayChunks = ['partial'];
+    mocks.blockUntilAbort = true;
+    mocks.gatewayChunks = ['partial'];
 
     const streamPromise = service.streamChat({
       messages: [{ role: 'user', content: 'Hi' }],
@@ -555,8 +333,8 @@ describe('TextGenerationService — cancelAll', () => {
 
   test('should cancel multiple active streams', async () => {
     const service = await loadService();
-    blockUntilAbort = true;
-    gatewayChunks = ['data'];
+    mocks.blockUntilAbort = true;
+    mocks.gatewayChunks = ['data'];
 
     const p1 = service.streamChat({
       messages: [{ role: 'user', content: 'A' }],
@@ -585,16 +363,16 @@ describe('TextGenerationService — local-first micro-tasks', () => {
   beforeEach(async () => {
     await (await loadService()).dispose();
     resetGatewayMocks();
-    localSubmitOutput = '';
-    localSubmitError = undefined;
-    localSubmitCalls = 0;
-    localEnsureLoadedCalls = 0;
-    localServedModels = ['local-qwen3'];
+    mocks.localSubmitOutput = '';
+    mocks.localSubmitError = undefined;
+    mocks.localSubmitCalls = 0;
+    mocks.localEnsureLoadedCalls = 0;
+    mocks.localServedModels = ['local-qwen3'];
   });
 
   test('uses the local pool and skips the gateway for a localFirst task', async () => {
     const service = await loadService();
-    localSubmitOutput = '{"change":"improve","magnitude":3,"reason":"kind"}';
+    mocks.localSubmitOutput = '{"change":"improve","magnitude":3,"reason":"kind"}';
 
     const result = await service.extractStructure({
       schema: RelationshipOutputSchema as unknown as Record<string, unknown>, // guard-ignore lint/type-safety/casting: TypeBox schema to the generic record the service accepts
@@ -604,15 +382,15 @@ describe('TextGenerationService — local-first micro-tasks', () => {
     });
 
     expect(result).toEqual({ change: 'improve', magnitude: 3, reason: 'kind' });
-    expect(localEnsureLoadedCalls).toBe(1);
-    expect(localSubmitCalls).toBe(1);
-    expect(gatewayGenerateCalls).toHaveLength(0);
+    expect(mocks.localEnsureLoadedCalls).toBe(1);
+    expect(mocks.localSubmitCalls).toBe(1);
+    expect(mocks.gatewayGenerateCalls).toHaveLength(0);
   });
 
   test('falls back to the gateway when the local engine fails', async () => {
     const service = await loadService();
-    gatewayStructured = { ok: true };
-    localSubmitError = new Error('no engine');
+    mocks.gatewayStructured = { ok: true };
+    mocks.localSubmitError = new Error('no engine');
 
     const result = await service.extractStructure({
       schema: RelationshipOutputSchema as unknown as Record<string, unknown>, // guard-ignore lint/type-safety/casting: TypeBox schema to the generic record the service accepts
@@ -622,16 +400,16 @@ describe('TextGenerationService — local-first micro-tasks', () => {
     });
 
     expect(result).toEqual({ ok: true });
-    expect(localEnsureLoadedCalls).toBe(1);
-    expect(localSubmitCalls).toBe(0);
-    expect(gatewayGenerateCalls).toHaveLength(1);
+    expect(mocks.localEnsureLoadedCalls).toBe(1);
+    expect(mocks.localSubmitCalls).toBe(0);
+    expect(mocks.gatewayGenerateCalls).toHaveLength(1);
     expect(textTelemetryService.spans[0].fallback).toBe(true);
     expect(textTelemetryService.summary.counters.fallbacks).toBe(1);
   });
 
   test('skips the local pool for a cloud-only task', async () => {
     const service = await loadService();
-    gatewayStructured = { ok: true };
+    mocks.gatewayStructured = { ok: true };
 
     await service.extractStructure({
       schema: CyoaChoiceResultSchema as unknown as Record<string, unknown>, // guard-ignore lint/type-safety/casting: TypeBox schema to the generic record the service accepts
@@ -640,13 +418,13 @@ describe('TextGenerationService — local-first micro-tasks', () => {
       task: 'agent-cyoa',
     });
 
-    expect(localEnsureLoadedCalls).toBe(0);
-    expect(gatewayGenerateCalls).toHaveLength(1);
+    expect(mocks.localEnsureLoadedCalls).toBe(0);
+    expect(mocks.gatewayGenerateCalls).toHaveLength(1);
   });
 
   test('honours an explicit model override instead of substituting a local one', async () => {
     const service = await loadService();
-    gatewayStructured = { ok: true };
+    mocks.gatewayStructured = { ok: true };
 
     await service.extractStructure({
       schema: RelationshipOutputSchema as unknown as Record<string, unknown>, // guard-ignore lint/type-safety/casting: TypeBox schema to the generic record the service accepts
@@ -658,15 +436,15 @@ describe('TextGenerationService — local-first micro-tasks', () => {
 
     // The caller pinned which model answers. Answering from a different
     // on-device bundle would make that pin a lie.
-    expect(localEnsureLoadedCalls).toBe(0);
-    expect(gatewayGenerateCalls).toHaveLength(1);
-    expect(gatewayGenerateCalls[0].model).toBe('deepseek-chat');
+    expect(mocks.localEnsureLoadedCalls).toBe(0);
+    expect(mocks.gatewayGenerateCalls).toHaveLength(1);
+    expect(mocks.gatewayGenerateCalls[0].model).toBe('deepseek-chat');
   });
 
   test('skips the local attempt when the configured route is a cloud provider', async () => {
     const service = await loadService();
-    gatewayStructured = { ok: true };
-    gatewayRouting = {
+    mocks.gatewayStructured = { ok: true };
+    mocks.gatewayRouting = {
       capability: 'text',
       mode: 'byok',
       provider: 'openrouter',
@@ -682,21 +460,21 @@ describe('TextGenerationService — local-first micro-tasks', () => {
     });
 
     // The task did not ask for an on-device detour, so it does not get one.
-    expect(localEnsureLoadedCalls).toBe(0);
-    expect(gatewayGenerateCalls).toHaveLength(1);
+    expect(mocks.localEnsureLoadedCalls).toBe(0);
+    expect(mocks.gatewayGenerateCalls).toHaveLength(1);
   });
 
   test('skips the local attempt when the engine does not serve the routed model', async () => {
     const service = await loadService();
-    gatewayStructured = { ok: true };
-    gatewayRouting = {
+    mocks.gatewayStructured = { ok: true };
+    mocks.gatewayRouting = {
       capability: 'text',
       mode: 'offline',
       provider: 'local-qwen3',
       model: 'qwen3-32b',
       endpoint: '',
     };
-    localServedModels = ['qwen3-0.6b'];
+    mocks.localServedModels = ['qwen3-0.6b'];
 
     await service.extractStructure({
       schema: RelationshipOutputSchema as unknown as Record<string, unknown>, // guard-ignore lint/type-safety/casting: TypeBox schema to the generic record the service accepts
@@ -707,8 +485,8 @@ describe('TextGenerationService — local-first micro-tasks', () => {
 
     // Readiness is per model: a live engine that cannot serve this one is not a
     // reason to pay a cold load and a failed generation.
-    expect(localEnsureLoadedCalls).toBe(0);
-    expect(gatewayGenerateCalls).toHaveLength(1);
+    expect(mocks.localEnsureLoadedCalls).toBe(0);
+    expect(mocks.gatewayGenerateCalls).toHaveLength(1);
   });
 });
 
@@ -718,7 +496,7 @@ describe('TextGenerationService — local-first micro-tasks', () => {
 
 describe('TextGenerationService — in-flight coalescing', () => {
   const cloudRoute = (): void => {
-    gatewayRouting = {
+    mocks.gatewayRouting = {
       capability: 'text',
       mode: 'byok',
       provider: 'openrouter',
@@ -729,13 +507,13 @@ describe('TextGenerationService — in-flight coalescing', () => {
 
   beforeEach(() => {
     resetGatewayMocks();
-    localSubmitOutput = '';
-    localSubmitError = undefined;
-    localSubmitCalls = 0;
-    localEnsureLoadedCalls = 0;
-    localServedModels = ['local-qwen3'];
+    mocks.localSubmitOutput = '';
+    mocks.localSubmitError = undefined;
+    mocks.localSubmitCalls = 0;
+    mocks.localEnsureLoadedCalls = 0;
+    mocks.localServedModels = ['local-qwen3'];
     cloudRoute();
-    gatewayStructured = { ok: true };
+    mocks.gatewayStructured = { ok: true };
   });
 
   test('two identical concurrent requests make ONE provider call', async () => {
@@ -757,13 +535,13 @@ describe('TextGenerationService — in-flight coalescing', () => {
 
     // Let both subscribers attach to the same in-flight attempt.
     await new Promise((resolve) => setTimeout(resolve, 10));
-    expect(gatewayGenerateCalls).toHaveLength(1);
+    expect(mocks.gatewayGenerateCalls).toHaveLength(1);
 
     release();
     expect(await first).toEqual({ ok: true });
     expect(await second).toEqual({ ok: true });
     // One call, two answers: the duplicate cost nothing.
-    expect(gatewayGenerateCalls).toHaveLength(1);
+    expect(mocks.gatewayGenerateCalls).toHaveLength(1);
   });
 
   test('a different prompt is not coalesced', async () => {
@@ -784,11 +562,14 @@ describe('TextGenerationService — in-flight coalescing', () => {
     });
 
     await new Promise((resolve) => setTimeout(resolve, 10));
-    // Two distinct questions are two distinct requests.
-    expect(gatewayGenerateCalls).toHaveLength(2);
+    // Two distinct questions are two distinct requests — not one shared call.
+    // Admission, not the coalescer, is what keeps them from running at the
+    // same time: both are background work on one contention domain.
+    expect(mocks.gatewayGenerateCalls).toHaveLength(1);
 
     release();
     await Promise.all([first, second]);
+    expect(mocks.gatewayGenerateCalls).toHaveLength(2);
   });
 
   test('a different schema is not coalesced even with the same prompt', async () => {
@@ -811,10 +592,17 @@ describe('TextGenerationService — in-flight coalescing', () => {
     await new Promise((resolve) => setTimeout(resolve, 10));
     // The same prompt under a different schema is a different question, and
     // merging them would serve one request's answer to the other.
-    expect(gatewayGenerateCalls).toHaveLength(2);
+    //
+    // Both are `agent-relationship` — BACKGROUND — and both resolve to one
+    // contention domain, so admission runs them ONE AT A TIME. That is the
+    // #416 fix, and it is why the second provider call only lands after the
+    // first settles. Two distinct questions, two distinct provider calls, never
+    // merged and never stacked.
+    expect(mocks.gatewayGenerateCalls).toHaveLength(1);
 
     release();
     await Promise.allSettled([first, second]);
+    expect(mocks.gatewayGenerateCalls).toHaveLength(2);
   });
 
   test('cancelling ONE consumer does not cancel the other', async () => {
@@ -843,7 +631,7 @@ describe('TextGenerationService — in-flight coalescing', () => {
     // The shared call was NOT cancelled: somebody was still waiting for it.
     release();
     expect(await survivor).toEqual({ ok: true });
-    expect(gatewayGenerateCalls).toHaveLength(1);
+    expect(mocks.gatewayGenerateCalls).toHaveLength(1);
   });
 
   test('a request after a settled one is NOT replayed from a cache', async () => {
@@ -864,7 +652,7 @@ describe('TextGenerationService — in-flight coalescing', () => {
 
     // This coalesces IN-FLIGHT work only. Reusing a settled answer across calls
     // is a separate decision with separate correctness requirements.
-    expect(gatewayGenerateCalls).toHaveLength(2);
+    expect(mocks.gatewayGenerateCalls).toHaveLength(2);
   });
 });
 
@@ -876,16 +664,16 @@ describe('TextGenerationService — shared end-to-end deadline', () => {
   beforeEach(async () => {
     await (await loadService()).dispose();
     resetGatewayMocks();
-    localSubmitOutput = '';
-    localSubmitError = undefined;
-    localSubmitCalls = 0;
-    localEnsureLoadedCalls = 0;
-    localServedModels = ['local-qwen3'];
+    mocks.localSubmitOutput = '';
+    mocks.localSubmitError = undefined;
+    mocks.localSubmitCalls = 0;
+    mocks.localEnsureLoadedCalls = 0;
+    mocks.localServedModels = ['local-qwen3'];
   });
 
   test('passes the caller deadline to the gateway rather than minting a new one', async () => {
     const service = await loadService();
-    blockUntilAbort = true;
+    mocks.blockUntilAbort = true;
     const deadlineAt = Date.now() + 60;
     const request = service.extractStructure({
       schema: { type: 'object' },
@@ -895,7 +683,7 @@ describe('TextGenerationService — shared end-to-end deadline', () => {
       deadlineAt,
     });
     await expect(request).rejects.toThrow('Aborted');
-    const signal = gatewayGenerateCalls[0].signal;
+    const signal = mocks.gatewayGenerateCalls[0].signal;
     if (!(signal instanceof AbortSignal)) {
       throw new Error('Missing gateway signal');
     }
@@ -916,8 +704,8 @@ describe('TextGenerationService — shared end-to-end deadline', () => {
         deadlineAt: Date.now() - 1,
       }),
     ).rejects.toThrow('Request deadline exceeded');
-    expect(localEnsureLoadedCalls).toBe(0);
-    expect(gatewayGenerateCalls).toHaveLength(0);
+    expect(mocks.localEnsureLoadedCalls).toBe(0);
+    expect(mocks.gatewayGenerateCalls).toHaveLength(0);
     expect(textTelemetryService.spans[0].deadlineExceeded).toBe(true);
   });
 
@@ -925,7 +713,7 @@ describe('TextGenerationService — shared end-to-end deadline', () => {
     'streamChat rejects deadline cancellation with %i ms left',
     async (remaining) => {
       const service = await loadService();
-      blockUntilAbort = true;
+      mocks.blockUntilAbort = true;
       await expect(
         service.streamChat({
           messages: [{ role: 'user', content: 'hi' }],
@@ -933,7 +721,7 @@ describe('TextGenerationService — shared end-to-end deadline', () => {
           deadlineAt: Date.now() + remaining,
         }),
       ).rejects.toMatchObject({ name: 'AbortError' });
-      expect(gatewayGenerateCalls).toHaveLength(remaining < 0 ? 0 : 1);
+      expect(mocks.gatewayGenerateCalls).toHaveLength(remaining < 0 ? 0 : 1);
       expect(textTelemetryService.spans[0].deadlineExceeded).toBe(true);
       expect(textTelemetryService.spans[0].errorCode).toBe('cancelled');
     },
@@ -941,7 +729,7 @@ describe('TextGenerationService — shared end-to-end deadline', () => {
 
   test('deadline aborts local loading without cooling down the route', async () => {
     const service = await loadService();
-    localBlockUntilAbort = true;
+    mocks.localBlockUntilAbort = true;
     const options = {
       schema: { type: 'object' },
       schemaName: 'Local',
@@ -951,19 +739,19 @@ describe('TextGenerationService — shared end-to-end deadline', () => {
     await expect(
       service.extractStructure({ ...options, deadlineAt: Date.now() + 30 }),
     ).rejects.toThrow();
-    expect(localSignal?.aborted).toBe(true);
-    expect(gatewayGenerateCalls).toHaveLength(0);
-    localBlockUntilAbort = false;
-    localSubmitOutput = '{}';
+    expect(mocks.localSignal?.aborted).toBe(true);
+    expect(mocks.gatewayGenerateCalls).toHaveLength(0);
+    mocks.localBlockUntilAbort = false;
+    mocks.localSubmitOutput = '{}';
     await service.extractStructure(options);
-    expect(localEnsureLoadedCalls).toBe(2);
-    expect(gatewayGenerateCalls).toHaveLength(0);
+    expect(mocks.localEnsureLoadedCalls).toBe(2);
+    expect(mocks.gatewayGenerateCalls).toHaveLength(0);
   });
 
   test('a local timeout falls back without cooling down the route', async () => {
     const service = await loadService();
-    localBlockUntilAbort = true;
-    gatewayStructured = { ok: true };
+    mocks.localBlockUntilAbort = true;
+    mocks.gatewayStructured = { ok: true };
     const options = {
       schema: { type: 'object' },
       schemaName: 'Local',
@@ -971,19 +759,19 @@ describe('TextGenerationService — shared end-to-end deadline', () => {
       task: 'agent-relationship' as const,
     };
     await service.extractStructure(options);
-    expect(localSignal?.aborted).toBe(true);
-    expect(gatewayGenerateCalls).toHaveLength(1);
+    expect(mocks.localSignal?.aborted).toBe(true);
+    expect(mocks.gatewayGenerateCalls).toHaveLength(1);
     expect(textTelemetryService.spans[0].fallback).toBe(true);
-    localBlockUntilAbort = false;
-    localSubmitOutput = '{}';
+    mocks.localBlockUntilAbort = false;
+    mocks.localSubmitOutput = '{}';
     await service.extractStructure(options);
-    expect(localEnsureLoadedCalls).toBe(2);
-    expect(gatewayGenerateCalls).toHaveLength(1);
+    expect(mocks.localEnsureLoadedCalls).toBe(2);
+    expect(mocks.gatewayGenerateCalls).toHaveLength(1);
   }, 10_000);
 
   test('a background task with no budget is not given an invented deadline', async () => {
     const service = await loadService();
-    gatewayStructured = { ok: true };
+    mocks.gatewayStructured = { ok: true };
 
     // `agent-schedule` declares no budget, so the request runs unbounded rather
     // than being cut off by a stopwatch it never asked for.
@@ -994,8 +782,8 @@ describe('TextGenerationService — shared end-to-end deadline', () => {
       task: 'agent-schedule',
     });
 
-    expect(gatewayGenerateCalls).toHaveLength(1);
-    expect(gatewayGenerateCalls[0].signal.aborted).toBe(false);
+    expect(mocks.gatewayGenerateCalls).toHaveLength(1);
+    expect(mocks.gatewayGenerateCalls[0].signal.aborted).toBe(false);
   });
 });
 
@@ -1020,15 +808,15 @@ describe('TextGenerationService — structured-call duration telemetry', () => {
   beforeEach(async () => {
     await (await loadService()).dispose();
     resetGatewayMocks();
-    localSubmitOutput = '';
-    localSubmitError = undefined;
-    localServedModels = ['local-qwen3'];
+    mocks.localSubmitOutput = '';
+    mocks.localSubmitError = undefined;
+    mocks.localServedModels = ['local-qwen3'];
   });
 
   test('a provider call that takes measurable time no longer records 0 ms', async () => {
     const service = await loadService();
-    gatewayStructured = { ok: true };
-    gatewayDelayMs = 40;
+    mocks.gatewayStructured = { ok: true };
+    mocks.gatewayDelayMs = 40;
 
     await service.extractStructure({
       schema: durationSchema,
@@ -1043,8 +831,8 @@ describe('TextGenerationService — structured-call duration telemetry', () => {
 
   test('a FAILED provider call reports the same real elapsed time as a successful one', async () => {
     const service = await loadService();
-    gatewayStructured = { ok: true };
-    gatewayDelayMs = 40;
+    mocks.gatewayStructured = { ok: true };
+    mocks.gatewayDelayMs = 40;
 
     await service.extractStructure({
       schema: durationSchema,
@@ -1056,7 +844,7 @@ describe('TextGenerationService — structured-call duration telemetry', () => {
 
     // The failure path shares the ONE logical start rather than minting its
     // own clock, which is how the success path ended up at 0 in the first place.
-    gatewayError = new Error('provider exploded');
+    mocks.gatewayError = new Error('provider exploded');
     await expect(
       service.extractStructure({
         schema: durationSchema,
@@ -1074,8 +862,8 @@ describe('TextGenerationService — structured-call duration telemetry', () => {
 
   test('a local-first success records real elapsed time, not 0', async () => {
     const service = await loadService();
-    localSubmitOutput = '{"change":"improve","magnitude":3,"reason":"kind"}';
-    localDelayMs = 30;
+    mocks.localSubmitOutput = '{"change":"improve","magnitude":3,"reason":"kind"}';
+    mocks.localDelayMs = 30;
 
     await service.extractStructure({
       schema: RelationshipOutputSchema as unknown as Record<string, unknown>, // guard-ignore lint/type-safety/casting: TypeBox schema to the generic record the service accepts
@@ -1093,8 +881,8 @@ describe('TextGenerationService — structured-call duration telemetry', () => {
 
   test('duration telemetry does not disturb token provenance', async () => {
     const service = await loadService();
-    gatewayStructured = { ok: true };
-    gatewayDelayMs = 20;
+    mocks.gatewayStructured = { ok: true };
+    mocks.gatewayDelayMs = 20;
     // No provider usage reported → the estimate is labelled as an estimate.
     await service.extractStructure({
       schema: durationSchema,
@@ -1108,7 +896,7 @@ describe('TextGenerationService — structured-call duration telemetry', () => {
     // Provider-reported usage still WINS over the estimate, unchanged by the
     // start-capture fix — which touched timing only.
     textTelemetryService.clear();
-    gatewayUsage = { inputTokens: 111, outputTokens: 22 };
+    mocks.gatewayUsage = { inputTokens: 111, outputTokens: 22 };
     await service.extractStructure({
       schema: durationSchema,
       schemaName: 'DurationProbe',
@@ -1122,7 +910,7 @@ describe('TextGenerationService — structured-call duration telemetry', () => {
   });
 
   test('a queued request records queue wait inside totalMs AND as queueMs', async () => {
-    gatewayStructured = { ok: true };
+    mocks.gatewayStructured = { ok: true };
 
     // Admission does not exist yet in this commit, so this asserts the SPAN's
     // contract: a caller that supplies queue measurements has them carried
@@ -1149,9 +937,12 @@ describe('TextGenerationService — structured-call duration telemetry', () => {
 
   test('a call that never queued carries no queueMs rather than a fabricated zero', async () => {
     const service = await loadService();
-    gatewayStructured = { ok: true };
-    gatewayDelayMs = 15;
+    mocks.gatewayStructured = { ok: true };
+    mocks.gatewayDelayMs = 15;
 
+    // An INTERACTIVE call is admitted immediately, so its queue wait is a
+    // measured zero — recorded as such rather than left absent, which is what
+    // makes `queueMs > 0` mean something.
     await service.extractStructure({
       schema: durationSchema,
       schemaName: 'DurationProbe',
@@ -1159,7 +950,7 @@ describe('TextGenerationService — structured-call duration telemetry', () => {
       task: 'envelope',
     });
 
-    expect(lastSpan().queueMs).toBeUndefined();
-    expect(lastSpan().queueDepth).toBeUndefined();
+    expect(lastSpan().queueMs).toBe(0);
+    expect(lastSpan().queueDepth).toBe(0);
   });
 });

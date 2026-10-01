@@ -5,10 +5,22 @@
 //
 // Contract: C-245 CYOA Choices Branching Narrative
 
-import { describe, expect, it } from 'bun:test';
+import { beforeEach, describe, expect, it } from 'bun:test';
 import { CYOA_AGENT_ID } from '@aikami/constants';
 import { AgentPipelineService } from './agent_pipeline_service.svelte.ts';
 import { BUILT_IN_AGENTS } from './built_in_agents.ts';
+
+// Agent work is BACKGROUND, so inference admission defers it by a quiet window
+// (#382) before it reaches the provider. That is correct in production and
+// irrelevant here: these tests are about WHICH agents run, not when their text
+// is generated. Zeroing the window keeps them testing their own subject — and
+// stops a scheduling policy from silently becoming an unrelated suite's
+// five-second timeout.
+(globalThis as Record<string, unknown>).__text_admission_quiet_window_ms = 0;
+
+beforeEach(() => {
+  (globalThis as Record<string, unknown>).__text_admission_quiet_window_ms = 0;
+});
 
 const createService = () =>
   AgentPipelineService.create({ className: 'AgentPipelineService' }) as AgentPipelineService;
