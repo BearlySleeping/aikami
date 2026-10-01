@@ -90,8 +90,42 @@ export type TextTelemetrySpan = {
   deadlineRemainingMs?: number;
   /** Which cache layer, if any, served or shaped this call. */
   cacheLayer?: TextCacheLayer;
-  /** How many calls were already queued locally when this one was submitted. */
+  /**
+   * How many requests were AHEAD of this one in its contention domain's
+   * admission queue at the instant it joined that queue — a snapshot taken on
+   * entry, never re-sampled afterwards.
+   *
+   * The "contention domain" is the resource the effective routing actually
+   * resolves to (see `text_request_admission.ts`): a provider + endpoint pair,
+   * deliberately NOT including the model, because two models served by the
+   * same local runtime compete for the same device.
+   *
+   * `0` is a real measurement — "this call joined an idle queue" — and is
+   * recorded for every call that passed through admission, so `maxQueueDepth`
+   * reflects the deepest queue actually observed instead of being
+   * structurally pinned at zero. A call that never joined a queue carries no
+   * value at all rather than a fabricated one.
+   */
   queueDepth?: number;
+  /**
+   * Milliseconds this call spent WAITING for admission to expensive inference,
+   * from joining its contention domain's queue to being admitted.
+   *
+   * This time is already part of {@link totalMs}: the critical path a player
+   * waits on is queue plus execution, and reporting `totalMs` without the
+   * queue makes a request that sat in a queue look exactly as fast as one that
+   * did not.
+   *
+   * `0` means "admitted immediately", which is the honest value for
+   * interactive work — and is recorded, so that `queueMs > 0` means something.
+   *
+   * The value is ABSENT only when the call never passed through inference
+   * admission at all: a local-first success answered on-device, or a coalesced
+   * subscriber that joined an attempt somebody else started. Those calls have
+   * no queue of their own to report, and inventing a number for them would be
+   * worse than recording nothing.
+   */
+  queueMs?: number;
 };
 
 /** Latency percentiles, only present where the sample count supports them. */

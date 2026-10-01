@@ -24,8 +24,7 @@
 //
 // Contract: C-080, C-111, C-320, issue #382 P0
 
-import { TEXT_TASK_PRESETS, type TextTask, textTaskBudgetMs } from '@aikami/constants';
-import { isAiGatewayError } from '@aikami/frontend/ai-gateway';
+import { TEXT_TASK_PRESETS, type TextTask } from '@aikami/constants';
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
@@ -34,28 +33,32 @@ import {
 import type { AiModeResolution } from '@aikami/types';
 import type { TextChatMessage } from '$types';
 import { aiGatewayService } from './ai_gateway_service.svelte.ts';
-import {
-  type AiRequestDeadline,
-  createAiRequestDeadline,
-  createUnboundedAiDeadline,
-} from './ai_request_deadline.ts';
-import {
-  createLocalRouteCooldown,
-  type LocalRouteCooldown,
-  presetForTask,
-  runLocalFirstStructured,
-} from './local_first_execution.ts';
+import type { AiRequestDeadline } from './ai_request_deadline.ts';
+import { createLocalFirstRoute, type LocalFirstRoute } from './local_first_route.ts';
 import { localTaskPoolService } from './local_task_pool_service.svelte.ts';
 import type { StructuredCallCoalescer } from './structured_call_coalescer.ts';
 import { createStructuredCallCoalescer } from './structured_call_coalescer.ts';
 import { resolveLocalFirstPolicy } from './text_local_first_policy.ts';
+import {
+  createServiceInferenceAdmission,
+  type QueueExit,
+  type ServiceInferenceAdmission,
+  type TextAdmissionLease,
+} from './text_request_admission.ts';
+import {
+  createRequestDeadline,
+  isDeadlineExceeded,
+  isRequestCancellation,
+  throwIfAlreadyAborted,
+  throwIfPastDeadline,
+} from './text_request_lifetime.ts';
+import {
+  decrementActiveTextRequests,
+  incrementActiveTextRequests,
+  publishResolvedTextRouting,
+  resetActiveTextRequests,
+} from './text_service_diagnostics.ts';
 import { recordTextCall, type TextCallObservation } from './text_telemetry_recorder.ts';
-
-/**
- * How long a local engine that just failed is skipped, tracked PER ROUTE so one
- * dead engine cannot suppress a healthy alternative.
- */
-const LOCAL_COOLDOWN_MS = 60_000;
 
 /** Provider-reported token counts, or a character-count estimate standing in. */
 type TextUsage = { inputTokens: number; outputTokens: number; cachedTokens?: number };
@@ -143,38 +146,6 @@ export type TextGenerationServiceInterface = BaseFrontendClassInterface & {
 // Implementation
 // ---------------------------------------------------------------------------
 
-/**
- * Rethrows a pre-aborted caller's cancellation reason.
- *
- * A call whose signal is already aborted must not reach routing, the local
- * engine or the provider at all — and it must not report a timeout, because
- * nobody waited.
- */
-const throwIfAlreadyAborted = (signal?: AbortSignal): void => {
-  if (signal?.aborted !== true) {
-    return;
-  }
-  if (signal.reason !== undefined) {
-    throw signal.reason;
-  }
-  const error = new Error('Aborted');
-  error.name = 'AbortError';
-  throw error;
-};
-
-/**
- * Throws when a shared deadline has already run out.
- *
- * Distinct from a caller abort: an exhausted budget must not buy a provider
- * call, and it must be reported as a timeout rather than a cancellation the user
- * asked for.
- */
-const throwIfPastDeadline = (deadline: AiRequestDeadline): void => {
-  if (deadline.expired()) {
-    throw new DOMException('Request deadline exceeded', 'AbortError');
-  }
-};
-
 class TextGenerationService
   extends BaseFrontendClass<TextGenerationServiceOptions>
   implements TextGenerationServiceInterface
@@ -182,12 +153,8 @@ class TextGenerationService
   // ── Private state ─────────────────────────────────────────────────────
 
   private readonly _abortControllers = new Set<AbortController>();
-  private _activeStreamCount = 0;
-  /**
-   * Per-route local cooldowns, keyed by provider + model so one dead engine
-   * never suppresses a healthy alternative.
-   */
-  private readonly _localCooldown: LocalRouteCooldown = createLocalRouteCooldown(LOCAL_COOLDOWN_MS);
+  /** The opportunistic on-device attempt and its per-route cooldowns. */
+  private readonly _localFirst: LocalFirstRoute = createLocalFirstRoute();
   /**
    * Coalesces identical structured requests that are in flight at the same time.
    *
@@ -199,28 +166,46 @@ class TextGenerationService
   private readonly _coalescer: StructuredCallCoalescer = createStructuredCallCoalescer({
     debug: (label, detail) => this.debug(label, detail),
   });
+  /**
+   * Priority-aware admission for expensive inference (issue #382).
+   *
+   * Owned HERE rather than in a new global scheduler because this service
+   * already owns every fact admission needs: the logical request's lifetime,
+   * caller abort linkage, the ONE absolute deadline, the local-first vs gateway
+   * decision, the coalescer and the telemetry. A separate service would have to
+   * be told all of it, and would be told it incorrectly the first time one of
+   * those changed.
+   */
+  private readonly _admission: ServiceInferenceAdmission = createServiceInferenceAdmission();
 
-  // ── Private: diagnostics globals ─────────────────────────────────────
+  // ── Private: diagnostics ────────────────────────────────────────────
 
   private _exposeRouting(resolution: AiModeResolution): void {
-    const g = globalThis as Record<string, unknown>;
-    g.__text_service_resolved_routing = {
-      provider: resolution.provider,
-      model: resolution.model ?? '',
-      endpoint: resolution.endpoint ?? '',
-    };
+    publishResolvedTextRouting(resolution);
   }
 
   private _incrementStreamCount(): void {
-    this._activeStreamCount++;
-    (globalThis as Record<string, unknown>).__text_service_active_stream_count =
-      this._activeStreamCount;
+    incrementActiveTextRequests();
   }
 
   private _decrementStreamCount(): void {
-    this._activeStreamCount = Math.max(0, this._activeStreamCount - 1);
-    (globalThis as Record<string, unknown>).__text_service_active_stream_count =
-      this._activeStreamCount;
+    decrementActiveTextRequests();
+  }
+
+  /**
+   * Reserves the contended resource.
+   *
+   * The returned lease is released by the CALLER, in a `finally`: a lease that
+   * leaked on a throw would close the domain to background work for the rest of
+   * the session, which is indistinguishable from "background is being starved".
+   */
+  private async _admit(options: {
+    routing: AiModeResolution;
+    task?: TextTask;
+    signal: AbortSignal;
+    onQueueExit?: (observation: QueueExit) => void;
+  }) {
+    return await this._admission.acquire(options);
   }
 
   /** Registers a per-call controller linked to the caller's signal. */
@@ -243,96 +228,6 @@ class TextGenerationService
     return { controller: abortController, cleanup };
   }
 
-  /** Whether the error represents cancellation (typed or raw AbortError). */
-  private _isCancellation(error: unknown): boolean {
-    if (isAiGatewayError(error)) {
-      return error.code === 'cancelled';
-    }
-    return (error as Error)?.name === 'AbortError';
-  }
-
-  /**
-   * Builds the ONE deadline for a logical request.
-   *
-   * A caller-supplied `deadlineAt` is adopted verbatim so a combat turn's
-   * budget is not silently replaced by a task default. Otherwise the task
-   * preset's budget applies, and a task with no budget is deliberately
-   * unbounded — background work's deadline is the campaign, not a stopwatch.
-   */
-  private _deadlineFor(options: {
-    deadlineAt?: number;
-    task?: TextTask;
-    signal?: AbortSignal;
-  }): AiRequestDeadline {
-    if (options.deadlineAt !== undefined) {
-      const startedAt = Date.now();
-      return createAiRequestDeadline({
-        startedAt,
-        hardDeadlineMs: Math.max(0, options.deadlineAt - startedAt),
-        ...(options.signal === undefined ? {} : { callerSignal: options.signal }),
-      });
-    }
-    const budgetMs = textTaskBudgetMs(options.task);
-    if (budgetMs === undefined) {
-      return createUnboundedAiDeadline(options.signal);
-    }
-    return createAiRequestDeadline({
-      hardDeadlineMs: budgetMs,
-      ...(options.signal === undefined ? {} : { callerSignal: options.signal }),
-    });
-  }
-
-  /** Recognizes expiry even before the deadline timer has had a turn to fire. */
-  private _deadlineExceeded(deadline?: AiRequestDeadline): boolean {
-    return (
-      deadline?.stopReason() === 'deadline' ||
-      (deadline?.stopReason() !== 'caller-abort' && deadline?.expired() === true)
-    );
-  }
-
-  /**
-   * Records one finished call into the rolling telemetry buffer.
-   *
-   * The projection itself lives in `text_telemetry_recorder.ts`; this exists so
-   * the call sites read as one step rather than reaching into the telemetry
-   * service's shape directly.
-   */
-  private _recordSpan(observation: TextCallObservation): void {
-    recordTextCall(observation);
-  }
-
-  /**
-   * Delegates the opportunistic on-device attempt.
-   *
-   * The execution rules and the per-route cooldown live in
-   * `local_first_execution.ts`; this method exists only so the call site reads
-   * as one step in the routing decision rather than a wall of mechanics.
-   */
-  private async _tryLocalStructured(options: {
-    prompt: string;
-    systemPrompt?: string;
-    schema: Record<string, unknown>;
-    task?: TextTask;
-    signal: AbortSignal;
-    deadline: AiRequestDeadline;
-    resolution: AiModeResolution;
-    allowLocal: boolean;
-    onAttempt: () => void;
-  }): Promise<unknown | undefined> {
-    return await runLocalFirstStructured({
-      prompt: options.prompt,
-      schema: options.schema,
-      signal: options.signal,
-      deadline: options.deadline,
-      resolution: options.resolution,
-      allowLocal: options.allowLocal,
-      onAttempt: options.onAttempt,
-      preset: presetForTask(options.task),
-      cooldown: this._localCooldown,
-      ...(options.systemPrompt === undefined ? {} : { systemPrompt: options.systemPrompt }),
-    });
-  }
-
   /**
    * The configured-route half of a structured request.
    *
@@ -346,13 +241,26 @@ class TextGenerationService
     task?: TextTask;
     signal: AbortSignal;
     deadline: AiRequestDeadline;
+    routing: AiModeResolution;
     onResolve: (resolution: AiModeResolution) => void;
+    onQueueExit?: (observation: QueueExit) => void;
   }): Promise<{
     structured?: unknown;
     usage?: { inputTokens: number; outputTokens: number; cachedTokens?: number };
   }> {
-    const { schema, schemaName, prompt, systemPrompt, model, task, signal, deadline, onResolve } =
-      options;
+    const {
+      schema,
+      schemaName,
+      prompt,
+      systemPrompt,
+      model,
+      task,
+      signal,
+      deadline,
+      routing,
+      onResolve,
+      onQueueExit,
+    } = options;
     const messages: TextChatMessage[] = [];
     if (systemPrompt) {
       messages.push({ role: 'system', content: systemPrompt });
@@ -362,23 +270,52 @@ class TextGenerationService
     if (deadline.expired()) {
       throw new DOMException('Request deadline exceeded', 'AbortError');
     }
-    const result = await aiGatewayService.generateText({
-      messages,
-      schema,
-      schemaName,
-      model,
-      task,
-      // ONE clock: the call cannot outlive the budget the caller handed down.
+    // 🔴 ADMISSION GOES HERE, not at `extractStructure` and not at the
+    // coalescer's edge.
+    //
+    // Inside the coalescer: two identical concurrent subscribers become ONE
+    // shared attempt, which then queues ONCE. Putting the gate outside it
+    // would serialize the two subscribers and turn "one provider call" back
+    // into "call A completes, then call B" — silently disabling #411's
+    // deduplication for the exact simultaneous case it exists to handle.
+    //
+    // Before the provider call: this is the shared, expensive, contended work.
+    // The local-first attempt is deliberately NOT gated — it is a different
+    // resource (a distinct provider id, hence a distinct contention domain)
+    // and is free and near-instant, so queueing it would delay a player for
+    // nothing.
+    const lease = await this._admit({
+      routing,
+      ...(task === undefined ? {} : { task }),
       signal: AbortSignal.any([signal, deadline.signal]),
-      onResolve: (resolved) => {
-        onResolve(resolved);
-        this._exposeRouting(resolved);
-      },
+      ...(onQueueExit === undefined ? {} : { onQueueExit }),
     });
-    return {
-      ...(result.structured === undefined ? {} : { structured: result.structured }),
-      ...(result.usage === undefined ? {} : { usage: result.usage }),
-    };
+    try {
+      // The quiet window may have spent the budget; re-check before paying for
+      // an answer nobody can still receive.
+      if (deadline.expired()) {
+        throw new DOMException('Request deadline exceeded', 'AbortError');
+      }
+      const result = await aiGatewayService.generateText({
+        messages,
+        schema,
+        schemaName,
+        model,
+        task,
+        // ONE clock: the call cannot outlive the budget the caller handed down.
+        signal: AbortSignal.any([signal, deadline.signal]),
+        onResolve: (resolved) => {
+          onResolve(resolved);
+          this._exposeRouting(resolved);
+        },
+      });
+      return {
+        ...(result.structured === undefined ? {} : { structured: result.structured }),
+        ...(result.usage === undefined ? {} : { usage: result.usage }),
+      };
+    } finally {
+      lease.release();
+    }
   }
 
   // ── streamChat ────────────────────────────────────────────────────────
@@ -400,7 +337,7 @@ class TextGenerationService
 
     const { controller: abortController, cleanup } = this._linkController(signal);
     this._incrementStreamCount();
-    const deadline = this._deadlineFor({ deadlineAt, task, signal });
+    const deadline = createRequestDeadline({ deadlineAt, task, signal });
 
     const start = performance.now();
     const startedAt = new Date().toISOString();
@@ -408,11 +345,22 @@ class TextGenerationService
     let ttftMs: number | undefined;
     let completionChars = 0;
     const promptChars = messages.reduce((sum, message) => sum + message.content.length, 0);
+    // Resolved BEFORE the call so the contention domain is known up front. An
+    // interactive stream is never gated, but it must be VISIBLE to the gate —
+    // this is the lane that keeps background summarization off the provider
+    // while the player is reading.
+    const routing = this._resolveRouting({ model, task, endpoint });
+    let lease: TextAdmissionLease | undefined;
 
     try {
       if (deadline.expired()) {
         throw new DOMException('Request deadline exceeded', 'AbortError');
       }
+      lease = await this._admit({
+        routing,
+        ...(task === undefined ? {} : { task }),
+        signal: AbortSignal.any([abortController.signal, deadline.signal]),
+      });
       const result = await aiGatewayService.generateText({
         messages,
         onChunk: (chunk) => {
@@ -433,7 +381,7 @@ class TextGenerationService
         },
       });
       this.info('streamChat:complete');
-      this._recordSpan({
+      recordTextCall({
         start,
         startedAt,
         resolution,
@@ -444,10 +392,13 @@ class TextGenerationService
         completionChars,
         ok: true,
         deadline,
+        // Interactive work is admitted immediately, so this is a real
+        // measurement of zero rather than an absent one.
+        ...(lease === undefined ? {} : { queueMs: lease.queueMs, queueDepth: lease.queueDepth }),
         ...(result.usage === undefined ? {} : { usage: result.usage }),
       });
     } catch (error: unknown) {
-      this._recordSpan({
+      recordTextCall({
         start,
         startedAt,
         resolution,
@@ -459,10 +410,11 @@ class TextGenerationService
         ok: false,
         error,
         deadline,
+        ...(lease === undefined ? {} : { queueMs: lease.queueMs, queueDepth: lease.queueDepth }),
       });
-      if (this._isCancellation(error)) {
+      if (isRequestCancellation(error)) {
         this.debug('streamChat:aborted');
-        if (this._deadlineExceeded(deadline)) {
+        if (isDeadlineExceeded(deadline)) {
           throw error;
         }
         return;
@@ -470,6 +422,7 @@ class TextGenerationService
       this.error('streamChat:failed', error);
       throw error;
     } finally {
+      lease?.release();
       cleanup();
       this._abortControllers.delete(abortController);
       this._decrementStreamCount();
@@ -495,9 +448,22 @@ class TextGenerationService
     task?: TextTask;
     signal: AbortSignal;
     deadline: AiRequestDeadline;
+    routing: AiModeResolution;
     onResolve: (resolution: AiModeResolution) => void;
+    onQueueExit?: (observation: QueueExit) => void;
   }): Promise<CoalescedStructuredResult> {
-    const { schema, schemaName, prompt, systemPrompt, model, task, signal, onResolve } = options;
+    const {
+      schema,
+      schemaName,
+      prompt,
+      systemPrompt,
+      model,
+      task,
+      signal,
+      routing,
+      onResolve,
+      onQueueExit,
+    } = options;
     // 🔴 The shared work inherits the initiator's ABSOLUTE deadline, including
     // time already spent on the local attempt. Deriving a fresh one from the
     // task would silently hand the shared call a whole new budget, so the total
@@ -518,7 +484,7 @@ class TextGenerationService
         model,
       },
       signal,
-      sharedDeadline: () => this._deadlineFor({ deadlineAt: inheritedDeadlineAt, task }),
+      sharedDeadline: () => createRequestDeadline({ deadlineAt: inheritedDeadlineAt, task }),
       call: (sharedSignal, sharedDeadline) =>
         this._generateStructured({
           schema,
@@ -529,7 +495,12 @@ class TextGenerationService
           task,
           signal: sharedSignal,
           deadline: sharedDeadline,
+          // Identical requests resolve identically, so the initiator's routing
+          // IS the shared work's routing — there is no ambiguity here for a
+          // second implementation to get wrong.
+          routing,
           onResolve,
+          ...(onQueueExit === undefined ? {} : { onQueueExit }),
         }),
     });
     return {
@@ -567,14 +538,40 @@ class TextGenerationService
     } = options;
     throwIfAlreadyAborted(signal);
 
+    // 🔴 ONE logical start, captured BEFORE any work is done.
+    //
+    // `recordTextCall` derives `totalMs` as `performance.now() - start`. Reading
+    // `start` AFTER an await made every structured call report its duration as
+    // ~0 ms — envelope, summarization, agent micro-tasks, the untasked calls:
+    // all of them measured as instantaneous, because the clock was read once
+    // the clock had already finished running. #416 caught it because a 4 s
+    // provider call was being logged as 0.
+    //
+    // It is taken here, ahead of controller linking, deadline construction,
+    // routing resolution, admission, the local-first attempt, the coalesced
+    // provider call and every fallback — because ALL of those are the call's
+    // critical path. Success, local-first success, provider success and failure
+    // all report against this one value; a second clock per outcome would let
+    // one of them drift back to zero without anything noticing.
+    const start = performance.now();
+
     const { controller: abortController, cleanup } = this._linkController(signal);
     this._incrementStreamCount();
-    const deadline = this._deadlineFor({ deadlineAt, task, signal });
+    const deadline = createRequestDeadline({ deadlineAt, task, signal });
 
     const startedAt = new Date().toISOString();
     let resolution: AiModeResolution | undefined;
     let localAttempted = false;
     let fallback = false;
+    // Set when this call LEAVES the admission queue — admitted OR dropped. A
+    // coalesced subscriber never runs `_generateStructured`, so it records
+    // nothing here, which is the honest answer: it did not itself measure a
+    // queue, and borrowing the initiator's number would attribute someone
+    // else's wait to it.
+    let admission: QueueExit | undefined;
+    const onQueueExit = (observation: QueueExit): void => {
+      admission = observation;
+    };
     // One span builder for both outcomes: the success and failure paths differ
     // only in the last few fields, and spelling the whole shape out twice is how
     // a field silently ends up recorded on one path and not the other.
@@ -602,7 +599,7 @@ class TextGenerationService
       const routing = this._resolveRouting({ model, task });
       resolution = routing;
 
-      const localResult = await this._tryLocalStructured({
+      const localResult = await this._localFirst.tryStructured({
         prompt,
         systemPrompt,
         schema,
@@ -622,9 +619,9 @@ class TextGenerationService
       });
       if (localResult !== undefined) {
         this.debug('extractStructure:local-first', { schemaName, task });
-        this._recordSpan(
+        recordTextCall(
           span({
-            start: performance.now(),
+            start,
             // A local answer names no provider, so the recorded route says so
             // rather than borrowing the routing that merely permitted it.
             resolution: { ...routing, mode: 'offline', provider: 'local-tasks', model: '' },
@@ -651,15 +648,17 @@ class TextGenerationService
         task,
         signal: abortController.signal,
         deadline,
+        routing,
         onResolve: (resolved) => {
           resolution = resolved;
         },
+        onQueueExit,
       });
 
       this.debug('extractStructure:done', { schemaName, coalesced: result.coalesced });
-      this._recordSpan(
+      recordTextCall(
         span({
-          start: performance.now(),
+          start,
           resolution,
           streamed: false,
           // A structured call can legitimately produce no object; that is a
@@ -669,6 +668,11 @@ class TextGenerationService
           ok: true,
           fallback,
           cacheLayer: result.coalesced ? 'in-flight-dedup' : 'none',
+          // Queue wait is part of the critical path and is already inside
+          // `totalMs`; recorded again so it is visible on its own.
+          ...(admission === undefined
+            ? {}
+            : { queueMs: admission.queueMs, queueDepth: admission.queueDepth }),
           // A coalesced span was PAID FOR by another span. Counting its tokens
           // again would double the figure, which is the opposite of the point.
           ...(result.coalesced || result.usage === undefined ? {} : { usage: result.usage }),
@@ -676,18 +680,26 @@ class TextGenerationService
       );
       return result.structured;
     } catch (error: unknown) {
-      this._recordSpan(
+      recordTextCall(
         span({
-          start: performance.now(),
+          start,
           resolution,
           streamed: false,
           completionChars: 0,
           ok: false,
           fallback,
           error,
+          // A request cancelled or expired WHILE QUEUED is recorded with the
+          // queue wait it actually incurred. Reporting nothing here would
+          // erase the difference between "never got a provider call" and
+          // "failed on the provider", which is the distinction this slice
+          // exists to make measurable.
+          ...(admission === undefined
+            ? {}
+            : { queueMs: admission.queueMs, queueDepth: admission.queueDepth }),
         }),
       );
-      if (this._isCancellation(error)) {
+      if (isRequestCancellation(error)) {
         this.debug('extractStructure:aborted');
         throw error;
       }
@@ -705,12 +717,15 @@ class TextGenerationService
 
   cancelAll(): void {
     this.debug('cancelAll', { count: this._abortControllers.size });
+    // Admission FIRST: queued requests are rejected before the controllers are
+    // aborted, so no queued work can be admitted by a window that happens to
+    // fire between the two, and nothing is left holding a slot afterwards.
+    this._admission.cancelAll();
     for (const controller of this._abortControllers) {
       controller.abort();
     }
     this._abortControllers.clear();
-    this._activeStreamCount = 0;
-    (globalThis as Record<string, unknown>).__text_service_active_stream_count = 0;
+    resetActiveTextRequests();
   }
 
   // ── Lifecycle ─────────────────────────────────────────────────────────
@@ -718,7 +733,8 @@ class TextGenerationService
   override async dispose(): Promise<void> {
     this.cancelAll();
     this._coalescer.cancelAll();
-    this._localCooldown.clearAll();
+    this._admission.cancelAll();
+    this._localFirst.clearAll();
     await super.dispose();
   }
 
@@ -729,11 +745,16 @@ class TextGenerationService
    * second implementation of task-role routing here would eventually disagree
    * with the dispatch path, and the disagreement would be invisible.
    */
-  private _resolveRouting(options: { model?: string; task?: TextTask }): AiModeResolution {
+  private _resolveRouting(options: {
+    model?: string;
+    task?: TextTask;
+    endpoint?: string;
+  }): AiModeResolution {
     try {
       return aiGatewayService.resolveText({
         ...(options.model === undefined ? {} : { model: options.model }),
         ...(options.task === undefined ? {} : { task: options.task }),
+        ...(options.endpoint === undefined ? {} : { endpoint: options.endpoint }),
       });
     } catch {
       // An unresolvable routing would fail the gateway call anyway; the local

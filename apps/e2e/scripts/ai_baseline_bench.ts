@@ -44,10 +44,12 @@ import { openCheckpoint } from './ai_baseline_checkpoint.ts';
 import { frameProbe, installFrameProbe } from './ai_baseline_frame_probe.ts';
 import type { DialogueTurnProbe, WireWindow } from './ai_baseline_production_scenarios.ts';
 import {
+  type AdmissionSnapshot,
   buildWidthOrder,
   type ClientSpan,
   runPrefetchWidthSweepScenario,
   runProductionDialogueScenario,
+  runResidualContentionScenario,
 } from './ai_baseline_production_scenarios.ts';
 import { renderMarkdown } from './ai_baseline_report.ts';
 import { runSyntheticScenarios } from './ai_baseline_synthetic_scenarios.ts';
@@ -117,6 +119,18 @@ const parseArgs = (
   p2Only: boolean;
   productionDialogue: boolean;
   productionContention: boolean;
+  /**
+   * Admission quiet window in ms, or `undefined` for the shipped default.
+   *
+   * Installed through the client's measurement seam so candidate windows can be
+   * compared in one session. It is a HARNESS input, not a product setting: the
+   * shipped default is whatever the measurements select. Parsed by
+   * `readQuietWindow`, which refuses a missing or negative value.
+   */
+  quietWindowMs: number | undefined;
+  /** Run the already-running-background residual experiment, and how many. */
+  residual: boolean;
+  residualReps: number;
   probeNpcId: string;
   probeNpcName: string;
   prefetchNpcIds: readonly string[];
@@ -156,6 +170,22 @@ const parseArgs = (
   };
   const widthSweepReps = readPositiveInt('p2-reps', 12);
   const widthSweepWidths = parseWidths(readRequired('p2-widths', '0,1,2,4'));
+  // `0` is LEGAL — it is the "no deferral" measurement row — so the value is a
+  // non-negative integer. A flag present without a value is REFUSED rather than
+  // read as "omitted": silently running the default would attribute the result
+  // to a configuration nobody asked for.
+  const readQuietWindow = (): number | undefined => {
+    const index = argv.indexOf('--quiet-window-ms');
+    if (index === -1) {
+      return undefined;
+    }
+    const raw = argv[index + 1];
+    const value = raw === undefined || raw.startsWith('--') ? Number.NaN : Number(raw);
+    if (!Number.isInteger(value) || value < 0) {
+      throw new Error(`--quiet-window-ms needs non-negative integer ms, got "${raw}".`);
+    }
+    return value;
+  };
   return {
     endpoint: readFlag('endpoint') ?? 'http://localhost:11434/v1',
     model: readFlag('model') ?? 'ornith-1.5:9b',
@@ -191,6 +221,9 @@ const parseArgs = (
     // discard P1's measurements too. A run that only needs the dialogue turn
     // can therefore ask for P1 alone.
     productionContention: !argv.includes('--no-production') && !argv.includes('--no-contention'),
+    quietWindowMs: readQuietWindow(),
+    residual: argv.includes('--residual'),
+    residualReps: readPositiveInt('residual-reps', 8),
     // `village_elder` is the authored NPC on the starting map, so the
     // production dialogue path is exercised against real pack content.
     probeNpcId: readFlag('npc') ?? 'village_elder',
@@ -1164,6 +1197,48 @@ const spansAfter = async (page: Page, cursor: number): Promise<readonly ClientSp
     return spans.filter((span) => (span.id ?? 0) > after).sort((a, b) => (a.id ?? 0) - (b.id ?? 0));
   }, cursor)) as readonly ClientSpan[];
 
+/**
+ * Reads the client's admission counters.
+ *
+ * Content-free by construction — counts only. This is the ONLY source that can
+ * observe a background request waiting for admission, because such a request has
+ * dispatched nothing and therefore has no wire row; treating "absent from the
+ * wire" as "did not happen" is the mistake this reader exists to prevent.
+ */
+const admissionSnapshot = async (page: Page): Promise<AdmissionSnapshot> =>
+  (await page.evaluate(() => {
+    const stats = (
+      globalThis as unknown as {
+        __text_service_admission_stats?: Partial<AdmissionSnapshot>;
+      }
+    ).__text_service_admission_stats;
+    return {
+      interactiveActive: Number(stats?.interactiveActive ?? 0),
+      backgroundActive: Number(stats?.backgroundActive ?? 0),
+      backgroundQueued: Number(stats?.backgroundQueued ?? 0),
+      backgroundAdmitted: Number(stats?.backgroundAdmitted ?? 0),
+      backgroundDropped: Number(stats?.backgroundDropped ?? 0),
+    };
+  })) as AdmissionSnapshot;
+
+/**
+ * Sets the admission quiet window for the page, in ms.
+ *
+ * Installed through the client's documented test/measurement seam rather than by
+ * a rebuild, so candidate windows can be compared within one session and one
+ * machine state. `undefined` restores the shipped default.
+ */
+const setAdmissionQuietWindow = async (page: Page, windowMs: number | undefined): Promise<void> => {
+  await page.evaluate((value) => {
+    const target = globalThis as Record<string, unknown>;
+    if (value === undefined) {
+      delete target.__text_admission_quiet_window_ms;
+      return;
+    }
+    target.__text_admission_quiet_window_ms = value;
+  }, windowMs);
+};
+
 const productionWire = (): WireWindow => ({
   mark: wireMark,
   slice: wireSlice,
@@ -1176,6 +1251,7 @@ const productionWire = (): WireWindow => ({
   runTurn: runProductionTurn,
   prepareBurst: prepareProductionBurst,
   runBurst: runProductionBurst,
+  admission: admissionSnapshot,
 });
 
 // ── Main ───────────────────────────────────────────────────────────────────
@@ -1249,6 +1325,15 @@ const main = async (): Promise<void> => {
   });
   await page.waitForTimeout(500);
   console.log('→ provider config loaded');
+
+  // Installed before ANY scenario runs, so no warm-up call can be admitted
+  // under one window and measured under another.
+  await setAdmissionQuietWindow(page, CONFIG.quietWindowMs);
+  console.log(
+    CONFIG.quietWindowMs === undefined
+      ? '→ admission quiet window: client default'
+      : `→ admission quiet window: ${String(CONFIG.quietWindowMs)} ms`,
+  );
 
   // Routing is only recorded once a call has actually resolved, so this is
   // read at the END of the run rather than here.
@@ -1324,6 +1409,26 @@ const main = async (): Promise<void> => {
         onSample: checkpoint.onSample,
       });
     }
+  }
+
+  // ── P3: already-running background — the residual experiment ────────
+  //
+  // Deliberately separate from the sweep, and never merged into it. This is the
+  // ordering admission is designed to PREVENT; forcing it measures the cost of
+  // the case the mechanism cannot reach, so the gate's boundary is a measured
+  // number rather than a caveat.
+  if (CONFIG.residual && CONFIG.productionContention) {
+    console.log(`→ P3 already-running-background residual ×${CONFIG.residualReps} …`);
+    scenarios.p3_residual_contention = await runResidualContentionScenario({
+      page,
+      wire: productionWire(),
+      playerLine: PLAYER_LINE,
+      npcPool: CONFIG.prefetchNpcIds,
+      npcNames: CONFIG.prefetchNpcNames,
+      repetitions: CONFIG.residualReps,
+      backgroundCapMs: CONFIG.backgroundCapMs,
+      providerStartTimeoutMs: 30_000,
+    });
   }
 
   // ── Client telemetry (secondary; absent before #410) ─────────────────

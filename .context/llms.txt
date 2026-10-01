@@ -1,8 +1,8 @@
 # Aikami Knowledge Index
 
 > **AI-first entry point.** Read this file first.
-> Generated: 2026-09-30
-> Files: 509 across 11 categories
+> Generated: 2026-10-01
+> Files: 511 across 11 categories
 
 ## Quick Start (Read These First)
 
@@ -27,7 +27,9 @@ Monorepo: SvelteKit Client × Cloudflare Workers backend (D1 + R2 + Better Auth)
 - [Semantic map authoring — foundation and deferred compiler design](architecture/semantic_map_authoring.md)
 ## audits/
 
+- [Issue #382 — Priority-aware inference admission, measured on the production path](audits/382-admission-control-report.md)
 - [Issue #382 — reproducible AI baseline (AC-1)](audits/382-ai-baseline-report.md)
+- [Issue #382 — `MAP_LOADED` contention, re-measured after the envelope fix](audits/382-contention-remeasure-report.md)
 - [Issue #382 — C-401 call-2 envelope extraction: schema reduction and result](audits/382-envelope-extraction-report.md)
 - [Issue #382 — C-401 call-2 envelope: reasoning control](audits/382-envelope-reasoning-control-report.md)
 - [Where #382's next slice should go — measurement-first triage](audits/382-next-slice-proposal.md)

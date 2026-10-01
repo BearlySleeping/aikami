@@ -93,6 +93,7 @@ export type ClientSpan = {
   readonly errorCode?: string;
   readonly cacheLayer?: string;
   readonly queueDepth?: number;
+  readonly queueMs?: number;
   readonly deadlineExceeded?: boolean;
   readonly deadlineRemainingMs?: number;
 };
@@ -144,6 +145,24 @@ export type WireWindow = {
     page: Page,
     input: { npcIds: readonly string[] },
   ) => Promise<{ candidates: number; dispatchMs: number }>;
+  /**
+   * The client's admission counters, as a snapshot.
+   *
+   * A SEPARATE source from the wire on purpose: it proves what the CLIENT
+   * believed about its own queue, which is the thing under test, and it is the
+   * only place a request waiting for admission can be observed at all — such a
+   * request has sent nothing and therefore has no wire row.
+   */
+  readonly admission: (page: Page) => Promise<AdmissionSnapshot>;
+};
+
+/** The client's admission counters at one instant. */
+export type AdmissionSnapshot = {
+  readonly interactiveActive: number;
+  readonly backgroundActive: number;
+  readonly backgroundQueued: number;
+  readonly backgroundAdmitted: number;
+  readonly backgroundDropped: number;
 };
 
 /**
@@ -409,6 +428,11 @@ const runWidthSample = async (options: {
   const spanCursor = await options.wire.telemetryCursor(options.page);
   const windowFrom = options.wire.mark();
 
+  // Taken BEFORE the burst, so every admission counter below is a DELTA over
+  // this sample rather than a cumulative total that would also carry the
+  // previous sample's activity.
+  const admissionBefore = await options.wire.admission(options.page);
+
   let candidates = 0;
   let dispatchMs = 0;
   if (options.width > 0) {
@@ -419,17 +443,26 @@ const runWidthSample = async (options: {
     dispatchMs = burst.dispatchMs;
   }
 
+  // The instant the burst has been dispatched but the player has not yet acted.
+  // Whether background work reached the provider HERE is the whole question:
+  // admission is supposed to make the answer zero.
+  const admissionAfterBurst = await options.wire.admission(options.page);
   const dialogueStart = performance.now();
   // Sampled across the turn only, so the window is the same length at every
   // width. A probe window that grew with the background burst would compare
   // frame cadences over different amounts of time.
   await options.frames?.reset(options.page);
   const turn = await recordTurn(options.page, options.wire, options.playerLine, label);
+  const turnEndedAt = performance.now();
   const frameResult = await options.frames?.read(options.page);
 
   // The burst is fire-and-forget, so it is waited out AFTER the interactive
   // measurement. Waiting before would have measured a background burst that had
   // already finished.
+  // Taken at the moment the player starts talking — before waiting for the
+  // burst, because that wait is deliberately after the interactive measurement.
+  const admissionAtDialogueStart = await options.wire.admission(options.page);
+  const drainStartedAt = Date.now();
   const backgroundSpans = await options.wire.settleBackground(
     options.page,
     'summarization',
@@ -437,6 +470,15 @@ const runWidthSample = async (options: {
     options.width,
     options.backgroundCapMs,
   );
+  // How long queued background work took to finish landing AFTER the player's
+  // turn. This is the cost admission charges best-effort work, reported rather
+  // than hidden.
+  const backgroundDrainMs = Date.now() - drainStartedAt;
+  const admissionAtEnd = await options.wire.admission(options.page);
+  const admissionDropped = admissionAtEnd.backgroundDropped - admissionBefore.backgroundDropped;
+  // The peak queue depth the CLIENT observed over this sample. Taken from the
+  // spans' own entry snapshots rather than from a live counter, so it survives
+  // the queue having already drained.
 
   // Settle the window so every response body has been read and enriched before
   // anything is counted. Reading before this is what previously produced rows
@@ -456,6 +498,16 @@ const runWidthSample = async (options: {
   );
   const dialogueRows = rows.filter((row) => row.startedAtMs >= splitAt);
 
+  // Every background request in the window, on either side of the player's turn.
+  // Admission deliberately moves most of them to AFTER the turn, so counting
+  // only the pre-dialogue ones would report a correct, fully-drained burst as
+  // missing.
+  const backgroundWireTotal = rows.filter(
+    (row) =>
+      (row.startedAtMs >= windowFrom && row.startedAtMs < dialogueStart) ||
+      row.startedAtMs > turnEndedAt,
+  ).length;
+
   // The overlap proof: background work that was still executing at the moment
   // the provider started serving the player's turn. A background call that
   // finished before this point is NOT contention and is counted as such.
@@ -470,32 +522,24 @@ const runWidthSample = async (options: {
   const extractionSpans = spansFor('envelope');
   const backgroundClientSpans = spansFor('summarization');
 
-  const invalidReasons: string[] = [];
-  if (options.width === 0) {
-    if (backgroundRows.length > 0 || backgroundSpans > 0) {
-      invalidReasons.push(
-        `the width-0 control produced background work (${String(backgroundRows.length)} wire ` +
-          `requests, ${String(backgroundSpans)} client spans)`,
-      );
-    }
-  } else {
-    // 🔴 Fan-out is COUNTED, never inferred from the candidates offered. A
-    // width-N sample that produced fewer than N real calls is not a
-    // contention measurement, so it is recorded as invalid rather than
-    // averaged into a latency statistic.
-    if (backgroundSpans < options.width) {
-      invalidReasons.push(
-        `only ${String(backgroundSpans)} of ${String(options.width)} intended summarization ` +
-          'calls were recorded by the client',
-      );
-    }
-    if (backgroundRows.length < options.width) {
-      invalidReasons.push(
-        `only ${String(backgroundRows.length)} of ${String(options.width)} summarization ` +
-          'requests reached the provider',
-      );
-    }
-  }
+  // The deepest queue the CLIENT observed during this sample, from the spans'
+  // own entry snapshots. A live counter cannot answer this: by the time it is
+  // read the queue has usually drained, and the sample would report the depth
+  // of whatever happened to be outstanding at the instant of reading.
+  const queueDepthMax = Math.max(
+    0,
+    ...[...backgroundClientSpans, ...extractionSpans, ...narrativeSpans].map(
+      (span) => span.queueDepth ?? 0,
+    ),
+  );
+
+  const invalidReasons = sampleValidityFailures({
+    width: options.width,
+    backgroundRows: backgroundRows.length,
+    backgroundWireTotal,
+    backgroundSpans,
+    admissionDropped,
+  });
 
   const turnRecord = turn as Record<string, unknown>;
   return {
@@ -511,9 +555,27 @@ const runWidthSample = async (options: {
 
     // ── Overlap proof: two independent sources, both required to agree ──
     backgroundProviderRequests: backgroundRows.length,
+    backgroundProviderRequestsTotal: backgroundWireTotal,
     backgroundClientSpans: backgroundSpans,
     backgroundRequestsStillRunningAtDialogueStart: stillRunning,
     overlapped: stillRunning > 0,
+
+    // ── Admission, measured from the client ──
+    //
+    // `backgroundAdmitted` is a running total, so it is differenced against the
+    // pre-burst snapshot. A background request that is QUEUED has no wire row
+    // and no span yet; these counters are the only way to see it exist.
+    backgroundQueuedAfterBurst:
+      admissionAfterBurst.backgroundQueued - admissionBefore.backgroundQueued,
+    backgroundAdmittedBeforeDialogue:
+      admissionAfterBurst.backgroundAdmitted - admissionBefore.backgroundAdmitted,
+    backgroundAdmittedTotal: admissionAtEnd.backgroundAdmitted - admissionBefore.backgroundAdmitted,
+    backgroundInFlightAtDialogueStart: admissionAtDialogueStart.backgroundActive,
+    interactiveActiveAtDialogueStart: admissionAtDialogueStart.interactiveActive,
+    backgroundQueuedAtDialogueStart: admissionAtDialogueStart.backgroundQueued,
+    backgroundDropped: admissionDropped,
+    backgroundDrainMs,
+    queueDepthMax,
 
     // ── Background work ──
     background: {
@@ -544,6 +606,7 @@ const runWidthSample = async (options: {
         tokenSource: span.tokenSource ?? null,
         cacheLayer: span.cacheLayer ?? null,
         queueDepth: span.queueDepth ?? null,
+        queueMs: span.queueMs ?? null,
         provider: span.provider ?? null,
         model: span.model ?? null,
       })),
@@ -672,6 +735,11 @@ const range = (values: readonly number[]): Record<string, unknown> => ({
   n: values.length,
 });
 
+/** The client's own spans for one task, in call order. */
+const backgroundClientCalls = (sample: Sample): readonly Record<string, unknown>[] =>
+  ((sample.background as Record<string, unknown> | undefined)?.clientCalls ??
+    []) as readonly Record<string, unknown>[];
+
 /** Every sample's value for a key, skipping samples that observed none. */
 const observed = (
   samples: readonly Sample[],
@@ -691,17 +759,114 @@ const clientCall = (sample: Sample, branch: 'narrative' | 'extraction', key: str
 /**
  * Per-sample WIRE duration for one dialogue call.
  *
- * The client's own span `totalMs` is reported next to it, never used for it:
- * `extractStructure` records `start: performance.now()` AFTER its await, so
- * every structured span in the client's buffer carries `totalMs: 0`. Reading
- * per-call latency from there would report a 17 s background summarization as
- * instantaneous. The disagreement is preserved in the sample so the defect
- * stays visible instead of being quietly worked around.
+ * The client's own span `totalMs` is reported NEXT TO it, never used for it.
+ *
+ * 🔴 This used to be stronger than that: `extractStructure` recorded
+ * `start: performance.now()` AFTER its await, so every structured span carried
+ * `totalMs: 0` and reading latency from the client's own buffer would have
+ * reported a 17 s background summarization as instantaneous. That defect is
+ * fixed (the start is now captured before any work) — but the wire remains the
+ * primary source, because it is the only one that survives a client that is not
+ * reporting at all, and because an aborted request has no span.
  */
 const wireCallMs = (sample: Sample, branch: 'narrative' | 'extraction'): unknown => {
   const byCall = (dialogueOf(sample).byCall ?? {}) as Record<string, unknown>;
   const record = byCall[branch] as Record<string, unknown> | undefined;
   return record?.medianMs;
+};
+
+/**
+ * Admission's ledger, per width.
+ *
+ * A request WAITING for admission has sent nothing: no wire row, no telemetry
+ * span yet. These counters are the only place it can be seen to exist, and
+ * "absent from the wire" must never be read as "did not happen".
+ */
+const widthAdmission = (samples: readonly Sample[]): Record<string, unknown> => {
+  const numberOf = (pick: (sample: Sample) => unknown): Record<string, number> => {
+    const values = samples.map((sample) => Number(pick(sample)));
+    return { min: Math.min(...values), max: Math.max(...values) };
+  };
+  return {
+    backgroundQueuedAfterBurst: numberOf((sample) => sample.backgroundQueuedAfterBurst),
+    backgroundAdmittedBeforeDialogue: numberOf((sample) => sample.backgroundAdmittedBeforeDialogue),
+    backgroundInFlightAtDialogueStart: numberOf(
+      (sample) => sample.backgroundInFlightAtDialogueStart,
+    ),
+    backgroundDropped: numberOf((sample) => sample.backgroundDropped),
+    // The queue wait the CLIENT recorded on its background spans, next to the
+    // wire duration for the same work. They are different clocks measuring
+    // different things — one includes admission, one cannot — and the gap
+    // between them is the point, not a discrepancy.
+    //
+    // Every waiting call is counted, not just the first. At width 4 the burst
+    // queues four requests whose waits differ by tens of seconds, and keeping
+    // only the shortest per sample would report a min-of-mins to min-of-maxes
+    // spread — a narrower and better-looking distribution than the one that
+    // happened.
+    queueWaitMs: range(
+      samples.flatMap((sample) =>
+        backgroundClientCalls(sample)
+          .map((call) => Number(call.queueMs ?? 0))
+          .filter((queueMs) => queueMs > 0),
+      ),
+    ),
+    backgroundDrainMs: range(observed(samples, (sample) => Number(sample.backgroundDrainMs))),
+  };
+};
+
+/**
+ * Why a sample is NOT a contention measurement, or `[]` when it is one.
+ *
+ * Extracted so the rule reads as a rule rather than as a branch inside a
+ * 200-line sample function.
+ *
+ * What must be counted changed when admission landed. Previously the requirement
+ * was that N requests were on the PROVIDER during the dialogue window; that is
+ * now exactly what admission is supposed to PREVENT, so holding to it would
+ * mark every correct sample invalid and the measurement would report a policy
+ * working as nothing at all. The invariant that still matters is that the work
+ * was issued, was not dropped, and eventually reached the provider — counted
+ * across the WHOLE window, before the turn and after it, not only before it.
+ *
+ * Fan-out is COUNTED, never inferred from the candidates offered.
+ */
+const sampleValidityFailures = (input: {
+  width: number;
+  backgroundRows: number;
+  backgroundWireTotal: number;
+  backgroundSpans: number;
+  admissionDropped: number;
+}): string[] => {
+  const { width, backgroundRows, backgroundWireTotal, backgroundSpans, admissionDropped } = input;
+  if (width === 0) {
+    return backgroundRows > 0 || backgroundSpans > 0
+      ? [
+          `the width-0 control produced background work (${String(backgroundRows)} wire ` +
+            `requests, ${String(backgroundSpans)} client spans)`,
+        ]
+      : [];
+  }
+  const failures: string[] = [];
+  if (backgroundSpans < width) {
+    failures.push(
+      `only ${String(backgroundSpans)} of ${String(width)} intended summarization calls were ` +
+        'recorded by the client',
+    );
+  }
+  if (backgroundWireTotal < width) {
+    failures.push(
+      `only ${String(backgroundWireTotal)} of ${String(width)} summarization requests reached ` +
+        'the provider across the whole window',
+    );
+  }
+  if (admissionDropped > 0) {
+    failures.push(
+      `${String(admissionDropped)} background requests were DROPPED by admission instead of ` +
+        'running; a dropped refresh silently loses a memory write',
+    );
+  }
+  return failures;
 };
 
 /** Latency, tokens and frame-cadence distributions for one width. */
@@ -820,6 +985,7 @@ const aggregateWidth = (width: number, samples: readonly Sample[]): Record<strin
   overlappedSamples: samples.filter((sample) => sample.overlapped === true).length,
   ...widthBackgroundCounts(samples),
   ...widthLatency(samples),
+  ...widthAdmission(samples),
   ...widthOutcomes(samples),
 });
 
@@ -996,5 +1162,146 @@ export const runPrefetchWidthSweepScenario = async (options: {
     })),
     byWidth,
     samples,
+  };
+};
+
+// ---------------------------------------------------------------------------
+// Scenario B — already-running background (the residual experiment)
+// ---------------------------------------------------------------------------
+
+/**
+ * Forces the case admission CANNOT fix, and measures what is left.
+ *
+ * Admission prevents background work from STARTING under player-visible work.
+ * It cannot stop work that has already started, because aborting an HTTP
+ * request does not reclaim GPU compute: Ollama keeps generating for a client
+ * that has gone away. Pretending otherwise would be the easy lie — cancel the
+ * background call, report a clean number, and hide the one scenario where the
+ * player still waits.
+ *
+ * So this experiment DELIBERELY creates the bad ordering:
+ *
+ *   1. dispatch one real background prefetch;
+ *   2. wait until the client reports it as provider-IN-FLIGHT (`backgroundActive
+ *      === 1`) — not merely dispatched, not merely queued, actually running;
+ *   3. start the player's dialogue turn.
+ *
+ * The result is reported separately from Scenario A and never blended into it.
+ * If this case still shows roughly the #416 width-1 penalty, that is the honest
+ * boundary of what admission buys, and it is stated as such.
+ */
+export const runResidualContentionScenario = async (options: {
+  readonly page: Page;
+  readonly wire: WireWindow;
+  readonly playerLine: string;
+  readonly npcPool: readonly string[];
+  readonly npcNames: Readonly<Record<string, string>>;
+  /** Samples to measure. */
+  readonly repetitions: number;
+  readonly backgroundCapMs: number;
+  /** How long to wait for the background request to reach the provider. */
+  readonly providerStartTimeoutMs: number;
+}): Promise<Record<string, unknown>> => {
+  const samples: Record<string, unknown>[] = [];
+
+  for (let index = 0; index < options.repetitions; index += 1) {
+    const label = `P3 residual ${index + 1}`;
+
+    // Memory is restored for the whole pool, exactly as in the sweep, so the
+    // prefetch is genuinely stale and the dialogue turn's context is identical
+    // to every other sample in the report.
+    await options.wire.prepareBurst(options.page, {
+      npcIds: options.npcPool,
+      npcNames: options.npcNames,
+    });
+
+    const spanCursor = await options.wire.telemetryCursor(options.page);
+    const windowFrom = options.wire.mark();
+    const admissionBefore = await options.wire.admission(options.page);
+
+    await options.wire.runBurst(options.page, { npcIds: options.npcPool.slice(0, 1) });
+
+    // 🔴 Wait for PROOF it is on the provider, not merely dispatched. Polling
+    // the client's own admission counter is the only signal available: a queued
+    // request has sent nothing and so has no wire row yet, and "dispatched"
+    // would happily be measured while the background work was still waiting —
+    // which would silently turn Scenario B back into Scenario A.
+    const providerDeadline = Date.now() + options.providerStartTimeoutMs;
+    let started = false;
+    while (Date.now() < providerDeadline) {
+      const snapshot = await options.wire.admission(options.page);
+      if (snapshot.backgroundActive > 0) {
+        started = true;
+        break;
+      }
+      await new Promise((done) => setTimeout(done, 25));
+    }
+    const admissionAtDialogueStart = await options.wire.admission(options.page);
+
+    const dialogueStart = performance.now();
+    const turn = await recordTurn(options.page, options.wire, options.playerLine, label);
+    await options.wire.settleBackground(
+      options.page,
+      'summarization',
+      spanCursor,
+      1,
+      options.backgroundCapMs,
+    );
+    await options.wire.slice(windowFrom).settle();
+    const rows = options.wire.rowsFrom(windowFrom);
+
+    const firstDialogueRow = rows.find((row) => row.startedAtMs >= dialogueStart);
+    const splitAt = firstDialogueRow?.startedAtMs ?? dialogueStart;
+    const backgroundRows = rows.filter(
+      (row) => row.startedAtMs >= windowFrom && row.startedAtMs < splitAt,
+    );
+    const overlapping = backgroundRows.filter(
+      (row) => row.startedAtMs + row.durationMs > splitAt,
+    ).length;
+
+    const turnRecord = turn as Record<string, unknown>;
+    samples.push({
+      index,
+      // A sample where the background request never actually reached the
+      // provider is not this experiment at all, and is reported as such rather
+      // than averaged in as a clean run.
+      backgroundReachedProvider: started,
+      backgroundInFlightAtDialogueStart: admissionAtDialogueStart.backgroundActive,
+      backgroundAdmittedBeforeDialogue:
+        admissionAtDialogueStart.backgroundAdmitted - admissionBefore.backgroundAdmitted,
+      backgroundProviderRequests: backgroundRows.length,
+      backgroundOverlappingDialogue: overlapping,
+      overlapped: overlapping > 0,
+      ttftMs: turnRecord.ttftMs ?? null,
+      wallClockMs: turnRecord.wallClockMs ?? null,
+      turnFailed: turnRecord.turnFailed === true,
+      turn,
+    });
+  }
+
+  const onProvider = samples.filter((sample) => sample.backgroundReachedProvider === true);
+  const residualTtfts = onProvider
+    .map((sample) => sample.ttftMs)
+    .filter((value): value is number => typeof value === 'number');
+  const overlapCount = onProvider.filter((sample) => sample.overlapped === true).length;
+
+  return {
+    description:
+      'SCENARIO B — deliberately already-running background. One real background ' +
+      'summarization is dispatched and waited for until the client reports it provider-' +
+      'in-flight, and only then does the dialogue turn start. This is the case admission ' +
+      'cannot prevent: aborting the background HTTP request does not reclaim GPU compute. ' +
+      'Reported separately from the width sweep and never blended with it.',
+    samples,
+    samplesMeasured: samples.length,
+    samplesWithBackgroundOnProvider: onProvider.length,
+    providerOverlapObserved: overlapCount,
+    ttftMs: {
+      count: residualTtfts.length,
+      median: median(residualTtfts),
+      min: residualTtfts.length > 0 ? Math.min(...residualTtfts) : null,
+      max: residualTtfts.length > 0 ? Math.max(...residualTtfts) : null,
+    },
+    turnFailures: samples.filter((sample) => sample.turnFailed === true).length,
   };
 };

@@ -14,7 +14,7 @@
 //
 // Contract: issue #382 P0 instrumentation.
 
-import { type TextTask, textTaskPreset } from './text_task.ts';
+import { type TextTask, type TextTaskPriority, textTaskPreset } from './text_task.ts';
 
 // ---------------------------------------------------------------------------
 // Versioned price table
@@ -156,3 +156,16 @@ export const DEFAULT_TEXT_TASK_BUDGET_MS = 20_000;
 /** Resolves the end-to-end budget for a task, or `undefined` when unbounded. */
 export const textTaskBudgetMs = (task: TextTask | undefined): number | undefined =>
   textTaskPreset(task).budgetMs;
+
+/**
+ * Scheduling class for a task, for inference admission (#382).
+ *
+ * A task that declared NONE is treated as `interactive`. That is the
+ * conservative direction: an untasked call is usually one someone wrote by hand
+ * for a player-visible moment, and starving an unknown call behind
+ * best-effort background summarization would degrade the game on the strength
+ * of a classification nobody made. An untasked call is not a licence to be
+ * deprioritised — it is an absence of evidence that it is safe to deprioritise.
+ */
+export const textTaskPriority = (task: TextTask | undefined): TextTaskPriority =>
+  task === undefined ? 'interactive' : textTaskPreset(task).priority;
