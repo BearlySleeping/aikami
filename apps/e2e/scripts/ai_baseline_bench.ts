@@ -124,12 +124,12 @@ const parseArgs = (
    *
    * Installed through the client's measurement seam so candidate windows can be
    * compared in one session. It is a HARNESS input, not a product setting: the
-   * shipped default is whatever the measurements select.
+   * shipped default is whatever the measurements select. Parsed by
+   * `readQuietWindow`, which refuses a missing or negative value.
    */
   quietWindowMs: number | undefined;
-  /** Run the already-running-background residual experiment. */
+  /** Run the already-running-background residual experiment, and how many. */
   residual: boolean;
-  /** Samples for the residual experiment. */
   residualReps: number;
   probeNpcId: string;
   probeNpcName: string;
@@ -170,6 +170,22 @@ const parseArgs = (
   };
   const widthSweepReps = readPositiveInt('p2-reps', 12);
   const widthSweepWidths = parseWidths(readRequired('p2-widths', '0,1,2,4'));
+  // `0` is LEGAL — it is the "no deferral" measurement row — so the value is a
+  // non-negative integer. A flag present without a value is REFUSED rather than
+  // read as "omitted": silently running the default would attribute the result
+  // to a configuration nobody asked for.
+  const readQuietWindow = (): number | undefined => {
+    const index = argv.indexOf('--quiet-window-ms');
+    if (index === -1) {
+      return undefined;
+    }
+    const raw = argv[index + 1];
+    const value = raw === undefined || raw.startsWith('--') ? Number.NaN : Number(raw);
+    if (!Number.isInteger(value) || value < 0) {
+      throw new Error(`--quiet-window-ms needs non-negative integer ms, got "${raw}".`);
+    }
+    return value;
+  };
   return {
     endpoint: readFlag('endpoint') ?? 'http://localhost:11434/v1',
     model: readFlag('model') ?? 'ornith-1.5:9b',
@@ -205,9 +221,7 @@ const parseArgs = (
     // discard P1's measurements too. A run that only needs the dialogue turn
     // can therefore ask for P1 alone.
     productionContention: !argv.includes('--no-production') && !argv.includes('--no-contention'),
-    quietWindowMs: argv.includes('--quiet-window-ms')
-      ? Number(readFlag('quiet-window-ms'))
-      : undefined,
+    quietWindowMs: readQuietWindow(),
     residual: argv.includes('--residual'),
     residualReps: readPositiveInt('residual-reps', 8),
     // `village_elder` is the authored NPC on the starting map, so the

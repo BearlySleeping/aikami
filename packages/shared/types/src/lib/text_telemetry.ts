@@ -116,9 +116,14 @@ export type TextTelemetrySpan = {
    * queue makes a request that sat in a queue look exactly as fast as one that
    * did not.
    *
-   * `0` means "admitted immediately", which is the honest value for interactive
-   * work. A call that never had to queue carries no value rather than a
-   * fabricated zero.
+   * `0` means "admitted immediately", which is the honest value for
+   * interactive work — and is recorded, so that `queueMs > 0` means something.
+   *
+   * The value is ABSENT only when the call never passed through inference
+   * admission at all: a local-first success answered on-device, or a coalesced
+   * subscriber that joined an attempt somebody else started. Those calls have
+   * no queue of their own to report, and inventing a number for them would be
+   * worse than recording nothing.
    */
   queueMs?: number;
 };

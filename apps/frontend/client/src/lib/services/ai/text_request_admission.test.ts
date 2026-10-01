@@ -571,7 +571,11 @@ describe('admission — queued requests can be dropped without dispatching', () 
     for (const controller of controllers) {
       controller.abort();
     }
-    await expect(Promise.allSettled(pending)).resolves.toBeDefined();
+    // Every subscriber must have been REJECTED, not merely settled:
+    // `Promise.allSettled` resolves for a fulfilled promise too, so asserting
+    // only that it resolved would pass with the requests quietly succeeding.
+    const outcomes = await Promise.allSettled(pending);
+    expect(outcomes.map((outcome) => outcome.status)).toEqual(['rejected', 'rejected', 'rejected']);
     expect(admission.stats.backgroundQueued).toBe(0);
     clock.advance(10_000);
     await flush();
@@ -596,7 +600,8 @@ describe('admission — cancelAll', () => {
 
     admission.cancelAll();
 
-    await expect(Promise.allSettled(queued)).resolves.toBeDefined();
+    const outcomes = await Promise.allSettled(queued);
+    expect(outcomes.map((outcome) => outcome.status)).toEqual(['rejected', 'rejected']);
     expect(admission.stats.backgroundQueued).toBe(0);
     expect(admission.stats.backgroundAdmitted).toBe(0);
     expect(admission.stats.backgroundDropped).toBe(2);
@@ -610,6 +615,52 @@ describe('admission — cancelAll', () => {
     // a fresh domain's counters negative.
     foreground.release();
     expect(admission.stats.interactiveActive).toBe(0);
+  });
+
+  test('an idle domain is RECLAIMED, not retained for the session', async () => {
+    // Keyed by user-controlled provider/endpoint strings, and scanned by
+    // `recountTotals` on every acquire and release. Retaining every domain a
+    // session ever touched would make that scan grow without bound.
+    const first = await admission.acquire({
+      routing: OLLAMA,
+      task: 'dialogue',
+      signal: signal(),
+    });
+    expect(admission.stats.domains).toBe(1);
+    first.release();
+    expect(admission.stats.domains).toBe(0);
+
+    // The same routing still works afterwards — reclamation must not break the
+    // next caller.
+    const second = await admission.acquire({
+      routing: OLLAMA,
+      task: 'dialogue',
+      signal: signal(),
+    });
+    expect(admission.stats.domains).toBe(1);
+    second.release();
+    expect(admission.stats.domains).toBe(0);
+  });
+
+  test('a domain with queued work is NOT reclaimed', async () => {
+    const foreground = await admission.acquire({
+      routing: OLLAMA,
+      task: 'dialogue',
+      signal: signal(),
+    });
+    const queued = admission.acquire({
+      routing: OLLAMA,
+      task: 'summarization',
+      signal: signal(),
+    });
+    foreground.release();
+    // The window is armed and a waiter exists: this domain is still live.
+    expect(admission.stats.domains).toBe(1);
+
+    clock.advance(1_000);
+    await flush();
+    (await queued).release();
+    expect(admission.stats.domains).toBe(0);
   });
 
   test('the domain can be used again after cancelAll', async () => {

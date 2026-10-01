@@ -94,9 +94,17 @@ saw +165 % / +379 % / +679 %.
 | width | bg queued after burst | bg admitted before dialogue | **bg in-flight at dialogue start** | queue depth max | bg queue wait ms (min–max) | bg drain ms after turn (min–max) | bg dropped |
 |---|---|---|---|---|---|---|---|
 | 0 | 0 | 0 | **0** | 0 | n/a | 0 (0–0) | **0** |
-| 1 | 1 | **0** | **0** | 0 | 10 236 (5 408–13 277) | 16 414 (10 464–26 416) | **0** |
-| 2 | 2 | **0** | **0** | 1 | 10 480 (7 496–13 819) | 39 093 (27 432–48 060) | **0** |
-| 4 | 4 | **0** | **0** | 3 | 10 826 (7 210–13 294) | 90 887 (62 154–105 868) | **0** |
+| 1 | 1 | **0** | **0** | 0 | 10 203 (5 408–13 277) | 16 414 (10 464–26 416) | **0** |
+| 2 | 2 | **0** | **0** | 1 | 13 819 (7 496–35 194) | 39 093 (27 432–48 060) | **0** |
+| 4 | 4 | **0** | **0** | 3 | 35 808 (7 210–92 060) | 90 887 (62 154–105 868) | **0** |
+
+> The queue-wait column counts **every** waiting call, not the first per sample.
+> An earlier version of this harness kept only the first positive `queueMs` per
+> sample, which reported 10 480 / 10 826 ms at widths 2 / 4 and capped the width-4
+> maximum at 13 294 ms. The true distribution reaches 92 060 ms, because the
+> fourth queued call waits for three predecessors. The figures above are
+> recomputed from the same per-sample JSONL the run wrote; no re-measurement was
+> needed, and no other number in this report depends on the fix.
 
 Reading it:
 
@@ -257,6 +265,12 @@ fix every one of these was 0.
 | 2 | 13 819 ms (7 496–35 194) | 0, 1 | 1 |
 | 4 | 35 808 ms (7 210–92 060) | 0, 1, 2, 3 | 3 |
 
+The width-4 maximum of 92 s is not an outlier: it is the fourth call waiting out
+three predecessors, one quiet window and roughly three generations' worth of
+provider time. That is the price of serialising a four-way burst onto one GPU,
+and it is why the drain column above is the honest cost of this mechanism rather
+than a footnote.
+
 Queue time is already inside `totalMs` — the critical path a player waits on is
 queue plus execution — and is reported again separately so the wait is visible on
 its own. A call that never queued carries **no** `queueMs`, which is distinct
@@ -403,6 +417,7 @@ the local pool's real resource identity on hardware is a separate slice.
 | **extraction acceptance** | 12/12, 7/12, 10/12, 10/12 by width. **Not** a function of admission — no background work was on the provider during any turn. This is the known marginality of a ~4 s extraction against a 6 s budget. Recorded as an open item, not attributed to this change. |
 | **#410 absolute deadline** | intact. Admission queues *within* the existing budget; a queued request's wait consumes it, and expiry while queued removes it without a provider call. |
 | **#411 coalescing** | intact. Regression test asserts one provider call per pair of identical concurrent background requests. |
+| **contention-domain reclamation** | An idle domain is removed from the gate's map once nothing holds it, so the map cannot grow for the lifetime of a session and `recountTotals` cannot scan an unbounded set of user-supplied provider/endpoint strings. Pinned by test in both directions: an idle domain is reclaimed, a domain with a queued waiter or an armed window is not. |
 | **#415/#416 frame cadence** | 16.7 ms median at **every** width. Long tasks: 0 / 1 / 0 / 4 across the four widths, max 90 ms, all inside the drain window rather than the turn. #416 recorded zero long tasks at every width, so this is a small, non-zero change and is reported as such rather than rounded to "no regression". |
 | **NPC memory** | untouched. Epoch, staleness and campaign-scope protections unchanged; no file under `services/npc` is in this diff. |
 

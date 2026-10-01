@@ -480,6 +480,28 @@ const createTextRequestAdmission = (options?: {
         recountTotals();
         // Both outcomes re-open the domain, so both must re-evaluate the queue.
         armGrace(domain, state);
+        // 🔴 RECLAIM THE DOMAIN once nothing is left in it. Without this the
+        // map is keyed by user-controlled provider/endpoint strings and grows
+        // for the lifetime of the session, while `recountTotals` — which runs
+        // on every acquire and every release — scans all of it. A user who edits
+        // connections, or an agent that uses custom endpoints, pays that scan
+        // forever.
+        //
+        // Safe because every outstanding claim on a domain is counted: active
+        // leases in `interactiveActive`/`backgroundActive`, waiters in `queue`,
+        // and an armed window in `graceArmed`. All four at zero means nothing
+        // holds this state. A lease from an already-replaced generation keeps
+        // its own reference to the ORPHANED object, so it cannot decrement a
+        // replacement's counters.
+        if (
+          state.interactiveActive === 0 &&
+          state.backgroundActive === 0 &&
+          state.queue.length === 0 &&
+          !state.graceArmed &&
+          domains.get(domain) === state
+        ) {
+          domains.delete(domain);
+        }
       },
     };
   };

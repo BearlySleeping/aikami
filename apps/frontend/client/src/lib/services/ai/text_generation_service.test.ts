@@ -935,14 +935,16 @@ describe('TextGenerationService — structured-call duration telemetry', () => {
     expect(textTelemetryService.summary.counters.maxQueueDepth).toBe(3);
   });
 
-  test('a call that never queued carries no queueMs rather than a fabricated zero', async () => {
+  test('an immediately-admitted call records a MEASURED zero queue wait', async () => {
     const service = await loadService();
     mocks.gatewayStructured = { ok: true };
     mocks.gatewayDelayMs = 15;
 
     // An INTERACTIVE call is admitted immediately, so its queue wait is a
-    // measured zero — recorded as such rather than left absent, which is what
-    // makes `queueMs > 0` mean something.
+    // measured ZERO — recorded as such rather than left absent, which is what
+    // makes `queueMs > 0` mean something. Absence is reserved for calls that
+    // never reached admission at all (a local-first success, a coalesced
+    // subscriber); those are covered in the admission suite.
     await service.extractStructure({
       schema: durationSchema,
       schemaName: 'DurationProbe',

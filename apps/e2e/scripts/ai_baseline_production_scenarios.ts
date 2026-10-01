@@ -798,13 +798,17 @@ const widthAdmission = (samples: readonly Sample[]): Record<string, unknown> => 
     // wire duration for the same work. They are different clocks measuring
     // different things — one includes admission, one cannot — and the gap
     // between them is the point, not a discrepancy.
+    //
+    // Every waiting call is counted, not just the first. At width 4 the burst
+    // queues four requests whose waits differ by tens of seconds, and keeping
+    // only the shortest per sample would report a min-of-mins to min-of-maxes
+    // spread — a narrower and better-looking distribution than the one that
+    // happened.
     queueWaitMs: range(
-      observed(
-        samples,
-        (sample) =>
-          backgroundClientCalls(sample).find((call) => Number(call.queueMs ?? 0) > 0)?.queueMs as
-            | number
-            | undefined,
+      samples.flatMap((sample) =>
+        backgroundClientCalls(sample)
+          .map((call) => Number(call.queueMs ?? 0))
+          .filter((queueMs) => queueMs > 0),
       ),
     ),
     backgroundDrainMs: range(observed(samples, (sample) => Number(sample.backgroundDrainMs))),
