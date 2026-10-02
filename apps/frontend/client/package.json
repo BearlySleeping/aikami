@@ -14,6 +14,8 @@
     "build:app": "bun scripts/build_client.ts",
     "check:bundle": "bun scripts/check_bundle.ts",
     "probe:ai-context-reuse": "bun scripts/ai_context_reuse_probe.ts",
+    "probe:ai-gameplay-path": "bun --tsconfig-override=./.svelte-kit/tsconfig.json scripts/ai_gameplay_path_probe.ts",
+    "probe:ai-reasoning-control": "bun --tsconfig-override=./.svelte-kit/tsconfig.json scripts/ai_reasoning_control_probe.ts",
     "update:cors": "bun scripts/update_cors.ts",
     "tauri": "tauri",
     "tauri:icon": "tauri icon ../../../assets/default.svg",

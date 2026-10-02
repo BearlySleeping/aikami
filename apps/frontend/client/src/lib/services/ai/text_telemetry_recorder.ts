@@ -19,7 +19,12 @@
 
 import { estimateTextTokens, type TextTask } from '@aikami/constants';
 import { isAiGatewayError } from '@aikami/frontend/ai-gateway';
-import type { AiModeResolution, TextAttemptObservation, TextCacheLayer } from '@aikami/types';
+import type {
+  AiModeResolution,
+  TextAttemptObservation,
+  TextCacheLayer,
+  TextDispatchKind,
+} from '@aikami/types';
 import type { AiRequestDeadline } from './ai_request_deadline.ts';
 import { textTelemetryService } from './text_telemetry_service.svelte.ts';
 
@@ -84,6 +89,15 @@ export type TextCallObservation = {
    * boundary that only saw the surviving attempt under-reports real spend.
    */
   attempts?: readonly TextAttemptObservation[];
+  /**
+   * How this logical request was satisfied.
+   *
+   * The axis that separates a provider bill from a local answer, a shared
+   * answer and work that was never sent. Without it, "no attempts recorded"
+   * is ambiguous between four different outcomes, and a report built on that
+   * ambiguity either over-reports spend or under-reports savings.
+   */
+  dispatch?: TextDispatchKind;
 };
 
 /**
@@ -156,38 +170,61 @@ const attemptFacts = (
 };
 
 /**
- * Records one finished call.
+ * The fields of a span that describe a SETTLED call rather than its attempts.
  *
- * Pure with respect to the call: it reads only what the caller observed, so it
- * cannot introduce latency or a second source of truth about what happened.
+ * Split from {@link recordTextCall} because those two groups are edited for
+ * different reasons and read for different reasons: the attempt facts change
+ * whenever the transport learns a new thing it can report, and the settled
+ * fields change whenever the vocabulary of an outcome does. Keeping them apart
+ * is what stops a new attempt field from being added in a hurry and landing in
+ * the wrong builder.
  */
-export const recordTextCall = (observation: TextCallObservation): void => {
-  const { resolution, task, streamed, ttftMs, deadline, usage, queueMs, queueDepth } = observation;
-  // A raw `AbortError` from a caller is a cancellation; an `AiGatewayException`
-  // carries its own code and does not need classifying.
-  const isAbortError = (observation.error as { name?: string } | undefined)?.name === 'AbortError';
-  const errorCode = spanErrorCode(observation.error, isAbortError);
-
-  textTelemetryService.record({
-    ...attemptFacts(observation.attempts),
-    task,
+const settledFields = (observation: TextCallObservation): Record<string, unknown> => {
+  const { resolution, streamed, ttftMs, deadline, usage } = observation;
+  return {
     provider: resolution?.provider ?? 'unknown',
     model: resolution?.model ?? '',
     mode: resolution?.mode ?? 'unknown',
     streamed,
     ttftMs,
     totalMs: Math.round(performance.now() - observation.start),
-    promptTokens: usage?.inputTokens ?? estimateTextTokens(observation.promptChars),
-    completionTokens: usage?.outputTokens ?? estimateTextTokens(observation.completionChars),
-    // The provenance of the two counts above travels with them. Presenting an
-    // estimate as a provider figure is how a cost estimate becomes a fiction.
-    tokenSource: usage === undefined ? 'estimated' : 'provider',
-    ...(usage?.cachedTokens === undefined ? {} : { cachedTokens: usage.cachedTokens }),
+    ...tokenFields(observation, usage),
     startedAt: observation.startedAt,
     ok: observation.ok,
+    ...identityFields(observation, deadline),
+  };
+};
+
+/**
+ * The token counts, with the provenance that makes them usable.
+ *
+ * `tokenSource` is the whole point: a character-count estimate and a provider
+ * bill are both "tokens", and presenting them as the same number is how a cost
+ * estimate becomes a fiction.
+ */
+const tokenFields = (
+  observation: TextCallObservation,
+  usage: TextCallObservation['usage'],
+): Record<string, unknown> => ({
+  promptTokens: usage?.inputTokens ?? estimateTextTokens(observation.promptChars),
+  completionTokens: usage?.outputTokens ?? estimateTextTokens(observation.completionChars),
+  tokenSource: usage === undefined ? 'estimated' : 'provider',
+  ...(usage?.cachedTokens === undefined ? {} : { cachedTokens: usage.cachedTokens }),
+});
+
+/** How the request was identified, and how it ended. */
+const identityFields = (
+  observation: TextCallObservation,
+  deadline: TextCallObservation['deadline'],
+): Record<string, unknown> => {
+  const isAbortError = (observation.error as { name?: string } | undefined)?.name === 'AbortError';
+  const errorCode = spanErrorCode(observation.error, isAbortError);
+  return {
+    ...(observation.task === undefined ? {} : { task: observation.task }),
     ...(errorCode === undefined ? {} : { errorCode }),
     ...(observation.fallback === undefined ? {} : { fallback: observation.fallback }),
     ...(observation.requestId === undefined ? {} : { requestId: observation.requestId }),
+    ...(observation.dispatch === undefined ? {} : { dispatch: observation.dispatch }),
     ...(observation.parentRequestId === undefined
       ? {}
       : { parentRequestId: observation.parentRequestId }),
@@ -197,7 +234,34 @@ export const recordTextCall = (observation: TextCallObservation): void => {
     // Queueing is part of the critical path, so it is inside `totalMs` by
     // construction (the span's start is captured before admission). It is
     // recorded again here only so the wait is visible as its own quantity.
-    ...(queueMs === undefined ? {} : { queueMs }),
-    ...(queueDepth === undefined ? {} : { queueDepth }),
-  });
+    ...(observation.queueMs === undefined ? {} : { queueMs: observation.queueMs }),
+    ...(observation.queueDepth === undefined ? {} : { queueDepth: observation.queueDepth }),
+  };
+};
+
+/**
+ * Queue measurements for a span, when the call passed through admission.
+ *
+ * `0` is a real measurement — "this call joined an idle queue" — and is
+ * recorded for every call that did, so `queueMs > 0` means something. ABSENT is
+ * reserved for calls that never reached admission at all: a local-first
+ * success, or a coalesced subscriber that joined somebody else's attempt.
+ */
+export const queueSpanFields = (admission?: {
+  queueMs: number;
+  queueDepth: number;
+}): { queueMs?: number; queueDepth?: number } =>
+  admission === undefined ? {} : { queueMs: admission.queueMs, queueDepth: admission.queueDepth };
+
+/**
+ * Records one finished call.
+ *
+ * Pure with respect to the call: it reads only what the caller observed, so it
+ * cannot introduce latency or a second source of truth about what happened.
+ */
+export const recordTextCall = (observation: TextCallObservation): void => {
+  textTelemetryService.record({
+    ...attemptFacts(observation.attempts),
+    ...settledFields(observation),
+  } as Parameters<typeof textTelemetryService.record>[0]);
 };

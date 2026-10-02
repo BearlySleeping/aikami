@@ -83,6 +83,45 @@ export type AiTextGenerationOptions = {
    * then gets a minted one.
    */
   requestId?: string;
+  /**
+   * The routing this call MUST take, resolved by the caller beforehand.
+   *
+   * 🔴 THE FIX FOR A REAL MISMATCH. A caller that has to decide something
+   * before it spends money — whether an on-device attempt is allowed, which
+   * contention domain the request belongs to, whether an identical in-flight
+   * request may be joined — needs the resolution `generateText` would compute,
+   * and it gets that from {@link AiProviderGateway.resolveText}. If dispatch
+   * then RE-RESOLVES, the two can differ: a settings change between admission
+   * and dispatch produces a request admitted against, coalesced under and
+   * dispatched to three different routes, and the shared attempt's identity
+   * describes none of them.
+   *
+   * When present, this snapshot is dispatched VERBATIM: the resolver is not
+   * consulted, `model` / `endpoint` / `task` are ignored (they are inputs to
+   * resolution, not dispatch parameters), and the adapter is selected from
+   * `route.mode`. The caller therefore holds the ONE immutable route that
+   * admission, coalescing identity and dispatch all agree on.
+   *
+   * Mutating the object after passing it is the caller's bug; the gateway
+   * reads it once, at the top of the call.
+   */
+  route?: AiModeResolution;
+  /**
+   * Opaque, NON-SECRET marker for the configuration revision this snapshot was
+   * taken from.
+   *
+   * Carried for identity and diagnostics only — the gateway never compares it
+   * against anything and never derives anything from it, because the gateway
+   * does not own the configuration and cannot know what a revision is allowed
+   * to mean.
+   *
+   * 🔴 It must never be a credential, and never a digest of one. An identity
+   * that can be compared across requests is a place a secret leaks: it ends up
+   * in coalescing keys, in log lines and in diagnostics buffers. Whatever
+   * produces a revision is responsible for making it opaque BEFORE it gets
+   * here; this field is the transport's promise not to make it worse.
+   */
+  routeRevision?: string;
 };
 
 /**
@@ -343,6 +382,12 @@ export type AiProviderGateway = {
    * resolution the dispatch path uses, including task role routing and explicit
    * model/endpoint overrides. Resolver failures throw a typed AiGatewayException,
    * exactly as they would on the dispatch path.
+   *
+   * 🔴 A caller that keeps this snapshot and hands it back on the dispatch via
+   * {@link AiTextGenerationOptions.route} removes the remaining gap: a
+   * configuration change between this call and dispatch can no longer move the
+   * request to a different endpoint, identity or resource than the one it was
+   * admitted and coalesced under.
    */
   resolveText(options?: { model?: string; endpoint?: string; task?: TextTask }): AiModeResolution;
   /** Detects capability availability with a bounded timeout. Never throws. */

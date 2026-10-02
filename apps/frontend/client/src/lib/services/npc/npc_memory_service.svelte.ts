@@ -26,13 +26,20 @@
 //
 // Two properties the previous bare promise chain did not have:
 //
-//   - AN OPENER IS STAMPED WITH THE WORLD STATE IT WAS GENERATED AGAINST, not
-//     with its completion time. `_refreshOpener` revalidates the world-state
+//   - AN OPENER IS STAMPED WITH THE STATE IT WAS GENERATED AGAINST, not with
+//     its completion time. `_refreshOpener` revalidates the world-state
 //     fingerprint after the call returns; if the world moved on, the result is
 //     discarded and the opener is left stale rather than being dated forward
 //     into a freshness it has not earned. Unrelated frame-level churn does not
 //     invalidate memory, because the fingerprint is built from task-relevant
 //     world facts, not from a frame counter.
+//   - AND IT IS REVALIDATED WHEN IT IS CONSUMED, not only when it is produced.
+//     `resolveGreeting` recomputes the fingerprint it was stamped with. A quest
+//     completed, an item carried or a persona rewritten between the refresh and
+//     the moment the player actually presses interact used to leave the old
+//     greeting on screen and display it as current. The player now sees the
+//     AUTHORED greeting instead, and a refresh is requested in the background —
+//     a bounded, debounced, one-at-a-time retry, never an unbounded loop.
 //   - A SUPERSEDED DIGEST DOES NOT LOSE THE CONVERSATION. A digest carries
 //     durable notes and promises. If it is dropped, its lines are carried
 //     forward (bounded) and offered to the next digest, which is the only
@@ -66,6 +73,11 @@ import { campaignService } from '../campaign/campaign_service.svelte.ts';
 import { buildGameStateFacts } from '../game/game_state_facts.ts';
 import { npcDialogueService } from '../game/npc_dialogue_service.svelte.ts';
 import { registerSerializable } from '../game/serializable_service';
+import {
+  createNpcBackgroundContextReader,
+  type NpcBackgroundContextReader,
+  type NpcBackgroundInputs,
+} from './npc_background_context.ts';
 import { publishNpcMemoryBackgroundDiagnostics } from './npc_memory_diagnostics.ts';
 import {
   createNpcMemoryLifecycle,
@@ -74,26 +86,20 @@ import {
   type NpcMemoryLifecycle,
 } from './npc_memory_lifecycle.ts';
 import {
-  buildDigestSystemPrompt,
   buildDigestUserPrompt,
   buildMemoryPromptFacts,
-  buildOpenerSystemPrompt,
   buildOpenerUserPrompt,
   clampSummary,
   clampText,
   evictOldest,
   fallbackSummary,
   mergeNotes,
+  mergeRestoredDigestLines,
   sanitizeChips,
   toMemoryLines,
 } from './npc_memory_utils.ts';
-import {
-  buildBackgroundWorldStateProjection,
-  createNpcPromptCache,
-  digestSystemPromptKey,
-  openerSystemPromptKey,
-  renderBackgroundFacts,
-} from './npc_prompt_projection.ts';
+import { type OpenerRejection, revalidateOpener } from './npc_opener_freshness.ts';
+import { renderBackgroundFacts } from './npc_prompt_projection.ts';
 
 export type NpcMemoryServiceOptions = BaseFrontendClassOptions;
 
@@ -112,30 +118,6 @@ const OPENER_JSON_SCHEMA = toJsonSchema(NpcMemoryOpenerOutputSchema);
  * the middle of a burst is the failure this carry-forward exists to prevent.
  */
 const MAX_CARRIED_LINES = NPC_MEMORY_LIMITS.digestTranscriptLines * 2;
-
-/**
- * A content-free fingerprint of the world state an opener was generated against.
- *
- * Built from the task-relevant facts the opener prompt actually consumed, not
- * from a frame counter or a revision bumped by unrelated rendering — otherwise
- * every animation frame would invalidate every remembered NPC and the memory
- * would never survive a walk.
- */
-const worldStateFingerprint = (facts: readonly string[]): string => {
-  let hash = 2166136261;
-  for (const fact of [...facts].sort()) {
-    for (let i = 0; i < fact.length; i += 1) {
-      hash ^= fact.charCodeAt(i);
-      hash = Math.imul(hash, 16777619);
-    }
-    hash ^= 10;
-    hash = Math.imul(hash, 16777619);
-  }
-  // Hex of a 32-bit FNV-1a. Used to detect CHANGE, never as a correctness
-  // identity: a collision here costs one extra digest, never a wrong answer,
-  // because a mismatch re-queues rather than applying.
-  return (hash >>> 0).toString(16);
-};
 
 /** Public contract for per-NPC conversational memory. */
 export type NpcMemoryServiceInterface = BaseFrontendClassInterface & {
@@ -214,7 +196,19 @@ class NpcMemoryService
    * only paid for what it is sent, and this lane reports those two costs
    * separately rather than conflating them.
    */
-  private readonly _promptCache = createNpcPromptCache();
+
+  /**
+   * The inputs a background memory call sees: persona, projected world facts,
+   * and the compiled system prompt.
+   *
+   * Owned by its own module so the same reader answers the pre-dispatch,
+   * post-completion and at-consumption questions with one implementation. See
+   * `npc_background_context.ts` for why the three must not drift.
+   */
+  private readonly _context: NpcBackgroundContextReader = createNpcBackgroundContextReader({
+    readGameStateFacts: (npcId) => buildGameStateFacts({ npcId }),
+    readPersona: (subject) => this._npcPersona(subject),
+  });
 
   /**
    * Generation-scoped background work.
@@ -293,11 +287,28 @@ class NpcMemoryService
     if (!record || record.conversationCount === 0) {
       return npc;
     }
-    const opener = record.opener;
-    if (!opener || opener.forConversation !== record.conversationCount) {
-      // Not ready — keep the authored greeting; prompt memory still applies.
-      this.debug('resolveGreeting:no-opener', { npcId: npc.npcId });
+    const rejection = this._revalidateOpener(record);
+    if (rejection !== undefined) {
+      // The AUTHORED greeting is always a valid answer. Falling back to it is
+      // what makes a stale opener a degradation rather than a failure: the
+      // player still gets a line, memory facts still apply to the prompt, and
+      // the next conversation regenerates the opener against current state.
+      //
+      // The refresh is requested rather than awaited. Blocking dialogue opening
+      // on a provider call would trade a cosmetic staleness for a multi-second
+      // wait on the one interaction that must never wait.
+      this.debug('resolveGreeting:rejected', { npcId: npc.npcId, reason: rejection });
       void this._prefetchOpener(npc.npcId);
+      return npc;
+    }
+    // An opener that has merely AGED is still shown: nothing it depends on
+    // changed, so it is still the right line, and the background refresh below
+    // will re-date it without asking the provider anything. Age bounds how
+    // often memory is looked at; it does not decide what is true.
+    void this._prefetchOpener(npc.npcId);
+    const opener = record?.opener;
+    /* c8 ignore next -- _revalidateOpener only returns undefined for a usable opener */
+    if (!opener) {
       return npc;
     }
     this.debug('resolveGreeting:returning', {
@@ -391,27 +402,6 @@ class NpcMemoryService
 
   // ── Private ───────────────────────────────────────────────────────────
 
-  /**
-   * The digest system prompt, compiled once per (persona, NPC name).
-   *
-   * Pure template: the same persona always produces the same text, and the
-   * measured cross-call re-derivation was 98.3% of its characters. The cache
-   * key is the CONTENT, so a persona that changes is a different entry rather
-   * than a stale hit.
-   */
-  private _digestSystemPrompt(persona: string, npcName: string): string {
-    return this._promptCache.get(digestSystemPromptKey(persona, npcName), () =>
-      buildDigestSystemPrompt({ persona, npcName }),
-    ).text;
-  }
-
-  /** The opener system prompt, compiled once per (persona, NPC name). */
-  private _openerSystemPrompt(persona: string, npcName: string): string {
-    return this._promptCache.get(openerSystemPromptKey(persona, npcName), () =>
-      buildOpenerSystemPrompt({ persona, npcName }),
-    ).text;
-  }
-
   /** Record lookup scoped to the active campaign. */
   private _getRecord(npcId: string): NpcMemoryRecord | undefined {
     this._syncCampaign();
@@ -431,13 +421,13 @@ class NpcMemoryService
     // Compiled prompts are content-keyed, so an entry could never be served
     // for the wrong content — but a campaign switch should not RETAIN another
     // campaign's personas in memory either, and the bound is the point.
-    this._promptCache.clear();
+    this._context.clear();
   }
 
-  /** Refreshes a remembered NPC's opener when missing or stale (debounced). */
+  /** Refreshes a remembered NPC's opener when missing, expired or unshowable. */
   private _prefetchOpener(npcId: string): Promise<void> {
     const record = this._getRecord(npcId);
-    if (!record || !this._isOpenerStale(record)) {
+    if (!record || !this._needsOpener(record)) {
       return Promise.resolve();
     }
     const now = Date.now();
@@ -471,14 +461,67 @@ class NpcMemoryService
     this._campaignId = active;
   }
 
-  /** Whether the record needs a (new) opener. */
-  private _isOpenerStale(record: NpcMemoryRecord): boolean {
+  /**
+   * Whether the record's opener has outlived its max age.
+   *
+   * A REFRESH TRIGGER, not a display veto. The max age bounds how long an
+   * opener may go without being looked at; it does not assert that the answer
+   * became wrong. An opener that is old but whose world and persona are
+   * unchanged is still the right greeting, and #422 measured that re-asking the
+   * provider for it is a full call spent on a byte-identical prompt. Those two
+   * facts are why age and validity are separate predicates here and must stay
+   * that way: conflating them turns every fifteen minutes of play into either a
+   * silent suppression or a wasted call.
+   */
+  private _isOpenerAged(record: NpcMemoryRecord): boolean {
     const opener = record.opener;
-    return (
-      !opener ||
-      opener.forConversation !== record.conversationCount ||
-      Date.now() - opener.generatedAt > NPC_MEMORY_OPENER_MAX_AGE_MS
-    );
+    return opener === undefined || Date.now() - opener.generatedAt > NPC_MEMORY_OPENER_MAX_AGE_MS;
+  }
+
+  /**
+   * Whether this record's opener should be regenerated.
+   *
+   * 🔴 Consumption-time revalidation and the refresh trigger have to agree, or
+   * the fix is worse than the defect. `resolveGreeting` refuses to show an
+   * opener whose world or persona moved on; if `_prefetchOpener` still asked
+   * only "has it expired?", nothing would ever be requested, and the player
+   * would get the authored greeting for a FULL MAX-AGE after every quest they
+   * completed — a silent regression wearing the fix's own name.
+   *
+   * One predicate, used by both paths, is what keeps the offer and the refusal
+   * in step.
+   */
+  private _needsOpener(record: NpcMemoryRecord): boolean {
+    return this._isOpenerAged(record) || this._revalidateOpener(record) !== undefined;
+  }
+  /**
+   * Whether a prepared opener may still be SHOWN, checked at the moment it is
+   * consumed rather than only at the moment it was produced.
+   *
+   * 🔴 THIS IS THE CHECK THAT WAS MISSING. Every previous validation happened
+   * when the opener was generated: `_refreshOpener` compared the fingerprint
+   * before and after its own call, which can only detect a change that happened
+   * DURING the call. Nothing compared the opener against the world at the
+   * instant the player pressed interact. The window between them is the whole
+   * map walk: a quest completes, the player picks up the sword they were told
+   * to find, an author ships a persona rewrite — and the greeting that greets
+   * them is the one generated before all of it, presented without complaint.
+   *
+   * DEGRADATION IS DELIBERATE AND BOUNDED. A refusal returns the AUTHORED
+   * greeting and asks for exactly one debounced, generation-scoped refresh —
+   * `NPC_MEMORY_PREFETCH_COOLDOWN_MS` between attempts and one unit per NPC, so
+   * a world that keeps moving produces a bounded amount of background work
+   * rather than a regeneration loop. Deliberate REUSE is preserved: if nothing
+   * relevant changed, the opener is served from the existing value and no
+   * provider call is made.
+   *
+   * The decision itself — which of the four failures applies, and why age is
+   * not one of them — lives in `npc_opener_freshness.ts`, and is tested there
+   * exhaustively.
+   */
+  private _revalidateOpener(record: NpcMemoryRecord): OpenerRejection | undefined {
+    const { fingerprint, promptRevision } = this._inputs(record);
+    return revalidateOpener(record, { worldFingerprint: fingerprint, promptRevision });
   }
 
   /** Appends transcript lines to the carry-forward buffer, bounded. */
@@ -500,46 +543,22 @@ class NpcMemoryService
     if (lines.length === 0) {
       return;
     }
-    const next = [...(this._unsummarized.get(npcId) ?? []), ...lines].slice(-MAX_CARRIED_LINES);
-    this._unsummarized.set(npcId, next);
+    // Chronology, not append order — see `mergeRestoredDigestLines`. Everything
+    // already in the buffer arrived AFTER these lines were claimed, so they go
+    // in front, and overflow drops the oldest rather than the newest.
+    this._unsummarized.set(
+      npcId,
+      mergeRestoredDigestLines({
+        claimed: lines,
+        accumulated: this._unsummarized.get(npcId) ?? [],
+        limit: MAX_CARRIED_LINES,
+      }),
+    );
   }
 
-  /**
-   * Persona + current world facts for a background call.
-   *
-   * TWO FIXES, both measured (issue #382).
-   *
-   * 1. The world-state facts are read ONCE and projected down to what a bounded
-   *    background task can act on. The digest and the opener refresh are
-   *    mechanical JSON extraction; neither can use the GM difficulty-guidance
-   *    paragraph or the equipped-items list, and both were being sent them.
-   *
-   * 2. The persona is read from the dialogue service WITHOUT a full context
-   *    projection. The previous code called `buildContext` — which walks every
-   *    account in every situation of the content manifest, selects a companion
-   *    witness, derives allowed commands and projects a memory window — and
-   *    then threw all of it away to keep `.persona`. That is O(manifest) work
-   *    per background call, twice per call (once to dispatch, once to
-   *    revalidate), for one string.
-   *
-   * The fingerprint is computed from the PROJECTED facts, so it describes what
-   * the prompt actually consumed. Fingerprinting the unprojected list would
-   * make an equipped-item change look like a world change and force a refresh
-   * the model would answer identically.
-   */
-  private _npcContext(record: NpcMemoryRecord): {
-    persona: string;
-    gameStateFacts: string[];
-    fingerprint: string;
-  } {
-    const gameStateFacts = buildBackgroundWorldStateProjection(
-      buildGameStateFacts({ npcId: record.npcId }),
-    );
-    return {
-      persona: this._npcPersona(record),
-      gameStateFacts,
-      fingerprint: worldStateFingerprint(gameStateFacts),
-    };
+  /** What a background call for this record would see, right now. */
+  private _inputs(record: NpcMemoryRecord): NpcBackgroundInputs {
+    return this._context.inputs({ npcId: record.npcId, npcName: record.npcName });
   }
 
   /**
@@ -549,14 +568,11 @@ class NpcMemoryService
    * (the dev harness), which is the same fallback the previous full-projection
    * path had.
    */
-  private _npcPersona(record: NpcMemoryRecord): string {
+  private _npcPersona(subject: { npcId: string; npcName: string }): string {
     try {
-      return npcDialogueService.buildNpcPersonaForPrompt({
-        npcId: record.npcId,
-        npcName: record.npcName,
-      });
+      return npcDialogueService.buildNpcPersonaForPrompt(subject);
     } catch {
-      return `You are ${record.npcName}.`;
+      return `You are ${subject.npcName}.`;
     }
   }
 
@@ -576,13 +592,13 @@ class NpcMemoryService
     // happen. Claiming it at enqueue time would lose the lines to any earlier
     // supersession without a digest ever having consumed them.
     const lines = this._takeUnsummarized(npcId);
-    const { persona, gameStateFacts, fingerprint: dispatchedAgainst } = this._npcContext(record);
+    const { gameStateFacts, fingerprint: dispatchedAgainst, promptRevision } = this._inputs(record);
     let structured: unknown;
     try {
       structured = await textGenerationService.extractStructure({
         schema: DIGEST_JSON_SCHEMA,
         schemaName: 'NpcMemoryDigest',
-        systemPrompt: this._digestSystemPrompt(persona, record.npcName),
+        systemPrompt: this._context.digestSystemPrompt(record),
         prompt: buildDigestUserPrompt({
           record: previous,
           npcName: record.npcName,
@@ -619,7 +635,7 @@ class NpcMemoryService
     }
     current.summary = clampSummary(structured.summary);
     current.notes = mergeNotes({ existing: current.notes, incoming: structured.notes });
-    if (this._npcContext(current).fingerprint === dispatchedAgainst) {
+    if (this._inputs(current).fingerprint === dispatchedAgainst) {
       current.opener = {
         text: clampText({ text: structured.opener, max: NPC_MEMORY_LIMITS.openerChars }),
         suggestions: sanitizeChips(structured.suggestions),
@@ -629,6 +645,10 @@ class NpcMemoryService
         // it was generated against, so a later refresh can distinguish "the
         // world moved on" from "nothing changed".
         worldFingerprint: dispatchedAgainst,
+        // …and with the persona/prompt revision, so CONSUMPTION can tell a
+        // greeting written in a voice that still exists from one written in a
+        // voice that was since deleted.
+        promptRevision,
       };
     }
     this.info('digest:complete', {
@@ -647,7 +667,7 @@ class NpcMemoryService
   }): Promise<NpcBackgroundOutcome> {
     const { npcId, context } = options;
     const record = this._records[npcId];
-    if (context.isStale() || record === undefined || !this._isOpenerStale(record)) {
+    if (context.isStale() || record === undefined || !this._needsOpener(record)) {
       return 'superseded-before-dispatch';
     }
     // Claimed HERE, not at enqueue time: a unit that never runs must not consume
@@ -655,7 +675,7 @@ class NpcMemoryService
     const ticket = (this._refreshTicketByNpc.get(npcId) ?? 0) + 1;
     this._refreshTicketByNpc.set(npcId, ticket);
 
-    const { persona, gameStateFacts, fingerprint: dispatchedAgainst } = this._npcContext(record);
+    const { gameStateFacts, fingerprint: dispatchedAgainst, promptRevision } = this._inputs(record);
     // The world state this opener is being generated AGAINST. Stamping the
     // result with its completion time instead is what made a deferred, stale
     // opener read as fresh: staleness had been judged when the unit was queued,
@@ -672,9 +692,17 @@ class NpcMemoryService
     // It is NOT an exact-result cache. Nothing is replayed: the existing opener
     // simply stays, and is re-dated, because it is still the right answer for
     // the world it was generated against. A real world change still refreshes.
+    //
+    // 🔴 The `!_needsOpener` half is load-bearing. Re-dating is a statement
+    // that the existing answer is still the right answer, so it may only be
+    // reached when nothing the prompt depends on has moved AND the opener is
+    // not being refreshed for its own sake. Re-stamping an opener that is
+    // semantically current but belongs to a previous conversation would hand
+    // the player a greeting for a talk that already happened.
     if (
       record.opener?.forConversation === record.conversationCount &&
-      dispatchedAgainst === record.opener.worldFingerprint
+      dispatchedAgainst === record.opener.worldFingerprint &&
+      promptRevision === record.opener.promptRevision
     ) {
       this.debug('refreshOpener:inputs-unchanged — re-dating instead of re-asking', { npcId });
       record.opener = {
@@ -688,7 +716,7 @@ class NpcMemoryService
       structured = await textGenerationService.extractStructure({
         schema: OPENER_JSON_SCHEMA,
         schemaName: 'NpcMemoryOpener',
-        systemPrompt: this._openerSystemPrompt(persona, record.npcName),
+        systemPrompt: this._context.openerSystemPrompt(record),
         prompt: buildOpenerUserPrompt({
           record,
           gameStateFacts,
@@ -703,19 +731,25 @@ class NpcMemoryService
       return 'failed';
     }
     // Apply-time revalidation, in two independent directions.
-    if (context.isStale() || this._records[npcId] !== record || !this._isOpenerStale(record)) {
+    if (context.isStale() || this._records[npcId] !== record || !this._needsOpener(record)) {
       return 'invalidated-after-completion';
     }
     if (this._refreshTicketByNpc.get(npcId) !== ticket) {
       // A newer refresh for this NPC was dispatched; this result is not it.
       return 'superseded-before-dispatch';
     }
-    if (this._npcContext(record).fingerprint !== dispatchedAgainst) {
+    if (this._inputs(record).fingerprint !== dispatchedAgainst) {
       // The world moved on while the call was in flight. The opener is
       // therefore still stale, and dating it now would make it read as fresh
       // for another full max-age on the strength of a call that predates the
       // change. It is left absent; the next proximity or map load regenerates.
       this.debug('refreshOpener:world-moved-on', { npcId });
+      return 'invalidated-after-completion';
+    }
+    // The same argument for the persona: a call dispatched before an authored
+    // rewrite must not be dated into it.
+    if (this._inputs(record).promptRevision !== promptRevision) {
+      this.debug('refreshOpener:prompt-revised', { npcId });
       return 'invalidated-after-completion';
     }
     if (!Value.Check(NpcMemoryOpenerOutputSchema, structured)) {
@@ -733,6 +767,10 @@ class NpcMemoryService
       // fingerprint never matches, so an old save refreshes — the safe
       // direction.
       worldFingerprint: dispatchedAgainst,
+      // Same for the persona/prompt revision. Both are checked again when the
+      // greeting is CONSUMED, which is the only check that covers a change made
+      // between the refresh finishing and the player pressing interact.
+      promptRevision,
     };
     this.info('refreshOpener:complete', { npcId });
     return 'applied';

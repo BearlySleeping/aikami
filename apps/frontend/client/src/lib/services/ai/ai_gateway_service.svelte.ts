@@ -49,6 +49,7 @@ import { resolveImageEngine } from '../image/engine/image_engine_factory.svelte.
 import { imageGenerationService } from '../image/image_generation_service.svelte.ts';
 import { localTaskPoolService } from './local_task_pool_service.svelte.ts';
 import { LOCAL_TEXT_PROVIDERS, resolveTextProviderMode } from './text_provider_mode.ts';
+import { createTextRouteRevisionTracker, UNKNOWN_ROUTE_REVISION } from './text_route_revision.ts';
 import { mergeTaskPresetParams } from './text_task_params.ts';
 
 // ---------------------------------------------------------------------------
@@ -57,8 +58,29 @@ import { mergeTaskPresetParams } from './text_task_params.ts';
 
 export type AiGatewayServiceOptions = BaseFrontendClassOptions;
 
-/** The gateway singleton's public surface — the AiProviderGateway contract. */
-export type AiGatewayServiceInterface = BaseFrontendClassInterface & AiProviderGateway;
+/**
+ * The gateway singleton's public surface — the AiProviderGateway contract, plus
+ * the one piece of state the gateway core deliberately does not own.
+ */
+export type AiGatewayServiceInterface = BaseFrontendClassInterface &
+  AiProviderGateway & {
+    /**
+     * An opaque, NON-SECRET revision of the configuration text routes are
+     * currently resolved from.
+     *
+     * The gateway core is configured with a resolver function and knows
+     * nothing about connections, roles or credentials, so it cannot name a
+     * revision. This is the composition layer's job, and it lives here because
+     * this is the only place that already reads `ConfigService` for routing.
+     *
+     * Callers put it in the coalescing identity so a request cannot join an
+     * attempt dispatched under a different configuration — including one whose
+     * only difference is a rotated API key, which no route field can see. The
+     * value is comparable but not meaningful: never a credential, never a hash
+     * of one. See `text_route_revision.ts`.
+     */
+    routeRevision(): string;
+  };
 
 // ---------------------------------------------------------------------------
 // Implementation
@@ -69,6 +91,15 @@ class AiGatewayService
   implements AiGatewayServiceInterface
 {
   private readonly _gateway: AiProviderGateway;
+
+  /**
+   * Configuration-revision tracker.
+   *
+   * Memoises the last projection so an unchanged configuration costs a
+   * projection build and nothing else, and holds the credential interner that
+   * makes a key rotation observable without the key ever leaving it.
+   */
+  private readonly _routeRevision = createTextRouteRevisionTracker();
 
   constructor(options: AiGatewayServiceOptions) {
     super(options);
@@ -83,6 +114,22 @@ class AiGatewayService
 
   resolveText(options?: { model?: string; endpoint?: string; task?: TextTask }): AiModeResolution {
     return this._gateway.resolveText(options);
+  }
+
+  routeRevision(): string {
+    // Read live, never cached across calls: a rotation that happened between
+    // two requests must be visible to the second one. The tracker memoises the
+    // PROJECTION, not the answer, so an unchanged configuration is a cheap
+    // comparison and a changed one is immediately a new marker.
+    try {
+      return this._routeRevision.current(configService.state);
+    } catch (error) {
+      // A configuration that cannot be read must not take text generation down
+      // with it. The fallback is a marker no configured request will ever
+      // produce, which costs a missed dedup and never a wrong join.
+      this.warn('routeRevision:unavailable', { error: String(error) });
+      return UNKNOWN_ROUTE_REVISION;
+    }
   }
 
   async detect(capability: AiCapability): Promise<AiDetectionResult> {

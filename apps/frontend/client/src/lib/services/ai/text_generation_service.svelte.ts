@@ -20,11 +20,29 @@
 //      fallback between them draw from one absolute deadline
 //      (`ai_request_deadline.ts`) instead of each minting its own timeout. A
 //      cold local load can therefore never consume the budget the configured
-//      gateway path still needs.
+//      gateway path still needs. That absolute instant is then handed to the
+//      gateway VERBATIM (`deadlineAt`), because a budget the transport cannot
+//      see is a budget the transport re-invents — that is what kept a 120 s
+//      dialogue turn on the adapter's 90 s watchdog.
+//
+//   3. ONE ROUTE PER REQUEST. Routing is resolved exactly once, and the
+//      snapshot is what admission, the coalescing identity and dispatch all
+//      use. Dispatch no longer re-resolves: a settings change between
+//      admission and release used to send a request to a different endpoint,
+//      under a different identity, into a different contention domain than the
+//      three it had already been committed to. The snapshot travels to the
+//      gateway as `route`, which dispatches it verbatim.
+//
+//   4. ONE BILL, COUNTED ONCE. Every gateway call installs an `onAttempt`
+//      sink and carries a stable logical request id, so retries, structured
+//      repairs and cancelled attempts are all recorded — once, on the span of
+//      the request that actually paid for them. Coalesced subscribers record
+//      no attempts and no usage, because their answer was paid for by
+//      somebody else's span.
 //
 // Contract: C-080, C-111, C-320, issue #382 P0
 
-import { TEXT_TASK_PRESETS, type TextTask } from '@aikami/constants';
+import type { TextTask } from '@aikami/constants';
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
@@ -35,14 +53,8 @@ import type { TextChatMessage } from '$types';
 import { aiGatewayService } from './ai_gateway_service.svelte.ts';
 import type { AiRequestDeadline } from './ai_request_deadline.ts';
 import { createLocalFirstRoute, type LocalFirstRoute } from './local_first_route.ts';
-import { localTaskPoolService } from './local_task_pool_service.svelte.ts';
-import type {
-  CoalescedStructuredResult,
-  StructuredCallCoalescer,
-} from './structured_call_coalescer.ts';
-import { createStructuredCallCoalescer } from './structured_call_coalescer.ts';
-import { buildCoalescingIdentity } from './text_effective_route.ts';
-import { resolveLocalFirstPolicy } from './text_local_first_policy.ts';
+import { coalescedSpanFields, createStructuredCallCoalescer } from './structured_call_coalescer.ts';
+import { createAttemptSink, type TextAttemptSink } from './text_attempt_projection.ts';
 import {
   createServiceInferenceAdmission,
   type QueueExit,
@@ -51,7 +63,6 @@ import {
 } from './text_request_admission.ts';
 import {
   createRequestDeadline,
-  isDeadlineExceeded,
   isRequestCancellation,
   throwIfAlreadyAborted,
   throwIfPastDeadline,
@@ -62,7 +73,21 @@ import {
   publishResolvedTextRouting,
   resetActiveTextRequests,
 } from './text_service_diagnostics.ts';
-import { recordTextCall, type TextCallObservation } from './text_telemetry_recorder.ts';
+import {
+  createStreamSpan,
+  isSwallowedStreamFailure,
+  type StreamObservation,
+  type StreamSpan,
+} from './text_stream_span.ts';
+import {
+  createStructuredTextDispatch,
+  type StructuredTextDispatch,
+} from './text_structured_dispatch.ts';
+import {
+  queueSpanFields,
+  recordTextCall,
+  type TextCallObservation,
+} from './text_telemetry_recorder.ts';
 
 // ---------------------------------------------------------------------------
 // Service interface
@@ -92,6 +117,15 @@ export type TextGenerationServiceInterface = BaseFrontendClassInterface & {
      * {@link AiRequestDeadline}.
      */
     deadlineAt?: number;
+    /**
+     * Identity of this logical request, for diagnostics and accounting.
+     *
+     * Minted when omitted, because "one logical request" is a real quantity
+     * that attempt accounting needs to be able to name: a request that was
+     * retried, repaired or coalesced is still ONE request with ONE bill, and
+     * an un-named request is indistinguishable from two.
+     */
+    requestId?: string;
   }): Promise<void>;
 
   /**
@@ -144,6 +178,14 @@ export type TextGenerationServiceInterface = BaseFrontendClassInterface & {
      * that changed while everything else stayed identical. Documented, not
      * guessed at.
      */
+    /**
+     * An opaque, non-secret connection-configuration revision.
+     *
+     * When omitted, the revision published by the gateway composition layer is
+     * used — the same value every other caller would see, read live from the
+     * configuration. It is never a credential and never a digest of one, so it
+     * is safe in a coalescing key; see `text_route_revision.ts`.
+     */
     configRevision?: string;
   }): Promise<unknown>;
 
@@ -153,6 +195,7 @@ export type TextGenerationServiceInterface = BaseFrontendClassInterface & {
 
 // ---------------------------------------------------------------------------
 // Implementation
+// ---------------------------------------------------------------------------
 // ---------------------------------------------------------------------------
 
 class TextGenerationService
@@ -172,8 +215,34 @@ class TextGenerationService
    * own answer and its own cancellation. It is deliberately NOT a result cache —
    * an entry is dropped the moment its attempt settles.
    */
-  private readonly _coalescer: StructuredCallCoalescer = createStructuredCallCoalescer({
+  private readonly _coalescer = createStructuredCallCoalescer({
     debug: (label, detail) => this.debug(label, detail),
+  });
+  /**
+   * The provider half of a structured request: identity, shared clock, admission
+   * and dispatch. See `text_structured_dispatch.ts` for why those three belong
+   * together and why the gate's position inside the coalescer is load-bearing.
+   */
+  /**
+   * The provider dispatch and the span for a STREAMED call.
+   *
+   * See `text_stream_span.ts` for why the two travel together: every field the
+   * span reports is something the dispatch observed on the way past.
+   */
+  private readonly _stream: StreamSpan = createStreamSpan({
+    generate: (input) => aiGatewayService.generateText(input),
+    exposeRouting: (resolution) => {
+      this._exposeRouting(resolution);
+    },
+  });
+
+  private readonly _dispatch: StructuredTextDispatch = createStructuredTextDispatch({
+    coalescer: this._coalescer,
+    admit: (input) => this._admission.acquire(input),
+    generate: (input) => aiGatewayService.generateText(input),
+    exposeRouting: (resolution) => {
+      this._exposeRouting(resolution);
+    },
   });
   /**
    * Priority-aware admission for expensive inference (issue #382).
@@ -186,6 +255,24 @@ class TextGenerationService
    * those changed.
    */
   private readonly _admission: ServiceInferenceAdmission = createServiceInferenceAdmission();
+
+  /**
+   * Monotonic counter behind the minted logical-request ids.
+   *
+   * Only ever compared for equality, and only within one session — which is
+   * exactly what a logical request id is for. Never persisted, never derived
+   * from content, and never from a credential.
+   */
+  private _requestSequence = 0;
+
+  /** The identity of one logical request, stable across every attempt it makes. */
+  private _mintRequestId(supplied?: string): string {
+    if (supplied !== undefined && supplied.length > 0) {
+      return supplied;
+    }
+    this._requestSequence += 1;
+    return `lg-${this._requestSequence}`;
+  }
 
   // ── Private: diagnostics ────────────────────────────────────────────
 
@@ -237,96 +324,6 @@ class TextGenerationService
     return { controller: abortController, cleanup };
   }
 
-  /**
-   * The configured-route half of a structured request.
-   *
-   */
-  private async _generateStructured(options: {
-    schema: Record<string, unknown>;
-    schemaName: string;
-    prompt: string;
-    systemPrompt?: string;
-    model?: string;
-    task?: TextTask;
-    signal: AbortSignal;
-    deadline: AiRequestDeadline;
-    routing: AiModeResolution;
-    onResolve: (resolution: AiModeResolution) => void;
-    onQueueExit?: (observation: QueueExit) => void;
-  }): Promise<{
-    structured?: unknown;
-    usage?: { inputTokens: number; outputTokens: number; cachedTokens?: number };
-  }> {
-    const {
-      schema,
-      schemaName,
-      prompt,
-      systemPrompt,
-      model,
-      task,
-      signal,
-      deadline,
-      routing,
-      onResolve,
-      onQueueExit,
-    } = options;
-    const messages: TextChatMessage[] = [];
-    if (systemPrompt) {
-      messages.push({ role: 'system', content: systemPrompt });
-    }
-    messages.push({ role: 'user', content: prompt });
-
-    if (deadline.expired()) {
-      throw new DOMException('Request deadline exceeded', 'AbortError');
-    }
-    // 🔴 ADMISSION GOES HERE, not at `extractStructure` and not at the
-    // coalescer's edge.
-    //
-    // Inside the coalescer: two identical concurrent subscribers become ONE
-    // shared attempt, which then queues ONCE. Putting the gate outside it
-    // would serialize the two subscribers and turn "one provider call" back
-    // into "call A completes, then call B" — silently disabling #411's
-    // deduplication for the exact simultaneous case it exists to handle.
-    //
-    // Before the provider call: this is the shared, expensive, contended work.
-    // The local-first attempt is deliberately NOT gated — it is a different
-    // resource (a distinct provider id, hence a distinct contention domain)
-    // and is free and near-instant, so queueing it would delay a player for
-    // nothing.
-    const lease = await this._admit({
-      routing,
-      ...(task === undefined ? {} : { task }),
-      signal: AbortSignal.any([signal, deadline.signal]),
-      ...(onQueueExit === undefined ? {} : { onQueueExit }),
-    });
-    try {
-      // The quiet window may have spent the budget; re-check before paying for
-      // an answer nobody can still receive.
-      if (deadline.expired()) {
-        throw new DOMException('Request deadline exceeded', 'AbortError');
-      }
-      const result = await aiGatewayService.generateText({
-        messages,
-        schema,
-        schemaName,
-        model,
-        task,
-        // ONE clock: the call cannot outlive the budget the caller handed down.
-        signal: AbortSignal.any([signal, deadline.signal]),
-        onResolve: (resolved) => {
-          onResolve(resolved);
-          this._exposeRouting(resolved);
-        },
-      });
-      return {
-        ...(result.structured === undefined ? {} : { structured: result.structured }),
-        ...(result.usage === undefined ? {} : { usage: result.usage }),
-      };
-    } finally {
-      lease.release();
-    }
-  }
-
   // ── streamChat ────────────────────────────────────────────────────────
 
   async streamChat(options: {
@@ -337,8 +334,9 @@ class TextGenerationService
     endpoint?: string;
     task?: TextTask;
     deadlineAt?: number;
+    requestId?: string;
   }): Promise<void> {
-    const { messages, onChunk, signal, model, endpoint, task, deadlineAt } = options;
+    const { messages, onChunk, signal, model, endpoint, task, deadlineAt, requestId } = options;
 
     if (signal?.aborted) {
       return;
@@ -347,12 +345,11 @@ class TextGenerationService
     const { controller: abortController, cleanup } = this._linkController(signal);
     this._incrementStreamCount();
     const deadline = createRequestDeadline({ deadlineAt, task, signal });
+    const logicalRequestId = this._mintRequestId(requestId);
+    const attempts = createAttemptSink();
 
     const start = performance.now();
     const startedAt = new Date().toISOString();
-    let resolution: AiModeResolution | undefined;
-    let ttftMs: number | undefined;
-    let completionChars = 0;
     const promptChars = messages.reduce((sum, message) => sum + message.content.length, 0);
     // Resolved BEFORE the call so the contention domain is known up front. An
     // interactive stream is never gated, but it must be VISIBLE to the gate —
@@ -360,6 +357,24 @@ class TextGenerationService
     // while the player is reading.
     const routing = this._resolveRouting({ model, task, endpoint });
     let lease: TextAdmissionLease | undefined;
+    // The whole observable state of this call, mutable, owned by the dispatch
+    // and the span. Declared OUTSIDE the try so the failure path can read the
+    // same values the success path does — a stream that failed after streaming
+    // is the one whose first-content time most needs recording.
+    const observation: StreamObservation = {
+      start,
+      startedAt,
+      resolution: routing,
+      task,
+      ttftMs: undefined,
+      promptChars,
+      completionChars: 0,
+      deadline,
+      lease,
+      requestId: logicalRequestId,
+      attempts,
+      dispatched: false,
+    };
 
     try {
       if (deadline.expired()) {
@@ -370,62 +385,32 @@ class TextGenerationService
         ...(task === undefined ? {} : { task }),
         signal: AbortSignal.any([abortController.signal, deadline.signal]),
       });
-      const result = await aiGatewayService.generateText({
-        messages,
-        onChunk: (chunk) => {
-          if (ttftMs === undefined) {
-            ttftMs = Math.round(performance.now() - start);
-          }
-          completionChars += chunk.length;
-          onChunk(chunk);
+      observation.lease = lease;
+      const usage = await this._stream.dispatch({
+        request: {
+          messages,
+          onChunk,
+          model,
+          endpoint,
+          task,
+          route: routing,
+          onFirstContent: () => {
+            observation.ttftMs ??= Math.round(performance.now() - start);
+          },
+          onCharacters: (count) => {
+            observation.completionChars += count;
+          },
         },
-        model,
-        endpoint,
-        task,
-        // ONE clock: the gateway call cannot outlive the caller's budget.
-        signal: AbortSignal.any([abortController.signal, deadline.signal]),
-        onResolve: (resolved) => {
-          resolution = resolved;
-          this._exposeRouting(resolved);
-        },
+        observation,
+        signal: abortController.signal,
       });
+      observation.dispatched = true;
       this.info('streamChat:complete');
-      recordTextCall({
-        start,
-        startedAt,
-        resolution,
-        task,
-        streamed: true,
-        ttftMs,
-        promptChars,
-        completionChars,
-        ok: true,
-        deadline,
-        // Interactive work is admitted immediately, so this is a real
-        // measurement of zero rather than an absent one.
-        ...(lease === undefined ? {} : { queueMs: lease.queueMs, queueDepth: lease.queueDepth }),
-        ...(result.usage === undefined ? {} : { usage: result.usage }),
-      });
+      this._stream.recordSuccess(observation, usage);
     } catch (error: unknown) {
-      recordTextCall({
-        start,
-        startedAt,
-        resolution,
-        task,
-        streamed: true,
-        ttftMs,
-        promptChars,
-        completionChars,
-        ok: false,
-        error,
-        deadline,
-        ...(lease === undefined ? {} : { queueMs: lease.queueMs, queueDepth: lease.queueDepth }),
-      });
-      if (isRequestCancellation(error)) {
+      this._stream.recordFailure(observation, error);
+      if (isSwallowedStreamFailure(error, deadline)) {
         this.debug('streamChat:aborted');
-        if (isDeadlineExceeded(deadline)) {
-          throw error;
-        }
         return;
       }
       this.error('streamChat:failed', error);
@@ -437,95 +422,6 @@ class TextGenerationService
       this._decrementStreamCount();
       deadline.dispose();
     }
-  }
-
-  /**
-   * The configured-route half of a structured request, with identical concurrent
-   * calls merged onto one provider call.
-   *
-   * The local attempt deliberately stays OUTSIDE this: a local answer is free
-   * and near-instant, so paying for it twice costs nothing, and keeping it
-   * per-caller preserves each caller's own deadline. The provider call is the
-   * expensive half, so that is the half worth sharing.
-   */
-  private async _runCoalescedStructured(options: {
-    schema: Record<string, unknown>;
-    schemaName: string;
-    prompt: string;
-    systemPrompt?: string;
-    model?: string;
-    task?: TextTask;
-    signal: AbortSignal;
-    deadline: AiRequestDeadline;
-    routing: AiModeResolution;
-    scope: string | undefined;
-    configRevision?: string;
-    onResolve: (resolution: AiModeResolution) => void;
-    onQueueExit?: (observation: QueueExit) => void;
-  }): Promise<CoalescedStructuredResult> {
-    const {
-      schema,
-      schemaName,
-      prompt,
-      systemPrompt,
-      model,
-      task,
-      signal,
-      routing,
-      scope,
-      configRevision,
-      onResolve,
-      onQueueExit,
-    } = options;
-    // 🔴 The shared work inherits the initiator's ABSOLUTE deadline, including
-    // time already spent on the local attempt. Deriving a fresh one from the
-    // task would silently hand the shared call a whole new budget, so the total
-    // wall-clock cost of a request would grow with every coalesced subscriber.
-    // Only the SIGNAL stays per-caller: inheriting that would let one
-    // subscriber's cancellation kill the work everyone else is waiting for,
-    // which is the exact failure the reference counting exists to prevent.
-    const inheritedDeadlineAt = Number.isFinite(options.deadline.deadlineAt)
-      ? options.deadline.deadlineAt
-      : undefined;
-    const outcome = await this._coalescer.run<Omit<CoalescedStructuredResult, 'coalesced'>>({
-      identity: buildCoalescingIdentity({
-        task,
-        schemaName,
-        schema,
-        systemPrompt,
-        prompt,
-        model,
-        routing,
-        scope,
-        configRevision,
-      }),
-      signal,
-      sharedDeadline: () => createRequestDeadline({ deadlineAt: inheritedDeadlineAt, task }),
-      call: (sharedSignal, sharedDeadline) =>
-        this._generateStructured({
-          schema,
-          schemaName,
-          prompt,
-          systemPrompt,
-          model,
-          task,
-          signal: sharedSignal,
-          deadline: sharedDeadline,
-          // The shared work runs the INITIATOR's route, unconditionally. That
-          // is the mechanism, not a safe assumption about identical requests —
-          // which is why the initiator's resolved route is captured in the
-          // identity above: a caller whose settings resolved elsewhere never
-          // becomes the initiator of this attempt.
-          routing,
-          onResolve,
-          ...(onQueueExit === undefined ? {} : { onQueueExit }),
-        }),
-    });
-    return {
-      structured: outcome.value.structured,
-      coalesced: outcome.coalesced,
-      ...(outcome.value.usage === undefined ? {} : { usage: outcome.value.usage }),
-    };
   }
 
   // ── extractStructure ──────────────────────────────────────────────────
@@ -556,9 +452,16 @@ class TextGenerationService
       requestId,
       parentRequestId,
       scope,
-      configRevision,
+      configRevision: suppliedRevision,
     } = options;
     throwIfAlreadyAborted(signal);
+    // Resolved ONCE, here, and read live. Every downstream consumer — admission,
+    // the coalescing identity, dispatch — uses this exact value, so a settings
+    // change mid-request cannot produce three different answers to "where does
+    // this go". A caller that owns a stricter notion of configuration identity
+    // (a vault epoch, a server-pushed revision) may supply one instead; the
+    // default is the composition layer's, and neither is a secret.
+    const configRevision = suppliedRevision ?? aiGatewayService.routeRevision();
 
     // 🔴 ONE logical start, captured BEFORE any work is done.
     //
@@ -594,6 +497,21 @@ class TextGenerationService
     const onQueueExit = (observation: QueueExit): void => {
       admission = observation;
     };
+    /**
+     * Set the moment a provider attempt is dispatched.
+     *
+     * The difference between "this request failed" and "this request was never
+     * sent" decides whether a span counts a bill. It is tracked from the
+     * gateway call rather than inferred from the error, because the error of a
+     * request that spent a real attempt looks exactly like the error of one
+     * that never reached the provider.
+     */
+    let dispatched = false;
+    // Owned here, not inside the coalescer, so the failure path below can read
+    // the same list the success path does. An attempt that was dispatched and
+    // then threw is the case an accounting boundary most often loses, and it is
+    // precisely the one the provider billed.
+    const attempts = createAttemptSink();
     // One span builder for both outcomes: the success and failure paths differ
     // only in the last few fields, and spelling the whole shape out twice is how
     // a field silently ends up recorded on one path and not the other.
@@ -629,15 +547,10 @@ class TextGenerationService
         signal: abortController.signal,
         deadline,
         resolution: routing,
+        ...(model === undefined ? {} : { explicitModel: model }),
         onAttempt: () => {
           localAttempted = true;
         },
-        allowLocal: resolveLocalFirstPolicy({
-          resolution: routing,
-          preset: task === undefined ? undefined : TEXT_TASK_PRESETS[task],
-          hasExplicitModel: model !== undefined && model.length > 0,
-          readiness: localTaskPoolService.readiness,
-        }).allowed,
       });
       if (localResult !== undefined) {
         this.debug('extractStructure:local-first', { schemaName, task });
@@ -650,6 +563,10 @@ class TextGenerationService
             streamed: false,
             completionChars: JSON.stringify(localResult).length,
             ok: true,
+            // Zero provider attempts, and not one attempt that happened to be
+            // free. The two are different facts and a cost report needs the
+            // second one to stay honest about hardware.
+            dispatch: 'local',
           }),
         );
         return localResult;
@@ -661,7 +578,7 @@ class TextGenerationService
       throwIfAlreadyAborted(abortController.signal);
       fallback = localAttempted;
 
-      const result = await this._runCoalescedStructured({
+      const result = await this._dispatch.run({
         schema,
         schemaName,
         prompt,
@@ -673,8 +590,12 @@ class TextGenerationService
         routing,
         scope,
         configRevision,
+        attempts,
         onResolve: (resolved) => {
           resolution = resolved;
+          // The gateway resolved a route, which it only does on the way to an
+          // adapter. From here the request is spent, whatever happens next.
+          dispatched = true;
         },
         onQueueExit,
       });
@@ -691,38 +612,35 @@ class TextGenerationService
             result.structured === undefined ? 0 : JSON.stringify(result.structured).length,
           ok: true,
           fallback,
-          cacheLayer: result.coalesced ? 'in-flight-dedup' : 'none',
-          // Queue wait is part of the critical path and is already inside
-          // `totalMs`; recorded again so it is visible on its own.
-          ...(admission === undefined
-            ? {}
-            : { queueMs: admission.queueMs, queueDepth: admission.queueDepth }),
-          // A coalesced span was PAID FOR by another span. Counting its tokens
-          // again would double the figure, which is the opposite of the point.
-          ...(result.coalesced || result.usage === undefined ? {} : { usage: result.usage }),
+          ...coalescedSpanFields(result),
+          ...queueSpanFields(admission),
         }),
       );
       return result.structured;
     } catch (error: unknown) {
-      recordTextCall(
-        span({
-          start,
-          resolution,
-          streamed: false,
-          completionChars: 0,
-          ok: false,
-          fallback,
-          error,
-          // A request cancelled or expired WHILE QUEUED is recorded with the
-          // queue wait it actually incurred. Reporting nothing here would
-          // erase the difference between "never got a provider call" and
-          // "failed on the provider", which is the distinction this slice
-          // exists to make measurable.
-          ...(admission === undefined
-            ? {}
-            : { queueMs: admission.queueMs, queueDepth: admission.queueDepth }),
-        }),
-      );
+      this._recordStructuredFailure({
+        span,
+        start,
+        resolution,
+        fallback,
+        error,
+        // No dispatch happened unless the gateway got as far as attempting
+        // one. A request that died in routing, in the local attempt or in the
+        // queue is SUPPRESSED work, and reporting it as a provider attempt
+        // would invent a bill that nobody received.
+        dispatched,
+        // Recorded on the failure path too. The attempt that threw is the one
+        // the provider billed, and a span that only carried attempts on
+        // success would under-report every retry, every schema repair and
+        // every cancellation — which is to say, all the interesting ones.
+        attempts,
+        // A request cancelled or expired WHILE QUEUED is recorded with the
+        // queue wait it actually incurred. Reporting nothing here would erase
+        // the difference between "never got a provider call" and "failed on
+        // the provider", which is the distinction this slice exists to make
+        // measurable.
+        admission,
+      });
       if (isRequestCancellation(error)) {
         this.debug('extractStructure:aborted');
         throw error;
@@ -735,6 +653,42 @@ class TextGenerationService
       this._decrementStreamCount();
       deadline.dispose();
     }
+  }
+
+  /**
+   * Records a structured call that FAILED, and nothing else.
+   *
+   * Its own method so the two span shapes cannot drift: the success path and
+   * the failure path differ in six fields, and spelling the whole thing out
+   * twice is how a field ends up recorded on one and forgotten on the other —
+   * which is exactly what happened to the attempt list before #382 consumed
+   * `onAttempt` in production.
+   */
+  private _recordStructuredFailure(options: {
+    span: (extra: Omit<TextCallObservation, 'startedAt' | 'promptChars'>) => TextCallObservation;
+    start: number;
+    resolution?: AiModeResolution;
+    fallback: boolean;
+    error: unknown;
+    dispatched: boolean;
+    attempts: TextAttemptSink;
+    admission: QueueExit | undefined;
+  }): void {
+    const { span, start, resolution, fallback, error, dispatched, attempts, admission } = options;
+    recordTextCall(
+      span({
+        start,
+        resolution,
+        streamed: false,
+        completionChars: 0,
+        ok: false,
+        fallback,
+        error,
+        dispatch: dispatched ? 'provider' : 'suppressed',
+        ...(attempts.attempts.length === 0 ? {} : { attempts: attempts.snapshot() }),
+        ...queueSpanFields(admission),
+      }),
+    );
   }
 
   // ── cancelAll ─────────────────────────────────────────────────────────

@@ -553,7 +553,7 @@
   },
   "apps/frontend/client/src/lib/services/game/npc_dialogue_service.svelte.ts": {
     "counts": {
-      "excessive": 9,
+      "excessive": 8,
       "worst": 67
     }
   },

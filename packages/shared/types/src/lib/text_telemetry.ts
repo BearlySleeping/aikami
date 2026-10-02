@@ -22,6 +22,34 @@ import type { TextTask } from '@aikami/constants';
 export type TextTokenSource = 'provider' | 'estimated';
 
 /**
+ * HOW the logical request was satisfied — the axis that separates a provider
+ * bill from everything that is not one.
+ *
+ * 🔴 This is the distinction a per-attempt event stream cannot make on its
+ * own. `onAttempt` fires per DISPATCHED attempt, so a request answered on the
+ * device, a request that joined someone else's attempt, and a request that was
+ * dropped from the admission queue all produce exactly the same silence. Read
+ * as "no attempts", that silence is indistinguishable from "nothing happened",
+ * and a cost report built on it under-reports the calls that did happen while
+ * also failing to say that three requests cost nothing.
+ *
+ * The four values are mutually exclusive and exhaustive for a settled request:
+ *
+ *  - `provider` — a provider attempt was dispatched. `attemptCount` is the real
+ *    number of bills, always ≥ 1.
+ *  - `local` — answered on-device. Zero provider billing, and NOT zero cost:
+ *    the hardware and electricity are real and are not priced here.
+ *  - `coalesced` — this caller joined an attempt somebody else started. It cost
+ *    nothing, and the attempt it rode on is recorded on the INITIATOR's span.
+ *    Counting it again would multiply measured spend by the subscriber count.
+ *  - `suppressed` — deliberately never dispatched: dropped from admission,
+ *    cut by an exhausted deadline, or abandoned before the local attempt.
+ *    Recorded so a budget that saved work is visible as savings rather than as
+ *    an absence.
+ */
+export type TextDispatchKind = 'provider' | 'local' | 'coalesced' | 'suppressed';
+
+/**
  * Which wire shape actually carried a generation.
  *
  * Added because `streamed` alone cannot carry the distinction that matters for
@@ -89,6 +117,14 @@ export type TextTelemetrySpan = {
   model: string;
   /** Resolved adapter mode. */
   mode: string;
+  /**
+   * How this logical request was satisfied.
+   *
+   * Absent only on a span recorded by a caller that predates this field; every
+   * span the text service records today carries one. See
+   * {@link TextDispatchKind} for why "no attempts" is not a sufficient answer.
+   */
+  dispatch?: TextDispatchKind;
   /** Whether the call streamed tokens. */
   streamed: boolean;
   /**
@@ -240,8 +276,29 @@ export type TextTelemetryCounters = {
    * Compared against `calls`, this is the retry/fallback rate. It exceeds
    * `calls` whenever a logical request spent more than one provider bill, which
    * is the number a cost investigation needs first.
+   *
+   * Only `dispatch: 'provider'` spans contribute. A local answer, a coalesced
+   * subscriber and a suppressed request all dispatch ZERO provider attempts,
+   * and adding a default of one to each of them — the previous behaviour —
+   * inflated this figure by exactly the number of requests that cost nothing.
    */
   readonly attempts: number;
+  /**
+   * Logical requests that were answered by joining someone else's attempt.
+   *
+   * Their provider spend is already counted on the initiator's span, which is
+   * the only way "one bill, N waiters" is expressible as a number.
+   */
+  readonly coalesced: number;
+  /**
+   * Requests deliberately never dispatched — dropped from admission, cut by an
+   * exhausted deadline, abandoned before the local attempt.
+   *
+   * A budget's real output. Without this counter, work the deadline and the
+   * admission gate avoided is invisible, and "we made no calls" reads as a
+   * measurement rather than as the absence of one.
+   */
+  readonly suppressed: number;
   /** Spans whose token counts do not cover the whole attempt. */
   readonly partialUsage: number;
   /**

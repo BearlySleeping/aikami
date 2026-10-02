@@ -47,6 +47,23 @@ export const mocks = {
     model: '',
     endpoint: '',
   } as Record<string, unknown>,
+  /**
+   * The opaque configuration revision `routeRevision` reports.
+   *
+   * Mutable per test so a suite can prove that a revision change separates two
+   * requests that would otherwise be byte-identical, and that the value never
+   * carries anything a credential could be recovered from.
+   */
+  gatewayRouteRevision: 'cfg-1-abc123',
+  /**
+   * Attempt events the mocked gateway reports, in the order it dispatches them.
+   *
+   * A test sets one entry per PHYSICAL provider attempt — the first try, an
+   * empty-body retry, a schema repair, a cancelled one — and the service is
+   * expected to record each exactly once, on the span of the request that
+   * actually paid for it.
+   */
+  gatewayAttempts: [] as Array<Record<string, unknown>>,
   localBlockUntilAbort: false,
   localSignal: undefined as AbortSignal | undefined,
   localSubmitOutput: '',
@@ -87,6 +104,10 @@ const mockAiGatewayService = {
     ...mocks.gatewayRouting,
     ...(options?.model === undefined ? {} : { model: options.model }),
   })),
+  // The composition layer's opaque configuration marker. The mock never
+  // derives it: a test sets it, which is what makes "the revision changed
+  // between two requests" an expressible scenario rather than a coincidence.
+  routeRevision: mock(() => mocks.gatewayRouteRevision),
   generateText: mock(async (options: Record<string, unknown>) => {
     mocks.gatewayGenerateCalls.push(options);
     // A test may hold every gateway call open to observe what happens while a
@@ -96,11 +117,13 @@ const mockAiGatewayService = {
       mocks.gatewayGate = undefined;
       await gate.promise;
     }
-    const { onChunk, onResolve, signal, model } = options as {
+    const { onChunk, onResolve, signal, model, onAttempt, requestId } = options as {
       onChunk?: (text: string) => void;
       onResolve?: (resolution: unknown) => void;
       signal?: AbortSignal;
       model?: string;
+      onAttempt?: (event: Record<string, unknown>) => void;
+      requestId?: string;
     };
 
     // Stands in for real inference time. Abort-aware, so a deadline test can
@@ -120,6 +143,19 @@ const mockAiGatewayService = {
           },
           { once: true },
         );
+      });
+    }
+
+    // Every PHYSICAL attempt, in order, with the identity the real gateway
+    // stamps. Emitted before the failure check so a cancelled or failed
+    // attempt is still reported — the provider billed it either way.
+    let ordinal = 0;
+    for (const attempt of mocks.gatewayAttempts) {
+      ordinal += 1;
+      onAttempt?.({
+        ...attempt,
+        attemptId: `${requestId ?? 'gw-0'}#${ordinal}`,
+        ...(requestId === undefined ? {} : { requestId }),
       });
     }
 
@@ -262,6 +298,8 @@ export const resetGatewayMocks = (): void => {
   mocks.localDelayMs = 0;
   mocks.localBlockUntilAbort = false;
   mocks.localSignal = undefined;
+  mocks.gatewayAttempts = [];
+  mocks.gatewayRouteRevision = 'cfg-1-abc123';
   textTelemetryService.clear();
   mocks.gatewayGate = undefined;
   mocks.gatewayRouting = {
@@ -280,6 +318,21 @@ export const resetGatewayMocks = (): void => {
 // These setters keep the mutable state private to the harness and make every
 // mutation go through one named place.
 // ---------------------------------------------------------------------------
+
+/** Sets the opaque configuration revision the mocked gateway reports. */
+export const setRouteRevision = (revision: string): void => {
+  mocks.gatewayRouteRevision = revision;
+};
+
+/**
+ * Sets the per-physical-attempt events the mocked gateway reports.
+ *
+ * One entry per DISPATCHED attempt, in dispatch order. The service is expected
+ * to record each of them exactly once, on one span.
+ */
+export const setGatewayAttempts = (attempts: Array<Record<string, unknown>>): void => {
+  mocks.gatewayAttempts = attempts;
+};
 
 /** Sets the routing `resolveText` reports, so policy can be exercised. */
 export const setGatewayRouting = (routing: Record<string, unknown>): void => {
