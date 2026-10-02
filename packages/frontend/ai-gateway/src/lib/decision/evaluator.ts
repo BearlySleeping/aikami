@@ -340,7 +340,8 @@ export const evaluateBackend = async (
 
   const corpus = loadDecisionCorpus();
   const reports: EvaluationReport[] = [];
-  for (const [name, cases] of Object.entries(corpus.splits)) {
+  for (const name of ['heldout', 'dev'] as const) {
+    const cases = corpus.splits[name];
     reports.push(
       await scoreSplit({ options, task, adapter, plan, schema, conditions, name, cases }),
     );

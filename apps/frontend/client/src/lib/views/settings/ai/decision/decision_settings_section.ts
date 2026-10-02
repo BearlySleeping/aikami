@@ -27,6 +27,7 @@ export type DecisionStateDescriptor = {
   readonly state: DecisionBackendState;
   readonly label: string;
   readonly colorClass: string;
+  readonly textColorClass: string;
   readonly dot: string;
   /** One sentence explaining what this state does and does not permit. */
   readonly meaning: string;
@@ -40,6 +41,7 @@ export const DECISION_STATE_DESCRIPTORS: Readonly<
     state: 'disabled',
     label: 'Disabled',
     colorClass: 'badge-ghost',
+    textColorClass: 'text-base-content/60',
     dot: '○',
     meaning: 'Not in use. Nothing is probed and nothing is routed to it.',
   },
@@ -47,6 +49,7 @@ export const DECISION_STATE_DESCRIPTORS: Readonly<
     state: 'ready',
     label: 'Ready to test',
     colorClass: 'badge-info',
+    textColorClass: 'text-info',
     dot: '◐',
     meaning:
       'A real sample decision came back and passed validation. Good for testing — not qualified for automatic gameplay.',
@@ -55,6 +58,7 @@ export const DECISION_STATE_DESCRIPTORS: Readonly<
     state: 'qualified',
     label: 'Qualified for automatic tasks',
     colorClass: 'badge-success',
+    textColorClass: 'text-success',
     dot: '●',
     meaning: 'Cleared the frozen task gate on held-out data as well as the sample check.',
   },

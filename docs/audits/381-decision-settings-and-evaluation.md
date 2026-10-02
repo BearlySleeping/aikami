@@ -85,7 +85,7 @@ measures something the game never does.
 The evidence for that second point is the corpus itself. The eighteen opening
 player messages the game actually ships
 (`apps/frontend/client/src/lib/data/initial_suggestion_presets.ts`, taken
-verbatim) were added as fixture cases. **Twelve of the eighteen require no
+verbatim) were added as fixture cases. **Thirteen of the eighteen require no
 command.** They were overwhelmingly conversation openers before anyone labelled
 them.
 
@@ -168,7 +168,7 @@ There is deliberately no `--credential=<value>`; use `--credential-env=<VAR>`.
 ### Live run 1 — the local runtime that is actually present: UNAVAILABLE
 
 ```
-$ bun run src/cli/decision_evaluate.ts --runtime=ollama \
+$ bun run src/cli/decision_evaluate_node.ts --runtime=ollama \
     --endpoint=http://127.0.0.1:11434 --checkpoint=nimble \
     --out=.evidence/381/eval-ollama-0.34.3.json
 
@@ -195,7 +195,7 @@ criteria key it is offered. **This is not a model and produces no model
 measurement** — it is a transport and harness check, and it is labelled as one.
 
 ```
-$ bun run src/cli/decision_evaluate.ts --runtime=jev \
+$ bun run src/cli/decision_evaluate_node.ts --runtime=jev \
     --endpoint=http://127.0.0.1:8791 --checkpoint=stub-decision \
     --out=.evidence/381/eval-stub-server.json
 

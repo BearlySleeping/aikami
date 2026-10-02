@@ -180,7 +180,7 @@ export type {
   RunLiveMeasurementOptions,
   SplitMeasurement,
 } from './live_measurement.ts';
-export { runLiveDecisionMeasurement } from './live_measurement.ts';
+export { measureSplit, runLiveDecisionMeasurement } from './live_measurement.ts';
 export type {
   DecisionExperimentalPreference,
   DecisionRouteDecision,

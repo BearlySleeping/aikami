@@ -8,14 +8,24 @@
 // open for three contracts because nothing could produce a number, and the
 // failure mode that keeps it open is reporting "no backend" as "no problems".
 
-import { describe, expect, test } from 'bun:test';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { describe, expect, spyOn, test } from 'bun:test';
 import { EXIT, parseOptions, renderSummary, run } from '../src/cli/decision_evaluate_node.ts';
 import {
+  analyzeDecisionSchema,
+  bindDecisionPolicy,
   createSystemOneDecisionAdapter,
+  evaluateSplit,
   evaluateBackend,
   type SystemOneTransport,
 } from '../src/lib/decision/index.ts';
-import { NPC_COMMAND_KIND_NONE } from '../src/lib/decision/tasks/index.ts';
+import {
+  NPC_COMMAND_KIND_NONE,
+  NPC_COMMAND_KIND_POLICY,
+  NPC_COMMAND_KIND_SCHEMA,
+} from '../src/lib/decision/tasks/index.ts';
 
 /** A backend that answers every sample with the first criteria key it is offered. */
 const echoingBackend = (): SystemOneTransport => ({
@@ -66,15 +76,32 @@ describe('the three outcomes', () => {
   });
 
   test('a backend that answers is measured, and fails or passes — never skips', async () => {
+    const adapter = adapterFor(echoingBackend());
+    const requestIds: string[] = [];
     const artifact = await evaluateBackend({
-      adapter: adapterFor(echoingBackend()),
+      adapter: {
+        ...adapter,
+        run: async (request) => {
+          requestIds.push(request.requestId);
+          return adapter.run(request);
+        },
+      },
       readinessTimeoutMs: 2_000,
       coldSamples: 1,
       warmupRequests: 0,
     });
+    const measuredRequests = requestIds.filter((id) => id.startsWith('evaluate:'));
+    const firstDev = measuredRequests.findIndex((id) => id.startsWith('evaluate:dev:'));
+    expect(firstDev).toBeGreaterThan(0);
+    expect(
+      measuredRequests.slice(0, firstDev).every((id) => id.startsWith('evaluate:heldout:')),
+    ).toBe(true);
+    expect(measuredRequests.slice(firstDev).every((id) => id.startsWith('evaluate:dev:'))).toBe(
+      true,
+    );
     expect(artifact.status).not.toBe('unavailable');
     expect(['passed', 'failed']).toContain(artifact.status);
-    expect(artifact.splits.map((split) => split.split)).toEqual(['dev', 'heldout']);
+    expect(artifact.splits.map((split) => split.split)).toEqual(['heldout', 'dev']);
     expect(artifact.unavailableReason).toBeUndefined();
   });
 
@@ -85,9 +112,8 @@ describe('the three outcomes', () => {
       coldSamples: 1,
       warmupRequests: 0,
     });
-    // The sorted literals put `none` first, so this backend abstains-by-literal;
-    // what it cannot do is answer the 15 positives correctly, and positive
-    // recall is the gate. Whichever way it lands, it must not be a silent pass.
+    // Always choosing the first literal misses most positives and must fail
+    // positive recall, regardless of the compiler's option ordering.
     expect(artifact.status).toBe('failed');
     expect(artifact.gateFailures.join('\n')).toContain('positive recall');
   });
@@ -122,11 +148,102 @@ describe('the three outcomes', () => {
   });
 
   test('the task safe literal is `none`, and it is what a safe answer is scored against', async () => {
-    expect(NPC_COMMAND_KIND_NONE).toBe('none');
+    const analysis = analyzeDecisionSchema({ schema: NPC_COMMAND_KIND_SCHEMA });
+    if (!analysis.ok) {
+      throw new Error('task schema must compile');
+    }
+    const binding = bindDecisionPolicy({ plan: analysis.plan, policy: NPC_COMMAND_KIND_POLICY });
+    if (!binding.ok) {
+      throw new Error('task policy must bind');
+    }
+    const report = await evaluateSplit({
+      split: 'heldout',
+      cases: [
+        {
+          caseId: 'safe',
+          category: 'smalltalk',
+          language: 'en',
+          kind: 'required-abstain',
+          expected: null,
+          state: 'Hello!',
+        },
+      ],
+      adapter: {
+        ...adapterFor(echoingBackend()),
+        run: async (request) => ({
+          ok: true,
+          answers: request.unit.questions.map((question) => ({
+            questionKey: question.key,
+            optionKey: `o${question.options?.findIndex((option) => option.value === 'none')}`,
+          })),
+          queueMs: 0,
+          inferenceMs: 1,
+        }),
+      },
+      plan: binding.plan,
+      schema: NPC_COMMAND_KIND_SCHEMA,
+      policy: NPC_COMMAND_KIND_POLICY,
+      timeoutMs: 1000,
+      coldSamples: 0,
+      warmupRequests: 0,
+      safeLiteral: NPC_COMMAND_KIND_NONE,
+    });
+    expect(report.outcomes[0]?.produced).toBe('none');
+    expect(report.overall.safeAnswers).toBe(1);
+    expect(report.overall.falseAcceptances).toBe(0);
   });
 });
 
 describe('the CLI contract', () => {
+  test('invalid integer flags produce usage errors before any measurement', async () => {
+    const stderr = spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      for (const flag of ['cold-samples', 'warmup', 'timeout-ms']) {
+        for (const value of ['-1', '1.5', '12junk', 'NaN', 'Infinity', '', '9007199254740992']) {
+          expect(await run(['--endpoint=http://h', '--checkpoint=n', `--${flag}=${value}`])).toBe(
+            EXIT.usage,
+          );
+        }
+        expect(await run(['--endpoint=http://h', '--checkpoint=n', `--${flag}`])).toBe(EXIT.usage);
+      }
+      expect(
+        parseOptions(['--endpoint=http://h', '--checkpoint=n', '--cold-samples=0', '--warmup=2'])
+          .coldSamples,
+      ).toBe(0);
+    } finally {
+      stderr.mockRestore();
+    }
+  });
+
+  test('artifact writes succeed quietly and write failures report usage errors on stderr', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'decision-evaluator-'));
+    const server = Bun.serve({
+      port: 0,
+      fetch: () => new Response('unavailable', { status: 503 }),
+    });
+    const stderr = spyOn(console, 'error').mockImplementation(() => {});
+    const stdout = spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      const argv = [
+        `--endpoint=http://127.0.0.1:${server.port}`,
+        '--checkpoint=n',
+        '--runtime=jev',
+        '--quiet',
+      ];
+      const artifactPath = join(directory, 'evaluation.json');
+      expect(await run([...argv, `--out=${artifactPath}`])).toBe(EXIT.unavailable);
+      expect((await Bun.file(artifactPath).json()).status).toBe('unavailable');
+      expect(await run([...argv, `--out=${directory}`])).toBe(EXIT.usage);
+      expect(stderr).toHaveBeenCalledWith(expect.stringContaining('artifact could not be written'));
+      expect(stdout).not.toHaveBeenCalled();
+    } finally {
+      stderr.mockRestore();
+      stdout.mockRestore();
+      server.stop(true);
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   test('exit codes separate pass, fail and unavailable', () => {
     expect(EXIT.passed).toBe(0);
     expect(EXIT.failed).toBe(1);
@@ -148,13 +265,23 @@ describe('the CLI contract', () => {
   });
 
   test('a secret is supplied by environment variable NAME, never by value', () => {
-    const options = parseOptions([
-      '--endpoint=http://h',
-      '--checkpoint=nimble',
-      '--credential-env=AIKAMI_JEV_TOKEN',
-    ]);
-    expect(options.credentialEnv).toBe('AIKAMI_JEV_TOKEN');
-    expect(JSON.stringify(options)).not.toContain('token-value');
+    const previous = process.env.AIKAMI_JEV_TOKEN;
+    process.env.AIKAMI_JEV_TOKEN = 'token-value';
+    try {
+      const options = parseOptions([
+        '--endpoint=http://h',
+        '--checkpoint=nimble',
+        '--credential-env=AIKAMI_JEV_TOKEN',
+      ]);
+      expect(options.credentialEnv).toBe('AIKAMI_JEV_TOKEN');
+      expect(JSON.stringify(options)).not.toContain('token-value');
+    } finally {
+      if (previous === undefined) {
+        delete process.env.AIKAMI_JEV_TOKEN;
+      } else {
+        process.env.AIKAMI_JEV_TOKEN = previous;
+      }
+    }
   });
 
   test('an unknown runtime is a usage error naming the valid set', () => {

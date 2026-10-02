@@ -13,12 +13,6 @@ import type { DecisionSettingsViewModelInterface } from './decision_settings_vie
 
 type Props = { viewModel: DecisionSettingsViewModelInterface };
 let { viewModel }: Props = $props();
-
-let showCredential = $state(false);
-let selectedDocs = $state<string | undefined>(undefined);
-const selectedProvider = $derived(
-  viewModel.providerOptions.find((option) => option.id === viewModel.draft.registryId),
-);
 </script>
 
 <BaseViewModelContainer {viewModel} class="max-w-3xl mx-auto space-y-6">
@@ -31,7 +25,7 @@ const selectedProvider = $derived(
   <section class="card card-bordered border-white/[0.08] bg-base-100/50">
     <div class="card-body p-4 space-y-2">
       <div class="flex items-center gap-3">
-        <span class="text-lg {viewModel.stateDescriptor.colorClass.replace('badge-', 'text-')}">
+        <span class="text-lg {viewModel.stateDescriptor.textColorClass}">
           {viewModel.stateDescriptor.dot}
         </span>
         <span class="font-mono text-sm font-semibold">{viewModel.stateDescriptor.label}</span>
@@ -50,7 +44,7 @@ const selectedProvider = $derived(
           <dt class="text-[#938ea1]/60">Checkpoint</dt>
           <dd>{viewModel.summary.checkpoint}</dd>
           <dt class="text-[#938ea1]/60">Credential</dt>
-          <dd>{viewModel.summary.hasCredential ? 'stored in the vault' : 'none'}</dd>
+          <dd>{viewModel.credentialSummary}</dd>
         </dl>
       {/if}
 
@@ -58,10 +52,10 @@ const selectedProvider = $derived(
         <button
           type="button"
           class="btn btn-xs font-mono border-[#00e3fd]/30 text-[#00e3fd]"
-          disabled={!viewModel.configured || viewModel.isTesting}
+          disabled={viewModel.testDisabled}
           onclick={() => viewModel.test()}
         >
-          {viewModel.isTesting ? 'Testing…' : 'Test connection'}
+          {viewModel.testLabel}
         </button>
         {#if viewModel.configured}
           <button
@@ -80,9 +74,9 @@ const selectedProvider = $derived(
             Sample inference
           </p>
           <p class="text-xs text-[#cabeff] font-sans mt-1">{viewModel.readinessMessage}</p>
-          {#if viewModel.setupSteps.length > 0}
+          {#if viewModel.hasSetupSteps}
             <ul class="mt-2 space-y-1">
-              {#each viewModel.setupSteps as step (`${step.id}:${step.detail}`)}
+              {#each viewModel.setupSteps as step (step)}
                 <li class="text-[11px] text-[#938ea1] font-sans">· {step.detail}</li>
               {/each}
             </ul>
@@ -108,17 +102,19 @@ const selectedProvider = $derived(
         </select>
       </label>
 
-      {#if selectedProvider}
-        <p class="text-[11px] text-[#938ea1] font-sans">{selectedProvider.description}</p>
+      {#if viewModel.selectedProvider}
+        <p class="text-[11px] text-[#938ea1] font-sans">{viewModel.selectedProvider.description}</p>
         <button
           type="button"
           class="text-left font-mono text-[10px] text-[#00e3fd]/70 hover:underline self-start"
-          onclick={() => (selectedDocs = selectedDocs === selectedProvider.docsUrl ? undefined : selectedProvider.docsUrl)}
+          onclick={() => viewModel.toggleDocs()}
         >
-          {selectedDocs === selectedProvider.docsUrl ? 'Hide setup link' : 'How to set this up'}
+          {viewModel.docsToggleLabel}
         </button>
-        {#if selectedDocs === selectedProvider.docsUrl}
-          <p class="font-mono text-[10px] text-[#938ea1] break-all">{selectedProvider.docsUrl}</p>
+        {#if viewModel.showDocs}
+          <p class="font-mono text-[10px] text-[#938ea1] break-all">
+            {viewModel.selectedProvider.docsUrl}
+          </p>
         {/if}
       {/if}
 
@@ -148,14 +144,14 @@ const selectedProvider = $derived(
         </span>
       </label>
 
-      {#if viewModel.credentialRequired || viewModel.credentialOptional}
+      {#if viewModel.showCredentialField}
         <label class="form-control w-full">
           <span class="label-text font-mono text-xs text-[#938ea1]">
-            {viewModel.credentialOptional ? 'API key (optional)' : 'API key'}
+            {viewModel.credentialLabel}
           </span>
           <div class="join w-full">
             <input
-              type={showCredential ? 'text' : 'password'}
+              type={viewModel.credentialInputType}
               class="input input-sm input-bordered bg-base-100 font-mono text-xs join-item flex-1"
               value={viewModel.draft.credential}
               oninput={(event) => viewModel.setCredential(event.currentTarget.value)}
@@ -163,9 +159,9 @@ const selectedProvider = $derived(
             <button
               type="button"
               class="btn btn-sm join-item font-mono text-[10px]"
-              onclick={() => (showCredential = !showCredential)}
+              onclick={() => viewModel.toggleCredential()}
             >
-              {showCredential ? 'Hide' : 'Show'}
+              {viewModel.credentialToggleLabel}
             </button>
           </div>
           <span class="label-text-alt text-[10px] text-[#938ea1]/60 font-sans">
@@ -194,16 +190,12 @@ const selectedProvider = $derived(
     <div class="card-body p-4 space-y-2">
       <h3 class="font-mono text-sm font-semibold text-[#cabeff]">Supported tasks</h3>
       <ul class="space-y-2">
-        {#each viewModel.summary.tasks as task (task.id)}
+        {#each viewModel.taskRows as task (task.id)}
           <li class="text-xs font-sans">
             <div class="flex items-center gap-2">
               <span class="font-mono">{task.label}</span>
-              <span
-                class="badge badge-xs font-mono {task.qualified
-                  ? 'badge-success'
-                  : 'badge-ghost'}"
-              >
-                {task.qualified ? 'qualified' : 'not qualified'}
+              <span class="badge badge-xs font-mono {task.badgeClass}">
+                {task.qualificationLabel}
               </span>
             </div>
             <p class="text-[11px] text-[#938ea1]">{task.description}</p>

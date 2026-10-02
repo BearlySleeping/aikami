@@ -449,7 +449,7 @@ export const migrateVaultV2ToV3 = (
   };
   for (const [role, connId] of Object.entries(roles)) {
     const cap = roleToCap[role as AiRole];
-    if (!cap || !connId) {
+    if (!cap || cap === 'decision' || !connId) {
       continue;
     }
     const connCap = getCapabilityForConnection(connId);

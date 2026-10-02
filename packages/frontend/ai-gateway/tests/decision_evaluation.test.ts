@@ -224,6 +224,7 @@ describe('the control does not clear the frozen gate', () => {
   test('it also fails on the development split, so the split is not rigged', async () => {
     const dev = await score('dev');
     expect(dev.overall.attempted).toBe(NPC_COMMAND_KIND_DEV.cases.length);
+    expect(evaluateQualityGates(dev, NPC_COMMAND_KIND_QUALITY_GATE).length).toBeGreaterThan(0);
   });
 
   test('no produced value escapes the original schema', async () => {

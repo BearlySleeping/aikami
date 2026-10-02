@@ -38,6 +38,7 @@ export const getDecisionSettingsViewModel = (
       updateProvider: (id, patch) => configService.updateProvider(id, patch),
       deleteAiConnection: (id) => configService.deleteAiConnection(id),
       addAiConnection: (connection) => configService.addAiConnection(connection),
+      updateAiConnection: (id, patch) => configService.updateAiConnection(id, patch),
       setRoleAssignment: (role, connectionId) =>
         configService.setRoleAssignment(role, connectionId),
       clearRoleAssignment: (role) => configService.clearRoleAssignment(role),

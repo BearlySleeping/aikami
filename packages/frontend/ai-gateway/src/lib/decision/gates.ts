@@ -170,7 +170,8 @@ const unestablishedLatency = (
   if (label === 'cold p95') {
     return metrics.coldP95Ms === undefined ? absent('cold') : undefined;
   }
-  const warmEstablished = metrics.warmP95Ms !== undefined || metrics.warmMedianMs !== undefined;
+  const warmEstablished =
+    label === 'warm p95' ? metrics.warmP95Ms !== undefined : metrics.warmMedianMs !== undefined;
   return warmEstablished ? undefined : absent('warm');
 };
 
@@ -185,10 +186,10 @@ export const evaluateQualityGates = (
   if (metrics.positives === 0) {
     structural.push('no positive cases were measured; positive recall cannot be computed');
   }
-  if (metrics.answeredPositiveAccuracy > metrics.positiveRecall && metrics.positivesAnswered > 0) {
-    // Survivorship-bias guard: the diagnostic must never exceed the gate metric.
+  if (metrics.positiveRecall > metrics.answeredPositiveAccuracy) {
+    // Recall divides by all positives, so it cannot exceed accuracy over answered positives.
     structural.push(
-      `answered-positive accuracy ${THREE_DECIMALS(metrics.answeredPositiveAccuracy)} exceeds positive recall ${THREE_DECIMALS(metrics.positiveRecall)}; the corpus or the scorer is inconsistent`,
+      `positive recall ${THREE_DECIMALS(metrics.positiveRecall)} exceeds answered-positive accuracy ${THREE_DECIMALS(metrics.answeredPositiveAccuracy)}; the corpus or the scorer is inconsistent`,
     );
   }
   const quality = qualityComparisons(metrics, gate).flatMap((comparison) => {

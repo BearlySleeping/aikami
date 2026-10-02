@@ -96,6 +96,13 @@ const harness = (
         providers[index] = { ...current, ...patch };
       }
     },
+    updateAiConnection: (id: string, patch: Partial<Omit<AiConnection, 'id' | 'createdAt'>>) => {
+      const index = connections.findIndex((candidate) => candidate.id === id);
+      const current = connections[index];
+      if (current) {
+        connections[index] = { ...current, ...patch };
+      }
+    },
     deleteAiConnection: (id: string) => {
       const index = connections.findIndex((candidate) => candidate.id === id);
       if (index >= 0) {
@@ -328,6 +335,37 @@ describe('the save gate', () => {
 });
 
 describe('configure', () => {
+  test('saving an edited checkpoint updates the reused connection and clears qualification', async () => {
+    const config = harness({
+      providers: [provider()],
+      connections: [
+        decisionConnection({
+          params: { checkpoint: 'old', runtime: 'jev', qualifiedForGameplay: true },
+        }),
+      ],
+    });
+    const viewModel = buildViewModel(config, stubDecisions());
+    await viewModel.initialize();
+    viewModel.setCheckpoint('new-checkpoint');
+    await viewModel.save();
+
+    expect(config.connections).toHaveLength(1);
+    expect(config.connections[0]).toMatchObject({
+      id: 'connection-1',
+      providerId: 'provider-1',
+      model: 'new-checkpoint',
+      params: {
+        checkpoint: 'new-checkpoint',
+        runtime: 'jev',
+        languages: ['en'],
+        qualifiedForGameplay: false,
+      },
+    });
+    expect(config.connections[0]?.label).toContain('new-checkpoint');
+    expect(config.roles.decisions).toBe('connection-1');
+    expect(config.saves).toBe(1);
+  });
+
   test('saving writes a provider, a decision connection and the decisions role', async () => {
     const config = harness();
     const viewModel = buildViewModel(config);
@@ -549,6 +587,24 @@ describe('disable and reload', () => {
 });
 
 describe('the provider picker', () => {
+  test('documentation and credential toggles expose presentation values', () => {
+    const viewModel = buildViewModel(harness(), stubDecisions());
+    expect(viewModel.showDocs).toBe(false);
+    viewModel.toggleDocs();
+    expect(viewModel.showDocs).toBe(true);
+    expect(viewModel.docsToggleLabel).toBe('Hide setup link');
+    viewModel.setProvider('ollama');
+    expect(viewModel.showDocs).toBe(false);
+    viewModel.toggleDocs();
+    expect(viewModel.showDocs).toBe(true);
+    viewModel.toggleDocs();
+    expect(viewModel.showDocs).toBe(false);
+    expect(viewModel.credentialInputType).toBe('password');
+    viewModel.toggleCredential();
+    expect(viewModel.credentialInputType).toBe('text');
+    expect(viewModel.credentialToggleLabel).toBe('Hide');
+  });
+
   test('every registry entry is offered with its runtime and docs', () => {
     const viewModel = buildViewModel(harness(), stubDecisions());
     const ids = viewModel.providerOptions.map((option) => option.id);

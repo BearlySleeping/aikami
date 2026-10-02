@@ -35,6 +35,7 @@ import { analyzeDecisionSchema } from './analyzer.ts';
 import {
   type DecisionValueComparator,
   type EvaluationCase,
+  type EvaluateSplitOptions,
   type EvaluationLatencyGate,
   type EvaluationQualityGate,
   type EvaluationReport,
@@ -66,6 +67,7 @@ export type MeasurementQualityGate = EvaluationQualityGate;
  * `positiveRecall` is the gate, `answeredPositiveAccuracy` is a diagnostic.
  */
 export type SplitMeasurement = EvaluationReport['overall'] & {
+  readonly split: string;
   /** Legacy name for {@link SplitMeasurement.positiveRecall}. */
   readonly accuracy: number;
   /** Cases carrying a non-null expected label. */
@@ -182,6 +184,22 @@ const bindForMeasurement = (
   };
 };
 
+/** Preserves the flat public measurement row while sharing the canonical scorer. */
+const toSplitMeasurement = (report: EvaluationReport): SplitMeasurement => ({
+  ...report.overall,
+  split: report.split,
+  accuracy: report.overall.positiveRecall,
+  cases: report.overall.attempted,
+  answered: report.overall.successful,
+  correct: report.overall.correct,
+  coverage: report.overall.coverage,
+  riskyFalseAcceptance: report.overall.falseAcceptances,
+});
+
+/** Scores one split through the shared evaluator, retaining the public flat result. */
+export const measureSplit = async (options: EvaluateSplitOptions): Promise<SplitMeasurement> =>
+  toSplitMeasurement(await evaluateSplit(options));
+
 /**
  * Runs the gated measurement, or reports an explicit skip.
  *
@@ -204,6 +222,13 @@ export const runLiveDecisionMeasurement = async (
     return { status: 'skipped', reason: bound.reason };
   }
 
+  if (Object.keys(options.splits).length === 0) {
+    return {
+      status: 'skipped',
+      reason: 'no evaluation splits were supplied; nothing was measured',
+    };
+  }
+
   const reports: EvaluationReport[] = [];
   for (const [name, cases] of Object.entries(options.splits)) {
     reports.push(await evaluateSplit({ ...bound.planOptions, split: name, cases }));
@@ -224,15 +249,7 @@ export const runLiveDecisionMeasurement = async (
     dialect: options.adapter.dialect,
     task: options.policy.task,
     report: reports[0] as EvaluationReport,
-    splits: reports.map((report) => ({
-      ...report.overall,
-      accuracy: report.overall.positiveRecall,
-      cases: report.overall.attempted,
-      answered: report.overall.successful,
-      correct: report.overall.correct,
-      coverage: report.overall.coverage,
-      riskyFalseAcceptance: report.overall.falseAcceptances,
-    })),
+    splits: reports.map(toSplitMeasurement),
     gateFailures,
     passed: gateFailures.length === 0,
   };

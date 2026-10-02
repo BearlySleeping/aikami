@@ -4,7 +4,7 @@
   "purpose": "Development and threshold-calibration split for the npc-command-kind research probe. Never used to report a held-out score and never used to fit a held-out threshold.",
   "task": "npc-command-kind",
   "labelProvenance": {
-    "note": "Every label is AUTHORED in this contract against the authored option descriptions in tasks/npc_command_kind.ts. No model judged any label. 'required-abstain' cases carry expected 'none' - no command is warranted - and a command fired on one is the unsafe acceptance the safety gate counts. 'excluded' cases are genuinely ungradable (two defensible readings) and are removed from every denominator rather than being scored as negatives or rewarded as coverage.",
+    "note": "Every label is AUTHORED in this contract against the authored option descriptions in tasks/npc_command_kind.ts. No model judged any label. 'required-abstain' cases use expected: null - no command is warranted. Answering 'none' is scored as safe; a command fired on one is the unsafe acceptance the safety gate counts. 'excluded' cases are genuinely ungradable (two defensible readings) and are removed from every denominator rather than being scored as negatives or rewarded as coverage.",
     "sources": [
       "contract-authored player messages written for this corpus",
       "SHIPPED PRODUCT TEXT: cases in category 'authored-in-product' are the exact prefillText strings the game sends to an NPC as a player message, taken verbatim from apps/frontend/client/src/lib/data/initial_suggestion_presets.ts. They were authored for this product and are split across dev/heldout so no string appears in both."

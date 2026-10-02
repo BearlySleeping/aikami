@@ -64,6 +64,10 @@ export type DecisionSettingsConfigCapabilities = {
     source: 'stored';
   }) => string;
   readonly updateProvider: (id: string, patch: Partial<Omit<AiProvider, 'id'>>) => void;
+  readonly updateAiConnection: (
+    id: string,
+    patch: Partial<Omit<AiConnection, 'id' | 'createdAt'>>,
+  ) => void;
   readonly deleteAiConnection: (id: string) => void;
   readonly addAiConnection: (connection: {
     providerId: string;
@@ -114,6 +118,23 @@ export type DecisionSettingsViewModelInterface = BaseViewModelInterface & {
   /** Whether automatic gameplay routing would be permitted, and why not. */
   readonly gameplayRouting: DecisionGameplayRouting;
   readonly isTesting: boolean;
+  readonly selectedProvider: DecisionProviderOption | undefined;
+  readonly showDocs: boolean;
+  readonly docsToggleLabel: string;
+  readonly credentialInputType: 'text' | 'password';
+  readonly credentialToggleLabel: string;
+  readonly credentialLabel: string;
+  readonly showCredentialField: boolean;
+  readonly credentialSummary: string;
+  readonly testDisabled: boolean;
+  readonly testLabel: string;
+  readonly hasSetupSteps: boolean;
+  readonly taskRows: readonly (DecisionBackendSummary['tasks'][number] & {
+    readonly badgeClass: string;
+    readonly qualificationLabel: string;
+  })[];
+  toggleDocs(): void;
+  toggleCredential(): void;
   setProvider(registryId: string): void;
   setEndpoint(endpoint: string): void;
   setCheckpoint(checkpoint: string): void;
@@ -171,6 +192,9 @@ class DecisionSettingsViewModel
   private readonly _decisions: DecisionBackendServiceInterface;
   private _draft = $state<DecisionDraft>(draftFor('jev-external'));
   private _lastOutcome = $state<DecisionTestOutcome | undefined>(undefined);
+
+  showCredential = $state(false);
+  selectedDocs = $state<string | undefined>(undefined);
 
   constructor(options: DecisionSettingsViewModelOptions) {
     super(options);
@@ -247,6 +271,66 @@ class DecisionSettingsViewModel
     return this._decisions.isTesting;
   }
 
+  get selectedProvider(): DecisionProviderOption | undefined {
+    return this.providerOptions.find((option) => option.id === this.draft.registryId);
+  }
+
+  get showDocs(): boolean {
+    return this.selectedDocs !== undefined && this.selectedDocs === this.selectedProvider?.docsUrl;
+  }
+
+  get docsToggleLabel(): string {
+    return this.showDocs ? 'Hide setup link' : 'How to set this up';
+  }
+
+  toggleDocs(): void {
+    this.selectedDocs = this.showDocs ? undefined : this.selectedProvider?.docsUrl;
+  }
+
+  get credentialInputType(): 'text' | 'password' {
+    return this.showCredential ? 'text' : 'password';
+  }
+
+  get credentialToggleLabel(): string {
+    return this.showCredential ? 'Hide' : 'Show';
+  }
+
+  toggleCredential(): void {
+    this.showCredential = !this.showCredential;
+  }
+
+  get credentialLabel(): string {
+    return this.credentialOptional ? 'API key (optional)' : 'API key';
+  }
+
+  get showCredentialField(): boolean {
+    return this.credentialRequired || this.credentialOptional;
+  }
+
+  get credentialSummary(): string {
+    return this.summary.hasCredential ? 'stored in the vault' : 'none';
+  }
+
+  get testDisabled(): boolean {
+    return !this.configured || this.isTesting;
+  }
+
+  get testLabel(): string {
+    return this.isTesting ? 'Testing…' : 'Test connection';
+  }
+
+  get hasSetupSteps(): boolean {
+    return this.setupSteps.length > 0;
+  }
+
+  get taskRows(): DecisionSettingsViewModelInterface['taskRows'] {
+    return this.summary.tasks.map((task) => ({
+      ...task,
+      badgeClass: task.qualified ? 'badge-success' : 'badge-ghost',
+      qualificationLabel: task.qualified ? 'qualified' : 'not qualified',
+    }));
+  }
+
   setProvider(registryId: string): void {
     this._draft = { ...this._draft, registryId, endpoint: this._registry?.defaultUrl ?? '' };
     this.reset();
@@ -318,23 +402,28 @@ class DecisionSettingsViewModel
         (connection) =>
           connection.providerId === providerId && connection.capability === 'decision',
       );
-    const connectionId =
-      existing?.id ??
-      this._config.addAiConnection({
-        providerId,
-        capability: 'decision',
-        label: `${registry?.label ?? this._draft.registryId} · ${this._draft.checkpoint}`,
-        // `model` mirrors the checkpoint so the shared provider tree shows the
-        // right identity; `params.checkpoint` is what the adapter sends.
-        model: this._draft.checkpoint,
-        params: {
-          checkpoint: this._draft.checkpoint,
-          runtime: registry?.runtime ?? 'jev',
-          languages: ['en'],
-          // Never set by a settings selection. Only a measurement may set it.
-          qualifiedForGameplay: false,
-        },
-      });
+    const fields: Parameters<DecisionSettingsConfigCapabilities['addAiConnection']>[0] = {
+      providerId,
+      capability: 'decision',
+      label: `${registry?.label ?? this._draft.registryId} · ${this._draft.checkpoint}`,
+      // `model` mirrors the checkpoint so the shared provider tree shows the
+      // right identity; `params.checkpoint` is what the adapter sends.
+      model: this._draft.checkpoint,
+      params: {
+        checkpoint: this._draft.checkpoint,
+        runtime: registry?.runtime ?? 'jev',
+        languages: ['en'],
+        // Never set by a settings selection. Only a measurement may set it.
+        qualifiedForGameplay: false,
+      },
+    };
+    let connectionId: string;
+    if (existing === undefined) {
+      connectionId = this._config.addAiConnection(fields);
+    } else {
+      this._config.updateAiConnection(existing.id, fields);
+      connectionId = existing.id;
+    }
 
     this._config.setRoleAssignment('decisions', connectionId);
     this.reset();

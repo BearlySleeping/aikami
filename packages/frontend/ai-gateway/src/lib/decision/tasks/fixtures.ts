@@ -47,6 +47,9 @@ const asFixtureFile = (value: unknown, name: string): DecisionFixtureFile => {
     throw new Error(`fixture ${name} is not an object`);
   }
   const record = value as Record<string, unknown>;
+  if (record.split !== 'dev' && record.split !== 'heldout') {
+    throw new Error(`fixture ${name} has an unsupported split`);
+  }
   const cases = record.cases;
   if (!Array.isArray(cases)) {
     throw new Error(`fixture ${name} has no cases array`);
@@ -56,7 +59,7 @@ const asFixtureFile = (value: unknown, name: string): DecisionFixtureFile => {
   }
   return {
     schemaVersion: String(record.schemaVersion),
-    split: record.split === 'dev' ? 'dev' : 'heldout',
+    split: record.split,
     purpose: String(record.purpose),
     task: String(record.task),
     labelProvenance: record.labelProvenance as DecisionFixtureProvenance,
@@ -76,6 +79,13 @@ const assertCaseShape = (entry: unknown, name: string): void => {
   const missing = REQUIRED_CASE_FIELDS.filter((field) => typeof testCase[field] !== 'string');
   if (missing.length > 0) {
     throw new Error(`fixture ${name} has a case missing ${missing.join(', ')}`);
+  }
+  if (
+    testCase.kind !== 'positive' &&
+    testCase.kind !== 'required-abstain' &&
+    testCase.kind !== 'excluded'
+  ) {
+    throw new Error(`fixture ${name} has a case with an unsupported kind`);
   }
   if (testCase.expected !== null && typeof testCase.expected !== 'string') {
     throw new Error(`fixture ${name} has a case with a non-string, non-null expected`);

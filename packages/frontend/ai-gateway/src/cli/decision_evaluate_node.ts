@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-// packages/frontend/ai-gateway/src/cli/decision_evaluate.ts
+// packages/frontend/ai-gateway/src/cli/decision_evaluate_node.ts
 //
 // The executable decision evaluator (issue #381).
 //
@@ -139,7 +139,13 @@ const requireFlagFrom = <T extends string>(
 /** Reads an optional integer flag. */
 const optionalInt = (argv: readonly string[], name: string): number | undefined => {
   const raw = readFlag(argv, name);
-  return raw === undefined ? undefined : Number.parseInt(raw, 10);
+  if (raw === undefined && !argv.includes(`--${name}`)) {
+    return undefined;
+  }
+  if (raw === undefined || !/^\d+$/.test(raw) || !Number.isSafeInteger(Number(raw))) {
+    throw new UsageError(`--${name} must be a non-negative integer`);
+  }
+  return Number(raw);
 };
 
 /**
@@ -287,6 +293,27 @@ const writeArtifact = async (path: string, artifact: EvaluationArtifact): Promis
   await writeFile(path, `${JSON.stringify(artifact, null, 2)}\n`, 'utf8');
 };
 
+/** Reports artifact I/O failures without turning a CLI usage error into a rejection. */
+const writeRequestedArtifact = async (options: {
+  path: string;
+  artifact: EvaluationArtifact;
+  quiet: boolean;
+}): Promise<boolean> => {
+  try {
+    await writeArtifact(options.path, options.artifact);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    // biome-ignore lint/suspicious/noConsole: a CLI's stderr IS its product.
+    console.error(`artifact could not be written: ${message}`);
+    return false;
+  }
+  if (!options.quiet) {
+    // biome-ignore lint/suspicious/noConsole: a CLI's stdout IS its product.
+    console.log(`\nartifact written to ${options.path}`);
+  }
+  return true;
+};
+
 /** Runs the evaluator from argv and returns its exit code. */
 export const run = async (argv: readonly string[]): Promise<number> => {
   let options: Options;
@@ -332,12 +359,15 @@ export const run = async (argv: readonly string[]): Promise<number> => {
     // biome-ignore lint/suspicious/noConsole: a CLI's stdout IS its product.
     console.log(renderSummary(artifact, options));
   }
-  if (options.out !== undefined) {
-    await writeArtifact(options.out, artifact);
-    if (!options.quiet) {
-      // biome-ignore lint/suspicious/noConsole: a CLI's stdout IS its product.
-      console.log(`\nartifact written to ${options.out}`);
-    }
+  if (
+    options.out !== undefined &&
+    !(await writeRequestedArtifact({
+      path: options.out,
+      artifact,
+      quiet: options.quiet,
+    }))
+  ) {
+    return EXIT.usage;
   }
   if (artifact.status === 'unavailable') {
     return EXIT.unavailable;
