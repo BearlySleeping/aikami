@@ -274,6 +274,55 @@ const promptCacheKey = (namespace: string, version: number, ...parts: readonly s
  */
 const NPC_PROMPT_CACHE_VERSION = 1;
 
+/**
+ * Revision of the OPENER prompt template and its persona inputs.
+ *
+ * 🔴 Bumped whenever the opener prompt itself changes meaning — a rewritten
+ * system template, a new required fact, a changed chip rule. It is not the
+ * cache version (that governs the client-side compiled block, which is a pure
+ * function of its inputs) and it is not the world fingerprint (that governs
+ * the world the opener was generated against). It answers the third question:
+ * "is the INSTRUCTION that produced this still the instruction we would give
+ * today?".
+ *
+ * The template lives in `npc_memory_utils.ts`, so a template edit that nobody
+ * bumps cannot be caught by this constant. That is a real coupling and it is
+ * the honest way to state it: the alternative is hashing the rendered prompt,
+ * which would re-derive the very string this lane exists to stop re-deriving,
+ * and would invalidate every stored opener the first time a whitespace character
+ * moved. A test asserts that the version below is a positive integer so a
+ * deliberate bump is a visible diff rather than an accident.
+ */
+const NPC_OPENER_PROMPT_REVISION = 1;
+
+/**
+ * A content-free fingerprint of everything in an opener prompt that is NOT
+ * world state: the authored persona, the display name, and the template
+ * revision.
+ *
+ * Two openers generated from the same world but different voices are different
+ * openers, and only this distinguishes them. It is a 32-bit hash of the persona
+ * block and the revision — never a credential, and never the persona text
+ * itself, so it is safe to persist in a save and to compare on load.
+ */
+export const openerPromptRevision = (persona: string, npcName: string): string => {
+  let hash = 2166136261;
+  const feed = (value: string): void => {
+    for (let i = 0; i < value.length; i += 1) {
+      hash ^= value.charCodeAt(i);
+      hash = Math.imul(hash, 16777619);
+    }
+    // Domain-separate the fields, so `persona='ab', name='c'` and
+    // `persona='a', name='bc'` cannot produce the same revision.
+    hash ^= 10;
+    hash = Math.imul(hash, 16777619);
+  };
+  feed(NPC_OPENER_PROMPT_REVISION.toString());
+  feed(npcName);
+  feed(persona);
+  return (hash >>> 0).toString(16);
+};
+
 /** Namespaces, so two block kinds can never collide. */
 const NPC_PROMPT_NAMESPACE = {
   digestSystem: 'digest-system',

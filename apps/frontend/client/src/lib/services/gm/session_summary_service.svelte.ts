@@ -13,6 +13,7 @@ import {
 } from '@aikami/frontend/services/base';
 import type { SessionSummary } from '$types';
 import { textGenerationService } from '../ai/text_generation_service.svelte.ts';
+import { campaignService } from '../campaign/campaign_service.svelte.ts';
 import { registerSerializable, type SerializableService } from '../game/serializable_service';
 import { worldStateService } from '../game/world_state_service.svelte.ts';
 
@@ -196,6 +197,11 @@ class SessionSummaryService
       systemPrompt: 'Summarize RPG sessions concisely. JSON only. No markdown, no explanations.',
       // Routes to the summarization role and its low-temperature token budget.
       task: 'summarization',
+      // A session summary IS campaign state — it becomes the resume point the
+      // player continues from. Scoped, so a summary computed for one campaign
+      // can never be handed to a request in another, and so two summaries of
+      // the same text in the same campaign still share one call.
+      scope: campaignService.activeCampaign?.id ?? 'no-campaign',
     })) as {
       synopsis: string;
       keyEvents: string[];

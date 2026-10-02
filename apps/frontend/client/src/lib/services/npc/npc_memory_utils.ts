@@ -115,6 +115,61 @@ export const sanitizeChips = (chips: readonly NpcSuggestionChip[]): NpcSuggestio
   return result;
 };
 
+/**
+ * Merges a failed digest's claimed lines back into the carry-forward buffer.
+ *
+ * 🔴 CHRONOLOGY IS THE WHOLE ARGUMENT. A digest claims its transcript lines at
+ * DISPATCH and gives them back if it fails, is superseded, or returns something
+ * that does not validate. Between the claim and the give-back the player may
+ * have finished ANOTHER conversation with the same NPC, whose lines are already
+ * in the buffer and are strictly NEWER.
+ *
+ * Appending the claimed lines after them — which is what the previous
+ * `[...existing, ...lines]` did — produces a buffer whose last lines are the
+ * OLDEST conversation in it. The next digest is then told, in order, about a
+ * conversation that has not happened yet and about nothing that has. Under the
+ * cap it is worse than merely reordered: the slice keeps the newest `limit`
+ * entries of a list whose tail is stale, so the buffer evicts real recent
+ * conversation to make room for a conversation the player has already moved
+ * past.
+ *
+ * So the claimed lines go FIRST. They are older; chronology is the property
+ * that makes the buffer mean what it says.
+ *
+ * RETENTION, EXPLICITLY. Overflow drops the OLDEST lines, keeping the newest
+ * `limit`. That is a deliberate, bounded loss: a player who talks to one NPC
+ * more than `limit` lines' worth between two successful digests loses the
+ * beginning of that burst from the next digest's transcript — though the
+ * deterministic `fallbackSummary` and `lastExchange` written at
+ * `recordConversation` time still carry the gist, and nothing here is
+ * lossless. What the merge guarantees is not completeness; it is that whatever
+ * IS retained is in the order it happened.
+ */
+export const mergeRestoredDigestLines = (options: {
+  /** Lines the failed digest had claimed, oldest first. */
+  readonly claimed: readonly NpcMemoryLine[];
+  /** Lines already buffered, all of them newer than `claimed`. */
+  readonly accumulated: readonly NpcMemoryLine[];
+  /** Ceiling on the merged buffer. */
+  readonly limit: number;
+}): NpcMemoryLine[] => {
+  // `slice(-0)` is `slice(0)` — it keeps everything. A zero (or negative)
+  // limit therefore has to be handled before the slice, or "retain nothing"
+  // silently becomes "retain everything", which is the opposite instruction
+  // and the more expensive one.
+  const limit = Math.max(0, options.limit);
+  if (limit === 0) {
+    return [];
+  }
+  if (options.claimed.length === 0) {
+    return [...options.accumulated].slice(-limit);
+  }
+  if (options.accumulated.length === 0) {
+    return [...options.claimed].slice(-limit);
+  }
+  return [...options.claimed, ...options.accumulated].slice(-limit);
+};
+
 /** Evicts least-recently-talked-to records beyond the cap. Mutates `records`. */
 export const evictOldest = (records: NpcMemoryState['records']): void => {
   const ids = Object.keys(records);

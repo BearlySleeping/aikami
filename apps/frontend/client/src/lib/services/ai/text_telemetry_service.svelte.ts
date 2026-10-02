@@ -124,6 +124,22 @@ const emptyCacheHitCounts = (): Record<TextCacheLayer | 'provider-prompt-cache',
   'provider-prompt-cache': 0,
 });
 
+/**
+ * How many PROVIDER attempts one span dispatched.
+ *
+ * Zero for a local answer, a coalesced subscriber and a suppressed request —
+ * the three cases whose silence an attempt stream cannot distinguish from each
+ * other. A span with no `dispatch` marker comes from a caller that predates the
+ * field, and is credited the old default of one, which is the right guess for
+ * what those callers were doing: a plain provider call.
+ */
+const dispatchedAttempts = (span: TextTelemetrySpan): number => {
+  if (span.dispatch !== undefined && span.dispatch !== 'provider') {
+    return 0;
+  }
+  return span.attemptCount ?? 1;
+};
+
 /** An all-zero counter block, used for an empty buffer. */
 const emptyCounters = (): TextTelemetryCounters => ({
   calls: 0,
@@ -132,6 +148,8 @@ const emptyCounters = (): TextTelemetryCounters => ({
   cancelled: 0,
   fallbacks: 0,
   attempts: 0,
+  coalesced: 0,
+  suppressed: 0,
   partialUsage: 0,
   localCalls: 0,
   cacheHits: emptyCacheHitCounts(),
@@ -234,9 +252,14 @@ class TextTelemetryService
       deadlineExceeded: spans.filter((span) => span.deadlineExceeded === true).length,
       cancelled: spans.filter((span) => span.errorCode === 'cancelled').length,
       fallbacks: spans.filter((span) => span.fallback === true).length,
-      // A span that recorded no attempt count dispatched exactly one attempt,
-      // which is the overwhelmingly common case and must not read as zero.
-      attempts: spans.reduce((sum, span) => sum + (span.attemptCount ?? 1), 0),
+      // 🔴 Only spans that actually dispatched contribute. The previous
+      // `(span.attemptCount ?? 1)` credited one provider bill to every logical
+      // request that had none — local answers, coalesced subscribers and
+      // suppressed requests alike — so a session in which most work was
+      // deduplicated or skipped reported MORE attempts than it made.
+      attempts: spans.reduce((sum, span) => sum + dispatchedAttempts(span), 0),
+      coalesced: spans.filter((span) => span.dispatch === 'coalesced').length,
+      suppressed: spans.filter((span) => span.dispatch === 'suppressed').length,
       partialUsage: spans.filter((span) => span.partialUsage === true).length,
       localCalls: spans.filter((span) => isLocalTextRoute(span.provider)).length,
       cacheHits,

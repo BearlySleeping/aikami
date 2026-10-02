@@ -54,6 +54,26 @@ export const NpcMemoryOpenerSchema = Type.Object(
      * a credential, a player name or any prompt text.
      */
     worldFingerprint: Type.Optional(Type.String()),
+    /**
+     * Revision of the PERSONA and prompt the opener was generated against
+     * (issue #382, consumption-time revalidation).
+     *
+     * `worldFingerprint` covers the world; this covers everything else the
+     * opener prompt was built from — the authored persona, the NPC's display
+     * name, and the version of the opener prompt template itself. Without it, an
+     * author who rewrites a shopkeeper's persona leaves every previously
+     * generated greeting in place: the world is unchanged, so the fingerprint
+     * matches, and the player is greeted in a voice that was deleted.
+     *
+     * Same contract as `worldFingerprint`: OPTIONAL and additive, absent on
+     * older saves, and an absent value never matches a computed one — so a
+     * hydrated opener re-generates rather than being displayed on the strength
+     * of a check that could not be made.
+     *
+     * Content-free: a 32-bit hash of the persona block and template version.
+     * It is a fingerprint, not a credential, and it is never logged verbatim.
+     */
+    promptRevision: Type.Optional(Type.String()),
   },
   { additionalProperties: false },
 );

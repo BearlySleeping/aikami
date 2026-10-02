@@ -24,6 +24,7 @@ import {
   canonicalSchemaFingerprint,
   UncanonicalizableSchemaError,
 } from '@aikami/frontend/ai-gateway';
+import type { TextAttemptObservation } from '@aikami/types';
 import type { AiRequestDeadline } from './ai_request_deadline.ts';
 import {
   createStructuredRequestDeduplicator,
@@ -123,16 +124,54 @@ export type StructuredCallUsage = {
  * consumes.
  *
  * Named here rather than declared inside the service because it IS the shared
- * attempt's payload: the value, whether this caller was the initiator, and the
- * accounting the initiator observed. A subscriber that was not the initiator
- * reports no usage of its own — its answer was paid for by another span, and
- * counting it again would double the figure.
+ * attempt's payload: the value, whether this caller was the initiator, the
+ * identity every party shares, and the accounting the initiator observed. A
+ * subscriber that was not the initiator reports no usage and no attempts of its
+ * own — its answer was paid for by another span, and counting it again would
+ * double the figure.
  */
 export type CoalescedStructuredResult = {
   structured?: unknown;
   coalesced: boolean;
+  /**
+   * Identity of the shared attempt.
+   *
+   * The SAME value for the initiator and for every subscriber, so a trace can
+   * stitch them together, and so the gateway's per-attempt ordinals are
+   * numbered within one logical request instead of one per caller.
+   */
+  requestId: string;
   usage?: StructuredCallUsage;
+  /**
+   * Per-attempt facts, for the INITIATOR only.
+   *
+   * Empty for a subscriber, by construction: those events describe one
+   * provider bill that another span already records.
+   */
+  attempts?: readonly TextAttemptObservation[];
 };
+
+/**
+ * How a coalesced result is accounted for on a telemetry span.
+ *
+ * A joiner was PAID FOR by another span. Counting its tokens and its attempts
+ * again would double the measured figure, which is the opposite of the point —
+ * so it is marked as a joiner and carries neither, and only the initiator's
+ * span shows the bill.
+ */
+export const coalescedSpanFields = (
+  result: CoalescedStructuredResult,
+): {
+  dispatch: 'coalesced' | 'provider';
+  cacheLayer: 'in-flight-dedup' | 'none';
+  attempts?: readonly TextAttemptObservation[];
+  usage?: { inputTokens: number; outputTokens: number; cachedTokens?: number };
+} => ({
+  dispatch: result.coalesced ? 'coalesced' : 'provider',
+  cacheLayer: result.coalesced ? 'in-flight-dedup' : 'none',
+  ...(result.attempts === undefined ? {} : { attempts: result.attempts }),
+  ...(result.coalesced || result.usage === undefined ? {} : { usage: result.usage }),
+});
 
 /** What a coalesced call produced. */
 export type StructuredCallOutcome<T> = {
@@ -140,6 +179,8 @@ export type StructuredCallOutcome<T> = {
   value: T;
   /** Whether this caller joined an already-running attempt. */
   coalesced: boolean;
+  /** Identity of the shared attempt, shared by every party to it. */
+  requestId: string;
 };
 
 /** Runs structured calls, merging identical concurrent ones. */
@@ -155,7 +196,16 @@ export type StructuredCallCoalescer = {
     /** The CALLER's signal: cancelling it cancels only this caller. */
     signal: AbortSignal;
     sharedDeadline: () => AiRequestDeadline;
-    call: (signal: AbortSignal, deadline: AiRequestDeadline) => Promise<T>;
+    /**
+     * Runs the attempt.
+     *
+     * Receives the shared logical request id as its third argument, minted
+     * ONCE per attempt. The initiator passes it to the gateway so that every
+     * dispatched attempt — the first try, an empty-body retry, a structured
+     * repair — is numbered within one logical request, and so the subscribers
+     * that joined can be recorded against the same identity.
+     */
+    call: (signal: AbortSignal, deadline: AiRequestDeadline, requestId: string) => Promise<T>;
   }): Promise<StructuredCallOutcome<T>>;
   /** Attempts currently in flight. */
   readonly inFlightCount: number;
@@ -176,11 +226,28 @@ export type StructuredCallCoalescer = {
 /** Creates the coalescer. */
 export const createStructuredCallCoalescer = (options?: {
   debug?: (label: string, detail: Record<string, unknown>) => void;
+  /**
+   * Mints the identity of one shared attempt.
+   *
+   * Injected rather than reached for directly so a test can assert that two
+   * concurrent subscribers really did share one id, without depending on the
+   * shape of a counter. The default is a monotonic sequence, which is stable
+   * within a session and never reused — the only two properties an attempt
+   * identity needs.
+   */
+  mintRequestId?: () => string;
 }): StructuredCallCoalescer => {
   const deduplicator: StructuredRequestDeduplicator = createStructuredRequestDeduplicator({
     ...(options?.debug === undefined ? {} : { debug: options.debug }),
   });
   let unshareable = 0;
+  let sequence = 0;
+  const mintRequestId =
+    options?.mintRequestId ??
+    ((): string => {
+      sequence += 1;
+      return `shared-${sequence}`;
+    });
 
   return {
     get inFlightCount(): number {
@@ -199,7 +266,7 @@ export const createStructuredCallCoalescer = (options?: {
       identity: StructuredCallIdentity;
       signal: AbortSignal;
       sharedDeadline: () => AiRequestDeadline;
-      call: (signal: AbortSignal, deadline: AiRequestDeadline) => Promise<T>;
+      call: (signal: AbortSignal, deadline: AiRequestDeadline, requestId: string) => Promise<T>;
     }): Promise<StructuredCallOutcome<T>> {
       const { identity, signal, sharedDeadline, call } = input;
       const fingerprint = schemaFingerprint(identity.schema);
@@ -211,8 +278,15 @@ export const createStructuredCallCoalescer = (options?: {
         unshareable += 1;
         options?.debug?.('coalesce:unshareable-schema', { schemaName: identity.schemaName });
         const deadline = sharedDeadline();
+        // Even an unshared call gets an identity, so a trace can tell "this ran
+        // alone" from "this joined somebody" and both can be correlated.
+        const requestId = mintRequestId();
         try {
-          return { value: await call(signal, deadline), coalesced: false };
+          return {
+            value: await call(signal, deadline, requestId),
+            coalesced: false,
+            requestId,
+          };
         } finally {
           deadline.dispose();
         }
@@ -229,13 +303,23 @@ export const createStructuredCallCoalescer = (options?: {
         scope: identity.scope,
       };
 
-      const outcome = await deduplicator.run({
+      // The attempt's own result is WRAPPED so the identity minted inside it can
+      // travel back out to a subscriber that never ran it. Capturing it in a
+      // closure would leave a joiner with nothing, because its `run` is never
+      // called — and a joiner that reported no id would be recorded as a
+      // separate logical request, which is the multiplication this exists to
+      // prevent.
+      const outcome = await deduplicator.run<{ payload: T; requestId: string }>({
         key,
         signal,
         run: async (sharedSignal) => {
           const deadline = sharedDeadline();
+          // Minted INSIDE the attempt, not before it: the id belongs to the
+          // work, and a caller that joins an already-running attempt must be
+          // handed that attempt's id rather than one of its own.
+          const requestId = mintRequestId();
           try {
-            return await call(sharedSignal, deadline);
+            return { payload: await call(sharedSignal, deadline, requestId), requestId };
           } finally {
             // Disposed when the ATTEMPT settles, not when any one caller returns.
             deadline.dispose();
@@ -255,7 +339,11 @@ export const createStructuredCallCoalescer = (options?: {
         // its ability to distinguish timeout from refusal — survives.
         throw outcome.error ?? new Error('Coalesced structured request produced no result');
       }
-      return { value: outcome.value, coalesced: outcome.coalesced };
+      return {
+        value: outcome.value.payload,
+        coalesced: outcome.coalesced,
+        requestId: outcome.value.requestId,
+      };
     },
 
     cancelAll(): void {

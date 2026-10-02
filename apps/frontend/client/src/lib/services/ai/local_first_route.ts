@@ -30,6 +30,8 @@ import {
   presetForTask,
   runLocalFirstStructured,
 } from './local_first_execution.ts';
+import { localTaskPoolService } from './local_task_pool_service.svelte.ts';
+import { resolveLocalFirstPolicy } from './text_local_first_policy.ts';
 
 /**
  * How long a local engine that just failed is skipped, tracked PER ROUTE so one
@@ -51,9 +53,16 @@ export type LocalFirstRoute = {
     signal: AbortSignal;
     deadline: AiRequestDeadline;
     resolution: AiModeResolution;
-    allowLocal: boolean;
     onAttempt: () => void;
     systemPrompt?: string;
+    /**
+     * The on-device model the caller pinned, when it pinned one.
+     *
+     * Readiness is checked against THIS, not against whatever the resolution
+     * names: a caller that pinned a model is asking for that model, and
+     * answering from a different on-device bundle would make the pin a lie.
+     */
+    explicitModel?: string;
   }): Promise<unknown | undefined>;
   /** Forgets every cooldown, on dispose. */
   clearAll(): void;
@@ -74,17 +83,28 @@ export const createLocalFirstRoute = (): LocalFirstRoute => {
       signal: AbortSignal;
       deadline: AiRequestDeadline;
       resolution: AiModeResolution;
-      allowLocal: boolean;
       onAttempt: () => void;
       systemPrompt?: string;
+      explicitModel?: string;
     }): Promise<unknown | undefined> {
+      // The ALLOWANCE is decided here, next to the attempt it gates, so a
+      // reader cannot see one without the other. The attempt is opportunistic,
+      // so it may only run when the configured routing permits it: the task
+      // must opt in, no model may be pinned, the route must be genuinely local,
+      // and the engine must actually serve the model in hand.
+      const allowLocal = resolveLocalFirstPolicy({
+        resolution: options.resolution,
+        preset: presetForTask(options.task),
+        hasExplicitModel: options.explicitModel !== undefined && options.explicitModel.length > 0,
+        readiness: localTaskPoolService.readiness,
+      }).allowed;
       return runLocalFirstStructured({
         prompt: options.prompt,
         schema: options.schema,
         signal: options.signal,
         deadline: options.deadline,
         resolution: options.resolution,
-        allowLocal: options.allowLocal,
+        allowLocal,
         onAttempt: options.onAttempt,
         preset: presetForTask(options.task),
         cooldown,

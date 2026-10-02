@@ -56,6 +56,7 @@ import { companionReactionService } from './companion_reaction_service.svelte.ts
 import { resolveAccounts } from './dramatic_structure_service';
 import { inventoryService } from './inventory_service.svelte.ts';
 import { narrativeEventService } from './narrative_event_service.svelte.ts';
+import { compareConsequenceDeltas } from './npc_consequence_order';
 import {
   buildDialogueExtractionSystemPrompt,
   parseDialogueExtraction,
@@ -69,57 +70,6 @@ import { relationshipService } from './relationship_service.svelte.ts';
 export type NpcDialogueServiceOptions = BaseFrontendClassOptions;
 
 /** Fixed application order for a batch (Failure Recovery) — never model order. */
-const CONSEQUENCE_KIND_ORDER = [
-  'flag_clear',
-  'flag_set',
-  'inventory_remove',
-  'inventory_grant',
-  'relationship_update',
-  'trust_change',
-] as const satisfies readonly NpcStateDelta['kind'][];
-
-/**
- * Canonical sort for a consequence batch (Failure Recovery): by kind in the
- * fixed order, then target (code-point), label (missing first, then code-point),
- * then numeric value (missing first, then ascending). Exact duplicates are
- * equivalent — their occurrence number is assigned after this sort.
- */
-const compareConsequenceDeltas = (a: NpcStateDelta, b: NpcStateDelta): number => {
-  const kindDiff = CONSEQUENCE_KIND_ORDER.indexOf(a.kind) - CONSEQUENCE_KIND_ORDER.indexOf(b.kind);
-  if (kindDiff !== 0) {
-    return kindDiff;
-  }
-  if (a.target < b.target) {
-    return -1;
-  }
-  if (a.target > b.target) {
-    return 1;
-  }
-  const aMissingLabel = a.label === undefined || a.label === null;
-  const bMissingLabel = b.label === undefined || b.label === null;
-  if (aMissingLabel !== bMissingLabel) {
-    return aMissingLabel ? -1 : 1;
-  }
-  if ((a.label ?? '') < (b.label ?? '')) {
-    return -1;
-  }
-  if ((a.label ?? '') > (b.label ?? '')) {
-    return 1;
-  }
-  const aMissingValue = !Number.isFinite(a.value);
-  const bMissingValue = !Number.isFinite(b.value);
-  if (aMissingValue !== bMissingValue) {
-    return aMissingValue ? -1 : 1;
-  }
-  if ((a.value ?? 0) < (b.value ?? 0)) {
-    return -1;
-  }
-  if ((a.value ?? 0) > (b.value ?? 0)) {
-    return 1;
-  }
-  return 0;
-};
-
 // ---------------------------------------------------------------------------
 // Injected interfaces — all external dependencies passed through configure()
 // ---------------------------------------------------------------------------
@@ -197,6 +147,19 @@ type NpcDialogueTextGenerator = (options: {
   signal?: AbortSignal;
   /** Called with each narrative token as it arrives. */
   onChunk?: (text: string) => void;
+  /**
+   * The turn's ABSOLUTE end-to-end budget, shared by both of its calls. The
+   * 120 s budget used to be a timer around the promise, which cannot reach the
+   * transport — the adapter applies its own shorter watchdog (#382).
+   */
+  deadlineAt?: number;
+  /** Identity of the dialogue TURN, shared by both of its calls. */
+  requestId?: string;
+  /**
+   * The campaign this turn belongs to. The composition root knows the id; the
+   * orchestrator does not, so it is passed down rather than guessed at.
+   */
+  scope?: string;
 }) => Promise<{ text: string; structured?: unknown }>;
 
 /**
@@ -498,6 +461,9 @@ export class NpcDialogueService
   /** Per-call generation timeout (AC-4). */
   private _timeoutMs = DEFAULT_DIALOGUE_TIMEOUT_MS;
 
+  /** Turn counter, behind the per-turn request identity. */
+  private _turnSequence = 0;
+
   /**
    * UI-visible state of the current dialogue turn (C-401).
    * Public by design — the dialogue ViewModel renders it reactively.
@@ -676,15 +642,9 @@ export class NpcDialogueService
   }
 
   /** @inheritdoc */
-  async generateTurn(options: {
-    npcId: string;
-    npcName: string;
-    messages: Array<{ role: 'player' | 'npc'; content: string }>;
-    signal: AbortSignal;
-    gameStateFacts?: string[];
-    activeEncounterId?: string;
-    onChunk?: (text: string) => void;
-  }): Promise<NpcDialogueTurn> {
+  async generateTurn(
+    options: Parameters<NpcDialogueServiceInterface['generateTurn']>[0],
+  ): Promise<NpcDialogueTurn> {
     this._assertConfigured();
 
     // ── Concurrency gate: cancel any in-flight turn ───────────────────
@@ -696,6 +656,10 @@ export class NpcDialogueService
     const controller = new AbortController();
     this._activeAbortController = controller;
     const linkedSignal = this._linkSignals(options.signal, controller.signal, controller);
+    // ONE budget for the whole TURN, shared by both calls.
+    const turnDeadlineAt = Date.now() + this._timeoutMs;
+    this._turnSequence += 1;
+    const turnRequestId = `dialogue-turn-${this._turnSequence}`;
 
     try {
       const npc = this._contentProvider!.getNpc(options.npcId);
@@ -732,6 +696,8 @@ export class NpcDialogueService
           signal: linkedSignal,
           turnCtx,
           onChunk: options.onChunk,
+          deadlineAt: turnDeadlineAt,
+          requestId: turnRequestId,
         });
         const pendingWitness = contextProjection.pendingCompanionWitness;
         if (pendingWitness) {
@@ -882,15 +848,9 @@ export class NpcDialogueService
   // ── Public: two-call pipeline (C-371) ─────────────────────────────────
 
   /** @inheritdoc */
-  async analyzeIntent(options: {
-    npcId: string;
-    npcName: string;
-    messages: Array<{ role: 'player' | 'npc'; content: string }>;
-    signal: AbortSignal;
-    gameStateFacts?: string[];
-    playerContext?: { characterSheetSummary: string; level: number; classId: string };
-    onChunk?: (text: string) => void;
-  }): Promise<NpcIntentAnalysisOutput> {
+  async analyzeIntent(
+    options: Parameters<NpcDialogueServiceInterface['analyzeIntent']>[0],
+  ): Promise<NpcIntentAnalysisOutput> {
     this._assertConfigured();
 
     // E2E seeding hook (C-487): deterministic intent envelope for the /game
@@ -919,6 +879,9 @@ export class NpcDialogueService
     const controller = new AbortController();
     this._activeAbortController = controller;
     const linkedSignal = this._linkSignals(options.signal, controller.signal, controller);
+    const turnDeadlineAt = Date.now() + this._timeoutMs;
+    this._turnSequence += 1;
+    const turnRequestId = `dialogue-turn-${this._turnSequence}`;
 
     try {
       const npc = this._contentProvider!.getNpc(options.npcId);
@@ -939,6 +902,8 @@ export class NpcDialogueService
             classId: 'fighter',
           },
           onChunk: options.onChunk,
+          deadlineAt: turnDeadlineAt,
+          requestId: turnRequestId,
         });
       } catch (error) {
         if (this._isAbortError(error)) {
@@ -969,19 +934,9 @@ export class NpcDialogueService
   }
 
   /** @inheritdoc */
-  async resolveRoll(options: {
-    npcId: string;
-    npcName: string;
-    messages: Array<{ role: 'player' | 'npc'; content: string }>;
-    signal: AbortSignal;
-    gameStateFacts?: string[];
-    checkType: string;
-    difficultyClass: number;
-    rollTotal: number;
-    outcome: 'pass' | 'fail';
-    playerInput: string;
-    onChunk?: (text: string) => void;
-  }): Promise<NpcRollResolutionOutput> {
+  async resolveRoll(
+    options: Parameters<NpcDialogueServiceInterface['resolveRoll']>[0],
+  ): Promise<NpcRollResolutionOutput> {
     this._assertConfigured();
 
     // Concurrency gate
@@ -991,6 +946,9 @@ export class NpcDialogueService
     const controller = new AbortController();
     this._activeAbortController = controller;
     const linkedSignal = this._linkSignals(options.signal, controller.signal, controller);
+    const turnDeadlineAt = Date.now() + this._timeoutMs;
+    this._turnSequence += 1;
+    const turnRequestId = `dialogue-turn-${this._turnSequence}`;
 
     try {
       try {
@@ -1006,6 +964,8 @@ export class NpcDialogueService
           outcome: options.outcome,
           playerInput: options.playerInput,
           onChunk: options.onChunk,
+          deadlineAt: turnDeadlineAt,
+          requestId: turnRequestId,
         });
       } catch (error) {
         if (this._isAbortError(error)) {
@@ -1053,8 +1013,11 @@ export class NpcDialogueService
     signal: AbortSignal;
     turnCtx: TurnContext;
     onChunk?: (text: string) => void;
+    /** The turn's shared absolute budget; see {@link NpcDialogueTextGenerator}. */
+    deadlineAt?: number;
+    requestId?: string;
   }): Promise<NpcDialogueTurn> {
-    const { contextProjection, messages, signal, onChunk } = options;
+    const { contextProjection, messages, signal, onChunk, deadlineAt, requestId } = options;
 
     const narrativeSystemPrompt = this._buildNarrativeSystemPrompt(contextProjection);
     // Call 2's prompt asks only for state-changing metadata — never for a
@@ -1090,6 +1053,8 @@ export class NpcDialogueService
           onChunk,
           path: 'turn-narrative',
           call: 1,
+          deadlineAt,
+          requestId,
         }),
         'narrative',
       );
@@ -1131,6 +1096,8 @@ export class NpcDialogueService
             signal,
             path: 'turn-envelope',
             call: 2,
+            deadlineAt,
+            requestId,
           }),
           'envelope',
         );
@@ -1225,8 +1192,10 @@ export class NpcDialogueService
     onChunk?: (text: string) => void;
     path: string;
     call: number;
+    deadlineAt?: number;
+    requestId?: string;
   }): Promise<string> {
-    const { adapterMessages, signal, onChunk, path, call } = options;
+    const { adapterMessages, signal, onChunk, path, call, deadlineAt, requestId } = options;
     const callStart = performance.now();
     // Capture the turn token: a timeout bumps `_streamTurnId`, so chunks
     // arriving after the timeout from the still-running provider are dropped
@@ -1252,6 +1221,8 @@ export class NpcDialogueService
         }
         this._forwardChunk(onChunk, text);
       },
+      ...(deadlineAt === undefined ? {} : { deadlineAt }),
+      ...(requestId === undefined ? {} : { requestId }),
     });
 
     return result.text?.trim() || this._streamText.trim() || '';
@@ -1269,8 +1240,20 @@ export class NpcDialogueService
     signal: AbortSignal;
     path: string;
     call: number;
+    deadlineAt?: number;
+    requestId?: string;
   }): Promise<unknown> {
-    const { narrative, systemPrompt, schema, schemaName, signal, path, call } = options;
+    const {
+      narrative,
+      systemPrompt,
+      schema,
+      schemaName,
+      signal,
+      path,
+      call,
+      deadlineAt,
+      requestId,
+    } = options;
     const callStart = performance.now();
     this._currentCallIndex = call;
     try {
@@ -1282,6 +1265,10 @@ export class NpcDialogueService
         schema,
         schemaName,
         signal,
+        // The SAME instant as call 1: it has less budget left, and that is
+        // the only number the transport can act on.
+        ...(deadlineAt === undefined ? {} : { deadlineAt }),
+        ...(requestId === undefined ? {} : { requestId }),
       });
       return result.structured;
     } catch (error) {
@@ -1291,8 +1278,8 @@ export class NpcDialogueService
   }
 
   /**
-   * Wraps a generation promise with the configured timeout. A stalled
-   * provider (never resolves) rejects with {@link DialogueTimeoutError}.
+   * Wraps a generation promise with the configured timeout. A stalled provider
+   * rejects with {@link DialogueTimeoutError}.
    *
    * On timeout the current turn is invalidated: the per-turn stream token
    * is bumped so late onChunk/_forwardChunk callbacks from the still-running
@@ -1853,6 +1840,8 @@ export class NpcDialogueService
     gameStateFacts: string[];
     playerContext: { characterSheetSummary: string; level: number; classId: string };
     onChunk?: (text: string) => void;
+    deadlineAt: number;
+    requestId: string;
   }): Promise<NpcIntentAnalysisOutput> {
     this.debug('_analyzeIntent:start');
 
@@ -1907,6 +1896,8 @@ export class NpcDialogueService
           onChunk,
           path: 'intent-narrative',
           call: 1,
+          deadlineAt: options.deadlineAt,
+          requestId: options.requestId,
         }),
         'intent-narrative',
       );
@@ -1927,6 +1918,8 @@ export class NpcDialogueService
             signal: options.signal,
             path: 'intent-envelope',
             call: 2,
+            deadlineAt: options.deadlineAt,
+            requestId: options.requestId,
           }),
           'intent-envelope',
         );
@@ -2016,6 +2009,8 @@ export class NpcDialogueService
     outcome: 'pass' | 'fail';
     playerInput: string;
     onChunk?: (text: string) => void;
+    deadlineAt: number;
+    requestId: string;
   }): Promise<NpcRollResolutionOutput> {
     this.debug('_resolveRoll:start', {
       checkType: options.checkType,
@@ -2126,6 +2121,8 @@ export class NpcDialogueService
           onChunk,
           path: 'roll-narrative',
           call: 1,
+          deadlineAt: options.deadlineAt,
+          requestId: options.requestId,
         }),
         'roll-narrative',
       );
@@ -2144,6 +2141,8 @@ export class NpcDialogueService
             signal: options.signal,
             path: 'roll-envelope',
             call: 2,
+            deadlineAt: options.deadlineAt,
+            requestId: options.requestId,
           }),
           'roll-envelope',
         );

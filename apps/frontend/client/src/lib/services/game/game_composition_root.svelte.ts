@@ -422,9 +422,13 @@ export class GameCompositionRoot
         getAllItems: () => contentPack.manifest.items,
       },
       textGenerator: async (opts) => {
-        // C-401 two-call split:
-        //   Call 1 (no schema) → streamChat — narrative prose streaming
-        //   Call 2 (schema) → extractStructure — schema-constrained extraction
+        // C-401 two-call split: call 1 (no schema) streams narrative prose,
+        // call 2 (schema) extracts the command envelope. The turn's absolute
+        // budget, identity and campaign scope all come from the orchestrator and
+        // are forwarded UNCHANGED to both — the difference between one turn
+        // being one budgeted, traceable, campaign-scoped logical request and
+        // two unrelated calls that each mint their own limits.
+        const campaignScope = campaignService.activeCampaign?.id ?? 'no-campaign';
         if (opts.schema && opts.schemaName) {
           const systemPrompt = opts.messages.find((m) => m.role === 'system')?.content;
           const userText = opts.messages
@@ -440,6 +444,9 @@ export class GameCompositionRoot
             // Call 2 (schema present) is the structured envelope; call 1 below
             // is the streamed dialogue/narrative.
             task: 'envelope',
+            ...(opts.deadlineAt === undefined ? {} : { deadlineAt: opts.deadlineAt }),
+            ...(opts.requestId === undefined ? {} : { requestId: opts.requestId }),
+            scope: opts.scope ?? campaignScope,
           });
           // Call 2 is extraction — the input prompt is not generated text.
           // Return an empty text value so no caller can mistake it for model output.
@@ -452,6 +459,11 @@ export class GameCompositionRoot
           messages: opts.messages,
           signal: opts.signal,
           task: 'dialogue',
+          // 🔴 The 120 s dialogue budget, as an absolute instant. Without it the
+          // adapter falls back to its own 90 s safety watchdog and cuts a turn
+          // that still had thirty seconds of its own budget left.
+          ...(opts.deadlineAt === undefined ? {} : { deadlineAt: opts.deadlineAt }),
+          ...(opts.requestId === undefined ? {} : { requestId: opts.requestId }),
           onChunk: (chunk) => {
             text += chunk;
             opts.onChunk?.(chunk);
