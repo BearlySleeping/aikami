@@ -363,6 +363,7 @@ describe('systemone dialect adapter', () => {
     const fetch = spyOn(globalThis, 'fetch').mockImplementation(stub.fetch);
     try {
       const adapter = createSystemOneDecisionAdapter({
+        runtime: 'ollama',
         endpoints,
         model: 'nimble',
         languages: ['en'],
@@ -378,6 +379,7 @@ describe('systemone dialect adapter', () => {
     'malformed response %s is invalid-response',
     async (body) => {
       const adapter = createSystemOneDecisionAdapter({
+        runtime: 'ollama',
         endpoints,
         model: 'nimble',
         languages: ['en'],
@@ -393,6 +395,7 @@ describe('systemone dialect adapter', () => {
 
   test('a fetch failure remains backend-unavailable', async () => {
     const adapter = createSystemOneDecisionAdapter({
+      runtime: 'ollama',
       endpoints,
       model: 'nimble',
       languages: ['en'],
@@ -412,6 +415,7 @@ describe('systemone dialect adapter', () => {
   test('a probe cancelled by its caller aborts the transport', async () => {
     const controller = new AbortController();
     const adapter = createSystemOneDecisionAdapter({
+      runtime: 'ollama',
       endpoints,
       model: 'nimble',
       languages: ['en'],
@@ -446,6 +450,7 @@ describe('systemone dialect adapter', () => {
       ]),
     );
     const adapter = createSystemOneDecisionAdapter({
+      runtime: 'ollama',
       endpoints,
       model: 'nimble',
       languages: ['en'],
@@ -476,6 +481,7 @@ describe('systemone dialect adapter', () => {
   test('a runtime that does not implement the route is reported as not ready, not ready-on-assumption', async () => {
     const transport = stubTransport({ routes: {} });
     const adapter = createSystemOneDecisionAdapter({
+      runtime: 'ollama',
       endpoints,
       model: 'nimble',
       languages: ['en'],
@@ -491,6 +497,7 @@ describe('systemone dialect adapter', () => {
       routes: { '/api/version': { status: 200, body: { version: '0.35.0' } } },
     });
     const adapter = createSystemOneDecisionAdapter({
+      runtime: 'ollama',
       endpoints,
       model: 'nimble',
       languages: ['en'],
@@ -538,6 +545,7 @@ describe('systemone dialect adapter', () => {
       },
     });
     const adapter = createSystemOneDecisionAdapter({
+      runtime: 'ollama',
       endpoints,
       model: 'nimble',
       languages: ['en'],
@@ -582,6 +590,7 @@ describe('systemone dialect adapter', () => {
   test('a 404 on the decision route is reported as backend-unavailable, not as success', async () => {
     const transport = stubTransport({ routes: {} });
     const adapter = createSystemOneDecisionAdapter({
+      runtime: 'ollama',
       endpoints,
       model: 'nimble',
       languages: ['en'],
@@ -600,6 +609,7 @@ describe('systemone dialect adapter', () => {
       routes: { '/v1/systemone': { status: 401, body: { error: 'nope' } } },
     });
     const adapter = createSystemOneDecisionAdapter({
+      runtime: 'ollama',
       endpoints,
       model: 'nimble',
       languages: ['en'],
@@ -618,6 +628,7 @@ describe('systemone dialect adapter', () => {
       routes: { '/v1/systemone': { status: 200, body: { model: 'nimble', answers: {} } } },
     });
     const adapter = createSystemOneDecisionAdapter({
+      runtime: 'ollama',
       endpoints,
       model: 'nimble',
       languages: ['en'],
@@ -646,6 +657,7 @@ describe('systemone dialect adapter', () => {
       routes: { '/v1/systemone': { status: 200, body: { model: 'nimble', answers: {} } } },
     });
     const adapter = createSystemOneDecisionAdapter({
+      runtime: 'ollama',
       endpoints,
       model: 'nimble',
       languages: ['en'],
@@ -665,6 +677,7 @@ describe('systemone dialect adapter', () => {
       routes: { '/v1/systemone': { status: 200, body: { model: 'nimble', answers: {} } } },
     });
     const adapter = createSystemOneDecisionAdapter({
+      runtime: 'ollama',
       endpoints,
       model: 'nimble',
       languages: ['en'],

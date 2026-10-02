@@ -14,6 +14,8 @@ import type {
   AiReasoningSchema,
   AiRoleSchema,
   ConnectionCapabilitySchema,
+  DecisionParamsSchema,
+  DecisionRuntimeSchema,
   ImageParamsSchema,
   ProviderSourceSchema,
   RoleAssignmentsSchema,
@@ -59,6 +61,18 @@ export type ImageParams = Static<typeof ImageParamsSchema>;
 
 /** Voice/TTS-specific connection options. */
 export type VoiceParams = Static<typeof VoiceParamsSchema>;
+
+/**
+ * Decision-connection options: checkpoint, runtime and declared languages.
+ *
+ * Not generation parameters — a decision checkpoint has none, and exposing
+ * temperature or a context window here would invite configuring a chat model as
+ * if it were a decision model.
+ */
+export type DecisionParams = Static<typeof DecisionParamsSchema>;
+
+/** Which runtime serves a decision endpoint. */
+export type DecisionRuntime = Static<typeof DecisionRuntimeSchema>;
 
 /** A credential + host. Created once per account. */
 export type AiProvider = Static<typeof AiProviderSchema>;

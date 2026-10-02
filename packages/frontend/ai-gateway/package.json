@@ -11,7 +11,8 @@
     "lint": "biome lint .",
     "format": "biome format .",
     "typecheck": "tsgo --noEmit",
-    "fix": "biome check --write . --error-on-warnings"
+    "fix": "biome check --write . --error-on-warnings",
+    "decision:evaluate": "bun run src/cli/decision_evaluate_node.ts"
   },
   "dependencies": {
     "@aikami/constants": "workspace:*",

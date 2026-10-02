@@ -239,16 +239,38 @@ export type DecisionTaskPolicy = {
    * probability that a *specific* answer is correct is task- and
    * field-specific, and a shared `0.5` is exactly the guess this replaces.
    */
-  readonly booleanPolicy?: {
-    /** Below this probability the answer is not accepted. */
-    readonly acceptProbability: number;
-    /** At or above this probability the answer is accepted outright. */
-    readonly confidentProbability: number;
-    /** Between the two: abstain, requesting an LLM fallback when configured. */
-    readonly fallback: 'reject' | 'llm';
-  };
+  readonly booleanPolicy?: DecisionProbabilityPolicy;
+  /**
+   * Per-task acceptance policy for `choice` and `combination` answers.
+   *
+   * The same shape as {@link DecisionTaskPolicy.booleanPolicy}, and for the same
+   * reason: the probability that a *particular* option is correct is specific to
+   * the task, the checkpoint and the context distribution. A choice is not
+   * reliable because its key was legal — `probabilities` are the backend's own
+   * distribution, never a correctness certificate, so a task that wants
+   * selective acceptance for choices must declare its own thresholds here.
+   *
+   * Thresholds are calibrated on the development split and then applied
+   * untouched to the held-out split (`metrics.ts`).
+   */
+  readonly choicePolicy?: DecisionProbabilityPolicy;
   /** Limits overriding {@link DEFAULT_DECISION_LIMITS} for this task. */
   readonly limits?: Partial<DecisionLimits>;
+};
+
+/**
+ * Selective acceptance for one question kind.
+ *
+ * Thresholds compare the probability the backend assigned to the answer it
+ * chose, not its reported confidence and not its entropy.
+ */
+export type DecisionProbabilityPolicy = {
+  /** Below this probability the answer is not accepted. */
+  readonly acceptProbability: number;
+  /** At or above this probability the answer is accepted outright. */
+  readonly confidentProbability: number;
+  /** Between the two: abstain, requesting an LLM fallback when configured. */
+  readonly fallback: 'reject' | 'llm';
 };
 
 /** Policy-binding outcome. */
@@ -353,7 +375,9 @@ export type DecisionCapability = {
     | 'unreachable'
     | 'unauthorized'
     | 'deadline-exceeded'
-    | 'cancelled';
+    | 'cancelled'
+    /** The caller's own configuration cannot answer the question it asked. */
+    | 'misconfigured';
   /** Question primitives this backend can answer. */
   readonly primitives: readonly DecisionQuestionKind[];
   /** Maximum options in one choice question. */

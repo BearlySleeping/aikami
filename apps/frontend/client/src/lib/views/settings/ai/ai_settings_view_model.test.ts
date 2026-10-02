@@ -500,7 +500,7 @@ describe('AiSettingsViewModel — AC-4: Status board', () => {
     const vm = getAiSettingsViewModel({ className: 'AiSettingsViewModel' });
     await vm.initialize();
 
-    expect(vm.statusEntries.length).toBe(3);
+    expect(vm.statusEntries.length).toBe(4);
     for (const entry of vm.statusEntries) {
       expect(entry.status).toBe('not_configured');
     }

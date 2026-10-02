@@ -22,11 +22,20 @@ export const ProviderSourceSchema = Type.Union([
   Type.Literal('detected'),
 ]);
 
-/** AI capability category. */
+/**
+ * AI capability category.
+ *
+ * `decision` is its own capability and NOT a flavour of `text`. A decision
+ * checkpoint answers bounded closed questions and cannot narrate, and a chat
+ * model cannot score them: sharing one capability would let the settings UI
+ * assign a decision backend to dialogue and a chat model to decisions, which is
+ * the exact conflation the decision subsystem refuses everywhere else.
+ */
 export const ConnectionCapabilitySchema = Type.Union([
   Type.Literal('text'),
   Type.Literal('image'),
   Type.Literal('voice'),
+  Type.Literal('decision'),
 ]);
 
 /** AI role — what the game uses a connection FOR. */
@@ -42,6 +51,8 @@ export const AiRoleSchema = Type.Union([
   // Voice roles
   Type.Literal('narrator-voice'),
   Type.Literal('npc-voice'),
+  // Decision role — bounded, closed-question scoring (System One / Jev)
+  Type.Literal('decisions'),
 ]);
 
 // ---------------------------------------------------------------------------
@@ -102,6 +113,35 @@ export const VoiceParamsSchema = Type.Object({
   archetypes: Type.Optional(Type.Array(VoiceArchetypeSchema)),
 });
 
+/**
+ * Which runtime serves a decision endpoint.
+ *
+ * `ollama` is asked for `/api/version` and must clear the dialect's floor.
+ * `jev` is any externally managed Jev-compatible server (laya.cpp's HTTP route,
+ * a hosted Jev API) and is never asked for an Ollama route it may not serve.
+ */
+export const DecisionRuntimeSchema = Type.Union([Type.Literal('ollama'), Type.Literal('jev')]);
+
+/**
+ * Decision-connection parameters.
+ *
+ * Carries the checkpoint plus the routing facts the adapter needs. Deliberately
+ * NOT generation parameters: a decision model has no temperature, no context
+ * window to tune and no prose to shape. It has a checkpoint, a runtime and an
+ * endpoint, and pretending otherwise is how a chat model ends up configured as a
+ * decision model.
+ */
+export const DecisionParamsSchema = Type.Object({
+  /** Checkpoint / model identity, reported verbatim in provenance. */
+  checkpoint: Type.String({ minLength: 1 }),
+  /** Which runtime serves this endpoint. Decides which probes are legitimate. */
+  runtime: DecisionRuntimeSchema,
+  /** Languages the checkpoint declares. Anything else must abstain. */
+  languages: Type.Optional(Type.Array(Type.Union([Type.Literal('en'), Type.Literal('multi')]))),
+  /** Whether this backend may serve automatic gameplay tasks. Off by default. */
+  qualifiedForGameplay: Type.Optional(Type.Boolean()),
+});
+
 // ---------------------------------------------------------------------------
 // AiProvider — one credential + host. Created once per account.
 // ---------------------------------------------------------------------------
@@ -141,7 +181,12 @@ export const AiConnectionSchema = Type.Object({
   /** Model identifier (e.g. 'anthropic/claude-3-opus', 'sd_xl_base_1.0'). */
   model: Type.String(),
   /** Discriminated on capability. No credential field — that lives on the provider. */
-  params: Type.Union([TextParamsSchema, ImageParamsSchema, VoiceParamsSchema]),
+  params: Type.Union([
+    TextParamsSchema,
+    ImageParamsSchema,
+    VoiceParamsSchema,
+    DecisionParamsSchema,
+  ]),
   /** ISO timestamp of creation. */
   createdAt: Type.String({ format: 'date-time' }),
   /** ISO timestamp of last update. */
@@ -183,6 +228,7 @@ export const RoleOverridesSchema = Type.Partial(
     scene: RoutingTargetSchema,
     'narrator-voice': RoutingTargetSchema,
     'npc-voice': RoutingTargetSchema,
+    decisions: RoutingTargetSchema,
   }),
   { additionalProperties: false },
 );
@@ -197,6 +243,7 @@ export const RoutingSchema = Type.Object(
           text: RoutingTargetSchema,
           image: RoutingTargetSchema,
           voice: RoutingTargetSchema,
+          decision: RoutingTargetSchema,
         }),
         { additionalProperties: false },
       ),

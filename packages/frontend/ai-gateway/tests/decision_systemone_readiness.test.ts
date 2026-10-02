@@ -256,6 +256,7 @@ describe('adapter capability — the false-ready regression', () => {
   test('a 200 on the version route alone does NOT make the adapter ready', async () => {
     // REGRESSION: against C-566 this returned ready: true.
     const adapter = createSystemOneDecisionAdapter({
+      runtime: 'ollama',
       endpoints: ENDPOINTS,
       model: 'nimble',
       languages: ['en'],
@@ -276,6 +277,7 @@ describe('adapter capability — the false-ready regression', () => {
 
   test('an endpoint with no decision route at all is not ready', async () => {
     const adapter = createSystemOneDecisionAdapter({
+      runtime: 'ollama',
       endpoints: ENDPOINTS,
       model: 'nimble',
       languages: ['en'],
@@ -294,6 +296,7 @@ describe('adapter capability — the false-ready regression', () => {
 
   test('a fully provisioned backend reports ready and its real runtime', async () => {
     const adapter = createSystemOneDecisionAdapter({
+      runtime: 'ollama',
       endpoints: ENDPOINTS,
       model: 'nimble',
       languages: ['en'],
@@ -318,6 +321,7 @@ describe('adapter capability — the false-ready regression', () => {
     // Ready here means "this endpoint can serve the dialect". Whether the
     // checkpoint can answer is `probeDecisionBackend`'s sample decision.
     const adapter = createSystemOneDecisionAdapter({
+      runtime: 'ollama',
       endpoints: { ...ENDPOINTS, models: undefined },
       model: 'nimble',
       languages: ['en'],
@@ -362,6 +366,7 @@ describe('probe identity and failure boundaries', () => {
     [503, 'unreachable'],
   ])('version HTTP %s preserves %s', async (status, state) => {
     const adapter = createSystemOneDecisionAdapter({
+      runtime: 'ollama',
       endpoints: ENDPOINTS,
       model: 'nimble',
       languages: ['en'],
@@ -379,6 +384,7 @@ describe('probe identity and failure boundaries', () => {
   });
   test('a failed version transport remains unreachable', async () => {
     const adapter = createSystemOneDecisionAdapter({
+      runtime: 'ollama',
       endpoints: ENDPOINTS,
       model: 'nimble',
       languages: ['en'],

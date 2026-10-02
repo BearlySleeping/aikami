@@ -239,7 +239,7 @@ export type CapabilityStatusEntryInput = {
 export const buildCapabilityStatusEntries = (
   input: CapabilityStatusEntryInput,
 ): readonly CapabilityStatusEntry[] => {
-  const capabilities: ConnectionCapability[] = ['text', 'voice', 'image'];
+  const capabilities: ConnectionCapability[] = ['text', 'voice', 'image', 'decision'];
   return capabilities.map((capability) => {
     const connections = input.connections.filter(
       (connection) => connection.capability === capability,
@@ -292,7 +292,7 @@ export const buildCapabilityStatuses = (
   config: CapabilityStatusConfig,
   status: AiConnectionStatus,
 ): readonly AiCapabilityStatus[] => {
-  const capabilities: ConnectionCapability[] = ['text', 'voice', 'image'];
+  const capabilities: ConnectionCapability[] = ['text', 'voice', 'image', 'decision'];
   const connections = config.getAiConnections();
   const defaults = config.getDefaultByCapability();
   return capabilities.map((capability) => {

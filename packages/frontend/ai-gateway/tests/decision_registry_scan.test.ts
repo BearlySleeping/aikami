@@ -31,7 +31,7 @@ import {
   analyzeDecisionSchema,
   type DecisionIncompatibilityCode,
 } from '../src/lib/decision/index.ts';
-import { PILOT_SCHEMA } from './decision_pilot.ts';
+import { NPC_COMMAND_KIND_NONE, NPC_COMMAND_KIND_SCHEMA } from '../src/lib/decision/tasks/index.ts';
 
 /** Compiles and returns the rejection codes, asserting failure. */
 const rejectCodes = (schema: unknown): DecisionIncompatibilityCode[] => {
@@ -189,16 +189,24 @@ describe('registry scan — TypeBox shipping schemas', () => {
     }
   });
 
-  test('the pilot schema — the bounded command-kind discriminator — is the only one that compiles', () => {
-    const analysis = analyzeDecisionSchema({ schema: PILOT_SCHEMA });
+  test('the probe schema is the shipping command kinds PLUS an explicit `none`', () => {
+    const analysis = analyzeDecisionSchema({ schema: NPC_COMMAND_KIND_SCHEMA });
     expect(analysis.ok).toBe(true);
     if (analysis.ok) {
       expect(analysis.plan.questions).toHaveLength(1);
       const shippingKinds = NpcDialogueCommandSchema.anyOf.map(
         (branch) => branch.properties.kind.const,
       );
-      const pilotKinds = analysis.plan.questions[0]?.options?.map((option) => option.value);
-      expect(new Set(pilotKinds)).toEqual(new Set(shippingKinds));
+      const probeKinds = analysis.plan.questions[0]?.options?.map((option) => option.value) ?? [];
+      // Every shipping kind is offered...
+      for (const kind of shippingKinds) {
+        expect(probeKinds).toContain(kind);
+      }
+      // ...and so is `none`, because `NpcDialogueAiEnvelopeSchema` types
+      // `command` as optional. A discriminator that structurally cannot say
+      // "nothing is warranted" measures something the game never does.
+      expect(probeKinds).toContain(NPC_COMMAND_KIND_NONE);
+      expect(probeKinds).toHaveLength(shippingKinds.length + 1);
       expect(analysis.plan.constants).toHaveLength(0);
     }
   });

@@ -15,6 +15,14 @@
 // and typed helper functions so that locality, URL/key rules, verification
 // strategy and model-discovery support are read from one definition rather
 // than re-derived in connection_verifier.ts and ai_settings_view_model.
+//
+// Issue #381: `providerAcceptsKey` also accepts the separate decision registry.
+// The descriptor below is a CHAT descriptor — verification strategy, CSP
+// origin, reasoning control and generation parameters are all meaningless for a
+// backend that scores closed questions — so the decision registry is consulted
+// directly rather than widening this type.
+
+import { decisionProviderEntry } from './decision_providers.ts';
 
 // ---------------------------------------------------------------------------
 // Verification strategy
@@ -500,8 +508,15 @@ export const providerNeedsKey = (registryId: string): boolean =>
  */
 export const providerAcceptsKey = (
   registryId: string,
-  capability?: ProviderCapability,
+  capability?: ProviderCapability | 'decision',
 ): boolean => {
+  // The decision registry is separate (see decision_providers.ts): none of the
+  // chat descriptor fields mean anything for a backend that only scores closed
+  // questions, but "does this one need a key" is still a real question about it.
+  if (capability === 'decision') {
+    const decision = decisionProviderEntry(registryId);
+    return decision?.needsKey === true || decision?.optionalKey === true;
+  }
   const descriptor = findProviderDescriptor(registryId, capability);
   if (!descriptor) {
     return false;

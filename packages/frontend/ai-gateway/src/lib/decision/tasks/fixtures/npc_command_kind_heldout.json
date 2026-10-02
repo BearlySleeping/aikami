@@ -1,0 +1,376 @@
+{
+  "schemaVersion": "decision-fixtures/2",
+  "split": "heldout",
+  "purpose": "Held-out evaluation split for the npc-command-kind research probe. Authored after the gates in tasks/npc_command_kind.ts were frozen and never used to choose a threshold.",
+  "task": "npc-command-kind",
+  "labelProvenance": {
+    "note": "Every label is AUTHORED in this contract against the authored option descriptions in tasks/npc_command_kind.ts. No model judged any label. 'required-abstain' cases carry expected 'none' - no command is warranted - and a command fired on one is the unsafe acceptance the safety gate counts. 'excluded' cases are genuinely ungradable (two defensible readings) and are removed from every denominator rather than being scored as negatives or rewarded as coverage.",
+    "sources": [
+      "contract-authored player messages written for this corpus",
+      "SHIPPED PRODUCT TEXT: cases in category 'authored-in-product' are the exact prefillText strings the game sends to an NPC as a player message, taken verbatim from apps/frontend/client/src/lib/data/initial_suggestion_presets.ts. They were authored for this product and are split across dev/heldout so no string appears in both."
+    ],
+    "corrections": [
+      "giveItem direction corrected. The original pilot described it as the player handing an item to the NPC; NpcDialogueGiveItemCommandSchema grants the item to the PLAYER and requires the NPC to possess it. Cases '*-giveitem-*' and '*-giveitem-reverse-*' pin both directions.",
+      "'none' added as a real literal. The original schema had no ordinary no-command outcome, while NpcDialogueAiEnvelopeSchema types `command` as optional."
+    ],
+    "limitations": [
+      "No external multi-author consented player-transcript corpus was available. Labels are one contract author's; the shipped product strings add real distribution but not independent authorship. Treat a pass on this corpus as necessary, not sufficient.",
+      "The corpus grades a command KIND only. Production commands carry itemId/quantity/questId/skill/difficultyClass and are gated by world preconditions, none of which this probe exercises."
+    ],
+    "kinds": "positive | required-abstain | excluded"
+  },
+  "cases": [
+    {
+      "caseId": "held-clear-trade",
+      "category": "clear-intent",
+      "language": "en",
+      "kind": "positive",
+      "expected": "trade",
+      "state": "Do you have anything for two copper? I am buying."
+    },
+    {
+      "caseId": "held-clear-recruit",
+      "category": "clear-intent",
+      "language": "en",
+      "kind": "positive",
+      "expected": "recruit",
+      "state": "Walk with us. You would be safer with the party."
+    },
+    {
+      "caseId": "held-clear-evidence",
+      "category": "clear-intent",
+      "language": "en",
+      "kind": "positive",
+      "expected": "presentEvidence",
+      "state": "Look - I have the missing ledger page."
+    },
+    {
+      "caseId": "held-clear-skill",
+      "category": "clear-intent",
+      "language": "en",
+      "kind": "positive",
+      "expected": "skillCheck",
+      "state": "Let me try to persuade the gate guard."
+    },
+    {
+      "caseId": "held-negation-skill",
+      "category": "negation",
+      "language": "en",
+      "kind": "required-abstain",
+      "expected": null,
+      "state": "I will not attempt to intimidate anyone today."
+    },
+    {
+      "caseId": "held-negation-evidence",
+      "category": "negation",
+      "language": "en",
+      "kind": "required-abstain",
+      "expected": null,
+      "state": "I do not have the seal to give you."
+    },
+    {
+      "caseId": "held-multi-action",
+      "category": "multiple-actions",
+      "language": "en",
+      "kind": "excluded",
+      "expected": null,
+      "state": "Sell me a rope and then join the company."
+    },
+    {
+      "caseId": "held-unsupported-flee",
+      "category": "unsupported-action",
+      "language": "en",
+      "kind": "required-abstain",
+      "expected": null,
+      "state": "Open the gate so I can run from here."
+    },
+    {
+      "caseId": "held-unsupported-marry",
+      "category": "unsupported-action",
+      "language": "en",
+      "kind": "required-abstain",
+      "expected": null,
+      "state": "Will you marry me before the harvest?"
+    },
+    {
+      "caseId": "held-invented-names",
+      "category": "invented-fantasy-names",
+      "language": "en",
+      "kind": "positive",
+      "expected": "recruit",
+      "state": "Orrin Blackhollow of the Ninth Fen, ride with us to Duskmere."
+    },
+    {
+      "caseId": "held-invented-relic",
+      "category": "invented-fantasy-names",
+      "language": "en",
+      "kind": "positive",
+      "expected": "presentEvidence",
+      "state": "The Ashen Compass of Vaeldrin - here, take it."
+    },
+    {
+      "caseId": "held-unseen-pack",
+      "category": "unseen-packs",
+      "language": "en",
+      "kind": "positive",
+      "expected": "trade",
+      "state": "I am looking for salt. Do you stock salt?"
+    },
+    {
+      "caseId": "held-unseen-npc",
+      "category": "unseen-packs",
+      "language": "en",
+      "kind": "required-abstain",
+      "expected": null,
+      "state": "Tell Marlok of the Salt Road that I sent him the toll tally."
+    },
+    {
+      "caseId": "held-quoted-command",
+      "category": "misleading-quote",
+      "language": "en",
+      "kind": "required-abstain",
+      "expected": null,
+      "state": "The poster read \"recruit me\" as an example of bad grammar."
+    },
+    {
+      "caseId": "held-quoted-evidence",
+      "category": "misleading-quote",
+      "language": "en",
+      "kind": "positive",
+      "expected": "presentEvidence",
+      "state": "She wrote \"give him the evidence at dawn\" - so here it is."
+    },
+    {
+      "caseId": "held-out-of-scope-markup",
+      "category": "out-of-scope",
+      "language": "en",
+      "kind": "required-abstain",
+      "expected": null,
+      "state": "<script>alert('trade')</script>"
+    },
+    {
+      "caseId": "held-out-of-scope-url",
+      "category": "out-of-scope",
+      "language": "en",
+      "kind": "required-abstain",
+      "expected": null,
+      "state": "https://example.invalid/shop/buy"
+    },
+    {
+      "caseId": "held-language-french",
+      "category": "out-of-scope-language",
+      "language": "fr",
+      "kind": "required-abstain",
+      "expected": null,
+      "state": "Je voudrais acheter une lanterne, combien cela coute-t-il ?"
+    },
+    {
+      "caseId": "held-ambiguous-open",
+      "category": "ambiguous",
+      "language": "en",
+      "kind": "excluded",
+      "expected": null,
+      "state": "Well. So. What now?"
+    },
+    {
+      "caseId": "held-correlated-recruit-enemy",
+      "category": "correlated-fields",
+      "language": "en",
+      "kind": "required-abstain",
+      "expected": null,
+      "state": "Join us, and do it before the orcs arrive."
+    },
+    {
+      "caseId": "held-clear-evidence-second",
+      "category": "clear-intent",
+      "language": "en",
+      "kind": "positive",
+      "expected": "presentEvidence",
+      "state": "This is the coin you asked me to find."
+    },
+    {
+      "caseId": "held-clear-skill-second",
+      "category": "clear-intent",
+      "language": "en",
+      "kind": "positive",
+      "expected": "skillCheck",
+      "state": "I would like to attempt a sleight of hand."
+    },
+    {
+      "caseId": "held-hardpos-trade-indirect",
+      "category": "clear-intent",
+      "language": "en",
+      "kind": "positive",
+      "expected": "trade",
+      "state": "I have coin if you have the map."
+    },
+    {
+      "caseId": "held-hardpos-recruit-indirect",
+      "category": "clear-intent",
+      "language": "en",
+      "kind": "positive",
+      "expected": "recruit",
+      "state": "We lost the other two. We could use you."
+    },
+    {
+      "caseId": "held-hardpos-evidence-indirect",
+      "category": "clear-intent",
+      "language": "en",
+      "kind": "positive",
+      "expected": "presentEvidence",
+      "state": "This was under your floorboards the whole time."
+    },
+    {
+      "caseId": "held-hardpos-skill-indirect",
+      "category": "clear-intent",
+      "language": "en",
+      "kind": "positive",
+      "expected": "skillCheck",
+      "state": "Can you talk me past the sentries?"
+    },
+    {
+      "caseId": "held-hardneg-recruit-context",
+      "category": "unsupported-action",
+      "language": "en",
+      "kind": "required-abstain",
+      "expected": null,
+      "state": "The guild recruits apprentices every spring."
+    },
+    {
+      "caseId": "held-hardneg-buy-context",
+      "category": "negation",
+      "language": "en",
+      "kind": "required-abstain",
+      "expected": null,
+      "state": "I refuse to buy anything from you today."
+    },
+    {
+      "caseId": "held-giveitem-correct",
+      "category": "reversed-action-direction",
+      "language": "en",
+      "kind": "positive",
+      "expected": "giveItem",
+      "state": "Could I trouble you for a cup of water?"
+    },
+    {
+      "caseId": "held-giveitem-reverse-bait",
+      "category": "reversed-action-direction",
+      "language": "en",
+      "kind": "required-abstain",
+      "expected": null,
+      "state": "Take this coin, I cannot carry it any further."
+    },
+    {
+      "caseId": "held-none-smalltalk",
+      "category": "clear-intent",
+      "language": "en",
+      "kind": "required-abstain",
+      "expected": null,
+      "state": "The rain has not stopped since the ford."
+    },
+    {
+      "caseId": "held-none-meta",
+      "category": "clear-intent",
+      "language": "en",
+      "kind": "required-abstain",
+      "expected": null,
+      "state": "What is your name again?"
+    },
+    {
+      "caseId": "held-unsupported-heal",
+      "category": "unsupported-action",
+      "language": "en",
+      "kind": "required-abstain",
+      "expected": null,
+      "state": "Your healing hands could save her tonight."
+    },
+    {
+      "caseId": "held-multi-action-excluded",
+      "category": "multiple-actions",
+      "language": "en",
+      "kind": "excluded",
+      "expected": null,
+      "state": "First trade me a shield, then come with us to the ridge."
+    },
+    {
+      "caseId": "held-none-quote-give",
+      "category": "misleading-quote",
+      "language": "en",
+      "kind": "required-abstain",
+      "expected": null,
+      "state": "The ledger entry says give, but that was about grain."
+    },
+    {
+      "caseId": "class_fighter_training",
+      "category": "authored-in-product",
+      "language": "en",
+      "kind": "required-abstain",
+      "expected": null,
+      "state": "Do you know where a fighter could find proper training around here?"
+    },
+    {
+      "caseId": "class_wizard_ward",
+      "category": "authored-in-product",
+      "language": "en",
+      "kind": "required-abstain",
+      "expected": null,
+      "state": "As a scholar, I would very much like to study the fading ward myself."
+    },
+    {
+      "caseId": "class_rogue_job",
+      "category": "authored-in-product",
+      "language": "en",
+      "kind": "excluded",
+      "expected": null,
+      "state": "I am good at quiet work if anyone needs a delicate problem solved."
+    },
+    {
+      "caseId": "class_bard_rumors",
+      "category": "authored-in-product",
+      "language": "en",
+      "kind": "required-abstain",
+      "expected": null,
+      "state": "I always love a good story — what rumors have you heard lately?"
+    },
+    {
+      "caseId": "class_cleric_suffering",
+      "category": "authored-in-product",
+      "language": "en",
+      "kind": "required-abstain",
+      "expected": null,
+      "state": "Is there anyone in the village who is sick or injured that I could help?"
+    },
+    {
+      "caseId": "class_ranger_track",
+      "category": "authored-in-product",
+      "language": "en",
+      "kind": "excluded",
+      "expected": null,
+      "state": "I am skilled at tracking and scouting if you need someone to investigate."
+    },
+    {
+      "caseId": "class_paladin_menace",
+      "category": "authored-in-product",
+      "language": "en",
+      "kind": "excluded",
+      "expected": null,
+      "state": "Tell me of any threat menacing this village so I may confront it directly."
+    },
+    {
+      "caseId": "class_druid_heal",
+      "category": "authored-in-product",
+      "language": "en",
+      "kind": "excluded",
+      "expected": null,
+      "state": "I know the healing herbs of the forest well if anyone is in need."
+    },
+    {
+      "caseId": "class_default_news",
+      "category": "authored-in-product",
+      "language": "en",
+      "kind": "required-abstain",
+      "expected": null,
+      "state": "What has been happening in the village lately? I would like to know."
+    }
+  ]
+}
