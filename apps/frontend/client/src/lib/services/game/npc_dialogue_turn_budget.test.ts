@@ -86,6 +86,62 @@ describe('dialogue turn budget and identity (issue #382)', () => {
     expect(envelope?.schema).toBe('NpcDialogueExtraction');
   });
 
+  test('intent and roll pipelines each share one budget and have distinct identities', async () => {
+    const seen: Array<{ deadlineAt?: number; requestId?: string; schema?: string }> = [];
+    npcDialogueService.configure({
+      contentProvider: makeContentProvider(),
+      textGenerator: async (options) => {
+        seen.push({
+          deadlineAt: options.deadlineAt,
+          requestId: options.requestId,
+          schema: options.schemaName,
+        });
+        if (options.schemaName === undefined) {
+          options.onChunk?.('The ridge is safe.');
+          return { text: 'The ridge is safe.' };
+        }
+        return {
+          text: '',
+          structured:
+            options.schemaName === 'NpcIntentAnalysisOutput'
+              ? { requiresRoll: false, npcResponse: 'The ridge is safe.', suggestedChips: [] }
+              : { narrativeResult: 'The ridge is safe.', stateDeltas: [], suggestedChips: [] },
+        };
+      },
+      executors: makeExecutors(),
+    });
+    const turnOptions = {
+      npcId: 'village_elder',
+      npcName: 'Elder Thalia',
+      messages: [{ role: 'player' as const, content: 'Which road?' }],
+      signal: new AbortController().signal,
+    };
+    const before = Date.now();
+    await npcDialogueService.analyzeIntent(turnOptions);
+    await npcDialogueService.resolveRoll({
+      ...turnOptions,
+      checkType: 'persuasion',
+      difficultyClass: 10,
+      rollTotal: 15,
+      outcome: 'pass',
+      playerInput: 'Which road?',
+    });
+    const after = Date.now();
+    expect(seen).toHaveLength(4);
+    for (const offset of [0, 2]) {
+      const narrative = seen[offset];
+      const envelope = seen[offset + 1];
+      expect(narrative?.deadlineAt).toBeGreaterThanOrEqual(before + 120_000);
+      expect(narrative?.deadlineAt).toBeLessThanOrEqual(after + 120_000);
+      expect(envelope?.deadlineAt).toBe(narrative?.deadlineAt);
+      expect(narrative?.requestId).toMatch(/^dialogue-turn-\d+$/);
+      expect(envelope?.requestId).toBe(narrative?.requestId);
+    }
+    expect(seen[1]?.schema).toBe('NpcIntentAnalysisOutput');
+    expect(seen[3]?.schema).toBe('NpcRollResolutionOutput');
+    expect(seen[0]?.requestId).not.toBe(seen[2]?.requestId);
+  });
+
   test('two turns get different identities, so one turn is never conflated with another', async () => {
     const ids: string[] = [];
     const controller = new AbortController();

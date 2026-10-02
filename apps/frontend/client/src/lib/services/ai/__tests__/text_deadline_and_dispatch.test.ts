@@ -108,23 +108,22 @@ describe('the caller deadline reaches the transport', () => {
     expect(mocks.gatewayGenerateCalls[0]?.deadlineAt).toBeUndefined();
   });
 
-  test('a deadline already spent at dispatch reaches the gateway as spent', async () => {
-    const release = holdGateway();
-    const deadlineAt = Date.now() + 5_000;
-    const first = service.extractStructure({
-      schema: SCHEMA,
-      schemaName: 'RelationshipOutput',
-      prompt: 'queued question',
-      task: 'summarization',
-      scope: 'campaign_a',
-      deadlineAt,
-    });
-    // The queue holds it past its own budget. When it is finally admitted, the
-    // instant it carries is already in the past — and that is what the gateway
-    // and adapter must both see, not a fresh one.
-    release();
-    await first;
-    expect(mocks.gatewayGenerateCalls[0]?.deadlineAt).toBe(deadlineAt);
+  test('a deadline spent in the quiet window suppresses dispatch', async () => {
+    setQuietWindow(100);
+    const deadlineAt = Date.now() + 20;
+    await expect(
+      service.extractStructure({
+        schema: SCHEMA,
+        schemaName: 'RelationshipOutput',
+        prompt: 'queued question',
+        task: 'summarization',
+        scope: 'campaign_a',
+        deadlineAt,
+      }),
+    ).rejects.toThrow();
+    expect(Date.now()).toBeGreaterThanOrEqual(deadlineAt);
+    expect(mocks.gatewayGenerateCalls).toHaveLength(0);
+    expect(textTelemetryService.summary.counters.suppressed).toBe(1);
   });
 });
 
@@ -415,7 +414,7 @@ describe('logical requests, provider attempts and the spans that record them', (
     );
   });
 
-  test('a local answer, a joiner and a suppressed request all cost zero attempts', async () => {
+  test('a local answer and a suppressed request both cost zero attempts', async () => {
     // A local-first success.
     mocks.localSubmitOutput = '{"change":"improve","magnitude":3,"reason":"kind"}';
     setGatewayRouting({

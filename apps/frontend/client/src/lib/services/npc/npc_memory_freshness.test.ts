@@ -71,13 +71,15 @@ mock.module('../ai/text_generation_service.svelte.ts', () => ({
 mock.module('../campaign/campaign_service.svelte.ts', () => ({
   campaignService: campaign,
 }));
+const readWorldFacts = mock(() => worldFacts);
+const readPersona = mock(() => persona);
 mock.module('../game/game_state_facts.ts', () => ({
-  buildGameStateFacts: () => worldFacts,
+  buildGameStateFacts: readWorldFacts,
 }));
 mock.module('../game/npc_dialogue_service.svelte.ts', () => ({
   npcDialogueService: {
     buildContext: () => ({ persona }),
-    buildNpcPersonaForPrompt: () => persona,
+    buildNpcPersonaForPrompt: readPersona,
   },
 }));
 mock.module('../game/serializable_service', () => ({
@@ -194,7 +196,11 @@ describe('a prepared greeting is revalidated when it is consumed', () => {
     });
     // The whole point of the re-dating behaviour: an unchanged world reuses the
     // opener instead of spending another provider call.
+    readWorldFacts.mockClear();
+    readPersona.mockClear();
     const greeted = npcMemoryService.resolveGreeting(authoredNpc());
+    expect(readWorldFacts).toHaveBeenCalledTimes(1);
+    expect(readPersona).toHaveBeenCalledTimes(1);
     expect(greeted.dialog).toBe(DIGEST.opener);
     expect(greeted.initialSuggestions?.[0]?.id).toBe('report_path');
   });

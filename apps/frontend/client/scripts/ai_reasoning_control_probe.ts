@@ -49,6 +49,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { NPC_MEMORY_LIMITS } from '@aikami/constants';
 import {
   NpcMemoryDigestSchema,
   NpcMemoryOpenerOutputSchema,
@@ -75,8 +76,6 @@ const OUT_DIR = join(REPO_ROOT, '.evidence', '382-reasoning-control');
 
 const ENDPOINT = process.env.AIKAMI_PROBE_ENDPOINT ?? 'http://127.0.0.1:11434';
 const MODEL = process.env.AIKAMI_PROBE_MODEL ?? 'ornith-1.5:9b';
-/** Characters the opener prompt allows, used by the quality gate. */
-const OPENER_MAX = 400;
 
 const readNumberFlag = (name: string): number | undefined => {
   const index = process.argv.indexOf(name);
@@ -218,7 +217,9 @@ const TASKS: readonly Task[] = [
         return 'verbatim repeat of the previous greeting';
       }
       const tooLong =
-        opener.opener.length > OPENER_MAX + 1 ? 'opener exceeds the production bound' : null;
+        opener.opener.length > NPC_MEMORY_LIMITS.openerChars
+          ? 'opener exceeds the production bound'
+          : null;
       const stubs =
         !Array.isArray(opener.suggestions) || opener.suggestions.length === 0
           ? 'no suggestion chips'

@@ -112,6 +112,18 @@ describe('credential identity, through the revision', () => {
     expect(withKey).toMatch(/^cfg-\d+-[0-9a-f]+$/);
   });
 
+  test('rotation back before eviction never aliases a new credential', () => {
+    const tracker = createTextRouteRevisionTracker(2);
+    tracker.current(vault({ credential: KEY_A }));
+    tracker.current(vault({ credential: KEY_B }));
+    const rotatedBack = tracker.current(vault({ credential: KEY_A }));
+    const afterEviction = tracker.current(vault({ credential: 'key-c' }));
+    expect(afterEviction).not.toBe(rotatedBack);
+    expect(tracker.revisionCount).toBe(4);
+    expect(tracker.interner.size).toBe(1);
+    expect(tracker.current(vault({ credential: 'key-c' }))).toBe(afterEviction);
+  });
+
   test('the interning table is bounded, and eviction fails safe', () => {
     // 40 distinct credentials against a four-entry table. The table must not
     // grow, and the revision must keep answering correctly for whatever it is
@@ -120,6 +132,7 @@ describe('credential identity, through the revision', () => {
     const revisions: string[] = [];
     for (let i = 0; i < 40; i += 1) {
       revisions.push(tracker.current(vault({ credential: `key-${i}` })));
+      expect(tracker.interner.size).toBeLessThanOrEqual(4);
     }
     // A repeated read of the LAST configuration is stable...
     expect(tracker.current(vault({ credential: 'key-39' }))).toBe(revisions[39]);

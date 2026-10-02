@@ -140,10 +140,9 @@ const createCredentialInterner = (limit?: number): CredentialInterner => {
       }
       if (table.size >= bound) {
         // Cheapest correct eviction: drop everything and re-seed on next
-        // sight. Ordinals restart, so the revision necessarily changes — the
-        // expensive direction, and the only honest one.
+        // sight. Ordinals are never reused: rotating back to an earlier key
+        // before eviction must not alias the next newly interned credential.
         table.clear();
-        next = 1;
       }
       const token = `cred-${next}`;
       next += 1;

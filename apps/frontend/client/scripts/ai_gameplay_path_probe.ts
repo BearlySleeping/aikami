@@ -106,6 +106,8 @@ type Rig = {
   attempts: Attempt[];
   /** Every logical request the harness issued, with its outcome. */
   logical: Array<{ id: string; dispatched: boolean; queueMs: number; queueDepth: number }>;
+  peakConcurrency(): number;
+  dispatchCount(): number;
   reset(): void;
 };
 
@@ -302,7 +304,7 @@ const request = async (
             signal: AbortSignal.any([sharedSignal, sharedDeadline.signal]),
           });
           rig.logical.push({
-            id: requestId,
+            id: options.id,
             dispatched: rig.attempts.length > before,
             queueMs,
             queueDepth,
@@ -417,8 +419,12 @@ const scenarioMapLoaded = async (): Promise<Record<string, unknown>> => {
       backgroundWidth: width,
       dialogueQueueMs: dialogue.queueMs,
       dialogueTotalMs: dialogue.totalMs,
-      backgroundDispatched: rig.logical.filter((entry) => entry.dispatched).length,
-      backgroundQueued: rig.logical.filter((entry) => !entry.dispatched).length,
+      backgroundDispatched: rig.logical.filter(
+        (entry) => entry.id.startsWith('bg-') && entry.dispatched,
+      ).length,
+      backgroundQueued: rig.logical.filter(
+        (entry) => entry.id.startsWith('bg-') && !entry.dispatched,
+      ).length,
       providerAttempts: rig.attempts.length,
       admission: rig.admission.stats,
       frameCadence: cadence,
@@ -517,12 +523,22 @@ const scenarioColdStart = async (): Promise<Record<string, unknown>> => {
     setQuietWindow(0);
     const cold = await Promise.all(
       Array.from({ length: width }, (_, index) =>
-        request(rig, { id: `cold-${index}`, task: 'summarization', scope: 'campaign_a' }),
+        request(rig, {
+          id: `cold-${index}`,
+          task: 'summarization',
+          prompt: `cold digest ${index}`,
+          scope: 'campaign_a',
+        }),
       ),
     );
     const warm = await Promise.all(
       Array.from({ length: width }, (_, index) =>
-        request(rig, { id: `warm-${index}`, task: 'summarization', scope: 'campaign_a' }),
+        request(rig, {
+          id: `warm-${index}`,
+          task: 'summarization',
+          prompt: `warm digest ${index}`,
+          scope: 'campaign_a',
+        }),
       ),
     );
     rows.push({
@@ -530,7 +546,7 @@ const scenarioColdStart = async (): Promise<Record<string, unknown>> => {
       coldMedianMs: median(cold.map((entry) => entry.totalMs)),
       warmMedianMs: median(warm.map((entry) => entry.totalMs)),
       // "At most one background inference at a time per contention domain" is
-      // what makes width-4 not four times width-1. Measured at the adapter,
+      // serialises distinct requests as width grows. Measured at the adapter,
       // because the counter is the thing under test.
       maxConcurrentAdapterCalls: rig.peakConcurrency(),
       providerAttempts: rig.attempts.length,
@@ -596,7 +612,12 @@ const scenarioDrain = async (): Promise<Record<string, unknown>> => {
   const rig = createRig();
   setQuietWindow(300);
   const queued = Array.from({ length: 6 }, (_, index) =>
-    request(rig, { id: `drain-${index}`, task: 'summarization', scope: 'campaign_a' }),
+    request(rig, {
+      id: `drain-${index}`,
+      task: 'summarization',
+      prompt: `drain digest ${index}`,
+      scope: 'campaign_a',
+    }),
   );
   const frames = sampleFrames(4_000);
   const results = await Promise.all(queued);

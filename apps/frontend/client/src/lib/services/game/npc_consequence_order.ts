@@ -48,7 +48,7 @@ const ascendingNullable = (a: string | undefined, b: string | undefined): number
   if (aMissing !== bMissing) {
     return aMissing ? -1 : 1;
   }
-  if (aMissing) {
+  if (aMissing || a === b) {
     return 0;
   }
   return (a ?? '') < (b ?? '') ? -1 : 1;
@@ -61,14 +61,19 @@ const ascendingNullableNumber = (a: number | undefined, b: number | undefined): 
   if (aMissing !== bMissing) {
     return aMissing ? -1 : 1;
   }
-  if (aMissing) {
+  if (aMissing || a === b) {
     return 0;
   }
   return (a ?? 0) < (b ?? 0) ? -1 : 1;
 };
 
 /** Lexicographic comparison of a non-nullable pair, by code point. */
-const ascending = (a: string, b: string): number => (a < b ? -1 : 1);
+const ascending = (a: string, b: string): number => {
+  if (a === b) {
+    return 0;
+  }
+  return a < b ? -1 : 1;
+};
 
 /**
  * Canonical sort for a consequence batch: by kind in the fixed order, then

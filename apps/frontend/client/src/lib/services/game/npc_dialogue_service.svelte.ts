@@ -642,15 +642,9 @@ export class NpcDialogueService
   }
 
   /** @inheritdoc */
-  async generateTurn(options: {
-    npcId: string;
-    npcName: string;
-    messages: Array<{ role: 'player' | 'npc'; content: string }>;
-    signal: AbortSignal;
-    gameStateFacts?: string[];
-    activeEncounterId?: string;
-    onChunk?: (text: string) => void;
-  }): Promise<NpcDialogueTurn> {
+  async generateTurn(
+    options: Parameters<NpcDialogueServiceInterface['generateTurn']>[0],
+  ): Promise<NpcDialogueTurn> {
     this._assertConfigured();
 
     // ── Concurrency gate: cancel any in-flight turn ───────────────────
@@ -854,15 +848,9 @@ export class NpcDialogueService
   // ── Public: two-call pipeline (C-371) ─────────────────────────────────
 
   /** @inheritdoc */
-  async analyzeIntent(options: {
-    npcId: string;
-    npcName: string;
-    messages: Array<{ role: 'player' | 'npc'; content: string }>;
-    signal: AbortSignal;
-    gameStateFacts?: string[];
-    playerContext?: { characterSheetSummary: string; level: number; classId: string };
-    onChunk?: (text: string) => void;
-  }): Promise<NpcIntentAnalysisOutput> {
+  async analyzeIntent(
+    options: Parameters<NpcDialogueServiceInterface['analyzeIntent']>[0],
+  ): Promise<NpcIntentAnalysisOutput> {
     this._assertConfigured();
 
     // E2E seeding hook (C-487): deterministic intent envelope for the /game
@@ -891,6 +879,9 @@ export class NpcDialogueService
     const controller = new AbortController();
     this._activeAbortController = controller;
     const linkedSignal = this._linkSignals(options.signal, controller.signal, controller);
+    const turnDeadlineAt = Date.now() + this._timeoutMs;
+    this._turnSequence += 1;
+    const turnRequestId = `dialogue-turn-${this._turnSequence}`;
 
     try {
       const npc = this._contentProvider!.getNpc(options.npcId);
@@ -911,6 +902,8 @@ export class NpcDialogueService
             classId: 'fighter',
           },
           onChunk: options.onChunk,
+          deadlineAt: turnDeadlineAt,
+          requestId: turnRequestId,
         });
       } catch (error) {
         if (this._isAbortError(error)) {
@@ -941,19 +934,9 @@ export class NpcDialogueService
   }
 
   /** @inheritdoc */
-  async resolveRoll(options: {
-    npcId: string;
-    npcName: string;
-    messages: Array<{ role: 'player' | 'npc'; content: string }>;
-    signal: AbortSignal;
-    gameStateFacts?: string[];
-    checkType: string;
-    difficultyClass: number;
-    rollTotal: number;
-    outcome: 'pass' | 'fail';
-    playerInput: string;
-    onChunk?: (text: string) => void;
-  }): Promise<NpcRollResolutionOutput> {
+  async resolveRoll(
+    options: Parameters<NpcDialogueServiceInterface['resolveRoll']>[0],
+  ): Promise<NpcRollResolutionOutput> {
     this._assertConfigured();
 
     // Concurrency gate
@@ -963,6 +946,9 @@ export class NpcDialogueService
     const controller = new AbortController();
     this._activeAbortController = controller;
     const linkedSignal = this._linkSignals(options.signal, controller.signal, controller);
+    const turnDeadlineAt = Date.now() + this._timeoutMs;
+    this._turnSequence += 1;
+    const turnRequestId = `dialogue-turn-${this._turnSequence}`;
 
     try {
       try {
@@ -978,6 +964,8 @@ export class NpcDialogueService
           outcome: options.outcome,
           playerInput: options.playerInput,
           onChunk: options.onChunk,
+          deadlineAt: turnDeadlineAt,
+          requestId: turnRequestId,
         });
       } catch (error) {
         if (this._isAbortError(error)) {
@@ -1852,6 +1840,8 @@ export class NpcDialogueService
     gameStateFacts: string[];
     playerContext: { characterSheetSummary: string; level: number; classId: string };
     onChunk?: (text: string) => void;
+    deadlineAt: number;
+    requestId: string;
   }): Promise<NpcIntentAnalysisOutput> {
     this.debug('_analyzeIntent:start');
 
@@ -1906,6 +1896,8 @@ export class NpcDialogueService
           onChunk,
           path: 'intent-narrative',
           call: 1,
+          deadlineAt: options.deadlineAt,
+          requestId: options.requestId,
         }),
         'intent-narrative',
       );
@@ -1926,6 +1918,8 @@ export class NpcDialogueService
             signal: options.signal,
             path: 'intent-envelope',
             call: 2,
+            deadlineAt: options.deadlineAt,
+            requestId: options.requestId,
           }),
           'intent-envelope',
         );
@@ -2015,6 +2009,8 @@ export class NpcDialogueService
     outcome: 'pass' | 'fail';
     playerInput: string;
     onChunk?: (text: string) => void;
+    deadlineAt: number;
+    requestId: string;
   }): Promise<NpcRollResolutionOutput> {
     this.debug('_resolveRoll:start', {
       checkType: options.checkType,
@@ -2125,6 +2121,8 @@ export class NpcDialogueService
           onChunk,
           path: 'roll-narrative',
           call: 1,
+          deadlineAt: options.deadlineAt,
+          requestId: options.requestId,
         }),
         'roll-narrative',
       );
@@ -2143,6 +2141,8 @@ export class NpcDialogueService
             signal: options.signal,
             path: 'roll-envelope',
             call: 2,
+            deadlineAt: options.deadlineAt,
+            requestId: options.requestId,
           }),
           'roll-envelope',
         );

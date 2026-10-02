@@ -18,10 +18,9 @@ deadline reaches the transport. The route a request was admitted and coalesced
 under is the route it is dispatched to. The gateway's per-attempt events are
 consumed in production, once per provider bill. A prepared NPC greeting is
 revalidated when the player actually sees it. A failed digest gives its
-transcript lines back in the order they happened. And the two things #422 could
-not measure — the reasoning on/off comparison and the gameplay-path timings —
-were rerun against a live runtime, with the code kept separate from the claims
-where a measurement is blocked.
+transcript lines back in the order they happened. The reasoning on/off probe ran
+against a live runtime. Gameplay-path timings used a simulated adapter, as described in §4.1; they measure client scheduling,
+admission and accounting. Live gameplay latency remains unmeasured.
 
 ---
 
@@ -250,7 +249,9 @@ width the evidence actually has.
 
 `bun run --cwd apps/frontend/client probe:ai-gameplay-path`
 Raw evidence: `.evidence/382-gameplay-path/gameplay-path-full.json`
-(regenerable, gitignored).
+(regenerable, gitignored). Rerun on 2026-10-02 with distinct per-request prompts
+in the cold-start and drain scenarios. Client tests ran concurrently in the
+same sandbox, so timer gaps include that host load.
 
 > 🔴 **This is a simulation.** The adapter behind the gateway is a timer
 > (400 ms service, 60 ms headers). Every number below describes **Aikami's
@@ -263,26 +264,26 @@ Raw evidence: `.evidence/382-gameplay-path/gameplay-path-full.json`
 
 | background width | dialogue queue | dialogue total | background dispatched | provider attempts | max frame gap | frames > 32 ms |
 |---|---|---|---|---|---|---|
-| 0 | 0 ms | 402 ms | 0 | 1 | 17 ms | 0 |
-| 1 | 0 ms | 401 ms | 1 | 2 | 17 ms | 0 |
-| 2 | 0 ms | 401 ms | 2 | 3 | 18 ms | 0 |
-| 4 | 0 ms | 401 ms | 4 | 5 | 17 ms | 0 |
+| 0 | 0 ms | 407 ms | 0 | 1 | 21 ms | 0 |
+| 1 | 0 ms | 401 ms | 1 | 2 | 21 ms | 0 |
+| 2 | 0 ms | 401 ms | 2 | 3 | 20 ms | 0 |
+| 4 | 0 ms | 401 ms | 4 | 5 | 20 ms | 0 |
 
 The production sequence is reproduced: the map loads, N remembered NPCs queue
 their digests, and the player walks up to someone. **Dialogue time is flat across
-the burst width and the dialogue queue is zero at every width** — the quiet window
-is doing what it was added to do, and the foreground pays nothing for the
-background. Browser frame cadence held at ~16.7 ms with zero long frames in all
-500 samples.
+the burst width and the dialogue queue is zero at every width** in this
+simulation. A 16 ms event-loop timer sampled each width for 2 seconds: 122, 123,
+124 and 123 samples respectively (492 total), with zero gaps over 32 ms. This
+is timer cadence in Bun, not browser rendering or GPU contention evidence.
 
 **Quiet window** (a dialogue arrives at half the window):
 
 | window | background queue wait |
 |---|---|
-| 0 ms | 0 ms |
-| 500 ms | 1 152 ms |
-| 1 500 ms | 2 652 ms |
-| 3 000 ms | 4 904 ms |
+| 0 ms | 1 ms |
+| 500 ms | 1 159 ms |
+| 1 500 ms | 2 688 ms |
+| 3 000 ms | 4 908 ms |
 
 The window is re-armed by interactive activity, so a mid-window arrival pushes
 background *further* out rather than letting it through. That is the intended
@@ -294,21 +295,35 @@ completed. The distinction is the point: queued work is cancellable and must cos
 nothing; already-dispatched work may still finish, and this report does not claim
 an HTTP abort reclaims model compute.
 
-**Cold start** (first admission on an idle domain vs. warm): cold and warm
-medians are within 1 ms at every width (1, 2, 4). **Maximum concurrent adapter
-calls is 1 at every width** — the one-background-at-a-time rule holds, which is
-what makes width-4 not four times width-1.
+**Cold start** (first admission on an idle domain vs. warm; distinct prompts
+for every request):
+
+| width | cold median | warm median | provider attempts (both bursts) | peak concurrent calls |
+|---|---|---|---|---|
+| 1 | 402 ms | 404 ms | 2 | 1 |
+| 2 | 609 ms | 607 ms | 4 | 1 |
+| 4 | 1 006 ms | 1 005 ms | 8 | 1 |
+
+Cold and warm differ by at most 2 ms here; there is no model-loading cost in the
+simulated adapter. The one-background-at-a-time rule holds, and the median wait
+increases with burst width because distinct requests each consume service time.
+The previous identical prompts measured coalescing and could not establish
+queue-drain behavior.
 
 **Long context** (200 / 8 000 / 64 000 prompt characters): identical client
 scheduling at every size, as it must be. A 100 ms caller budget on a 400 ms call
-clamps at **100 ms**, with **1 dispatch and 0 completed attempts** — the honest
+clamps at **101–107 ms**, with **1 dispatch and 0 completed attempts** — the honest
 report of a request that was sent, cost a bill, and was cut. Prompt size changes
 provider cost, not client scheduling; this probe does not measure provider cost.
 
-**Queue drain** (6 background units, 300 ms window): 6 admitted, 0 dropped, queue
-wait median 0 ms / max 300 ms, **1 provider attempt, max 1 concurrent**, frame
-cadence max gap 17 ms with zero frames over 32 ms. The gate's one-at-a-time rule
-serialises correctly and costs the event loop nothing.
+**Queue drain** (6 distinct background prompts, 300 ms window): 6 admitted,
+0 dropped, queue wait median **2 053 ms** / max **3 811 ms**, **6 provider
+attempts, max 1 concurrent**. The window is applied between serial admissions,
+so waiting accumulates across the burst. The 4-second timer window collected
+246 samples, with max gap 21 ms and zero gaps over 32 ms. These samples cover the
+sampling window, not necessarily the final request's completion. This establishes
+serial admission of separate attempts; the previous single-attempt result was
+coalescing, not a six-request drain.
 
 **Coalescing** (5 identical subscribers): 5 answered, **1 provider attempt**.
 
@@ -319,6 +334,9 @@ Raw evidence: `.evidence/382-reasoning-control/reasoning-control.json`.
 
 **Configuration.** Ollama 0.34.3, `ornith-1.5:9b` (Q4_K_M), native `/api/chat`,
 CPU-only. 4 reps per cell. `status: measured`; 48/48 requests connected.
+This table retains the original live run. The 2026-10-02 correction uses the
+production opener limit exactly; its quality counts have not been remeasured
+against a live runtime.
 
 **Method, stated rather than assumed.** Cold is established by
 `POST /api/generate {keep_alive: 0}` followed by `GET /api/ps` confirming absence;
@@ -350,8 +368,8 @@ and it is the failure a schema check exists to miss. A runtime that ignores
 
 **The finding is a quality regression, not a latency trade.** On the digest and
 opener tasks, reasoning-on consumed the entire 600-token prediction budget in the
-thinking channel and returned **truncated, non-JSON content** in 15 of 16
-requests. The single schema-valid reasoning-on response was a fluke, not a mode.
+thinking channel and returned **truncated, non-JSON content** in 14 of 16
+requests. The other 2 reasoning-on responses were schema-valid and quality-valid.
 Reasoning-off returned well-formed, quality-valid output in 16 of 16.
 
 Session-summary is the exception: its thinking stays short enough (353–404
@@ -380,7 +398,7 @@ separate piece of work with its own evidence.
 
 ## 5. Retired and rejected candidates
 
-### 5.1 Retired by measurement (previously proposed, now closed)
+### 5.1 Candidate decisions and measurement limits
 
 - **Private cross-NPC prompt aggregation.** One request carrying several NPCs'
   private memory into a single model call. **Rejected.** It merges content the
@@ -396,10 +414,13 @@ separate piece of work with its own evidence.
   for the risk, and the hits that existed were openers whose semantic inputs
   were unchanged — which the fingerprint check now handles by *re-dating*, with
   no stored model output at all.
-- **Application-level batching of MAP_LOADED opener work.** **Retired.** The
-  admission gate serialises the burst without batching it, and §4.1 shows the
-  dialogue pays nothing for the burst. Batching would have added a coordinator
-  and a shared failure domain to solve a problem the queue already solves.
+- **Application-level batching of MAP_LOADED opener work.** **Deferred pending
+  live workload measurements.** The corrected simulation shows that admission
+  preserves foreground dispatch while six distinct background requests incur
+  six attempts and accumulate up to 3 811 ms of queue wait. It does not establish
+  that batching offers no benefit to background latency or provider cost. A
+  live comparison must weigh those possible benefits against coordination and
+  shared failure handling before closing this candidate.
 
 ### 5.2 Rejected for this lane
 
@@ -411,11 +432,11 @@ separate piece of work with its own evidence.
 
 ### 5.3 Reconsideration bar
 
-Both rejected candidates stay rejected unless a **new compatible workload
-measurement** appears: evidence that a real session produces concurrent,
+Reconsider aggregation or result caching, and evaluate deferred batching, only
+with a **compatible live workload measurement**: evidence that a real session produces concurrent,
 same-campaign, semantically-independent NPC turns at a rate that makes merging
-them cheaper than the coordination they cost. No such measurement exists today,
-and the one in §4.1 points the other way.
+them cheaper than the coordination they cost. No such live measurement exists today. Section 4.1 establishes client queue
+behavior and leaves the batching comparison open.
 
 ---
 
@@ -464,6 +485,8 @@ touching the deadline or route wiring.
 
 ## 7. Validation performed
 
+Original implementation results (before the 2026-10-02 review corrections):
+
 | Check | Result |
 |---|---|
 | `moon run client:test` | 4 570 pass, 0 fail, 7 skip, 2 todo (345 files) |
@@ -474,8 +497,9 @@ touching the deadline or route wiring.
 | Structural guards | 10/10 pass; two baselines **shrank**, none raised |
 
 Probes are run manually and their output lands in `.evidence/` (gitignored,
-regenerable). Neither probe is a test and neither is wired into CI: they need a
-live runtime and take minutes. A failed or unavailable probe is recorded as
+regenerable). Neither probe is a test and neither is wired into CI. The reasoning-control
+probe needs a live runtime; the gameplay-path probe uses a simulated adapter.
+A failed or unavailable probe is recorded as
 `blocked` with its reason and exits non-zero — it is never reported as a pass.
 
 ---

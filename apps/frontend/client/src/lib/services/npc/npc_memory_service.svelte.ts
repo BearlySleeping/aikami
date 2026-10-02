@@ -298,14 +298,14 @@ class NpcMemoryService
       // on a provider call would trade a cosmetic staleness for a multi-second
       // wait on the one interaction that must never wait.
       this.debug('resolveGreeting:rejected', { npcId: npc.npcId, reason: rejection });
-      void this._prefetchOpener(npc.npcId);
+      void this._prefetchOpener({ npcId: npc.npcId, validation: { rejection } });
       return npc;
     }
     // An opener that has merely AGED is still shown: nothing it depends on
     // changed, so it is still the right line, and the background refresh below
     // will re-date it without asking the provider anything. Age bounds how
     // often memory is looked at; it does not decide what is true.
-    void this._prefetchOpener(npc.npcId);
+    void this._prefetchOpener({ npcId: npc.npcId, validation: { rejection } });
     const opener = record?.opener;
     /* c8 ignore next -- _revalidateOpener only returns undefined for a usable opener */
     if (!opener) {
@@ -332,7 +332,7 @@ class NpcMemoryService
       (entry) => entry.npcName.trim().toLowerCase() === key,
     );
     if (record) {
-      void this._prefetchOpener(record.npcId);
+      void this._prefetchOpener({ npcId: record.npcId });
     }
   }
 
@@ -344,7 +344,7 @@ class NpcMemoryService
       .sort((a, b) => b.lastTalkedAt - a.lastTalkedAt)
       .slice(0, NPC_MEMORY_MAP_PREFETCH_LIMIT);
     for (const record of remembered) {
-      void this._prefetchOpener(record.npcId);
+      void this._prefetchOpener({ npcId: record.npcId });
     }
   }
 
@@ -425,9 +425,19 @@ class NpcMemoryService
   }
 
   /** Refreshes a remembered NPC's opener when missing, expired or unshowable. */
-  private _prefetchOpener(npcId: string): Promise<void> {
+  private _prefetchOpener(options: {
+    npcId: string;
+    validation?: { rejection: OpenerRejection | undefined };
+  }): Promise<void> {
+    const { npcId, validation } = options;
     const record = this._getRecord(npcId);
-    if (!record || !this._needsOpener(record)) {
+    if (!record) {
+      return Promise.resolve();
+    }
+    const needsOpener = validation
+      ? this._isOpenerAged(record) || validation.rejection !== undefined
+      : this._needsOpener(record);
+    if (!needsOpener) {
       return Promise.resolve();
     }
     const now = Date.now();

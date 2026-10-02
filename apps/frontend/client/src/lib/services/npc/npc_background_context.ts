@@ -88,7 +88,7 @@ export type NpcBackgroundContextReader = {
   /** Drops every compiled prompt — called on campaign switch and teardown. */
   clear(): void;
   /** Compiled-prompt cache counters, for the #382 measurement. */
-  cacheStats(): NpcPromptCache['stats'];
+  cacheStats(): ReturnType<NpcPromptCache['stats']>;
 };
 
 /**
@@ -125,18 +125,18 @@ export const createNpcBackgroundContextReader = (options: {
   const subjectOf = (subject: NpcBackgroundSubject): NpcBackgroundInputs => inputs(subject);
 
   return {
-    inputs,
+    inputs: subjectOf,
     cacheStats() {
-      return promptCache.stats;
+      return promptCache.stats();
     },
     digestSystemPrompt(subject: NpcBackgroundSubject): string {
-      const { persona } = subjectOf(subject);
+      const persona = readPersona(subject);
       return promptCache.get(digestSystemPromptKey(persona, subject.npcName), () =>
         buildDigestSystemPrompt({ persona, npcName: subject.npcName }),
       ).text;
     },
     openerSystemPrompt(subject: NpcBackgroundSubject): string {
-      const { persona } = subjectOf(subject);
+      const persona = readPersona(subject);
       return promptCache.get(openerSystemPromptKey(persona, subject.npcName), () =>
         buildOpenerSystemPrompt({ persona, npcName: subject.npcName }),
       ).text;

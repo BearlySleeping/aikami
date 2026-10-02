@@ -210,6 +210,7 @@ export const createStreamSpan = (options: {
         signal: AbortSignal.any([signal, deadline.signal]),
         onResolve: (resolved) => {
           observation.resolution = resolved;
+          observation.dispatched = true;
           exposeRouting(resolved);
         },
       });
