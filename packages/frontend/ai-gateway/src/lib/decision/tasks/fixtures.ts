@@ -11,6 +11,8 @@
 
 import type { EvaluationCase } from '../metrics.ts';
 import { assertCaseIntegrity, toEvaluationCase } from '../metrics.ts';
+import npcActionDevFile from './fixtures/npc_action_selection_dev.json';
+import npcActionHeldOutFile from './fixtures/npc_action_selection_heldout.json';
 import devFile from './fixtures/npc_command_kind_dev.json';
 import heldOutFile from './fixtures/npc_command_kind_heldout.json';
 
@@ -102,6 +104,84 @@ export const NPC_COMMAND_KIND_HELDOUT = asFixtureFile(heldOutFile, 'npc_command_
 export const NPC_COMMAND_KIND_SPLITS: Readonly<Record<'dev' | 'heldout', DecisionFixtureFile>> = {
   dev: NPC_COMMAND_KIND_DEV,
   heldout: NPC_COMMAND_KIND_HELDOUT,
+};
+
+/**
+ * The `npc-action-selection` corpus (lane C).
+ *
+ * Each case carries an EXTRA `options` array the probe corpus does not have:
+ * the legal action set for that NPC in that world state. `EvaluationCase`
+ * ignores it, so these cases are still ordinary `EvaluationCase`s to the
+ * scorer; the measurement driver reads the option set to compile a per-case
+ * plan. The shared scorer is reused unchanged, deliberately.
+ */
+export type NpcActionFixtureCase = EvaluationCase & {
+  readonly npcId: string;
+  readonly options: readonly { readonly id: string; readonly description: string }[];
+  readonly rationale: string;
+};
+
+/** The development split for `npc-action-selection`. */
+export const NPC_ACTION_SELECTION_DEV = asFixtureFile(
+  npcActionDevFile,
+  'npc_action_selection_dev.json',
+) as unknown as { cases: readonly NpcActionFixtureCase[] } & Omit<DecisionFixtureFile, 'cases'>; // guard-ignore lint/type-safety/casting: TypeBox schema cast for AI envelope or rAF polyfill
+
+/** The held-out split for `npc-action-selection`. */
+export const NPC_ACTION_SELECTION_HELDOUT = asFixtureFile(
+  npcActionHeldOutFile,
+  'npc_action_selection_heldout.json',
+) as unknown as { cases: readonly NpcActionFixtureCase[] } & Omit<DecisionFixtureFile, 'cases'>; // guard-ignore lint/type-safety/casting: TypeBox schema cast for AI envelope or rAF polyfill
+
+/** Both `npc-action-selection` splits, keyed the way the evaluator gates on. */
+export const NPC_ACTION_SELECTION_SPLITS = {
+  dev: NPC_ACTION_SELECTION_DEV,
+  heldout: NPC_ACTION_SELECTION_HELDOUT,
+} as const;
+
+/**
+ * Loads the lane C corpus and checks integrity.
+ *
+ * Reuses {@link assertCaseIntegrity} rather than writing a second integrity
+ * check, and adds the two rules this corpus can violate that the probe's
+ * cannot: a case whose label is not in its OWN option set, and a duplicate
+ * case id across splits.
+ */
+export const loadNpcActionSelectionCorpus = (): {
+  readonly splits: Readonly<Record<'dev' | 'heldout', readonly NpcActionFixtureCase[]>>;
+  readonly problems: readonly string[];
+} => {
+  const problems: string[] = [
+    ...assertCaseIntegrity(NPC_ACTION_SELECTION_DEV.cases),
+    ...assertCaseIntegrity(NPC_ACTION_SELECTION_HELDOUT.cases),
+  ];
+  const seen = new Set<string>();
+  for (const testCase of [
+    ...NPC_ACTION_SELECTION_DEV.cases,
+    ...NPC_ACTION_SELECTION_HELDOUT.cases,
+  ]) {
+    if (seen.has(testCase.caseId)) {
+      problems.push(`case id ${testCase.caseId} appears in both splits`);
+    }
+    seen.add(testCase.caseId);
+    // The integrity rule this task exists to make possible: a label must name
+    // an option the case's own NPC was actually offered.
+    if (
+      testCase.expected !== null &&
+      !testCase.options.some((option) => option.id === testCase.expected)
+    ) {
+      problems.push(
+        `case ${testCase.caseId} expects ${testCase.expected}, which is not in ${testCase.npcId}'s option set`,
+      );
+    }
+    if (testCase.options.length === 0) {
+      problems.push(`case ${testCase.caseId} offers no options, so no answer is expressible`);
+    }
+  }
+  return {
+    splits: { dev: NPC_ACTION_SELECTION_DEV.cases, heldout: NPC_ACTION_SELECTION_HELDOUT.cases },
+    problems,
+  };
 };
 
 /**

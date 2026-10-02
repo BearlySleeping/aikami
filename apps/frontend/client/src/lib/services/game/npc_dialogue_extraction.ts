@@ -19,7 +19,7 @@
 // decides what a rejection means. The caller logs the rejection and chooses
 // the degrade path. Nothing in here knows about deadlines or cancellation.
 
-import { NpcDialogueExtractionSchema } from '@aikami/schemas';
+import { NpcDialogueChoicesExtractionSchema, NpcDialogueExtractionSchema } from '@aikami/schemas';
 import type { NpcDialogueChoice, NpcDialogueCommand } from '@aikami/types';
 import { Value } from 'typebox/value';
 
@@ -74,6 +74,63 @@ export function buildDialogueExtractionSystemPrompt(context: DialogueExtractionC
     `Allowed actions: ${context.allowedCommands.join(', ') || 'none'}.`,
     'Omit both fields when the narrative implies neither a command nor a choice.',
   ].join('\n');
+}
+
+/**
+ * Builds the call-2 system prompt for the narrowed, choices-only schema
+ * (C-568, issue #381).
+ *
+ * Used ONLY when an already-authorized decision has supplied the turn's
+ * command. The prompt no longer mentions commands at all: leaving the field in
+ * the instructions while removing it from the schema would ask the model to
+ * produce something it is about to be rejected for, which is the same wasted
+ * reasoning budget the narrowing exists to remove.
+ */
+export function buildDialogueChoicesSystemPrompt(context: DialogueExtractionContext): string {
+  return [
+    '[NPC CONTEXT]',
+    context.persona,
+    `You are ${context.npcName}, staying in character.`,
+    '',
+    '[EXTRACTION]',
+    'The narrative below was ALREADY spoken to the player, verbatim.',
+    'Do not rewrite, summarize, quote, continue or return it.',
+    '',
+    'Return only up to 4 short player options the player could pick next:',
+    'each with an "id" and a "label".',
+    '',
+    'Return no other fields, and no prose outside the JSON.',
+    'Return {} when the narrative implies no useful options.',
+  ].join('\n');
+}
+
+/** The metadata call 2 may return when the command is already decided. */
+export type DialogueChoicesExtraction = {
+  choices?: NpcDialogueChoice[];
+};
+
+/**
+ * Parses the narrowed, choices-only payload.
+ *
+ * Shares {@link parseDialogueExtraction}'s strictness: no repair path, unknown
+ * fields rejected. An empty object is VALID here too — "no options worth
+ * offering" is an ordinary outcome, not a failure.
+ */
+export function parseDialogueChoicesExtraction(rawOutput: unknown): DialogueExtractionParse {
+  if (!rawOutput || typeof rawOutput !== 'object') {
+    return { ok: false, reason: 'not-an-object' };
+  }
+  const candidate = rawOutput as Record<string, unknown>;
+  if ('command' in candidate) {
+    // The model produced a command this path did not ask for. Rejecting it
+    // rather than ignoring it keeps "the decision owns the command" a property
+    // the code enforces instead of one the prompt suggests.
+    return { ok: false, reason: 'schema-invalid', keys: Object.keys(candidate) };
+  }
+  if (Value.Check(NpcDialogueChoicesExtractionSchema, candidate)) {
+    return { ok: true, value: candidate as DialogueChoicesExtraction };
+  }
+  return { ok: false, reason: 'schema-invalid', keys: Object.keys(candidate) };
 }
 
 /**

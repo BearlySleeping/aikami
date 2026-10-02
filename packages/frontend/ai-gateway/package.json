@@ -4,7 +4,8 @@
   "main": "src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./decision": "./src/lib/decision/index.ts"
+    "./decision": "./src/lib/decision/index.ts",
+    "./decision/tasks": "./src/lib/decision/tasks/index.ts"
   },
   "scripts": {
     "test": "bun test",

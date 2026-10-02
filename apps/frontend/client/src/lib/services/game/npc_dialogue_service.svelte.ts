@@ -56,11 +56,13 @@ import { companionReactionService } from './companion_reaction_service.svelte.ts
 import { resolveAccounts } from './dramatic_structure_service';
 import { inventoryService } from './inventory_service.svelte.ts';
 import { narrativeEventService } from './narrative_event_service.svelte.ts';
-import { compareConsequenceDeltas } from './npc_consequence_order';
 import {
-  buildDialogueExtractionSystemPrompt,
-  parseDialogueExtraction,
-} from './npc_dialogue_extraction.ts';
+  noteDialogueSessionStarted,
+  planTurnExtraction,
+  runTurnExtraction,
+  type TurnExtractionParse,
+} from './npc_action_turn.ts';
+import { compareConsequenceDeltas } from './npc_consequence_order';
 import { buildNpcPersona } from './npc_dialogue_persona';
 import { buildNarrativeSystemPrompt } from './npc_dialogue_prompts';
 import { partyRosterService } from './party_roster_service.svelte.ts';
@@ -554,6 +556,7 @@ export class NpcDialogueService
       suggestionCount: initialSuggestions?.length ?? 0,
     });
 
+    noteDialogueSessionStarted();
     this._activeNpc = {
       npcId: options.npcData.npcId,
       npcName: options.npcData.npcName,
@@ -1020,14 +1023,6 @@ export class NpcDialogueService
     const { contextProjection, messages, signal, onChunk, deadlineAt, requestId } = options;
 
     const narrativeSystemPrompt = this._buildNarrativeSystemPrompt(contextProjection);
-    // Call 2's prompt asks only for state-changing metadata — never for a
-    // narrative, which call 1 already streamed (C-401, issue #382).
-    const extractionSystemPrompt = buildDialogueExtractionSystemPrompt({
-      persona: contextProjection.persona,
-      npcName: contextProjection.npcName,
-      allowedCommands: contextProjection.allowedCommands,
-    });
-
     // Build adapter messages: system + conversation (bounded window)
     const conversationMessages = messages
       .slice(-20) // bounded memory window — last 20 turns max
@@ -1079,27 +1074,38 @@ export class NpcDialogueService
         throw new Error('AI dialogue produced no narrative; refusing to report a successful turn');
       }
 
-      // ── Call 2: extract command metadata from the spoken narrative ──
+      // C-568: a decision may supply the command; call 2 then asks for `choices`.
       this.turnState = { kind: 'awaiting_envelope', text: narrative };
-      let rawExtraction: unknown;
+      const activeCampaignId = campaignService.activeCampaign?.id;
+      const plan = await planTurnExtraction({
+        npcId: options.turnCtx.npcId,
+        npcName: options.turnCtx.npcName,
+        persona: contextProjection.persona,
+        allowedCommands: contextProjection.allowedCommands,
+        npcEntry: options.turnCtx.npcEntry,
+        narrative,
+        offerableQuests: questStateService.getOfferableQuests(options.turnCtx.npcId),
+        discoverableEvidence: questStateService.getDiscoverableEvidence(activeCampaignId),
+        deadlineAt,
+        signal,
+        turnSequence: this._turnSequence,
+        currentCampaignId: () => activeCampaignId,
+        log: (detail: Record<string, unknown>) => this.info('npc action decision', detail),
+      });
+
+      let parsedExtraction: TurnExtractionParse;
       try {
-        rawExtraction = await this._withTimeout(
+        parsedExtraction = await runTurnExtraction(plan, (config) =>
           this._extractEnvelope({
             narrative,
-            systemPrompt: extractionSystemPrompt,
-            // C-401 call 2 extracts metadata only. The narrative was already
-            // produced and streamed by call 1, and the prompt tells the model
-            // not to return it; asking for it again spent the whole budget
-            // regenerating prose the client already holds (issue #382).
-            schema: NpcDialogueExtractionSchema as unknown as Record<string, unknown>, // guard-ignore lint/type-safety/casting: TypeBox schema cast for AI envelope or rAF polyfill
-            schemaName: 'NpcDialogueExtraction',
+            ...config,
+            schema: config.schema as Record<string, unknown>,
             signal,
             path: 'turn-envelope',
             call: 2,
             deadlineAt,
             requestId,
           }),
-          'envelope',
         );
       } catch (error) {
         this._checkAbort(signal);
@@ -1109,22 +1115,16 @@ export class NpcDialogueService
       }
       this._checkAbort(signal);
 
-      // ── Parse and validate the extraction ──────────────────────────
-      const parsed = parseDialogueExtraction(rawExtraction);
-
-      if (!parsed.ok) {
-        // Malformed extraction — same AC-7 degrade path.
-        this.warn('_generateAiTurn:invalid-extraction', {
-          narrativeLength: narrative.length,
-          reason: parsed.reason,
-          extractionKeys: 'keys' in parsed ? parsed.keys : [],
-        });
+      if (!parsedExtraction.ok) {
+        this.warn('_generateAiTurn:invalid-extraction', { narrativeLength: narrative.length });
         return this._assembleNarrativeTurn({ narrative, contextProjection });
       }
 
+      // A decided command came from an authorized candidate and still goes
+      // through `_validateCommandPreconditions` below.
       const finalNarrative = narrative;
-      const command = parsed.value.command;
-      let choices = this._filterChoices(parsed.value.choices ?? []);
+      const command = plan.decidedByDecision ? plan.command : parsedExtraction.value.command;
+      let choices = this._filterChoices(parsedExtraction.value.choices ?? []);
 
       // If no choices came back, derive from context
       if (choices.length === 0) {

@@ -14,13 +14,51 @@ export {
   type EvaluatorTask,
   NPC_COMMAND_KIND_TASK,
 } from '../evaluator.ts';
-export type { DecisionFixtureFile, DecisionFixtureProvenance } from './fixtures.ts';
+export type { ChatModelDecisionAdapterOptions } from './chat_model_baseline_adapter.ts';
+export { createChatModelDecisionAdapter } from './chat_model_baseline_adapter.ts';
 export {
   loadDecisionCorpus,
+  loadNpcActionSelectionCorpus,
+  NPC_ACTION_SELECTION_DEV,
+  NPC_ACTION_SELECTION_HELDOUT,
+  NPC_ACTION_SELECTION_SPLITS,
   NPC_COMMAND_KIND_DEV,
   NPC_COMMAND_KIND_HELDOUT,
   NPC_COMMAND_KIND_SPLITS,
 } from './fixtures.ts';
+export type { NpcActionSelectionProbe } from './npc_action_selection.ts';
+// ---------------------------------------------------------------------------
+// The production task (lane C). Everything here is reachable from
+// `@aikami/frontend-ai-gateway/decision/tasks` and from the measurement
+// runner; `decision/index.ts` deliberately does NOT re-export it, because a
+// task is not part of the dispatch contract a consumer needs.
+// ---------------------------------------------------------------------------
+export {
+  isStateChangingAction,
+  NPC_ACTION_NONE_ID,
+  NPC_ACTION_SELECTION_COMPARATOR,
+  NPC_ACTION_SELECTION_LATENCY_GATE,
+  NPC_ACTION_SELECTION_LITERALS,
+  NPC_ACTION_SELECTION_OMISSIONS,
+  NPC_ACTION_SELECTION_OPTION_DESCRIPTIONS,
+  NPC_ACTION_SELECTION_POLICY,
+  NPC_ACTION_SELECTION_QUALITY_GATE,
+  NPC_ACTION_SELECTION_SCHEMA,
+  NPC_ACTION_SELECTION_TASK_ID,
+  NPC_ACTION_SELECTION_TASK_VERSION,
+  npcActionSelectionPolicy,
+  npcActionSelectionSchema,
+  parseActionLiteral,
+} from './npc_action_selection.ts';
+export type {
+  MeasureNpcActionSelectionOptions,
+  NpcActionCorpusCase,
+  NpcActionMeasurement,
+  NpcActionMeasurementCase,
+  NpcActionMeasurementConditions,
+  NpcActionMeasurementSplit,
+} from './npc_action_selection_measurement.ts';
+export { formatSlice, measureNpcActionSelection } from './npc_action_selection_measurement.ts';
 export type { NpcCommandKindProbe } from './npc_command_kind.ts';
 export {
   isStateChangingCommand,
