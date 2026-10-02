@@ -4,7 +4,7 @@
 // shape, default params per capability, draft identity for probe invalidation,
 // model-test messaging, and unique label allocation. No state, no services.
 
-import type { ImageParams, TextParams, VoiceParams } from '@aikami/types';
+import type { DecisionParams, ImageParams, TextParams, VoiceParams } from '@aikami/types';
 import type { ConnectionCapability, ConnectionId } from '$types';
 import { DEFAULT_IMAGE_PARAMS } from './ai_image_section';
 
@@ -54,15 +54,26 @@ export const DEFAULT_TEXT_PARAMS: TextParams = {
   contextSize: 4096,
 };
 
+/** Default decision params. Runtime `jev` is the safe default, not `ollama`. */
+export const DEFAULT_DECISION_PARAMS: DecisionParams = {
+  checkpoint: '',
+  runtime: 'jev',
+  languages: ['en'],
+  qualifiedForGameplay: false,
+};
+
 /** Default params for a new connection of the given capability. */
 export const defaultParamsForCapability = (
   capability: ConnectionCapability,
-): TextParams | ImageParams | VoiceParams => {
+): TextParams | ImageParams | VoiceParams | DecisionParams => {
   if (capability === 'voice') {
     return { voiceId: '', speed: 1.0, pitch: 0 } as VoiceParams;
   }
   if (capability === 'image') {
     return DEFAULT_IMAGE_PARAMS;
+  }
+  if (capability === 'decision') {
+    return { ...DEFAULT_DECISION_PARAMS };
   }
   return { ...DEFAULT_TEXT_PARAMS };
 };

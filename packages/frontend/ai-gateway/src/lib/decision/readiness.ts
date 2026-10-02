@@ -69,7 +69,9 @@ export type DecisionReadinessState =
   /** No budget left to finish the probe. */
   | 'deadline-exceeded'
   /** The caller cancelled before the probe finished. */
-  | 'cancelled';
+  | 'cancelled'
+  /** The configuration cannot answer the question it asked (e.g. Ollama with no version route). */
+  | 'misconfigured';
 
 /** One readiness outcome. */
 export type DecisionReadinessVerdict = {
@@ -155,6 +157,9 @@ const stateForNotReady = (capability: DecisionCapability): DecisionReadinessStat
   // problem is bad credentials or a missing route. Transport and auth outcomes
   // are matched first; unrecognised reasons stay `unreachable`.
   const reason = capability.notReadyReason ?? '';
+  if (/no runtime version endpoint|requires a version endpoint|misconfigur/i.test(reason)) {
+    return 'misconfigured';
+  }
   if (/cancelled|aborted by (the )?caller/i.test(reason)) {
     return 'cancelled';
   }
@@ -473,6 +478,8 @@ export const describeDecisionReadiness = (
       return [{ id: 'decision.setup.deadline', detail: verdict.reason }];
     case 'cancelled':
       return [{ id: 'decision.setup.cancelled', detail: verdict.reason }];
+    case 'misconfigured':
+      return [{ id: 'decision.setup.misconfigured', detail: verdict.reason }];
     default:
       return [{ id: 'decision.setup.unreachable', detail: verdict.reason }];
   }

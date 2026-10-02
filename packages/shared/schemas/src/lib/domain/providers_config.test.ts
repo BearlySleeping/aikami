@@ -8,7 +8,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { TSchema } from 'typebox';
 import { Value } from 'typebox/value';
-import { RoutingSchema, VaultPayloadV3Schema } from './providers_config.ts';
+import { DecisionParamsSchema, RoutingSchema, VaultPayloadV3Schema } from './providers_config.ts';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -208,5 +208,59 @@ describe('C-481: RoutingSchema', () => {
     expect(validate(RoutingSchema, absentOverride)).toBe(true);
     expect(validate(RoutingSchema, pinnedOverride)).toBe(true);
     expect(validate(RoutingSchema, disabledOverride)).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// #381: the decision capability and role
+// ---------------------------------------------------------------------------
+
+describe('#381: decision capability, role and params', () => {
+  test('a decision connection validates with its own params shape', () => {
+    const payload = makeV3Payload({
+      providers: [
+        {
+          id: UUID(),
+          registryId: 'jev-external',
+          label: 'Jev-compatible server (local)',
+          source: 'stored',
+          baseUrl: 'http://127.0.0.1:8080',
+        },
+      ],
+      connections: [
+        {
+          id: UUID(),
+          providerId: UUID(),
+          capability: 'decision',
+          label: 'Laya · laya-nimble-q4',
+          model: 'laya-nimble-q4',
+          params: { checkpoint: 'laya-nimble-q4', runtime: 'jev', languages: ['en'] },
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+      roles: { decisions: UUID() },
+      routing: { defaults: { decision: UUID() }, overrides: { decisions: UUID() } },
+    });
+    expect(validate(VaultPayloadV3Schema, payload)).toBe(true);
+  });
+
+  test('a decision connection with NO checkpoint is rejected', () => {
+    expect(validate(DecisionParamsSchema, { runtime: 'jev' })).toBe(false);
+  });
+
+  test('a decision connection with an unknown runtime is rejected', () => {
+    expect(validate(DecisionParamsSchema, { checkpoint: 'n', runtime: 'vllm' })).toBe(false);
+  });
+
+  test('a chat model cannot be spelled as decision params', () => {
+    expect(validate(DecisionParamsSchema, { temperature: 0.7, topP: 1, maxTokens: 2048 })).toBe(
+      false,
+    );
+  });
+
+  test('an old v3 payload with no decision entries still validates', () => {
+    // Additive schema change: nothing has to be rewritten on load.
+    expect(validate(VaultPayloadV3Schema, makeV3Payload())).toBe(true);
   });
 });

@@ -21,7 +21,11 @@ export type {
   SystemOneEndpoints,
   SystemOneTransport,
 } from './adapters/systemone_adapter.ts';
-export { createSystemOneDecisionAdapter } from './adapters/systemone_adapter.ts';
+export {
+  createSystemOneDecisionAdapter,
+  decisionBackendId,
+  JEV_DECISION_LIMITS,
+} from './adapters/systemone_adapter.ts';
 export type {
   DecisionAdapter,
   DecisionAdapterResponse,
@@ -48,7 +52,73 @@ export type { DecisionDispatchPlan, DecisionDispatchRefusal } from './dispatch.t
 export { buildDecisionDispatch } from './dispatch.ts';
 export type { DecisionPlanCache } from './plan_cache.ts';
 export { createDecisionPlanCache } from './plan_cache.ts';
-export { bindDecisionPolicy, resolveBooleanPolicy } from './policy.ts';
+
+// ---------------------------------------------------------------------------
+// The ONE metric implementation. `live_measurement` re-exports it; the
+// evaluator CLI and the deterministic harness call it directly. There is no
+// second scorer left to disagree with.
+// ---------------------------------------------------------------------------
+
+export type {
+  CaseOutcome,
+  DecisionValueComparator,
+  EvaluationCase,
+  EvaluationCaseKind,
+  EvaluationLatencyGate,
+  EvaluationQualityGate,
+  EvaluationReport,
+  EvaluationSliceMetrics,
+  EvaluationTally,
+  LatencyConditionMethod,
+  LegacyEvaluationCase,
+} from './metrics.ts';
+export {
+  assertCaseIntegrity,
+  createEvaluationTally,
+  defaultDecisionValueComparator,
+  evaluateQualityGates,
+  evaluateSplit,
+  foldOutcome,
+  MIN_REPETITIONS_FOR_PERCENTILE,
+  median,
+  percentile,
+  scoreResult,
+  summarizeTally,
+  toEvaluationCase,
+} from './metrics.ts';
+
+// ---------------------------------------------------------------------------
+// Runtime-kind probes. Wire parsing is runtime-neutral; readiness is not.
+// ---------------------------------------------------------------------------
+
+export type {
+  DecisionRuntimeEndpoints,
+  DecisionRuntimeKind,
+  DecisionRuntimeProbeFailureState,
+  DecisionRuntimeProbeOptions,
+  DecisionRuntimeProbeResult,
+} from './runtime_probe.ts';
+export { DECISION_RUNTIME_KINDS, probeDecisionRuntime, runtimeLabel } from './runtime_probe.ts';
+
+// ---------------------------------------------------------------------------
+// The executable evaluator and the frozen task it runs.
+// ---------------------------------------------------------------------------
+
+export type {
+  EvaluateBackendOptions,
+  EvaluationArtifact,
+  EvaluationConditions,
+  EvaluationSplitArtifact,
+  EvaluationStatus,
+  EvaluatorTask,
+} from './evaluator.ts';
+export {
+  EVALUATION_ARTIFACT_VERSION,
+  EVALUATOR_TASKS,
+  evaluateBackend,
+  NPC_COMMAND_KIND_TASK,
+} from './evaluator.ts';
+export { bindDecisionPolicy, resolveBooleanPolicy, resolveChoicePolicy } from './policy.ts';
 export { reconstructDecisionValue } from './reconstruct.ts';
 export type { RunDecisionOptions } from './runner.ts';
 export { runDecision } from './runner.ts';
@@ -70,6 +140,7 @@ export type {
   DecisionLiteral,
   DecisionOption,
   DecisionPlan,
+  DecisionProbabilityPolicy,
   DecisionProvenance,
   DecisionQuestion,
   DecisionQuestionGroup,
@@ -109,11 +180,7 @@ export type {
   RunLiveMeasurementOptions,
   SplitMeasurement,
 } from './live_measurement.ts';
-export {
-  MIN_REPETITIONS_FOR_PERCENTILE,
-  measureSplit,
-  runLiveDecisionMeasurement,
-} from './live_measurement.ts';
+export { measureSplit, runLiveDecisionMeasurement } from './live_measurement.ts';
 export type {
   DecisionExperimentalPreference,
   DecisionRouteDecision,

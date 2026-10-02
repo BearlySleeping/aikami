@@ -340,6 +340,32 @@ describe('C-463 Migration: v1 → v2', () => {
 // ═══════════════════════════════════════════════════════════════════════════
 
 describe('C-481 Migration: v2 → v3', () => {
+  test('preserves a decision role without voting into a generation capability bucket', () => {
+    const v2: VaultPayloadV2 = {
+      schemaVersion: 2,
+      providers: [{ id: 'provider', registryId: 'jev-external', label: 'Jev', source: 'stored' }],
+      connections: [
+        {
+          id: 'decision',
+          providerId: 'provider',
+          capability: 'decision',
+          label: 'Nimble',
+          model: 'nimble',
+          params: { checkpoint: 'nimble', runtime: 'jev' },
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+      roles: { decisions: 'decision' },
+      userPresets: [],
+    };
+    const migrated = migrateVaultV2ToV3(v2);
+    expect(migrated.roles.decisions).toBe('decision');
+    expect(migrated.connections).toEqual(v2.connections);
+    expect(migrated.routing.defaults).toBeUndefined();
+    expect(migrated.routing.overrides?.decisions).toBe('decision');
+  });
+
   describe('Basic migration', () => {
     test('migrates empty v2 to v3', () => {
       const v2: VaultPayloadV2 = {

@@ -1314,3 +1314,116 @@ describe('P04: canonical mutators reproject legacy views', () => {
     expect(configService.state.connections.length).toBeGreaterThan(0);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════
+// #381: the decision backend resolves separately, and never as a text provider
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe('ConfigService — #381 decision backend resolution', () => {
+  const _get = async () => (await import('./config_service.svelte.ts')).configService;
+  const _reset = async () => {
+    const configService = await _get();
+    configService.state.providers = [];
+    configService.state.aiConnections = [];
+    configService.state.roles = {};
+    configService.state.connections = [];
+    configService.state.defaultByCapability = {};
+    configService.state.defaultConnectionId = null;
+    configService.state.routing = {};
+  };
+
+  beforeEach(async () => {
+    await _reset();
+  });
+
+  const _seedDecision = async (
+    over: {
+      registryId?: string;
+      baseUrl?: string;
+      credential?: string | undefined;
+      runtime?: 'ollama' | 'jev';
+      capability?: 'decision' | 'text';
+    } = {},
+  ) => {
+    const configService = await _get();
+    const providerId = configService.addProvider({
+      registryId: over.registryId ?? 'jev-external',
+      label: 'Jev-compatible server (local)',
+      baseUrl: over.baseUrl ?? 'http://127.0.0.1:8080',
+      source: 'stored',
+      ...(over.credential === undefined
+        ? { credential: 'jev-token' }
+        : { credential: over.credential }),
+    });
+    const connectionId = configService.addAiConnection({
+      providerId,
+      capability: over.capability ?? 'decision',
+      label: 'Laya · laya-nimble-q4',
+      model: 'laya-nimble-q4',
+      params:
+        over.capability === 'text'
+          ? {
+              temperature: 0.7,
+              topP: 1,
+              topK: 40,
+              repetitionPenalty: 1,
+              presencePenalty: 0,
+              maxTokens: 2048,
+              contextSize: 4096,
+            }
+          : { checkpoint: 'laya-nimble-q4', runtime: over.runtime ?? 'jev', languages: ['en'] },
+    });
+    configService.setRoleAssignment('decisions', connectionId);
+    return { configService, providerId, connectionId };
+  };
+
+  test('an unconfigured capability resolves to nothing, not to a chat model', async () => {
+    const configService = await _get();
+    expect(configService.resolveDecisionBackend()).toBeUndefined();
+  });
+
+  test('a saved decision backend resolves with its runtime, checkpoint and credential', async () => {
+    const { configService } = await _seedDecision();
+    const backend = configService.resolveDecisionBackend();
+    expect(backend?.runtime).toBe('jev');
+    expect(backend?.checkpoint).toBe('laya-nimble-q4');
+    expect(backend?.endpoint).toBe('http://127.0.0.1:8080');
+    expect(backend?.credential).toBe('jev-token');
+    // Nothing is qualified by being configured.
+    expect(backend?.qualifiedForGameplay).toBe(false);
+  });
+
+  test('a TEXT connection can never be served as a decision backend', async () => {
+    const { configService } = await _seedDecision({ capability: 'text' });
+    expect(configService.resolveDecisionBackend()).toBeUndefined();
+  });
+
+  test('a decision connection is never resolved as a text provider', async () => {
+    const { configService, connectionId } = await _seedDecision();
+    expect(configService.resolveRole('decisions')).toBeUndefined();
+    expect(configService.resolveRole('dialogue')).toBeUndefined();
+    expect(configService.getAiConnection(connectionId)?.capability).toBe('decision');
+  });
+
+  test('clearing the role disables the backend', async () => {
+    const { configService } = await _seedDecision();
+    expect(configService.resolveDecisionBackend()).toBeDefined();
+    configService.clearRoleAssignment('decisions');
+    expect(configService.resolveDecisionBackend()).toBeUndefined();
+  });
+
+  test('a decision connection projects into the decision capability default', async () => {
+    const { configService } = await _seedDecision();
+    expect(configService.state.defaultByCapability.decision).toBeDefined();
+  });
+
+  test('an Ollama decision backend keeps its own runtime rather than inheriting a chat one', async () => {
+    const { configService } = await _seedDecision({
+      registryId: 'ollama',
+      baseUrl: 'http://127.0.0.1:11434',
+      credential: undefined,
+      runtime: 'ollama',
+    });
+    expect(configService.resolveDecisionBackend()?.runtime).toBe('ollama');
+  });
+});

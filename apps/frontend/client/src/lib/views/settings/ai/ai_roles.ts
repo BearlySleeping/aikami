@@ -17,6 +17,7 @@ export const ALL_ROLES: readonly AiRole[] = [
   'scene',
   'narrator-voice',
   'npc-voice',
+  'decisions',
 ] as const;
 
 /** Which capability a role is served by (mirrors the config service mapping). */
@@ -29,6 +30,7 @@ export const ROLE_CAPABILITY: Record<AiRole, ConnectionCapability> = {
   scene: 'image',
   'narrator-voice': 'voice',
   'npc-voice': 'voice',
+  decisions: 'decision',
 };
 
 /** A connection with the roles currently assigned to it. */

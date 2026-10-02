@@ -14,7 +14,7 @@
 
 import type { DecisionAdapter, DecisionRequest } from './adapters/types.ts';
 import { buildDecisionDispatch } from './dispatch.ts';
-import { resolveBooleanPolicy } from './policy.ts';
+import { resolveBooleanPolicy, resolveChoicePolicy } from './policy.ts';
 import { reconstructDecisionValue } from './reconstruct.ts';
 import {
   DEFAULT_DECISION_LIMITS,
@@ -23,6 +23,7 @@ import {
   type DecisionCapability,
   type DecisionDispatchUnit,
   type DecisionPlan,
+  type DecisionProbabilityPolicy,
   type DecisionProvenance,
   type DecisionResult,
   type DecisionTaskPolicy,
@@ -40,6 +41,16 @@ export type RunDecisionOptions = {
   readonly adapter: DecisionAdapter;
   /** The text the backend will read. */
   readonly context: string;
+  /**
+   * Overrides the policy's declared language for this call only.
+   *
+   * A per-case language slice cannot be measured by rewriting the policy: the
+   * policy is bound once, while the language actually used is a property of the
+   * content in front of the model. When the override is not a language the
+   * checkpoint declares, preflight abstains with `language-unsupported` — it
+   * never falls back to the policy's language and answers in the wrong one.
+   */
+  readonly language?: string;
   /** Absolute deadline in epoch ms. Never restarted by a retry. */
   readonly deadlineAt: number;
   readonly signal: AbortSignal;
@@ -120,11 +131,69 @@ const booleanAcceptable = (options: {
   return policy.fallback === 'llm' ? 'llm-fallback-required' : 'below-accept-threshold';
 };
 
+/**
+ * Applies the task's declared selective-acceptance policy to one choice answer.
+ *
+ * A choice is NOT safe because its key was legal. `probabilities` are the
+ * backend's own distribution over options — never a probability that the option
+ * is correct — so a task that wants selective acceptance must declare its own
+ * thresholds, calibrated on its development split and then applied untouched to
+ * the held-out split.
+ *
+ * When the task declares no `choicePolicy` there is nothing calibrated to apply
+ * and the answer is accepted as-is. That is deliberately the permissive branch:
+ * it is only correct for a task that has measured the absence of a problem, and
+ * the shipped decision task declares explicit thresholds rather than relying on
+ * it.
+ */
+const choiceAcceptable = (options: {
+  answer: DecisionAnswer;
+  policy: DecisionProbabilityPolicy | undefined;
+}): DecisionAbstentionReason | undefined => {
+  const { answer, policy } = options;
+  if (policy === undefined || answer.probabilities === undefined) {
+    return undefined;
+  }
+  if (answer.optionKey === undefined) {
+    return 'below-accept-threshold';
+  }
+  const chosen = answer.probabilities[answer.optionKey];
+  if (typeof chosen !== 'number' || !Number.isFinite(chosen) || chosen < 0 || chosen > 1) {
+    return 'below-accept-threshold';
+  }
+  if (chosen >= policy.confidentProbability) {
+    return undefined;
+  }
+  if (chosen < policy.acceptProbability) {
+    return 'below-accept-threshold';
+  }
+  return policy.fallback === 'llm' ? 'llm-fallback-required' : 'below-accept-threshold';
+};
+
+/** Applies the task's declared selective-acceptance policy to every choice answer. */
+const choicesAcceptable = (
+  plan: DecisionPlan,
+  answers: readonly DecisionAnswer[],
+  policy: DecisionProbabilityPolicy | undefined,
+): DecisionAbstentionReason | undefined => {
+  const byKey = new Map(plan.questions.map((question) => [question.key, question]));
+  const reasons = answers
+    .filter((answer) => {
+      const kind = byKey.get(answer.questionKey)?.kind;
+      return kind === 'choice' || kind === 'combination';
+    })
+    .map((answer) => choiceAcceptable({ answer, policy }));
+  return reasons.includes('below-accept-threshold')
+    ? 'below-accept-threshold'
+    : reasons.find((reason) => reason !== undefined);
+};
+
 /** Readiness, primitive and language gates before dispatch. */
 const checkPreflight = (options: {
   capability: DecisionCapability;
   plan: DecisionPlan;
   policy: DecisionTaskPolicy;
+  language?: string;
 }): DecisionAbstentionReason | undefined => {
   if (!options.capability.ready) {
     return 'backend-unavailable';
@@ -136,8 +205,10 @@ const checkPreflight = (options: {
   ) {
     return 'schema-incompatible';
   }
-  const language = options.policy.language ?? 'en';
-  return options.capability.languages.includes(language) ? undefined : 'language-unsupported';
+  const language = options.language ?? options.policy.language ?? 'en';
+  return options.capability.languages.includes(language as DecisionCapability['languages'][number])
+    ? undefined
+    : 'language-unsupported';
 };
 
 /** Collects every answer from the dispatched units, or the refusal that stopped it. */
@@ -222,7 +293,12 @@ export const runDecision = async (options: RunDecisionOptions): Promise<Decision
   if (Date.now() >= options.deadlineAt) {
     return abort('deadline-exceeded');
   }
-  const preflight = checkPreflight({ capability, policy: options.policy, plan: options.plan });
+  const preflight = checkPreflight({
+    capability,
+    policy: options.policy,
+    plan: options.plan,
+    ...(options.language === undefined ? {} : { language: options.language }),
+  });
   if (preflight !== undefined) {
     return abstained({
       reason: preflight,
@@ -234,29 +310,14 @@ export const runDecision = async (options: RunDecisionOptions): Promise<Decision
     });
   }
 
-  const limits = { ...DEFAULT_DECISION_LIMITS, ...options.policy.limits };
-  const dispatch = buildDecisionDispatch({
-    plan: options.plan,
-    context: options.context,
-    limits: {
-      ...limits,
-      maxOptions: Math.min(limits.maxOptions, capability.maxOptions),
-      maxQuestions: Math.min(limits.maxQuestions, capability.maxQuestions),
-      maxContextBytes: Math.min(limits.maxContextBytes, capability.maxContextBytes),
-    },
-  });
-  if (!dispatch.ok) {
-    return abort(
-      dispatch.refusal.reason === 'context-too-large' ? 'context-too-large' : 'invalid-response',
-    );
-  }
-  if (dispatch.units.length === 0) {
-    return abort('invalid-response');
+  const units = dispatchUnits(options, capability);
+  if (!units.ok) {
+    return abort(units.reason);
   }
 
   const collected = await collectAnswers({
     plan: options.plan,
-    units: dispatch.units,
+    units: units.units,
     adapter: options.adapter,
     request: {
       deadlineAt: options.deadlineAt,
@@ -270,22 +331,20 @@ export const runDecision = async (options: RunDecisionOptions): Promise<Decision
     return abort(collected.reason);
   }
 
-  const observedCheckpoint = collected.checkpoint ?? capability.checkpoint;
-  const observedRuntime = collected.runtime ?? capability.runtime;
-
-  const booleanRefusal = booleansAcceptable(
-    options.plan,
-    collected.answers,
-    resolveBooleanPolicy(options.policy),
-  );
-  if (booleanRefusal !== undefined) {
+  const observed = {
+    ...capability,
+    checkpoint: collected.checkpoint ?? capability.checkpoint,
+    runtime: collected.runtime ?? capability.runtime,
+  };
+  const selective = selectiveRefusal(options, collected.answers);
+  if (selective !== undefined) {
     return abstained({
-      reason: booleanRefusal,
+      reason: selective,
       adapter: options.adapter,
       planCacheHit,
       startedAt,
       timings,
-      capability: { ...capability, checkpoint: observedCheckpoint, runtime: observedRuntime },
+      capability: observed,
     });
   }
 
@@ -301,8 +360,8 @@ export const runDecision = async (options: RunDecisionOptions): Promise<Decision
   const provenance: DecisionProvenance = {
     backendId: options.adapter.backendId,
     dialect: options.adapter.dialect,
-    checkpoint: observedCheckpoint,
-    runtime: observedRuntime,
+    checkpoint: observed.checkpoint,
+    runtime: observed.runtime,
     resourceId: capability.resourceId,
     outcome: 'accepted',
     timings: {
@@ -325,4 +384,51 @@ export const runDecision = async (options: RunDecisionOptions): Promise<Decision
   }
 
   return { ok: true, value: reconstruction.value, answers: collected.answers, provenance };
+};
+
+/**
+ * Applies both selective-acceptance policies.
+ *
+ * Booleans and choices are checked separately so a task that only calibrated one
+ * of them is not silently given the other's default.
+ */
+const selectiveRefusal = (
+  options: RunDecisionOptions,
+  answers: readonly DecisionAnswer[],
+): DecisionAbstentionReason | undefined =>
+  booleansAcceptable(options.plan, answers, resolveBooleanPolicy(options.policy)) ??
+  choicesAcceptable(options.plan, answers, resolveChoicePolicy(options.policy));
+
+/**
+ * Assembles the dispatch units, bounded by BOTH the task's limits and the
+ * backend's declared capability. A limit the backend reports wins, because a
+ * request the backend cannot hold is not a request it should be asked to hold.
+ */
+const dispatchUnits = (
+  options: RunDecisionOptions,
+  capability: DecisionCapability,
+):
+  | { ok: true; units: readonly DecisionDispatchUnit[] }
+  | { ok: false; reason: DecisionAbstentionReason } => {
+  const limits = { ...DEFAULT_DECISION_LIMITS, ...options.policy.limits };
+  const dispatch = buildDecisionDispatch({
+    plan: options.plan,
+    context: options.context,
+    limits: {
+      ...limits,
+      maxOptions: Math.min(limits.maxOptions, capability.maxOptions),
+      maxQuestions: Math.min(limits.maxQuestions, capability.maxQuestions),
+      maxContextBytes: Math.min(limits.maxContextBytes, capability.maxContextBytes),
+    },
+  });
+  if (!dispatch.ok) {
+    return {
+      ok: false,
+      reason:
+        dispatch.refusal.reason === 'context-too-large' ? 'context-too-large' : 'invalid-response',
+    };
+  }
+  return dispatch.units.length === 0
+    ? { ok: false, reason: 'invalid-response' }
+    : { ok: true, units: dispatch.units };
 };

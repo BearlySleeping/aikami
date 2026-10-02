@@ -367,6 +367,7 @@ describe('the probe never contacts a backend the caller did not supply', () => {
     try {
       const verdict = await probeWith(
         createSystemOneDecisionAdapter({
+          runtime: 'ollama',
           endpoints,
           model: 'nimble',
           languages: ['en'],

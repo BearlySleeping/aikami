@@ -11,6 +11,7 @@ export * from './lib/contract_pipeline.ts';
 export { allCountries } from './lib/country_codes.ts';
 export * from './lib/country_codes_phone_number.ts';
 export * from './lib/cyoa.ts';
+export * from './lib/decision_providers.ts';
 export * from './lib/degradation.ts';
 export * from './lib/dev_route_build.ts';
 export * from './lib/dev_services.ts';

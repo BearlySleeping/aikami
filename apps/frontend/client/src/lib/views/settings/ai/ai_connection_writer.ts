@@ -12,7 +12,14 @@
 // Every side effect goes through the `config` port, so the resolution is
 // exercisable without a store.
 
-import type { AiConnection, AiProvider, ImageParams, TextParams, VoiceParams } from '@aikami/types';
+import type {
+  AiConnection,
+  AiProvider,
+  DecisionParams,
+  ImageParams,
+  TextParams,
+  VoiceParams,
+} from '@aikami/types';
 import {
   defaultParamsForCapability,
   type EditorDraft,
@@ -42,7 +49,7 @@ export type ConnectionWriteConfig = {
     capability: AiConnection['capability'];
     label: string;
     model: string;
-    params: TextParams | ImageParams | VoiceParams;
+    params: TextParams | ImageParams | VoiceParams | DecisionParams;
   }): string;
   updateAiConnection(id: string, patch: Partial<Omit<AiConnection, 'id' | 'createdAt'>>): void;
   setDefaultConnection(connectionId: string): void;
@@ -154,7 +161,9 @@ const connectionLabel = (context: ConnectionWriteContext): string => {
 };
 
 /** Generation params for a saved text row, folded over the capability defaults. */
-const paramsFor = (context: ConnectionWriteContext): TextParams | ImageParams | VoiceParams => {
+const paramsFor = (
+  context: ConnectionWriteContext,
+): TextParams | ImageParams | VoiceParams | DecisionParams => {
   const defaults = defaultParamsForCapability(context.draft.capability);
   if (context.draft.capability !== 'text' || Object.keys(context.genParams).length === 0) {
     return defaults;

@@ -17,6 +17,7 @@ import type { AiActivityViewModelInterface } from './ai/ai_activity_view_model.s
 import type { AiCapabilityBadgeViewModelInterface } from './ai/ai_capability_badge_view_model.svelte';
 import type { AiConnectionStatus } from './ai/ai_connection_status.svelte';
 import type { CapabilityDetailViewModelInterface } from './ai/capability_detail_view_model.svelte';
+import type { DecisionSettingsViewModelInterface } from './ai/decision/decision_settings_view_model.svelte';
 import type { SettingsAudioViewModelInterface } from './audio/settings_audio_view_model.svelte';
 import type { AutonomousSettingsViewModelInterface } from './autonomous/autonomous_settings_view_model.svelte';
 import type { SettingsControlsViewModelInterface } from './controls/settings_controls_view_model.svelte';
@@ -93,6 +94,8 @@ export type SettingsViewModelInterface = BaseViewModelInterface & {
   readonly storyDialogueViewModel: CapabilityDetailViewModelInterface;
   readonly artworkViewModel: CapabilityDetailViewModelInterface;
   readonly readAloudViewModel: CapabilityDetailViewModelInterface;
+  /** Settings → Decisions / System One (issue #381). */
+  readonly decisionSettingsViewModel: DecisionSettingsViewModelInterface;
   readonly aiActivityViewModel: AiActivityViewModelInterface;
   readonly agentListViewModel: AgentListViewModelInterface;
   readonly agentEditorViewModel: AgentEditorViewModelInterface;
@@ -137,6 +140,7 @@ export type SettingsViewModelOptions = BaseViewModelOptions & {
     className: string;
     capability: ConnectionCapability;
   }) => CapabilityDetailViewModelInterface;
+  createDecisionSettings: (options: BaseViewModelOptions) => DecisionSettingsViewModelInterface;
   createAiActivity: (options: BaseViewModelOptions) => AiActivityViewModelInterface;
   createAgentList: (
     options: BaseViewModelOptions & SettingsAgentListCallbacks,
@@ -160,6 +164,7 @@ export class SettingsViewModel
   private _storyDialogueViewModel: CapabilityDetailViewModelInterface | undefined;
   private _artworkViewModel: CapabilityDetailViewModelInterface | undefined;
   private _readAloudViewModel: CapabilityDetailViewModelInterface | undefined;
+  private _decisionSettingsViewModel: DecisionSettingsViewModelInterface | undefined;
   private _aiActivityViewModel: AiActivityViewModelInterface | undefined;
   private _agentListViewModel: AgentListViewModelInterface | undefined;
   private _agentEditorViewModel: AgentEditorViewModelInterface | undefined;
@@ -191,6 +196,9 @@ export class SettingsViewModel
     className: string;
     capability: ConnectionCapability;
   }) => CapabilityDetailViewModelInterface;
+  private readonly _createDecisionSettings: (
+    options: BaseViewModelOptions,
+  ) => DecisionSettingsViewModelInterface;
   private readonly _createAiActivity: (
     options: BaseViewModelOptions,
   ) => AiActivityViewModelInterface;
@@ -335,6 +343,15 @@ export class SettingsViewModel
     return this._readAloudViewModel;
   }
 
+  get decisionSettingsViewModel(): DecisionSettingsViewModelInterface {
+    if (!this._decisionSettingsViewModel) {
+      this._decisionSettingsViewModel = this._createDecisionSettings({
+        className: 'DecisionSettingsViewModel',
+      });
+    }
+    return this._decisionSettingsViewModel;
+  }
+
   get aiActivityViewModel(): AiActivityViewModelInterface {
     if (!this._aiActivityViewModel) {
       this._aiActivityViewModel = this._createAiActivity({
@@ -390,6 +407,7 @@ export class SettingsViewModel
     this._createExport = options.createExport;
     this._createAiCapabilityBadge = options.createAiCapabilityBadge;
     this._createCapabilityDetail = options.createCapabilityDetail;
+    this._createDecisionSettings = options.createDecisionSettings;
     this._createAiActivity = options.createAiActivity;
     this._createAgentList = options.createAgentList;
     this._createAgentEditor = options.createAgentEditor;

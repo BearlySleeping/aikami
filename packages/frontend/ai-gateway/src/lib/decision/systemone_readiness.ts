@@ -211,6 +211,11 @@ export type SystemOneProbeOptions = {
   /** Total budget across both probes, in ms. */
   readonly budgetMs: number;
   readonly signal: AbortSignal;
+  /**
+   * Resolved per sub-probe so a vault-backed credential is never captured in a
+   * closure at adapter-construction time and never travels in an argument.
+   */
+  readonly authHeaders?: () => Promise<Readonly<Record<string, string>>>;
 };
 
 /** JSON parse that never throws; an unparseable body becomes undefined. */
@@ -254,9 +259,10 @@ const get = async (
   const onAbort = (): void => controller.abort();
   options.signal.addEventListener('abort', onAbort, { once: true });
   try {
+    const headers = options.authHeaders === undefined ? {} : await options.authHeaders();
     const response = await options.transport.fetch(url, {
       method: 'GET',
-      headers: {},
+      headers: { ...headers },
       signal: controller.signal,
     });
     const body = await safeJson(response);
@@ -316,7 +322,17 @@ const probeRuntimeVersion = async (
   | { ok: true; runtime: string }
   | { ok: false; failure: SystemOneProbeFailure & { runtime?: string } }
 > => {
-  const response = await get(options, options.endpoints.version);
+  const versionEndpoint = options.endpoints.version;
+  if (versionEndpoint === undefined) {
+    return {
+      ok: false,
+      failure: {
+        state: 'unreachable',
+        reason: 'no runtime version endpoint was configured for this Ollama backend',
+      },
+    };
+  }
+  const response = await get(options, versionEndpoint);
   if ('error' in response) {
     return {
       ok: false,

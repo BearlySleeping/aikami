@@ -24,6 +24,7 @@ import {
   type DecisionLiteral,
   type DecisionOption,
   type DecisionPlan,
+  type DecisionProbabilityPolicy,
   type DecisionQuestion,
   type DecisionQuestionGroup,
   type DecisionTaskPolicy,
@@ -152,17 +153,24 @@ const expandCombinations = (
 };
 
 /** Resolves the acceptance policy a task declared, or the conservative default. */
-export const resolveBooleanPolicy = (
-  policy: DecisionTaskPolicy,
-): {
-  readonly acceptProbability: number;
-  readonly confidentProbability: number;
-  readonly fallback: 'reject' | 'llm';
-} => ({
+export const resolveBooleanPolicy = (policy: DecisionTaskPolicy): DecisionProbabilityPolicy => ({
   acceptProbability: policy.booleanPolicy?.acceptProbability ?? 0.9,
   confidentProbability: policy.booleanPolicy?.confidentProbability ?? 0.98,
   fallback: policy.booleanPolicy?.fallback ?? 'reject',
 });
+
+/**
+ * Resolves the task's selective-acceptance policy for choice/combination answers.
+ *
+ * Absent `choicePolicy` means UNCALIBRATED, which is deliberately not the same
+ * as "accept": an uncalibrated task returns `undefined` so the caller abstains
+ * rather than trusting a raw backend probability. A task that has been measured
+ * on the development split declares its own thresholds and those are applied
+ * unchanged to the held-out split.
+ */
+export const resolveChoicePolicy = (
+  policy: DecisionTaskPolicy,
+): DecisionProbabilityPolicy | undefined => policy.choicePolicy;
 
 /**
  * Resolves the authored text and option descriptions for one question.
@@ -362,13 +370,17 @@ const combinationQuestion = (
  * @param options.policy - The task's explicit opt-in and authored metadata.
  * @param options.supportedLanguages - Languages the target checkpoint declares.
  */
-export const bindDecisionPolicy = (options: {
-  plan: DecisionPlan;
-  policy: DecisionTaskPolicy;
-  supportedLanguages?: readonly DecisionLanguage[];
-}): DecisionBinding => {
-  const { plan, policy } = options;
-
+/**
+ * Refuses a task whose semantic preconditions do not hold.
+ *
+ * Split out of {@link bindDecisionPolicy} so the opt-in, the language and the
+ * threshold checks read as a list rather than as a ladder buried in the middle
+ * of the binding. Returns undefined when the task is admissible.
+ */
+const semanticRefusal = (
+  policy: DecisionTaskPolicy,
+  supportedLanguages: readonly DecisionLanguage[] | undefined,
+): DecisionBinding | undefined => {
   if (!policy.enabled) {
     return fail(
       'semantic-opt-in-required',
@@ -376,34 +388,68 @@ export const bindDecisionPolicy = (options: {
       `task ${policy.task} has not opted in to decision inference`,
     );
   }
-
   const language = policy.language ?? 'en';
   if (!DECISION_LANGUAGES.includes(language)) {
     return fail('unsupported-language', [], `language ${language} is not a decision language tag`);
   }
-  if (options.supportedLanguages && !options.supportedLanguages.includes(language)) {
+  if (supportedLanguages && !supportedLanguages.includes(language)) {
     return fail(
       'unsupported-language',
       [],
-      `checkpoint declares [${options.supportedLanguages.join(', ')}]; task needs ${language}`,
+      `checkpoint declares [${supportedLanguages.join(', ')}]; task needs ${language}`,
     );
   }
+  const booleanRefusal = thresholdRefusal('boolean', policy.booleanPolicy);
+  return booleanRefusal ?? thresholdRefusal('choice', policy.choicePolicy);
+};
 
-  if (policy.booleanPolicy) {
-    const { acceptProbability, confidentProbability } = policy.booleanPolicy;
-    if (
-      !Number.isFinite(acceptProbability) ||
-      !Number.isFinite(confidentProbability) ||
-      acceptProbability < 0 ||
-      confidentProbability > 1 ||
-      acceptProbability > confidentProbability
-    ) {
-      return fail(
-        'invalid-boolean-policy',
-        [],
-        `boolean thresholds must satisfy 0 <= acceptProbability <= confidentProbability <= 1, got ${acceptProbability}/${confidentProbability}`,
-      );
-    }
+/**
+ * Refuses out-of-range selective-acceptance thresholds.
+ *
+ * `acceptProbability <= confidentProbability <= 1` is the whole contract; a
+ * task that violates it would silently accept answers it meant to reject.
+ */
+const thresholdRefusal = (
+  kind: 'boolean' | 'choice',
+  thresholds: DecisionProbabilityPolicy | undefined,
+): DecisionBinding | undefined => {
+  if (thresholds === undefined) {
+    return undefined;
+  }
+  const { acceptProbability, confidentProbability } = thresholds;
+  if (
+    !Number.isFinite(acceptProbability) ||
+    !Number.isFinite(confidentProbability) ||
+    acceptProbability < 0 ||
+    confidentProbability > 1 ||
+    acceptProbability > confidentProbability
+  ) {
+    return fail(
+      'invalid-boolean-policy',
+      [],
+      `${kind} thresholds must satisfy 0 <= acceptProbability <= confidentProbability <= 1, got ${acceptProbability}/${confidentProbability}`,
+    );
+  }
+  return undefined;
+};
+
+/**
+ * Applies task semantics to a structurally valid plan.
+ *
+ * @param options.plan - Output of `analyzeDecisionSchema`.
+ * @param options.policy - The task's explicit opt-in and authored metadata.
+ * @param options.supportedLanguages - Languages the target checkpoint declares.
+ */
+export const bindDecisionPolicy = (options: {
+  plan: DecisionPlan;
+  policy: DecisionTaskPolicy;
+  supportedLanguages?: readonly DecisionLanguage[];
+}): DecisionBinding => {
+  const { plan, policy } = options;
+
+  const refusal = semanticRefusal(policy, options.supportedLanguages);
+  if (refusal !== undefined) {
+    return refusal;
   }
 
   const identifiers = [policy.task, ...plan.questions.map((question) => question.key)];
@@ -429,17 +475,16 @@ export const bindDecisionPolicy = (options: {
   if (!correlated.ok) {
     return correlated;
   }
-  const working = correlated.questions;
 
   // ---- groups ----
-  const groupIds = [...new Set(working.map((question) => question.groupId))].sort();
-  const groups: DecisionQuestionGroup[] = groupIds.map((groupId) => ({
-    id: groupId,
-    questionKeys: working
-      .filter((question) => question.groupId === groupId)
-      .map((question) => question.key),
-    dispatch: dispatchFor(groupId),
-  }));
+  const working = correlated.questions;
+  const groups: DecisionQuestionGroup[] = [...new Set(working.map((q) => q.groupId))]
+    .sort()
+    .map((groupId) => ({
+      id: groupId,
+      questionKeys: working.filter((question) => question.groupId === groupId).map((q) => q.key),
+      dispatch: dispatchFor(groupId),
+    }));
 
   return { ok: true, plan: { ...plan, questions: working, groups }, groups };
 };
