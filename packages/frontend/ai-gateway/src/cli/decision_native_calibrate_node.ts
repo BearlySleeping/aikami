@@ -1,4 +1,4 @@
-// packages/frontend/ai-gateway/src/cli/decision_native_calibrate.ts
+// packages/frontend/ai-gateway/src/cli/decision_native_calibrate_node.ts
 //
 // Threshold calibration on the DEVELOPMENT split only (issue #381 native).
 //
@@ -19,7 +19,7 @@
 //   - report an accuracy that ignores abstention.
 //
 // Usage:
-//   bun run src/cli/decision_native_calibrate.ts \
+//   bun run src/cli/decision_native_calibrate_node.ts \
 //     --endpoint=http://127.0.0.1:8410 --checkpoint=Laya-Q8_0.gguf \
 //     --out=.evidence/381-native/laya-dev-calibration.json
 
@@ -37,6 +37,7 @@ import {
   npcActionSelectionPolicy,
   npcActionSelectionSchema,
 } from '../lib/decision/tasks/npc_action_selection.ts';
+import type { DecisionAnswer } from '../lib/decision/types.ts';
 
 /**
  * Widens a TypeBox schema instance to the plain string-keyed record the
@@ -101,11 +102,7 @@ const chosenProbability = (
       readonly kind: string;
     }[];
   },
-  answers: readonly {
-    readonly questionKey: string;
-    readonly optionKey?: string;
-    readonly probabilities?: Readonly<Record<string, number>>;
-  }[],
+  answers: readonly DecisionAnswer[],
 ): number | undefined => {
   const actionQuestion = plan.questions.find(
     (question) => question.path[0] === 'actionId' && question.kind !== 'boolean',
@@ -122,6 +119,9 @@ const chosenProbability = (
   return typeof probability === 'number' && Number.isFinite(probability) ? probability : undefined;
 };
 
+/** A usage mistake, as opposed to a run that could not produce a number. */
+class UsageError extends Error {}
+
 /** Parses and validates the invocation, or explains why it is wrong. */
 type CalibrationInvocation = {
   readonly endpoint: string;
@@ -130,14 +130,50 @@ type CalibrationInvocation = {
   readonly perCaseTimeoutMs: number;
 };
 
-/** Reads `--key=value` / `--key value`, absent when not supplied. */
+/**
+ * Reads `--key=value` / `--key value`, absent when not supplied.
+ *
+ * A separated operand that is absent, or that is itself a flag, is REJECTED
+ * rather than accepted: `--checkpoint --out=x` must not silently calibrate
+ * against the literal string `--out=x` and publish the result as a checkpoint
+ * run.
+ */
 const optionalFlag = (argv: readonly string[], name: string): string | undefined => {
   const inline = argv.find((entry) => entry.startsWith(`--${name}=`));
   if (inline !== undefined) {
-    return inline.slice(name.length + 3);
+    const value = inline.slice(name.length + 3);
+    if (value.length === 0) {
+      throw new UsageError(`--${name}= needs a value`);
+    }
+    return value;
   }
   const index = argv.indexOf(`--${name}`);
-  return index !== -1 && index + 1 < argv.length ? argv[index + 1] : undefined;
+  if (index === -1) {
+    return undefined;
+  }
+  const value = argv[index + 1];
+  if (value === undefined || value.startsWith('-')) {
+    throw new UsageError(`--${name} needs a value, got ${value ?? 'nothing'}`);
+  }
+  return value;
+};
+
+/**
+ * A per-case deadline, validated rather than parsed.
+ *
+ * `Number.parseInt` turns junk into `NaN`, and a `NaN` deadline is not a slow
+ * run — it is a comparison that is never true, so the per-case timeout silently
+ * stops bounding anything while still appearing in the artifact's conditions.
+ */
+const timeoutFlag = (raw: string | undefined): number => {
+  if (raw === undefined) {
+    return 120_000;
+  }
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < 1 || value > 3_600_000) {
+    throw new UsageError(`--per-case-timeout-ms must be an integer in [1, 3600000], got "${raw}"`);
+  }
+  return value;
 };
 
 /**
@@ -154,17 +190,24 @@ const parseInvocation = (argv: readonly string[]): CalibrationInvocation | undef
     process.stderr.write('--endpoint and --checkpoint are required\n');
     return undefined;
   }
-  if (optionalFlag(argv, 'split') === 'heldout') {
+  // `heldout` is called out by name because that is the mistake worth
+  // explaining; anything else is simply not a split this tool can calibrate.
+  const split = optionalFlag(argv, 'split') ?? 'dev';
+  if (split === 'heldout') {
     process.stderr.write(
       'REFUSED: --split=heldout. Thresholds are calibrated on development data only.\n',
     );
+    return undefined;
+  }
+  if (split !== 'dev') {
+    process.stderr.write(`--split must be dev (or omitted), got "${split}"\n`);
     return undefined;
   }
   return {
     endpoint,
     checkpoint,
     out: optionalFlag(argv, 'out') ?? `.evidence/381-native/${checkpoint}-dev-calibration.json`,
-    perCaseTimeoutMs: Number.parseInt(optionalFlag(argv, 'per-case-timeout-ms') ?? '120000', 10),
+    perCaseTimeoutMs: timeoutFlag(optionalFlag(argv, 'per-case-timeout-ms')),
   };
 };
 
@@ -228,9 +271,7 @@ const dispatchCase = async (options: {
     decision.ok && typeof decision.value.actionId === 'string'
       ? decision.value.actionId
       : undefined;
-  const probability = decision.ok
-    ? chosenProbability(bound.plan, decision.answers as never)
-    : undefined;
+  const probability = decision.ok ? chosenProbability(bound.plan, decision.answers) : undefined;
   return {
     caseId: testCase.caseId,
     kind: testCase.kind,
@@ -275,7 +316,13 @@ const buildThresholdCurve = (cases: readonly CalibratedCase[]): readonly Thresho
 };
 
 const main = async (): Promise<number> => {
-  const invocation = parseInvocation(process.argv.slice(2));
+  let invocation: CalibrationInvocation | undefined;
+  try {
+    invocation = parseInvocation(process.argv.slice(2));
+  } catch (error) {
+    process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+    return 3;
+  }
   if (invocation === undefined) {
     return 3;
   }
@@ -340,6 +387,12 @@ const main = async (): Promise<number> => {
           entry.chosen !== undefined &&
           isStateChangingAction(entry.chosen),
       ).length,
+      // Proof that the per-case schema rebuild worked: if the harness had
+      // compiled ONE global literal list, this would be 1 and every case would
+      // have been asked about candidates that do not exist in it.
+      distinctOptionSets: new Set(
+        corpus.splits.dev.map((entry) => entry.options.map((option) => option.id).join(' ')),
+      ).size,
     },
   };
 

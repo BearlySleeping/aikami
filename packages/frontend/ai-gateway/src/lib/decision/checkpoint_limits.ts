@@ -29,7 +29,16 @@ export type CheckpointLimitSource =
   /** Measured against a built server + loaded checkpoint in this repository. */
   | 'measured'
   /** Observed as the hard refusal point of this specific checkpoint. */
-  | 'measured-rejected';
+  | 'measured-rejected'
+  /**
+   * NOT A MEASUREMENT — the conservative bound below, applied because this
+   * checkpoint's real ceiling is unknown.
+   *
+   * Deliberately its own value so it can never be read as, or reported as,
+   * evidence about the checkpoint. A settings screen or an audit that says
+   * "measured" here is claiming something nobody established.
+   */
+  | 'unknown-fallback';
 
 /** One checkpoint family's real limits. */
 export type CheckpointLimits = {
@@ -53,6 +62,15 @@ export type CheckpointLimits = {
 
 /**
  * Upstream's documented per-family `choice` ceilings.
+ *
+ * Only families upstream actually names appear here. julia-1, lev and kev are
+ * absent on purpose: upstream publishes no number for them, and nothing in this
+ * repository has measured one either. The runs in `docs/audits/` exercised
+ * small option sets — they established what these models ANSWER, not how many
+ * options they can be asked about — so writing 255 down for them would be a
+ * number with no experiment behind it, presented as though it had one. They
+ * resolve through {@link limitsForCheckpoint} to the conservative bound instead,
+ * which is the correct answer for an unknown ceiling.
  *
  * `maxQuestions` is deliberately absent for every family: upstream publishes
  * none, and inventing a number would be the same category error as copying an
@@ -79,24 +97,6 @@ export const NATIVE_CHECKPOINT_LIMITS: readonly CheckpointLimits[] = [
     maxChoiceOptions: 255,
     maxChoiceOptionsSource: 'upstream-documented',
     note: 'Upstream states 255 criteria keys for clef. Clef serves only this endpoint.',
-  },
-  {
-    family: 'julia-1',
-    maxChoiceOptions: 255,
-    maxChoiceOptionsSource: 'measured',
-    note: 'Measured against a server built at the pinned commit; upstream publishes no number.',
-  },
-  {
-    family: 'lev',
-    maxChoiceOptions: 255,
-    maxChoiceOptionsSource: 'measured',
-    note: 'Measured against a server built at the pinned commit; upstream publishes no number.',
-  },
-  {
-    family: 'kev',
-    maxChoiceOptions: 255,
-    maxChoiceOptionsSource: 'measured',
-    note: 'Measured against a server built at the pinned commit; upstream publishes no number.',
   },
 ];
 
@@ -129,7 +129,7 @@ export const limitsForCheckpoint = (checkpoint: string): CheckpointLimits => {
   return {
     family,
     maxChoiceOptions: UNKNOWN_CHECKPOINT_MAX_CHOICE_OPTIONS,
-    maxChoiceOptionsSource: 'measured',
+    maxChoiceOptionsSource: 'unknown-fallback',
     note:
       `Checkpoint family "${family}" is not one Aikami has verified. Its real ceiling is ` +
       `unknown, so the smallest published ceiling (${UNKNOWN_CHECKPOINT_MAX_CHOICE_OPTIONS}) ` +

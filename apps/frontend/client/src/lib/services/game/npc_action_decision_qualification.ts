@@ -28,6 +28,7 @@
 // Nothing in this build writes such evidence, because no shipped measurement has
 // cleared the gate. That is the correct state, not a gap to paper over.
 
+import { NATIVE_LLAMACPP_DIALECT, SYSTEM_ONE_DIALECT } from '@aikami/frontend/ai-gateway/decision';
 import {
   NPC_ACTION_SELECTION_TASK_ID,
   NPC_ACTION_SELECTION_TASK_VERSION,
@@ -60,11 +61,17 @@ export type SupportedQualification = {
   readonly knownDialects: readonly string[];
 };
 
-/** Dialects a measured qualification has been issued for. */
-const QUALIFIED_DIALECTS: readonly string[] = ['jev-v1'];
+/**
+ * Dialects a measured qualification has been issued for.
+ *
+ * Taken from the gateway's own constants rather than retyped: a dialect string
+ * that is spelled two ways in two packages is a string that will eventually be
+ * compared against itself and always match.
+ */
+const QUALIFIED_DIALECTS: readonly string[] = [SYSTEM_ONE_DIALECT];
 
 /** Dialects the consumer understands, measured or not. */
-const KNOWN_DIALECTS: readonly string[] = ['jev-v1', 'typesafe-systemone-v1'];
+const KNOWN_DIALECTS: readonly string[] = [SYSTEM_ONE_DIALECT, NATIVE_LLAMACPP_DIALECT];
 
 const refused = (
   reason: string,
@@ -73,7 +80,7 @@ const refused = (
   qualified: false,
   taskId: NPC_ACTION_SELECTION_TASK_ID,
   taskVersion: NPC_ACTION_SELECTION_TASK_VERSION,
-  dialect: QUALIFIED_DIALECTS[0] ?? 'jev-v1',
+  dialect: QUALIFIED_DIALECTS[0] ?? SYSTEM_ONE_DIALECT,
   checkpoint: '',
   reason,
   ...overrides,
@@ -151,7 +158,8 @@ export const resolveNpcActionQualification = (options: {
   const supportedDialects = options.supportedDialects ?? QUALIFIED_DIALECTS;
   const knownDialects = options.knownDialects ?? KNOWN_DIALECTS;
   const backendDialect =
-    options.backendDialect ?? (backend.runtime === 'llamacpp' ? 'typesafe-systemone-v1' : 'jev-v1');
+    options.backendDialect ??
+    (backend.runtime === 'llamacpp' ? NATIVE_LLAMACPP_DIALECT : SYSTEM_ONE_DIALECT);
 
   // The player's master switch narrows; it never widens.
   if (!backend.qualifiedForGameplay) {

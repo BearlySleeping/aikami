@@ -53,6 +53,7 @@ import type {
 import { utf8ByteLength } from '../util.ts';
 import {
   type IdentityProbe,
+  type LlamaCppTransport,
   probeHealth,
   probeIdentity,
   probeResidency,
@@ -67,13 +68,17 @@ import type {
   DecisionRequest,
 } from './types.ts';
 
-/** Injectable transport, so the wire contract is testable with no live server. */
-export type LlamaCppTransport = {
-  fetch(
-    input: string,
-    init: { method: string; body?: string; headers: Record<string, string>; signal: AbortSignal },
-  ): Promise<{ status: number; text(): Promise<string> }>;
-};
+/**
+ * The transport and `/props` vocabulary lives in the runtime module; these
+ * re-exports keep the adapter's public surface unchanged for existing callers.
+ */
+export {
+  type LlamaCppBuildInfo,
+  type LlamaCppServerProps,
+  type LlamaCppTransport,
+  parseLlamaCppBuildInfo,
+  parseServerProps,
+} from './llamacpp_runtime.ts';
 
 /** Endpoints a native llama.cpp server serves. All optional but the decision route. */
 export type LlamaCppEndpoints = {
@@ -83,68 +88,6 @@ export type LlamaCppEndpoints = {
   readonly health?: string;
   /** `GET /props`. Build identity, slot count and the loaded `model_path`. */
   readonly props?: string;
-};
-
-/**
- * Build identity reported by `GET /props`.
- *
- * `build_commit` is what proves the server actually contains the endpoint.
- * A build string alone ("0.5.0-dev") proves nothing: every build for months has
- * carried a `0.x` dev version, including many predating this route.
- */
-export type LlamaCppBuildInfo = {
-  readonly version?: string;
-  readonly buildCommit?: string;
-  readonly buildNumber?: number;
-};
-
-/**
- * The `/props` facts this adapter relies on.
- *
- * `modelPath` is the checkpoint the PROCESS was started with. Because native
- * llama.cpp serves exactly the model it was launched with and has no per-request
- * or on-demand unload route, that is strong residency evidence — but it is
- * evidence about the process, so it is reported with the method that produced
- * it rather than as a bare boolean.
- */
-export type LlamaCppServerProps = {
-  /** Full filesystem path of the checkpoint the server was started with. */
-  readonly modelPath?: string;
-  /** The `--alias` the operator gave the model, when they set one. */
-  readonly modelAlias?: string;
-  readonly totalSlots?: number;
-  /**
-   * llama.cpp's sleep mode. `true` means the weights are released, so a latency
-   * measured then is a cold sample and must not be aggregated as warm.
-   */
-  readonly isSleeping?: boolean;
-  readonly build?: LlamaCppBuildInfo;
-};
-
-/**
- * Upstream's `build_info`, as `GET /props` actually spells it: the STRING
- * `"b<build_number>-<commit_prefix>"`.
- *
- * Measured against a running server, not assumed. An earlier reading of this
- * file looked for `default_generation_settings.build_info.{version, build_commit,
- * build_number}`, which is not the shape `/props` returns; the consequence was a
- * runtime label with no commit in it on every real server — which is the one
- * field that makes "does this build contain the endpoint" checkable at all.
- */
-export const parseLlamaCppBuildInfo = (raw: unknown): LlamaCppBuildInfo | undefined => {
-  if (typeof raw !== 'string' || raw.trim().length === 0) {
-    return undefined;
-  }
-  const trimmed = raw.trim();
-  const match = /^b(\d+)-([0-9a-f]{6,40})$/.exec(trimmed);
-  if (match === null) {
-    // An unrecognised build string is still evidence that a build was recorded.
-    return { version: trimmed };
-  }
-  return {
-    buildNumber: Number.parseInt(match[1] as string, 10),
-    buildCommit: match[2] as string,
-  };
 };
 
 /**
@@ -166,22 +109,6 @@ export const sameCheckpoint = (configured: string, served: string): boolean => {
       .replace(/:latest$/, '')
       .replace(/\.(gguf|safetensors|bin)$/, '');
   return normalize(configured) === normalize(served);
-};
-
-/** Reads a llama.cpp server's `GET /props` body. Unparseable yields undefined. */
-export const parseServerProps = (body: unknown): LlamaCppServerProps | undefined => {
-  if (typeof body !== 'object' || body === null || Array.isArray(body)) {
-    return undefined;
-  }
-  const record = body as Record<string, unknown>;
-  const build = parseLlamaCppBuildInfo(record.build_info);
-  return {
-    ...(typeof record.model_path === 'string' ? { modelPath: record.model_path } : {}),
-    ...(typeof record.model_alias === 'string' ? { modelAlias: record.model_alias } : {}),
-    ...(typeof record.total_slots === 'number' ? { totalSlots: record.total_slots } : {}),
-    ...(typeof record.is_sleeping === 'boolean' ? { isSleeping: record.is_sleeping } : {}),
-    ...(build === undefined ? {} : { build }),
-  };
 };
 
 /** Extra, provider-specific diagnostics an adapter may attach to a refusal. */
@@ -307,6 +234,32 @@ const wireOptionKeys = (question: DecisionQuestion): readonly string[] => {
     return (question.combinationOptions ?? []).map((option) => option.key);
   }
   return [];
+};
+
+/**
+ * How much of a refusal body is kept for diagnosis.
+ *
+ * Upstream echoes the offending request in some errors, so this is bounded: a
+ * refusal detail ends up in telemetry and in a settings screen, and neither
+ * should carry an entire prompt back out.
+ */
+const MAX_REFUSAL_BODY_CHARS = 300;
+
+/**
+ * Reads a refusal body, bounded and never thrown on.
+ *
+ * A diagnostic aid must never be the thing that turns a clean, typed refusal
+ * into an unhandled error, so the text is truncated and a read failure yields
+ * `undefined` — which the mapper treats as "no cause reported" rather than as a
+ * claim.
+ */
+const refusalBody = async (response: { text(): Promise<string> }): Promise<string | undefined> => {
+  try {
+    const text = (await response.text()).trim();
+    return text.length === 0 ? undefined : text.slice(0, MAX_REFUSAL_BODY_CHARS);
+  } catch {
+    return undefined;
+  }
 };
 
 /**
@@ -602,19 +555,32 @@ const readDispatch = async (options: {
   readonly inferenceMs: number;
   readonly configuredCheckpoint: string;
 }): Promise<DecisionAdapterResponse> => {
-  const refusal = nativeStatusRefusal(options.response.status);
-  if (refusal !== undefined) {
-    return {
-      ok: false,
-      reason: failureReasonFor(refusal.reason),
-      detail: refusal.detail,
-      queueMs: 0,
-      inferenceMs: options.inferenceMs,
-      diagnostics: { servedCheckpoint: options.configuredCheckpoint },
-    };
+  if (options.response.status !== 200) {
+    // The body is read BEFORE mapping, because the status alone cannot tell a
+    // batch-layer overflow from any other server fault, and the distinction
+    // changes the operator's next step. Read at most once.
+    const refusal = nativeStatusRefusal(
+      options.response.status,
+      await refusalBody(options.response),
+    );
+    if (refusal !== undefined) {
+      return {
+        ok: false,
+        reason: failureReasonFor(refusal.reason),
+        detail: refusal.detail,
+        queueMs: 0,
+        inferenceMs: options.inferenceMs,
+        // NO `servedCheckpoint`: a refusal is precisely the case where the
+        // server never told us what answered. Recording the CONFIGURED
+        // checkpoint here would report a configured value in a field
+        // documented as the served one, and qualification evidence is keyed on
+        // this field. Absent is the truthful answer.
+        diagnostics: {},
+      };
+    }
   }
   const parsed = parseNativeResponse(safeJson(await options.response.text()));
-  if (!parsed.ok) {
+  if (parsed.ok !== true) {
     return {
       ok: false,
       reason: 'invalid-response',

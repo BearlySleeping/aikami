@@ -298,10 +298,9 @@ describe('changing the mode cannot invalidate the Test connection verdict', () =
   });
 });
 
-describe('gameplayMode is part of canonical config', () => {
-  test('the resolved backend always reports a mode', () => {
-    // The resolver defaults it, so `off` is structural rather than a field a
-    // caller has to remember to supply.
-    expect(backend().gameplayMode).toBe('off');
-  });
-});
+// Note: there is deliberately no `gameplayMode` defaulting assertion here. The
+// case that matters — params saved before the field existed resolving to `off`
+// rather than `on` — is exercised against the real ConfigService in
+// `decision_llamacpp_config.test.ts`. Restating it here with a hand-built
+// fixture would only assert this file's own literal, which is what the previous
+// version of this block did.

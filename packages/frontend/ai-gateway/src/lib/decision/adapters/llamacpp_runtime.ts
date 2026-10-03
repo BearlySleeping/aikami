@@ -24,8 +24,93 @@
 //     state the settings UI must show rather than hide behind "unreachable".
 
 import type { DecisionCapability } from '../types.ts';
-import type { LlamaCppServerProps, LlamaCppTransport } from './llamacpp_adapter.ts';
-import { parseServerProps } from './llamacpp_adapter.ts';
+// These live here, not in `llamacpp_adapter.ts`, because the runtime half needs
+// them and the adapter needs the runtime: importing them from the adapter
+// while the adapter imports this module closes a cycle, and a cycle between a
+// type and a parser is exactly how a module ends up half-initialised.
+// `llamacpp_adapter.ts` re-exports every one of them, so the package's public
+// surface is unchanged.
+
+export type LlamaCppTransport = {
+  fetch(
+    input: string,
+    init: { method: string; body?: string; headers: Record<string, string>; signal: AbortSignal },
+  ): Promise<{ status: number; text(): Promise<string> }>;
+};
+/**
+ * Build identity reported by `GET /props`.
+ *
+ * `build_commit` is what proves the server actually contains the endpoint.
+ * A build string alone ("0.5.0-dev") proves nothing: every build for months has
+ * carried a `0.x` dev version, including many predating this route.
+ */
+export type LlamaCppBuildInfo = {
+  readonly version?: string;
+  readonly buildCommit?: string;
+  readonly buildNumber?: number;
+};
+/**
+ * The `/props` facts this adapter relies on.
+ *
+ * `modelPath` is the checkpoint the PROCESS was started with. Because native
+ * llama.cpp serves exactly the model it was launched with and has no per-request
+ * or on-demand unload route, that is strong residency evidence — but it is
+ * evidence about the process, so it is reported with the method that produced
+ * it rather than as a bare boolean.
+ */
+export type LlamaCppServerProps = {
+  /** Full filesystem path of the checkpoint the server was started with. */
+  readonly modelPath?: string;
+  /** The `--alias` the operator gave the model, when they set one. */
+  readonly modelAlias?: string;
+  readonly totalSlots?: number;
+  /**
+   * llama.cpp's sleep mode. `true` means the weights are released, so a latency
+   * measured then is a cold sample and must not be aggregated as warm.
+   */
+  readonly isSleeping?: boolean;
+  readonly build?: LlamaCppBuildInfo;
+};
+/**
+ * Upstream's `build_info`, as `GET /props` actually spells it: the STRING
+ * `"b<build_number>-<commit_prefix>"`.
+ *
+ * Measured against a running server, not assumed. An earlier reading of this
+ * file looked for `default_generation_settings.build_info.{version, build_commit,
+ * build_number}`, which is not the shape `/props` returns; the consequence was a
+ * runtime label with no commit in it on every real server — which is the one
+ * field that makes "does this build contain the endpoint" checkable at all.
+ */
+export const parseLlamaCppBuildInfo = (raw: unknown): LlamaCppBuildInfo | undefined => {
+  if (typeof raw !== 'string' || raw.trim().length === 0) {
+    return undefined;
+  }
+  const trimmed = raw.trim();
+  const match = /^b(\d+)-([0-9a-f]{6,40})$/.exec(trimmed);
+  if (match === null) {
+    // An unrecognised build string is still evidence that a build was recorded.
+    return { version: trimmed };
+  }
+  return {
+    buildNumber: Number.parseInt(match[1] as string, 10),
+    buildCommit: match[2] as string,
+  };
+};
+/** Reads a llama.cpp server's `GET /props` body. Unparseable yields undefined. */
+export const parseServerProps = (body: unknown): LlamaCppServerProps | undefined => {
+  if (typeof body !== 'object' || body === null || Array.isArray(body)) {
+    return undefined;
+  }
+  const record = body as Record<string, unknown>;
+  const build = parseLlamaCppBuildInfo(record.build_info);
+  return {
+    ...(typeof record.model_path === 'string' ? { modelPath: record.model_path } : {}),
+    ...(typeof record.model_alias === 'string' ? { modelAlias: record.model_alias } : {}),
+    ...(typeof record.total_slots === 'number' ? { totalSlots: record.total_slots } : {}),
+    ...(typeof record.is_sleeping === 'boolean' ? { isSleeping: record.is_sleeping } : {}),
+    ...(build === undefined ? {} : { build }),
+  };
+};
 
 /**
  * JSON parse that never throws.

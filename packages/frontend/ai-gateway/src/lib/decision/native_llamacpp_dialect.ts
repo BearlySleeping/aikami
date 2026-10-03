@@ -273,6 +273,23 @@ export type NativeRefusal = {
 };
 
 /**
+ * Whether a server error message is upstream's batch-layer overflow.
+ *
+ * Matched on the words upstream actually uses ("too large to process",
+ * "batch size") rather than on the status alone, because the status alone does
+ * not identify this failure. Deliberately case-insensitive and substring-based:
+ * upstream has changed the exact wording between releases, and a missed match
+ * degrades to the honest `backend-unavailable` rather than to a wrong fix.
+ */
+const isBatchOverflowMessage = (body: string | undefined): boolean => {
+  if (body === undefined) {
+    return false;
+  }
+  const text = body.toLowerCase();
+  return text.includes('too large to process') || text.includes('batch size');
+};
+
+/**
  * Maps an HTTP status onto a refusal.
  *
  * 501 is the load-bearing case: upstream returns it when the LOADED MODEL IS NOT
@@ -287,8 +304,12 @@ export type NativeRefusal = {
  * 500 ("input is too large to process. increase the physical batch size"). That
  * is a different failure with a different fix, so it gets its own reason rather
  * than being folded into "bad request".
+ *
+ * @param status HTTP status of the refusal.
+ * @param body Server-supplied error text, when one was read. Used ONLY to
+ * disambiguate 500, which upstream uses for more than one failure.
  */
-export const nativeStatusRefusal = (status: number): NativeRefusal | undefined => {
+export const nativeStatusRefusal = (status: number, body?: string): NativeRefusal | undefined => {
   if (status === 200) {
     return undefined;
   }
@@ -308,12 +329,26 @@ export const nativeStatusRefusal = (status: number): NativeRefusal | undefined =
     };
   }
   if (status === 500) {
+    // 500 is upstream's generic server-error status, NOT a dedicated
+    // "too large" code. Reporting every one of them as a batch-size overflow
+    // would send an operator to raise `-ub` when the real fault is anywhere
+    // else in the server — a bad template, an exhausted context slot, a failed
+    // decode. Only the batch-layer message earns that diagnosis.
+    if (isBatchOverflowMessage(body)) {
+      return {
+        reason: 'request-too-large',
+        detail:
+          'HTTP 500: llama.cpp could not batch the prompt. The assembled question exceeds the ' +
+          "server's --ubatch-size, not the checkpoint's option ceiling. Reduce the context, or " +
+          'start the server with a larger -ub.',
+      };
+    }
     return {
-      reason: 'request-too-large',
+      reason: 'backend-unavailable',
       detail:
-        'HTTP 500: llama.cpp could not batch the prompt. The assembled question exceeds the ' +
-        "server's --ubatch-size, not the checkpoint's option ceiling. Reduce the context, or " +
-        'start the server with a larger -ub.',
+        body === undefined || body.length === 0
+          ? 'HTTP 500: llama.cpp failed to serve the request, and reported no cause'
+          : `HTTP 500: llama.cpp failed to serve the request: ${body}`,
     };
   }
   if (status === 401 || status === 403) {

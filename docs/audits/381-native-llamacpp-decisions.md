@@ -73,6 +73,19 @@ rather than falling through to the wrong rules.
 All raw artifacts, with per-run identity and hashes, are in
 `docs/audits/381-native-evidence/` (`CHECKSUMS.sha256` lists them).
 
+**One correction to those artifacts.** Both `*-dev-calibration.json` files
+originally carried `comparatorUsed: true` and
+`unthresholded.distinctOptionSets: 20`. Neither field was produced by the
+calibration CLI, so neither could be reproduced by re-running it, and the
+second was wrong besides: the dev corpus has **6** distinct candidate-option
+sets across its 20 cases, not 20. `comparatorUsed` is gone — no comparator ran
+in a calibration pass, and the deterministic control is cited from #425 rather
+than re-derived (see the note in the measure CLI). `distinctOptionSets` is
+kept at its true value and the CLI now emits it, computed from the corpus. No
+measured number changed: every latency, recall, coverage and false-acceptance
+figure in both files is byte-identical, and `CHECKSUMS.sha256` was regenerated
+for the two edited files.
+
 Hardware: 32-thread x86-64 CPU, 31 GB RAM, RTX 4090 Laptop GPU **present but
 unused** (no CUDA toolkit on this host — see §5). Build: CPU-only `llama-server`
 at the pinned commit. Checkpoints: hashes and sizes in `checkpoint-manifest.tsv`.
@@ -89,16 +102,35 @@ nothing else, which is exactly what they are for.
 
 ### 2.2 Two real checkpoints, development split only
 
-Threshold calibration used a permissive policy so the **raw** `p(chosen)` was
-recorded; the frozen `choicePolicy {0.75, 0.95}` was then applied unchanged.
-20 dev cases (12 positive, 8 required-abstain), the corrected #425 harness, the
-same corpus and the same frozen gates.
+Two **separate runs per checkpoint**, and their figures are not interchangeable:
 
-| checkpoint | file size | load | warm p50 | warm p95 | dev recall | false acceptances |
-|---|---|---|---|---|---|---|
-| Julia-1 Q8_0 | 160 MB | 3 s | 2088 ms | 3232 ms | 0.42 | **4** (8 unthresholded) |
-| Laya Q8_0 | 449 MB | 2 s | 1627 ms | 1720 ms | 0.17 | 2 |
-| OpenJev Q4_K_M | 19 GB | 107 s | **213 837 ms** (single request) | — | not run | — |
+- a **calibration run** (`*-dev-calibration.json`) with a permissive policy, so
+  the raw `p(chosen)` was recorded and `thresholdCurve` could be swept;
+- a **measurement run** (`*-dev.json`) with the frozen `choicePolicy
+  {0.75, 0.95}` applied unchanged.
+
+They used different server instances, so the endpoints differ — Julia-1
+calibrated on `:8470` and was measured on `:8480`, Laya on `:8422` and `:8410`.
+Only the measurement run is evidence about the frozen policy; only the
+calibration run is evidence about the shape of the threshold curve.
+
+20 dev cases (12 positive, 8 required-abstain), the corrected #425 harness, the
+same corpus and the same frozen gates. Size and latency come from the
+measurement run; recall and false acceptances are split by which run they came
+from.
+
+| checkpoint | file size | load | warm p50 | warm p95 | frozen dev recall | frozen false accept. | unthresholded recall | unthresholded false accept. |
+|---|---|---|---|---|---|---|---|---|
+| Julia-1 Q8_0 | 160 MB | 3 s | 2088 ms | 3232 ms | **0.33** | **4** | 0.42 | **8** |
+| Laya Q8_0 | 449 MB | 2 s | 1627 ms | 1720 ms | **0.00** | **0** | 0.17 | 2 |
+| OpenJev Q4_K_M | 19 GB | 107 s | **213 837 ms** (single request) | — | not run | — | — | — |
+
+The frozen columns are the `overall` block of `*-dev.json`. The unthresholded
+columns are the `threshold: 0` row of `thresholdCurve`, i.e. every answer
+accepted regardless of confidence; they are reported because the failure
+direction of each checkpoint is only visible without the threshold in the way.
+Under the frozen policy Laya abstained on all 20 cases, so its 0.00 recall is
+an abstention, not a wrong answer — its errors live in the unthresholded column.
 
 Frozen gates: recall ≥ 0.85, false acceptances ≤ 0 (absolute), coverage ≥ 0.90,
 warm p50 ≤ 250 ms, warm p95 ≤ 750 ms.
@@ -110,7 +142,8 @@ per-case deadline expired before any case could be scored.
 ### 2.3 The two real checkpoints fail in OPPOSITE directions
 
 This is the most useful thing in the run, and it is why no threshold can rescue
-either:
+either. Both counts below are from the **calibration** runs, which is where the
+shape of each checkpoint is visible:
 
 - **Laya over-abstains.** It answers `none` on 9 of 12 positives.
 - **Julia-1 over-acts.** It returns a state-changing action on **8 of 8**
@@ -124,8 +157,13 @@ an action where the fixture says nothing is warranted). Raising the threshold
 removes correct answers long before it removes those.
 
 Full curves (`thresholdCurve` in the calibration artifacts) sweep 0 → 1.01:
-Laya's recall never exceeds 0.17 at any threshold; Julia-1's never exceeds 0.42
-at any threshold with ≥ 4 false acceptances.
+Laya's recall never exceeds 0.17 at any threshold, and it has already fallen to
+0.00 by 0.70. Julia-1's recall never exceeds 0.42 either, but the honest
+statement is the sharper one: **no threshold gives Julia-1 zero false
+acceptances together with non-zero recall.** At threshold 0.95 it has recall
+0.33 and 4 false acceptances; the only zero-false-acceptance row is 1.01,
+where it answers nothing at all. Raising the threshold removes correct answers
+and unsafe ones together, never the unsafe ones alone.
 
 This is a **task-level** NO-GO, not a capability NO-GO. The diagnosis points at
 the task's own shape — per-turn candidate enumeration with payload-bearing

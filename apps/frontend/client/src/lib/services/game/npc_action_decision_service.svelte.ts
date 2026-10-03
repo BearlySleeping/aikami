@@ -199,7 +199,17 @@ class NpcActionDecisionService
     // The in-memory value is now authoritative; a later hydrate must not
     // resurrect the pre-change value from config before the write lands.
     this._hydrated = true;
-    void this._caps.persistMode?.(next);
+    // `persistMode` is fired and forgotten by design — the turn has already
+    // been routed — but "forgotten" must not mean "unhandled". A rejected save
+    // (full disk, quota, a config that will not parse) would otherwise surface
+    // as a global unhandled rejection with nothing pointing at the mode change,
+    // and the player would see their choice silently not survive a reload.
+    void this._caps.persistMode?.(next)?.catch((error: unknown) => {
+      this.warn('npc action decision mode was not persisted', {
+        mode: next,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
     this.info('npc action decision mode changed', { mode: next });
   }
 

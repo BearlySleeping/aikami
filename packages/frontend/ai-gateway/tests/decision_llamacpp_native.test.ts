@@ -234,13 +234,13 @@ describe('native noul is a probability, not a boolean', () => {
     expect(result).toEqual({ ok: true, pTrue: 0.6328, pFalse: 1 - 0.6328 });
   });
 
-  test('the wire carries no boolean; reading `value` yields nothing', () => {
-    // This is the whole point. `answers[q].value` is the jev-v1 (Ollama) field.
-    // A native server never sends it, so a reader that expects it sees undefined
-    // and every boolean decision abstains for what looks like a policy reason.
-    const nativeAnswer = { type: 'noul', noul: 0.9 };
-    expect((nativeAnswer as Record<string, unknown>).value).toBeUndefined();
-    expect(readNativeNoul(nativeAnswer, 'q').ok).toBe(true);
+  test('an answer carrying the jev-v1 `value` field is refused, not silently read', () => {
+    // `answers[q].value` is the jev-v1 (Ollama) field. A native server never
+    // sends it, so a reader that only looked for `value` would abstain for what
+    // looks like a policy reason — and a reader that COERCED it would turn a
+    // dialect mismatch into a confident answer.
+    expect(readNativeNoul({ type: 'noul', noul: 0.9 }, 'q').ok).toBe(true);
+    expect(readNativeNoul({ type: 'boolean', value: true }, 'q').ok).toBe(false);
   });
 
   test('refuses a jev-v1-shaped answer instead of misreading it', () => {
@@ -379,13 +379,31 @@ describe('native status refusals', () => {
     expect(refusal?.detail).toContain('not a decision model');
   });
 
-  test('a too-large prompt is 500 and says so, separately from a bad request', () => {
+  test('an oversized prompt is told apart from any other 500 by the server message', () => {
     // Measured: an oversized question earns a 500 from the batch layer, not a
     // 400. Reporting it as "bad request" would send the player to debug our
     // JSON instead of their --ubatch-size.
-    const refusal = nativeStatusRefusal(500);
-    expect(refusal?.reason).toBe('request-too-large');
-    expect(refusal?.detail).toContain('ubatch');
+    //
+    // But 500 is also upstream's generic server-error status. Only the
+    // batch-layer MESSAGE earns the batch-size diagnosis, or an operator would
+    // be told to raise `-ub` when the real fault is a bad template or a failed
+    // decode.
+    const batch = nativeStatusRefusal(
+      500,
+      'input is too large to process. increase the batch size',
+    );
+    expect(batch?.reason).toBe('request-too-large');
+    expect(batch?.detail).toContain('ubatch');
+
+    const other = nativeStatusRefusal(500, 'error: failed to decode template');
+    expect(other?.reason).toBe('backend-unavailable');
+    expect(other?.detail).toContain('failed to decode template');
+    // Still separate from a bad request either way.
+    expect(other?.detail).not.toContain('ubatch');
+
+    // A 500 that reports nothing is not evidence of anything in particular.
+    expect(nativeStatusRefusal(500)?.reason).toBe('backend-unavailable');
+    expect(nativeStatusRefusal(500)?.detail).toContain('reported no cause');
   });
 
   test.each([
@@ -958,13 +976,32 @@ describe('native adapter through the real pipeline', () => {
     expect(calls).toHaveLength(0);
   });
 
-  test('one absolute deadline is shared, never restarted per attempt', async () => {
-    const { plan, dispatch, keys } = buildNativeUnit();
-    const adapter = adapterReplaying({
-      status: 200,
-      body: nativeResponseFor(keys, { noul: 0.9, choice: keys.options[0] as string }),
+  test('an in-flight request is cut off at the caller deadline, not restarted', async () => {
+    const { plan, dispatch } = buildNativeUnit();
+    // A transport that NEVER answers by itself: it settles only when the
+    // adapter aborts it at the deadline. A transport that replies instantly
+    // cannot test a deadline at all — the call is finished before the clock is
+    // ever consulted, so the old version of this test asserted nothing.
+    const stalledTransport: LlamaCppTransport = {
+      fetch: (_url, init) =>
+        new Promise((_resolve, reject) => {
+          init.signal.addEventListener(
+            'abort',
+            () => {
+              reject(new Error('aborted'));
+            },
+            { once: true },
+          );
+        }),
+    };
+    const adapter = createLlamaCppDecisionAdapter({
+      endpoints: { decision: 'http://127.0.0.1:8080/v1/systemone' },
+      checkpoint: 'Laya-Q8_0.gguf',
+      languages: ['en'],
+      transport: stalledTransport,
     });
-    const deadlineAt = Date.now() + 25;
+
+    const deadlineAt = Date.now() + 40;
     const response = await adapter.run({
       plan,
       unit:
@@ -977,13 +1014,10 @@ describe('native adapter through the real pipeline', () => {
       requestId: 'q',
       stateRevision: 0,
     });
-    // Either it fitted, or it was refused on the SAME absolute deadline. What it
-    // may not do is extend past `deadlineAt` and still report success.
-    expect(Date.now()).toBeLessThanOrEqual(deadlineAt + 200);
-    if (response.ok) {
-      expect(response.inferenceMs).toBeLessThan(1000);
-    } else {
-      expect(response.reason).toBe('deadline-exceeded');
-    }
+
+    expect(response.ok).toBe(false);
+    expect(response.ok === false && response.reason).toBe('deadline-exceeded');
+    // And it did not extend past the deadline to get there.
+    expect(Date.now()).toBeLessThanOrEqual(deadlineAt + 250);
   });
 });

@@ -1,4 +1,4 @@
-// packages/frontend/ai-gateway/src/cli/decision_native_llamacpp_measure.ts
+// packages/frontend/ai-gateway/src/cli/decision_native_llamacpp_measure_node.ts
 //
 // Runs the CORRECTED #425 measurement harness against a LIVE native llama.cpp
 // server (issue #381 native follow-up).
@@ -10,7 +10,7 @@
 // harness the SAME corpus and the SAME frozen gates.
 //
 // Usage:
-//   bun run src/cli/decision_native_llamacpp_measure.ts \
+//   bun run src/cli/decision_native_llamacpp_measure_node.ts \
 //     --endpoint=http://127.0.0.1:8401 --checkpoint=Laya-Q8_0.gguf \
 //     --split=dev --out=.evidence/381-native/laya-dev.json
 //
@@ -36,17 +36,32 @@ const EXIT = { passed: 0, failed: 1, unavailable: 2, usage: 3 } as const;
 
 class UsageError extends Error {}
 
-/** Reads `--key=value` or `--key value`. */
+/**
+ * Reads `--key=value` or `--key value`.
+ *
+ * A separated operand that is absent, or that is itself a flag, is REJECTED
+ * rather than accepted: `--endpoint --checkpoint=x` must not silently bind the
+ * literal string `--checkpoint=x` as an endpoint and produce a run against a
+ * nonsense address, which would then be written into an evidence artifact.
+ */
 const readFlag = (argv: readonly string[], name: string): string | undefined => {
   const inline = argv.find((entry) => entry.startsWith(`--${name}=`));
   if (inline !== undefined) {
-    return inline.slice(name.length + 3);
+    const value = inline.slice(name.length + 3);
+    if (value.length === 0) {
+      throw new UsageError(`--${name}= needs a value`);
+    }
+    return value;
   }
   const index = argv.indexOf(`--${name}`);
-  if (index !== -1 && index + 1 < argv.length) {
-    return argv[index + 1];
+  if (index === -1) {
+    return undefined;
   }
-  return undefined;
+  const value = argv[index + 1];
+  if (value === undefined || value.startsWith('-')) {
+    throw new UsageError(`--${name} needs a value, got ${value ?? 'nothing'}`);
+  }
+  return value;
 };
 
 type Parsed = {
@@ -58,14 +73,39 @@ type Parsed = {
   readonly perCaseTimeoutMs: number;
 };
 
+/** The splits the harness knows how to score. */
+const SPLITS = ['dev', 'heldout', 'both'] as const;
+
+const isSplit = (value: string): value is Parsed['split'] =>
+  (SPLITS as readonly string[]).includes(value);
+
+/**
+ * Reads a bounded count.
+ *
+ * `Number.parseInt` alone is too forgiving here: it returns `NaN` for junk and
+ * happily truncates a fractional timeout into a different deadline than the one
+ * asked for. A warm-up count or a timeout that silently becomes `NaN` would
+ * propagate into the measured latencies and then into a published artifact.
+ */
+const countFlag = (name: string, raw: string | undefined, min: number, max: number): number => {
+  if (raw === undefined) {
+    throw new UsageError(`--${name} is required`);
+  }
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < min || value > max) {
+    throw new UsageError(`--${name} must be an integer in [${min}, ${max}], got "${raw}"`);
+  }
+  return value;
+};
+
 const parse = (argv: readonly string[]): Parsed => {
   const endpoint = readFlag(argv, 'endpoint');
   const checkpoint = readFlag(argv, 'checkpoint');
-  const split = (readFlag(argv, 'split') ?? 'dev') as Parsed['split'];
+  const split = readFlag(argv, 'split') ?? 'dev';
   if (endpoint === undefined) {
     throw new UsageError('--endpoint is required, e.g. http://127.0.0.1:8401');
   }
-  if (!['dev', 'heldout', 'both'].includes(split)) {
+  if (!isSplit(split)) {
     throw new UsageError(`--split must be dev|heldout|both, got "${split}"`);
   }
   if (checkpoint === undefined) {
@@ -79,8 +119,16 @@ const parse = (argv: readonly string[]): Parsed => {
     checkpoint,
     split,
     out: readFlag(argv, 'out') ?? `.evidence/381-native/${checkpoint}-${split}.json`,
-    warmupRequests: Number.parseInt(readFlag(argv, 'warmup') ?? '2', 10),
-    perCaseTimeoutMs: Number.parseInt(readFlag(argv, 'per-case-timeout-ms') ?? '120000', 10),
+    warmupRequests:
+      readFlag(argv, 'warmup') === undefined
+        ? 2
+        : countFlag('warmup', readFlag(argv, 'warmup'), 0, 1000),
+    perCaseTimeoutMs: countFlag(
+      'per-case-timeout-ms',
+      readFlag(argv, 'per-case-timeout-ms') ?? '120000',
+      1,
+      3_600_000,
+    ),
   };
 };
 
@@ -177,9 +225,14 @@ const main = async (): Promise<number> => {
       perCaseTimeoutMs: options.perCaseTimeoutMs,
     });
   } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    // Reported to stderr BEFORE the artifact is written: if the write itself
+    // fails, the operator still has the cause on the terminal. An exit code of
+    // 2 with no message anywhere is indistinguishable from a bad invocation.
+    process.stderr.write(`UNAVAILABLE: ${reason}\n`);
     await writeArtifact(options.out, {
       status: 'unavailable',
-      reason: error instanceof Error ? error.message : String(error),
+      reason,
       startedAt,
       checkpoint: options.checkpoint,
     });

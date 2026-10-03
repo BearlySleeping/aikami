@@ -7,7 +7,6 @@
   "startedAt": "2026-10-03T16:07:17.586Z",
   "finishedAt": "2026-10-03T16:07:47.461Z",
   "note": "Thresholds calibrated on DEVELOPMENT data only. p(chosen) is the backend own distribution over options, not a probability of correctness. Held-out was not scored.",
-  "comparatorUsed": true,
   "cases": [
     {
       "caseId": "dev-elder-quest-01",
@@ -340,6 +339,6 @@
     "answeredPositives": 12,
     "correctPositives": 2,
     "falseAcceptances": 2,
-    "distinctOptionSets": 20
+    "distinctOptionSets": 6
   }
 }
