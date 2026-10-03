@@ -10,14 +10,19 @@
 
 import type { DecisionBackendState } from '@aikami/constants';
 import {
+  createLlamaCppDecisionAdapter,
   createSystemOneDecisionAdapter,
   type DecisionAdapter,
   type DecisionReadinessVerdict,
+  NATIVE_LLAMACPP_DIALECT,
   probeDecisionBackend,
+  SYSTEM_ONE_DIALECT,
 } from '@aikami/frontend/ai-gateway/decision';
+import type { DecisionGameplayMode } from '@aikami/types';
 import type { ResolvedDecisionBackend } from '../../config/decision_backend_resolution';
 import type {
   DecisionBackendCapabilities,
+  DecisionGameplayModeOption,
   DecisionGameplayRouting,
   DecisionTaskSummary,
 } from './types';
@@ -44,10 +49,38 @@ export const defaultDecisionProbe: DecisionBackendCapabilities['probe'] = ({
  *
  * A runtime kind decides its own routes. A `jev` runtime is never handed an
  * Ollama `/api/version` URL it may not serve — that refusal is what made
- * external decision servers unusable.
+ * external decision servers unusable. Native `llamacpp` is a different adapter
+ * entirely, not this one with a different URL: it sends no `model` field,
+ * reads `answers[q].noul` as a probability, treats 501 as the
+ * not-a-decision-model signal, and enforces the loaded checkpoint's own option
+ * ceiling.
  */
 export const adapterForBackend = (backend: ResolvedDecisionBackend): DecisionAdapter => {
   const root = backend.endpoint.replace(/\/+$/, '');
+  const authHeaders =
+    backend.credential === undefined
+      ? undefined
+      : async () => ({
+          // biome-ignore lint/style/useNamingConvention: verbatim HTTP header name
+          Authorization: `Bearer ${backend.credential}`,
+        });
+
+  if (backend.runtime === 'llamacpp') {
+    return createLlamaCppDecisionAdapter({
+      endpoints: {
+        decision: `${root}/v1/systemone`,
+        health: `${root}/health`,
+        props: `${root}/props`,
+      },
+      checkpoint: backend.checkpoint,
+      languages: [...backend.languages],
+      // Resolved per request so a rotated credential takes effect without a
+      // restart, and so the secret never sits in a closure that could be
+      // serialised into a report.
+      ...(authHeaders === undefined ? {} : { authHeaders }),
+    });
+  }
+
   return createSystemOneDecisionAdapter({
     runtime: backend.runtime,
     endpoints: {
@@ -57,19 +90,21 @@ export const adapterForBackend = (backend: ResolvedDecisionBackend): DecisionAda
     },
     model: backend.checkpoint,
     languages: [...backend.languages],
-    // Resolved per request so a rotated credential takes effect without a
-    // restart, and so the secret never sits in a closure that could be
-    // serialised into a report.
-    ...(backend.credential === undefined
-      ? {}
-      : {
-          authHeaders: async () => ({
-            // biome-ignore lint/style/useNamingConvention: verbatim HTTP header name
-            Authorization: `Bearer ${backend.credential}`,
-          }),
-        }),
+    ...(authHeaders === undefined ? {} : { authHeaders }),
   });
 };
+
+/**
+ * The wire dialect a configured backend actually speaks.
+ *
+ * Derived from the runtime kind, because the runtime kind IS the dialect choice
+ * here: `llamacpp` builds the native adapter, everything else builds the
+ * `jev-v1` one. Reading this from one place is what stops a qualification gate
+ * from checking a native connection against `jev-v1` — the exact mistake a
+ * hardcoded string made.
+ */
+export const dialectForBackend = (backend: ResolvedDecisionBackend): string =>
+  backend.runtime === 'llamacpp' ? NATIVE_LLAMACPP_DIALECT : SYSTEM_ONE_DIALECT;
 
 /** Inputs to the state projection. */
 export type DeriveDecisionBackendStateOptions = {
@@ -141,6 +176,42 @@ export const decisionGameplayRouting = (options: {
     reason:
       'npc-action-selection is qualified on held-out data for this checkpoint; the consumer still enforces per-turn qualification, staleness and one fallback',
   };
+};
+
+/**
+ * The persisted Off/Shadow/On projection, one row per mode.
+ *
+ * Kept as a pure function beside {@link decisionGameplayRouting} so the UI
+ * renders a DECISION the code made rather than re-deriving "is `on` allowed?"
+ * in a template — which is how a mode selector ends up offering a setting the
+ * router would silently refuse.
+ *
+ * The asymmetry between `shadow` and `on` is deliberate and is the whole point
+ * of shadow existing: `shadow` evaluates a decision and DISCARDS it, so it
+ * cannot cause a wrong mutation and is therefore not gated on qualification.
+ * `on` can change the game and must be.
+ */
+export const decisionGameplayModeOptions = (options: {
+  readonly routing: DecisionGameplayRouting;
+  readonly persisted: DecisionGameplayMode;
+}): readonly DecisionGameplayModeOption[] => {
+  const refusedBecause = options.routing.reason;
+  return (['off', 'shadow', 'on'] as const).map((mode) => {
+    const allowed = mode === 'off' || mode === 'shadow' || options.routing.allowed;
+    return {
+      mode,
+      selected: options.persisted === mode,
+      allowed,
+      detail:
+        mode === 'off'
+          ? 'No decision call is made. Every turn is answered by the existing extraction path.'
+          : mode === 'shadow'
+            ? "A decision is evaluated and discarded, under the turn's own deadline and resource budget. The turn still answers from the existing path, so this cannot change the game."
+            : allowed
+              ? 'The decision may answer the turn.'
+              : `Refused: ${refusedBecause}`,
+    };
+  });
 };
 
 /**

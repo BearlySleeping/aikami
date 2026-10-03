@@ -208,10 +208,35 @@ let { viewModel }: Props = $props();
           Automatic gameplay routing
         </p>
         <p class="text-xs text-[#938ea1] font-sans mt-1">{viewModel.gameplayRouting.reason}</p>
-        <p class="text-[10px] text-[#938ea1]/60 font-sans mt-1">
-          Nothing in the game is routed to this backend. Configuring it here cannot change how
-          dialogue, combat or any other gameplay call behaves.
-        </p>
+
+        <!-- Off / Shadow / On. Shadow is deliberately ungated: it discards its
+             result, so it cannot change the game and does not need a
+             qualification. `on` is refused with the reason spelled out. -->
+        <fieldset class="mt-3 space-y-2" disabled={!viewModel.configured}>
+          <legend class="font-mono text-[10px] uppercase tracking-wider text-[#938ea1]/60">
+            Gameplay mode
+          </legend>
+          {#each viewModel.gameplayModeOptions as option (option.mode)}
+            <label
+              class="flex items-start gap-2 text-xs font-sans
+                {option.allowed ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}"
+            >
+              <input
+                type="radio"
+                name="decision-gameplay-mode"
+                class="radio radio-xs mt-0.5"
+                value={option.mode}
+                checked={option.selected}
+                disabled={!option.allowed}
+                onchange={() => viewModel.setGameplayMode(option.mode)}
+              >
+              <span>
+                <span class="font-mono">{option.mode}</span>
+                <span class="block text-[11px] text-[#938ea1]">{option.detail}</span>
+              </span>
+            </label>
+          {/each}
+        </fieldset>
       </div>
     </div>
   </section>

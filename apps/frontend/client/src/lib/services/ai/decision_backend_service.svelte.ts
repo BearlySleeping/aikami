@@ -21,6 +21,8 @@ import {
 import { BaseFrontendClass, type BaseFrontendClassOptions } from '@aikami/frontend/services/base';
 import { configService } from '../config/config_service.svelte.ts';
 import type { ResolvedDecisionBackend } from '../config/decision_backend_resolution';
+import type { NpcActionDecisionMode } from '../game/npc_action_decision.ts';
+import { npcActionDecisionService } from '../game/npc_action_decision_service.svelte.ts';
 import {
   adapterForBackend,
   DECISION_TEST_TIMEOUT_MS,
@@ -51,6 +53,12 @@ export type DecisionBackendServiceInterface = {
   summary(): DecisionBackendSummary;
   gameplayRouting(): DecisionGameplayRouting;
   test(): Promise<DecisionTestOutcome | undefined>;
+  /**
+   * Switches the persisted Off/Shadow/On mode.
+   *
+   * Delegated to the gameplay consumer so one place owns the mode.
+   */
+  setGameplayMode(mode: NpcActionDecisionMode): void;
   invalidate(): void;
   persist(): Promise<void>;
 };
@@ -209,6 +217,17 @@ class DecisionBackendService
   async persist(): Promise<void> {
     this.invalidate();
     await this._capabilities.persist();
+  }
+
+  /**
+   * Switches the persisted Off/Shadow/On mode.
+   *
+   * Delegates to the gameplay consumer, so there is ONE owner of the mode: the
+   * settings section renders it and the turn reads it, and neither keeps a
+   * private copy that could disagree after a reload.
+   */
+  setGameplayMode(mode: NpcActionDecisionMode): void {
+    npcActionDecisionService.setMode(mode);
   }
 }
 

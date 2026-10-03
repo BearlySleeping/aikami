@@ -107,7 +107,8 @@ export type DecisionProviderOption = {
   readonly id: string;
   readonly label: string;
   readonly description: string;
-  readonly runtime: 'ollama' | 'jev';
+  /** Mirrors the registry's runtime kind, including native `llamacpp`. */
+  readonly runtime: 'ollama' | 'jev' | 'llamacpp';
   readonly needsKey: boolean;
   readonly optionalKey: boolean;
   readonly defaultUrl?: string;

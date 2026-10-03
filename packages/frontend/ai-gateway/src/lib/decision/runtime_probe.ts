@@ -45,7 +45,18 @@ export type DecisionRuntimeKind =
    * hosted Jev API, or anything else implementing the same body. No Ollama
    * version route is assumed or required.
    */
-  | 'jev';
+  | 'jev'
+  /**
+   * NATIVE llama.cpp: `llama-server` at or after the pinned upstream commit,
+   * serving the TypeSafe-compatible `/v1/systemone`.
+   *
+   * Kept separate from `jev` because it is a different dialect with a different
+   * failure vocabulary, not a different deployment of the same one. In
+   * particular its "this checkpoint cannot answer" signal is HTTP 501, not a
+   * 404 and not a missing listing entry, and this module has no version floor
+   * to check — the pin is on the BUILD, established at setup.
+   */
+  | 'llamacpp';
 
 /** Endpoints a runtime probe may use. All caller-supplied; nothing is assumed. */
 export type DecisionRuntimeEndpoints = {
@@ -58,11 +69,15 @@ export type DecisionRuntimeEndpoints = {
 };
 
 /** Runtime identities, as reported in readiness and provenance. */
-export const DECISION_RUNTIME_KINDS: readonly DecisionRuntimeKind[] = ['ollama', 'jev'];
+export const DECISION_RUNTIME_KINDS: readonly DecisionRuntimeKind[] = ['ollama', 'jev', 'llamacpp'];
 
 /** Human-readable runtime label for a kind, with no vendor implied beyond the fact. */
-export const runtimeLabel = (runtime: DecisionRuntimeKind): string =>
-  runtime === 'ollama' ? `Ollama (>= ${SYSTEM_ONE_MIN_RUNTIME_VERSION})` : 'Jev-compatible server';
+export const runtimeLabel = (runtime: DecisionRuntimeKind): string => {
+  if (runtime === 'ollama') {
+    return `Ollama (>= ${SYSTEM_ONE_MIN_RUNTIME_VERSION})`;
+  }
+  return runtime === 'llamacpp' ? 'llama.cpp (native /v1/systemone)' : 'Jev-compatible server';
+};
 
 /** Failure states a runtime probe can report. Mirrors the dialect probe's. */
 export type DecisionRuntimeProbeFailureState = SystemOneProbeFailureState | 'misconfigured';
@@ -238,6 +253,21 @@ const advisoryCheckpoint = async (
 export const probeDecisionRuntime = async (
   options: DecisionRuntimeProbeOptions,
 ): Promise<DecisionRuntimeProbeResult> => {
+  // Native llama.cpp has no version floor to check (the pin is on the BUILD,
+  // established at setup) and no `/api/version`. Letting it fall through to the
+  // generic `jev` path would probe it with `jev`'s rules and report the result
+  // under the wrong dialect. It is served by `llamacpp_adapter.ts` instead.
+  if (options.runtime === 'llamacpp') {
+    return {
+      ok: false,
+      state: 'misconfigured',
+      reason:
+        "runtime 'llamacpp' is served by the native llama.cpp adapter, which reads " +
+        'GET /props and establishes readiness from the loaded checkpoint; it does not go ' +
+        'through the jev-v1 runtime probe',
+      runtimeKind: 'llamacpp',
+    };
+  }
   if (options.runtime === 'ollama') {
     if (options.endpoints.version === undefined) {
       return {

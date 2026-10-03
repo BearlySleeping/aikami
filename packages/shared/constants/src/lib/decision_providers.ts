@@ -17,8 +17,17 @@ export type DecisionProviderDescriptor = {
   id: string;
   label: string;
   description: string;
-  /** Which runtime probe is legitimate for this backend. */
-  runtime: 'ollama' | 'jev';
+  /**
+   * Which runtime probe is legitimate for this backend.
+   *
+   * `llamacpp` is its own kind, NOT a flavour of `jev`. The two disagree on the
+   * request body (native has no per-request `model`), on how a boolean comes
+   * back (native answers `noul` as a numeric probability), on which status
+   * means "this checkpoint cannot answer" (native 501) and on where checkpoint
+   * identity comes from (native: the server process). Filing native llama.cpp
+   * under `jev` would hide all four behind the wrong probe.
+   */
+  runtime: 'ollama' | 'jev' | 'llamacpp';
   /** Whether the endpoint URL is user-supplied. Always true today. */
   needsUrl: boolean;
   /** Whether a credential is required. */
@@ -58,6 +67,24 @@ export const DECISION_PROVIDERS: readonly DecisionProviderDescriptor[] = [
     defaultUrl: 'http://127.0.0.1:11434',
     externallyManaged: false,
     docsUrl: 'https://ollama.com/blog/ollama-now-supports-jev-style-decision-models',
+  },
+  {
+    id: 'llamacpp',
+    label: 'llama.cpp — decision models',
+    description:
+      'A llama.cpp server built with native /v1/systemone support (upstream #29818 or later). ' +
+      'Requires a purpose-trained decision checkpoint such as Laya, OpenJev, Julia-1, Lev or Kev. ' +
+      'A general chat GGUF cannot answer this endpoint.',
+    runtime: 'llamacpp',
+    needsUrl: true,
+    needsKey: false,
+    optionalKey: true,
+    isLocal: true,
+    defaultUrl: 'http://127.0.0.1:8080',
+    // A llama-server the player started is theirs. Aikami never stops, reloads
+    // or uninstalls a process it did not spawn.
+    externallyManaged: true,
+    docsUrl: 'https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md',
   },
   {
     id: 'jev-external',

@@ -119,8 +119,17 @@ export const VoiceParamsSchema = Type.Object({
  * `ollama` is asked for `/api/version` and must clear the dialect's floor.
  * `jev` is any externally managed Jev-compatible server (laya.cpp's HTTP route,
  * a hosted Jev API) and is never asked for an Ollama route it may not serve.
+ * `llamacpp` is NATIVE llama.cpp (`llama-server` at or after the pinned commit)
+ * speaking the TypeSafe-compatible `/v1/systemone` shape. It is a separate kind
+ * because it disagrees with `jev` on the request body, the boolean answer
+ * representation, the not-a-decision-model status and the source of checkpoint
+ * identity.
  */
-export const DecisionRuntimeSchema = Type.Union([Type.Literal('ollama'), Type.Literal('jev')]);
+export const DecisionRuntimeSchema = Type.Union([
+  Type.Literal('ollama'),
+  Type.Literal('jev'),
+  Type.Literal('llamacpp'),
+]);
 
 /**
  * A recorded workload qualification (C-568).
@@ -157,6 +166,31 @@ export const DecisionQualificationEvidenceSchema = Type.Object(
 );
 
 /**
+ * How much the game is allowed to do with this decision backend.
+ *
+ * PERSISTED on the connection, because a mode that resets on reload is not a
+ * setting. `off` is the default for every new connection: nothing is dispatched
+ * until a player deliberately widens it.
+ *
+ *   `off`    — no decision call is made at all. The existing extraction path
+ *              answers every turn.
+ *   `shadow` — a decision is evaluated but its result is DISCARDED; the turn
+ *              still answers from the existing path. Bounded by the same
+ *              resource and deadline policy as call 2, so it cannot consume the
+ *              fallback budget.
+ *   `on`     — the decision may answer the turn. Refused unless a matching
+ *              versioned {@link DecisionQualificationEvidenceSchema} record
+ *              exists; `shadow` is deliberately NOT gated, because shadow cannot
+ *              change anything.
+ */
+export const DecisionGameplayModeSchema = Type.Union([
+  Type.Literal('off'),
+  Type.Literal('shadow'),
+  Type.Literal('on'),
+]);
+export type DecisionGameplayMode = Static<typeof DecisionGameplayModeSchema>;
+
+/**
  * Decision-connection parameters.
  *
  * Carries the checkpoint plus the routing facts the adapter needs. Deliberately
@@ -186,6 +220,14 @@ export const DecisionParamsSchema = Type.Object({
    * checkpoint. With it absent, automatic routing is refused.
    */
   qualification: Type.Optional(DecisionQualificationEvidenceSchema),
+  /**
+   * Persisted Off/Shadow/On. Absent means `off`.
+   *
+   * Optional so that a connection written before this field existed loads
+   * unchanged and resolves to the safe default, rather than needing a vault
+   * migration that would rewrite every stored connection to say "off".
+   */
+  gameplayMode: Type.Optional(DecisionGameplayModeSchema),
 });
 
 // ---------------------------------------------------------------------------

@@ -11,6 +11,7 @@ import type {
   DecisionAdapter,
   DecisionReadinessVerdict,
 } from '@aikami/frontend/ai-gateway/decision';
+import type { DecisionGameplayMode } from '@aikami/types';
 import type { ResolvedDecisionBackend } from '../../config/decision_backend_resolution';
 
 /** One task a configured backend could serve, and whether it may. */
@@ -73,4 +74,21 @@ export type DecisionTestOutcome = {
   readonly verdict: DecisionReadinessVerdict;
   /** Ordered, credential-free setup steps derived from the verdict. */
   readonly steps: readonly { readonly id: string; readonly detail: string }[];
+};
+
+/** One selectable Off/Shadow/On row, with the reason it is or is not allowed. */
+export type DecisionGameplayModeOption = {
+  readonly mode: DecisionGameplayMode;
+  /** Whether this row is the persisted choice right now. */
+  readonly selected: boolean;
+  /**
+   * Whether selecting this mode would take effect.
+   *
+   * `false` for `on` when the backend is unqualified. The row is still shown —
+   * hiding it would leave a player wondering where the option went — but it is
+   * not selectable.
+   */
+  readonly allowed: boolean;
+  /** Player-facing explanation. Never contains an endpoint or a credential. */
+  readonly detail: string;
 };

@@ -282,6 +282,21 @@ export type NpcActionDecisionCapabilities = {
   readonly resolveBackend: () => ResolvedDecisionBackend | undefined;
   readonly createAdapter: (backend: ResolvedDecisionBackend) => DecisionAdapter;
   readonly readQualification: (backend: ResolvedDecisionBackend) => NpcActionQualification;
+  /**
+   * Reads the PERSISTED mode. Returns undefined when there is nothing to read.
+   *
+   * The mode lives on the connection rather than in the service so that it
+   * survives a reload; without this seam a `setMode` would be a session-local
+   * flag that silently reverts to `off` on the next launch.
+   */
+  readonly readMode?: () => NpcActionDecisionMode | undefined;
+  /**
+   * Writes the mode through canonical config and saves.
+   *
+   * Best-effort: a failure leaves the in-memory mode as chosen for this session
+   * but the next load reads `off`, which is the safe direction.
+   */
+  readonly persistMode?: (next: NpcActionDecisionMode) => Promise<void>;
 };
 
 /** What one turn passes in. */

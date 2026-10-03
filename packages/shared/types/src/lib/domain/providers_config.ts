@@ -14,6 +14,7 @@ import type {
   AiReasoningSchema,
   AiRoleSchema,
   ConnectionCapabilitySchema,
+  DecisionGameplayModeSchema,
   DecisionParamsSchema,
   DecisionRuntimeSchema,
   ImageParamsSchema,
@@ -73,6 +74,9 @@ export type DecisionParams = Static<typeof DecisionParamsSchema>;
 
 /** Which runtime serves a decision endpoint. */
 export type DecisionRuntime = Static<typeof DecisionRuntimeSchema>;
+
+/** Persisted Off/Shadow/On for a decision connection. */
+export type DecisionGameplayMode = Static<typeof DecisionGameplayModeSchema>;
 
 /** A credential + host. Created once per account. */
 export type AiProvider = Static<typeof AiProviderSchema>;

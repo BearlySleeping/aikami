@@ -1,0 +1,51 @@
+{
+  "checkpoint": "Laya-Q8_0.gguf",
+  "runtime": "llama.cpp a4cb4c61f CPU",
+  "rows": [
+    {
+      "context": "tiny",
+      "stateChars": 22,
+      "inputTokens": 36,
+      "p50Ms": 144.4,
+      "minMs": 138.3,
+      "maxMs": 152.8,
+      "n": 6
+    },
+    {
+      "context": "1x",
+      "stateChars": 495,
+      "inputTokens": 173,
+      "p50Ms": 759.8,
+      "minMs": 739.1,
+      "maxMs": 793.9,
+      "n": 6
+    },
+    {
+      "context": "3x",
+      "stateChars": 1485,
+      "inputTokens": 457,
+      "p50Ms": 2222.5,
+      "minMs": 2189.6,
+      "maxMs": 2285.8,
+      "n": 6
+    },
+    {
+      "context": "9x",
+      "stateChars": 4455,
+      "inputTokens": 1309,
+      "p50Ms": 8873.0,
+      "minMs": 8435.5,
+      "maxMs": 9191.3,
+      "n": 6
+    },
+    {
+      "context": "27x",
+      "stateChars": 13365,
+      "inputTokens": 3865,
+      "p50Ms": 48769.0,
+      "minMs": 48350.8,
+      "maxMs": 55035.6,
+      "n": 6
+    }
+  ]
+}
