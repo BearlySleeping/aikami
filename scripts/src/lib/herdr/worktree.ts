@@ -107,7 +107,7 @@ export type BootstrapOptions = {
   repoRoot: string;
   /** Run `bun install --frozen-lockfile` (default true). */
   install?: boolean;
-  /** Copy gitignored-but-required seed files (.env*, paraglide, .secrets). */
+  /** Copy gitignored-but-required seed files (.env*, .secrets). */
   seed?: boolean;
   /** Install timeout in ms (default 180_000 — cold worktrees are slow). */
   installTimeoutMs?: number;
@@ -582,7 +582,7 @@ export const findWorktreeByBranch = async (
  *      applied FIRST, before anything writes to those paths
  *   2. .envrc delegating to the repo root, followed by `direnv allow`
  *   3. .pi/npm/node_modules symlink (pi extensions deps)
- *   4. seed gitignored-but-required files (.env*, paraglide, .secrets)
+ *   4. seed gitignored-but-required files (.env*, .secrets)
  *   5. bun install --frozen-lockfile
  *   6. verify dependencies and generate the canonical cached content plane
  *

@@ -50,7 +50,6 @@ An AI-driven living world where every NPC has a personality, memory, and agenda.
 - ✅ Blackbox testing infrastructure + Playwright E2E
 - ✅ CI/CD pipeline (GitHub Actions: pr-checks + release)
 - ✅ Developer setup and onboarding scripts
-- ✅ i18n (Paraglide)
 
 **Planned / In Progress:**
 - Authored 10–20 minute offline vertical slice (the immediate product goal)

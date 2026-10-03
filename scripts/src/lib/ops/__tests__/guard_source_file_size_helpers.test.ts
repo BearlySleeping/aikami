@@ -56,7 +56,6 @@ describe('classification', () => {
     expect(isGeneratedFile('apps/x/src/env.d.ts')).toBe(true);
     expect(isGeneratedFile('.pi/generated-skills/foo/bar.ts')).toBe(true);
     expect(isGeneratedFile('packages/x/src/generated/catalog.ts')).toBe(true);
-    expect(isGeneratedFile('packages/x/src/paraglide/messages.js')).toBe(true);
     expect(isGeneratedFile('apps/x/src/lpc_asset_catalog_generated.ts')).toBe(true);
     expect(isGeneratedFile('apps/x/src/catalog.generated.ts')).toBe(true);
     expect(isGeneratedFile('apps/frontend/client/static/content.js')).toBe(true);

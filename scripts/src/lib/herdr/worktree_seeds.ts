@@ -94,14 +94,6 @@ export const WORKTREE_SEED_PATHS: WorktreeSeedEntry[] = [
   { from: 'scripts/.env', to: 'scripts/.env', kind: 'file', optional: true },
   // GCP service-account keys (needed by gcloud deploys)
   { from: '.secrets', to: '.secrets', kind: 'dir', optional: true },
-  // Paraglide generated i18n files — gitignored, required for client
-  // typecheck/build/dev (Vite re-generates them, but only when running).
-  {
-    from: 'apps/frontend/client/src/lib/paraglide',
-    to: 'apps/frontend/client/src/lib/paraglide',
-    kind: 'dir',
-    optional: true,
-  },
 ];
 
 /** Copy gitignored files and return every source path that failed to copy. */

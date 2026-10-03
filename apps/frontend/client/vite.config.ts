@@ -5,7 +5,6 @@ import { dirname, join, resolve } from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import type { Mode } from '@aikami/types';
-import { paraglideVitePlugin } from '@inlang/paraglide-js';
 import adapter from '@sveltejs/adapter-static';
 import { sveltekit } from '@sveltejs/kit/vite';
 import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
@@ -182,7 +181,6 @@ export default defineConfig(({ command, mode }) => {
         $appCss: toSrcPath('app.css'),
         $components: toSrcPath('lib/components'),
         '$components/*': toSrcPath('lib/components/*'),
-        $i18n: toSrcPath('lib/utils/i18n'),
         $lib: toPackagesPath('lib'),
         '$lib/*': toSrcPath('lib/*'),
         $router: toPackagesPath('frontend/services/src/lib/router/router_utils'),
@@ -247,10 +245,6 @@ export default defineConfig(({ command, mode }) => {
         '@aikami/types': toPackagesPath('shared/types/src'),
         '@aikami/utils': toPackagesPath('shared/utils/src'),
       },
-    }) as PluginOption,
-    paraglideVitePlugin({
-      project: './project.inlang',
-      outdir: './src/lib/paraglide',
     }) as PluginOption,
     {
       name: 'internal-logging-endpoint',

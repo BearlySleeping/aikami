@@ -54,8 +54,7 @@ src/lib/
 │   │   └── login-view-model.svelte.ts
 │   └── settings/
 │       └── SettingsView.svelte
-├── services.ts            # Service exports
-└── i18n.ts               # Internationalization
+└── services.ts            # Service exports
 
 packages/frontend/services/
 └── src/lib/
@@ -119,7 +118,6 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '$services'
-import t from '$i18n'
 
 export type LoginViewModelOptions = BaseViewModelOptions & {
   // Specific options if needed
@@ -157,7 +155,6 @@ export const getLoginViewModel = (
 ```svelte
 <script lang="ts">
     import { getLoginViewModel } from "./login-view-model.svelte.ts";
-    import t from "$i18n";
 
     const viewModel = getLoginViewModel({});
 </script>
@@ -165,7 +162,7 @@ export const getLoginViewModel = (
 <div class="min-h-screen flex items-center justify-center bg-base-200">
     <div class="card w-full max-w-md bg-base-100 shadow-xl">
         <div class="card-body">
-            <h2 class="card-title">{t.login()}</h2>
+            <h2 class="card-title">Sign In</h2>
 
             {#if viewModel.error}
                 <div class="alert alert-error">
@@ -176,7 +173,7 @@ export const getLoginViewModel = (
             <form onsubmit|preventDefault={() => viewModel.login()}>
                 <div class="form-control">
                     <label class="label" for="email">
-                        <span class="label-text">{t.email()}</span>
+                        <span class="label-text">Email</span>
                     </label>
                     <input
                         id="email"
@@ -189,7 +186,7 @@ export const getLoginViewModel = (
 
                 <div class="form-control">
                     <label class="label" for="password">
-                        <span class="label-text">{t.password()}</span>
+                        <span class="label-text">Password</span>
                     </label>
                     <input
                         id="password"
@@ -261,17 +258,31 @@ navigationItems = $derived.by(() => {
 import { authService, BaseViewModel, type BaseViewModelOptions, routerService } from '$services'
 ```
 
-### Internationalization
+### Localization
+
+The client is English-only. There is no message catalogue and no runtime locale
+negotiation: write user-facing text literally in the View or ViewModel that owns
+it.
+
+```svelte
+<!-- View -->
+<h1>Characters</h1>
+```
+
+Where the game engine emits a stable key instead of prose, keep an explicit
+key→English-text table in a leaf module and resolve it in the ViewModel. That
+keeps the "no logic in Views" rule intact without inventing a translation layer:
 
 ```typescript
-import t from '$i18n';
+// combat_intent_translations.ts
+export const COMBAT_INTENT_TRANSLATIONS: Record<string, string> = {
+  'combat.invalid.target_out_of_range': 'That target is out of range.',
+};
 
-// Usage in ViewModel
-const label = t.home();
-
-// Usage in Views
-<h1>{t.page_title()}</h1>
-<p>{t.greeting({ name: userName })}</p>
+// ViewModel
+translateIntentMessage(messageKey: string): string {
+  return COMBAT_INTENT_TRANSLATIONS[messageKey] ?? 'That instruction was refused.';
+}
 ```
 
 **Important:** All user-facing text MUST be added to `messages/en.json` (and other language files) and accessed via `t`:
@@ -370,7 +381,7 @@ When migrating old code:
 2. **Replace `on:` handlers** - Use `onclick`, `oninput`, etc.
 3. **Replace `bind:value`** - Use controlled inputs with ViewModel setters
 4. **Remove `$:` statements** - Use `$derived()`
-5. **Update imports** - Use `$services` and `$i18n`
+5. **Update imports** - Use `$services`
 6. **Use `type` instead of `interface`**
 7. **Options pattern** - `BaseViewModelOptions & { }`
 
@@ -488,7 +499,7 @@ email = $state('')
 ❌ Using `on:` event handlers
 ❌ Using `bind:value` without ViewModel setter
 ❌ Importing from `$lib/services.ts` directly in views
-❌ Hardcoded strings (use i18n)
+❌ Resolving user-facing text in a View (write it literally, or map a stable key in the ViewModel)
 ❌ Arrow functions in `$derived()` when not needed
 ❌ **Arrow function methods in classes** (breaks `super` and `this`)
 ❌ Missing JSDoc on public methods

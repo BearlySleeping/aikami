@@ -620,7 +620,6 @@ describe('guard CLI — exclusions and determinism', () => {
     writeSource(root, 'apps/frontend/example/build/out.ts', 3000);
     writeSource(root, 'apps/src/.cache/tmp.ts', 3000);
     writeSource(root, 'apps/src/bundle_generated.ts', 3000);
-    writeSource(root, 'apps/src/paraglide/messages.ts', 3000);
     writeSource(root, 'apps/src/fine.ts', 10);
     expect(runGuard({ root }).status).toBe(0);
   });
