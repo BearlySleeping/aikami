@@ -47,6 +47,7 @@ import {
   prepareScene,
   SceneTransitionRunner,
 } from './game_world/scene_transition.ts';
+import { resolveScreenToCell } from './game_world/screen_projection.ts';
 import { WeatherFxController } from './game_world/weather_fx_controller.ts';
 import {
   type WorkerFailure,
@@ -64,7 +65,6 @@ import type { TextureManager } from './rendering/texture_manager.ts';
 import type { TilemapChunk } from './rendering/tilemap_chunk_renderer.ts';
 import type { GameAiService } from './services/ai_service.ts';
 import type { GameApiService } from './services/api_service.ts';
-import { findNearestPathableCell } from './systems/actor_footprint.ts';
 import type { CollisionGrid } from './systems/collision_system.ts';
 import { dirtyCheckAppearance } from './systems/render_system.ts';
 import { type FrameUvResolver, renderTilemap } from './systems/tilemap_render_system.ts';
@@ -555,7 +555,10 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     this._resolveTag = options.resolveTag;
     this._releaseUrl = options.releaseUrl;
 
-    this._renderBufferPool = new RenderBufferPool();
+    this._renderBufferPool = new RenderBufferPool({
+      onRejectedState: (detail) =>
+        this.warn('[GameWorld] worker state rejected at the buffer boundary', detail),
+    });
     this._frameRenderer = new FrameRenderer({
       textureManager: options.textureManager,
     });
@@ -601,6 +604,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       onFailure: (failure) => this._handleWorkerFailure(failure),
       onHeartbeat: (event) =>
         reportHeartbeatEvent(event, (message, detail) => this.warn(message, detail)),
+      onLateReply: (detail) => this.warn('[GameWorld] dropped a stale worker reply', detail),
       shouldCheckStall: () => !this._inputController.locked,
     });
 
@@ -910,6 +914,9 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     this.debug('[GameWorld] destroy:called');
     // Flag disposal so in-flight async init paths (worker import) abort
     this._disposed = true;
+    // Retire the transition runner FIRST: a map load awaiting a parse must
+    // not resume or unlock input on an engine that is being torn down.
+    this._sceneTransition.dispose();
     // Stop the render loop
     this._running = false;
     this._combatMoveMode = false;
@@ -2184,26 +2191,12 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    * @returns The resolved tile cell coordinates.
    */
   screenToCell(screenX: number, screenY: number): { cellX: number; cellY: number } {
-    const world = this.unprojectScreenToWorld(screenX, screenY);
-    const tileSize = this._activeTileSize ?? 32;
-    let cellX = Math.floor(world.x / tileSize);
-    let cellY = Math.floor(world.y / tileSize);
-
-    const terrain = this._activeTerrainGrid;
-    if (terrain) {
-      cellX = Math.max(0, Math.min(terrain.width - 1, cellX));
-      cellY = Math.max(0, Math.min(terrain.height - 1, cellY));
-    }
-
-    const pathGrid = this._activePathGrid;
-    if (pathGrid) {
-      const nearest = findNearestPathableCell(pathGrid, cellX, cellY);
-      if (nearest) {
-        return { cellX: nearest.x, cellY: nearest.y };
-      }
-    }
-
-    return { cellX, cellY };
+    return resolveScreenToCell({
+      world: this.unprojectScreenToWorld(screenX, screenY),
+      tileSize: this._activeTileSize,
+      terrain: this._activeTerrainGrid,
+      pathGrid: this._activePathGrid,
+    });
   }
 }
 

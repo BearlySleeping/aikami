@@ -14,6 +14,15 @@
 // re-checks it after every await. A superseded load never installs scene
 // state, never resumes the engine, and never surfaces an error — the newer
 // transition owns engine state.
+//
+// Recovery rule: a failed switch is NOT made good by flipping `running` back
+// to true. Once the previous surface is torn down, "running" describes an
+// empty world the player can still drive. The runner instead replays the last
+// committed scene — surface, grids, worker payload — so the renderer and the
+// worker agree again before input is handed back. When there is nothing to go
+// back to (first boot) or the replay itself fails, the engine stays paused
+// with input locked and an actionable error, which is a visible failure rather
+// than a playable empty scene.
 
 import type { PropContactShadow } from '@aikami/schemas';
 import type { PackConfig } from '@aikami/types';
@@ -117,6 +126,15 @@ export type SceneTransitionLog = {
   debug: (message: string, detail?: unknown) => void;
   warn: (message: string, detail?: unknown) => void;
   error: (message: string, detail?: unknown) => void;
+};
+
+/**
+ * The last scene that completed the whole transition, kept so a failed switch
+ * can be undone instead of leaving the engine running on nothing.
+ */
+export type CommittedScene = {
+  scene: PreparedScene;
+  options: LoadMapOptions;
 };
 
 /**
@@ -270,6 +288,9 @@ export type SceneTransitionDeps = {
 export class SceneTransitionRunner {
   private readonly _deps: SceneTransitionDeps;
   private _generation = 0;
+  private _disposed = false;
+  /** Last fully committed scene, or `undefined` before the first success. */
+  private _committed: CommittedScene | undefined;
 
   constructor(deps: SceneTransitionDeps) {
     this._deps = deps;
@@ -278,6 +299,11 @@ export class SceneTransitionRunner {
   /** Current supersession generation (test/diagnostic visibility). */
   get generation(): number {
     return this._generation;
+  }
+
+  /** True once {@link dispose} has run. */
+  get disposed(): boolean {
+    return this._disposed;
   }
 
   /**
@@ -290,11 +316,28 @@ export class SceneTransitionRunner {
   }
 
   /**
+   * Permanently retires the runner. Supersedes every in-flight load AND
+   * forbids the failure path from resuming or unlocking: after the facade has
+   * torn the engine down, a late transition must not hand a dead world back
+   * to the player (or to a worker that has already been terminated).
+   */
+  dispose(): void {
+    this._disposed = true;
+    this._generation++;
+    this._committed = undefined;
+  }
+
+  /**
    * Runs one map transition. Resolves when the scene is live, or returns
    * silently when superseded by a newer transition. Only the newest
    * transition may resume the engine or surface an error.
    */
   async load(options: LoadMapOptions): Promise<void> {
+    if (this._disposed) {
+      this._deps.log.debug('loadMap:ignored-disposed', { mapUrl: options.mapUrl });
+      return;
+    }
+
     const { mapUrl, packConfig } = options;
     this._deps.log.debug('loadMap', {
       mapUrl,
@@ -311,34 +354,38 @@ export class SceneTransitionRunner {
       this._deps.setRunning(false);
       this._deps.setInputLocked(true);
 
-      // 2. Tear down the previous scene's surface and derived state.
-      this._deps.resetSurface();
-
-      // 3-4. Load, parse, and derive the new scene.
+      // 2. Load, parse, and derive the new scene BEFORE anything is torn
+      //    down. A parse/render failure here is recoverable for free: the
+      //    live surface and the worker world are still the old, consistent
+      //    scene, and the recovery path below simply resumes it.
       const scene = await this._deps.prepare({ mapUrl, packConfig });
-      if (generation !== this._generation) {
+      if (this._isStale(generation)) {
         this._deps.log.debug('loadMap:superseded-after-parse', { mapUrl, generation });
         return;
       }
 
+      // 3. The replacement is proven loadable — now the previous surface can
+      //    go. Nothing before this point was destructive.
+      this._deps.resetSurface();
       this._deps.installScene(scene);
 
-      // 5. Render the new scene graph + overlays. A superseded render
+      // 4. Render the new scene graph + overlays. A superseded render
       //    releases its own resources and reports false.
       const rendered = await this._deps.render(scene, () => generation === this._generation);
-      if (!rendered || generation !== this._generation) {
+      if (!rendered || this._isStale(generation)) {
         this._deps.log.debug('loadMap:superseded-after-render', { mapUrl, generation });
         return;
       }
 
-      // 6. Round-trip to the worker.
+      // 5. Round-trip to the worker.
       await this._deps.postLoadMap(scene, options);
-      if (generation !== this._generation) {
+      if (this._isStale(generation)) {
         this._deps.log.debug('loadMap:superseded-after-worker', { mapUrl, generation });
         return;
       }
 
-      // 7. Resume the engine and signal completion.
+      // 6. Resume the engine and signal completion.
+      this._committed = { scene, options };
       this._deps.setRunning(true);
       this._deps.setInputLocked(false);
       this._deps.emitMapLoaded();
@@ -347,18 +394,97 @@ export class SceneTransitionRunner {
     } catch (error) {
       // A superseded load must not resume/unlock the engine or surface an
       // error — the newer transition owns engine state now.
-      if (generation !== this._generation) {
+      if (this._isStale(generation)) {
         this._deps.log.debug('loadMap:superseded-error', { mapUrl, generation });
         return;
       }
       const message = error instanceof Error ? error.message : String(error);
       this._deps.log.error('loadMap:failed', { mapUrl, error: message });
 
-      // Restore engine state so it does not remain soft-locked.
-      this._deps.setRunning(true);
-      this._deps.setInputLocked(false);
-      this._deps.emitError(`Map load failed: ${message}`);
+      await this._recoverFromFailure({ generation, mapUrl, error: message });
       throw error;
     }
+  }
+
+  /** Whether `generation` has been superseded or the runner retired. */
+  private _isStale(generation: number): boolean {
+    return generation !== this._generation || this._disposed;
+  }
+
+  /**
+   * Restores a playable world after a failed transition.
+   *
+   * Two outcomes, and never the fake one:
+   *
+   * - **Replayed**: the last committed scene is re-installed, re-rendered and
+   *   re-posted to the worker, so renderer and worker agree, then the engine
+   *   resumes with input unlocked. The original failure is still reported.
+   * - **Held**: there is nothing to replay (first boot) or the replay itself
+   *   failed. The engine stays paused with input LOCKED — never unlocked onto
+   *   a world that does not exist — and the error tells the player to reload.
+   */
+  private async _recoverFromFailure(options: {
+    generation: number;
+    mapUrl: string;
+    error: string;
+  }): Promise<void> {
+    const committed = this._committed;
+
+    if (!committed) {
+      // First boot (or nothing has ever completed): there is no world to
+      // return to. Running an empty scene would let the player drive a void.
+      this._deps.log.warn('loadMap:no-previous-scene', { mapUrl: options.mapUrl });
+      this._holdLocked(options);
+      return;
+    }
+
+    try {
+      this._deps.resetSurface();
+      this._deps.installScene(committed.scene);
+
+      const rendered = await this._deps.render(committed.scene, () =>
+        this._isCurrentForRecovery(options.generation),
+      );
+      if (!rendered || this._isStale(options.generation)) {
+        this._deps.log.debug('loadMap:recovery-superseded', { mapUrl: options.mapUrl });
+        return;
+      }
+
+      await this._deps.postLoadMap(committed.scene, committed.options);
+      if (this._isStale(options.generation)) {
+        return;
+      }
+
+      this._deps.setRunning(true);
+      this._deps.setInputLocked(false);
+      this._deps.log.warn('loadMap:recovered-previous-scene', {
+        mapUrl: committed.options.mapUrl,
+      });
+      this._deps.emitError(`Map load failed: ${options.error}`);
+    } catch (recoveryError) {
+      const detail = recoveryError instanceof Error ? recoveryError.message : String(recoveryError);
+      this._deps.log.error('loadMap:recovery-failed', {
+        mapUrl: options.mapUrl,
+        error: detail,
+      });
+      this._holdLocked({ ...options, error: `${options.error} (recovery failed: ${detail})` });
+    }
+  }
+
+  /**
+   * Freezes the engine in its last known state with input locked and reports
+   * an actionable message. Deliberate, visible failure — not a soft-lock.
+   */
+  private _holdLocked(options: { mapUrl: string; error: string }): void {
+    this._deps.setRunning(false);
+    this._deps.setInputLocked(true);
+    this._deps.emitError(
+      `Map load failed: ${options.error}. The engine is paused — reload the game to continue.`,
+    );
+  }
+
+  /** Recovery is abandoned the moment anything else owns engine state. */
+  private _isCurrentForRecovery(generation: number): boolean {
+    return !this._disposed && generation === this._generation;
   }
 }

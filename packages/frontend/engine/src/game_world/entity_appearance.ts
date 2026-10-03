@@ -29,7 +29,14 @@ export type AppearanceLayer = {
   sprite: Sprite;
   recipe: LpcLayerRecipe;
   texture?: Texture;
+  /**
+   * Parsed sheet used for WebGPU-safe frame lookups. `sheet.textures` is read
+   * every animation frame, so the layer holds a LEASE on it for as long as the
+   * layer is alive; `releaseSheet` is what ends that pin.
+   */
   spritesheet?: Spritesheet;
+  /** Ends the spritesheet pin. Always defined when `spritesheet` is. */
+  releaseSheet?: () => void;
   /** C-496 AC-3: compiled shared visual definition for this layer. */
   definition?: CompleteSpriteDefinition;
   /**
@@ -110,6 +117,12 @@ export class EntityAppearanceLoader {
   private readonly _textureManager: TextureManager | undefined;
   private readonly _loadTexture: (url: string) => Promise<Texture>;
   private readonly _onLoadError: ((info: { url: string; error: string }) => void) | undefined;
+  /**
+   * Sprite → the release that ends that sprite's spritesheet pin. Weak, so a
+   * sprite that is destroyed without going through `commit` cannot keep its
+   * release alive; `disposePrepared` is the explicit path for that case.
+   */
+  private readonly _sheetReleases = new WeakMap<Container, () => void>();
 
   constructor(options: EntityAppearanceLoaderOptions) {
     this._resolveAssetUrl = options.resolveAssetUrl;
@@ -213,11 +226,14 @@ export class EntityAppearanceLoader {
    * synchronous step that adds the new ones, so there is no blank frame.
    *
    * Only sprite display objects are destroyed — textures belong to shared
-   * caches and must survive.
+   * caches and must survive. What the old children DO own is their spritesheet
+   * lease, so each replaced child releases its pin here; that is what makes the
+   * sheet evictable again once the last actor using it is gone.
    */
   commit(options: { target: Container; prepared: PreparedAppearance }): void {
     const stale = options.target.removeChildren();
     for (const child of stale) {
+      this._releaseSpriteSheet(child);
       child.destroy();
     }
     for (const layer of options.prepared.layers) {
@@ -228,10 +244,30 @@ export class EntityAppearanceLoader {
 
   /**
    * Releases a prepared appearance that will not be committed (stale load,
-   * entity replaced, or partial failure). Destroys sprites only.
+   * entity replaced, or partial failure). Destroys sprites and drops the
+   * spritesheet leases they were holding.
    */
   disposePrepared(prepared: PreparedAppearance): void {
+    for (const layer of prepared.layers) {
+      layer.releaseSheet?.();
+      layer.releaseSheet = undefined;
+      layer.spritesheet = undefined;
+    }
     prepared.container.destroy({ children: true });
+  }
+
+  /**
+   * Releases the spritesheet lease a destroyed sprite was holding. Keyed by
+   * sprite identity so a replaced child can give its pin back even though the
+   * layer object that acquired it is long gone.
+   */
+  private _releaseSpriteSheet(sprite: Container): void {
+    const release = this._sheetReleases.get(sprite);
+    if (!release) {
+      return;
+    }
+    this._sheetReleases.delete(sprite);
+    release();
   }
 
   private async _loadLayer(
@@ -254,9 +290,12 @@ export class EntityAppearanceLoader {
       const geometry = resolveLpcSheetGeometry(texture);
 
       // C-168: create a cached Spritesheet so frame lookup is WebGPU-safe.
+      // The lease is held for this layer's whole life: eviction nulls
+      // `sheet.textures`, which the per-frame path reads.
       let spritesheet: Spritesheet | undefined;
+      let releaseSheet: (() => void) | undefined;
       if (this._textureManager && geometry.columns > 0 && geometry.rows > 0) {
-        spritesheet = await this._textureManager.getOrCreateSpritesheet({
+        const lease = await this._textureManager.acquireSpritesheet({
           baseTexture: texture,
           layout: {
             frameWidth: geometry.pitch,
@@ -267,9 +306,14 @@ export class EntityAppearanceLoader {
           },
           cacheKey: `${url}::${geometry.pitch}`,
         });
+        spritesheet = lease.spritesheet;
+        releaseSheet = lease.release;
       }
 
       const sprite = new Sprite(Texture.WHITE);
+      this._sheetReleases.set(sprite, () => {
+        releaseSheet?.();
+      });
       sprite.eventMode = 'none';
       // C-428: anchor the logical body. Feet are at bottom-center for the
       // standard 64px cell; oversize 128px cells center the body, so feet sit
@@ -295,7 +339,7 @@ export class EntityAppearanceLoader {
         definition = undefined;
       }
 
-      return { sprite, recipe, texture, spritesheet, definition };
+      return { sprite, recipe, texture, spritesheet, definition, releaseSheet };
     } catch (error) {
       this._onLoadError?.({ url, error: String(error) });
       return undefined;

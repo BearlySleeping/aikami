@@ -3,6 +3,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { LpcLayerRecipe } from '@aikami/lpc';
 import { Container, Sprite, Texture, TextureSource } from 'pixi.js';
+import { TextureManager } from '../rendering/texture_manager.ts';
 import { EntityAppearanceLoader } from './entity_appearance.ts';
 
 const recipe = (slot: string, assetId: string): LpcLayerRecipe => ({
@@ -148,5 +149,86 @@ describe('EntityAppearanceLoader — commit and dispose', () => {
     const target = new Container();
     loader.commit({ target, prepared });
     expect(prepared.layers[0]?.texture?.destroyed).toBe(false);
+  });
+});
+
+describe('EntityAppearanceLoader — spritesheet lease lifetime', () => {
+  /** A loader backed by a real TextureManager, so leases are really taken. */
+  const makeLeaseHarness = (): { loader: EntityAppearanceLoader; manager: TextureManager } => {
+    const manager = new TextureManager();
+    const loader = new EntityAppearanceLoader({
+      resolveAssetUrl: (_slot, assetId) => `/assets/${assetId}.png`,
+      loadTexture: async () => makeTexture(),
+      textureManager: manager,
+    });
+    return { loader, manager };
+  };
+
+  test('a prepared layer pins its sheet and disposePrepared gives the pin back', async () => {
+    const harness = makeLeaseHarness();
+    const prepared = await harness.loader.prepare({
+      recipes: [recipe('body', 'body.1')],
+      state: 'walk',
+    });
+
+    expect(prepared.layers).toHaveLength(1);
+    expect(prepared.layers[0]?.spritesheet).toBeDefined();
+    expect(harness.manager.spritesheetCount).toBe(1);
+
+    const sheet = prepared.layers[0]?.spritesheet;
+    harness.loader.disposePrepared(prepared);
+
+    // The pin is gone and the layer no longer references the sheet, so a
+    // later eviction can safely null `sheet.textures`.
+    expect(prepared.layers[0]?.spritesheet).toBeUndefined();
+    expect(prepared.layers[0]?.releaseSheet).toBeUndefined();
+    expect(harness.manager.spritesheetCount).toBe(1);
+    expect(sheet?.textures).not.toBeNull();
+  });
+
+  test('replacing a committed appearance releases the replaced sheet', async () => {
+    const { loader, manager } = makeLeaseHarness();
+    const target = new Container();
+
+    const first = await loader.prepare({ recipes: [recipe('body', 'body.1')], state: 'walk' });
+    const firstSheet = first.layers[0]?.spritesheet;
+    loader.commit({ target, prepared: first });
+    expect(manager.spritesheetCount).toBe(1);
+
+    // A different asset, committed over the top: the old sheet is now unused.
+    const second = await loader.prepare({ recipes: [recipe('body', 'body.2')], state: 'walk' });
+    loader.commit({ target, prepared: second });
+
+    expect(manager.spritesheetCount).toBe(2);
+    expect(firstSheet?.textures).not.toBeNull();
+
+    // With the pin returned, the manager can drop it — and does.
+    const released = [];
+    for (let i = 0; i < 128; i++) {
+      released.push(
+        await manager.acquireSpritesheet({
+          baseTexture: Texture.WHITE,
+          layout: { frameWidth: 8, frameHeight: 8, columns: 2, rows: 1 },
+          cacheKey: `filler-${i}`,
+        }),
+      );
+    }
+    // 128 unpinned entries plus the sheet the live appearance still holds:
+    // the over-budget one is the pinned one, which is the whole point.
+    expect(manager.spritesheetCount).toBe(129);
+    expect(second.layers[0]?.spritesheet?.textures).not.toBeNull();
+    for (const lease of released) {
+      lease.release();
+    }
+  });
+
+  test('a superseded prepare never leaves a pin behind', async () => {
+    const { loader, manager } = makeLeaseHarness();
+    const stale = await loader.prepare({ recipes: [recipe('body', 'body.9')], state: 'walk' });
+    loader.disposePrepared(stale);
+    loader.disposePrepared(stale);
+
+    // Idempotent: the second dispose must not double-release a pin.
+    expect(manager.spritesheetCount).toBe(1);
   });
 });

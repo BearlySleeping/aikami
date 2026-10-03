@@ -1,6 +1,9 @@
 // packages/frontend/engine/src/rendering/texture_manager.ts
-import { Rectangle, Spritesheet, Texture } from 'pixi.js';
+import { Spritesheet, Texture } from 'pixi.js';
 import type { LpcLayerRecipe } from '../components/appearance.ts';
+import { createDeferredLoadRegistry } from './deferred_loads.ts';
+import { getSheetFrameAt, sliceSheetFrames } from './spritesheet_frames.ts';
+import { type SpritesheetLease, SpritesheetRegistry } from './spritesheet_registry.ts';
 
 // ---------------------------------------------------------------------------
 // LPC Atlas Data — dynamically generated Spritesheet JSON descriptor
@@ -116,9 +119,6 @@ const DEFAULT_MAX_BYTES = 200 * 1024 * 1024; // 200 MB
 
 /** Default limit for grayscale sheet cache entries. */
 const DEFAULT_MAX_GRAYSCALE_SHEETS = 256;
-
-/** Default limit for Spritesheet cache entries. */
-const DEFAULT_MAX_SPRITESHEETS = 128;
 
 // ---------------------------------------------------------------------------
 // preparePaletteLUT — static palette utility
@@ -280,36 +280,20 @@ export class TextureManager {
   private readonly _grayscaleCache: Map<number, GrayscaleSheetEntry>;
 
   /**
-   * Cache for sliced frame sub-textures.
-   *
-   * Key: composite string `${assetId}:${frameIndex}`.
-   * Each slice is a PixiJS Texture sharing the same GPU resource
-   * as the base spritesheet — only the UV `frame` rectangle differs.
-   * This means frame cache entries do NOT count against VRAM budget.
+   * Lease-counted parsed-sheet cache. A sheet stays resident while any live
+   * appearance layer holds a lease on it, so animation frames can never read
+   * a destroyed `sheet.textures` map.
    */
-  private readonly _frameSliceCache: Map<string, Texture>;
+  private readonly _spritesheets: SpritesheetRegistry;
 
-  /**
-   * Reference counts for frame slices.
-   *
-   * When a slice's count drops to zero, it is removed from the
-   * frame slice cache without destroying the GPU resource (which
-   * belongs to the base sheet).
-   */
-  private readonly _frameSliceRefCounts: Map<string, number>;
+  /** Single-flight loaders: concurrent misses for one key share one load. */
+  private readonly _textureLoads = createDeferredLoadRegistry<number, Texture>();
 
-  /**
-   * Cache of parsed PixiJS `Spritesheet` instances.
-   *
-   * Keyed by `${cacheKey}::${columns}x${rows}` to avoid recreating
-   * atlas objects when multiple entities share the same base asset
-   * with the same grid layout (per C-168 Edge Cases).
-   *
-   * Spritesheet.parse() sets correct WebGPU-compatible UVs on
-   * every sub-texture — avoiding the UV fragmentation bug caused
-   * by manual `new Texture({ source, frame: rect })`.
-   */
-  private readonly _spritesheetCache: Map<string, Spritesheet>;
+  /** Same single-flight guard for the grayscale LPC sheet cache. */
+  private readonly _grayscaleLoads = createDeferredLoadRegistry<number, Texture>();
+
+  /** Set by {@link destroy}; blocks late loads from repopulating caches. */
+  private _destroyed = false;
 
   /** Maximum textures before eviction. */
   private readonly _maxTextures: number;
@@ -335,9 +319,7 @@ export class TextureManager {
   constructor(config?: Partial<TextureManagerConfig>) {
     this._cache = new Map();
     this._grayscaleCache = new Map();
-    this._frameSliceCache = new Map();
-    this._frameSliceRefCounts = new Map();
-    this._spritesheetCache = new Map();
+    this._spritesheets = new SpritesheetRegistry();
     this._maxTextures = config?.maxTextures ?? DEFAULT_MAX_TEXTURES;
     this._maxBytes = config?.maxBytes ?? DEFAULT_MAX_BYTES;
     this._maxGrayscaleSheets = DEFAULT_MAX_GRAYSCALE_SHEETS;
@@ -354,8 +336,13 @@ export class TextureManager {
    * Returns a cached texture or loads + caches a new one.
    *
    * If the texture is already cached, updates its access timestamp (LRU
-   * promotion). Otherwise, calls the injected `loadTexture` function,
-   * caches the result, and evicts stale entries if limits are exceeded.
+   * promotion). Otherwise the load runs single-flight: concurrent callers for
+   * the same key share one decode and one accounting entry, instead of each
+   * loading the asset and inflating the VRAM estimate N times.
+   *
+   * A load that completes after {@link destroy} still resolves with its
+   * texture — the texture really was produced, and it is owned by the PixiJS
+   * asset system, not by this cache — but it is never cached.
    *
    * @param key - Numeric asset ID.
    * @returns A promise resolving to the PixiJS texture.
@@ -371,19 +358,18 @@ export class TextureManager {
       return existing.texture;
     }
 
-    const texture = await this._loadTexture(key);
-    const estimatedBytes = texture.width * texture.height * BYTES_PER_PIXEL;
-
-    this._cache.set(key, {
-      texture,
-      lastAccessedAt: ++this._tick,
-      byteSize: estimatedBytes,
+    const loaded = await this._textureLoads.run({
+      key,
+      load: () => this._loadTexture(key),
+      commit: (texture) => this._commitTexture(this._cache, key, texture),
     });
 
-    this._totalBytes += estimatedBytes;
-    this._evictIfNeeded();
-
-    return texture;
+    const committed = this._cache.get(key);
+    if (committed) {
+      committed.lastAccessedAt = ++this._tick;
+      return committed.texture;
+    }
+    return loaded;
   }
 
   /**
@@ -408,18 +394,18 @@ export class TextureManager {
       return existing.texture;
     }
 
-    const texture = await this._loadTexture(key);
-    const estimatedBytes = texture.width * texture.height * BYTES_PER_PIXEL;
-
-    this._grayscaleCache.set(key, {
-      texture,
-      lastAccessedAt: ++this._tick,
-      byteSize: estimatedBytes,
+    const loaded = await this._grayscaleLoads.run({
+      key,
+      load: () => this._loadTexture(key),
+      commit: (texture) => this._commitGrayscaleSheet(key, texture),
     });
 
-    this._evictGrayscaleIfNeeded();
-
-    return texture;
+    const committed = this._grayscaleCache.get(key);
+    if (committed) {
+      committed.lastAccessedAt = ++this._tick;
+      return committed.texture;
+    }
+    return loaded;
   }
 
   /**
@@ -500,31 +486,32 @@ export class TextureManager {
   }
 
   /**
-   * Creates or retrieves a cached PixiJS `Spritesheet` for the given
-   * base texture and grid layout.
+   * Acquires a LEASE on the cached PixiJS `Spritesheet` for the given base
+   * texture and grid layout.
    *
-   * On first call, generates a procedural {@link LpcAtlasData} JSON
-   * descriptor via {@link generateLpcAtlas}, constructs a
-   * `Spritesheet`, and awaits `sheet.parse()` — which sets correct
-   * WebGPU-compatible UV mappings on every sub-texture. Subsequent
-   * calls for the same `cacheKey + layout` hit the cache (O(1)
-   * Map lookup).
+   * On first request it generates a procedural {@link LpcAtlasData} JSON
+   * descriptor via {@link generateLpcAtlas}, constructs a `Spritesheet`, and
+   * awaits `sheet.parse()` — which sets correct WebGPU-compatible UV mappings
+   * on every sub-texture. Concurrent requests for the same key share one
+   * parse; each still gets its own lease.
    *
-   * Caching prevents atlas recreation when multiple NPCs share the
-   * same base asset (C-168 Edge Case: spritesheet cache).
+   * The lease is load-bearing, not bookkeeping: while it is held the sheet is
+   * pinned and cannot be evicted, because `sheet.textures` is read on every
+   * animation frame and `Spritesheet.destroy()` nulls it. Callers MUST call
+   * `release()` when the sheet is torn down or replaced.
    *
-   * @param options - Spritesheet creation options.
+   * @param options - Spritesheet request options.
    * @param options.baseTexture - The loaded base spritesheet texture.
    * @param options.layout - Grid layout descriptor.
    * @param options.cacheKey - Unique key for the spritesheet cache
    *   (typically the asset URL or a composite `url:layout` string).
-   * @returns A promise resolving to the parsed `Spritesheet`.
+   * @returns The sheet plus the release that ends the pin.
    */
-  async getOrCreateSpritesheet(options: {
+  async acquireSpritesheet(options: {
     baseTexture: Texture;
     layout: LpcSpritesheetLayout;
     cacheKey: string;
-  }): Promise<Spritesheet> {
+  }): Promise<SpritesheetLease> {
     const { baseTexture, layout, cacheKey } = options;
 
     const columns = layout.columns ?? Math.floor(baseTexture.width / layout.frameWidth);
@@ -532,30 +519,45 @@ export class TextureManager {
 
     const sheetKey = `${cacheKey}::${columns}x${rows}`;
 
-    const existing = this._spritesheetCache.get(sheetKey);
-    if (existing) {
-      return existing;
-    }
+    return this._spritesheets.acquire({
+      cacheKey: sheetKey,
+      create: async () => {
+        const atlasData = generateLpcAtlas({
+          layout: { ...layout, columns, rows },
+          imageKey: cacheKey,
+        });
 
-    const atlasData = generateLpcAtlas({
-      layout: { ...layout, columns, rows },
-      imageKey: cacheKey,
+        const spritesheet = new Spritesheet(baseTexture, atlasData);
+        await spritesheet.parse();
+        return spritesheet;
+      },
     });
+  }
 
-    const spritesheet = new Spritesheet(baseTexture, atlasData);
-    await spritesheet.parse();
-
-    this._spritesheetCache.set(sheetKey, spritesheet);
-    this._evictSpritesheetsIfNeeded();
-
-    return spritesheet;
+  /**
+   * Unpinned convenience accessor for callers that only read a frame once.
+   *
+   * Resolves the cached sheet (parsing it on first use) WITHOUT holding a
+   * lease, so the sheet may be evicted — nulling `textures` — while the
+   * caller still holds the object. Correct only for immediate, one-shot
+   * lookups. Any consumer that keeps the sheet across frames must use
+   * {@link TextureManager.acquireSpritesheet} and release it on teardown.
+   */
+  async getOrCreateSpritesheet(options: {
+    baseTexture: Texture;
+    layout: LpcSpritesheetLayout;
+    cacheKey: string;
+  }): Promise<Spritesheet> {
+    const lease = await this.acquireSpritesheet(options);
+    lease.release();
+    return lease.spritesheet;
   }
 
   /**
    * Retrieves a single frame sub-texture from a cached or newly-created
    * `Spritesheet`.
    *
-   * Uses {@link getOrCreateSpritesheet} under the hood for caching,
+   * Uses {@link TextureManager.acquireSpritesheet} under the hood for caching,
    * then returns `sheet.textures[frameKey]`. The returned texture has
    * correct WebGPU UVs set by `Spritesheet.parse()`.
    *
@@ -575,20 +577,26 @@ export class TextureManager {
   }): Promise<Texture | null> {
     const { baseTexture, layout, cacheKey, frameKey } = options;
 
-    const spritesheet = await this.getOrCreateSpritesheet({
+    // A one-shot lookup: the frame texture is read here and never held, so the
+    // lease ends immediately. Long-lived holders must not use this method.
+    const lease = await this.acquireSpritesheet({
       baseTexture,
       layout,
       cacheKey,
     });
 
-    return spritesheet.textures[frameKey] ?? null;
+    try {
+      return lease.spritesheet.textures[frameKey] ?? null;
+    } finally {
+      lease.release();
+    }
   }
 
   /**
    * Returns the number of cached Spritesheet instances.
    */
   get spritesheetCount(): number {
-    return this._spritesheetCache.size;
+    return this._spritesheets.count;
   }
 
   /**
@@ -609,13 +617,10 @@ export class TextureManager {
   }
 
   /**
-   * Releases a grayscale sheet from the dedicated grayscale cache
-   * along with all cached frame slices derived from it.
+   * Releases a grayscale sheet from the dedicated grayscale cache.
    *
-   * Frame slices share the same GPU resource as the base sheet,
-   * so they are invalidated when the base is destroyed. Their cache
-   * entries and reference counts are cleared without separate destroy
-   * calls (the GPU resource is already freed by the sheet destroy).
+   * The grayscale base is an asset-owned texture, so only the wrapper this
+   * cache created is destroyed.
    *
    * @param key - Numeric grayscale asset ID to release.
    */
@@ -623,16 +628,6 @@ export class TextureManager {
     const entry = this._grayscaleCache.get(key);
     if (!entry) {
       return;
-    }
-
-    // Purge all frame slices derived from this base sheet.
-    // Slices are keyed as "{assetId}:{frameIndex}".
-    const prefix = `${key}:`;
-    for (const sliceKey of this._frameSliceCache.keys()) {
-      if (sliceKey.startsWith(prefix)) {
-        this._frameSliceCache.delete(sliceKey);
-        this._frameSliceRefCounts.delete(sliceKey);
-      }
     }
 
     entry.texture.destroy();
@@ -676,17 +671,15 @@ export class TextureManager {
     }
     this._grayscaleCache.clear();
 
-    // Frame slices share GPU resources — no separate destroy needed.
-    // Just clear the cache and reference counts.
-    this._frameSliceCache.clear();
-    this._frameSliceRefCounts.clear();
+    // Leased sheets are retired here and destroyed when their last lease
+    // drops; the registry never nulls `sheet.textures` under a live holder.
+    this._spritesheets.destroy();
 
-    // Spritesheet cache: destroy each Spritesheet to release its
-    // internal base texture references, then clear the cache.
-    for (const sheet of this._spritesheetCache.values()) {
-      sheet.destroy();
-    }
-    this._spritesheetCache.clear();
+    // Detach every in-flight load so a load that completes after teardown
+    // resolves for its original caller but cannot repopulate the caches.
+    this._destroyed = true;
+    this._textureLoads.invalidate();
+    this._grayscaleLoads.invalidate();
   }
 
   // -----------------------------------------------------------------------
@@ -717,92 +710,15 @@ export class TextureManager {
    * @throws If frame dimensions are zero or layout is invalid.
    */
   sliceSpritesheet(options: { texture: Texture; layout: LpcSpritesheetLayout }): Texture[] {
-    const { texture, layout } = options;
-    this._validateLayout(layout, texture.width, texture.height);
-
-    const frameWidth = layout.frameWidth;
-    const frameHeight = layout.frameHeight;
-    const columns = layout.columns ?? Math.floor(texture.width / frameWidth);
-    const rows = layout.rows ?? Math.floor(texture.height / frameHeight);
-
-    if (columns <= 0 || rows <= 0) {
-      return [];
-    }
-
-    const frames: Texture[] = [];
-
-    for (let row = 0; row < rows; row++) {
-      for (let col = 0; col < columns; col++) {
-        const frame = this.getFrameAt({
-          texture,
-          layout,
-          frameIndex: row * columns + col,
-        });
-        if (frame) {
-          frames.push(frame);
-        }
-      }
-    }
-
-    return frames;
+    return sliceSheetFrames(options);
   }
 
-  /**
-   * Retrieves a single frame sub-texture at the given index from a
-   * loaded spritesheet.
-   *
-   * The frame index is row-major: `row = floor(index / columns)`,
-   * `col = index % columns`. The returned sub-texture shares the
-   * base sheet's GPU resource — only the UV frame rectangle is unique.
-   *
-   * Results are cached in `_frameSliceCache` keyed by
-   * `"{assetId}:{frameIndex}"` so repeat lookups are O(1). When the
-   * texture has no associated asset ID (direct slice), caching is
-   * skipped.
-   *
-   * @param options - Frame lookup options.
-   * @param options.texture - The spritesheet texture.
-   * @param options.layout - Grid layout descriptor.
-   * @param options.frameIndex - Zero-based frame index (row-major).
-   * @returns The frame sub-texture, or null if out of bounds.
-   */
   getFrameAt(options: {
     texture: Texture;
     layout: LpcSpritesheetLayout;
     frameIndex: number;
   }): Texture | null {
-    const { texture, layout, frameIndex } = options;
-
-    if (frameIndex < 0) {
-      return null;
-    }
-
-    const frameWidth = layout.frameWidth;
-    const frameHeight = layout.frameHeight;
-    const columns = layout.columns ?? Math.floor(texture.width / frameWidth);
-    const rows = layout.rows ?? Math.floor(texture.height / frameHeight);
-
-    const totalFrames = columns * rows;
-    if (frameIndex >= totalFrames) {
-      return null;
-    }
-
-    const col = frameIndex % columns;
-    const row = Math.floor(frameIndex / columns);
-    const x = col * frameWidth;
-    const y = row * frameHeight;
-
-    // Clamp: ensure the frame does not extend past texture boundaries
-    if (x + frameWidth > texture.width || y + frameHeight > texture.height) {
-      return null;
-    }
-
-    const frameRect = new Rectangle(x, y, frameWidth, frameHeight);
-
-    return new Texture({
-      source: texture.source,
-      frame: frameRect,
-    });
+    return getSheetFrameAt(options);
   }
 
   // -----------------------------------------------------------------------
@@ -810,30 +726,40 @@ export class TextureManager {
   // -----------------------------------------------------------------------
 
   /**
-   * Validates a spritesheet layout and throws on invalid parameters.
+   * Publishes a freshly loaded texture into `cache` and re-runs eviction.
    *
-   * @param layout - The layout to validate.
-   * @param sheetWidth - Source sheet width for context in error messages.
-   * @param sheetHeight - Source sheet height for context in error messages.
+   * Runs at most once per key (single-flight) and never after
+   * {@link destroy}, which is what keeps a late load from resurrecting a
+   * cache that no longer exists.
    */
-  private _validateLayout(
-    layout: LpcSpritesheetLayout,
-    sheetWidth: number,
-    sheetHeight: number,
-  ): void {
-    if (layout.frameWidth <= 0 || layout.frameHeight <= 0) {
-      throw new Error(
-        `Invalid frame dimensions: ${layout.frameWidth}×${layout.frameHeight}. ` +
-          `Sheet is ${sheetWidth}×${sheetHeight}.`,
-      );
+  private _commitTexture(cache: Map<number, CacheEntry>, key: number, texture: Texture): void {
+    if (this._destroyed || cache.has(key)) {
+      return;
     }
 
-    if (layout.columns === undefined && layout.rows === undefined) {
-      throw new Error(
-        'Spritesheet layout must specify at least `columns` or `rows`. ' +
-          `Sheet is ${sheetWidth}×${sheetHeight}, frame: ${layout.frameWidth}×${layout.frameHeight}.`,
-      );
+    const estimatedBytes = texture.width * texture.height * BYTES_PER_PIXEL;
+    cache.set(key, {
+      texture,
+      lastAccessedAt: ++this._tick,
+      byteSize: estimatedBytes,
+    });
+
+    this._totalBytes += estimatedBytes;
+    this._evictIfNeeded();
+  }
+
+  /** Publishes a freshly loaded grayscale base sheet. */
+  private _commitGrayscaleSheet(key: number, texture: Texture): void {
+    if (this._destroyed || this._grayscaleCache.has(key)) {
+      return;
     }
+
+    this._grayscaleCache.set(key, {
+      texture,
+      lastAccessedAt: ++this._tick,
+      byteSize: texture.width * texture.height * BYTES_PER_PIXEL,
+    });
+    this._evictGrayscaleIfNeeded();
   }
 
   /**
@@ -853,30 +779,6 @@ export class TextureManager {
   private _evictGrayscaleIfNeeded(): void {
     while (this._grayscaleCache.size > this._maxGrayscaleSheets) {
       this._evictOne(this._grayscaleCache, 'grayscale');
-    }
-  }
-
-  /**
-   * Evicts the oldest entries from the Spritesheet cache when
-   * the count exceeds {@link DEFAULT_MAX_SPRITESHEETS}.
-   *
-   * Spritesheets don't carry an access timestamp in the current
-   * implementation — eviction is simple FIFO (first inserted,
-   * first evicted) via `Map.keys().next()`. This is acceptable
-   * because Spritesheet cache entries are small (atlas JSON +
-   * sub-texture UV metadata, not raw pixel data).
-   */
-  private _evictSpritesheetsIfNeeded(): void {
-    while (this._spritesheetCache.size > DEFAULT_MAX_SPRITESHEETS) {
-      const firstKey = this._spritesheetCache.keys().next().value;
-      if (firstKey === undefined) {
-        break;
-      }
-      const sheet = this._spritesheetCache.get(firstKey);
-      if (sheet) {
-        sheet.destroy();
-      }
-      this._spritesheetCache.delete(firstKey);
     }
   }
 

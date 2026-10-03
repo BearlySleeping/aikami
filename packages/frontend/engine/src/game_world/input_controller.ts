@@ -118,8 +118,19 @@ export class InputController {
   /**
    * Sets the global input lock and always zeroes velocity on the transition
    * so movement does not stick across pause/unpause or overlay cycles.
+   *
+   * Locking FORGETS the held-key set. A lock is a discontinuity (pause,
+   * overlay, scene transition): the keys the player was holding are no longer
+   * the keys they are holding once input returns, and the release events for
+   * them may already have been consumed by the browser. Keeping the set alive
+   * across a lock let a later `keyup` recompute a NONZERO velocity from the
+   * leftovers of the pre-lock press (hold W+D, lock, release D → dispatch W)
+   * even though input was suppressed.
    */
   setLocked(locked: boolean): void {
+    if (locked) {
+      this._activeKeys.clear();
+    }
     this._locked = locked;
     this._onVelocity({ x: 0, y: 0 });
   }
@@ -177,19 +188,45 @@ export class InputController {
 
   private _handleKeyUp(event: KeyboardEvent): void {
     const key = event.key.toLowerCase();
+
+    // A release that lands on a focused control is STILL a release of a key
+    // the game believes is held: focus moves between the keydown and the
+    // keyup (click a button mid-walk) and the browser still routes the event
+    // to the new target. Ignoring it left the key stuck down forever. Only
+    // the default action is withheld — the owned key is always released.
     if (this._isInputField(event.target)) {
+      if (this._releaseKey(key)) {
+        this._updateVelocity();
+      }
       return;
     }
-    if (this._activeKeys.has(key)) {
+
+    if (this._releaseKey(key)) {
       event.preventDefault();
-      this._activeKeys.delete(key);
       this._updateVelocity();
     }
   }
 
+  /** Drops `key` from the held set. Returns whether it was actually held. */
+  private _releaseKey(key: string): boolean {
+    if (!this._activeKeys.has(key)) {
+      return false;
+    }
+    this._activeKeys.delete(key);
+    return true;
+  }
+
   private _handleBlur(): void {
+    // A window blur loses the keyboard entirely: the OS never delivers the
+    // matching keyup, so the held set must be dropped here. If movement was
+    // actually in flight, cancel the click-path too — otherwise the player
+    // keeps auto-walking to a destination chosen before focus was lost.
+    const wasMoving = this._activeKeys.size > 0;
     this._activeKeys.clear();
     this._onVelocity({ x: 0, y: 0 });
+    if (wasMoving) {
+      this._onMovementStart();
+    }
   }
 
   /**
@@ -202,6 +239,14 @@ export class InputController {
   }
 
   private _updateVelocity(): void {
+    // Locked input never moves. Every path that could otherwise publish a
+    // nonzero vector (a late keyup, a lock raced with a held key) funnels
+    // through here, so the invariant is asserted in one place.
+    if (this._locked) {
+      this._onVelocity({ x: 0, y: 0 });
+      return;
+    }
+
     let vx = 0;
     let vy = 0;
 
