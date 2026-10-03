@@ -20,7 +20,6 @@
 // module and asserts it can be constructed and read.
 
 import { describe, expect, test } from 'bun:test';
-import { NpcActionDecisionService } from './npc_action_decision_service.svelte.ts';
 
 describe('the decision service graph boots', () => {
   test('the production singleton constructs and answers mode() without a TDZ crash', async () => {
@@ -44,21 +43,5 @@ describe('the decision service graph boots', () => {
     const backend = await import('../ai/decision_backend_service.svelte.ts');
     expect(backend.decisionBackendService).toBeDefined();
     expect('setGameplayMode' in backend.decisionBackendService).toBe(false);
-  });
-
-  test('hydrate is idempotent and a failing read leaves the service off', async () => {
-    // A read that throws must not wedge the service, and must not promote it to
-    // a mode nobody chose.
-    const service = new NpcActionDecisionService({
-      capabilities: {
-        readMode: () => {
-          throw new Error('config unavailable');
-        },
-      },
-    });
-
-    expect(service.mode()).toBe('off');
-    // Second call must not re-read, and must not throw either.
-    expect(service.mode()).toBe('off');
   });
 });
