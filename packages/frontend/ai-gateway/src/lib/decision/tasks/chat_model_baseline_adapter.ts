@@ -39,6 +39,7 @@ import type {
 } from '../adapters/types.ts';
 import type { DecisionAnswer, DecisionCapability, DecisionLiteral } from '../types.ts';
 import { DEFAULT_DECISION_LIMITS } from '../types.ts';
+import { probeOllamaResidency, unverifiedResidency } from './residency_probe.ts';
 
 /** Options for {@link createChatModelDecisionAdapter}. */
 export type ChatModelDecisionAdapterOptions = {
@@ -51,6 +52,15 @@ export type ChatModelDecisionAdapterOptions = {
   readonly maxContextBytes?: number;
   readonly transport?: typeof fetch;
   readonly languages?: readonly ('en' | 'multi')[];
+  /**
+   * The runtime's process-state route, when it has one.
+   *
+   * Set this only for a runtime that lists loaded models (an Ollama-compatible
+   * daemon answers at `<root>/api/ps`). Left unset, residency is reported as
+   * unverified rather than inferred — a chat completion's duration is not
+   * evidence about whether a checkpoint was loaded for it.
+   */
+  readonly residencyEndpoint?: string;
 };
 
 /** Builds the prompt body for one dispatch unit. */
@@ -196,6 +206,33 @@ const readActionId = (
     : { ok: false, detail: 'chat completion had no actionId' };
 };
 
+/**
+ * A signal bounded by BOTH the caller's cancellation and the request's deadline.
+ *
+ * The adapter checked `deadlineAt` before dispatching, which stops a request
+ * that has already run out of budget — but it did nothing for one that starts
+ * with budget and then hangs. The caller aborts or the deadline arrives, the
+ * fetch is torn down, and the attempt settles instead of holding a slot.
+ */
+const deadlineBoundedSignal = (options: {
+  readonly signal: AbortSignal;
+  readonly deadlineAt: number;
+}): AbortSignal => {
+  const remaining = options.deadlineAt - Date.now();
+  if (remaining <= 0) {
+    return AbortSignal.abort();
+  }
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), remaining);
+  const onAbort = (): void => controller.abort();
+  options.signal.addEventListener('abort', onAbort, { once: true });
+  controller.signal.addEventListener('abort', () => {
+    clearTimeout(timer);
+    options.signal.removeEventListener('abort', onAbort);
+  });
+  return controller.signal;
+};
+
 /** Why a transport error is what it is, given what the request's own state says. */
 const transportReason = (
   signal: AbortSignal,
@@ -284,6 +321,17 @@ export const createChatModelDecisionAdapter = (
     backendId,
     dialect: 'openai-chat',
 
+    async residency(probe) {
+      if (options.residencyEndpoint === undefined) {
+        return unverifiedResidency('none', 'no residency route was configured for this endpoint');
+      }
+      return probeOllamaResidency({
+        root: options.residencyEndpoint,
+        checkpoint: options.model,
+        ...(probe?.signal === undefined ? {} : { signal: probe.signal }),
+      });
+    },
+
     async capability(probe): Promise<DecisionCapability> {
       const outcome = await probeChatEndpoint(
         doFetch,
@@ -315,6 +363,7 @@ export const createChatModelDecisionAdapter = (
         inferenceStarted - queueStarted,
         Date.now() - inferenceStarted,
       ];
+      const bounded = deadlineBoundedSignal({ signal, deadlineAt });
 
       try {
         const response = await doFetch(`${root}/chat/completions`, {
@@ -323,7 +372,7 @@ export const createChatModelDecisionAdapter = (
           body: JSON.stringify(
             completionBody({ model: options.model, prompt: buildPrompt(request), unit }),
           ),
-          signal,
+          signal: bounded,
         });
 
         const refused = refusalFor(response.status);
@@ -331,7 +380,21 @@ export const createChatModelDecisionAdapter = (
           return failure(refused, `chat endpoint answered ${response.status}`, ...elapsed());
         }
 
-        const parsed = readActionId(await response.json());
+        // A body that is not JSON is a MALFORMED RESPONSE, not an unreachable
+        // backend; letting it reach the transport handler would report the wrong
+        // failure and hide a real provider regression.
+        let rawBody: unknown;
+        try {
+          rawBody = await response.json();
+        } catch (error) {
+          return failure(
+            'invalid-response',
+            `chat body was not JSON: ${String(error)}`,
+            ...elapsed(),
+          );
+        }
+
+        const parsed = readActionId(rawBody);
         if (!parsed.ok) {
           return failure('invalid-response', parsed.detail, ...elapsed());
         }

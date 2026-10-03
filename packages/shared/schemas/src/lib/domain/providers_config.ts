@@ -123,6 +123,40 @@ export const VoiceParamsSchema = Type.Object({
 export const DecisionRuntimeSchema = Type.Union([Type.Literal('ollama'), Type.Literal('jev')]);
 
 /**
+ * A recorded workload qualification (C-568).
+ *
+ * `qualifiedForGameplay: true` alone is NOT a qualification. It says the player
+ * ticked a box; it says nothing about WHICH task, at WHICH task version, over
+ * WHICH wire dialect, answered by WHICH checkpoint. The first consumer treated
+ * that boolean as a current-version qualification, which manufactured the one
+ * piece of evidence the routing gate exists to require.
+ *
+ * This record carries the four things that must match before a decision backend
+ * may answer automatically, plus provenance for the record itself so a stale one
+ * is identifiable rather than merely wrong.
+ *
+ * Absent in practice: nothing in this build writes it, because no shipped
+ * measurement has cleared the gate. Its absence means FAIL CLOSED.
+ */
+export const DecisionQualificationEvidenceSchema = Type.Object(
+  {
+    /** Task the measurement scored. */
+    taskId: Type.String({ minLength: 1 }),
+    /** Task contract version the measurement was taken against. */
+    taskVersion: Type.Integer({ minimum: 1 }),
+    /** Wire dialect the measurement was taken over. */
+    dialect: Type.String({ minLength: 1 }),
+    /** Checkpoint that actually answered. */
+    checkpoint: Type.String({ minLength: 1 }),
+    /** ISO timestamp of the measurement, for identifying a stale record. */
+    measuredAt: Type.Optional(Type.String()),
+    /** Run identifier of the measurement, when it produced one. */
+    runId: Type.Optional(Type.String()),
+  },
+  { additionalProperties: false },
+);
+
+/**
  * Decision-connection parameters.
  *
  * Carries the checkpoint plus the routing facts the adapter needs. Deliberately
@@ -138,8 +172,20 @@ export const DecisionParamsSchema = Type.Object({
   runtime: DecisionRuntimeSchema,
   /** Languages the checkpoint declares. Anything else must abstain. */
   languages: Type.Optional(Type.Array(Type.Union([Type.Literal('en'), Type.Literal('multi')]))),
-  /** Whether this backend may serve automatic gameplay tasks. Off by default. */
+  /**
+   * Whether the player has opted this backend into automatic tasks at all.
+   *
+   * A MASTER SWITCH, not a qualification: it can only ever narrow what the
+   * versioned {@link DecisionQualificationEvidenceSchema} record permits.
+   */
   qualifiedForGameplay: Type.Optional(Type.Boolean()),
+  /**
+   * The measured qualification this connection relies on.
+   *
+   * Routing requires this AND a matching current task/version/dialect/
+   * checkpoint. With it absent, automatic routing is refused.
+   */
+  qualification: Type.Optional(DecisionQualificationEvidenceSchema),
 });
 
 // ---------------------------------------------------------------------------

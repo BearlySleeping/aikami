@@ -5,7 +5,7 @@
   ".pi/extensions/herdr_orchestrator.ts": 1209,
   "apps/frontend/client/src/lib/services/audio/tts_service.svelte.ts": 919,
   "apps/frontend/client/src/lib/services/config/config_service.svelte.ts": 1570,
-  "apps/frontend/client/src/lib/services/game/npc_dialogue_service.svelte.ts": 2846,
+  "apps/frontend/client/src/lib/services/game/npc_dialogue_service.svelte.ts": 2845,
   "apps/frontend/client/src/lib/services/game/npc_dialogue_service.test.ts": 2474,
   "apps/frontend/client/src/lib/services/game/quest_state_service.svelte.ts": 1715,
   "apps/frontend/client/src/lib/views/character/persona/create/persona_create_view_model.svelte.ts": 943,

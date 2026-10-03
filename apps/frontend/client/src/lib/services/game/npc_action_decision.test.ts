@@ -7,7 +7,7 @@
 // which promise broke rather than just that a boolean flipped.
 
 import { describe, expect, it } from 'bun:test';
-import { NPC_ACTION_SELECTION_TASK_ID } from '@aikami/frontend-ai-gateway/decision/tasks';
+import { NPC_ACTION_SELECTION_TASK_ID } from '@aikami/frontend/ai-gateway/decision/tasks';
 import {
   enumerateNpcActionCandidates,
   type NpcActionCandidateSet,
@@ -51,6 +51,9 @@ describe('routing — qualification is pinned to four things', () => {
       configured: true,
       qualification: qualified(),
       taskId: NPC_ACTION_SELECTION_TASK_ID,
+      expectedTaskVersion: 1,
+      expectedDialect: 'jev-v1',
+      expectedCheckpoint: 'tev1',
       candidates: candidates(),
     });
     expect(route.route).toBe('decision');
@@ -62,9 +65,54 @@ describe('routing — qualification is pinned to four things', () => {
       configured: true,
       qualification: qualified({ qualified: false, reason: 'sample inference only' }),
       taskId: NPC_ACTION_SELECTION_TASK_ID,
+      expectedTaskVersion: 1,
+      expectedDialect: 'jev-v1',
+      expectedCheckpoint: 'tev1',
       candidates: candidates(),
     });
     expect(route).toMatchObject({ route: 'llm', refusal: 'not-qualified' });
+  });
+
+  it('refuses a qualification recorded at an older TASK VERSION', () => {
+    const route = resolveNpcActionRoute({
+      mode: 'on',
+      configured: true,
+      qualification: qualified({ taskVersion: 0 }),
+      taskId: NPC_ACTION_SELECTION_TASK_ID,
+      expectedTaskVersion: 1,
+      expectedDialect: 'jev-v1',
+      expectedCheckpoint: 'tev1',
+      candidates: candidates(),
+    });
+    expect(route).toMatchObject({ route: 'llm', refusal: 'task-version-mismatch' });
+  });
+
+  it('refuses a qualification recorded over a different DIALECT', () => {
+    const route = resolveNpcActionRoute({
+      mode: 'on',
+      configured: true,
+      qualification: qualified({ dialect: 'jev-v2' }),
+      taskId: NPC_ACTION_SELECTION_TASK_ID,
+      expectedTaskVersion: 1,
+      expectedDialect: 'jev-v1',
+      expectedCheckpoint: 'tev1',
+      candidates: candidates(),
+    });
+    expect(route).toMatchObject({ route: 'llm', refusal: 'dialect-mismatch' });
+  });
+
+  it('refuses a qualification recorded for a different CHECKPOINT', () => {
+    const route = resolveNpcActionRoute({
+      mode: 'on',
+      configured: true,
+      qualification: qualified({ checkpoint: 'nimble' }),
+      taskId: NPC_ACTION_SELECTION_TASK_ID,
+      expectedTaskVersion: 1,
+      expectedDialect: 'jev-v1',
+      expectedCheckpoint: 'tev1',
+      candidates: candidates(),
+    });
+    expect(route).toMatchObject({ route: 'llm', refusal: 'checkpoint-mismatch' });
   });
 
   it('refuses a qualification recorded against a DIFFERENT task', () => {
@@ -74,6 +122,9 @@ describe('routing — qualification is pinned to four things', () => {
       configured: true,
       qualification: qualified({ taskId: 'npc-command-kind' }),
       taskId: NPC_ACTION_SELECTION_TASK_ID,
+      expectedTaskVersion: 1,
+      expectedDialect: 'jev-v1',
+      expectedCheckpoint: 'tev1',
       candidates: candidates(),
     });
     expect(route).toMatchObject({ route: 'llm', refusal: 'task-mismatch' });
@@ -85,6 +136,9 @@ describe('routing — qualification is pinned to four things', () => {
       configured: false,
       qualification: qualified(),
       taskId: NPC_ACTION_SELECTION_TASK_ID,
+      expectedTaskVersion: 1,
+      expectedDialect: 'jev-v1',
+      expectedCheckpoint: 'tev1',
       candidates: candidates(),
     });
     expect(route).toMatchObject({ route: 'llm', refusal: 'not-configured' });
@@ -98,6 +152,9 @@ describe('routing — qualification is pinned to four things', () => {
       configured: true,
       qualification: qualified(),
       taskId: NPC_ACTION_SELECTION_TASK_ID,
+      expectedTaskVersion: 1,
+      expectedDialect: 'jev-v1',
+      expectedCheckpoint: 'tev1',
       candidates: candidates(),
     });
     expect(route).toMatchObject({ route: 'llm', refusal: 'mode-off' });
@@ -127,6 +184,9 @@ describe('routing — qualification is pinned to four things', () => {
       configured: true,
       qualification: qualified({ qualified: false, reason: 'not yet measured' }),
       taskId: NPC_ACTION_SELECTION_TASK_ID,
+      expectedTaskVersion: 1,
+      expectedDialect: 'jev-v1',
+      expectedCheckpoint: 'tev1',
       candidates: candidates(),
     });
     expect(route.route).toBe('decision');
@@ -139,7 +199,8 @@ describe('staleness — a late result belongs to a turn that no longer exists', 
     campaignId: 'camp-1',
     conversationId: 'dialogue-3-village_elder',
     turnSequence: 7,
-    stateRevision: 7,
+    worldRevision: 'w1',
+    configRevision: 'mode=on|gen=0|conn=c1|ckpt=tev1|rt=ollama',
   };
 
   it('accepts a result whose turn is still current', () => {
@@ -166,7 +227,7 @@ describe('staleness — a late result belongs to a turn that no longer exists', 
   });
 
   it('discards a result computed against a world revision that has moved on', () => {
-    expect(isStaleNpcActionResult(dispatched, { ...dispatched, stateRevision: 9 })).toBe(true);
+    expect(isStaleNpcActionResult(dispatched, { ...dispatched, worldRevision: 'w9' })).toBe(true);
   });
 });
 

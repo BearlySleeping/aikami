@@ -30,7 +30,7 @@
       "language": "en",
       "kind": "positive",
       "expected": "offerQuest:fading_ward",
-      "state": "[NPC]\nElder Thalia. Stay in character.\n\n[PLAYER]\n\"The lamps keep going out.\"\n\n[ELDER]\n\"They always have. Not always.\"",
+      "state": "[NPC]\nElder Thalia\nVoice: Measured and warm, the cadence of a village elder who has led Emberwatch for decades.\nManner: Patient and authoritative; she weighs every word, especially when the ward is at stake.\n\n[AGENDA]\n- Keep the Ward Wand sealed in Emberwatch's shrine.\n- Renew the fading ward before the corruption beyond the hills pours in.\n\n[KNOWLEDGE]\n- The Ward Wand is a relic of the Vesperine Order, carved from the heartwood of the first ward tree.\n- Rollo the Grasper keeps the wand at the Guttering Candle inn, east of the village square.\n\n[SECRETS]\n- She fears the Vesperine Order's old enemies may have already breached the valley.\n\n[BOUNDARIES]\n- She will not risk Emberwatch's safety on a stranger's promise, no matter how earnest.\n\n[EXCHANGE]\n[PLAYER]\n\"The lamps keep going out.\"\n\n[ELDER]\n\"They always have. Not always.\"",
       "npcId": "village_elder",
       "options": [
         {
@@ -58,7 +58,7 @@
       "language": "en",
       "kind": "positive",
       "expected": "offerQuest:fading_ward",
-      "state": "[NPC]\nElder Thalia. Stay in character.\n\n[PLAYER]\n\"Anyone else able to help with the wards?\"\n\n[ELDER]\n\"No one else. That is why I am standing here talking to you.\"",
+      "state": "[NPC]\nElder Thalia\nVoice: Measured and warm, the cadence of a village elder who has led Emberwatch for decades.\nManner: Patient and authoritative; she weighs every word, especially when the ward is at stake.\n\n[AGENDA]\n- Keep the Ward Wand sealed in Emberwatch's shrine.\n- Renew the fading ward before the corruption beyond the hills pours in.\n\n[KNOWLEDGE]\n- The Ward Wand is a relic of the Vesperine Order, carved from the heartwood of the first ward tree.\n- Rollo the Grasper keeps the wand at the Guttering Candle inn, east of the village square.\n\n[SECRETS]\n- She fears the Vesperine Order's old enemies may have already breached the valley.\n\n[BOUNDARIES]\n- She will not risk Emberwatch's safety on a stranger's promise, no matter how earnest.\n\n[EXCHANGE]\n[PLAYER]\n\"Anyone else able to help with the wards?\"\n\n[ELDER]\n\"No one else. That is why I am standing here talking to you.\"",
       "npcId": "village_elder",
       "options": [
         {
@@ -86,7 +86,7 @@
       "language": "en",
       "kind": "positive",
       "expected": "offerQuest:tools_for_tomorrow",
-      "state": "[NPC]\nOrra. Stay in character.\n\n[PLAYER]\n\"You have work?\"\n\n[ORRA]\n\"I have work.\"",
+      "state": "[NPC]\nOrra\nVoice: Blunt and concrete, a smith who trusts metal more than talk.\nManner: Works while she speaks; interrupts herself to finish a strike.\n\n[AGENDA]\n- Repair the physical ward conduits before the next corruption tide.\n\n[KNOWLEDGE]\n- The ward fails at its joints, not its heart — the conduits were never maintained.\n\n[SECRETS]\n- She warned the council about the conduit debt years ago and was ignored.\n\n[BOUNDARIES]\n- Will not hand over tools she has not tested herself.\n\n[EXCHANGE]\n[PLAYER]\n\"You have work?\"\n\n[ORRA]\n\"I have work.\"",
       "npcId": "smith_orra",
       "options": [
         {
@@ -106,7 +106,7 @@
       "language": "en",
       "kind": "positive",
       "expected": "offerQuest:a_room_kept_warm",
-      "state": "[NPC]\nSella. Stay in character.\n\n[PLAYER]\n\"Anywhere for a traveller?\"\n\n[SELLA]\n\"There is.\"",
+      "state": "[NPC]\nSella\nVoice: Brisk and dry, a publican used to cutting a story short before it costs her a paying room.\nManner: Practical and unsentimental; she softens only when someone is genuinely in danger.\n\n[AGENDA]\n- Keep the inn open and the road trade alive through the ward crisis.\n\n[KNOWLEDGE]\n- Saw who carried the Ward Wand into the inn and when.\n\n[SECRETS]\n- Kept a written custody receipt for the wand she has not shown anyone.\n\n[BOUNDARIES]\n- Will not name a guest as a thief without proof.\n\n[EXCHANGE]\n[PLAYER]\n\"Anywhere for a traveller?\"\n\n[SELLA]\n\"There is.\"",
       "npcId": "innkeeper_sella",
       "options": [
         {
@@ -126,7 +126,7 @@
       "language": "en",
       "kind": "positive",
       "expected": "giveItem:healthPotion",
-      "state": "[NPC]\nMara the Merchant. Stay in character.\n\n[PLAYER]\n\"My arm is not right.\"\n\n[MERCHANT]\n\"That is a potion problem.\"",
+      "state": "[NPC]\nMara the Merchant\nVoice: Bright, practiced shopkeeper's charm with a knowing edge.\nManner: Friendly but observant; she catalogues every customer's purse and patience.\n\n[AGENDA]\n- Keep her shop profitable through the ward crisis.\n- Steer adventurers toward the supplies they will need against Rollo.\n\n[KNOWLEDGE]\n- Rollo has been trying to sell the Ward Wand for months.\n- The elder would pay dearly to have the wand returned.\n\n[SECRETS]\n- She has quietly overstocked potions, expecting the crisis to drive prices up.\n\n[BOUNDARIES]\n- She will not undercut her own prices, even for a cause as desperate as the ward.\n\n[EXCHANGE]\n[PLAYER]\n\"My arm is not right.\"\n\n[MERCHANT]\n\"That is a potion problem.\"",
       "npcId": "merchant",
       "options": [
         {
@@ -170,7 +170,7 @@
       "language": "en",
       "kind": "positive",
       "expected": "giveItem:steelSword",
-      "state": "[NPC]\nMara the Merchant. Stay in character.\n\n[PLAYER]\n\"Something to cut with that will hold.\"\n\n[MERCHANT]\n\"You have reached the right counter.\"",
+      "state": "[NPC]\nMara the Merchant\nVoice: Bright, practiced shopkeeper's charm with a knowing edge.\nManner: Friendly but observant; she catalogues every customer's purse and patience.\n\n[AGENDA]\n- Keep her shop profitable through the ward crisis.\n- Steer adventurers toward the supplies they will need against Rollo.\n\n[KNOWLEDGE]\n- Rollo has been trying to sell the Ward Wand for months.\n- The elder would pay dearly to have the wand returned.\n\n[SECRETS]\n- She has quietly overstocked potions, expecting the crisis to drive prices up.\n\n[BOUNDARIES]\n- She will not undercut her own prices, even for a cause as desperate as the ward.\n\n[EXCHANGE]\n[PLAYER]\n\"Something to cut with that will hold.\"\n\n[MERCHANT]\n\"You have reached the right counter.\"",
       "npcId": "merchant",
       "options": [
         {
@@ -214,7 +214,7 @@
       "language": "en",
       "kind": "positive",
       "expected": "giveItem:manaPotion",
-      "state": "[NPC]\nMara the Merchant. Stay in character.\n\n[PLAYER]\n\"I have burned through everything I carried.\"\n\n[MERCHANT]\n\"Then stop carrying it and start drinking it.\"",
+      "state": "[NPC]\nMara the Merchant\nVoice: Bright, practiced shopkeeper's charm with a knowing edge.\nManner: Friendly but observant; she catalogues every customer's purse and patience.\n\n[AGENDA]\n- Keep her shop profitable through the ward crisis.\n- Steer adventurers toward the supplies they will need against Rollo.\n\n[KNOWLEDGE]\n- Rollo has been trying to sell the Ward Wand for months.\n- The elder would pay dearly to have the wand returned.\n\n[SECRETS]\n- She has quietly overstocked potions, expecting the crisis to drive prices up.\n\n[BOUNDARIES]\n- She will not undercut her own prices, even for a cause as desperate as the ward.\n\n[EXCHANGE]\n[PLAYER]\n\"I have burned through everything I carried.\"\n\n[MERCHANT]\n\"Then stop carrying it and start drinking it.\"",
       "npcId": "merchant",
       "options": [
         {
@@ -258,7 +258,7 @@
       "language": "en",
       "kind": "positive",
       "expected": "trade",
-      "state": "[NPC]\nMara the Merchant. Stay in character.\n\n[PLAYER]\n\"Your prices are robbery.\"\n\n[MERCHANT]\n\"They are, and here is the list.\"",
+      "state": "[NPC]\nMara the Merchant\nVoice: Bright, practiced shopkeeper's charm with a knowing edge.\nManner: Friendly but observant; she catalogues every customer's purse and patience.\n\n[AGENDA]\n- Keep her shop profitable through the ward crisis.\n- Steer adventurers toward the supplies they will need against Rollo.\n\n[KNOWLEDGE]\n- Rollo has been trying to sell the Ward Wand for months.\n- The elder would pay dearly to have the wand returned.\n\n[SECRETS]\n- She has quietly overstocked potions, expecting the crisis to drive prices up.\n\n[BOUNDARIES]\n- She will not undercut her own prices, even for a cause as desperate as the ward.\n\n[EXCHANGE]\n[PLAYER]\n\"Your prices are robbery.\"\n\n[MERCHANT]\n\"They are, and here is the list.\"",
       "npcId": "merchant",
       "options": [
         {
@@ -302,7 +302,7 @@
       "language": "en",
       "kind": "positive",
       "expected": "recruit",
-      "state": "[NPC]\nBram the Guard. Stay in character.\n\n[PLAYER]\n\"You would be better off with us.\"\n\n[GUARD]\n\"I would, perhaps.\"",
+      "state": "[NPC]\nBram the Guard\nVoice: Steady and plain-spoken, the voice of a guard who has seen the wall hold and the wall fail.\nManner: Alert and loyal; he answers with his chin up, but his hands always drift toward his sword hilt when the ward is mentioned.\n\n[AGENDA]\n- Keep the gates of Emberwatch shut against the Crimson Covenant until the ward is renewed\n- Prove to Elder Thalia that a guard's oath can hold where a relic cannot\n\n[KNOWLEDGE]\n- The ward is renewed not by magic alone but by the people who keep watch over it\n\n[SECRETS]\n- He nearly abandoned his post the night the ward first flickered, and has never told anyone.\n\n[BOUNDARIES]\n- refuse|Threaten an innocent villager\n- object|Give the Ward Wand to Rollo\n\n[EXCHANGE]\n[PLAYER]\n\"You would be better off with us.\"\n\n[GUARD]\n\"I would, perhaps.\"",
       "npcId": "village_guard",
       "options": [
         {
@@ -326,7 +326,7 @@
       "language": "en",
       "kind": "positive",
       "expected": "startCombat",
-      "state": "[NPC]\nBram the Guard. Stay in character.\n\n[PLAYER]\n\"Last chance.\"\n\n[GUARD]\n\"There was never one.\"",
+      "state": "[NPC]\nBram the Guard\nVoice: Steady and plain-spoken, the voice of a guard who has seen the wall hold and the wall fail.\nManner: Alert and loyal; he answers with his chin up, but his hands always drift toward his sword hilt when the ward is mentioned.\n\n[AGENDA]\n- Keep the gates of Emberwatch shut against the Crimson Covenant until the ward is renewed\n- Prove to Elder Thalia that a guard's oath can hold where a relic cannot\n\n[KNOWLEDGE]\n- The ward is renewed not by magic alone but by the people who keep watch over it\n\n[SECRETS]\n- He nearly abandoned his post the night the ward first flickered, and has never told anyone.\n\n[BOUNDARIES]\n- refuse|Threaten an innocent villager\n- object|Give the Ward Wand to Rollo\n\n[EXCHANGE]\n[PLAYER]\n\"Last chance.\"\n\n[GUARD]\n\"There was never one.\"",
       "npcId": "village_guard",
       "options": [
         {
@@ -350,7 +350,7 @@
       "language": "en",
       "kind": "positive",
       "expected": "startCombat",
-      "state": "[NPC]\nAsh Hound. Stay in character.\n\n[PLAYER]\n\"Easy, friend.\"\n\n[HOUND]\n\"...\"",
+      "state": "[NPC]\nAsh Hound\nYou are Ash Hound, a character in a fantasy world.\n\n[EXCHANGE]\n[PLAYER]\n\"Easy, friend.\"\n\n[HOUND]\n\"...\"",
       "npcId": "ash_hound",
       "options": [
         {
@@ -370,7 +370,7 @@
       "language": "en",
       "kind": "positive",
       "expected": "presentEvidence:the_ledger",
-      "state": "[NPC]\nElder Thalia. Stay in character.\n\n[PLAYER]\n\"I am not going to the guard with this.\"\n\n[ELDER]\n\"Then you are right to bring it to me.\"",
+      "state": "[NPC]\nElder Thalia\nVoice: Measured and warm, the cadence of a village elder who has led Emberwatch for decades.\nManner: Patient and authoritative; she weighs every word, especially when the ward is at stake.\n\n[AGENDA]\n- Keep the Ward Wand sealed in Emberwatch's shrine.\n- Renew the fading ward before the corruption beyond the hills pours in.\n\n[KNOWLEDGE]\n- The Ward Wand is a relic of the Vesperine Order, carved from the heartwood of the first ward tree.\n- Rollo the Grasper keeps the wand at the Guttering Candle inn, east of the village square.\n\n[SECRETS]\n- She fears the Vesperine Order's old enemies may have already breached the valley.\n\n[BOUNDARIES]\n- She will not risk Emberwatch's safety on a stranger's promise, no matter how earnest.\n\n[EXCHANGE]\n[PLAYER]\n\"I am not going to the guard with this.\"\n\n[ELDER]\n\"Then you are right to bring it to me.\"",
       "npcId": "village_elder",
       "options": [
         {
@@ -398,7 +398,7 @@
       "language": "en",
       "kind": "positive",
       "expected": "presentEvidence:elders_seal",
-      "state": "[NPC]\nRollo the Grasper. Stay in character.\n\n[PLAYER]\n\"This was in the well.\"\n\n[ROLLO]\n\"You went into the well.\"",
+      "state": "[NPC]\nRollo the Grasper\nVoice: A wheedling, self-serving drawl that sharpens into a snarl when cornered.\nManner: Sly and opportunistic; he measures every person by what they can pay or take.\n\n[AGENDA]\n- Acquire the Ward Wand and sell it beyond Emberwatch.\n- Turn a profit before the ward fails and the village has nothing left to offer.\n\n[KNOWLEDGE]\n- The wand hums when held, and its warmth never fades.\n- Every buyer with coin has heard of it, but none has met his price yet.\n\n[SECRETS]\n- He did not find the wand off a dead man's hands; he pried it from a shrine guardian's corpse.\n\n[BOUNDARIES]\n- He will not give the wand away for free, no matter how desperate the plea.\n\n[EXCHANGE]\n[PLAYER]\n\"This was in the well.\"\n\n[ROLLO]\n\"You went into the well.\"",
       "npcId": "rollo_grasper",
       "options": [
         {
@@ -422,7 +422,7 @@
       "language": "en",
       "kind": "required-abstain",
       "expected": null,
-      "state": "[NPC]\nElder Thalia. Stay in character.\n\n[PLAYER]\n\"The roads are getting worse.\"\n\n[ELDER]\n\"They were always bad. Now they are worse.\"",
+      "state": "[NPC]\nElder Thalia\nVoice: Measured and warm, the cadence of a village elder who has led Emberwatch for decades.\nManner: Patient and authoritative; she weighs every word, especially when the ward is at stake.\n\n[AGENDA]\n- Keep the Ward Wand sealed in Emberwatch's shrine.\n- Renew the fading ward before the corruption beyond the hills pours in.\n\n[KNOWLEDGE]\n- The Ward Wand is a relic of the Vesperine Order, carved from the heartwood of the first ward tree.\n- Rollo the Grasper keeps the wand at the Guttering Candle inn, east of the village square.\n\n[SECRETS]\n- She fears the Vesperine Order's old enemies may have already breached the valley.\n\n[BOUNDARIES]\n- She will not risk Emberwatch's safety on a stranger's promise, no matter how earnest.\n\n[EXCHANGE]\n[PLAYER]\n\"The roads are getting worse.\"\n\n[ELDER]\n\"They were always bad. Now they are worse.\"",
       "npcId": "village_elder",
       "options": [
         {
@@ -450,7 +450,7 @@
       "language": "en",
       "kind": "required-abstain",
       "expected": null,
-      "state": "[NPC]\nElder Thalia. Stay in character.\n\n[PLAYER]\n\"I like your village.\"\n\n[ELDER]\n\"It has its uses.\"",
+      "state": "[NPC]\nElder Thalia\nVoice: Measured and warm, the cadence of a village elder who has led Emberwatch for decades.\nManner: Patient and authoritative; she weighs every word, especially when the ward is at stake.\n\n[AGENDA]\n- Keep the Ward Wand sealed in Emberwatch's shrine.\n- Renew the fading ward before the corruption beyond the hills pours in.\n\n[KNOWLEDGE]\n- The Ward Wand is a relic of the Vesperine Order, carved from the heartwood of the first ward tree.\n- Rollo the Grasper keeps the wand at the Guttering Candle inn, east of the village square.\n\n[SECRETS]\n- She fears the Vesperine Order's old enemies may have already breached the valley.\n\n[BOUNDARIES]\n- She will not risk Emberwatch's safety on a stranger's promise, no matter how earnest.\n\n[EXCHANGE]\n[PLAYER]\n\"I like your village.\"\n\n[ELDER]\n\"It has its uses.\"",
       "npcId": "village_elder",
       "options": [
         {
@@ -478,7 +478,7 @@
       "language": "en",
       "kind": "required-abstain",
       "expected": null,
-      "state": "[NPC]\nElder Thalia. Stay in character.\n\n[PLAYER]\n\"The innkeeper says you have a room going spare.\"\n\n[ELDER]\n\"Go and ask her, then.\"",
+      "state": "[NPC]\nElder Thalia\nVoice: Measured and warm, the cadence of a village elder who has led Emberwatch for decades.\nManner: Patient and authoritative; she weighs every word, especially when the ward is at stake.\n\n[AGENDA]\n- Keep the Ward Wand sealed in Emberwatch's shrine.\n- Renew the fading ward before the corruption beyond the hills pours in.\n\n[KNOWLEDGE]\n- The Ward Wand is a relic of the Vesperine Order, carved from the heartwood of the first ward tree.\n- Rollo the Grasper keeps the wand at the Guttering Candle inn, east of the village square.\n\n[SECRETS]\n- She fears the Vesperine Order's old enemies may have already breached the valley.\n\n[BOUNDARIES]\n- She will not risk Emberwatch's safety on a stranger's promise, no matter how earnest.\n\n[EXCHANGE]\n[PLAYER]\n\"The innkeeper says you have a room going spare.\"\n\n[ELDER]\n\"Go and ask her, then.\"",
       "npcId": "village_elder",
       "options": [
         {
@@ -506,7 +506,7 @@
       "language": "en",
       "kind": "required-abstain",
       "expected": null,
-      "state": "[NPC]\nElder Thalia. Stay in character.\n\n[PLAYER]\n\"Show me your wares.\"\n\n[ELDER]\n\"I have no wares.\"",
+      "state": "[NPC]\nElder Thalia\nVoice: Measured and warm, the cadence of a village elder who has led Emberwatch for decades.\nManner: Patient and authoritative; she weighs every word, especially when the ward is at stake.\n\n[AGENDA]\n- Keep the Ward Wand sealed in Emberwatch's shrine.\n- Renew the fading ward before the corruption beyond the hills pours in.\n\n[KNOWLEDGE]\n- The Ward Wand is a relic of the Vesperine Order, carved from the heartwood of the first ward tree.\n- Rollo the Grasper keeps the wand at the Guttering Candle inn, east of the village square.\n\n[SECRETS]\n- She fears the Vesperine Order's old enemies may have already breached the valley.\n\n[BOUNDARIES]\n- She will not risk Emberwatch's safety on a stranger's promise, no matter how earnest.\n\n[EXCHANGE]\n[PLAYER]\n\"Show me your wares.\"\n\n[ELDER]\n\"I have no wares.\"",
       "npcId": "village_elder",
       "options": [
         {
@@ -534,7 +534,7 @@
       "language": "en",
       "kind": "required-abstain",
       "expected": null,
-      "state": "[NPC]\nMara the Merchant. Stay in character.\n\n[PLAYER]\n\"I am done asking nicely.\"\n\n[MERCHANT]\n\"Then you are done.\"",
+      "state": "[NPC]\nMara the Merchant\nVoice: Bright, practiced shopkeeper's charm with a knowing edge.\nManner: Friendly but observant; she catalogues every customer's purse and patience.\n\n[AGENDA]\n- Keep her shop profitable through the ward crisis.\n- Steer adventurers toward the supplies they will need against Rollo.\n\n[KNOWLEDGE]\n- Rollo has been trying to sell the Ward Wand for months.\n- The elder would pay dearly to have the wand returned.\n\n[SECRETS]\n- She has quietly overstocked potions, expecting the crisis to drive prices up.\n\n[BOUNDARIES]\n- She will not undercut her own prices, even for a cause as desperate as the ward.\n\n[EXCHANGE]\n[PLAYER]\n\"I am done asking nicely.\"\n\n[MERCHANT]\n\"Then you are done.\"",
       "npcId": "merchant",
       "options": [
         {
@@ -578,7 +578,7 @@
       "language": "en",
       "kind": "required-abstain",
       "expected": null,
-      "state": "[NPC]\nMara the Merchant. Stay in character.\n\n[PLAYER]\n\"Any work?\"\n\n[MERCHANT]\n\"Work is offered by people who have work to offer.\"",
+      "state": "[NPC]\nMara the Merchant\nVoice: Bright, practiced shopkeeper's charm with a knowing edge.\nManner: Friendly but observant; she catalogues every customer's purse and patience.\n\n[AGENDA]\n- Keep her shop profitable through the ward crisis.\n- Steer adventurers toward the supplies they will need against Rollo.\n\n[KNOWLEDGE]\n- Rollo has been trying to sell the Ward Wand for months.\n- The elder would pay dearly to have the wand returned.\n\n[SECRETS]\n- She has quietly overstocked potions, expecting the crisis to drive prices up.\n\n[BOUNDARIES]\n- She will not undercut her own prices, even for a cause as desperate as the ward.\n\n[EXCHANGE]\n[PLAYER]\n\"Any work?\"\n\n[MERCHANT]\n\"Work is offered by people who have work to offer.\"",
       "npcId": "merchant",
       "options": [
         {
@@ -622,7 +622,7 @@
       "language": "en",
       "kind": "required-abstain",
       "expected": null,
-      "state": "[NPC]\nBram the Guard. Stay in character.\n\n[PLAYER]\n\"Do you have anything for sale?\"\n\n[GUARD]\n\"No.\"",
+      "state": "[NPC]\nBram the Guard\nVoice: Steady and plain-spoken, the voice of a guard who has seen the wall hold and the wall fail.\nManner: Alert and loyal; he answers with his chin up, but his hands always drift toward his sword hilt when the ward is mentioned.\n\n[AGENDA]\n- Keep the gates of Emberwatch shut against the Crimson Covenant until the ward is renewed\n- Prove to Elder Thalia that a guard's oath can hold where a relic cannot\n\n[KNOWLEDGE]\n- The ward is renewed not by magic alone but by the people who keep watch over it\n\n[SECRETS]\n- He nearly abandoned his post the night the ward first flickered, and has never told anyone.\n\n[BOUNDARIES]\n- refuse|Threaten an innocent villager\n- object|Give the Ward Wand to Rollo\n\n[EXCHANGE]\n[PLAYER]\n\"Do you have anything for sale?\"\n\n[GUARD]\n\"No.\"",
       "npcId": "village_guard",
       "options": [
         {
@@ -646,7 +646,7 @@
       "language": "en",
       "kind": "required-abstain",
       "expected": null,
-      "state": "[NPC]\nSella. Stay in character.\n\n[PLAYER]\n\"Is it always this busy?\"\n\n[SELLA]\n\"It is always this busy.\"",
+      "state": "[NPC]\nSella\nVoice: Brisk and dry, a publican used to cutting a story short before it costs her a paying room.\nManner: Practical and unsentimental; she softens only when someone is genuinely in danger.\n\n[AGENDA]\n- Keep the inn open and the road trade alive through the ward crisis.\n\n[KNOWLEDGE]\n- Saw who carried the Ward Wand into the inn and when.\n\n[SECRETS]\n- Kept a written custody receipt for the wand she has not shown anyone.\n\n[BOUNDARIES]\n- Will not name a guest as a thief without proof.\n\n[EXCHANGE]\n[PLAYER]\n\"Is it always this busy?\"\n\n[SELLA]\n\"It is always this busy.\"",
       "npcId": "innkeeper_sella",
       "options": [
         {
@@ -666,7 +666,7 @@
       "language": "en",
       "kind": "required-abstain",
       "expected": null,
-      "state": "[NPC]\nOrra. Stay in character.\n\n[PLAYER]\n\"Give me a sword.\"\n\n[ORRA]\n\"Not like that.\"",
+      "state": "[NPC]\nOrra\nVoice: Blunt and concrete, a smith who trusts metal more than talk.\nManner: Works while she speaks; interrupts herself to finish a strike.\n\n[AGENDA]\n- Repair the physical ward conduits before the next corruption tide.\n\n[KNOWLEDGE]\n- The ward fails at its joints, not its heart — the conduits were never maintained.\n\n[SECRETS]\n- She warned the council about the conduit debt years ago and was ignored.\n\n[BOUNDARIES]\n- Will not hand over tools she has not tested herself.\n\n[EXCHANGE]\n[PLAYER]\n\"Give me a sword.\"\n\n[ORRA]\n\"Not like that.\"",
       "npcId": "smith_orra",
       "options": [
         {
@@ -686,7 +686,7 @@
       "language": "en",
       "kind": "required-abstain",
       "expected": null,
-      "state": "[NPC]\nNemi. Stay in character.\n\n[PLAYER]\n\"The elder had an errand for me.\"\n\n[NEMI]\n\"Then he will have it.\"",
+      "state": "[NPC]\nNemi\nVoice: Quiet and deliberate, a keeper who has spent years listening to a failing ward.\nManner: Never rushes a question; states costs as plainly as benefits.\n\n[AGENDA]\n- See the ward renewed without hiding what the old rite demands.\n\n[KNOWLEDGE]\n- The renewal rite can bind the ward to one keeper or to the whole village.\n\n[SECRETS]\n- The centralized ward has failed before, and the failure was concealed.\n\n[BOUNDARIES]\n- Will not perform the rite on a lie or a guess.\n\n[EXCHANGE]\n[PLAYER]\n\"The elder had an errand for me.\"\n\n[NEMI]\n\"Then he will have it.\"",
       "npcId": "shrine_keeper_nemi",
       "options": [
         {
@@ -706,7 +706,7 @@
       "language": "en",
       "kind": "required-abstain",
       "expected": null,
-      "state": "[NPC]\nMara the Merchant. Stay in character.\n\n[PLAYER]\n\"Have you seen this seal?\"\n\n[MERCHANT]\n\"I have seen many things.\"",
+      "state": "[NPC]\nMara the Merchant\nVoice: Bright, practiced shopkeeper's charm with a knowing edge.\nManner: Friendly but observant; she catalogues every customer's purse and patience.\n\n[AGENDA]\n- Keep her shop profitable through the ward crisis.\n- Steer adventurers toward the supplies they will need against Rollo.\n\n[KNOWLEDGE]\n- Rollo has been trying to sell the Ward Wand for months.\n- The elder would pay dearly to have the wand returned.\n\n[SECRETS]\n- She has quietly overstocked potions, expecting the crisis to drive prices up.\n\n[BOUNDARIES]\n- She will not undercut her own prices, even for a cause as desperate as the ward.\n\n[EXCHANGE]\n[PLAYER]\n\"Have you seen this seal?\"\n\n[MERCHANT]\n\"I have seen many things.\"",
       "npcId": "merchant",
       "options": [
         {
@@ -750,7 +750,7 @@
       "language": "en",
       "kind": "required-abstain",
       "expected": null,
-      "state": "[NPC]\nBram the Guard. Stay in character.\n\n[PLAYER]\n\"You must be tired.\"\n\n[GUARD]\n\"I am.\"",
+      "state": "[NPC]\nBram the Guard\nVoice: Steady and plain-spoken, the voice of a guard who has seen the wall hold and the wall fail.\nManner: Alert and loyal; he answers with his chin up, but his hands always drift toward his sword hilt when the ward is mentioned.\n\n[AGENDA]\n- Keep the gates of Emberwatch shut against the Crimson Covenant until the ward is renewed\n- Prove to Elder Thalia that a guard's oath can hold where a relic cannot\n\n[KNOWLEDGE]\n- The ward is renewed not by magic alone but by the people who keep watch over it\n\n[SECRETS]\n- He nearly abandoned his post the night the ward first flickered, and has never told anyone.\n\n[BOUNDARIES]\n- refuse|Threaten an innocent villager\n- object|Give the Ward Wand to Rollo\n\n[EXCHANGE]\n[PLAYER]\n\"You must be tired.\"\n\n[GUARD]\n\"I am.\"",
       "npcId": "village_guard",
       "options": [
         {
@@ -774,7 +774,7 @@
       "language": "en",
       "kind": "positive",
       "expected": "offerQuest:mark_the_safe_trail",
-      "state": "[NPC]\nAda. Stay in character.\n\n[PLAYER]\n\"The path east is gone.\"\n\n[ADA]\n\"I marked it once. Once was enough to be wrong.\"",
+      "state": "[NPC]\nAda\nVoice: Low and weathered, a woodcutter who prefers trees to people and both to the ward.\nManner: Points with her axe; says only what the forest already shows.\n\n[AGENDA]\n- Understand why the roots along the old road are twisting toward the shrine.\n\n[KNOWLEDGE]\n- The woodland trail is safe if you follow the cut stumps, and the culvert is the quick risk.\n\n[SECRETS]\n- She has seen lights moving beneath the culvert at night.\n\n[BOUNDARIES]\n- Will not cut a tree that the ward tree’s roots still reach.\n\n[EXCHANGE]\n[PLAYER]\n\"The path east is gone.\"\n\n[ADA]\n\"I marked it once. Once was enough to be wrong.\"",
       "npcId": "woodcutter_ada",
       "options": [
         {
@@ -794,7 +794,7 @@
       "language": "en",
       "kind": "positive",
       "expected": "startCombat",
-      "state": "[NPC]\nEmber Warden. Stay in character.\n\n[PLAYER]\n\"I am not stopping.\"\n\n[WARDEN]\n\"Then this will be brief.\"",
+      "state": "[NPC]\nEmber Warden\nYou are Ember Warden, a character in a fantasy world.\n\n[EXCHANGE]\n[PLAYER]\n\"I am not stopping.\"\n\n[WARDEN]\n\"Then this will be brief.\"",
       "npcId": "ember_warden",
       "options": [
         {
@@ -814,7 +814,7 @@
       "language": "en",
       "kind": "required-abstain",
       "expected": null,
-      "state": "[NPC]\nRollo the Grasper. Stay in character.\n\n[PLAYER]\n\"You seem busy.\"\n\n[ROLLO]\n\"I am idle. It is a performance.\"",
+      "state": "[NPC]\nRollo the Grasper\nVoice: A wheedling, self-serving drawl that sharpens into a snarl when cornered.\nManner: Sly and opportunistic; he measures every person by what they can pay or take.\n\n[AGENDA]\n- Acquire the Ward Wand and sell it beyond Emberwatch.\n- Turn a profit before the ward fails and the village has nothing left to offer.\n\n[KNOWLEDGE]\n- The wand hums when held, and its warmth never fades.\n- Every buyer with coin has heard of it, but none has met his price yet.\n\n[SECRETS]\n- He did not find the wand off a dead man's hands; he pried it from a shrine guardian's corpse.\n\n[BOUNDARIES]\n- He will not give the wand away for free, no matter how desperate the plea.\n\n[EXCHANGE]\n[PLAYER]\n\"You seem busy.\"\n\n[ROLLO]\n\"I am idle. It is a performance.\"",
       "npcId": "rollo_grasper",
       "options": [
         {
@@ -838,7 +838,7 @@
       "language": "en",
       "kind": "required-abstain",
       "expected": null,
-      "state": "[NPC]\nAda. Stay in character.\n\n[PLAYER]\n\"Trade with me.\"\n\n[ADA]\n\"I have an axe.\"",
+      "state": "[NPC]\nAda\nVoice: Low and weathered, a woodcutter who prefers trees to people and both to the ward.\nManner: Points with her axe; says only what the forest already shows.\n\n[AGENDA]\n- Understand why the roots along the old road are twisting toward the shrine.\n\n[KNOWLEDGE]\n- The woodland trail is safe if you follow the cut stumps, and the culvert is the quick risk.\n\n[SECRETS]\n- She has seen lights moving beneath the culvert at night.\n\n[BOUNDARIES]\n- Will not cut a tree that the ward tree’s roots still reach.\n\n[EXCHANGE]\n[PLAYER]\n\"Trade with me.\"\n\n[ADA]\n\"I have an axe.\"",
       "npcId": "woodcutter_ada",
       "options": [
         {
@@ -858,7 +858,7 @@
       "language": "en",
       "kind": "required-abstain",
       "expected": null,
-      "state": "[NPC]\nMara the Merchant. Stay in character.\n\n[PLAYER]\n\"Nice weather for it.\"\n\n[MERCHANT]\n\"It is.\"",
+      "state": "[NPC]\nMara the Merchant\nVoice: Bright, practiced shopkeeper's charm with a knowing edge.\nManner: Friendly but observant; she catalogues every customer's purse and patience.\n\n[AGENDA]\n- Keep her shop profitable through the ward crisis.\n- Steer adventurers toward the supplies they will need against Rollo.\n\n[KNOWLEDGE]\n- Rollo has been trying to sell the Ward Wand for months.\n- The elder would pay dearly to have the wand returned.\n\n[SECRETS]\n- She has quietly overstocked potions, expecting the crisis to drive prices up.\n\n[BOUNDARIES]\n- She will not undercut her own prices, even for a cause as desperate as the ward.\n\n[EXCHANGE]\n[PLAYER]\n\"Nice weather for it.\"\n\n[MERCHANT]\n\"It is.\"",
       "npcId": "merchant",
       "options": [
         {
@@ -902,7 +902,7 @@
       "language": "en",
       "kind": "required-abstain",
       "expected": null,
-      "state": "[NPC]\nSella. Stay in character.\n\n[PLAYER]\n\"Leave the inn. Come with me.\"\n\n[SELLA]\n\"No.\"",
+      "state": "[NPC]\nSella\nVoice: Brisk and dry, a publican used to cutting a story short before it costs her a paying room.\nManner: Practical and unsentimental; she softens only when someone is genuinely in danger.\n\n[AGENDA]\n- Keep the inn open and the road trade alive through the ward crisis.\n\n[KNOWLEDGE]\n- Saw who carried the Ward Wand into the inn and when.\n\n[SECRETS]\n- Kept a written custody receipt for the wand she has not shown anyone.\n\n[BOUNDARIES]\n- Will not name a guest as a thief without proof.\n\n[EXCHANGE]\n[PLAYER]\n\"Leave the inn. Come with me.\"\n\n[SELLA]\n\"No.\"",
       "npcId": "innkeeper_sella",
       "options": [
         {
@@ -922,7 +922,7 @@
       "language": "en",
       "kind": "required-abstain",
       "expected": null,
-      "state": "[NPC]\nElder Thalia. Stay in character.\n\n[PLAYER]\n\"Draw your blade.\"\n\n[ELDER]\n\"I am an old man with a stick.\"",
+      "state": "[NPC]\nElder Thalia\nVoice: Measured and warm, the cadence of a village elder who has led Emberwatch for decades.\nManner: Patient and authoritative; she weighs every word, especially when the ward is at stake.\n\n[AGENDA]\n- Keep the Ward Wand sealed in Emberwatch's shrine.\n- Renew the fading ward before the corruption beyond the hills pours in.\n\n[KNOWLEDGE]\n- The Ward Wand is a relic of the Vesperine Order, carved from the heartwood of the first ward tree.\n- Rollo the Grasper keeps the wand at the Guttering Candle inn, east of the village square.\n\n[SECRETS]\n- She fears the Vesperine Order's old enemies may have already breached the valley.\n\n[BOUNDARIES]\n- She will not risk Emberwatch's safety on a stranger's promise, no matter how earnest.\n\n[EXCHANGE]\n[PLAYER]\n\"Draw your blade.\"\n\n[ELDER]\n\"I am an old man with a stick.\"",
       "npcId": "village_elder",
       "options": [
         {
@@ -950,7 +950,7 @@
       "language": "en",
       "kind": "required-abstain",
       "expected": null,
-      "state": "[NPC]\nTess. Stay in character.\n\n[PLAYER]\n\"Any work from the smith?\"\n\n[TESS]\n\"I would not know.\"",
+      "state": "[NPC]\nTess\nVoice: Bright and rattled, an apprentice holding herself together by naming every part she can.\nManner: Talks fast, then stops to check the instrument she is carrying.\n\n[AGENDA]\n- Get the intact ward component back to Emberwatch.\n\n[KNOWLEDGE]\n- The waystation conduit cracked along a joint, not from any monster attack.\n\n[SECRETS]\n- She is afraid the failure was her master’s negligence, not bad luck.\n\n[BOUNDARIES]\n- Will not abandon the component to save herself.\n\n[EXCHANGE]\n[PLAYER]\n\"Any work from the smith?\"\n\n[TESS]\n\"I would not know.\"",
       "npcId": "apprentice_tess",
       "options": [
         {

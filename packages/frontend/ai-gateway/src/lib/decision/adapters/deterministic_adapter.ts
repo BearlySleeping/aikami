@@ -251,6 +251,20 @@ export const createDeterministicDecisionAdapter = (options: {
       };
     },
 
+    /**
+     * Always resident, and this is evidence rather than an assumption: there is
+     * no model, no process and nothing to load. Reported so the measurement
+     * layer has a verified condition to compare a loading runtime against.
+     */
+    async residency() {
+      return {
+        verified: true,
+        resident: true,
+        method: 'in-process',
+        detail: 'no checkpoint; nothing to load',
+      } as const;
+    },
+
     async run(request: DecisionRequest): Promise<DecisionAdapterResponse> {
       const started = Date.now();
       if (request.signal.aborted) {

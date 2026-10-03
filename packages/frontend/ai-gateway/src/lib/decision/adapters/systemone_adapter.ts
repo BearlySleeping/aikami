@@ -25,6 +25,11 @@ import {
   runtimeLabel,
 } from '../runtime_probe.ts';
 import {
+  ollamaRootFor,
+  probeOllamaResidency,
+  unverifiedResidency,
+} from '../tasks/residency_probe.ts';
+import {
   DEFAULT_DECISION_LIMITS,
   type DecisionAnswer,
   type DecisionCapability,
@@ -525,6 +530,25 @@ export const createSystemOneDecisionAdapter = (
         probeTimeoutMs,
         ...(options.authHeaders === undefined ? {} : { authHeaders: options.authHeaders }),
         ...(probe === undefined ? {} : { probe }),
+      });
+    },
+
+    /**
+     * Residency, from the runtime itself where it can answer.
+     *
+     * Only an Ollama-compatible daemon exposes a process-state listing, so a
+     * generic `jev` endpoint reports `verified: false` rather than guessing
+     * from latency — the harness must then treat the warm condition as
+     * unestablished instead of quietly labelling cases warm by position.
+     */
+    async residency(probe) {
+      if (options.runtime !== 'ollama') {
+        return unverifiedResidency('none', 'this runtime exposes no residency route');
+      }
+      return probeOllamaResidency({
+        root: ollamaRootFor(options.endpoints.decision),
+        checkpoint: options.model,
+        ...(probe?.signal === undefined ? {} : { signal: probe.signal }),
       });
     },
 

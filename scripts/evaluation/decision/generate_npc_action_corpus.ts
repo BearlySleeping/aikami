@@ -149,11 +149,51 @@ const optionsFor = (npcId: string): Option[] => {
   return options;
 };
 
-const stateFor = (npcId: string, exchange: string): string => {
+/**
+ * The persona block, mirroring `buildNpcPersona`.
+ *
+ * MIRRORED, not shared: the production builder lives in an app, and
+ * `scripts/` may not import an app. Rather than silently accept a second
+ * implementation, the equality is pinned by
+ * `apps/frontend/client/src/lib/services/game/npc_action_fixture_projection.test.ts`,
+ * which compares this output against the production builder for every NPC the
+ * corpus uses. If either side changes, that test fails.
+ */
+const personaFor = (npcId: string): string => {
   const npc = npcsById[npcId];
-  return `[NPC]\n${npc.name}. Stay in character.\n\n${exchange}`;
+  const lines = npc.personality
+    ? [`Voice: ${npc.personality.voice}`, `Manner: ${npc.personality.manner}`]
+    : [`You are ${npc.name}, a character in a fantasy world.`];
+  const block = (label: string, entries: readonly string[] | undefined): void => {
+    if (entries && entries.length > 0) {
+      lines.push('', `[${label}]`, ...entries.map((entry) => `- ${entry}`));
+    }
+  };
+  block('AGENDA', npc.agenda);
+  block('KNOWLEDGE', npc.knowledge);
+  block('SECRETS', npc.secrets);
+  block('BOUNDARIES', npc.boundaries);
+  return lines.join('\n');
 };
 
+/**
+ * The fixture's `state`, built with the SAME projection production sends.
+ *
+ * `buildNpcActionDecisionContext` is imported from the client service rather
+ * than reimplemented here. The previous version of this generator wrote a
+ * different shape entirely (`[NPC]\n<name>. Stay in character.` with
+ * `[PLAYER]`/`[ELDER]` sections and no persona), which meant the benchmark was
+ * measuring an input the game never produces.
+ */
+const stateFor = (npcId: string, narrative: string): string =>
+  buildNpcActionDecisionContext({
+    npcName: npcsById[npcId].name,
+    // The authored persona the narrative call receives.
+    persona: personaFor(npcId),
+    narrative,
+  });
+
+import { buildNpcActionDecisionContext } from '../../../packages/frontend/ai-gateway/src/lib/decision/tasks/decision_context.ts';
 import SPECS from './npc_action_corpus_cases.ts';
 
 // ---------------------------------------------------------------------------
@@ -181,6 +221,9 @@ const LABEL_PROVENANCE = {
   kinds:
     'positive = the named action is the correct one; required-abstain = no state-changing action is warranted and `none` (or abstention) is the only safe outcome; excluded = ungradable and reported separately.',
 };
+
+/** Display name for an npc id, falling back to the id itself. */
+const npcIdLabel = (npcId: string): string => npcsById[npcId]?.name ?? npcId;
 
 for (const split of ['dev', 'heldout'] as const) {
   const cases = SPECS.filter((spec) => spec.split === split).map((spec) => {
@@ -223,5 +266,3 @@ for (const split of ['dev', 'heldout'] as const) {
     `${split}: ${cases.length} cases (${positives} positive, ${abstains} required-abstain) -> ${target.replace(process.cwd() + '/', '')}`,
   );
 }
-
-const npcIdLabel = (npcId: string): string => npcsById[npcId]?.name ?? npcId;

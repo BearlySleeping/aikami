@@ -16,7 +16,8 @@
 // Exit codes: 0 measured, 1 gate failed, 2 backend unavailable. "Unavailable"
 // is never reported as a pass.
 
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -28,7 +29,7 @@ import {
   NPC_ACTION_SELECTION_DEV,
   NPC_ACTION_SELECTION_HELDOUT,
   type NpcActionFixtureCase,
-} from '../../../packages/frontend/ai-gateway/src/lib/decision/tasks/fixtures.ts';
+} from '../../../packages/frontend/ai-gateway/src/lib/decision/tasks/npc_action_corpus.ts';
 import {
   NPC_ACTION_SELECTION_LATENCY_GATE,
   NPC_ACTION_SELECTION_QUALITY_GATE,
@@ -379,14 +380,64 @@ for (const entry of adapters) {
   );
 }
 
+/**
+ * The exact command that produced this artifact.
+ *
+ * Embedded so a reviewer can re-run it verbatim rather than reconstructing it
+ * from the report — and so a number can always be traced to the invocation that
+ * made it.
+ */
+const command = [
+  'bun scripts/evaluation/decision/run_npc_action_selection.ts',
+  `--endpoint ${endpoint}`,
+  `--model ${models.join(',')}`,
+  `--chat-model ${chatModel}`,
+  onlyArms === undefined ? '' : `--arms ${[...onlyArms].join(',')}`,
+  `--out ${outPath}`,
+]
+  .filter((part) => part.length > 0)
+  .join(' ');
+
+/** Content hash of a corpus file, so a report can name the exact input. */
+const hashOf = (file: string): string =>
+  createHash('sha256').update(readFileSync(file, 'utf8')).digest('hex').slice(0, 16);
+
+const runId = `run-${new Date().toISOString().replace(/[:.]/g, '-')}`;
+
 mkdirSync(dirname(outPath), { recursive: true });
 writeFileSync(
   outPath,
   `${JSON.stringify(
     {
+      runId,
       task: NPC_ACTION_SELECTION_TASK_ID,
       taskVersion: NPC_ACTION_SELECTION_TASK_VERSION,
       recordedAt: new Date().toISOString(),
+      command,
+      runtime: {
+        // The runtime/model identity that produced these numbers, and the
+        // isolation it ran under. The pinned daemon returns 404 on
+        // /v1/systemone, so the decision arms need an isolated 0.35+.
+        decisionEndpoint: endpoint,
+        decisionRuntime: 'ollama >= 0.35.0 (isolated daemon, separate model dir)',
+        sharedDaemonUnmodified: 'http://127.0.0.1:11434 (ollama 0.34.4) — untouched',
+        checkpoints: models,
+        chatComparator: { endpoint: chatBaseUrl, model: chatModel },
+      },
+      corpusHashes: {
+        dev: hashOf(
+          resolve(
+            HERE,
+            '../../../packages/frontend/ai-gateway/src/lib/decision/tasks/fixtures/npc_action_selection_dev.json',
+          ),
+        ),
+        heldout: hashOf(
+          resolve(
+            HERE,
+            '../../../packages/frontend/ai-gateway/src/lib/decision/tasks/fixtures/npc_action_selection_heldout.json',
+          ),
+        ),
+      },
       endpoint,
       chatBaseUrl,
       chatModel,
@@ -400,6 +451,8 @@ writeFileSync(
         heldout: splits.heldout.length,
         provenance: NPC_ACTION_SELECTION_HELDOUT.labelProvenance,
       },
+      aggregation:
+        'per split: overall + per-category slices; gates from the heldout split only; every fixture case scored exactly once (denominatorProblems must be empty)',
       arms: results,
     },
     null,

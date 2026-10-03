@@ -208,6 +208,42 @@ describe('Issue #382: call 2 extracts metadata, narrative stays authoritative', 
     expect(turn.command).toBeUndefined();
   });
 
+  // C-568 regression: extracting metadata through the decision-aware path must
+  // not have lost the bounded timeout. The first integration of that path
+  // replaced the `_withTimeout` wrapper with a bare await, so a hanging call 2
+  // hung the turn instead of degrading.
+  test('a generator that IGNORES abort still times out and degrades', async () => {
+    const textGenerator = mock(async (opts: Record<string, unknown>) => {
+      const onChunk = opts.onChunk as ((t: string) => void) | undefined;
+      if (opts.schema) {
+        // Never settles and never listens to abort — the worst case a provider
+        // integration can present. Only the caller's timer can end this.
+        await new Promise<void>(() => {});
+        return { text: '', structured: undefined };
+      }
+      onChunk?.('A thought, unfinished.');
+      return { text: 'A thought, unfinished.' };
+    });
+    npcDialogueService.configure({
+      contentProvider: makeContentProvider(),
+      textGenerator,
+      executors: makeExecutors(),
+      timeoutMs: 60,
+    });
+
+    const turn = await npcDialogueService.generateTurn({
+      npcId: 'village_elder',
+      npcName: 'Elder Thalia',
+      messages: [],
+      signal: new AbortController().signal,
+    });
+
+    // AC-7 again: the streamed prose survives; the failure degrades.
+    expect(turn.narrative).toBe('A thought, unfinished.');
+    expect(turn.source).toBe('ai');
+    expect(turn.command).toBeUndefined();
+  });
+
   test('empty call-1 narrative is surfaced as a provider failure, never a successful empty turn', async () => {
     let call2Count = 0;
     const textGenerator = mock(async (opts: Record<string, unknown>) => {

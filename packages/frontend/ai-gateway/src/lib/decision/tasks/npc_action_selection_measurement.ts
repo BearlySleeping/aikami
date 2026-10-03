@@ -15,25 +15,38 @@
 // `giveItem` instances and no `recruit`, the village elder's contains two
 // `presentEvidence` instances and no `giveItem` at all. Scoring a turn against
 // the union of every option any NPC has would hand the backend a menu of
-// actions that NPC cannot take — which is precisely the defect the task exists
-// to remove.
+// actions that NPC cannot take — precisely the defect the task exists to remove.
 //
 // So this driver compiles a PER-CASE plan from that case's own option set.
 //
 // It does not fork the SCORER. Every number below comes from `metrics.ts` —
 // `scoreResult`, `foldOutcome`, `summarizeTally`, `evaluateQualityGates` — the
-// one corrected implementation. The corrected negative-case semantics, the
-// `required-abstain` / `excluded` distinction, `unsafeAcceptance`, the safe
-// literal and the per-language floors are all the shipped ones. Only the
-// dispatch loop is local, and the only reason is the per-case plan.
+// one corrected implementation. Only the dispatch loop is local, and the only
+// reason is the per-case plan.
 //
-// A different scorer would be the defect this whole lane exists to close.
+// ---------------------------------------------------------------------------
+// Two corrections this driver exists to enforce (lane C review)
+// ---------------------------------------------------------------------------
+//
+// 1. EVERY GRADABLE FIXTURE CASE IS SCORED EXACTLY ONCE. The first version used a
+//    POSITIONAL warm-up: label the first N cases cold, discard the next N, then
+//    score. On the held-out fixture that discarded block landed entirely inside
+//    the positives, so a 33-case / 15-positive corpus was reported as 30 / 12.
+//    Warm-up now runs on a DEDICATED, NON-FIXTURE request ({@link WARMUP_REQUEST})
+//    whose result is never folded.
+//
+// 2. COLD/WARM COMES FROM RUNTIME LIFECYCLE EVIDENCE, NOT POSITION. Labelling by
+//    dispatch order is an assumption: a runtime that pre-loads or evicts under
+//    memory pressure produces the same latency shape while every positional label
+//    is wrong. Each dispatch asks the adapter whether the checkpoint is resident
+//    ({@link ResidencyEvidence}); when the runtime cannot answer the case is
+//    recorded as `cold` — "not known to be warm" — so unverified latency never
+//    enters the warm aggregate.
 
-import type { DecisionAdapter } from '../adapters/types.ts';
+import type { DecisionAdapter, ResidencyEvidence } from '../adapters/types.ts';
 import type { EvaluationLatencyGate, EvaluationQualityGate } from '../gates.ts';
 import { buildDecisionDispatch, createDecisionPlanCache, runDecision } from '../index.ts';
 import {
-  type CaseOutcome,
   createEvaluationTally,
   type EvaluationSliceMetrics,
   evaluateQualityGates,
@@ -43,7 +56,7 @@ import {
   summarizeTally,
   toEvaluationCase,
 } from '../metrics.ts';
-import type { DecisionTaskPolicy } from '../types.ts';
+import type { DecisionPlan, DecisionTaskPolicy } from '../types.ts';
 import {
   NPC_ACTION_NONE_ID,
   NPC_ACTION_SELECTION_COMPARATOR,
@@ -51,115 +64,136 @@ import {
   npcActionSelectionPolicy,
   npcActionSelectionSchema,
 } from './npc_action_selection.ts';
+import type {
+  MeasureNpcActionSelectionOptions,
+  NpcActionCorpusCase,
+  NpcActionMeasurement,
+  NpcActionMeasurementCase,
+  NpcActionMeasurementConditions,
+  NpcActionMeasurementSplit,
+} from './npc_action_selection_measurement_types.ts';
 
-/** One corpus case, carrying the option set its NPC is actually offered. */
-export type NpcActionCorpusCase = {
-  readonly caseId: string;
-  readonly category: string;
-  readonly language: string;
-  readonly kind: 'positive' | 'required-abstain' | 'excluded';
-  readonly expected: string | null;
-  readonly state: string;
-  readonly npcId: string;
-  readonly options: readonly { readonly id: string; readonly description: string }[];
-  readonly rationale: string;
-};
-
-/** How the measurement established its conditions. */
-export type NpcActionMeasurementConditions = {
-  /** First N dispatches, labelled cold. Model load is included, not excluded. */
-  readonly coldSamples: number;
-  /** Unmeasured dispatches that load the checkpoint before any timing is kept. */
-  readonly warmupRequests: number;
-  readonly minimumPercentileSamples: number;
-  readonly perCaseTimeoutMs: number;
-};
-
-/** One case's result, kept so a number can be traced to the text it came from. */
-export type NpcActionMeasurementCase = CaseOutcome & {
-  readonly npcId: string;
-  readonly optionCount: number;
-  readonly producedOption?: string;
-  /**
-   * The backend's own probability for the option it chose.
-   *
-   * Recorded because it is the ONLY evidence a selective-acceptance threshold
-   * can honestly be calibrated on: it is what the backend said about its own
-   * answer, per case, before any threshold exists. Absent for a chat-model arm,
-   * which reports no distribution — and that absence is itself the finding.
-   */
-  readonly chosenProbability?: number;
-  readonly reason?: string;
-};
-
-/** A whole split, measured. */
-export type NpcActionMeasurementSplit = {
-  readonly split: string;
-  readonly overall: EvaluationSliceMetrics;
-  readonly byCategory: readonly EvaluationSliceMetrics[];
-  readonly cases: readonly NpcActionMeasurementCase[];
-};
-
-/** What one backend produced across both splits. */
-export type NpcActionMeasurement = {
-  readonly backendId: string;
-  readonly dialect: string;
-  readonly task: string;
-  readonly status: 'measured' | 'unavailable';
-  readonly unavailableReason?: string;
-  readonly conditions: NpcActionMeasurementConditions;
-  readonly latencyConditionMethod: 'cold-then-warm';
-  readonly splits: readonly NpcActionMeasurementSplit[];
-  readonly gateFailures: readonly string[];
-  /** Whether the warm percentile could be established at all. */
-  readonly percentileEstablished: boolean;
-};
-
-/** Inputs to one measurement. */
-export type MeasureNpcActionSelectionOptions = {
-  readonly adapter: DecisionAdapter;
-  readonly cases: readonly NpcActionCorpusCase[];
-  readonly splits: Readonly<Record<string, readonly NpcActionCorpusCase[]>>;
-  readonly qualityGate: EvaluationQualityGate;
-  readonly latencyGate?: EvaluationLatencyGate;
-  readonly coldSamples?: number;
-  readonly warmupRequests?: number;
-  readonly perCaseTimeoutMs?: number;
-  readonly deadlineAt?: number;
-  /**
-   * Builds the policy for a candidate set, replacing the task's own.
-   *
-   * Used ONLY by the calibration pass, to observe what a backend WOULD answer
-   * before any threshold exists. With it, a threshold is chosen from observed
-   * confidence on the development split and then frozen for held-out scoring —
-   * rather than being declared blind and then failing every correct answer.
-   */
-  readonly policyOverride?: (
-    optionIds: readonly string[],
-    descriptions: Readonly<Record<string, string>>,
-  ) => DecisionTaskPolicy;
-};
+/**
+ * The dedicated warm-up request.
+ *
+ * NOT a fixture case and never folded. It exists so "warm" can be reached without
+ * spending a graded case to get there.
+ */
+export const WARMUP_REQUEST = {
+  id: 'warmup-dedicated',
+  state: [
+    '[NPC]',
+    'Merchant',
+    'Deals in what the village needs and nothing else.',
+    '',
+    '[EXCHANGE]',
+    '"What have you?" / "Take a look."',
+  ].join('\n'),
+  options: [
+    {
+      id: NPC_ACTION_NONE_ID,
+      description: 'Nothing state-changing is called for here. Keep talking.',
+    },
+    { id: 'trade', description: 'Open the trade overlay so the player can buy or sell.' },
+  ],
+} as const;
 
 const DEFAULTS = {
-  coldSamples: 3,
-  warmupRequests: 3,
+  warmupRequests: 2,
   perCaseTimeoutMs: 120_000,
 } as const;
 
-/** Everything one case's dispatch needs from the enclosing run. */
-type MeasureCaseContext = {
-  readonly adapter: DecisionAdapter;
-  readonly cache: ReturnType<typeof createDecisionPlanCache>;
-  readonly policyOverride: MeasureNpcActionSelectionOptions['policyOverride'];
-  readonly conditions: NpcActionMeasurementConditions;
-  readonly dispatched: number;
-  readonly split: string;
+/** Mutable counters for one run. */
+type RunCounters = {
+  readinessProbes: number;
+  warmupDispatches: number;
+  residencyObservations: number;
+  inferenceDispatches: number;
+  verifiedWarm: number;
+  verifiedCold: number;
+  unverified: number;
+  residencyVerified: boolean;
+  residencyMethod: string;
+  setupMs: number;
+  readinessMs: number;
+  residencyMs: number;
+  inferenceMs: number;
 };
 
-/** An outcome for a case whose plan never compiled — a corpus bug, not a refusal. */
-const unusable = (
-  raw: NpcActionCorpusCase,
+/** Accumulators for one split. */
+type SplitAccumulator = {
+  readonly split: string;
+  readonly cases: readonly NpcActionCorpusCase[];
+  readonly tally: ReturnType<typeof createEvaluationTally>;
+  readonly byCategory: Map<string, ReturnType<typeof createEvaluationTally>>;
+  readonly outcomes: NpcActionMeasurementCase[];
+};
+
+/** Asks the runtime whether the checkpoint is resident, right now. */
+const observeResidency = async (
+  adapter: DecisionAdapter,
+  counters: RunCounters,
+): Promise<ResidencyEvidence> => {
+  if (adapter.residency === undefined) {
+    return { verified: false, method: 'none', detail: 'adapter exposes no residency route' };
+  }
+  const observed = await adapter.residency({ signal: new AbortController().signal });
+  counters.residencyObservations += 1;
+  return observed;
+};
+
+/**
+ * Turns residency evidence into a latency condition.
+ *
+ * Unverified becomes `cold` — "not known to be warm" — so an unverifiable
+ * latency never enters the warm aggregate.
+ */
+const classifyCondition = (
+  evidence: ResidencyEvidence,
+): { readonly latencyCondition: 'cold' | 'warm'; readonly conditionVerified: boolean } => ({
+  latencyCondition: evidence.verified && evidence.resident === true ? 'warm' : 'cold',
+  conditionVerified: evidence.verified,
+});
+
+/** Tallies one condition. Warm-up dispatches are not corpus cases and are skipped. */
+const tallyCondition = (
+  counters: RunCounters,
   latencyCondition: 'cold' | 'warm',
+  conditionVerified: boolean,
+  scored: boolean,
+): void => {
+  if (!scored) {
+    return;
+  }
+  if (!conditionVerified) {
+    counters.unverified += 1;
+    return;
+  }
+  if (latencyCondition === 'warm') {
+    counters.verifiedWarm += 1;
+    return;
+  }
+  counters.verifiedCold += 1;
+};
+
+/**
+ * A case whose plan never compiled or never dispatched.
+ *
+ * This is a HARNESS failure, not a backend decision, and must not be scored as
+ * one. Two earlier drafts got this wrong in opposite directions:
+ *
+ *   - marking it `unsafeAcceptance` on a required-abstain case charged the
+ *     BACKEND with a false acceptance it never made;
+ *   - folding it at all added a placeholder `0 ms` to the latency arrays,
+ *     dragging warm percentiles toward zero for a case that was never measured.
+ *
+ * It is therefore excluded from the tallies entirely and surfaced as a
+ * `denominatorProblems` entry, which is the honest reading: the case produced no
+ * measurement, so the denominators no longer describe what was measured.
+ */
+const unusableCase = (
+  raw: NpcActionCorpusCase,
+  conditionVerified: boolean,
   reason: string,
 ): NpcActionMeasurementCase => ({
   caseId: raw.caseId,
@@ -169,13 +203,16 @@ const unusable = (
   accepted: false,
   schemaValid: false,
   correct: false,
-  unsafeAcceptance: raw.kind === 'required-abstain',
+  unsafeAcceptance: false,
   safeAnswer: false,
   unexplainedAcceptance: false,
   latencyMs: 0,
-  latencyCondition,
+  latencyCondition: 'cold',
+  expected: raw.expected,
   npcId: raw.npcId,
   optionCount: raw.options.length,
+  conditionVerified,
+  measured: false,
   reason,
 });
 
@@ -188,75 +225,122 @@ const chosenProbabilityOf = (
   return typeof reported === 'number' ? reported : undefined;
 };
 
-/**
- * Dispatches and scores ONE case against its own candidate set.
- *
- * Extracted from the run loop so the loop stays a loop. The compile, bind,
- * dispatch and score steps are a list of rules; a rule list that also has to
- * track cold/warm phases and per-category tallies is where branches go wrong.
- */
-const measureOneCase = async (
-  raw: NpcActionCorpusCase,
-  ctx: MeasureCaseContext,
-): Promise<NpcActionMeasurementCase> => {
-  const latencyCondition: 'cold' | 'warm' =
-    ctx.dispatched < ctx.conditions.coldSamples ? 'cold' : 'warm';
+/** A case's compiled and bound plan, ready to dispatch. */
+type PlannedCase = {
+  readonly schema: unknown;
+  readonly policy: DecisionTaskPolicy;
+  readonly plan: DecisionPlan;
+  readonly planCacheHit: boolean;
+};
 
-  const testCase = toEvaluationCase({
-    caseId: raw.caseId,
-    category: raw.category,
-    language: raw.language,
-    kind: raw.kind,
-    expected: raw.expected,
-    state: raw.state,
-  });
-
+/** Compiles and binds a case's own plan, or explains why it could not. */
+const planFor = (options: {
+  readonly raw: NpcActionCorpusCase;
+  readonly cache: ReturnType<typeof createDecisionPlanCache>;
+  readonly policyOverride: MeasureNpcActionSelectionOptions['policyOverride'];
+}): { ok: true; planned: PlannedCase } | { ok: false; reason: string } => {
+  const { raw, cache, policyOverride } = options;
   const optionIds = raw.options.map((option) => option.id);
   const descriptions = Object.fromEntries(
     raw.options.map((option) => [option.id, option.description]),
   );
   const schema = npcActionSelectionSchema(optionIds);
   const policy =
-    ctx.policyOverride?.(optionIds, descriptions) ??
-    npcActionSelectionPolicy(optionIds, descriptions);
+    policyOverride?.(optionIds, descriptions) ?? npcActionSelectionPolicy(optionIds, descriptions);
 
-  const analyzed = ctx.cache.analyze({
-    schema: schema as unknown as Record<string, unknown>, // guard-ignore lint/type-safety/casting: TypeBox schema cast for AI envelope or rAF polyfill // guard-ignore lint/type-safety/casting: TypeBox schema cast for AI envelope or rAF polyfill
+  const analyzed = cache.analyze({
+    // guard-ignore lint/type-safety/casting: TypeBox schema cast for AI envelope or rAF polyfill
+    schema: schema as unknown as Record<string, unknown>,
   });
   if (analyzed.analysis.ok !== true) {
-    return unusable(raw, latencyCondition, 'schema-rejected');
+    return { ok: false, reason: 'schema-rejected' };
   }
-  const bound = ctx.cache.bind({
-    plan: analyzed.analysis.plan,
-    policy,
-    supportedLanguages: ['en'],
-  });
+  const bound = cache.bind({ plan: analyzed.analysis.plan, policy, supportedLanguages: ['en'] });
   if (bound.ok !== true) {
-    return unusable(raw, latencyCondition, 'policy-rejected');
+    return { ok: false, reason: 'policy-rejected' };
+  }
+  return {
+    ok: true,
+    planned: {
+      schema,
+      policy,
+      plan: bound.plan,
+      planCacheHit: analyzed.cacheHit,
+    },
+  };
+};
+
+/** Dispatches and scores exactly one fixture case. */
+const measureOneCase = async (
+  raw: NpcActionCorpusCase,
+  context: {
+    readonly adapter: DecisionAdapter;
+    readonly cache: ReturnType<typeof createDecisionPlanCache>;
+    readonly policyOverride: MeasureNpcActionSelectionOptions['policyOverride'];
+    readonly conditions: { perCaseTimeoutMs: number };
+    readonly split: string;
+    readonly counters: RunCounters;
+    /**
+     * False for the dedicated warm-up request.
+     *
+     * A warm-up dispatch is a real provider call and is counted as one, but it
+     * is not a corpus case: it must not contribute to the condition tallies or
+     * to the scored-inference count, or the denominators it exists to protect
+     * are the ones it would corrupt.
+     */
+    readonly scored: boolean;
+  },
+): Promise<NpcActionMeasurementCase> => {
+  const { adapter, cache, counters } = context;
+
+  const evidence = await observeResidency(adapter, counters);
+  if (evidence.verified) {
+    counters.residencyVerified = true;
+    counters.residencyMethod = evidence.method;
+  }
+  const { latencyCondition, conditionVerified } = classifyCondition(evidence);
+  tallyCondition(counters, latencyCondition, conditionVerified, context.scored);
+
+  const setupStarted = performance.now();
+  const planned = planFor({ raw, cache, policyOverride: context.policyOverride });
+  counters.setupMs += performance.now() - setupStarted;
+
+  if (!planned.ok) {
+    return unusableCase(raw, conditionVerified, planned.reason);
   }
 
-  const dispatched = buildDecisionDispatch({ plan: bound.plan, context: raw.state });
+  const dispatched = buildDecisionDispatch({ plan: planned.planned.plan, context: raw.state });
   if (dispatched.ok !== true) {
-    return unusable(raw, latencyCondition, dispatched.refusal.reason);
+    return unusableCase(raw, conditionVerified, dispatched.refusal.reason);
   }
 
   const started = Date.now();
+  if (context.scored) {
+    counters.inferenceDispatches += 1;
+  }
   const result = await runDecision({
-    plan: bound.plan,
-    schema: schema as unknown as Record<string, unknown>, // guard-ignore lint/type-safety/casting: TypeBox schema cast for AI envelope or rAF polyfill
-    policy,
-    adapter: ctx.adapter,
+    plan: planned.planned.plan,
+    schema: planned.planned.schema as Record<string, unknown>, // guard-ignore lint/type-safety/casting: TypeBox schema cast for AI envelope or rAF polyfill
+    policy: planned.planned.policy,
+    adapter,
     context: raw.state,
     language: raw.language,
-    deadlineAt: started + ctx.conditions.perCaseTimeoutMs,
+    deadlineAt: started + context.conditions.perCaseTimeoutMs,
     signal: new AbortController().signal,
-    requestId: `measure:${ctx.split}:${raw.caseId}:${ctx.dispatched}`,
-    stateRevision: ctx.dispatched,
-    planCacheHit: analyzed.cacheHit,
+    requestId: `measure:${context.split}:${raw.caseId}`,
+    stateRevision: 0,
+    planCacheHit: planned.planned.planCacheHit,
   });
 
   const scored = scoreResult({
-    testCase,
+    testCase: toEvaluationCase({
+      caseId: raw.caseId,
+      category: raw.category,
+      language: raw.language,
+      kind: raw.kind,
+      expected: raw.expected,
+      state: raw.state,
+    }),
     result,
     latencyMs: Date.now() - started,
     latencyCondition,
@@ -265,32 +349,107 @@ const measureOneCase = async (
   });
 
   const chosenProbability = result.ok ? chosenProbabilityOf(result.answers) : undefined;
+  if (result.ok) {
+    counters.inferenceMs += result.provenance.timings.inferenceMs;
+  }
+
   return {
     ...scored,
+    expected: raw.expected,
     npcId: raw.npcId,
-    optionCount: optionIds.length,
+    optionCount: raw.options.length,
     producedOption: scored.produced,
     ...(chosenProbability === undefined ? {} : { chosenProbability }),
+    conditionVerified,
+    measured: true,
+    residencyDetail: evidence.detail,
     reason: result.ok ? undefined : result.reason,
   };
 };
 
-/** Mutable accumulator for one split, folded into the result at the end. */
-type SplitAccumulator = {
-  readonly split: string;
-  readonly cases: readonly NpcActionCorpusCase[];
-  readonly tally: ReturnType<typeof createEvaluationTally>;
-  readonly byCategory: Map<string, ReturnType<typeof createEvaluationTally>>;
-  readonly outcomes: NpcActionMeasurementCase[];
+/** Everything one dispatch loop needs, assembled once. */
+type RunContext = {
+  readonly adapter: DecisionAdapter;
+  readonly cache: ReturnType<typeof createDecisionPlanCache>;
+  readonly policyOverride: MeasureNpcActionSelectionOptions['policyOverride'];
+  readonly conditions: { perCaseTimeoutMs: number };
+  readonly counters: RunCounters;
+};
+
+const runContext = (
+  options: MeasureNpcActionSelectionOptions,
+  cache: ReturnType<typeof createDecisionPlanCache>,
+  conditions: { perCaseTimeoutMs: number },
+  counters: RunCounters,
+): RunContext => ({
+  adapter: options.adapter,
+  cache,
+  policyOverride: options.policyOverride,
+  conditions,
+  counters,
+});
+
+/**
+ * Dedicated warm-up, on a NON-FIXTURE request.
+ *
+ * Its answers are discarded and it never enters a tally — this is the change that
+ * stops a graded case being spent to establish a condition.
+ */
+const runWarmups = async (context: RunContext & { readonly requests: number }): Promise<void> => {
+  for (let index = 0; index < context.requests; index += 1) {
+    await measureOneCase(
+      {
+        caseId: `${WARMUP_REQUEST.id}-${index}`,
+        category: 'warmup',
+        language: 'en',
+        kind: 'excluded',
+        expected: null,
+        state: WARMUP_REQUEST.state,
+        npcId: 'warmup',
+        options: WARMUP_REQUEST.options,
+        rationale: 'dedicated warm-up request; not a corpus case',
+      },
+      { ...context, split: 'warmup', scored: false },
+    );
+    context.counters.warmupDispatches += 1;
+  }
 };
 
 /**
- * Gates the HELD-OUT split only.
+ * Scores every fixture case of every split, exactly once.
  *
- * Scoring a gate on the split used to choose thresholds is how a threshold gets
- * fitted to the data it is then judged on, so a missing held-out split is a
- * failure rather than a silent pass.
+ * A case that produced no measurement is NOT folded — see
+ * {@link NpcActionMeasurementCase.measured} — and is collected for the
+ * denominator report instead.
  */
+const scoreAllSplits = async (
+  context: RunContext & { readonly plan: readonly SplitAccumulator[] },
+): Promise<readonly string[]> => {
+  const problems: string[] = [];
+  for (const entry of context.plan) {
+    for (const raw of entry.cases) {
+      const outcome = await measureOneCase(raw, {
+        ...context,
+        split: entry.split,
+        scored: true,
+      });
+      if (!outcome.measured) {
+        problems.push(
+          `split ${entry.split} case ${raw.caseId} produced no measurement (${outcome.reason ?? 'unknown'})`,
+        );
+        continue;
+      }
+      foldOutcome(entry.tally, outcome);
+      const categoryTally = entry.byCategory.get(raw.category) ?? createEvaluationTally();
+      foldOutcome(categoryTally, outcome);
+      entry.byCategory.set(raw.category, categoryTally);
+      entry.outcomes.push(outcome);
+    }
+  }
+  return problems;
+};
+
+/** Gates the HELD-OUT split only. */
 const gateFailuresFor = (options: {
   readonly heldout: NpcActionMeasurementSplit | undefined;
   readonly backendId: string;
@@ -319,33 +478,58 @@ const gateFailuresFor = (options: {
 };
 
 /**
- * Measures one backend over the corpus.
- *
- * Cold and warm are ESTABLISHED here by dispatch order, never asserted by the
- * caller: the first `coldSamples` cases are labelled cold, the next
- * `warmupRequests` are dispatched and discarded, and only then are latencies
- * kept. A warm percentile that cannot be established withholds itself rather
- * than reporting a p50 over three samples.
+ * Measures one backend over the corpus: every fixture case dispatched once and
+ * folded once. Only the dedicated warm-up dispatches are discarded.
  */
 export const measureNpcActionSelection = async (
   options: MeasureNpcActionSelectionOptions,
 ): Promise<NpcActionMeasurement> => {
-  const conditions: NpcActionMeasurementConditions = {
-    coldSamples: options.coldSamples ?? DEFAULTS.coldSamples,
-    warmupRequests: options.warmupRequests ?? DEFAULTS.warmupRequests,
-    minimumPercentileSamples: MIN_REPETITIONS_FOR_PERCENTILE,
+  const runStarted = Date.now();
+  const warmupRequests = options.warmupRequests ?? DEFAULTS.warmupRequests;
+  const conditions = {
     perCaseTimeoutMs: options.perCaseTimeoutMs ?? DEFAULTS.perCaseTimeoutMs,
   };
 
-  // Compiled plans are cached across cases: several NPCs appear more than once,
-  // so the same option set is compiled once. The cache is keyed by schema
-  // content, so a different option set is a different plan.
+  const counters: RunCounters = {
+    readinessProbes: 0,
+    warmupDispatches: 0,
+    residencyObservations: 0,
+    inferenceDispatches: 0,
+    verifiedWarm: 0,
+    verifiedCold: 0,
+    unverified: 0,
+    residencyVerified: false,
+    residencyMethod: 'none',
+    setupMs: 0,
+    readinessMs: 0,
+    residencyMs: 0,
+    inferenceMs: 0,
+  };
+
   const cache = createDecisionPlanCache();
 
+  // One readiness probe per arm, timed and counted separately so it is never
+  // mistaken for inference. (The chat-model comparator's probe is a real
+  // generation, so this matters for that arm in particular.)
+  const readinessStarted = performance.now();
+  counters.readinessProbes += 1;
   const capability = await options.adapter.capability({
-    deadlineAt: options.deadlineAt ?? Date.now() + 15_000,
+    deadlineAt: options.readinessDeadlineAt ?? Date.now() + 15_000,
     signal: new AbortController().signal,
   });
+  counters.readinessMs += performance.now() - readinessStarted;
+
+  const conditionsReport = (): NpcActionMeasurementConditions => ({
+    warmupRequests,
+    minimumPercentileSamples: MIN_REPETITIONS_FOR_PERCENTILE,
+    perCaseTimeoutMs: conditions.perCaseTimeoutMs,
+    residencyVerified: counters.residencyVerified,
+    residencyMethod: counters.residencyMethod,
+    verifiedWarmCases: counters.verifiedWarm,
+    verifiedColdCases: counters.verifiedCold,
+    unverifiedCases: counters.unverified,
+  });
+
   if (!capability.ready) {
     return {
       backendId: options.adapter.backendId,
@@ -353,11 +537,25 @@ export const measureNpcActionSelection = async (
       task: NPC_ACTION_SELECTION_TASK_ID,
       status: 'unavailable',
       unavailableReason: capability.notReadyReason ?? 'backend is not ready',
-      conditions,
-      latencyConditionMethod: 'cold-then-warm',
+      conditions: conditionsReport(),
+      latencyConditionMethod: 'runtime-residency',
+      calls: {
+        readinessProbes: counters.readinessProbes,
+        warmupDispatches: 0,
+        residencyObservations: counters.residencyObservations,
+        inferenceDispatches: 0,
+      },
+      timings: {
+        setupMsTotal: counters.setupMs,
+        readinessProbeMsTotal: counters.readinessMs,
+        residencyMsTotal: counters.residencyMs,
+        inferenceMsTotal: 0,
+        totalMs: Date.now() - runStarted,
+      },
       splits: [],
       gateFailures: [],
-      percentileEstablished: false,
+      warmConditionEstablished: false,
+      denominatorProblems: [],
     };
   }
 
@@ -369,36 +567,19 @@ export const measureNpcActionSelection = async (
     outcomes: [],
   }));
 
-  // Each split establishes its OWN conditions. Warming the checkpoint on the
-  // development split and then reporting the held-out split as warm would be
-  // true but weaker: the held-out numbers would depend on the development
-  // split having run first. Per-split cold means the held-out report states
-  // its own load cost, and needs enough cases to leave 20 warm samples.
-  for (const entry of plan) {
-    const warmupTarget = conditions.coldSamples + conditions.warmupRequests;
-    let dispatched = 0;
-    for (const raw of entry.cases) {
-      const outcome = await measureOneCase(raw, {
-        adapter: options.adapter,
-        cache,
-        policyOverride: options.policyOverride,
-        conditions,
-        dispatched,
-        split: entry.split,
-      });
-      // Warmup dispatches are performed and discarded: they establish the
-      // condition, and their numbers are never kept.
-      const isWarmup = dispatched >= conditions.coldSamples && dispatched < warmupTarget;
-      if (!isWarmup) {
-        foldOutcome(entry.tally, outcome);
-        const categoryTally = entry.byCategory.get(raw.category) ?? createEvaluationTally();
-        foldOutcome(categoryTally, outcome);
-        entry.byCategory.set(raw.category, categoryTally);
-        entry.outcomes.push(outcome);
-      }
-      dispatched += 1;
-    }
-  }
+  await runWarmups({
+    adapter: options.adapter,
+    cache,
+    policyOverride: options.policyOverride,
+    conditions,
+    counters,
+    requests: warmupRequests,
+  });
+
+  const unusableProblems = await scoreAllSplits({
+    plan,
+    ...runContext(options, cache, conditions, counters),
+  });
 
   const splits: NpcActionMeasurementSplit[] = plan.map((entry) => ({
     split: entry.split,
@@ -407,29 +588,82 @@ export const measureNpcActionSelection = async (
       .map(([key, tally]) => summarizeTally(key, 'category', tally))
       .sort((a, b) => a.key.localeCompare(b.key)),
     cases: entry.outcomes,
+    fixtureCaseCount: entry.cases.length,
+    fixturePositiveCount: entry.cases.filter((c) => c.kind === 'positive').length,
+    fixtureRequiredAbstentionCount: entry.cases.filter((c) => c.kind === 'required-abstain').length,
   }));
 
-  const gateFailures = gateFailuresFor({
-    heldout: splits.find((entry) => entry.split === 'heldout'),
-    backendId: options.adapter.backendId,
-    dialect: options.adapter.dialect,
-    qualityGate: options.qualityGate,
-    latencyGate: options.latencyGate,
-  });
+  const denominatorProblems = [...unusableProblems, ...denominatorProblemsFor(splits)];
+  const heldout = splits.find((entry) => entry.split === 'heldout');
+  const gateFailures = [
+    ...denominatorProblems,
+    ...gateFailuresFor({
+      heldout,
+      backendId: options.adapter.backendId,
+      dialect: options.adapter.dialect,
+      qualityGate: options.qualityGate,
+      latencyGate: options.latencyGate,
+    }),
+  ];
 
   return {
     backendId: options.adapter.backendId,
     dialect: options.adapter.dialect,
     task: NPC_ACTION_SELECTION_TASK_ID,
     status: 'measured',
-    conditions,
-    latencyConditionMethod: 'cold-then-warm',
+    conditions: conditionsReport(),
+    latencyConditionMethod: 'runtime-residency',
+    calls: {
+      readinessProbes: counters.readinessProbes,
+      warmupDispatches: counters.warmupDispatches,
+      residencyObservations: counters.residencyObservations,
+      inferenceDispatches: counters.inferenceDispatches,
+    },
+    timings: {
+      setupMsTotal: counters.setupMs,
+      readinessProbeMsTotal: counters.readinessMs,
+      residencyMsTotal: counters.residencyMs,
+      inferenceMsTotal: counters.inferenceMs,
+      totalMs: Date.now() - runStarted,
+    },
     splits,
     gateFailures,
-    percentileEstablished: splits.some(
-      (entry) => entry.split === 'heldout' && entry.overall.warmP95Ms !== undefined,
-    ),
+    warmConditionEstablished: heldout !== undefined && counters.verifiedWarm > 0,
+    denominatorProblems,
   };
+};
+
+/**
+ * Fails the run when a split did not score its whole fixture — the regression the
+ * first version had: 33/15 declared, 30/12 scored.
+ */
+export const denominatorProblemsFor = (splits: readonly NpcActionMeasurementSplit[]): string[] => {
+  const problems: string[] = [];
+  for (const split of splits) {
+    const scored = split.cases.length;
+    if (scored !== split.fixtureCaseCount) {
+      problems.push(
+        `split ${split.split} scored ${scored} case(s) but its fixture declares ${split.fixtureCaseCount}`,
+      );
+    }
+    const seen = new Set(split.cases.map((entry) => entry.caseId));
+    if (seen.size !== scored) {
+      problems.push(`split ${split.split} contains ${scored - seen.size} duplicate case id(s)`);
+    }
+    const positives = split.cases.filter((entry) => entry.kind === 'positive').length;
+    if (positives !== split.fixturePositiveCount) {
+      problems.push(
+        `split ${split.split} scored ${positives} positive(s) but its fixture declares ${split.fixturePositiveCount}`,
+      );
+    }
+    const abstentions = split.cases.filter((entry) => entry.kind === 'required-abstain').length;
+    if (abstentions !== split.fixtureRequiredAbstentionCount) {
+      problems.push(
+        `split ${split.split} scored ${abstentions} required-abstention case(s) but its fixture declares ${split.fixtureRequiredAbstentionCount}`,
+      );
+    }
+  }
+  return problems;
 };
 
 /** Formats one slice for a report. */

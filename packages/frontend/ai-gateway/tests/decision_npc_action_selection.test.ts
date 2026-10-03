@@ -10,12 +10,13 @@ import { analyzeDecisionSchema } from '../src/lib/decision/index.ts';
 import {
   loadNpcActionSelectionCorpus,
   NPC_ACTION_SELECTION_HELDOUT,
-} from '../src/lib/decision/tasks/fixtures.ts';
+} from '../src/lib/decision/tasks/npc_action_corpus.ts';
 import {
   isStateChangingAction,
   NPC_ACTION_NONE_ID,
   NPC_ACTION_SELECTION_COMPARATOR,
   NPC_ACTION_SELECTION_LATENCY_GATE,
+  NPC_ACTION_SELECTION_LITERALS,
   NPC_ACTION_SELECTION_POLICY,
   NPC_ACTION_SELECTION_QUALITY_GATE,
   NPC_ACTION_SELECTION_SCHEMA,
@@ -52,16 +53,25 @@ describe('the task contract', () => {
     expect(parseActionLiteral('trade')).toEqual({ kind: 'trade' });
   });
 
-  it('every canonical literal carries a real content-pack id', () => {
-    // The point of the task: no option is a bare invented identifier.
-    const questLiterals = [
-      'offerQuest:fading_ward',
-      'offerQuest:tools_for_tomorrow',
-      'offerQuest:a_room_kept_warm',
-    ];
-    for (const literal of questLiterals) {
-      expect(parseActionLiteral(literal).payloadId).toBeTruthy();
+  it('every payload-bearing canonical literal carries a real content-pack id', () => {
+    // Drives the ACTUAL vocabulary rather than a hand-written subset, so a new
+    // literal cannot be added without this rule being checked against it.
+    // `none` and the three zero-payload kinds legitimately have no payload.
+    const payloadKinds = new Set(['offerQuest', 'giveItem', 'presentEvidence']);
+    for (const literal of NPC_ACTION_SELECTION_LITERALS) {
+      const parsed = parseActionLiteral(literal);
+      if (payloadKinds.has(parsed.kind)) {
+        expect(parsed.payloadId).toBeTruthy();
+      } else {
+        expect(parsed.payloadId).toBeUndefined();
+      }
     }
+    // The check above is only meaningful if it examined both shapes.
+    expect(
+      NPC_ACTION_SELECTION_LITERALS.filter((literal) =>
+        payloadKinds.has(parseActionLiteral(literal).kind),
+      ).length,
+    ).toBeGreaterThanOrEqual(5);
   });
 
   it('declares a selective-acceptance policy, because a legal key is not a correct answer', () => {

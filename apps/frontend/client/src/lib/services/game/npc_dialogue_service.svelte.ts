@@ -23,7 +23,6 @@ import {
 } from '@aikami/frontend/services/base';
 import {
   NpcDialogueCommandSchema,
-  NpcDialogueExtractionSchema,
   NpcDialogueTurnSchema,
   NpcIntentAnalysisOutputSchema,
   NpcQuestActivationSchema,
@@ -56,6 +55,7 @@ import { companionReactionService } from './companion_reaction_service.svelte.ts
 import { resolveAccounts } from './dramatic_structure_service';
 import { inventoryService } from './inventory_service.svelte.ts';
 import { narrativeEventService } from './narrative_event_service.svelte.ts';
+import { npcActionDecisionService } from './npc_action_decision_service.svelte.ts';
 import {
   noteDialogueSessionStarted,
   planTurnExtraction,
@@ -65,6 +65,7 @@ import {
 import { compareConsequenceDeltas } from './npc_consequence_order';
 import { buildNpcPersona } from './npc_dialogue_persona';
 import { buildNarrativeSystemPrompt } from './npc_dialogue_prompts';
+import { questOfferPrecondition } from './npc_dialogue_quest_authorization.ts';
 import { partyRosterService } from './party_roster_service.svelte.ts';
 import { questStateService } from './quest_state_service.svelte.ts';
 import { relationshipService } from './relationship_service.svelte.ts';
@@ -183,7 +184,7 @@ type DialogueTurnState =
     };
 
 /**
- * Thrown when a generation call exceeds the configured timeout.
+/** Thrown when a generation call exceeds the configured timeout.
  * Distinguished from other failures so callers can surface an actionable
  * error naming the provider (AC-4).
  */
@@ -1074,38 +1075,40 @@ export class NpcDialogueService
         throw new Error('AI dialogue produced no narrative; refusing to report a successful turn');
       }
 
-      // C-568: a decision may supply the command; call 2 then asks for `choices`.
       this.turnState = { kind: 'awaiting_envelope', text: narrative };
-      const activeCampaignId = campaignService.activeCampaign?.id;
+      const turnCtx = options.turnCtx;
       const plan = await planTurnExtraction({
-        npcId: options.turnCtx.npcId,
-        npcName: options.turnCtx.npcName,
+        npcId: turnCtx.npcId,
+        npcName: turnCtx.npcName,
         persona: contextProjection.persona,
         allowedCommands: contextProjection.allowedCommands,
-        npcEntry: options.turnCtx.npcEntry,
+        npcEntry: turnCtx.npcEntry,
         narrative,
-        offerableQuests: questStateService.getOfferableQuests(options.turnCtx.npcId),
-        discoverableEvidence: questStateService.getDiscoverableEvidence(activeCampaignId),
+        currentCampaignId: () => campaignService.activeCampaign?.id,
         deadlineAt,
         signal,
-        turnSequence: this._turnSequence,
-        currentCampaignId: () => activeCampaignId,
+        readTurnSequence: () => this._turnSequence,
+        readConfigRevision: () => npcActionDecisionService.configRevision(),
+        mode: npcActionDecisionService.mode(),
         log: (detail: Record<string, unknown>) => this.info('npc action decision', detail),
       });
 
       let parsedExtraction: TurnExtractionParse;
       try {
         parsedExtraction = await runTurnExtraction(plan, (config) =>
-          this._extractEnvelope({
-            narrative,
-            ...config,
-            schema: config.schema as Record<string, unknown>,
-            signal,
-            path: 'turn-envelope',
-            call: 2,
-            deadlineAt,
-            requestId,
-          }),
+          this._withTimeout(
+            this._extractEnvelope({
+              narrative,
+              ...config,
+              schema: config.schema as Record<string, unknown>,
+              signal,
+              path: 'turn-envelope',
+              call: 2,
+              deadlineAt,
+              requestId,
+            }),
+            'envelope',
+          ),
         );
       } catch (error) {
         this._checkAbort(signal);
@@ -1137,7 +1140,7 @@ export class NpcDialogueService
           command,
           allowedCommands: contextProjection.allowedCommands,
           npcId: options.turnCtx.npcId,
-          npcEntry: options.turnCtx.npcEntry,
+          npcEntry: turnCtx.npcEntry,
         });
         if (!precondResult.allowed) {
           this.warn('_generateAiTurn:command-denied', {
@@ -1646,17 +1649,13 @@ export class NpcDialogueService
         return { allowed: true };
       }
 
-      case 'offerQuest': {
-        const questId = c.questId as string | undefined;
-        if (!questId) {
-          return { allowed: false, reason: 'offerQuest missing questId' };
-        }
-        const quest = this._contentProvider!.getQuest(questId);
-        if (!quest) {
-          return { allowed: false, reason: `quest ${questId} not found` };
-        }
-        return { allowed: true };
-      }
+      case 'offerQuest':
+        return questOfferPrecondition({
+          questId: c.questId as string | undefined,
+          npcId,
+          contentProvider: this._contentProvider!,
+          questState: questStateService,
+        });
 
       case 'skillCheck': {
         const skill = c.skill as string | undefined;

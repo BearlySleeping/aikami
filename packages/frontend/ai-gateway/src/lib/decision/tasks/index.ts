@@ -16,22 +16,30 @@ export {
 } from '../evaluator.ts';
 export type { ChatModelDecisionAdapterOptions } from './chat_model_baseline_adapter.ts';
 export { createChatModelDecisionAdapter } from './chat_model_baseline_adapter.ts';
+export type { NpcActionDecisionContextInput } from './decision_context.ts';
+export { buildNpcActionDecisionContext } from './decision_context.ts';
 export {
   loadDecisionCorpus,
-  loadNpcActionSelectionCorpus,
-  NPC_ACTION_SELECTION_DEV,
-  NPC_ACTION_SELECTION_HELDOUT,
-  NPC_ACTION_SELECTION_SPLITS,
   NPC_COMMAND_KIND_DEV,
   NPC_COMMAND_KIND_HELDOUT,
   NPC_COMMAND_KIND_SPLITS,
 } from './fixtures.ts';
 export type { NpcActionSelectionProbe } from './npc_action_selection.ts';
 // ---------------------------------------------------------------------------
-// The production task (lane C). Everything here is reachable from
-// `@aikami/frontend-ai-gateway/decision/tasks` and from the measurement
-// runner; `decision/index.ts` deliberately does NOT re-export it, because a
-// task is not part of the dispatch contract a consumer needs.
+// The production task (lane C) — TASK CONTRACT ONLY.
+//
+// Deliberately narrow, twice over.
+//
+// `decision/index.ts` does not re-export tasks at all, because a task is not
+// part of the dispatch contract a consumer needs. And this barrel stops at the
+// CONTRACT: the measurement driver, the chat-model comparator AND the JSON
+// fixture corpus are harness data, imported by the evaluation scripts and tests
+// BY PATH.
+//
+// Keeping them out is measured, not theoretical. Re-exporting the fixtures put
+// 92 KB of corpus JSON — including every NPC persona and exchange — into the
+// shipped client, and the bundle-budget ratchet reported a real +10 % on both
+// the `/` and `/settings` initial route closures.
 // ---------------------------------------------------------------------------
 export {
   isStateChangingAction,
@@ -52,13 +60,14 @@ export {
 } from './npc_action_selection.ts';
 export type {
   MeasureNpcActionSelectionOptions,
+  NpcActionCallCounts,
   NpcActionCorpusCase,
   NpcActionMeasurement,
   NpcActionMeasurementCase,
   NpcActionMeasurementConditions,
   NpcActionMeasurementSplit,
-} from './npc_action_selection_measurement.ts';
-export { formatSlice, measureNpcActionSelection } from './npc_action_selection_measurement.ts';
+  NpcActionTimings,
+} from './npc_action_selection_measurement_types.ts';
 export type { NpcCommandKindProbe } from './npc_command_kind.ts';
 export {
   isStateChangingCommand,

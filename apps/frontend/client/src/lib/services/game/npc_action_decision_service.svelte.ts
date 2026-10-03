@@ -34,27 +34,23 @@
 //   - `off` is instantaneous and does not require a restart, a re-auth or a
 //     reload of anything: the next turn takes the existing LLM path.
 
-import { BaseFrontendClass, type BaseFrontendClassOptions } from '@aikami/frontend/services/base';
+import type { DecisionPlan, DecisionTaskPolicy } from '@aikami/frontend/ai-gateway/decision';
 import {
-  analyzeDecisionSchema,
-  bindDecisionPolicy,
   buildDecisionDispatch,
   createDecisionPlanCache,
-  type DecisionAdapter,
   type DecisionResult,
   runDecision,
-} from '@aikami/frontend-ai-gateway/decision';
+} from '@aikami/frontend/ai-gateway/decision';
 import {
   NPC_ACTION_NONE_ID,
   NPC_ACTION_SELECTION_TASK_ID,
   NPC_ACTION_SELECTION_TASK_VERSION,
   npcActionSelectionPolicy,
   npcActionSelectionSchema,
-} from '@aikami/frontend-ai-gateway/decision/tasks';
-import type { NpcDialogueCommand } from '@aikami/types';
+} from '@aikami/frontend/ai-gateway/decision/tasks';
+import { BaseFrontendClass, type BaseFrontendClassOptions } from '@aikami/frontend/services/base';
 import { adapterForBackend } from '../ai/decision/decision_backend_logic.ts';
 import { decisionBackendService } from '../ai/decision_backend_service.svelte.ts';
-import type { ResolvedDecisionBackend } from '../config/decision_backend_resolution.ts';
 import {
   commandForActionId,
   enumerateNpcActionCandidates,
@@ -73,12 +69,15 @@ import {
   type NpcActionResolution,
   resolveNpcActionRoute,
 } from './npc_action_decision.ts';
+import { resolveNpcActionQualification } from './npc_action_decision_qualification.ts';
 
 export type NpcActionDecisionServiceInterface = {
   mode(): NpcActionDecisionMode;
   setMode(next: NpcActionDecisionMode): void;
   /** Enumerates this turn's candidates from world state. */
   candidatesFor(input: NpcActionCandidateInput): NpcActionCandidateSet;
+  /** Identity of the configuration a dispatch runs under; re-read live. */
+  configRevision(): string;
   qualification(): NpcActionQualification;
   /** Dispatches one turn. Never throws for a backend failure. */
   resolve(request: NpcActionDecisionRequest): Promise<NpcActionResolution>;
@@ -130,22 +129,13 @@ class NpcActionDecisionService
       createAdapter: injected.createAdapter ?? adapterForBackend,
       readQualification:
         injected.readQualification ??
-        // Qualification is read from the saved connection, never inferred. It
-        // is false until a shipped measurement records a qualification for
-        // THIS task, at THIS task version, for THIS checkpoint.
         ((backend) =>
-          backend.qualifiedForGameplay
-            ? {
-                qualified: true,
-                taskId: NPC_ACTION_SELECTION_TASK_ID,
-                taskVersion: NPC_ACTION_SELECTION_TASK_VERSION,
-                dialect: 'jev-v1',
-                checkpoint: backend.checkpoint,
-                reason: 'the saved connection is marked qualified for gameplay',
-              }
-            : UNQUALIFIED(
-                'no measurement has qualified this checkpoint for npc-action-selection on held-out data',
-              )),
+          resolveNpcActionQualification({
+            backend,
+            supportedTaskId: NPC_ACTION_SELECTION_TASK_ID,
+            supportedTaskVersion: NPC_ACTION_SELECTION_TASK_VERSION,
+            supportedDialect: 'jev-v1',
+          })),
     };
   }
 
@@ -180,6 +170,26 @@ class NpcActionDecisionService
     return this._caps.readQualification(backend);
   }
 
+  /**
+   * Identity of the configuration a dispatch runs under.
+   *
+   * Includes the mode AND the backend identity, not just a mode flag: swapping
+   * the connection or the checkpoint mid-flight must discard an answer, because
+   * a qualification recorded for one checkpoint is not a qualification for
+   * another. Contains no endpoint and no credential — only ids the player can
+   * already see.
+   */
+  configRevision(): string {
+    const backend = this._caps.resolveBackend();
+    return [
+      `mode=${this._mode}`,
+      `gen=${this._generation}`,
+      backend === undefined ? 'backend=none' : `conn=${backend.connectionId}`,
+      backend === undefined ? 'ckpt=none' : `ckpt=${backend.checkpoint}`,
+      backend === undefined ? 'rt=none' : `rt=${backend.runtime}`,
+    ].join('|');
+  }
+
   candidatesFor(input: NpcActionCandidateInput): NpcActionCandidateSet {
     return enumerateNpcActionCandidates(input);
   }
@@ -206,6 +216,9 @@ class NpcActionDecisionService
       configured: backend !== undefined,
       qualification,
       taskId: NPC_ACTION_SELECTION_TASK_ID,
+      expectedTaskVersion: NPC_ACTION_SELECTION_TASK_VERSION,
+      expectedDialect: 'jev-v1',
+      expectedCheckpoint: backend?.checkpoint ?? '',
       candidates,
     });
 
@@ -217,145 +230,159 @@ class NpcActionDecisionService
       };
     }
 
-    // Capture the generation so a configuration change mid-flight drops the
-    // result instead of answering the new configuration's question.
+    // A per-turn enumeration or binding failure must surface as a REJECTED
+    // attempt, never as an exception escaping `resolve` and rejecting the whole
+    // dialogue turn — so the whole prologue is inside the guarded helper.
+    const staged = this._stage(candidates, backend.languages, context);
+    if (staged.ok !== true) {
+      return {
+        command: undefined,
+        source: 'none',
+        attempts: [{ source: 'decision', outcome: 'rejected', reason: staged.reason }],
+      };
+    }
+    const { schema, policy, plan } = staged;
+
+    // Captured BEFORE the dispatch, so a configuration change mid-flight drops
+    // the result instead of answering the new configuration's question.
     const generation = this._generation;
-    const optionIds = candidates.candidates.map((candidate) => candidate.id);
-    const schema = npcActionSelectionSchema(optionIds);
-    const policy = npcActionSelectionPolicy(optionIds, optionDescriptionsFor(candidates));
-
-    const analyzed = this._plans.analyze({
-      schema: schema as unknown as Record<string, unknown>, // guard-ignore lint/type-safety/casting: TypeBox schema cast for AI envelope or rAF polyfill
-    });
-    if (analyzed.analysis.ok !== true) {
-      return {
-        command: undefined,
-        source: 'none',
-        attempts: [
-          { source: 'decision', outcome: 'rejected', reason: 'candidate set did not compile' },
-        ],
-      };
-    }
-    const bound = this._plans.bind({
-      plan: analyzed.analysis.plan,
-      policy,
-      supportedLanguages: [...backend.languages],
-    });
-    if (bound.ok !== true) {
-      return {
-        command: undefined,
-        source: 'none',
-        attempts: [
-          { source: 'decision', outcome: 'rejected', reason: 'candidate set did not bind' },
-        ],
-      };
-    }
-
-    const dispatched = buildDecisionDispatch({ plan: bound.plan, context });
-    if (dispatched.ok !== true) {
-      return {
-        command: undefined,
-        source: 'none',
-        attempts: [{ source: 'decision', outcome: 'rejected', reason: dispatched.refusal.reason }],
-      };
-    }
-
-    const started = Date.now();
     let result: DecisionResult;
     try {
       result = await runDecision({
-        plan: bound.plan,
-        schema: schema as unknown as Record<string, unknown>, // guard-ignore lint/type-safety/casting: TypeBox schema cast for AI envelope or rAF polyfill
+        plan,
+        schema: schema as Record<string, unknown>, // guard-ignore lint/type-safety/casting: TypeBox schema cast for AI envelope or rAF polyfill
         policy,
         adapter: this._caps.createAdapter(backend),
         context,
-        ...(request.language === undefined ? {} : { language: request.language }),
         deadlineAt,
         signal,
         requestId: `npc-action:${request.staleness.turnSequence}`,
-        stateRevision: request.staleness.stateRevision,
-        planCacheHit: analyzed.cacheHit,
+        stateRevision: request.staleness.turnSequence,
       });
     } catch (error) {
       return {
         command: undefined,
         source: 'none',
-        attempts: [
-          {
-            source: 'decision',
-            outcome: 'abstained',
-            ms: Date.now() - started,
-            reason: String(error),
-          },
-        ],
+        attempts: [{ source: 'decision', outcome: 'abstained', reason: String(error) }],
       };
     }
 
-    // A result for a turn that has moved on is discarded, never applied. Both
-    // the generation and the campaign/conversation/turn revision are checked.
+    return this._settle({ result, candidates, generation, request });
+  }
+
+  /**
+   * Compiles, binds and bounds one turn's candidate set.
+   *
+   * Every failure here is a REJECTION rather than an exception, because the
+   * caller is mid-dialogue-turn: throwing would fail the whole turn over a
+   * malformed candidate list, when the correct behaviour is to decline the
+   * decision and let the existing LLM path answer.
+   */
+  private _stage(
+    candidates: NpcActionCandidateSet,
+    languages: readonly ('en' | 'multi')[],
+    context: string,
+  ):
+    | { ok: true; schema: unknown; policy: DecisionTaskPolicy; plan: DecisionPlan }
+    | { ok: false; reason: string } {
+    const optionIds = candidates.candidates.map((candidate) => candidate.id);
+    let schema: unknown;
+    let policy: DecisionTaskPolicy;
+    try {
+      schema = npcActionSelectionSchema(optionIds);
+      policy = npcActionSelectionPolicy(optionIds, optionDescriptionsFor(candidates));
+    } catch (error) {
+      return { ok: false, reason: String(error) };
+    }
+
+    const analyzed = this._plans.analyze({
+      schema: schema as Record<string, unknown>, // guard-ignore lint/type-safety/casting: TypeBox schema cast for AI envelope or rAF polyfill
+    });
+    if (analyzed.analysis.ok !== true) {
+      return { ok: false, reason: 'candidate set did not compile' };
+    }
+    const bound = this._plans.bind({
+      plan: analyzed.analysis.plan,
+      policy,
+      supportedLanguages: [...languages],
+    });
+    if (bound.ok !== true) {
+      return { ok: false, reason: 'candidate set did not bind' };
+    }
+    const dispatched = buildDecisionDispatch({ plan: bound.plan, context });
+    if (dispatched.ok !== true) {
+      return { ok: false, reason: dispatched.refusal.reason };
+    }
+    return { ok: true, schema, policy, plan: bound.plan };
+  }
+
+  /**
+   * Turns a dispatch result into the turn's resolution.
+   *
+   * Split out because it is a decision LADDER — stale?, abstained?, shadow?,
+   * recognised? — and a ladder inside `resolve` is what pushed that function
+   * past the complexity threshold. Each branch returns the whole resolution so
+   * no caller can read a half-decided one.
+   */
+  private _settle(options: {
+    readonly result: DecisionResult;
+    readonly candidates: NpcActionCandidateSet;
+    readonly generation: number;
+    readonly request: NpcActionDecisionRequest;
+  }): NpcActionResolution {
+    const { result, candidates, generation, request } = options;
+    const rejected = (reason: string): NpcActionResolution => ({
+      command: undefined,
+      source: 'none',
+      attempts: [{ source: 'decision', outcome: 'rejected', reason }],
+    });
+
+    // A result for a turn that has moved on is DISCARDED, never applied: both
+    // the configuration generation and the live campaign/conversation/turn
+    // token are checked.
     if (
       generation !== this._generation ||
       isStaleNpcActionResult(request.staleness, request.currentStaleness())
     ) {
+      return rejected('stale turn discarded');
+    }
+
+    const elapsed = result.provenance.timings.totalMs;
+    if (result.ok !== true) {
+      // Abstention is the ONLY outcome that earns a fallback. The caller decides
+      // whether budget allows one; this method never runs it, so a mutation that
+      // succeeded is structurally incapable of being retried here.
       return {
         command: undefined,
         source: 'none',
         attempts: [
-          {
-            source: 'decision',
-            outcome: 'rejected',
-            ms: Date.now() - started,
-            reason: 'stale turn discarded',
-          },
+          { source: 'decision', outcome: 'abstained', ms: elapsed, reason: result.reason },
         ],
       };
     }
 
-    const attempt: NpcActionAttempt =
-      result.ok === true
-        ? { source: 'decision', outcome: 'accepted', ms: result.provenance.timings.totalMs }
-        : {
-            source: 'decision',
-            outcome: 'abstained',
-            ms: result.provenance.timings.totalMs,
-            reason: result.reason,
-          };
-
-    if (result.ok !== true) {
-      // Abstention is the ONLY path that earns a fallback. The caller decides
-      // whether budget allows one; this method never runs it, so a mutation that
-      // succeeded is structurally incapable of being retried here.
-      return { command: undefined, source: 'none', attempts: [attempt] };
-    }
-
+    const attempt: NpcActionAttempt = { source: 'decision', outcome: 'accepted', ms: elapsed };
     const actionId = result.value.actionId;
     if (typeof actionId !== 'string') {
-      return {
-        command: undefined,
-        source: 'none',
-        attempts: [{ source: 'decision', outcome: 'rejected', reason: 'no actionId in result' }],
-      };
+      return rejected('no actionId in result');
     }
 
-    // Shadow dispatches are measured and discarded. The turn behaves exactly as
-    // `off` does; only the comparison accumulates.
+    // Shadow dispatches are measured and discarded: the turn behaves exactly as
+    // `off` does, and only the comparison accumulates.
     if (this._mode === 'shadow') {
       return {
         command: undefined,
         actionId,
         source: 'none',
-        attempts: [{ ...attempt, outcome: 'accepted', reason: 'shadow: discarded' }],
+        attempts: [{ ...attempt, reason: 'shadow: discarded' }],
       };
     }
 
-    const command: NpcDialogueCommand | undefined =
-      actionId === NPC_ACTION_NONE_ID ? undefined : commandForActionId(candidates, actionId);
-
-    // A literal this turn did not enumerate resolves to nothing rather than to
-    // a plausible-looking command. Reconstruct already refused unknown option
-    // keys, so reaching here with no command means `none`.
     return {
-      command,
+      // `undefined` here is a real answer: `none` means "no action", which is
+      // not the same as "nothing was decided".
+      command:
+        actionId === NPC_ACTION_NONE_ID ? undefined : commandForActionId(candidates, actionId),
       actionId,
       source: 'decision',
       attempts: [attempt],

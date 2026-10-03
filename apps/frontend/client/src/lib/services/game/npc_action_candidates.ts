@@ -104,7 +104,8 @@ export type NpcActionCandidate = {
 
 /** A permitted command kind that contributed no candidates, and why. */
 export type NpcActionCandidateOmission = {
-  readonly kind: NpcDialogueCommandKind;
+  /** The kind whose candidates were lost — including `none`, which can be lost. */
+  readonly kind: NpcDialogueCommandKind | 'none';
   readonly reason: 'no-world-instance' | 'not-enumerable-from-world-state' | 'bound-exceeded';
   readonly detail: string;
 };
@@ -213,39 +214,72 @@ const zeroPayloadCandidates = (
 };
 
 /** One candidate per quest this NPC may actually offer. */
-const questCandidates = (input: NpcActionCandidateInput): NpcActionCandidate[] =>
-  input.offerableQuests.map((quest) => ({
-    id: `offerQuest:${quest.id}`,
-    kind: 'offerQuest',
-    command: { kind: 'offerQuest', questId: quest.id },
-    label: `Offer the quest "${quest.name}" to the player.`,
-  }));
+const questCandidates = (
+  input: NpcActionCandidateInput,
+  allowed: ReadonlySet<NpcDialogueCommandKind>,
+): NpcActionCandidate[] =>
+  allowed.has('offerQuest')
+    ? input.offerableQuests.map((quest) => ({
+        id: `offerQuest:${quest.id}`,
+        kind: 'offerQuest',
+        command: { kind: 'offerQuest', questId: quest.id },
+        label: `Offer the quest "${quest.name}" to the player.`,
+      }))
+    : [];
 
 /** One candidate per item the NPC is actually holding. */
-const itemCandidates = (input: NpcActionCandidateInput): NpcActionCandidate[] =>
-  input.vendorInventory.map((itemId) => ({
-    id: `giveItem:${itemId}`,
-    kind: 'giveItem',
-    command: { kind: 'giveItem', itemId, quantity: 1 },
-    label: `Hand ${itemId} to the player as a gift.`,
-  }));
+const itemCandidates = (
+  input: NpcActionCandidateInput,
+  allowed: ReadonlySet<NpcDialogueCommandKind>,
+): NpcActionCandidate[] =>
+  allowed.has('giveItem')
+    ? input.vendorInventory.map((itemId) => ({
+        id: `giveItem:${itemId}`,
+        kind: 'giveItem',
+        command: { kind: 'giveItem', itemId, quantity: 1 },
+        label: `Hand ${itemId} to the player as a gift.`,
+      }))
+    : [];
 
 /**
  * One candidate per evidence item this NPC is the RECIPIENT of.
  *
- * The `presentToNpcId` filter is the authorization
- * `_validateCommandPreconditions` also enforces, applied here so an
- * unauthorised evidence id is never even an option.
+ * Two independent filters apply and both matter:
+ *
+ *   - the KIND must be whitelisted. Without this, an NPC not permitted to
+ *     present evidence is still offered evidence options — the same class of
+ *     defect as offering another NPC's quest.
+ *   - `presentToNpcId` must be this NPC. This is the authorization
+ *     `_validateCommandPreconditions` also enforces, applied here so an
+ *     unauthorised evidence id is never even an option.
  */
-const evidenceCandidates = (input: NpcActionCandidateInput): NpcActionCandidate[] =>
-  input.discoverableEvidence
-    .filter((evidence) => evidence.presentToNpcId === input.npcId)
-    .map((evidence) => ({
-      id: `presentEvidence:${evidence.id}`,
-      kind: 'presentEvidence',
-      command: { kind: 'presentEvidence', evidenceId: evidence.id },
-      label: `Receive the evidence "${evidence.label}" from the player.`,
-    }));
+const evidenceCandidates = (
+  input: NpcActionCandidateInput,
+  allowed: ReadonlySet<NpcDialogueCommandKind>,
+): NpcActionCandidate[] =>
+  allowed.has('presentEvidence')
+    ? input.discoverableEvidence
+        .filter((evidence) => evidence.presentToNpcId === input.npcId)
+        .map((evidence) => ({
+          id: `presentEvidence:${evidence.id}`,
+          kind: 'presentEvidence',
+          command: { kind: 'presentEvidence', evidenceId: evidence.id },
+          label: `Receive the evidence "${evidence.label}" from the player.`,
+        }))
+    : [];
+
+/**
+ * The effective bound.
+ *
+ * Floored at 2 rather than 1 because the first TWO candidates are `none` and the
+ * first zero-payload kind. A bound of 1 would leave a turn able to offer only
+ * "do nothing", which is not a question — and a bound below 1 would leave the
+ * turn unable to say no at all.
+ */
+const effectiveBound = (requested: number | undefined): number => {
+  const requestedBound = requested ?? DEFAULT_MAX_ACTION_CANDIDATES;
+  return Math.max(2, Math.floor(requestedBound));
+};
 
 /** Drops the tail that exceeded the bound, recording each loss. */
 const applyBound = (
@@ -263,7 +297,10 @@ const applyBound = (
   return {
     candidates,
     omissions: dropped.map((candidate) => ({
-      kind: candidate.kind === 'none' ? 'skillCheck' : candidate.kind,
+      // The candidate's OWN kind. An earlier draft relabelled a dropped `none`
+      // as `skillCheck` to satisfy the omission type, which reported a bound as
+      // a difficulty-class problem — a factually wrong reason for a real loss.
+      kind: candidate.kind,
       reason: 'bound-exceeded' as const,
       detail: `candidate ${candidate.id} exceeded maxCandidates=${maxCandidates}`,
     })),
@@ -281,7 +318,7 @@ const applyBound = (
 export const enumerateNpcActionCandidates = (
   input: NpcActionCandidateInput,
 ): NpcActionCandidateSet => {
-  const maxCandidates = input.maxCandidates ?? DEFAULT_MAX_ACTION_CANDIDATES;
+  const maxCandidates = effectiveBound(input.maxCandidates);
   const allowed = new Set<NpcDialogueCommandKind>(input.allowedCommands);
 
   const omissions: NpcActionCandidateOmission[] = [];
@@ -299,9 +336,9 @@ export const enumerateNpcActionCandidates = (
     [
       noneCandidate(),
       ...zeroPayloadCandidates(input, allowed),
-      ...questCandidates(input),
-      ...itemCandidates(input),
-      ...evidenceCandidates(input),
+      ...questCandidates(input, allowed),
+      ...itemCandidates(input, allowed),
+      ...evidenceCandidates(input, allowed),
     ],
     maxCandidates,
   );
@@ -355,6 +392,66 @@ export const buildNpcActionCandidateInput = (options: {
   offerableQuests: options.offerableQuests,
   discoverableEvidence: options.discoverableEvidence,
 });
+
+/**
+ * The exact text a decision backend is given for one turn.
+ *
+ * ---------------------------------------------------------------------------
+ * Why this lives here and is shared with the corpus generator
+ * ---------------------------------------------------------------------------
+ *
+ * The first version of the benchmark sent a DIFFERENT input shape than
+ * production: the fixtures were built as
+ * `[NPC]\\n<name>. Stay in character.\\n\\n[PLAYER]…[ELDER]…` while the turn
+ * module sent `[NPC]\\n<name>\\n<persona>\\n\\n[EXCHANGE]\\n<narrative>`.
+ *
+ * A benchmark that measures a different input from the one production sends is
+ * not a benchmark of that workload, and the drift is invisible: both shapes
+ * look like "context" in a diff. So there is now exactly one projection, and
+ * the generator imports it rather than reimplementing it.
+ */
+export const buildNpcActionDecisionContext = (options: {
+  readonly npcName: string;
+  /** The same persona block the narrative call receives. */
+  readonly persona: string;
+  /** The already-spoken exchange. */
+  readonly narrative: string;
+}): string =>
+  ['[NPC]', options.npcName, options.persona, '', '[EXCHANGE]', options.narrative].join('\n');
+
+/**
+ * A revision over EXACTLY the world facts the candidate set is derived from.
+ *
+ * ---------------------------------------------------------------------------
+ * Why this and not a turn counter, and not the memory fingerprint
+ * ---------------------------------------------------------------------------
+ *
+ * A turn counter misses the changes that matter: accepting the quest this NPC
+ * offered, discovering the evidence item, the vendor losing an item. Each of
+ * those changes what is LEGAL without any turn happening, so a result chosen
+ * against the old set is not merely late, it is wrong.
+ *
+ * The memory service's fingerprint tracks PROMPT context, which is a broader
+ * and different question. This one is narrower and more honest: it is the
+ * authority the decision was actually granted under. It is derived from the
+ * same inputs as the enumeration, so the two cannot drift — a change that
+ * alters the candidate set necessarily alters this string.
+ */
+export const npcActionWorldRevision = (input: NpcActionCandidateInput): string =>
+  [
+    `quests:${input.offerableQuests
+      .map((quest) => quest.id)
+      .sort()
+      .join(',')}`,
+    `evidence:${input.discoverableEvidence
+      .filter((item) => item.presentToNpcId === input.npcId)
+      .map((item) => item.id)
+      .sort()
+      .join(',')}`,
+    `items:${[...input.vendorInventory].sort().join(',')}`,
+    `caps:${input.isVendor ? 'v' : ''}${input.isCompanion ? 'c' : ''}${input.hasCombatStats ? 'f' : ''}`,
+    `kinds:${[...input.allowedCommands].sort().join(',')}`,
+  ].join('|');
 
 /**
  * Maps a returned literal back to the command this turn enumerated.

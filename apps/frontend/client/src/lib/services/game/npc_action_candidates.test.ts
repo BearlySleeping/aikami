@@ -77,6 +77,24 @@ describe('npc action candidates — authorization', () => {
     expect(result).not.toContain('presentEvidence:tess_component');
   });
 
+  it('omits a kind that is not in the whitelist, even with instances available', () => {
+    // Regression: `presentEvidence` candidates were emitted without consulting
+    // the kind whitelist, so an NPC not permitted to present evidence was still
+    // offered evidence options — the same defect class as offering another
+    // NPC's quest. World state supplied the instances; the whitelist decides
+    // whether the kind is offered at all.
+    const result = ids(
+      base({
+        allowedCommands: ['offerQuest'],
+        discoverableEvidence: [
+          { id: 'the_ledger', label: 'Ledger', presentToNpcId: 'village_elder' },
+        ],
+      }),
+    );
+    expect(result).not.toContain('presentEvidence:the_ledger');
+    expect(result).toContain('none');
+  });
+
   it('does not offer a zero-payload kind the npc is not entitled to', () => {
     // `trade` is in allowedCommands but the NPC is not a vendor.
     expect(ids(base({ allowedCommands: ['trade'] }))).not.toContain('trade');
@@ -174,7 +192,7 @@ describe('npc action candidates — nothing is truncated silently', () => {
       base({
         npcId: 'merchant',
         npcName: 'Mara the Merchant',
-        allowedCommands: ['trade', 'offerQuest', 'skillCheck', 'giveItem'],
+        allowedCommands: ['trade', 'offerQuest', 'skillCheck', 'giveItem', 'presentEvidence'],
         isVendor: true,
         vendorInventory: [
           'ironSword',
@@ -192,8 +210,8 @@ describe('npc action candidates — nothing is truncated silently', () => {
         ],
       }),
     );
-    // none + trade + 1 quest + 6 items + 3 evidence = 11, inside the default 16.
-    expect(set.candidates.length).toBe(11);
+    // none + trade + 1 quest + 6 items + 3 evidence = 12, inside the default 16.
+    expect(set.candidates.length).toBe(12);
     expect(set.complete).toBe(true);
   });
 });

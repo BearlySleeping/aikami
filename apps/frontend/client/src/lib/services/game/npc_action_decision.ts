@@ -26,7 +26,7 @@
 // version bump invalidates the measurement even when the literals are the same
 // ones. All four must match or the existing LLM path answers.
 
-import type { DecisionAdapter } from '@aikami/frontend-ai-gateway/decision';
+import type { DecisionAdapter } from '@aikami/frontend/ai-gateway/decision';
 import type { NpcDialogueCommand } from '@aikami/types';
 import type { ResolvedDecisionBackend } from '../config/decision_backend_resolution.ts';
 import type { NpcActionCandidateInput, NpcActionCandidateSet } from './npc_action_candidates.ts';
@@ -94,6 +94,17 @@ export const resolveNpcActionRoute = (options: {
   readonly qualification: NpcActionQualification;
   /** The task this turn would ask. Pins the qualification to it. */
   readonly taskId: string;
+  /**
+   * What this consumer implements RIGHT NOW.
+   *
+   * The qualification reader already compares these, but the routing gate
+   * re-checks them: the gate is the last place a stale qualification can be
+   * stopped, and a defense that only exists in one caller is one refactor away
+   * from not existing.
+   */
+  readonly expectedTaskVersion: number;
+  readonly expectedDialect: string;
+  readonly expectedCheckpoint: string;
   readonly candidates: NpcActionCandidateSet;
 }): NpcActionRoute => {
   if (options.mode === 'off') {
@@ -140,6 +151,27 @@ export const resolveNpcActionRoute = (options: {
       reason: `qualified for ${qualification.taskId}, this turn asks ${options.taskId}`,
     };
   }
+  if (qualification.taskVersion !== options.expectedTaskVersion) {
+    return {
+      route: 'llm',
+      refusal: 'task-version-mismatch',
+      reason: `qualified at task version ${qualification.taskVersion}, this consumer implements ${options.expectedTaskVersion}`,
+    };
+  }
+  if (qualification.dialect !== options.expectedDialect) {
+    return {
+      route: 'llm',
+      refusal: 'dialect-mismatch',
+      reason: `qualified over dialect ${qualification.dialect}, this consumer speaks ${options.expectedDialect}`,
+    };
+  }
+  if (qualification.checkpoint !== options.expectedCheckpoint) {
+    return {
+      route: 'llm',
+      refusal: 'checkpoint-mismatch',
+      reason: `qualified for checkpoint ${qualification.checkpoint}, this backend runs ${options.expectedCheckpoint}`,
+    };
+  }
   return { route: 'decision', reason: 'qualified for this task, version and checkpoint' };
 };
 
@@ -152,20 +184,46 @@ export const resolveNpcActionRoute = (options: {
  * they may have left.
  */
 export type NpcActionStaleness = {
+  /**
+   * Read LIVE at both dispatch and resolution.
+   *
+   * The first implementation captured the campaign id once and passed the
+   * captured value as the current one, so switching campaigns mid-flight could
+   * not be detected. Every field here must be re-read when the result arrives.
+   */
   readonly campaignId: string;
+  /** Identifies the dialogue session, not just the NPC: a session can end and a
+   * new one start with the same NPC inside one campaign. */
   readonly conversationId: string;
-  /** Monotonic per-turn counter; the service bumps it at dispatch. */
+  /** Monotonic per-turn counter; bumped at each turn. */
   readonly turnSequence: number;
-  /** The revision the candidate set was enumerated from. */
-  readonly stateRevision: number;
+  /**
+   * A live fingerprint of the world state the candidates were enumerated from.
+   *
+   * NOT the turn sequence. The candidates come from quests this NPC may offer,
+   * the items it holds and the evidence discovered — so accepting a quest or
+   * moving an item between dispatch and resolution changes what was legal, and
+   * a turn counter would not notice.
+   */
+  readonly worldRevision: string;
+  /**
+   * Identity of the configuration the dispatch ran under.
+   *
+   * Covers the backend that would answer, not just a mode flag: swapping the
+   * connection or the checkpoint mid-flight must discard the answer, because a
+   * qualification for one checkpoint is not a qualification for another.
+   */
+  readonly configRevision: string;
 };
 
 /**
  * Whether a result belongs to the turn that is still current.
  *
- * All four are checked. The turn sequence alone would miss a campaign switch;
- * the campaign id alone would miss a player who started a new exchange with the
- * same NPC.
+ * All five are checked, and none subsumes another: the campaign catches a
+ * player who left, the conversation catches a session that ended and restarted
+ * with the same NPC, the turn catches the player moving on, the world revision
+ * catches an accept or an inventory change that altered what was legal, and the
+ * config revision catches the backend being swapped underneath.
  */
 export const isStaleNpcActionResult = (
   dispatched: NpcActionStaleness,
@@ -174,7 +232,8 @@ export const isStaleNpcActionResult = (
   dispatched.campaignId !== current.campaignId ||
   dispatched.conversationId !== current.conversationId ||
   dispatched.turnSequence !== current.turnSequence ||
-  dispatched.stateRevision !== current.stateRevision;
+  dispatched.worldRevision !== current.worldRevision ||
+  dispatched.configRevision !== current.configRevision;
 
 /**
  * Whether there is budget left to run the existing LLM path.

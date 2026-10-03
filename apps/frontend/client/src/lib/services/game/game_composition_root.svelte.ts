@@ -391,6 +391,7 @@ export class GameCompositionRoot
             id: q.id,
             name: q.name,
             offerDialogueKey: q.offerDialogueKey,
+            offeredByNpcId: q.offeredByNpcId, // C-568: needed for ownership checks
             endings: q.endings,
           };
         },
@@ -399,6 +400,7 @@ export class GameCompositionRoot
             id: q.id,
             name: q.name,
             offerDialogueKey: q.offerDialogueKey,
+            offeredByNpcId: q.offeredByNpcId,
             endings: q.endings,
           })),
         getAllEncounters: () =>
