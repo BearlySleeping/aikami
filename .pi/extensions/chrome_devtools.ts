@@ -204,7 +204,7 @@ async function ensureBrowser(options: {
       message:
         '❌ Chromium not found. Ensure `chromium` is in flake.nix packages ' +
         'and direnv is loaded. Run `direnv reload` or use the ' +
-        '`direnv_add_package` tool to add it.',
+        '`direnv` tool, action "add_package", to add it.',
     };
   }
 

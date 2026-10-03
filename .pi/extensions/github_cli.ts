@@ -9,33 +9,15 @@
 //   resolve_comment) — they provide richer structured data and resolution
 //   tracking that gh_pr_comments cannot match.
 //
-// Registered tools:
-//   gh_create_pr            — Create a PR (default base: main)
-//   gh_list_prs             — List open PRs
-//   gh_summarize_pr         — View + summarize a PR
-//   gh_pr_comments          — Fetch PR comments (reviews + timeline) with timestamp cache
-//   gh_pr_status            — Show CI checks status for a PR
-//   gh_merge_pr             — Merge a PR (default: squash)
-//   gh_cancel_pr            — Close a PR without merging
-//   gh_edit_pr              — Edit PR title/body/base/labels
-//   gh_promote_pr           — Promote a draft PR to "Ready for Review"
-//   gh_list_issues          — List GitHub Issues
-//   gh_create_issue         — Create a GitHub Issue
-//   gh_close_issue          — Close a GitHub Issue
-//   gh_reopen_issue         — Reopen a closed Issue
-//   gh_edit_issue           — Edit an Issue
-//   gh_view_issue           — View full Issue details
-//   gh_list_projects        — List GitHub Projects
-//   gh_project_view         — View a GitHub Project board
-//   gh_project_item_add     — Add an Issue/PR to a Project
-//   gh_project_item_mutate  — Mutate a Project v2 item field (e.g. Status)
-//   gh_project_item_get     — Get Project v2 item details by content URL
-//   gh_workflow_run         — Trigger a workflow_dispatch (e.g. the release deploy)
-//   gh_workflow_status      — Recent workflow runs / detailed run status (watch mode)
-//   gh_workflow_logs        — Stream workflow run logs (watch until completion)
-//   gh_release_list         — List GitHub Releases
-//   gh_release_view         — View a Release + its assets (debug artifact uploads)
-//   gh_deploy               — Deploy & wait: dispatch + periodic poll + failed logs
+// Registered tools — five action-dispatch hubs, not one tool per operation:
+//   gh_pr, gh_issue, gh_project, gh_workflow, gh_release.
+//
+// 🔴 Every hint this file prints back to the model MUST name one of those five
+// plus its action (`gh_pr` action "merge", pr="…"). These hints used to name
+// tools from the pre-consolidation set (gh_merge_pr, gh_workflow_status,
+// gh_workflow_logs) that no longer exist, so the model was being told to call
+// phantoms after every PR create and every deploy dispatch.
+// github_cli_tool_names.test.ts enforces that on every run.
 //
 // Deploy workflow:
 //   gh_deploy(mode="staging", platforms=["windows"], wait=true)
@@ -1025,7 +1007,7 @@ export default function (pi: ExtensionAPI) {
                   contractSyncNote ? `⚠️ **Contract not linked:** ${contractSyncNote}` : '',
                   assessment.warning,
                   '',
-                  `You can merge this PR with: \`gh_merge_pr("${prUrl}")\``,
+                  `You can merge this PR with: \`gh_pr\` action "merge", pr="${prUrl}"`,
                 ]
                   .filter(Boolean)
                   .join('\n'),
@@ -1507,7 +1489,7 @@ export default function (pi: ExtensionAPI) {
                   `✅ **PR #${selector} is now Ready for Review!**`,
                   '',
                   'CodeRabbit AI review has been triggered. You can check for review',
-                  `comments with: \`gh_pr_comments("${selector}")\``,
+                  `comments with: the \`gh_pr\` tool, action "comments", pr="${selector}"`,
                 ].join('\n'),
               },
             ],
@@ -3222,7 +3204,7 @@ export default function (pi: ExtensionAPI) {
             lines.push(`**Run:** ${runUrl}`);
           } else {
             lines.push(
-              '**Run:** not visible yet — check with `gh_workflow_status` in a few seconds.',
+              '**Run:** not visible yet — re-check with the `gh_workflow` tool, action "status", in a few seconds.',
             );
           }
 
@@ -3333,7 +3315,7 @@ export default function (pi: ExtensionAPI) {
                 content: [
                   {
                     type: 'text',
-                    text: `⏳ Run #${runId} still running after ${params.timeoutSeconds ?? 1800}s — use gh_workflow_status again or gh_workflow_logs to inspect.`,
+                    text: `⏳ Run #${runId} still running after ${params.timeoutSeconds ?? 1800}s — use the \`gh_workflow\` tool again with action "status", or action "logs" to inspect.`,
                   },
                 ],
                 details: { runId, status: 'still-running' },
@@ -3645,7 +3627,7 @@ export default function (pi: ExtensionAPI) {
               content: [
                 {
                   type: 'text',
-                  text: `❌ Deploy dispatched but the run did not appear — check with gh_workflow_status(workflow="${workflow}").`,
+                  text: `❌ Deploy dispatched but the run did not appear — check with the \`gh_workflow\` tool, action "status", workflow="${workflow}".`,
                 },
               ],
               isError: true,
@@ -3665,8 +3647,8 @@ export default function (pi: ExtensionAPI) {
                     `🚀 **Deploy dispatched** (mode=${mode}${platformsCsv ? `, platforms=${platformsCsv}` : ', all platforms'}${bundles ? `, bundles=${bundles}` : ''})`,
                     `**Run:** ${runUrl}`,
                     '',
-                    `Watch with: gh_workflow_status(run=${runId}, watch=true)`,
-                    `Logs with: gh_workflow_logs(run=${runId})`,
+                    `Watch with: the \`gh_workflow\` tool, action "status", run=${runId}, watch=true`,
+                    `Logs with: the \`gh_workflow\` tool, action "logs", run=${runId}`,
                   ].join('\n'),
                 },
               ],
