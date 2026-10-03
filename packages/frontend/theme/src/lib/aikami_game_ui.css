@@ -1331,6 +1331,10 @@
 
     .hud-prompt {
       display: inline-flex;
+      /* The target clamp below reasons about the prompt's own border box
+         (`100%` in translate(), `max-inline-size`), so the box must be
+         border-box or the padding silently widens it past the clamp. */
+      box-sizing: border-box;
       align-items: center;
       gap: 0.5em;
       padding: 0.4em 1em;
@@ -1349,15 +1353,27 @@
     }
 
     .hud-prompt--target {
+      /* The preferred anchor: above the target, never closer than one rem to
+         either edge. A long label at 200% text makes the prompt taller than
+         that gap, so the final position is corrected by the translate below. */
+      --prompt-anchor-block-start: clamp(1rem, calc(var(--prompt-y) - 4rem), calc(100dvh - 1rem));
       position: fixed;
-      inset-block-start: clamp(1rem, calc(var(--prompt-y) - 4rem), calc(100dvh - 1rem));
+      inset-block-start: var(--prompt-anchor-block-start);
       inset-inline-start: var(--prompt-x);
       max-inline-size: calc(100vw - 2rem);
       margin-block-end: 0;
-      /* The percentage is the prompt's own width, so both edges stay in view. */
-      transform: translateX(
-        clamp(calc(1rem - var(--prompt-x)), -50%, calc(100vw - 1rem - var(--prompt-x) - 100%))
-      );
+      transform:
+        /* The percentage is the prompt's own width, so both edges stay in view. */ translateX(
+          clamp(calc(1rem - var(--prompt-x)), -50%, calc(100vw - 1rem - var(--prompt-x) - 100%))
+        )
+        /* …and likewise the height: pull the box back up when it would overflow
+           the bottom edge, but never above the top margin. */
+        translateY(
+          max(
+            calc(1rem - var(--prompt-anchor-block-start)),
+            min(0px, calc(100dvh - 1rem - var(--prompt-anchor-block-start) - 100%))
+          )
+        );
     }
 
     .hud-prompt__key {

@@ -13,9 +13,13 @@
 // identities via the same normalization — proven at the integration layer
 // (entity_spawner.test.ts) — and are exercised in the inn/shop scenes by the
 // `/assets-verify 1` session (which boots the worktree client + map routing).
+//
+// The third case is the production-path one: a real save through the Pause Menu
+// followed by a network-isolated reload. Reload-only parity can pass on a
+// session that never persisted; save + offline reload cannot.
 
 import { expect, type Page, test } from '@playwright/test';
-import { GamePage } from '$pom';
+import { GamePage, pauseMenuSaveStatus } from '$pom';
 
 type NpcAppearance = Record<string, string>;
 
@@ -73,5 +77,43 @@ test.describe('NPC appearance identity (C-504 AC-5)', () => {
 
     // Idempotent: reload must not change the resolved named identity.
     expect(after).toEqual(before);
+  });
+
+  test('elder identity survives a save and a network-isolated reload', async ({ page }) => {
+    // Offline = no remote services. The app shell and this run's local asset
+    // stand-in are the only origins left reachable.
+    await page.route('**/*', (route) => {
+      const url = route.request().url();
+      if (url.includes('localhost') || url.includes('127.0.0.1')) {
+        return route.continue();
+      }
+      return route.abort('internetdisconnected');
+    });
+
+    const game = new GamePage(page);
+    await page.goto('/game');
+    await game.waitForEngineReady();
+    const before = await waitForElder(page);
+
+    // Real save through the Pause Menu: the dialog reports the outcome and the
+    // campaign's last-saved timestamp, both asserted in GamePage.saveGame.
+    await game.saveGame();
+
+    await page.reload();
+    await game.waitForEngineReady();
+    const after = await waitForElder(page);
+
+    expect(after).toEqual(before);
+  });
+
+  test('a completed save is still reported as saved after a reload', async ({ page }) => {
+    const game = new GamePage(page);
+    await page.goto('/game');
+    await game.waitForEngineReady();
+
+    await game.saveGame();
+    // Re-opening the menu shows the persisted timestamp, not "Not saved yet".
+    await game.openPauseMenu();
+    await expect(pauseMenuSaveStatus(page)).toContainText('Last saved', { timeout: 10_000 });
   });
 });

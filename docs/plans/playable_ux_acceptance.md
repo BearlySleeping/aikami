@@ -1,0 +1,179 @@
+# Playable UX + Production Acceptance
+
+Branch: `task/sa-polish-playable-ux-98a3` · base: `main` @ `67ff50f5d23766176614e2766bc4d4b4c13c1971`
+
+Scope is deliberately narrow: the game HUD/overlay **views** under
+`apps/frontend/client/src/lib/views/game/ui/**`, the one theme stylesheet that
+lays those views out, and the E2E POM/specs that drive the production `/game`
+route. No engine changes, no shared type/schema/barrel changes, no new stores.
+
+---
+
+## 1. Stale selector contracts (the failing save/offline case)
+
+**Source-confirmed.** Production renders
+`overlays/pause_menu/pause_menu_view.svelte` (`game_ui_view.svelte:195`), whose
+buttons are **Resume / Save now / Settings / Customize HUD / End Session /
+Quit to Main Menu** plus a `role="status"` save line
+(`Not saved yet` → `Game Saved! · Last saved <timestamp>`).
+
+`GamePage.openPauseMenu()` asserted `getByText('Resume Game')`, so it failed
+*before* the save step ever ran. Same stale label lived in
+`inventory_page.ts`, `hud_customization_page.ts`, `game_page.spec.ts` (×3) and
+`release_gate.spec.ts`.
+
+### Changes
+
+- **New** `apps/e2e/src/pom/pause_menu.ts` — one source of truth for the
+  Pause Menu contract: `pauseMenuDialog`, `pauseMenuResumeButton`,
+  `pauseMenuSaveButton`, `pauseMenuSaveStatus`, `pauseMenuCustomizeHudButton`,
+  `isFocusInsidePauseMenu`. Every locator is scoped to
+  `getByRole('dialog', { name: 'Pause Menu' })`, because the HUD renders its own
+  save-adjacent copy and an unscoped text match binds to whichever node is first
+  in the DOM. Re-exported from the POM barrel.
+- `game_page.ts` — `openPauseMenu` waits for the dialog **and** its primary
+  action; `closePauseMenu` asserts the dialog is hidden (no fixed sleeps);
+  `saveGame` still waits for the **real** completion signal and additionally
+  requires the completion to carry a **timestamp** (`Last saved …`), not just the
+  outcome word. No test seam was introduced.
+- `inventory_page.ts`, `hud_customization_page.ts`, `game_page.spec.ts`,
+  `release_gate.spec.ts` — stale `Resume Game` selectors replaced with the
+  dialog-scoped locator.
+- **Deleted** `overlays/pause_menu_overlay.svelte`. It was dead (no importer
+  anywhere in the repo), imported `$services` directly — which the C-314 split
+  explicitly forbids — and was the reason the stale `Resume Game` / `Save Game`
+  labels still existed in the tree.
+- `release_gate.spec.ts` — the four hardcoded `http://localhost:5274…` URLs now
+  come from `EMULATOR_PORTS.client` (`src/config.ts`), so a linked-worktree run
+  targets its own checkout instead of whatever owns 5274. The keyboard journey
+  additionally asserts the pause open lands focus on Resume and that Shift+Tab
+  stays contained.
+
+Product labels were **not** changed to satisfy a test.
+
+## 2. Quest objective progressbar has no accessible name
+
+`hud/quest_overlay.svelte` rendered `role="progressbar"` with only
+valuenow/min/max — announced as "progress bar, 50%", never naming the step.
+
+- `QuestOverlayViewModel.currentObjectiveProgressLabel` derives the name from the
+  same objective the bar visualises (`Objective progress: <label>, <n> of <max>`;
+  the step clause is omitted for single-step objectives; `undefined` when no
+  objective is in flight). The View binds it as `aria-label`.
+- Covered by `quest_overlay_view_model.test.ts` (Bun) and by a **compiled
+  browser** test that mounts the real View and queries
+  `getByRole('progressbar', { name: … })`.
+
+## 3. Pause Menu keyboard/focus
+
+`pause_menu_view.svelte` had an inline Tab trap that could never be proven,
+never moved focus on open, and dropped focus to `<body>` when the content
+branch swapped (menu → quit confirmation).
+
+- **New** `pause_menu/pause_menu_focus.ts`: pure helpers (`nextFocusIndex`,
+  `cycleFocus`, `focusInitial`, `captureRestoreTarget`, `restoreFocus`) plus the
+  `pauseDialogFocus` Svelte action — initial focus, closed Tab/Shift+Tab cycle,
+  focus re-anchoring on content change, and focus restoration on destroy.
+  Dismissal semantics stay in the View/ViewModel.
+- The View uses `use:pauseDialogFocus={{ focusKey: viewModel.confirmingQuit }}`
+  and marks Resume with `data-pause-menu-initial-focus`.
+- Restoration prefers the element that owned focus when the menu opened and
+  falls back to the game surface (`#game-canvas-container`), which is not a
+  native tab stop — a transient `tabindex="-1"` is used and removed immediately,
+  so no tab order changes.
+- Proof: `pause_menu_focus.test.ts` (arithmetic) and
+  `src/browser_tests/pause_menu_focus.browser.test.ts`, which mounts the real
+  compiled View in Chromium with a feature-owned ViewModel and asserts initial
+  focus, Tab/Shift+Tab wrapping in both directions, Escape→resumeGame, and focus
+  restoration in both the owned-focus and fallback cases.
+
+## 4. Target interaction prompt clipping (reproduced, then fixed)
+
+Reproduced in Chromium at **800×600 with 200% text** (root `font-size: 32px`),
+mounting the real `interaction_prompt.svelte` inside the shipped
+`aikami_game_ui.css` with a production-shaped label
+(`E — Speak with Archmagus Lysanthius Moonveil, Warden of the Eastern Reaches`).
+
+Measured **before** the fix (`getBoundingClientRect`, viewport 800×600):
+
+| target (x, y) | rect | defect |
+|---|---|---|
+| (400, 580) | 200…600 × **452…612** | 12 px below the viewport bottom |
+| (4, 300) | 32…**828** | 28 px past the right edge |
+| (796, 590) | 570…768 × 462…**758** | 158 px below the bottom, 296 px tall |
+
+Two evidenced causes, both in `packages/frontend/theme/src/lib/aikami_game_ui.css`:
+
+1. `.hud-prompt` was `content-box`, so `max-inline-size: calc(100vw - 2rem)`
+   bounded the *content* (736 px) while the border box reached 796 px — wider
+   than the `translateX` clamp assumed, so both edges could not fit.
+2. The vertical clamp (`100dvh - 1rem`) never considered the prompt's own
+   height, so any prompt taller than the gap under its target fell off-screen.
+
+Fix: `box-sizing: border-box` on `.hud-prompt`, plus a `translateY` correction
+that uses the self-referential `100%` trick (same idea as the existing
+horizontal clamp) and is floored at the top margin.
+
+Measured **after** the fix — all five probed cases fully on screen, and the
+normal placement (target mid-screen, short label, 100% text) is byte-identical to
+before: only oversized prompts move.
+
+Semantic tokens, night contrast, reduced-motion policy and HUD layout policy are
+untouched; no re-theme.
+
+## 5. Production appearance/identity parity through save + offline reload
+
+`npc_identity_persistence.spec.ts` previously covered only elder startup and a
+plain reload — reload-only parity can pass on a session that never persisted.
+Added two production-route cases:
+
+- identity parity across **a real Pause Menu save** and a **network-isolated
+  reload** (`localhost`/`127.0.0.1` allowed, everything else aborted with
+  `internetdisconnected` — same isolation contract as `emberwatch_journey.spec.ts`);
+- the persisted timestamp is still reported by the dialog after a reload, i.e.
+  the save outcome survives the menu close.
+
+`equipment_visual.spec.ts` (dev sandbox) was deliberately left alone: it tests
+equipment stat maths, not identity restoration, and its route is not the
+production path this acceptance is about.
+
+## 6. New bounded acceptance spec
+
+`apps/e2e/tests/client/playable_ux_acceptance.spec.ts` — production `/game`
+route only: keyboard-only open → primary focus → Tab/Shift+Tab containment →
+close restores focus to the game surface; manual save reports outcome **and**
+timestamp (including the honest `Not saved yet` state before it); HUD
+customization opens from the Pause Menu and returns to it.
+
+---
+
+## Execution report
+
+Environment: Herdr worktree `task-sa-polish-playable-ux-98a3`, bootstrapped,
+Bun/Moon.
+
+| Command | Result |
+|---|---|
+| `bun moon run client:test-browser` | **28 files / 65 tests passed** (baseline before this change: 26 / 54) |
+| `bun moon run client:test-unit` | see "Validation" below |
+| `bun moon run client:typecheck`, `e2e` checks | see "Validation" |
+| `bun moon run e2e:test-client -- tests/client/emberwatch_journey.spec.ts` | **not run here** — reserved for the captain's final integration run against the merged diff |
+| `playable_ux_acceptance.spec.ts`, `npc_identity_persistence.spec.ts` additions | **not run here** — require the production route/dev server; left to the captain's run |
+
+### Limitations / honest gaps
+
+- The Playwright production-route specs were **not executed** in this worktree:
+  starting the contract-scoped service stack is the captain's serialized step
+  (this run was told not to launch broad browser runs). The POM/spec changes
+  are therefore verified by typecheck + lint only; the compiled-DOM behaviour
+  they assert is independently covered by the Chromium browser-lane tests.
+- `modern-web-guidance` search tooling was not available in this environment, so
+  the CSS change was driven purely by measured Chromium evidence rather than by
+  a guideline lookup.
+- `#game-canvas-container` has no `tabindex`, and `views/game/canvas/**` is
+  outside this task's scope. Focus restoration therefore sets a **transient**
+  `tabindex="-1"` rather than relying on the surface being natively focusable.
+  Making that surface permanently focusable is a one-line follow-up for whoever
+  owns the canvas view.
+- If the production `/game` route cannot obtain a WebGL context in the runner's
+  browser, these specs **fail**. They were not made to skip.

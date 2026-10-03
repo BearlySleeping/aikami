@@ -11,9 +11,16 @@
 // DOM reference: apps/frontend/client/src/routes/game/+page.svelte
 //                apps/frontend/client/src/lib/views/game/game_view.svelte
 
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import { EMULATOR_PORTS } from '../config';
 import { approachProductionNpc } from './npc_approach';
+import {
+  pauseMenuCustomizeHudButton,
+  pauseMenuDialog,
+  pauseMenuResumeButton,
+  pauseMenuSaveButton,
+  pauseMenuSaveStatus,
+} from './pause_menu';
 
 /** Origin of the client dev server for this run (contract-scoped offset applied). */
 const CLIENT_ORIGIN = `http://localhost:${EMULATOR_PORTS.client}`;
@@ -183,31 +190,67 @@ export class GamePage {
   }
 
   // ── Pause Menu ────────────────────────────────────────────
+  //
+  // Every locator below is scoped to the named Pause Menu dialog (see
+  // ./pause_menu.ts). The HUD renders its own save-adjacent copy, so an
+  // unscoped text match is a contract bug waiting to happen.
 
-  /** Open the pause menu via Escape key. */
+  /** The Pause Menu dialog. */
+  get pauseMenu(): Locator {
+    return pauseMenuDialog(this.page);
+  }
+
+  /** The primary "Resume" action. */
+  get pauseMenuResumeButton(): Locator {
+    return pauseMenuResumeButton(this.page);
+  }
+
+  /** The manual save action inside the dialog. */
+  get pauseMenuSaveButton(): Locator {
+    return pauseMenuSaveButton(this.page);
+  }
+
+  /** The live save status line (real timestamp/outcome). */
+  get pauseMenuSaveStatus(): Locator {
+    return pauseMenuSaveStatus(this.page);
+  }
+
+  /** The HUD customization action inside the dialog. */
+  get pauseMenuCustomizeHudButton(): Locator {
+    return pauseMenuCustomizeHudButton(this.page);
+  }
+
+  /** Open the pause menu via Escape key and wait for the dialog. */
   async openPauseMenu(): Promise<void> {
     await this.page.keyboard.press('Escape');
     const { expect } = await import('@playwright/test');
-    await expect(this.page.getByText('Resume Game')).toBeVisible({ timeout: 5000 });
+    await expect(this.pauseMenu).toBeVisible({ timeout: 5000 });
+    await expect(this.pauseMenuResumeButton).toBeVisible({ timeout: 5000 });
   }
 
   /** Close pause menu (resume game). */
   async closePauseMenu(): Promise<void> {
     await this.page.keyboard.press('Escape');
-    await this.page.waitForTimeout(300);
+    const { expect } = await import('@playwright/test');
+    await expect(this.pauseMenu).toBeHidden({ timeout: 5000 });
   }
 
-  /** Click "Save Game" in pause menu and await save-completion signal. */
+  /**
+   * Click "Save now" in the pause menu and await the real save-completion
+   * signal. The dialog reports both the outcome and the campaign's last-saved
+   * timestamp; the completion assertion stays on that real product signal
+   * rather than on a test seam.
+   */
   async saveGame(): Promise<void> {
     await this.openPauseMenu();
-    const saveButton = this.page.getByRole('button', { name: /save/i });
     const { expect } = await import('@playwright/test');
-    await expect(saveButton).toBeVisible({ timeout: 5000 });
-    await expect(saveButton).toBeEnabled({ timeout: 5000 });
-    await saveButton.click();
-    // Await the "Game Saved!" confirmation message before closing
-    const saveConfirmation = this.page.getByText('Game Saved!');
-    await expect(saveConfirmation).toBeVisible({ timeout: 10_000 });
+    await expect(this.pauseMenuSaveButton).toBeVisible({ timeout: 5000 });
+    await expect(this.pauseMenuSaveButton).toBeEnabled({ timeout: 5000 });
+    await this.pauseMenuSaveButton.click();
+    // The status line is a live region: "Game Saved!" only after a completed save.
+    await expect(this.pauseMenuSaveStatus).toContainText('Game Saved!', { timeout: 10_000 });
+    // …and the completion carries a real timestamp, not just an outcome word.
+    await expect(this.pauseMenuSaveStatus).toContainText('Last saved', { timeout: 10_000 });
     await this.closePauseMenu();
   }
 

@@ -308,7 +308,7 @@
   "apps/e2e/tests/client/release_gate.spec.ts": {
     "counts": {
       "excessive": 2,
-      "worst": 36
+      "worst": 33
     }
   },
   "apps/frontend/client/scripts/check_bundle.ts": {

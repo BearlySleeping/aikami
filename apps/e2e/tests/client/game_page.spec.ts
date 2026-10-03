@@ -4,6 +4,7 @@
 // GameView + GameUIView architecture renders correctly.
 
 import { expect, test } from '@playwright/test';
+import { isFocusInsidePauseMenu, pauseMenuDialog, pauseMenuResumeButton } from '$pom';
 
 test.describe('Game Page (Separated Architecture)', () => {
   test.beforeEach(async ({ page }) => {
@@ -43,9 +44,9 @@ test.describe('Game Page (Separated Architecture)', () => {
     // Press Escape to open pause menu
     await page.keyboard.press('Escape');
 
-    // Check for pause menu elements
-    const resumeButton = page.getByText('Resume Game');
-    await expect(resumeButton).toBeVisible({ timeout: 5000 });
+    // Check for pause menu elements (scoped to the named dialog)
+    await expect(pauseMenuDialog(page)).toBeVisible({ timeout: 5000 });
+    await expect(pauseMenuResumeButton(page)).toBeVisible({ timeout: 5000 });
   });
 
   // ── C-332 AC-1: Always-Visible HUD ──
@@ -78,23 +79,20 @@ test.describe('Game Page (Separated Architecture)', () => {
 
     // Open pause menu
     await page.keyboard.press('Escape');
-    const resumeButton = page.getByText('Resume Game');
-    await expect(resumeButton).toBeVisible({ timeout: 5000 });
-
-    // Locate the pause dialog
-    const pauseDialog = page.locator('[role="dialog"][aria-label="Pause Menu"]');
-    await expect(pauseDialog).toBeVisible();
+    await expect(pauseMenuDialog(page)).toBeVisible({ timeout: 5000 });
+    // Opening lands on the primary action, so Tab starts from a known place.
+    await expect(pauseMenuResumeButton(page)).toBeFocused({ timeout: 5000 });
 
     // Tab through focusable elements — verify focus stays within the pause dialog
     for (let i = 0; i < 15; i++) {
       await page.keyboard.press('Tab');
-      // Verify document.activeElement is contained within the pause dialog
-      const isContained = await page.evaluate(() => {
-        const dialog = document.querySelector('[role="dialog"][aria-label="Pause Menu"]');
-        const activeEl = document.activeElement;
-        return dialog?.contains(activeEl) ?? false;
-      });
-      expect(isContained).toBe(true);
+      expect(await isFocusInsidePauseMenu(page)).toBe(true);
+    }
+
+    // Shift+Tab must cycle inside the dialog too, not escape to the HUD.
+    for (let i = 0; i < 15; i++) {
+      await page.keyboard.press('Shift+Tab');
+      expect(await isFocusInsidePauseMenu(page)).toBe(true);
     }
   });
 
@@ -106,8 +104,7 @@ test.describe('Game Page (Separated Architecture)', () => {
 
     // Open pause menu
     await page.keyboard.press('Escape');
-    const resumeButton = page.getByText('Resume Game');
-    await expect(resumeButton).toBeVisible({ timeout: 5000 });
+    await expect(pauseMenuResumeButton(page)).toBeVisible({ timeout: 5000 });
 
     // Close with Escape
     await page.keyboard.press('Escape');
