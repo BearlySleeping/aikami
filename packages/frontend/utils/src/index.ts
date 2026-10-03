@@ -3,6 +3,7 @@ export * from './lib/browser/detect.ts';
 export * from './lib/browser/listener.ts';
 export * from './lib/browser/mobile_logger.ts';
 export * from './lib/browser/url.ts';
+export * from './lib/browser/webgpu.ts';
 export * from './lib/common/common.ts';
 export * from './lib/common/copy.ts';
 export * from './lib/common/date_converters.ts';

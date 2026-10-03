@@ -60,4 +60,5 @@ export * from './lib/text_pricing.ts';
 export * from './lib/text_task.ts';
 export * from './lib/transform.ts';
 export * from './lib/voice_config.ts';
+export * from './lib/webgpu.ts';
 export * from './lib/world_gen.ts';

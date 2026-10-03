@@ -25,10 +25,16 @@ import type {
   PackRegistryServiceInterface,
   PlayerStateServiceInterface,
   RouterServiceInterface,
+  WebGpuSupportServiceInterface,
   WorldStateServiceInterface,
 } from '$services';
 import { CREDIT_GROUPS, type CreditGroup } from './credits_data';
 import { type AdvancedEntry, buildAdvancedItems } from './start_advanced_items.ts';
+import {
+  type AssetDownloadStatus,
+  buildAssetDownloadStatus,
+  DOWNLOAD_STATUS_SETTLE_MS,
+} from './start_asset_download_status.ts';
 
 // ---------------------------------------------------------------------------
 // Capability contracts
@@ -94,6 +100,19 @@ export type StartPlatformCapabilities = {
   closeWindow(): Promise<void>;
 };
 
+/**
+ * On-device WebGPU capability + the player's dismissal of the start-menu
+ * recommendation.
+ *
+ * Narrower than the service on purpose: the start menu asks whether a
+ * recommendation is warranted, asks for the probe once, and records the
+ * dismissal — it never re-probes or restores a dismissal itself.
+ */
+export type StartWebGpuCapabilities = Pick<
+  WebGpuSupportServiceInterface,
+  'status' | 'shouldRecommend' | 'compatibilityCheckUrl' | 'check' | 'dismissRecommendation'
+>;
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -123,6 +142,8 @@ export type StartViewModelOptions = BaseViewModelOptions & {
   assets: StartAssetPrefetchCapabilities;
   /** Desktop platform capability. */
   platform: StartPlatformCapabilities;
+  /** WebGPU capability + recommendation-dismissal capability. */
+  webgpu: StartWebGpuCapabilities;
 };
 
 /** Display-ready summary of a campaign for the start menu. */
@@ -141,29 +162,6 @@ export type CampaignSummary = {
   readonly isResumable: boolean;
   /** AI capability indicators. */
   readonly capabilities: CapabilityProfile;
-};
-
-/** What the start menu is currently saying about the asset download. */
-export type AssetDownloadStatusKind =
-  /** Work is in flight — starter content or the full offline catalog. */
-  | 'progress'
-  /** Everything required to play is cached; the full catalog is opt-in. */
-  | 'offer'
-  /** The full catalog is cached — the game runs with no network at all. */
-  | 'complete'
-  /** The pipeline degraded (network/storage); retrying is worth a shot. */
-  | 'error';
-
-/** Display-ready asset-download state for the start menu's status strip. */
-export type AssetDownloadStatus = {
-  /** Which of the four shapes to render. */
-  readonly kind: AssetDownloadStatusKind;
-  /** Sentence shown to the player. */
-  readonly label: string;
-  /** Completion as 0-1, or undefined while the work is indeterminate. */
-  readonly fraction: number | undefined;
-  /** Display-ready percentage (e.g. `"42%"`), or undefined when indeterminate. */
-  readonly percentLabel: string | undefined;
 };
 
 export type StartViewModelInterface = BaseViewModelInterface & {
@@ -298,22 +296,29 @@ export type StartViewModelInterface = BaseViewModelInterface & {
 
   /** Restarts the asset pipeline after it degraded. */
   retryAssetDownload(): void;
+
+  // ── WebGPU recommendation ──
+
+  /**
+   * Whether the "enable WebGPU" recommendation should be shown.
+   *
+   * False while the probe is still running (nothing may be claimed about the
+   * player's GPU yet), false when WebGPU works, and false once the player
+   * has dismissed it — the dismissal is persisted, so this never comes back
+   * on its own.
+   */
+  readonly showWebGpuRecommendation: boolean;
+
+  /** The public compatibility checker the banner links to. */
+  readonly webGpuCheckUrl: string;
+
+  /** Permanently (per device) hides the WebGPU recommendation banner. */
+  dismissWebGpuRecommendation(): void;
 };
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-/**
- * How long the start menu waits before it is willing to talk about the asset
- * download at all. The pipeline runs idle → preparing → prefetching-core →
- * ready, and on a returning player with a warm cache that whole sequence
- * finishes in a few frames — rendering each step would flash three different
- * strings and shift the menu. Nothing is shown until the pipeline has had
- * this long to reach a state worth reporting; after that the strip tracks
- * the pipeline live.
- */
-const DOWNLOAD_STATUS_SETTLE_MS = 600;
 
 /** Maps a content pack ID to a human-readable label. */
 const CONTENT_PACK_LABELS: Record<string, string> = {
@@ -365,17 +370,6 @@ const formatLastSavedLabel = (iso: string | undefined): string => {
   });
 };
 
-/** Turns a done/total pair into the display fields of an AssetDownloadStatus. */
-const toProgressLabels = (
-  progress: { readonly done: number; readonly total: number } | null,
-): { fraction: number | undefined; percentLabel: string | undefined } => {
-  if (!progress || progress.total === 0) {
-    return { fraction: undefined, percentLabel: undefined };
-  }
-  const fraction = progress.done / progress.total;
-  return { fraction, percentLabel: `${Math.round(fraction * 100)}%` };
-};
-
 /** Builds a CampaignSummary from a Campaign. */
 const toCampaignSummary = (campaign: Campaign): CampaignSummary => ({
   id: campaign.id,
@@ -409,6 +403,7 @@ class StartViewModel
   private readonly _packRegistry: StartPackRegistryCapabilities;
   private readonly _assets: StartAssetPrefetchCapabilities;
   private readonly _platform: StartPlatformCapabilities;
+  private readonly _webgpu: StartWebGpuCapabilities;
 
   /** Initialization error message — null when initialization succeeded. */
   private _initError = $state<string | null>(null);
@@ -468,6 +463,7 @@ class StartViewModel
     this._packRegistry = options.packRegistry;
     this._assets = options.assets;
     this._platform = options.platform;
+    this._webgpu = options.webgpu;
   }
 
   /** @inheritdoc */
@@ -491,50 +487,7 @@ class StartViewModel
 
   /** @inheritdoc */
   get downloadStatus(): AssetDownloadStatus | undefined {
-    if (!this._downloadStatusSettled) {
-      return undefined;
-    }
-
-    switch (this._assets.phase) {
-      case 'prefetching-core':
-        return {
-          kind: 'progress',
-          label: 'Downloading starter content…',
-          ...toProgressLabels(this._assets.coreProgress),
-        };
-      case 'warming':
-        return {
-          kind: 'progress',
-          label: 'Downloading everything for offline play…',
-          ...toProgressLabels(this._assets.warmProgress),
-        };
-      case 'degraded':
-        return {
-          kind: 'error',
-          label: this._assets.prefetchError ?? 'Asset download paused — check your connection.',
-          fraction: undefined,
-          percentLabel: undefined,
-        };
-      case 'ready':
-        // warmRemaining() flips the phase to 'warming' synchronously, so a
-        // 'ready' phase with warming already requested means it finished.
-        return this._assets.warmStarted
-          ? {
-              kind: 'complete',
-              label: 'Ready for offline play',
-              fraction: 1,
-              percentLabel: undefined,
-            }
-          : {
-              kind: 'offer',
-              label: 'Download everything for offline play',
-              fraction: undefined,
-              percentLabel: undefined,
-            };
-      default:
-        // 'idle' / 'preparing' — the pipeline has nothing to report yet.
-        return undefined;
-    }
+    return this._downloadStatusSettled ? buildAssetDownloadStatus(this._assets) : undefined;
   }
 
   /** @inheritdoc */
@@ -545,6 +498,23 @@ class StartViewModel
   /** @inheritdoc */
   retryAssetDownload(): void {
     this._assets.ensureStarted();
+  }
+
+  // ── WebGPU recommendation ──
+
+  /** @inheritdoc */
+  get showWebGpuRecommendation(): boolean {
+    return this._webgpu.shouldRecommend;
+  }
+
+  /** @inheritdoc */
+  get webGpuCheckUrl(): string {
+    return this._webgpu.compatibilityCheckUrl;
+  }
+
+  /** @inheritdoc */
+  dismissWebGpuRecommendation(): void {
+    this._webgpu.dismissRecommendation();
   }
 
   /** @inheritdoc */
@@ -708,6 +678,16 @@ class StartViewModel
 
     // C-448: start (or observe) the required-to-play (offline-core) download
     this._assets.ensureStarted();
+
+    // Kick off the WebGPU probe. Deliberately NOT awaited: it races an
+    // adapter request against a 3s timeout, and the menu must not sit behind
+    // a GPU probe. The banner only appears once the answer lands (and only
+    // when the answer is negative), so an unresolved probe simply renders
+    // nothing. The probe itself cannot reject, but a rejected promise here
+    // would still be an unhandled rejection.
+    void this._webgpu.check().catch((error: unknown) => {
+      this.debug('initialize:webgpu-probe-failed', { error: String(error) });
+    });
 
     // Hold the download strip back until the pipeline has settled — see
     // DOWNLOAD_STATUS_SETTLE_MS. After it opens, downloadStatus tracks the

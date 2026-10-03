@@ -571,4 +571,57 @@ describe('StartViewModel (C-317 Campaign-First)', () => {
       expect(vm.initError).toBe('Error: Storage error');
     });
   });
+
+  // ── WebGPU recommendation ──────────────────────────────────────────────
+
+  describe('WebGPU recommendation', () => {
+    test('recommends enabling WebGPU when the probe found no adapter', async () => {
+      harness.setWebGpuStatus('unsupported');
+      const vm = newViewModel();
+
+      await vm.initialize();
+
+      expect(vm.showWebGpuRecommendation).toBe(true);
+      expect(vm.webGpuCheckUrl).toBe('https://webgpucheck.com');
+    });
+
+    test('probes once during initialize and never blocks on it', async () => {
+      harness.setWebGpuStatus('unsupported');
+      const vm = newViewModel();
+
+      await vm.initialize();
+
+      expect(harness.webGpuCheckCalls()).toBe(1);
+    });
+
+    test('stays hidden while the probe has not resolved', async () => {
+      harness.setWebGpuStatus('unknown');
+      const vm = newViewModel();
+
+      await vm.initialize();
+
+      expect(vm.showWebGpuRecommendation).toBe(false);
+    });
+
+    test('stays hidden when WebGPU works', async () => {
+      harness.setWebGpuStatus('supported');
+      const vm = newViewModel();
+
+      await vm.initialize();
+
+      expect(vm.showWebGpuRecommendation).toBe(false);
+    });
+
+    test('dismissal hides the banner for good', async () => {
+      harness.setWebGpuStatus('unsupported');
+      const vm = newViewModel();
+      await vm.initialize();
+      expect(vm.showWebGpuRecommendation).toBe(true);
+
+      vm.dismissWebGpuRecommendation();
+
+      expect(vm.showWebGpuRecommendation).toBe(false);
+      expect(harness.webGpuDismissCalls()).toBe(1);
+    });
+  });
 });

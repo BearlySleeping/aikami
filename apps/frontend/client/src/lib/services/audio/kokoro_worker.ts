@@ -39,6 +39,11 @@ import {
   MODEL_ORIGIN,
   type OrtConfigurableEnv,
 } from '@aikami/frontend/local-runtime';
+// Deep import, not the barrel: this worker bundle is inlined with
+// `inlineDynamicImports` and size-checked by `check_bundle.ts`, and the
+// utils barrel drags in the API client + logger. The probe itself is the
+// single source of truth shared with the text LLM worker and the start menu.
+import { isWebGPUSupported } from '@aikami/frontend/utils/browser/webgpu';
 import { env } from '@huggingface/transformers';
 import type {
   ErrorResponse,
@@ -178,25 +183,9 @@ const describeError = (error: unknown): WorkerErrorPayload => {
 // Backend detection
 // ---------------------------------------------------------------------------
 
-/** True when a WebGPU adapter can actually be requested. */
-const hasWebGpu = async (): Promise<boolean> => {
-  try {
-    const gpu = (navigator as Navigator & { gpu?: { requestAdapter?: () => Promise<unknown> } })
-      .gpu;
-    if (!gpu?.requestAdapter) {
-      return false;
-    }
-    const adapter = await Promise.race([
-      gpu.requestAdapter(),
-      new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), 3000)),
-    ]);
-    return adapter !== undefined && adapter !== null;
-  } catch {
-    // Headless CI, blocklisted driver, or adapter request failure — treat
-    // WebGPU as absent rather than letting the promise hang.
-    return false;
-  }
-};
+// The adapter probe lives in `@aikami/frontend/utils` (`isWebGPUSupported`) —
+// this worker's context is the one that matters, so it is decided here, but
+// the probe itself is never re-implemented.
 
 // ---------------------------------------------------------------------------
 // Handlers
@@ -241,7 +230,7 @@ const handleInitialize = async (message: InitializeMessage): Promise<void> => {
     const [ort, { KokoroTTS }, gpuOk] = await Promise.all([
       import('onnxruntime-web/webgpu'),
       import('kokoro-js'),
-      device === 'wasm' ? Promise.resolve(false) : hasWebGpu(),
+      device === 'wasm' ? Promise.resolve(false) : isWebGPUSupported(),
     ]);
     // The standalone `onnxruntime-web` instance the Worker controls directly
     // must agree with the transformers env.

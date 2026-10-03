@@ -17,6 +17,7 @@ import LoadCampaignModal from './components/load_campaign_modal.svelte';
 import NewAdventureConfirmDialog from './components/new_adventure_confirm_dialog.svelte';
 import PackBrowserView from './components/pack_browser_view.svelte';
 import StartBackdrop from './components/start_backdrop.svelte';
+import WebGpuRecommendation from './components/webgpu_recommendation.svelte';
 import type { StartViewModelInterface } from './start_view_model.svelte';
 
 let { viewModel }: { viewModel: StartViewModelInterface } = $props();
@@ -70,6 +71,24 @@ let { viewModel }: { viewModel: StartViewModelInterface } = $props();
             A living world, powered by AI
           </p>
         </header>
+
+        <!--
+          WebGPU advisory — above the hero actions, because it changes what
+          those actions will feel like (local models fall back to the CPU) and
+          is worth reading before the player commits to a run. Renders nothing
+          at all unless the shared adapter probe proved WebGPU unusable AND
+          the player has not dismissed the recommendation; the dismissal is
+          persisted, so this cannot return on its own. Purely informational:
+          the game is fully playable on the CPU fallback.
+        -->
+        {#if viewModel.showWebGpuRecommendation}
+          <div class="animate-rise motion-reduce:animate-none [animation-delay:0.04s] mb-4 w-full">
+            <WebGpuRecommendation
+              checkUrl={viewModel.webGpuCheckUrl}
+              onDismiss={() => viewModel.dismissWebGpuRecommendation()}
+            />
+          </div>
+        {/if}
 
         <!-- Primary actions -->
         <div
