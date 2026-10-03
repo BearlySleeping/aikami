@@ -18,6 +18,10 @@ export type { ChatModelDecisionAdapterOptions } from './chat_model_baseline_adap
 export { createChatModelDecisionAdapter } from './chat_model_baseline_adapter.ts';
 export type { NpcActionDecisionContextInput } from './decision_context.ts';
 export { buildNpcActionDecisionContext } from './decision_context.ts';
+// Type-only, so it costs nothing in the shipped bundle, but a downstream
+// consumer that reached for `DecisionFixtureFile` through this subpath before
+// the corpus split must keep resolving it.
+export type { DecisionFixtureFile, DecisionFixtureProvenance } from './fixtures.ts';
 export {
   loadDecisionCorpus,
   NPC_COMMAND_KIND_DEV,

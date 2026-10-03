@@ -463,9 +463,10 @@ writeFileSync(
 console.log(`\nartifact -> ${outPath}`);
 
 const anyUnavailable = results.some((entry) => entry.measurement.status === 'unavailable');
-const decisionArms = results.filter(
-  (entry) => entry.arm.startsWith('systemone:') || entry.arm === 'deterministic',
-);
+// Only the CHECKPOINTS under test decide the exit code. The deterministic
+// control is a baseline, not a candidate: letting a control's failure set the
+// status would report the decision backends as unmeasured-and-failed.
+const decisionArms = results.filter((entry) => entry.arm.startsWith('systemone:'));
 const anyMeasured = decisionArms.some((entry) => entry.measurement.status === 'measured');
 if (!anyMeasured) {
   console.log('\nNO-GO: no decision checkpoint could be measured.');
