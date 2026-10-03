@@ -1604,8 +1604,16 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
   /**
    * Sets the global input lock state.
    *
-   * When `true`, keyboard movement keys (WASD/arrows) are suppressed.
-   * Interaction keys ('E', 'Enter') continue to work.
+   * When `true`, ALL game keyboard input is suppressed: movement keys
+   * (WASD/arrows) and the in-world interaction key. The previous comment here
+   * claimed 'E'/'Enter' kept working — it has not: `InputController` gates the
+   * interact key on the same lock, and `_handleInteractKey` re-checks it, so
+   * the world-level E never fires while locked. Keys typed into a focused DOM
+   * control are unaffected; that path is deliberately left to the UI, which
+   * handles its own activation.
+   *
+   * Locking also forgets the held-key set, so no movement survives the
+   * transition in either direction.
    */
   setInputLocked(locked: boolean): void {
     // The controller always posts zero velocity on a lock transition so the

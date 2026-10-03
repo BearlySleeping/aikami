@@ -1,33 +1,10 @@
 // packages/frontend/engine/src/rendering/texture_manager.ts
-import { Spritesheet, Texture } from 'pixi.js';
+import { type Spritesheet, Texture } from 'pixi.js';
 import type { LpcLayerRecipe } from '../components/appearance.ts';
 import { createDeferredLoadRegistry } from './deferred_loads.ts';
+import { buildSheetKey, createSheet } from './lpc_sheet.ts';
 import { getSheetFrameAt, sliceSheetFrames } from './spritesheet_frames.ts';
 import { type SpritesheetLease, SpritesheetRegistry } from './spritesheet_registry.ts';
-
-// ---------------------------------------------------------------------------
-// LPC Atlas Data — dynamically generated Spritesheet JSON descriptor
-// ---------------------------------------------------------------------------
-
-/**
- * JSON atlas data format for PixiJS `Spritesheet` construction.
- *
- * Each entry in `frames` maps a string key (e.g. `'idle_down'`, `'walk_0'`)
- * to a frame rectangle within the base texture. The `meta` block carries
- * the image identifier (used for cache keying) and atlas format metadata.
- *
- * Generated procedurally by {@link generateLpcAtlas} from a grid layout
- * rather than hardcoded — the LPC spritesheet grid is fully regular.
- */
-export type LpcAtlasData = {
-  frames: Record<string, { frame: { x: number; y: number; w: number; h: number } }>;
-  meta: {
-    image: string;
-    format: string;
-    size: { w: number; h: number };
-    scale: number;
-  };
-};
 
 // ---------------------------------------------------------------------------
 // TextureManager — LRU cache for GPU textures + grayscale LPC sheets
@@ -103,6 +80,12 @@ export type TextureManagerConfig = {
   maxTextures: number;
   /** Maximum VRAM footprint in bytes before eviction begins. */
   maxBytes: number;
+  /**
+   * Maximum parsed spritesheets retained before unleased ones are evicted.
+   * Defaults to 128. Lowering it makes eviction reachable in tests without
+   * having to create that many real actor sheets.
+   */
+  maxSpritesheets?: number;
   /**
    * Optional injectable loader function. Receives a numeric asset key
    * and must return a PixiJS `Texture`.
@@ -186,72 +169,6 @@ const preparePaletteLUT = (hexColors: Record<string, string>): Uint8Array => {
 const defaultLoadTexture = async (_key: number): Promise<Texture> => Texture.WHITE;
 
 // ---------------------------------------------------------------------------
-// generateLpcAtlas — dynamic Spritesheet atlas JSON
-// ---------------------------------------------------------------------------
-
-/**
- * Generates a PixiJS-compatible {@link LpcAtlasData} JSON descriptor for
- * a procedurally gridded LPC spritesheet.
- *
- * Since LPC spritesheets follow a strict regular grid (e.g. 9 columns ×
- * 4 rows of 64×64 px frames for a walk sheet), the atlas is generated
- * algorithmically rather than hand-authored. Each frame is labelled by
- * `{keyPrefix}_{row}_{col}` (e.g. `"walk_0_0"` through `"walk_3_8"`).
- *
- * The `image` field in `meta` is set to the provided `cacheKey` so
- * downstream consumers (Spritesheet cache, debug overlays) can identify
- * the source asset without re-deriving the URL.
- *
- * @param options - Atlas generation options.
- * @param options.layout - Grid layout descriptor.
- * @param options.imageKey - String key for the `meta.image` field
- *   (used as the spritesheet cache key — typically the asset URL).
- * @returns A populated {@link LpcAtlasData} ready for
- *   `new Spritesheet(baseTexture, atlasData)`.
- */
-const generateLpcAtlas = (options: {
-  layout: LpcSpritesheetLayout;
-  imageKey: string;
-}): LpcAtlasData => {
-  const { layout, imageKey } = options;
-  const { frameWidth, frameHeight } = layout;
-
-  const columns = layout.columns ?? Math.floor(layout.rows ? layout.rows : 1);
-  // Derive rows from frameHeight and known sheet height, or use layout.rows
-  // Callers must provide at least `columns` or `rows` — validated upstream.
-  const rows = layout.rows ?? 1;
-  const totalWidth = columns * frameWidth;
-  const totalHeight = rows * frameHeight;
-  const keyPrefix = layout.keyPrefix ?? 'frame';
-
-  const frames: LpcAtlasData['frames'] = {};
-
-  for (let row = 0; row < rows; row++) {
-    for (let col = 0; col < columns; col++) {
-      const key = `${keyPrefix}_${row}_${col}`;
-      frames[key] = {
-        frame: {
-          x: col * frameWidth,
-          y: row * frameHeight,
-          w: frameWidth,
-          h: frameHeight,
-        },
-      };
-    }
-  }
-
-  return {
-    frames,
-    meta: {
-      image: imageKey,
-      format: 'RGBA8888',
-      size: { w: totalWidth, h: totalHeight },
-      scale: 1,
-    },
-  };
-};
-
-// ---------------------------------------------------------------------------
 // TextureManager
 // ---------------------------------------------------------------------------
 
@@ -319,7 +236,9 @@ export class TextureManager {
   constructor(config?: Partial<TextureManagerConfig>) {
     this._cache = new Map();
     this._grayscaleCache = new Map();
-    this._spritesheets = new SpritesheetRegistry();
+    this._spritesheets = new SpritesheetRegistry({
+      maxEntries: config?.maxSpritesheets,
+    });
     this._maxTextures = config?.maxTextures ?? DEFAULT_MAX_TEXTURES;
     this._maxBytes = config?.maxBytes ?? DEFAULT_MAX_BYTES;
     this._maxGrayscaleSheets = DEFAULT_MAX_GRAYSCALE_SHEETS;
@@ -512,35 +431,39 @@ export class TextureManager {
     layout: LpcSpritesheetLayout;
     cacheKey: string;
   }): Promise<SpritesheetLease> {
-    const { baseTexture, layout, cacheKey } = options;
-
-    const columns = layout.columns ?? Math.floor(baseTexture.width / layout.frameWidth);
-    const rows = layout.rows ?? Math.floor(baseTexture.height / layout.frameHeight);
-
-    const sheetKey = `${cacheKey}::${columns}x${rows}`;
-
     return this._spritesheets.acquire({
-      cacheKey: sheetKey,
-      create: async () => {
-        const atlasData = generateLpcAtlas({
-          layout: { ...layout, columns, rows },
-          imageKey: cacheKey,
-        });
-
-        const spritesheet = new Spritesheet(baseTexture, atlasData);
-        await spritesheet.parse();
-        return spritesheet;
-      },
+      cacheKey: buildSheetKey(options),
+      create: () => createSheet(options),
     });
   }
 
   /**
-   * Unpinned convenience accessor for callers that only read a frame once.
+   * One-turn borrow of the same sheet {@link acquireSpritesheet} returns.
+   * See {@link TextureManager.getOrCreateSpritesheet} for why a plain
+   * acquire-then-release is not safe for a one-shot caller.
+   */
+  private async _spritesheetBorrow(options: {
+    baseTexture: Texture;
+    layout: LpcSpritesheetLayout;
+    cacheKey: string;
+  }): Promise<SpritesheetLease> {
+    return this._spritesheets.borrow({
+      cacheKey: buildSheetKey(options),
+      create: () => createSheet(options),
+    });
+  }
+
+  /**
+   * One-shot accessor for callers that read a frame and drop the sheet.
    *
-   * Resolves the cached sheet (parsing it on first use) WITHOUT holding a
-   * lease, so the sheet may be evicted — nulling `textures` — while the
-   * caller still holds the object. Correct only for immediate, one-shot
-   * lookups. Any consumer that keeps the sheet across frames must use
+   * The sheet is BORROWED for a single macrotask turn rather than leased: a
+   * plain acquire-then-release would evict the sheet before the awaiting
+   * caller could read it whenever every other cached entry is pinned, and the
+   * caller would receive a sheet whose `textures` is already `null`. The
+   * borrow outlives the caller's continuation and is then released
+   * automatically, so it can neither leak nor dangle.
+   *
+   * Any consumer that keeps a sheet across frames must use
    * {@link TextureManager.acquireSpritesheet} and release it on teardown.
    */
   async getOrCreateSpritesheet(options: {
@@ -548,8 +471,7 @@ export class TextureManager {
     layout: LpcSpritesheetLayout;
     cacheKey: string;
   }): Promise<Spritesheet> {
-    const lease = await this.acquireSpritesheet(options);
-    lease.release();
+    const lease = await this._spritesheetBorrow(options);
     return lease.spritesheet;
   }
 
@@ -577,14 +499,10 @@ export class TextureManager {
   }): Promise<Texture | null> {
     const { baseTexture, layout, cacheKey, frameKey } = options;
 
-    // A one-shot lookup: the frame texture is read here and never held, so the
-    // lease ends immediately. Long-lived holders must not use this method.
-    const lease = await this.acquireSpritesheet({
-      baseTexture,
-      layout,
-      cacheKey,
-    });
-
+    // Borrowed, not released immediately: the frame texture belongs to the
+    // sheet, so a sheet evicted before the caller resumes would hand back a
+    // destroyed frame.
+    const lease = await this._spritesheetBorrow({ baseTexture, layout, cacheKey });
     try {
       return lease.spritesheet.textures[frameKey] ?? null;
     } finally {
@@ -822,4 +740,7 @@ export class TextureManager {
   }
 }
 
-export { generateLpcAtlas, PALETTE_LUT_BYTE_LENGTH, preparePaletteLUT };
+// Re-exported from `lpc_sheet` so the public surface of this module (and the
+// barrel above it) is unchanged by the extraction.
+export { generateLpcAtlas, type LpcAtlasData } from './lpc_sheet.ts';
+export { PALETTE_LUT_BYTE_LENGTH, preparePaletteLUT };

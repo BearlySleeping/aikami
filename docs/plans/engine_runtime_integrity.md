@@ -140,9 +140,29 @@ is `Assets.load`-owned and shared with the texture caches, so the registry
 frees only its own per-frame textures. Over-budget while everything is pinned
 is a deliberate, correct outcome rather than a crash.
 
-`TextureManager.acquireSpritesheet` is the new entry point and returns a lease;
-the engine's appearance loader is its only production call site.
-`getSpritesheetFrame` is a one-shot lookup and releases immediately.
+`TextureManager.acquireSpritesheet` is the entry point for anything that keeps
+a sheet across frames: it pins before pruning, so a saturated cache can never
+evict the sheet it just handed out. The engine's appearance loader is its
+production call site.
+
+The public one-shot accessors (`getOrCreateSpritesheet`,
+`getSpritesheetFrame`) **borrow** instead (`SpritesheetRegistry.borrow`): the
+pin is released on the next MACROtask, scheduled at creation so a caller that
+forgets to release still cannot leak. An earlier version acquired and released
+synchronously, which was subtly wrong — the caller resumes as a *microtask*, so
+whenever every other cached entry was pinned the new sheet was the only
+unleased candidate and evicted **itself** before the caller could read it. The
+caller got a sheet whose `textures` was already `null`; `getSpritesheetFrame`
+could return a destroyed frame. `queueMicrotask` would not help — it runs
+*before* the caller's continuation. Tests prove all three: live under
+saturation, released on the next turn, and bounded under repeated pressure.
+
+Sheet identity is the full geometry (`buildSheetKey` in `rendering/lpc_sheet.ts`):
+URL **+ columns + rows + frame width + frame height + key prefix + base texture
+uid**. The old key was `url::colsxrows`, so the same URL with 64px vs 128px
+cells, or a `walk` vs `slash` label prefix, collided onto one sheet and served
+callers frame rectangles — and frame *labels* — that did not exist. Identical
+inputs still dedup to one instance.
 
 `getOrCreateSpritesheet` is kept as an explicitly unpinned compatibility
 wrapper (acquire → resolve → release) because
@@ -170,16 +190,17 @@ shrink rather than grow:
 
 | Module | Responsibility | `game_world.ts` / `texture_manager.ts` |
 |---|---|---|
-| `rendering/spritesheet_frames.ts` | frame geometry (thin delegating methods keep the `TextureManager` API) | 923 → 825 |
+| `rendering/spritesheet_frames.ts` | frame geometry (thin delegating methods keep the `TextureManager` API) | 923 → 746 |
 | `rendering/spritesheet_registry.ts` | sheet lifetimes | |
 | `game_world/screen_projection.ts` | screen → world → tile-cell | 2221 → 2198 |
 | `game_world/world_restorer.ts` | snapshot/restore sequencing | |
 | `game_world/load_map_message.ts` | the `LOAD_MAP` payload (pure) | |
+| `rendering/lpc_sheet.ts` | sheet identity + atlas/sheet construction | |
 | `game_world/engine_diagnostics_probe.ts` | E2E/visual state publication | |
 
-`game_world.ts` finishes at **2198** lines, under its 2214 waiver ceiling —
-**no ceiling was raised**. `texture_manager.ts`'s size baseline was contracted
-923 → 825 with the guard's own reduction-only update.
+`game_world.ts` finishes under its 2214 waiver ceiling — **no ceiling was
+raised**. `texture_manager.ts` graduated from the size baseline via the
+guard's own reduction-only update (923 → 746).
 
 `load` was also flattened so `cognitive complexity` for
 `scene_transition.ts` stayed at its recorded level: the stages are now
@@ -208,6 +229,14 @@ It now acquires leases, never destroys a sheet, releases on effect cleanup and
 `loadCycle` so a load superseded mid-parse **releases its own lease** instead
 of resurrecting a sheet into the next cycle's map.
 
+### 5c. Input lock, restated honestly
+
+`GameWorld.setInputLocked`'s doc claimed the interaction key "continues to
+work". It has not: `InputController` gates the interact key on the same lock
+and `_handleInteractKey` re-checks it, so the world-level E never fires while
+locked. Keys typed into a focused DOM control are untouched — that path is the
+UI's. The comment now says what the code does.
+
 ### 6. Worker session — stale replies stop at the boundary
 
 A terminal reply whose `requestId` no longer has a pending request is stale by
@@ -233,7 +262,7 @@ settle a pending request are still forwarded, so the boot/restore
 
 ## Verification actually run
 
-- `bun moon run frontend-engine:test` — **1992 pass / 0 fail** (132 files).
+- `bun moon run frontend-engine:test` — **2002 pass / 0 fail** (134 files).
 - `bun moon run frontend-engine:typecheck` — clean.
 - `moon_detect_affected` → `frontend-engine`.
 - `validate` (fix + typecheck + structural guards) — clean after the

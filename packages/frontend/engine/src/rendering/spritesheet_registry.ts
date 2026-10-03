@@ -44,6 +44,16 @@ type SheetEntry = {
 export const DEFAULT_MAX_SPRITESHEETS = 128;
 
 /**
+ * How long a borrowed sheet stays pinned.
+ *
+ * `0` schedules a MACROtask, which is the whole point: `queueMicrotask` would
+ * run BEFORE the awaiting caller's continuation and hand back a sheet that
+ * eviction had already nulled. One macrotask turn outlives every microtask
+ * continuation of the borrow, so the caller can read it, and no longer.
+ */
+const BORROW_TURN_MS = 0;
+
+/**
  * Releases a sheet's per-frame textures.
  *
  * `destroyBase` is deliberately left at its `false` default: the base texture
@@ -124,6 +134,45 @@ export class SpritesheetRegistry {
     // evicting before pinning could select the sheet just handed out.
     this._evictIfNeeded();
     return lease;
+  }
+
+  /**
+   * Borrows a sheet for ONE TURN for a caller that only reads a frame once.
+   *
+   * Unlike {@link SpritesheetRegistry.acquire} the pin is released
+   * automatically on the next macrotask, so a one-shot accessor can never
+   * leak a permanent pin — and never hands back a dead object. Releasing
+   * immediately is NOT equivalent: the caller resumes as a microtask, and a
+   * sheet that is the only unleased candidate (every other entry pinned) is
+   * evicted by its own release before the caller ever looks at it.
+   *
+   * The pin is deliberately scheduled at creation rather than on `release()`,
+   * so a caller that forgets to release still cannot leak.
+   */
+  async borrow(options: {
+    cacheKey: string;
+    create: () => Promise<Spritesheet>;
+  }): Promise<SpritesheetLease> {
+    const lease = await this.acquire(options);
+
+    let scheduled = false;
+    const schedule = (): void => {
+      if (scheduled) {
+        return;
+      }
+      scheduled = true;
+      // Survives `destroy()`: the release path frees a retired entry, so a
+      // borrow outstanding at teardown is still reclaimed, never leaked.
+      setTimeout(() => {
+        lease.release();
+      }, BORROW_TURN_MS);
+    };
+
+    schedule();
+    return {
+      spritesheet: lease.spritesheet,
+      release: schedule,
+    };
   }
 
   /**
