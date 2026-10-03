@@ -230,6 +230,10 @@
       "class": "pi_extensions",
       "active": true
     },
+    ".pi/extensions/lib/tool_name_hygiene.test.ts": {
+      "class": "pi_extensions",
+      "active": true
+    },
     ".pi/extensions/lib/tool_namespace.test.ts": {
       "class": "pi_extensions",
       "active": true
