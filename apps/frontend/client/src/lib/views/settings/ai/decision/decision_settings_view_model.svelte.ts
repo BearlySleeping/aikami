@@ -299,8 +299,7 @@ class DecisionSettingsViewModel
       });
       return;
     }
-    this._decisions.setGameplayMode(mode);
-    await this._decisions.persist();
+    await this._decisions.setGameplayMode(mode);
   }
 
   get isTesting(): boolean {

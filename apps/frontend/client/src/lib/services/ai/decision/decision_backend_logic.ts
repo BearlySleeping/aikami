@@ -194,24 +194,33 @@ export const decisionGameplayRouting = (options: {
 export const decisionGameplayModeOptions = (options: {
   readonly routing: DecisionGameplayRouting;
   readonly persisted: DecisionGameplayMode;
-}): readonly DecisionGameplayModeOption[] => {
-  const refusedBecause = options.routing.reason;
-  return (['off', 'shadow', 'on'] as const).map((mode) => {
-    const allowed = mode === 'off' || mode === 'shadow' || options.routing.allowed;
-    return {
-      mode,
-      selected: options.persisted === mode,
-      allowed,
-      detail:
-        mode === 'off'
-          ? 'No decision call is made. Every turn is answered by the existing extraction path.'
-          : mode === 'shadow'
-            ? "A decision is evaluated and discarded, under the turn's own deadline and resource budget. The turn still answers from the existing path, so this cannot change the game."
-            : allowed
-              ? 'The decision may answer the turn.'
-              : `Refused: ${refusedBecause}`,
-    };
+}): readonly DecisionGameplayModeOption[] =>
+  DECISION_GAMEPLAY_MODES.map((mode) => {
+    // `off` and `shadow` are always selectable: neither can change the game, so
+    // neither needs a measurement. Only `on` is gated.
+    const allowed = mode !== 'on' || options.routing.allowed;
+    const detail =
+      mode === 'on' && !allowed
+        ? `Refused: ${options.routing.reason}`
+        : DECISION_GAMEPLAY_MODE_DETAILS[mode];
+    return { mode, selected: options.persisted === mode, allowed, detail };
   });
+
+/** The three modes, in the order the selector renders them. */
+const DECISION_GAMEPLAY_MODES: readonly DecisionGameplayMode[] = ['off', 'shadow', 'on'];
+
+/**
+ * What each mode does, as data.
+ *
+ * A lookup rather than a branch ladder: these are four sentences, not four
+ * behaviours, and a table keeps the copy readable and the logic flat.
+ */
+const DECISION_GAMEPLAY_MODE_DETAILS: Readonly<Record<DecisionGameplayMode, string>> = {
+  off: 'No decision call is made. Every turn is answered by the existing extraction path.',
+  shadow:
+    "A decision is evaluated and discarded, under the turn's own deadline and resource " +
+    'budget. The turn still answers from the existing path, so this cannot change the game.',
+  on: 'The decision may answer the turn.',
 };
 
 /**

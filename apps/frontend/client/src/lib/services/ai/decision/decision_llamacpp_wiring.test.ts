@@ -11,7 +11,12 @@
 
 import { describe, expect, test } from 'bun:test';
 import { DECISION_PROVIDERS, decisionProviderEntry } from '@aikami/constants';
-import { NATIVE_LLAMACPP_DIALECT, SYSTEM_ONE_DIALECT } from '@aikami/frontend/ai-gateway/decision';
+import {
+  type DecisionReadinessVerdict,
+  NATIVE_LLAMACPP_DIALECT,
+  SYSTEM_ONE_DIALECT,
+} from '@aikami/frontend/ai-gateway/decision';
+import type { DecisionBackendServiceInterface } from '../../ai/decision_backend_service.svelte';
 import type { ResolvedDecisionBackend } from '../../config/decision_backend_resolution';
 import { resolveNpcActionQualification } from '../../game/npc_action_decision_qualification.ts';
 import { decisionGameplayModeOptions, dialectForBackend } from './decision_backend_logic.ts';
@@ -146,7 +151,7 @@ describe('qualification fails closed for an unmeasured native backend', () => {
     ['taskId', { taskId: 'npc-command-kind' }, 'measured for task'],
     ['taskVersion', { taskVersion: 99 }, 'measured at task version'],
     ['checkpoint', { checkpoint: 'some-other-model' }, 'measured for checkpoint'],
-  ])('a mismatched %s is refused by name', (leg, evidence, expected) => {
+  ])('a mismatched %s is refused by name', (_leg, evidence, expected) => {
     const result = resolveNpcActionQualification({
       backend: backend({
         runtime: 'ollama',
@@ -207,6 +212,41 @@ describe('Off / Shadow / On is a projection, not template logic', () => {
     const options = decisionGameplayModeOptions({ routing: refused, persisted: 'off' });
     const shadow = options.find((option) => option.mode === 'shadow');
     expect(shadow?.detail).toContain('cannot change the game');
+  });
+});
+
+describe('changing the mode must not erase the Test connection verdict', () => {
+  // Found by CodeRabbit: the view model called `persist()` after switching the
+  // mode, and `persist()` invalidates the cached verdict. The section then
+  // reported `disabled` immediately after a successful test — the backend looked
+  // switched off because the player changed a setting. The mode now persists
+  // through its own owner and nothing invalidates the verdict.
+  test('setGameplayMode persists without touching lastVerdict', async () => {
+    const persisted: string[] = [];
+    const service = {
+      lastVerdict: { state: 'ready' } as DecisionReadinessVerdict,
+      isTesting: false,
+      resolve: () => backend(),
+      summary: () => ({}) as never,
+      gameplayRouting: () => ({ allowed: true, reason: 'qualified' }),
+      test: async () => undefined,
+      invalidate: () => {
+        service.lastVerdict = undefined;
+      },
+      persist: async () => {
+        persisted.push('persist');
+      },
+      setGameplayMode: async (mode: string) => {
+        persisted.push(`mode:${mode}`);
+      },
+    } as unknown as DecisionBackendServiceInterface;
+
+    await service.setGameplayMode('shadow');
+
+    // Persisted exactly once, by setGameplayMode itself.
+    expect(persisted).toEqual(['mode:shadow']);
+    // The verdict survived, so the state projection is unchanged.
+    expect(service.lastVerdict?.state).toBe('ready');
   });
 });
 

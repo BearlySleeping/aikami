@@ -730,16 +730,18 @@ export const createLlamaCppDecisionAdapter = (options: LlamaCppAdapterOptions): 
         budgetMs: budget,
         signal,
       });
-      const health =
-        identity.ok &&
-        sameCheckpoint(options.checkpoint, identity.props?.modelPath ?? options.checkpoint)
-          ? await probeHealth({
-              context,
-              healthUrl: options.endpoints.health,
-              budgetMs: Math.min(probeTimeoutMs, remainingMs(deadlineAt)),
-              signal,
-            })
-          : { ok: true as const };
+      // Probed whenever the identity probe succeeded. Gating it on a checkpoint
+      // match bought nothing — `capabilityFrom` already reports a mismatch
+      // before it looks at health — and the `{ ok: true }` fallback it needed
+      // manufactured a result nothing had observed.
+      const health = identity.ok
+        ? await probeHealth({
+            context,
+            healthUrl: options.endpoints.health,
+            budgetMs: Math.min(probeTimeoutMs, remainingMs(deadlineAt)),
+            signal,
+          })
+        : ({ ok: true } as const);
       return capabilityFrom({
         base,
         identity,

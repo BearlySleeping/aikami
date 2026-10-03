@@ -54,11 +54,11 @@ export type DecisionBackendServiceInterface = {
   gameplayRouting(): DecisionGameplayRouting;
   test(): Promise<DecisionTestOutcome | undefined>;
   /**
-   * Switches the persisted Off/Shadow/On mode.
+   * Switches the persisted Off/Shadow/On mode and resolves once saved.
    *
-   * Delegated to the gameplay consumer so one place owns the mode.
+   * Must not invalidate the test verdict; see the implementation.
    */
-  setGameplayMode(mode: NpcActionDecisionMode): void;
+  setGameplayMode(mode: NpcActionDecisionMode): Promise<void>;
   invalidate(): void;
   persist(): Promise<void>;
 };
@@ -220,14 +220,20 @@ class DecisionBackendService
   }
 
   /**
-   * Switches the persisted Off/Shadow/On mode.
+   * Switches the persisted Off/Shadow/On mode, and resolves once it is saved.
    *
-   * Delegates to the gameplay consumer, so there is ONE owner of the mode: the
-   * settings section renders it and the turn reads it, and neither keeps a
-   * private copy that could disagree after a reload.
+   * Deliberately does NOT call `this.persist()`. That method invalidates the
+   * cached test verdict, so routing a mode change through it made the section
+   * report `disabled` immediately after a successful "Test connection" — the
+   * backend looked switched off because the player changed a setting, not
+   * because anything about the backend changed.
+   *
+   * The gameplay consumer owns the mode and persists it through canonical
+   * config, so there is exactly one writer.
    */
-  setGameplayMode(mode: NpcActionDecisionMode): void {
+  async setGameplayMode(mode: NpcActionDecisionMode): Promise<void> {
     npcActionDecisionService.setMode(mode);
+    await this._capabilities.persist();
   }
 }
 

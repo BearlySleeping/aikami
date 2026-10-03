@@ -86,8 +86,11 @@ describe('ConfigService — native llama.cpp decision configuration', () => {
   test('a connection saved before gameplayMode existed resolves to `off`', async () => {
     const { configService, connectionId } = await _seedDecision();
     const stored = configService.getAiConnection(connectionId);
+    if (stored === undefined) {
+      throw new Error('the seeded decision connection should exist');
+    }
     // The seeded params carry no gameplayMode, exactly as an old save would.
-    expect((stored?.params as Record<string, unknown>).gameplayMode).toBeUndefined();
+    expect((stored.params as Record<string, unknown>).gameplayMode).toBeUndefined();
     // Structural default, not a field the caller has to remember to supply.
     expect(configService.resolveDecisionBackend()?.gameplayMode).toBe('off');
   });
