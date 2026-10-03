@@ -9,6 +9,10 @@
 
 import type { BaseViewModelOptions } from '@aikami/frontend/services/base';
 import { configService, decisionBackendService } from '$services';
+// Imported directly rather than through the `$services` barrel: the barrel does
+// not export the gameplay services, and adding one would widen the public
+// surface far past what this section needs.
+import { npcActionDecisionService } from '../../../../services/game/npc_action_decision_service.svelte.ts';
 import {
   createDecisionSettingsViewModel,
   type DecisionSettingsViewModelInterface,
@@ -31,6 +35,9 @@ export const getDecisionSettingsViewModel = (
   createDecisionSettingsViewModel({
     ...options,
     decisions,
+    // The gameplay service owns the mode and persists it itself; the section is
+    // a control surface, not a second writer.
+    gameplayMode: { setMode: async (mode) => npcActionDecisionService.setMode(mode) },
     config: {
       getProviders: () => configService.getProviders(),
       getAiConnections: () => configService.getAiConnections(),

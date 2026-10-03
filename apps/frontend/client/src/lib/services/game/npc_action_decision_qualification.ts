@@ -28,6 +28,7 @@
 // Nothing in this build writes such evidence, because no shipped measurement has
 // cleared the gate. That is the correct state, not a gap to paper over.
 
+import { NATIVE_LLAMACPP_DIALECT, SYSTEM_ONE_DIALECT } from '@aikami/frontend/ai-gateway/decision';
 import {
   NPC_ACTION_SELECTION_TASK_ID,
   NPC_ACTION_SELECTION_TASK_VERSION,
@@ -39,8 +40,38 @@ import type { NpcActionQualification } from './npc_action_decision.ts';
 export type SupportedQualification = {
   readonly supportedTaskId: string;
   readonly supportedTaskVersion: number;
-  readonly supportedDialect: string;
+  /**
+   * Dialects this consumer has a MEASURED qualification for.
+   *
+   * A set, not a single string, because more than one runtime can serve this
+   * task over more than one dialect — native llama.cpp
+   * (`typesafe-systemone-v1`) is a genuinely different wire contract from
+   * `jev-v1`, and a measurement taken over one says nothing about the other.
+   *
+   * Membership is earned by measurement, never by declaring a backend's
+   * runtime here: adding a dialect to this set asserts that some held-out run
+   * cleared the frozen gates over it. An unmeasured dialect stays absent and the
+   * gate refuses with a named reason.
+   */
+  readonly supportedDialects: readonly string[];
+  /**
+   * Every dialect this consumer can even parse, used to tell a player their
+   * backend is fine but unmeasured, rather than simply wrong.
+   */
+  readonly knownDialects: readonly string[];
 };
+
+/**
+ * Dialects a measured qualification has been issued for.
+ *
+ * Taken from the gateway's own constants rather than retyped: a dialect string
+ * that is spelled two ways in two packages is a string that will eventually be
+ * compared against itself and always match.
+ */
+const QUALIFIED_DIALECTS: readonly string[] = [SYSTEM_ONE_DIALECT];
+
+/** Dialects the consumer understands, measured or not. */
+const KNOWN_DIALECTS: readonly string[] = [SYSTEM_ONE_DIALECT, NATIVE_LLAMACPP_DIALECT];
 
 const refused = (
   reason: string,
@@ -49,7 +80,7 @@ const refused = (
   qualified: false,
   taskId: NPC_ACTION_SELECTION_TASK_ID,
   taskVersion: NPC_ACTION_SELECTION_TASK_VERSION,
-  dialect: 'jev-v1',
+  dialect: QUALIFIED_DIALECTS[0] ?? SYSTEM_ONE_DIALECT,
   checkpoint: '',
   reason,
   ...overrides,
@@ -61,23 +92,80 @@ const refused = (
  * Pure, so the rule can be read and tested without a connection, a socket or a
  * GPU.
  */
+/** One named mismatch, or undefined when every identity leg matches. */
+type Mismatch = { readonly reason: string } | undefined;
+
+/** Checks the two DIALECT conditions, which are independent and both required. */
+const checkDialect = (options: {
+  readonly evidenceDialect: string;
+  readonly backendDialect: string;
+  readonly supportedDialects: readonly string[];
+  readonly knownDialects: readonly string[];
+}): Mismatch => {
+  const { evidenceDialect, backendDialect, supportedDialects, knownDialects } = options;
+  // (1) The measurement must be over the dialect THIS CONNECTION speaks.
+  //
+  // Checking only set membership is not enough: that set holds every dialect
+  // that has ever cleared a gate, so a `jev-v1` measurement satisfied it for a
+  // native llama.cpp connection and qualified a backend over a wire it never
+  // used. Comparing against the backend's own dialect makes the two conditions
+  // independent.
+  if (evidenceDialect !== backendDialect) {
+    return {
+      reason: knownDialects.includes(evidenceDialect)
+        ? `measured over dialect ${evidenceDialect}; this connection speaks ${backendDialect}`
+        : `measured over dialect ${evidenceDialect}, which this consumer does not speak; ` +
+          `this connection speaks ${backendDialect}`,
+    };
+  }
+  // (2) Right dialect, but no gate has been cleared for it. Naming the qualified
+  // set makes the refusal actionable rather than merely negative.
+  if (!supportedDialects.includes(evidenceDialect)) {
+    return {
+      reason:
+        `measured over dialect ${evidenceDialect}, which has no cleared gate for this task ` +
+        `(qualified: ${supportedDialects.join(', ') || 'none'})`,
+    };
+  }
+  return undefined;
+};
+
+/**
+ * Resolves a backend's qualification, failing closed.
+ *
+ * Pure, so the rule can be read and tested without a connection, a socket or a
+ * GPU.
+ */
 export const resolveNpcActionQualification = (options: {
   readonly backend: ResolvedDecisionBackend;
   readonly supportedTaskId?: string;
   readonly supportedTaskVersion?: number;
-  readonly supportedDialect?: string;
+  /** Additional dialects beyond {@link QUALIFIED_DIALECTS}, for tests. */
+  readonly supportedDialects?: readonly string[];
+  readonly knownDialects?: readonly string[];
+  /**
+   * The dialect the BACKEND actually speaks, from its adapter.
+   *
+   * Taken from the backend rather than assumed, because assuming it is exactly
+   * how a native llama.cpp connection came to be checked against `jev-v1` and
+   * refused for a dialect it never claimed to speak.
+   */
+  readonly backendDialect?: string;
 }): NpcActionQualification => {
   const { backend } = options;
-  const supported: SupportedQualification = {
-    supportedTaskId: options.supportedTaskId ?? NPC_ACTION_SELECTION_TASK_ID,
-    supportedTaskVersion: options.supportedTaskVersion ?? NPC_ACTION_SELECTION_TASK_VERSION,
-    supportedDialect: options.supportedDialect ?? 'jev-v1',
-  };
+  const supportedTaskId = options.supportedTaskId ?? NPC_ACTION_SELECTION_TASK_ID;
+  const supportedTaskVersion = options.supportedTaskVersion ?? NPC_ACTION_SELECTION_TASK_VERSION;
+  const supportedDialects = options.supportedDialects ?? QUALIFIED_DIALECTS;
+  const knownDialects = options.knownDialects ?? KNOWN_DIALECTS;
+  const backendDialect =
+    options.backendDialect ??
+    (backend.runtime === 'llamacpp' ? NATIVE_LLAMACPP_DIALECT : SYSTEM_ONE_DIALECT);
 
   // The player's master switch narrows; it never widens.
   if (!backend.qualifiedForGameplay) {
     return refused('automatic gameplay routing is not enabled for this connection', {
       checkpoint: backend.checkpoint,
+      dialect: backendDialect,
     });
   }
 
@@ -85,7 +173,7 @@ export const resolveNpcActionQualification = (options: {
   if (evidence === undefined) {
     return refused(
       'this connection carries no recorded measurement; a player toggle is not a task qualification',
-      { checkpoint: backend.checkpoint },
+      { checkpoint: backend.checkpoint, dialect: backendDialect },
     );
   }
 
@@ -95,32 +183,45 @@ export const resolveNpcActionQualification = (options: {
     dialect: evidence.dialect,
     checkpoint: evidence.checkpoint,
   };
+  // Each identity leg is its own named check, evaluated in order and stopping
+  // at the first mismatch. A branch ladder is both harder to read and harder to
+  // extend when a fifth leg arrives.
+  const legs: readonly (() => Mismatch)[] = [
+    () =>
+      evidence.taskId === supportedTaskId
+        ? undefined
+        : {
+            reason: `measured for task ${evidence.taskId}; this consumer routes ${supportedTaskId}`,
+          },
+    () =>
+      evidence.taskVersion === supportedTaskVersion
+        ? undefined
+        : {
+            reason:
+              `measured at task version ${evidence.taskVersion}; this consumer implements ` +
+              `${supportedTaskVersion}`,
+          },
+    () =>
+      checkDialect({
+        evidenceDialect: evidence.dialect,
+        backendDialect,
+        supportedDialects,
+        knownDialects,
+      }),
+    () =>
+      evidence.checkpoint === backend.checkpoint
+        ? undefined
+        : {
+            reason:
+              `measured for checkpoint ${evidence.checkpoint}; this connection runs ` +
+              `${backend.checkpoint}`,
+          },
+  ];
+  const mismatch = legs.map((leg) => leg()).find((result) => result !== undefined);
 
-  if (evidence.taskId !== supported.supportedTaskId) {
-    return refused(
-      `measured for task ${evidence.taskId}; this consumer routes ${supported.supportedTaskId}`,
-      base,
-    );
+  if (mismatch !== undefined) {
+    return refused(mismatch.reason, base);
   }
-  if (evidence.taskVersion !== supported.supportedTaskVersion) {
-    return refused(
-      `measured at task version ${evidence.taskVersion}; this consumer implements ${supported.supportedTaskVersion}`,
-      base,
-    );
-  }
-  if (evidence.dialect !== supported.supportedDialect) {
-    return refused(
-      `measured over dialect ${evidence.dialect}; this consumer speaks ${supported.supportedDialect}`,
-      base,
-    );
-  }
-  if (evidence.checkpoint !== backend.checkpoint) {
-    return refused(
-      `measured for checkpoint ${evidence.checkpoint}; this connection runs ${backend.checkpoint}`,
-      base,
-    );
-  }
-
   return {
     qualified: true,
     ...base,

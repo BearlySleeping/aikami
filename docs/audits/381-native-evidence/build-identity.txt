@@ -1,0 +1,10 @@
+version: 0.5.0-dev (build 11361, commit a4cb4c61f)
+built with GNU 16.2.0 for Linux x86_64
+
+pinned_upstream_commit=a4cb4c61fd9d9c2066c7c1747821d3d65b8943bd
+pinned_upstream_pr=https://github.com/ggml-org/llama.cpp/pull/29818
+pinned_upstream_commit_date=2026-10-02T11:56:04+02:00
+route_source=tools/server/server.cpp:282  ctx_http.post("/v1/systemone", routes.post_systemone)
+implementation_source=tools/server/server-decision.cpp
+cmake_flags=-DCMAKE_BUILD_TYPE=Release -DLLAMA_CURL=OFF -DGGML_NATIVE=ON -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=OFF -DLLAMA_BUILD_SERVER=ON
+acceleration=CPU only (no CUDA toolkit on this host; see report "what was NOT measured")

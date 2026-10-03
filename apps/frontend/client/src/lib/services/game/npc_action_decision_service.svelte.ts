@@ -49,8 +49,11 @@ import {
   npcActionSelectionSchema,
 } from '@aikami/frontend/ai-gateway/decision/tasks';
 import { BaseFrontendClass, type BaseFrontendClassOptions } from '@aikami/frontend/services/base';
-import { adapterForBackend } from '../ai/decision/decision_backend_logic.ts';
+import type { AiConnection } from '@aikami/types';
+import { adapterForBackend, dialectForBackend } from '../ai/decision/decision_backend_logic.ts';
 import { decisionBackendService } from '../ai/decision_backend_service.svelte.ts';
+import { configService } from '../config/config_service.svelte.ts';
+import { applyDecisionGameplayMode } from '../config/decision_backend_resolution.ts';
 import {
   commandForActionId,
   enumerateNpcActionCandidates,
@@ -118,6 +121,8 @@ class NpcActionDecisionService
   private _mode: NpcActionDecisionMode = 'off';
   /** Bumped on every configuration change; late results are dropped. */
   private _generation = 0;
+  /** Whether {@link hydrate} has run. Guards the lazy first read. */
+  private _hydrated = false;
 
   private readonly _caps: NpcActionDecisionCapabilities;
 
@@ -132,14 +137,45 @@ class NpcActionDecisionService
         ((backend) =>
           resolveNpcActionQualification({
             backend,
-            supportedTaskId: NPC_ACTION_SELECTION_TASK_ID,
-            supportedTaskVersion: NPC_ACTION_SELECTION_TASK_VERSION,
-            supportedDialect: 'jev-v1',
+            // The dialect comes from the BACKEND, not from a constant here. A
+            // hardcoded `jev-v1` checked a native llama.cpp connection against a
+            // dialect it never claimed to speak and refused it for the wrong
+            // reason.
+            backendDialect: dialectForBackend(backend),
           })),
+      // Read from canonical config, NOT through `decisionBackendService`.
+      //
+      // `decision_backend_service` imports THIS module (to own the mode), so
+      // routing this through `resolveBackend()` closes a cycle: the singleton
+      // below is constructed during module initialisation, and at that moment
+      // `decisionBackendService` is still in its temporal dead zone. Constructing
+      // then calling it threw `Cannot access 'decisionBackendService' before
+      // initialization` and blanked the whole app on boot.
+      //
+      // `configService` is the actual source of truth for the mode, and it has no
+      // path back here, so it is both cycle-free and more direct.
+      readMode: injected.readMode ?? (() => configService.resolveDecisionBackend()?.gameplayMode),
+      persistMode:
+        injected.persistMode ??
+        (async (next) => {
+          // Persisted through canonical config via the connection's own params,
+          // so the mode survives a reload. `applyDecisionGameplayMode` owns the
+          // lookup and the no-op case; `ConfigService` is at its grandfathered
+          // line limit and is not where decision-domain state belongs.
+          applyDecisionGameplayMode(configService.state, next, (id, params) => {
+            configService.updateAiConnection(id, { params } as Partial<AiConnection>);
+          });
+          await configService.save();
+        }),
     };
+    // Deliberately NOT hydrated here. The singleton is built during module
+    // initialisation, and reading any other service at that point makes
+    // construction order load-bearing. The first `mode()` or `qualification()`
+    // call hydrates instead — by then every module is initialised.
   }
 
   mode(): NpcActionDecisionMode {
+    this.hydrate();
     return this._mode;
   }
 
@@ -148,6 +184,11 @@ class NpcActionDecisionService
    *
    * `off` takes effect on the NEXT turn with no restart and no reload: the
    * routing decision is made per turn, so this is the immediate rollback path.
+   *
+   * Persisted through the resolved backend's `gameplayMode`, so the choice
+   * survives a reload; {@link hydrate} re-reads it at construction. It is NOT
+   * persisted for a backend that is absent, because there is nothing to
+   * persist it on and no dispatch is possible without one anyway.
    */
   setMode(next: NpcActionDecisionMode): void {
     if (this._mode === next) {
@@ -155,7 +196,48 @@ class NpcActionDecisionService
     }
     this._mode = next;
     this._generation += 1;
+    // The in-memory value is now authoritative; a later hydrate must not
+    // resurrect the pre-change value from config before the write lands.
+    this._hydrated = true;
+    // `persistMode` is fired and forgotten by design — the turn has already
+    // been routed — but "forgotten" must not mean "unhandled". A rejected save
+    // (full disk, quota, a config that will not parse) would otherwise surface
+    // as a global unhandled rejection with nothing pointing at the mode change,
+    // and the player would see their choice silently not survive a reload.
+    void this._caps.persistMode?.(next)?.catch((error: unknown) => {
+      this.warn('npc action decision mode was not persisted', {
+        mode: next,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
     this.info('npc action decision mode changed', { mode: next });
+  }
+
+  /**
+   * Restores the persisted mode, once, on first use.
+   *
+   * Fail-closed: an absent or unreadable value leaves the service at `off`.
+   * Starting at `on` because a read failed would turn a config problem into a
+   * state-changing NPC action.
+   *
+   * Idempotent and guarded, because it is reachable from both `mode()` and
+   * `qualification()`, and because a read that throws must not wedge the service
+   * in a half-initialised state.
+   */
+  hydrate(): NpcActionDecisionMode {
+    if (this._hydrated) {
+      return this._mode;
+    }
+    this._hydrated = true;
+    try {
+      const persisted = this._caps.readMode?.();
+      if (persisted === 'shadow' || persisted === 'on') {
+        this._mode = persisted;
+      }
+    } catch (error) {
+      this.warn('npc action decision mode could not be restored; staying off', { error });
+    }
+    return this._mode;
   }
 
   invalidate(): void {
@@ -163,6 +245,7 @@ class NpcActionDecisionService
   }
 
   qualification(): NpcActionQualification {
+    this.hydrate();
     const backend = this._caps.resolveBackend();
     if (backend === undefined) {
       return UNQUALIFIED('no decision backend is configured');
@@ -217,7 +300,9 @@ class NpcActionDecisionService
       qualification,
       taskId: NPC_ACTION_SELECTION_TASK_ID,
       expectedTaskVersion: NPC_ACTION_SELECTION_TASK_VERSION,
-      expectedDialect: 'jev-v1',
+      // From the backend, not a constant: the route gate must check the dialect the
+      // adapter will actually speak, or a native connection is judged on `jev-v1`.
+      expectedDialect: backend === undefined ? '' : dialectForBackend(backend),
       expectedCheckpoint: backend?.checkpoint ?? '',
       candidates,
     });

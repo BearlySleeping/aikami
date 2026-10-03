@@ -17,6 +17,21 @@
 export type { DeterministicRule, DeterministicRuleSet } from './adapters/deterministic_adapter.ts';
 export { createDeterministicDecisionAdapter } from './adapters/deterministic_adapter.ts';
 export type {
+  LlamaCppAdapterOptions,
+  LlamaCppBuildInfo,
+  LlamaCppEndpoints,
+  LlamaCppServerProps,
+  LlamaCppTransport,
+} from './adapters/llamacpp_adapter.ts';
+export {
+  createLlamaCppDecisionAdapter,
+  LLAMACPP_DECISION_LIMITS,
+  llamaCppBackendId,
+  parseLlamaCppBuildInfo,
+  parseServerProps,
+  sameCheckpoint,
+} from './adapters/llamacpp_adapter.ts';
+export type {
   SystemOneAdapterOptions,
   SystemOneEndpoints,
   SystemOneTransport,
@@ -28,6 +43,7 @@ export {
 } from './adapters/systemone_adapter.ts';
 export type {
   DecisionAdapter,
+  DecisionAdapterDiagnostics,
   DecisionAdapterResponse,
   DecisionRequest,
 } from './adapters/types.ts';
@@ -99,6 +115,48 @@ export type {
   DecisionRuntimeProbeResult,
 } from './runtime_probe.ts';
 export { DECISION_RUNTIME_KINDS, probeDecisionRuntime, runtimeLabel } from './runtime_probe.ts';
+
+// ---------------------------------------------------------------------------
+// Native llama.cpp: a DIFFERENT dialect, not a different deployment of the
+// same one. Kept in its own section because the boolean wire contract differs
+// (`answers[q].noul` is a probability, not a boolean) and because every limit
+// here is per-checkpoint rather than per-dialect.
+// ---------------------------------------------------------------------------
+
+export type {
+  CheckpointLimitSource,
+  CheckpointLimits,
+  CheckpointLimitViolation,
+} from './checkpoint_limits.ts';
+export {
+  checkCheckpointLimits,
+  checkpointFamily,
+  limitsForCheckpoint,
+  NATIVE_CHECKPOINT_LIMITS,
+  UNKNOWN_CHECKPOINT_MAX_CHOICE_OPTIONS,
+} from './checkpoint_limits.ts';
+export type {
+  NativeAnswer,
+  NativeParsedBody,
+  NativeQuestion,
+  NativeRefusal,
+  NativeRequest,
+  NativeResponse,
+  NativeUsage,
+} from './native_llamacpp_dialect.ts';
+export {
+  distributionSumsToOne,
+  NATIVE_LLAMACPP_DIALECT,
+  NATIVE_LLAMACPP_MAX_REQUEST_BYTES,
+  NATIVE_LLAMACPP_MIN_BUILD_COMMIT,
+  NATIVE_LLAMACPP_UNSUPPORTED_PRIMITIVES,
+  NATIVE_LLAMACPP_UPSTREAM_PR,
+  nativeStatusRefusal,
+  parseNativeResponse,
+  readNativeChoice,
+  readNativeErrorMessage,
+  readNativeNoul,
+} from './native_llamacpp_dialect.ts';
 
 // ---------------------------------------------------------------------------
 // The executable evaluator and the frozen task it runs.
