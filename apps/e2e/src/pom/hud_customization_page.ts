@@ -2,6 +2,7 @@
 // Production HUD customization journeys and persisted-state access.
 
 import type { Locator, Page } from '@playwright/test';
+import { pauseMenuResumeButton } from './pause_menu';
 
 const HUD_PREFERENCES_KEY = 'aikami:hud:preferences';
 
@@ -347,7 +348,7 @@ export class HudCustomizationPage {
     await this.page.getByTestId('pause-customize-hud').click();
     await this.page.getByTestId('hud-editor-toggle-visibility').click();
     await this.page.getByTestId('hud-editor-close').click();
-    await this.page.getByRole('button', { name: 'Resume Game' }).click();
+    await pauseMenuResumeButton(this.page).click();
   }
 
   async openInGameInterfaceSettings(): Promise<void> {

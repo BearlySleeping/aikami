@@ -10,8 +10,10 @@ import {
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services/base';
+import { CampaignSchema } from '@aikami/schemas';
 import type { Campaign, CapabilityProfile } from '@aikami/types';
 import { AiTextProviderRequiredError } from '@aikami/utils';
+import { Value } from 'typebox/value';
 import { configService } from '../config/config_service.svelte.ts';
 import { registerSerializable } from '../game/serializable_service.ts';
 import { transition } from './boot_state_machine.ts';
@@ -49,6 +51,15 @@ export type CampaignServiceInterface = BaseFrontendClassInterface & {
    * and Continue-after-refresh can resume.
    */
   ensureDefaultCampaign(): Promise<Campaign>;
+  /**
+   * Publishes an already-resolved local campaign as the active campaign.
+   *
+   * Synchronous by design: the boot pipeline has *just* verified the campaign
+   * from local storage, so re-reading the database here would (a) cost a second
+   * load and (b) risk publishing a stale record when a newer boot has already
+   * resolved. Callers must pass only a campaign they verified in this boot.
+   */
+  activateResolvedCampaign(options: { campaign: Campaign }): void;
   /** Resumes the active campaign from paused → playing. */
   resumeCampaign(): void;
   /** Pauses the active campaign (playing → paused). */
@@ -154,9 +165,7 @@ class CampaignService
     registerSerializable('campaign', {
       serialize: (): unknown => this.activeCampaign ?? null,
       hydrate: (data: unknown): void => {
-        if (data) {
-          this.activeCampaign = data as Campaign;
-        }
+        this._hydrateCampaign(data);
       },
     });
   }
@@ -331,6 +340,25 @@ class CampaignService
   }
 
   /** @inheritdoc */
+  activateResolvedCampaign(options: { campaign: Campaign }): void {
+    const { campaign } = options;
+    this.activeCampaign = campaign;
+    // Keep the cached list coherent so getLatestCampaign() and the campaign
+    // switcher observe the same record the boot pipeline adopted (no DB read).
+    const index = this.campaigns.findIndex((c) => c.id === campaign.id);
+    if (index === -1) {
+      this.campaigns = [campaign, ...this.campaigns];
+    } else {
+      this.campaigns = this.campaigns.map((c, i) => (i === index ? campaign : c));
+    }
+    this.debug('activateResolvedCampaign', {
+      campaignId: campaign.id,
+      state: campaign.state,
+      lastSavedAt: campaign.lastSavedAt,
+    });
+  }
+
+  /** @inheritdoc */
   resumeCampaign(): void {
     if (!this.activeCampaign) {
       throw new Error('No active campaign');
@@ -440,6 +468,47 @@ class CampaignService
   // -----------------------------------------------------------------------
   // Private
   // -----------------------------------------------------------------------
+
+  /**
+   * Restores the campaign identity embedded in a save slot.
+   *
+   * A slot payload is written BEFORE the save updates campaign metadata (the
+   * slot is persisted first so a failed metadata write can never point resume
+   * at a slot that does not exist), so its embedded copy is always one save
+   * behind. The campaigns table is the source of truth: when a stored campaign
+   * is active it wins outright — including its `lastSavedAt`/`lastSaveSlotId`
+   * and its id — and a slot snapshot for a DIFFERENT campaign is refused
+   * rather than silently switching identity (which would re-scope NPC memory
+   * and break the save↔campaign linkage).
+   *
+   * Legacy fallback: with no active campaign (a save written before the
+   * campaigns table existed), a schema-valid snapshot is adopted instead of
+   * dropping the session's identity on the floor.
+   */
+  private _hydrateCampaign(data: unknown): void {
+    if (this.activeCampaign) {
+      this.debug('hydrate:kept-stored-campaign', {
+        campaignId: this.activeCampaign.id,
+        snapshotCampaignId:
+          typeof data === 'object' && data !== null && 'id' in data ? String(data.id) : undefined,
+        snapshotLastSavedAt:
+          typeof data === 'object' && data !== null && 'lastSavedAt' in data
+            ? String(data.lastSavedAt)
+            : undefined,
+      });
+      return;
+    }
+
+    try {
+      const parsed = Value.Parse(CampaignSchema, data);
+      this.activeCampaign = parsed;
+      this.debug('hydrate:adopted-legacy-campaign', { campaignId: parsed.id });
+    } catch {
+      // A slot without a usable campaign must not invent one: boot resolves
+      // the identity from storage on the very next attempt.
+      this.warn('hydrate:campaign-snapshot-invalid', { dataType: typeof data });
+    }
+  }
 
   /** Applies a state machine transition and persists the result. */
   private _applyTransition(

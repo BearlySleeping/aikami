@@ -268,15 +268,17 @@ export class GameCompositionRoot
     // Phase 5b: Thread contentPackId to engine and ensure campaign service is ready
     const contentPackId = campaignService.activeCampaign?.contentPackId ?? 'emberwatch';
     // ── C-372: actually assign it — the engine default is 'emberwatch', so
-    // every save was stamped packId 'emberwatch' regardless of the campaign.
+    // every save would be stamped 'emberwatch' regardless of the campaign.
     gameEngineService.contentPackId = contentPackId;
     this.debug('initialize:contentPackId', { contentPackId });
-
     // Phase 5c: Wire NPC dialogue orchestrator with content pack + gateway
     const { djb2Hash, loadContentPack, createEngineBridge, publishContentIdentity } = await import(
       '@aikami/frontend/engine'
     );
-    const { assetTagResolver } = await import('$lib/services/assets/registry_resolver');
+    const { assetTagResolver, awaitRegistryReady } = await import(
+      '$lib/services/assets/registry_resolver'
+    );
+    await awaitRegistryReady();
     const contentPack = await loadContentPack({
       packId: contentPackId,
       resolveTag: assetTagResolver,
@@ -425,11 +427,9 @@ export class GameCompositionRoot
       },
       textGenerator: async (opts) => {
         // C-401 two-call split: call 1 (no schema) streams narrative prose,
-        // call 2 (schema) extracts the command envelope. The turn's absolute
-        // budget, identity and campaign scope all come from the orchestrator and
-        // are forwarded UNCHANGED to both — the difference between one turn
-        // being one budgeted, traceable, campaign-scoped logical request and
-        // two unrelated calls that each mint their own limits.
+        // call 2 (schema) extracts the command envelope. The turn's budget,
+        // identity and campaign scope come from the orchestrator and are
+        // forwarded UNCHANGED to both — one budgeted, campaign-scoped request.
         const campaignScope = campaignService.activeCampaign?.id ?? 'no-campaign';
         if (opts.schema && opts.schemaName) {
           const systemPrompt = opts.messages.find((m) => m.role === 'system')?.content;

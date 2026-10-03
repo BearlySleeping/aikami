@@ -1,0 +1,428 @@
+{
+  "_comment": "Captured verbatim from the published release graph (releaseId below), trimmed to one row per distinct (category, ext) pair plus every offline-core tag. NOTE originUrl is \"\" in the published seed — the R2 base comes from PUBLIC_ASSETS_BASE_URL.",
+  "releaseId": "2026-09-27T13:34:17.944Z",
+  "generatedAt": "2026-09-27T11:25:00.401Z",
+  "originUrl": "",
+  "totalPublishedRows": 12803,
+  "coreTags": [
+    "index",
+    "emberwatch:manifest",
+    "emberwatch:maps:inn",
+    "emberwatch:maps:merchant_shop",
+    "emberwatch:maps:old_road",
+    "emberwatch:maps:ruined_shrine",
+    "emberwatch:maps:village",
+    "portraits:emberwatch:apprentice_tess:neutral",
+    "portraits:emberwatch:cartographer_ivo:neutral",
+    "portraits:emberwatch:innkeeper_sella:neutral",
+    "portraits:emberwatch:merchant:neutral",
+    "portraits:emberwatch:rollo_grasper:guarded",
+    "portraits:emberwatch:rollo_grasper:neutral",
+    "portraits:emberwatch:rollo_grasper:relieved",
+    "portraits:emberwatch:shrine_keeper_nemi:neutral",
+    "portraits:emberwatch:smith_orra:neutral",
+    "portraits:emberwatch:village_elder:concerned",
+    "portraits:emberwatch:village_elder:neutral",
+    "portraits:emberwatch:village_elder:relieved",
+    "portraits:emberwatch:village_guard:neutral",
+    "portraits:emberwatch:woodcutter_ada:neutral",
+    "emberwatch:enemies:ash_hound",
+    "emberwatch:enemies:cinder_thrall",
+    "emberwatch:enemies:ember_warden",
+    "music:combat:emberwatch_combat",
+    "music:exploration:inn_hearth",
+    "music:exploration:old_road",
+    "music:exploration:ruined_shrine",
+    "music:exploration:village_ward",
+    "sprites:tilesets:atlas.json",
+    "sprites:tilesets:atlas.webp",
+    "sprites:tilesets:props.json",
+    "sprites:tilesets:props.pages.json",
+    "sprites:tilesets:props.webp"
+  ],
+  "rows": [
+    {
+      "tag": "emberwatch:audio:village_ward",
+      "hash": "22536060db87b024eaf717d57c8885067a7942052ecfef9ed8b51fc7766a5a98",
+      "sizeBytes": 1007750,
+      "category": "contentPacks",
+      "ext": ".webm",
+      "licenses": ["Apache-2.0"]
+    },
+    {
+      "tag": "emberwatch:props:ward_small_c",
+      "hash": "99fcb1542fc25e24f8b2fcf6c68d6615e7b4c883d5b7dfd3a839d914d63f974d",
+      "sizeBytes": 18766,
+      "category": "contentPacks",
+      "ext": ".png",
+      "licenses": ["MIT"]
+    },
+    {
+      "tag": "index",
+      "hash": "a9fcb2a6bdcfca7c3966b8b91de4c70662aab2f74d96f9eb805e2d53b88e3e5e",
+      "sizeBytes": 405,
+      "category": "contentPacks",
+      "ext": ".json",
+      "licenses": ["MIT"]
+    },
+    {
+      "tag": "lpc:weapon:sword:scimitar:walk",
+      "hash": "291e88f0ddcca85240a1a95d703a65eaa82a30b0a4f6da123fd6cd8628bb4bad",
+      "sizeBytes": 4544,
+      "category": "lpc",
+      "ext": ".webp",
+      "licenses": []
+    },
+    {
+      "tag": "maps:sandbox_textured",
+      "hash": "56e9ddaece923fda2b3161911a3b21dbb277f60c0c84d7c6b6efc7dcb0e08e24",
+      "sizeBytes": 806,
+      "category": "maps",
+      "ext": ".jton",
+      "licenses": []
+    },
+    {
+      "tag": "maps:sandbox_zone_b",
+      "hash": "a5c50c40f604ea7db54ff43431c399963ae59ef4dec54116ddb937ff4ae30b58",
+      "sizeBytes": 3381,
+      "category": "maps",
+      "ext": ".json",
+      "licenses": []
+    },
+    {
+      "tag": "music:exploration:village_ward",
+      "hash": "22536060db87b024eaf717d57c8885067a7942052ecfef9ed8b51fc7766a5a98",
+      "sizeBytes": 1007750,
+      "category": "music",
+      "ext": ".webm",
+      "licenses": ["Apache-2.0"]
+    },
+    {
+      "tag": "portraits:emberwatch:woodcutter_ada:neutral",
+      "hash": "154cbb9a4fd6ae36c33bcc173586136d8b7a676b9e02126ad10822f2764e15e9",
+      "sizeBytes": 255400,
+      "category": "portraits",
+      "ext": ".png",
+      "licenses": ["circlestone-labs-non-commercial-license"]
+    },
+    {
+      "tag": "portraits:npc:troll:neutral",
+      "hash": "d34423f379d82ea167b0a1bb537a557d8c5b03b1be2a1299ede2840b0e34b9a7",
+      "sizeBytes": 254388,
+      "category": "portraits",
+      "ext": ".webp",
+      "licenses": []
+    },
+    {
+      "tag": "portraits:npc:placeholder",
+      "hash": "f47751632a345d3f6c7b5996198e433b4da202375a679270e1c1d6d1f716da7c",
+      "sizeBytes": 917,
+      "category": "portraits",
+      "ext": ".svg",
+      "licenses": []
+    },
+    {
+      "tag": "sprites:tilesets:example_tiles",
+      "hash": "6426f775399fa93da7d3314c30e2c7de923564b87556f89f14841dbd72856b3a",
+      "sizeBytes": 1160,
+      "category": "sprites",
+      "ext": ".webp",
+      "licenses": []
+    },
+    {
+      "tag": "sprites:tilesets:props.pages.json",
+      "hash": "ed36a3413df67b921d563c833d6d4f3e7d217f8f3a085da027b68dc5e591aaee",
+      "sizeBytes": 859,
+      "category": "tilesets",
+      "ext": ".json",
+      "licenses": ["MIT"]
+    },
+    {
+      "tag": "sprites:tilesets:props.webp",
+      "hash": "b0723e4cd38d58ce5c6df44fe844c62138086aa538c082d07a08d54b1bfa09a8",
+      "sizeBytes": 546836,
+      "category": "tilesets",
+      "ext": ".webp",
+      "licenses": ["MIT"]
+    },
+    {
+      "tag": "sprites:tilesets:debug_tiles",
+      "hash": "d2bfadf018480c54a4e55c16fff4cdca307a4ea98931b11b277e9ccbcb5a9cfa",
+      "sizeBytes": 267,
+      "category": "sprites",
+      "ext": ".png",
+      "licenses": []
+    },
+    {
+      "tag": "sprites:tilesets:debug_tiles.png",
+      "hash": "d2bfadf018480c54a4e55c16fff4cdca307a4ea98931b11b277e9ccbcb5a9cfa",
+      "sizeBytes": 267,
+      "category": "tilesets",
+      "ext": ".png",
+      "licenses": []
+    },
+    {
+      "tag": "emberwatch:manifest",
+      "hash": "b505bf197c735d1ee164940770fb4527a607d0c3cf8ebdfd7964f606c3d1a338",
+      "sizeBytes": 144520,
+      "category": "contentPacks",
+      "ext": ".json",
+      "licenses": ["MIT"]
+    },
+    {
+      "tag": "emberwatch:maps:inn",
+      "hash": "2e362825254c2f99f964903b1b5c9b6526f565e2f42fb13b75adbbecdc94fc05",
+      "sizeBytes": 47225,
+      "category": "contentPacks",
+      "ext": ".json",
+      "licenses": ["MIT"]
+    },
+    {
+      "tag": "emberwatch:maps:merchant_shop",
+      "hash": "8b432df35451960d534cebc160cc9e9a6f1efa504f1345daef52b53ecbec2c41",
+      "sizeBytes": 35216,
+      "category": "contentPacks",
+      "ext": ".json",
+      "licenses": ["MIT"]
+    },
+    {
+      "tag": "emberwatch:maps:old_road",
+      "hash": "af456f64eab2f7d079fd1529fc5d7ca551f9ea9aae39a4f60ee8566502e87afc",
+      "sizeBytes": 195351,
+      "category": "contentPacks",
+      "ext": ".json",
+      "licenses": ["MIT"]
+    },
+    {
+      "tag": "emberwatch:maps:ruined_shrine",
+      "hash": "77030df4c04f9a1fc9c0b0c0d4fd9bf69dae9a0a48cc572883aa9165c39b94a5",
+      "sizeBytes": 105653,
+      "category": "contentPacks",
+      "ext": ".json",
+      "licenses": ["MIT"]
+    },
+    {
+      "tag": "emberwatch:maps:village",
+      "hash": "16edd25618a99075945a6299dd85c02b2e1a513d9042febd4c029ceb3928f3da",
+      "sizeBytes": 226995,
+      "category": "contentPacks",
+      "ext": ".json",
+      "licenses": ["MIT"]
+    },
+    {
+      "tag": "portraits:emberwatch:apprentice_tess:neutral",
+      "hash": "625b74a578d8256baeb49ef8dfbd826082bbc84fda62d58eb16177f280f4540a",
+      "sizeBytes": 245901,
+      "category": "portraits",
+      "ext": ".png",
+      "licenses": ["circlestone-labs-non-commercial-license"]
+    },
+    {
+      "tag": "portraits:emberwatch:cartographer_ivo:neutral",
+      "hash": "bb79c63e591b393bed2fe54eda352294b8fd538aaa398f8874661f40b34eb5a3",
+      "sizeBytes": 209506,
+      "category": "portraits",
+      "ext": ".png",
+      "licenses": ["circlestone-labs-non-commercial-license"]
+    },
+    {
+      "tag": "portraits:emberwatch:innkeeper_sella:neutral",
+      "hash": "d36ee00f819c7573a1e4f97c93fe3e65d8d108ab445f410e8eb00e47f81826b8",
+      "sizeBytes": 281223,
+      "category": "portraits",
+      "ext": ".png",
+      "licenses": ["circlestone-labs-non-commercial-license"]
+    },
+    {
+      "tag": "portraits:emberwatch:merchant:neutral",
+      "hash": "9589db7fc9813cdd6de55140c83af02d094121e006b47a24c9516f2172a5425f",
+      "sizeBytes": 298472,
+      "category": "portraits",
+      "ext": ".png",
+      "licenses": ["circlestone-labs-non-commercial-license"]
+    },
+    {
+      "tag": "portraits:emberwatch:rollo_grasper:guarded",
+      "hash": "f9ac5aa7b5d8776dd111239dd05e9f4a643734537d3aafbc9d7c1a3c6bb71f2d",
+      "sizeBytes": 349566,
+      "category": "portraits",
+      "ext": ".png",
+      "licenses": ["circlestone-labs-non-commercial-license"]
+    },
+    {
+      "tag": "portraits:emberwatch:rollo_grasper:neutral",
+      "hash": "88cd76e0fbc1e3060ef461ddb21056364237237630a94613ab2620cb1ff005a7",
+      "sizeBytes": 392341,
+      "category": "portraits",
+      "ext": ".png",
+      "licenses": ["circlestone-labs-non-commercial-license"]
+    },
+    {
+      "tag": "portraits:emberwatch:rollo_grasper:relieved",
+      "hash": "b0ea4ab081203521ca84214961dc1c75700eb8a08b4a4ab5705a09f984fee94a",
+      "sizeBytes": 306013,
+      "category": "portraits",
+      "ext": ".png",
+      "licenses": ["circlestone-labs-non-commercial-license"]
+    },
+    {
+      "tag": "portraits:emberwatch:shrine_keeper_nemi:neutral",
+      "hash": "1e528a4e4c62445611e01fc4ea9ac3cec79406a563db58c20391465a9534b320",
+      "sizeBytes": 218337,
+      "category": "portraits",
+      "ext": ".png",
+      "licenses": ["circlestone-labs-non-commercial-license"]
+    },
+    {
+      "tag": "portraits:emberwatch:smith_orra:neutral",
+      "hash": "a90663423d83689e65db1c5b5464d2c28ed8eab2bb6377e1ea2630c095f52b99",
+      "sizeBytes": 288254,
+      "category": "portraits",
+      "ext": ".png",
+      "licenses": ["circlestone-labs-non-commercial-license"]
+    },
+    {
+      "tag": "portraits:emberwatch:village_elder:concerned",
+      "hash": "444897d71afaf996e798838d1418559e9de51bb33f0b3aa95980b62d1b603939",
+      "sizeBytes": 313676,
+      "category": "portraits",
+      "ext": ".png",
+      "licenses": ["circlestone-labs-non-commercial-license"]
+    },
+    {
+      "tag": "portraits:emberwatch:village_elder:neutral",
+      "hash": "817dda6fd34f0f271b7fa6f1e11ed0dd5d93b6627631883ff8e3fa20740e3787",
+      "sizeBytes": 222664,
+      "category": "portraits",
+      "ext": ".png",
+      "licenses": ["circlestone-labs-non-commercial-license"]
+    },
+    {
+      "tag": "portraits:emberwatch:village_elder:relieved",
+      "hash": "b95b5aeac8dfa5586620672bf0f444c981f94b76b4f6429f29150d7ad7b0c2c2",
+      "sizeBytes": 290238,
+      "category": "portraits",
+      "ext": ".png",
+      "licenses": ["circlestone-labs-non-commercial-license"]
+    },
+    {
+      "tag": "portraits:emberwatch:village_guard:neutral",
+      "hash": "5b3839689c56aa5ff43ffe81af79d65af3dadcb392bc1f7fd4cc0bcd1e2bbe65",
+      "sizeBytes": 237173,
+      "category": "portraits",
+      "ext": ".png",
+      "licenses": ["circlestone-labs-non-commercial-license"]
+    },
+    {
+      "tag": "emberwatch:enemies:ash_hound",
+      "hash": "eb8c73033714703741b198fff73d0e2f46ce860f581d69e51bdcbd7ce0efc47e",
+      "sizeBytes": 43888,
+      "category": "contentPacks",
+      "ext": ".png",
+      "licenses": ["MIT"]
+    },
+    {
+      "tag": "emberwatch:enemies:cinder_thrall",
+      "hash": "6e34a0f898fb33b845acc7ec433b9e62ecaf2400be26216dbf1df61e58c07d8c",
+      "sizeBytes": 20657,
+      "category": "contentPacks",
+      "ext": ".png",
+      "licenses": ["MIT"]
+    },
+    {
+      "tag": "emberwatch:enemies:ember_warden",
+      "hash": "329f945a855b2a02882f840986686779d38fc62784aa7964a284d319a9ada73a",
+      "sizeBytes": 40002,
+      "category": "contentPacks",
+      "ext": ".png",
+      "licenses": ["MIT"]
+    },
+    {
+      "tag": "music:combat:emberwatch_combat",
+      "hash": "7989c905e85ef41948860ae0e7d042a9fc412ae478eb2ed2ee6b30e0634caf9a",
+      "sizeBytes": 1001415,
+      "category": "music",
+      "ext": ".webm",
+      "licenses": ["Apache-2.0"]
+    },
+    {
+      "tag": "music:exploration:inn_hearth",
+      "hash": "a01b7aa92d2fc01cf9240e03d278a18c8e73da66567ae2f8cb2d601c8e08b4dc",
+      "sizeBytes": 1053806,
+      "category": "music",
+      "ext": ".webm",
+      "licenses": ["Apache-2.0"]
+    },
+    {
+      "tag": "music:exploration:old_road",
+      "hash": "cb1c05a159a346322790efdfe31335225ddd3e37d3bd10cede4c03a4b8162ba1",
+      "sizeBytes": 1113622,
+      "category": "music",
+      "ext": ".webm",
+      "licenses": ["Apache-2.0"]
+    },
+    {
+      "tag": "music:exploration:ruined_shrine",
+      "hash": "46fe67554780fda4ff516e6aea4b05e2a6713bf76811a09b50df58cff11e8ce7",
+      "sizeBytes": 1189628,
+      "category": "music",
+      "ext": ".webm",
+      "licenses": ["Apache-2.0"]
+    },
+    {
+      "tag": "sprites:tilesets:atlas.json",
+      "hash": "0fd1c47d68ca2e9e76dbde0338283565f82922bcd96014bc07a5b573e602294c",
+      "sizeBytes": 65094,
+      "category": "tilesets",
+      "ext": ".json",
+      "licenses": ["MIT"]
+    },
+    {
+      "tag": "sprites:tilesets:atlas.webp",
+      "hash": "0fae9724b755dddb3f9c1c5905055be97ec1243bf1c5b5eb1548cb6a3d4380b5",
+      "sizeBytes": 117524,
+      "category": "tilesets",
+      "ext": ".webp",
+      "licenses": ["MIT"]
+    },
+    {
+      "tag": "sprites:tilesets:props.json",
+      "hash": "6161b47b96b1a936ed49ca35ec73b987df2d1a81895fe38576967097ba4342c1",
+      "sizeBytes": 9823,
+      "category": "tilesets",
+      "ext": ".json",
+      "licenses": ["MIT"]
+    }
+  ],
+  "packLock": {
+    "schemaVersion": "catalog.release.v1",
+    "releaseId": "2026-09-27T13:34:17.944Z",
+    "assets": [
+      {
+        "id": "sprites:tilesets:atlas.webp",
+        "imageHash": "0fae9724b755dddb3f9c1c5905055be97ec1243bf1c5b5eb1548cb6a3d4380b5",
+        "definitionHash": "b505bf197c735d1ee164940770fb4527a607d0c3cf8ebdfd7964f606c3d1a338"
+      },
+      {
+        "id": "sprites:tilesets:atlas.json",
+        "imageHash": "0fd1c47d68ca2e9e76dbde0338283565f82922bcd96014bc07a5b573e602294c",
+        "definitionHash": "b505bf197c735d1ee164940770fb4527a607d0c3cf8ebdfd7964f606c3d1a338"
+      },
+      {
+        "id": "sprites:tilesets:props.webp",
+        "imageHash": "b0723e4cd38d58ce5c6df44fe844c62138086aa538c082d07a08d54b1bfa09a8",
+        "definitionHash": "b505bf197c735d1ee164940770fb4527a607d0c3cf8ebdfd7964f606c3d1a338"
+      }
+    ],
+    "audioAssets": [
+      {
+        "id": "village.music",
+        "renditionHash": "22536060db87b024eaf717d57c8885067a7942052ecfef9ed8b51fc7766a5a98"
+      },
+      {
+        "id": "combat.music",
+        "renditionHash": "7989c905e85ef41948860ae0e7d042a9fc412ae478eb2ed2ee6b30e0634caf9a"
+      }
+    ]
+  }
+}

@@ -117,6 +117,7 @@ const { viewModel = getQuestOverlayViewModel({ className: 'QuestOverlayVM' }) }:
           <div
             class="hud-objective__progress"
             role="progressbar"
+            aria-label={viewModel.currentObjectiveProgressLabel}
             aria-valuenow={viewModel.currentObjectivePercent}
             aria-valuemin={0}
             aria-valuemax={100}

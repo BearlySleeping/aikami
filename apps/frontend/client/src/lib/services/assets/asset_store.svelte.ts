@@ -23,10 +23,25 @@
 // snapshot active — it must never erase release N while attempting N+1. Only an
 // initial boot with no valid catalog ends up empty, and it fails closed.
 //
-// Contract: C-243, C-435, C-496
+// Contract: C-243, C-435, C-496, C-523
+//
+// OFFLINE BOOT (C-523 follow-up). The release graph above used to be fetched
+// from the publish origin on every boot and never written down, while the
+// binaries it names stayed cached on the device (Turso registry rows + OPFS /
+// Tauri FS bytes). A network-blocked reload therefore had every byte it
+// needed and could not find it: `resolveUrl` returned null for every tag
+// because no catalog row existed, `loadContentPack` fell back to a relative
+// manifest path the de-bundled client does not ship, and boot died on a 404.
+//
+// The verified graph is now persisted once (see `catalog_snapshot_store.ts`)
+// and restored BEFORE any network work, so a cached device boots offline. A
+// snapshot is only ever written from a fully verified release, is validated
+// structurally and by digest on the way back in, and is never blended with a
+// different release: the active catalog is always one coherent graph.
 
 import { r2AssetUrl, tagToAssetPath } from '@aikami/constants';
 import { publicEnv } from '@aikami/frontend/configs';
+import { type CatalogSnapshot, catalogSnapshotDigest } from '@aikami/frontend/storage';
 import type { InstalledPackLock } from '@aikami/schemas';
 import type {
   AssetEntry,
@@ -38,6 +53,10 @@ import type {
 import { logger } from '$logger';
 import { assetManager } from './asset_manager.svelte.ts';
 import {
+  type CatalogSnapshotStore,
+  createDatabaseCatalogSnapshotStore,
+} from './catalog_snapshot_store.ts';
+import {
   ReleaseResolutionError,
   type ResolvedCatalog,
   resolveCatalogRelease,
@@ -46,6 +65,11 @@ import {
 export type AssetStore = AssetStoreState & {
   /**
    * Load the catalog (seed + offline core). Idempotent and de-duplicated.
+   *
+   * CACHE-FIRST: a verified device snapshot is restored from local storage and
+   * returned immediately, so boot never waits on the publish origin. With no
+   * usable snapshot the catalog is resolved from the network as before — the
+   * first run needs the network once.
    *
    * Concurrent callers share one attempt. A failure rejects the candidate and
    * keeps the previously verified catalog active, so a refresh can be retried
@@ -56,7 +80,11 @@ export type AssetStore = AssetStoreState & {
    * Discard the memoized catalog and load it again.
    *
    * Concurrent rescans share ONE fresh attempt, so two writers can never race
-   * into the same catalog state.
+   * into the same catalog state. This is also the explicit ADOPTION path for a
+   * newer release the background check reported (`newerReleaseId`): only an
+   * explicit rescan replaces a live catalog with a different release, because
+   * the cached binaries and the registry rows behind it belong to the release
+   * that is currently active.
    */
   rescanAssets: () => Promise<void>;
   /** Resolve a tag to a loadable URL. Returns null if the tag is unknown. */
@@ -76,6 +104,24 @@ export type AssetStore = AssetStoreState & {
   /** Whether the last successful load came from a release or the legacy alias. */
   readonly releaseSource: ResolvedCatalog['source'] | null;
   /**
+   * Where the ACTIVE catalog's graph came from this session: `network` when it
+   * was resolved from the publish origin during this boot, `offline-snapshot`
+   * when it was restored from the device's verified catalog snapshot.
+   *
+   * Distinct from {@link AssetStore.releaseSource}, which describes the
+   * provenance of the release itself (`release` vs the legacy alias) and
+   * survives a restore unchanged — a restored catalog IS that release.
+   */
+  readonly catalogOrigin: CatalogOrigin | null;
+  /**
+   * Release id a background origin check found that is DIFFERENT from the
+   * active catalog, or undefined when the origin agrees with what is active
+   * (or could not be reached). Reported, never auto-applied: adopting another
+   * release re-keys every cached binary, so it goes through an explicit
+   * {@link AssetStore.rescanAssets}.
+   */
+  readonly newerReleaseId: string | undefined;
+  /**
    * The installed pack lock the ACTIVE catalog's release pinned and verified,
    * or null when the active release authors none. This is the lock audio
    * verification reads — the store never re-fetches the mutable
@@ -94,7 +140,19 @@ export type AssetStore = AssetStoreState & {
   setMusic: (tag: string | null) => void;
   /** Toggle audio mute state. */
   setAudioMuted: (muted: boolean) => void;
+  /**
+   * Replace the snapshot persistence seam.
+   *
+   * Production wires the device database (the default). It is injectable so
+   * the offline-boot contract can be exercised against an arbitrary backend
+   * without standing up a whole local database; `undefined` restores the
+   * production store.
+   */
+  setSnapshotStore: (store: CatalogSnapshotStore | undefined) => void;
 };
+
+/** Which surface the ACTIVE catalog's graph was taken from this session. */
+export type CatalogOrigin = 'network' | 'offline-snapshot';
 
 /**
  * Rebuilds the manifest entry for a seed row. `path` is the exact inverse of
@@ -164,6 +222,24 @@ class AssetStoreImpl implements AssetStore {
   /** Where the active catalog's pack lock came from. */
   private _packLockSource: ResolvedCatalog['packLockSource'] | null = null;
 
+  /** Where the active catalog's graph came from this session. */
+  private _catalogOrigin: CatalogOrigin | null = null;
+
+  /** A different release the origin advertises; reported, never auto-applied. */
+  private _newerReleaseId: string | undefined;
+
+  /**
+   * Integrity digest of the ACTIVE catalog.
+   *
+   * Kept as the in-flight promise so a detached origin check can await the
+   * digest of the catalog that is active when it runs, without a second
+   * hash pass over a large seed.
+   */
+  private _digestPromise: Promise<string> | undefined;
+
+  /** Persistence seam for the verified device snapshot. */
+  private _snapshotStore: CatalogSnapshotStore = createDatabaseCatalogSnapshotStore();
+
   /** In-flight load attempt, so concurrent callers share one fetch. */
   private _loadPromise: Promise<void> | null = null;
 
@@ -201,6 +277,18 @@ class AssetStoreImpl implements AssetStore {
     return this._packLockSource;
   }
 
+  get catalogOrigin(): CatalogOrigin | null {
+    return this._catalogOrigin;
+  }
+
+  get newerReleaseId(): string | undefined {
+    return this._newerReleaseId;
+  }
+
+  setSnapshotStore(store: CatalogSnapshotStore | undefined): void {
+    this._snapshotStore = store ?? createDatabaseCatalogSnapshotStore();
+  }
+
   // -----------------------------------------------------------------------
   // fetchManifest
   // -----------------------------------------------------------------------
@@ -220,8 +308,9 @@ class AssetStoreImpl implements AssetStore {
   // -----------------------------------------------------------------------
 
   async rescanAssets(): Promise<void> {
-    // The catalog is a build artifact — "rescan" just drops the memoized load
-    // so the next call re-reads it. The filesystem scan runs in tooling.
+    // A rescan is an explicit, user-driven re-read: it always goes to the
+    // origin, so it is also the path that adopts a newer release onto a
+    // device running a restored one. The filesystem scan runs in tooling.
     // Concurrent rescans share ONE fresh attempt: two writers must never race
     // into the same catalog state.
     this._rescanPromise ??= this._performRescan();
@@ -235,7 +324,7 @@ class AssetStoreImpl implements AssetStore {
       // a snapshot, and orphaning it would leave two writers racing.
       await this._loadPromise;
       this._loadPromise = null;
-      await this._runLoad();
+      await this._runLoad({ cacheFirst: false });
     } finally {
       this._rescanPromise = null;
     }
@@ -249,13 +338,13 @@ class AssetStoreImpl implements AssetStore {
    * retained only while it represents an active catalog: a failed attempt is
    * cleared so the next call can retry.
    */
-  private async _runLoad(): Promise<void> {
+  private async _runLoad(options?: { cacheFirst?: boolean }): Promise<void> {
     const inFlight = this._loadPromise;
     if (inFlight) {
       await inFlight;
       return;
     }
-    const attempt = this._loadCatalog();
+    const attempt = this._loadCatalog({ cacheFirst: options?.cacheFirst ?? true });
     this._loadPromise = attempt;
     try {
       await attempt;
@@ -278,7 +367,12 @@ class AssetStoreImpl implements AssetStore {
   resolveUrl(tag: string): string | null {
     const row = this._rowsByTag.get(tag);
     if (!row) {
-      return null;
+      // Defence in depth for a catalog that never loaded (no snapshot, origin
+      // unreachable): a blob URL exists ONLY for a tag whose cached bytes were
+      // hash-verified against the local registry, so serving it cannot bypass
+      // admission or integrity. A tag that IS absent from a loaded catalog is
+      // deliberately not resolved here — the active release dropped it.
+      return this._hasCatalog() ? null : assetManager.acquireUrl(tag);
     }
 
     // C-373: serve verified cached binaries via the AssetManager (blob: URL)
@@ -342,25 +436,94 @@ class AssetStoreImpl implements AssetStore {
     return r2AssetUrl({ baseUrl, hash: row.hash, ext: row.ext });
   }
 
+  /** Builds the persistable snapshot form of ONE verified resolution. */
+  private static _toSnapshot(resolved: ResolvedCatalog): CatalogSnapshot {
+    return {
+      releaseId: resolved.releaseId,
+      releaseSource: resolved.source,
+      seed: resolved.seed,
+      coreTags: [...resolved.coreTags],
+      packLock: resolved.packLock,
+      packLockSource: resolved.packLockSource,
+    };
+  }
+
   /**
    * Fetches, validates and installs the catalog.
    *
+   * Cache-first when a verified device snapshot exists: it is restored and the
+   * load returns without touching the network, so a cached device boots with
+   * no publish origin in reach. Only a device with no usable snapshot resolves
+   * from the origin — that first run legitimately needs the network once.
+   *
    * The complete candidate is resolved into locals first and only then swapped
    * into the active state, so the store never exposes a partially-replaced
-   * catalog. On failure the previous verified snapshot is preserved: rejecting
+   * catalog. On failure the previous verified catalog is preserved: rejecting
    * release N+1 must not destroy a working release N.
    */
-  private async _loadCatalog(): Promise<void> {
+  private async _loadCatalog(options: { cacheFirst: boolean }): Promise<void> {
     this.isLoading = true;
     this.error = null;
 
+    try {
+      if (options.cacheFirst && (await this._restoreSnapshot())) {
+        // The active graph is the device's own; ask the origin about a newer
+        // release without ever blocking the boot on it.
+        this._scheduleOriginCheck();
+        return;
+      }
+
+      await this._loadFromOrigin();
+    } finally {
+      this.isLoading = false;
+    }
+  }
+
+  /**
+   * Restores the device's persisted, verified catalog snapshot.
+   *
+   * A missing, malformed or digest-rejected record is a cache miss — never an
+   * error, and never partially applied. Restoring rebuilds the SAME derived
+   * views a network load would (`rowsByTag`, `coreTags`, `manifest`, lock), so
+   * every downstream consumer sees an identical catalog either way.
+   *
+   * @returns Whether a verified snapshot became the active catalog.
+   */
+  private async _restoreSnapshot(): Promise<boolean> {
+    let snapshot: CatalogSnapshot | undefined;
+    try {
+      snapshot = await this._snapshotStore.read();
+    } catch (error) {
+      // An unreadable device store is a cache miss, not a boot failure: fall
+      // through to the origin so an online device still starts.
+      logger.warn('assetStore: catalog snapshot unreadable', error);
+      return false;
+    }
+
+    if (!snapshot) {
+      return false;
+    }
+
+    this._installCatalog(snapshot, 'offline-snapshot');
+
+    logger.warn('assetStore: catalog restored from device snapshot', {
+      count: snapshot.seed.rows.length,
+      coreTags: snapshot.coreTags.length,
+      releaseId: snapshot.releaseId,
+      releaseSource: snapshot.releaseSource,
+      packLockSource: snapshot.packLockSource,
+    });
+    return true;
+  }
+
+  /** Resolves the release graph from the publish origin and installs it. */
+  private async _loadFromOrigin(): Promise<void> {
     const baseUrl = publicEnv.PUBLIC_ASSETS_BASE_URL;
     if (!baseUrl) {
       // Not a release failure: with no origin configured every content-addressed
       // URL would 404, so the catalog is genuinely unservable. Fail closed.
       this._clearCatalog();
       this.error = 'PUBLIC_ASSETS_BASE_URL is not configured — cannot load asset catalog.';
-      this.isLoading = false;
       logger.error('assetStore: PUBLIC_ASSETS_BASE_URL is not configured');
       return;
     }
@@ -372,48 +535,140 @@ class AssetStoreImpl implements AssetStore {
       // metadata throws instead of silently degrading.
       const resolved = await resolveCatalogRelease({ originUrl: baseUrl });
 
-      // Stage the whole candidate BEFORE touching the active state. Nothing
-      // below this line can fail, so the swap is atomic at the state level.
-      const seed = resolved.seed;
-      const rowsByTag = new Map(seed.rows.map((row) => [row.tag, row]));
-      const coreTags = new Set(resolved.coreTags);
-      const manifest = toManifest(seed);
+      const snapshot = AssetStoreImpl._toSnapshot(resolved);
+      this._installCatalog(snapshot, 'network');
 
-      this._seed = seed;
-      this._rowsByTag = rowsByTag;
-      this._coreTags = coreTags;
-      this._releaseId = resolved.releaseId;
-      this._releaseSource = resolved.source;
-      this._packLock = resolved.packLock ?? null;
-      this._packLockSource = resolved.packLockSource;
-      this.manifest = manifest;
-      // A new catalog revision may add tags that previously failed to warm —
-      // allow them to be retried.
-      this._warmFailedTags.clear();
-
-      logger.debug('assetStore: catalog loaded', {
-        count: seed.rows.length,
-        coreTags: coreTags.size,
-        generatedAt: seed.generatedAt,
-        releaseId: resolved.releaseId,
-        source: resolved.source,
-        packLockSource: resolved.packLockSource,
-      });
+      // Persist only a FULLY verified release, and only AFTER it is active.
+      // A failed refresh above never reaches this line, so the last good
+      // snapshot survives a partial fail. The write is awaited so a caller
+      // that returns from the load KNOWS the device has the release.
+      await this._persistSnapshot(snapshot);
+      this._newerReleaseId = undefined;
     } catch (err) {
-      this.error =
+      const reason =
         err instanceof ReleaseResolutionError
           ? `Failed to resolve catalog release (${err.code}): ${err.message}`
           : `Failed to load asset catalog: ${String(err)}`;
       logger.error('assetStore: fetchManifest failed', err);
 
-      // A failed REFRESH keeps the previous complete, verified snapshot active.
-      // A failed INITIAL load has no previous snapshot, so the store stays
-      // empty and the error is exposed — never a fabricated or partial catalog.
+      // A failed REFRESH keeps the previous complete, verified catalog active.
+      // A failed INITIAL load has no previous catalog, so the store stays
+      // empty and the error is exposed — never a fabricated or partial one.
       if (!this._hasCatalog()) {
+        // An explicit rescan on a device that has a snapshot but no active
+        // catalog (e.g. an earlier failed boot) still has something verified
+        // to fall back to.
+        if (await this._restoreSnapshot()) {
+          this.error = reason;
+          return;
+        }
         this._clearCatalog();
+        this.error = `${reason} No verified catalog is cached on this device — connect once to download the starter content. Later runs boot offline from the cache.`;
+        return;
       }
-    } finally {
-      this.isLoading = false;
+      this.error = reason;
+    }
+  }
+
+  /**
+   * Swaps a complete, verified catalog into the active state.
+   *
+   * Everything is staged before the first assignment, so no failure can leave a
+   * half-replaced catalog visible to a consumer.
+   */
+  private _installCatalog(snapshot: CatalogSnapshot, origin: CatalogOrigin): void {
+    const { seed } = snapshot;
+    const rowsByTag = new Map(seed.rows.map((row) => [row.tag, row]));
+    const coreTags = new Set(snapshot.coreTags);
+    const manifest = toManifest(seed);
+
+    this._seed = seed;
+    this._rowsByTag = rowsByTag;
+    this._coreTags = coreTags;
+    this._releaseId = snapshot.releaseId;
+    this._releaseSource = snapshot.releaseSource;
+    this._packLock = snapshot.packLock ?? null;
+    this._packLockSource = snapshot.packLockSource;
+    this._catalogOrigin = origin;
+    this.manifest = manifest;
+    // A new catalog revision may add tags that previously failed to warm —
+    // allow them to be retried.
+    this._warmFailedTags.clear();
+
+    const pending = catalogSnapshotDigest(snapshot);
+    this._digestPromise = pending;
+
+    logger.debug('assetStore: catalog loaded', {
+      count: seed.rows.length,
+      coreTags: coreTags.size,
+      generatedAt: seed.generatedAt,
+      releaseId: snapshot.releaseId,
+      source: snapshot.releaseSource,
+      origin,
+      packLockSource: snapshot.packLockSource,
+    });
+  }
+
+  /**
+   * Persists a verified snapshot. Failures are logged, never propagated: a
+   * device that cannot write its catalog still plays, it just boots online.
+   *
+   * It IS awaited by the caller — the record is local, cheap and already
+   * covered by the local-database handle the cache-first read opened.
+   */
+  private async _persistSnapshot(snapshot: CatalogSnapshot): Promise<void> {
+    try {
+      await this._snapshotStore.write(snapshot);
+    } catch (error) {
+      logger.warn('assetStore: catalog snapshot not persisted', error);
+    }
+  }
+
+  /**
+   * Asks the origin whether a NEWER release exists — off the boot path.
+   *
+   * This deliberately never installs anything. The cached binaries and the
+   * registry rows behind the active catalog belong to the release it was
+   * verified against, so replacing a live catalog mid-session would pair old
+   * bytes with a new hash index. A difference is REPORTED
+   * ({@link AssetStore.newerReleaseId}) and adopted only through an explicit
+   * {@link AssetStore.rescanAssets}, which re-seeds the registry and
+   * re-verifies the cache against the new release.
+   */
+  private _scheduleOriginCheck(): void {
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      return;
+    }
+    void this._checkOriginForNewerRelease();
+  }
+
+  private async _checkOriginForNewerRelease(): Promise<void> {
+    const baseUrl = publicEnv.PUBLIC_ASSETS_BASE_URL;
+    if (!baseUrl || !this._digestPromise) {
+      return;
+    }
+    try {
+      const activeDigest = await this._digestPromise;
+      const resolved = await resolveCatalogRelease({ originUrl: baseUrl });
+      const digest = await catalogSnapshotDigest(AssetStoreImpl._toSnapshot(resolved));
+      if (digest === activeDigest) {
+        this._newerReleaseId = undefined;
+        logger.debug('assetStore: origin agrees with the active catalog', {
+          releaseId: resolved.releaseId,
+        });
+        return;
+      }
+      this._newerReleaseId = resolved.releaseId;
+      logger.warn('assetStore: newer release available (not adopted)', {
+        activeReleaseId: this._releaseId,
+        newerReleaseId: resolved.releaseId,
+      });
+    } catch (error) {
+      // An unreachable or broken origin is the normal offline case: the active
+      // catalog stays exactly as it is.
+      logger.debug('assetStore: origin check failed, keeping the active catalog', {
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 
@@ -426,6 +681,9 @@ class AssetStoreImpl implements AssetStore {
     this._releaseSource = null;
     this._packLock = null;
     this._packLockSource = null;
+    this._catalogOrigin = null;
+    this._newerReleaseId = undefined;
+    this._digestPromise = undefined;
     this.manifest = null;
     this._warmFailedTags.clear();
   }

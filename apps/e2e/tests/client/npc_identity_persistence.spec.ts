@@ -13,9 +13,13 @@
 // identities via the same normalization — proven at the integration layer
 // (entity_spawner.test.ts) — and are exercised in the inn/shop scenes by the
 // `/assets-verify 1` session (which boots the worktree client + map routing).
+//
+// The third case is the production-path one: a real save through the Pause Menu
+// followed by a network-isolated reload. Reload-only parity can pass on a
+// session that never persisted; save + offline reload cannot.
 
 import { expect, type Page, test } from '@playwright/test';
-import { GamePage } from '$pom';
+import { GamePage, pauseMenuSaveStatus } from '$pom';
 
 type NpcAppearance = Record<string, string>;
 
@@ -56,7 +60,8 @@ test.describe('NPC appearance identity (C-504 AC-5)', () => {
     // index-mismatch bug). Assert resolved named identities.
     expect(appearance.body).toBe('body/bodies_female');
     expect(appearance.head).toBe('head/heads/human/female_elderly');
-    expect(appearance.legs).toBe('legs/pants_female');
+    // Authored village_elder layer in content/packs/emberwatch/manifest.json.
+    expect(appearance.legs).toBe('legs/skirts/straight_thin');
     expect(appearance.body).not.toBe('body/bodies_child');
     expect(appearance.head).not.toBe('head/heads/human/female_small');
   });
@@ -73,5 +78,41 @@ test.describe('NPC appearance identity (C-504 AC-5)', () => {
 
     // Idempotent: reload must not change the resolved named identity.
     expect(after).toEqual(before);
+  });
+
+  test('elder identity survives a save and a network-isolated reload', async ({ page }) => {
+    // The first run may download starter content; isolate only the reload.
+    const game = new GamePage(page);
+    await game.goto();
+    const before = await waitForElder(page);
+
+    // Real save through the Pause Menu: the dialog reports the outcome and the
+    // campaign's last-saved timestamp, both asserted in GamePage.saveGame.
+    await game.saveGame();
+
+    // Only this checkout's app shell/asset stand-in remain reachable.
+    await page.route('**/*', (route) => {
+      const hostname = new URL(route.request().url()).hostname;
+      if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]') {
+        return route.continue();
+      }
+      return route.abort('internetdisconnected');
+    });
+    await game.reload();
+    const after = await waitForElder(page);
+
+    expect(after).toEqual(before);
+  });
+
+  test('a completed save is still reported as saved after a reload', async ({ page }) => {
+    const game = new GamePage(page);
+    await page.goto('/game');
+    await game.waitForEngineReady();
+
+    await game.saveGame();
+    await game.reload();
+    // A new boot reads the persisted timestamp, not the prior dialog's message.
+    await game.openPauseMenu();
+    await expect(pauseMenuSaveStatus(page)).toContainText('Last saved', { timeout: 10_000 });
   });
 });

@@ -11,6 +11,7 @@
 import type { AssetTagResolver } from '@aikami/frontend/engine/sim';
 import { pathToTag } from '@aikami/frontend/engine/sim';
 import { logger } from '$logger';
+import { assetPrefetchService } from './asset_prefetch_service.svelte.ts';
 import { assetStore } from './asset_store.svelte.ts';
 
 /**
@@ -61,20 +62,42 @@ export const createAssetTagResolver = (): AssetTagResolver => {
 };
 
 /**
- * Waits until the boot-seed manifest has loaded.
+ * Waits until the tag resolver may be trusted: the catalog has loaded AND the
+ * AssetManager has finished rehydrating the device cache.
  *
- * Call this before the first resolution on any route that builds a world.
- * `assetStore.resolveUrl` is synchronous and reads the manifest, so a route that
- * resolves tags before the catalog has landed gets `null` for every tag and
- * silently falls back to a bundled static path — which a de-bundled client
- * (C-435) does not ship, so the route dies on a 404 instead of rendering.
+ * This is the HANDSHAKE every consumer of {@link createAssetTagResolver} must
+ * pass through first, and it exists because `assetStore.resolveUrl` is
+ * synchronous and has an honest-looking but wrong answer during startup:
  *
- * Living here rather than at each call site means the precondition sits with
- * the resolver that depends on it, and every consumer gets it for free. The
- * underlying fetch is memoized, so repeat calls are cheap.
+ *   1. the catalog row may be present (restored from the device snapshot);
+ *   2. `assetManager.acquireUrl` returns null until rehydration binds blobs;
+ *   3. so the resolver falls through to `_originUrl(row)` — a NETWORK url.
+ *
+ * A content-pack load that starts inside that window therefore fetches the
+ * publish origin for bytes the device already holds, and with no network it
+ * aborts with `ContentPackLoader: failed to fetch manifest` even though the
+ * cache was complete. Awaiting here removes the race instead of retrying it.
+ *
+ * Both halves are LOCAL work — the catalog load is cache-first on a warmed
+ * device, and rehydration reads the OPFS / Tauri FS cache — so this adds no
+ * cloud dependency to boot. The pipeline is memoized, so every caller shares
+ * one attempt and repeat calls are free.
  */
 export const awaitRegistryReady = async (): Promise<void> => {
+  // The catalog first: rehydration is keyed on `assetStore.coreTags`, so it
+  // needs the catalog, and a resolver with no rows resolves nothing.
   await assetStore.fetchManifest();
+  try {
+    // Opens the device database, seeds the registry and runs rehydration.
+    await assetPrefetchService.ensureRegistryReady();
+  } catch (error) {
+    // Not fatal here: the boot pipeline treats registry init as a degradable
+    // stage, and killing the caller would be a NEW failure mode. The pack load
+    // reports the real problem if the cache truly is unusable.
+    logger.warn('registryResolver:cache-not-ready', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
 };
 
 /**

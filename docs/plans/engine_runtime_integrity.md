@@ -257,7 +257,8 @@ settle a pending request are still forwarded, so the boot/restore
 - Buffers: worker `STATE_UPDATE` → `GameWorld._handleStateUpdate` →
   `RenderBufferPool.ingest` → `FrameRenderer.render`.
 - Textures: `EntityAppearanceLoader.prepare` → `TextureManager.getTexture` /
-  `getOrCreateSpritesheet` → `applyLpcFrameToEntry` per frame.
+  `acquireSpritesheet` → `applyLpcFrameToEntry` per frame; sprite destruction
+  releases the lease.
 - Worker: `WorkerSession.request` / `recycleBuffer` → `_handleInbound`.
 
 ## Verification actually run
@@ -317,8 +318,8 @@ terminate the worker there; it was left out of this pass deliberately.
 
 ## Known limitations
 
-- **Every map switch now costs two extra worker round-trips**: one
-  `REQUEST_SNAPSHOT` before teardown, and — only on failure — one `LOAD_GAME`.
+- **A successful map switch adds one worker round-trip**:
+  `REQUEST_SNAPSHOT` before teardown. Recovery adds `LOAD_GAME` only on failure.
   The snapshot is only taken when a previous scene exists, but it is on the
   critical path of every switch. This is the deliberate cost of never losing
   progress; if the latency proves unacceptable, the fix is a ring of recent
@@ -333,3 +334,18 @@ terminate the worker there; it was left out of this pass deliberately.
 - Leases make over-budget sheet caches possible while actors are pinned; the
   registry reports the condition through `pinnedCount` but nothing surfaces it
   to the UI yet.
+
+## Captain integration verification — 2026-10-03
+
+The earlier worktree-only execution report is superseded for integration by:
+
+- Combined production Playwright: **19/19 passed**, including five-map
+  routing, offline save/reload, NPC appearance parity, durable saved-status
+  reload, pause/settings, keyboard/focus and HUD acceptance.
+- Interactive movement Playwright: **4/4 passed**, using live diagnostics and
+  canvas/camera-derived click coordinates, not visual-freeze snapshots.
+- Local evidence: `.evidence/engine-polish/resume-final-client.log` and
+  `.evidence/engine-polish/resume-movement.log` (gitignored).
+
+These behavioral checks do not prove a long-running GPU-memory plateau or
+human art acceptance. The checkpoint and held-worker limitations above remain.

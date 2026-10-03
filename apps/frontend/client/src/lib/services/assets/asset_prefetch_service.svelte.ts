@@ -255,7 +255,7 @@ class AssetPrefetchService
   private async _doPrefetchCore(
     onProgress?: (progress: { done: number; total: number }) => void,
   ): Promise<CorePrefetchResult> {
-    await this.ensureRegistryReady();
+    const { registry } = await this.ensureRegistryReady();
 
     const { assetManager } = await import('./asset_manager.svelte.ts');
     const { assetStore } = await import('./asset_store.svelte.ts');
@@ -297,7 +297,44 @@ class AssetPrefetchService
 
     onProgress?.({ done: coreTags.length, total: coreTags.length });
 
+    // The core batch is DONE — make its bookkeeping durable before reporting
+    // it. `warm()` marks each download in `install_state` inside SQLite, but
+    // the browser adapter snapshots that database to IndexedDB on a debounce:
+    // a reload before it lands comes back with an empty install-state table,
+    // rehydration finds no cached core binaries, and the device re-downloads
+    // (or, offline, cannot). Flushed once at the batch boundary, never per
+    // asset, so this costs one snapshot per prefetch run.
+    await this._flushDurability(registry, 'prefetchCore');
+
     return { requested: coreTags.length, fetched, alreadyCached, failedTags };
+  }
+
+  /**
+   * Makes the registry's write-behind state durable at a BATCH boundary.
+   *
+   * The browser adapter debounces its IndexedDB snapshot, so SQL written
+   * during a prefetch batch can be lost to a reload. A no-op under OPFS and
+   * native libSQL, which commit synchronously. Failures are logged and
+   * swallowed: the bytes are already in the cache backend, and the pipeline
+   * must degrade to "download again", never to a thrown boot stage.
+   */
+  private async _flushDurability(
+    registry: { database: { flush?: () => Promise<void> } },
+    stage: string,
+  ): Promise<void> {
+    const started = performance.now();
+    try {
+      await registry.database.flush?.();
+      this.debug('assetPrefetchService:durability-flush', {
+        stage,
+        elapsedMs: Math.round(performance.now() - started),
+      });
+    } catch (error) {
+      this.warn('assetPrefetchService:durability-flush-failed', {
+        stage,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   warmRemaining(onProgress?: (progress: { done: number; total: number }) => void): void {
@@ -362,6 +399,11 @@ class AssetPrefetchService
       };
 
       await Promise.all(Array.from({ length: WARM_CONCURRENCY }, runWorker));
+
+      // Same durability boundary as the core batch: the opt-in "download all
+      // for offline" pass is only really finished once its install-state rows
+      // have been snapshotted, otherwise a reload resumes from nothing.
+      await this._flushDurability(registry, 'warmRemaining');
 
       this.phase = 'ready';
       this.debug('assetPrefetchService:warm:complete', {
