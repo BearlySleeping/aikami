@@ -17,6 +17,7 @@ import {
   packRegistryService,
   playerStateService,
   routerService,
+  webGpuSupportService,
   worldStateService,
 } from '$services';
 import {
@@ -40,12 +41,13 @@ export type StartPublicOptions = Omit<
   | 'packRegistry'
   | 'assets'
   | 'platform'
+  | 'webgpu'
 >;
 
 /**
  * Builds the start-menu ViewModel wired to the production campaign, router,
- * game-state, save/recovery, pack-registry, asset-prefetch, and desktop
- * platform singletons.
+ * game-state, save/recovery, pack-registry, asset-prefetch, WebGPU-support,
+ * and desktop platform singletons.
  */
 export const getStartViewModel = (options: StartPublicOptions): StartViewModelInterface =>
   createStartViewModel({
@@ -62,6 +64,7 @@ export const getStartViewModel = (options: StartPublicOptions): StartViewModelIn
     gameSave: gameSaveService,
     packRegistry: packRegistryService,
     assets: assetPrefetchService,
+    webgpu: webGpuSupportService,
     platform: {
       isTauri,
       closeWindow: async () => {

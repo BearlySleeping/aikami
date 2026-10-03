@@ -55,6 +55,7 @@ export * from './backup/backup_service.svelte.ts';
 export * from './campaign/campaign_service.svelte.ts';
 export * from './campaign/pack_registry_service.svelte.ts';
 export * from './capability/capability_service.svelte.ts';
+export * from './capability/webgpu_support_service.svelte.ts';
 export * from './character/card_compiler.ts';
 export * from './character/character.svelte.ts';
 export * from './character/character_importer.ts';

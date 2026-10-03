@@ -16,6 +16,7 @@ project:
 
 dependsOn:
   - 'constants'
+  - 'frontend-utils'
   - 'schemas'
   - 'types'
   - 'logger'

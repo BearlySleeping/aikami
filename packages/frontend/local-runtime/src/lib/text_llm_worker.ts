@@ -6,6 +6,7 @@
 //
 // Contract: C-427 AC-3
 
+import { isWebGPUSupported } from '@aikami/frontend/utils/browser/webgpu';
 import { env, pipeline } from '@huggingface/transformers';
 import {
   configureLocalModelResolution,
@@ -80,23 +81,11 @@ type ErrorResponse = {
 // Backend detection
 // ---------------------------------------------------------------------------
 
-/** True when a WebGPU adapter can actually be requested. */
-const hasWebGpu = async (): Promise<boolean> => {
-  try {
-    const gpu = (navigator as Navigator & { gpu?: { requestAdapter?: () => Promise<unknown> } })
-      .gpu;
-    if (!gpu?.requestAdapter) {
-      return false;
-    }
-    const adapter = await Promise.race([
-      gpu.requestAdapter(),
-      new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), 3000)),
-    ]);
-    return adapter !== undefined && adapter !== null;
-  } catch {
-    return false;
-  }
-};
+// The adapter probe is the shared `isWebGPUSupported` from
+// `@aikami/frontend/utils` — the same one the Kokoro worker and the start
+// menu use. It must never be re-implemented here: this worker's own context
+// decides which backend loads, and the start menu's recommendation to the
+// player has to be describing that same capability.
 
 // ---------------------------------------------------------------------------
 // Handlers
@@ -107,7 +96,7 @@ const handleInitialize = async (message: InitializeMessage): Promise<void> => {
     const { modelId, revision, device } = message;
 
     // Decide the effective backend
-    const useWebGpu = device === 'webgpu' && (await hasWebGpu());
+    const useWebGpu = device === 'webgpu' && (await isWebGPUSupported());
 
     generator = await pipeline('text-generation', modelId, {
       revision,

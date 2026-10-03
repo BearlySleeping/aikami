@@ -20,3 +20,15 @@ dependsOn:
   - 'types'
   - 'logger'
 
+fileGroups:
+  tests:
+    - 'src/**/*.test.ts'
+
+tasks:
+  test:
+    command: 'bun run test'
+    inputs:
+      - '@group(sources)'
+      - '@group(tests)'
+      - '@group(configs)'
+
