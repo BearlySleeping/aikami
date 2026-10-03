@@ -476,7 +476,7 @@ export default function codeRabbitExtension(pi: ExtensionAPI): void {
                   type: 'text',
                   text: [
                     `⏳ CI checks are still running on PR #${num}.`,
-                    'Please wait 2 minutes and call `code_rabbit_autofix` again.',
+                    'Please wait 2 minutes and call the `code_rabbit` tool, action "autofix", again.',
                   ].join('\n'),
                 },
               ],
@@ -717,7 +717,7 @@ export default function codeRabbitExtension(pi: ExtensionAPI): void {
             ? [
                 '',
                 '⚠️  **CodeRabbit found actionable comments that autofix could not resolve.**',
-                'Call `code_rabbit_findings` to inspect them. The Captain should decide',
+                'Call the `code_rabbit` tool, action "findings", to inspect them. The Captain should decide',
                 'whether these are blocking before merging.',
               ].join('\n')
             : '';

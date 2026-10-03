@@ -811,7 +811,7 @@ export default function (pi: ExtensionAPI) {
               `✅ **PR #${prNumber} opened** (branch \`${headBranch}\` @ \`${headCommit.slice(0, 7)}\`)`,
               `→ ${prUrl}`,
               '',
-              'Merge it with gh_merge_pr when CI passes. The worktree is preserved.',
+              'Merge it with the `gh_pr` tool, action "merge", when CI passes. The worktree is preserved.',
             ].join('\n'),
           },
         ],

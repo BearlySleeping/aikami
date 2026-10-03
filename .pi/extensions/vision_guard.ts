@@ -8,7 +8,7 @@
 //      ai_describe_image / ai_validate_image. This prevents the wasted
 //      read → "[image omitted]" → fallback round trip.
 //
-//   2. Enriches `browser_screenshot` results:
+//   2. Enriches `browser` (action screenshot) results:
 //      - Non-vision models: appends an inline VLM description so the
 //        follow-up ai_describe_image call is unnecessary.
 //      - Vision models: attaches the optimised PNG as image content so
@@ -30,7 +30,7 @@ const _modelSupportsImages = (ctx: unknown): boolean => {
   return model.input.includes('image');
 };
 
-/** Extracts the saved screenshot filepath from browser_screenshot details. */
+/** Extracts the saved screenshot filepath from the browser tool's details. */
 const _screenshotPath = (details: unknown): string | undefined => {
   const d = details as { success?: boolean; filepath?: string } | undefined;
   if (d?.success !== true || typeof d.filepath !== 'string') {
@@ -65,9 +65,9 @@ export default function (pi: ExtensionAPI) {
     };
   });
 
-  // ── 2. Enrich browser_screenshot results ────────────────────
+  // ── 2. Enrich browser screenshot results ───────────────────
   pi.on('tool_result', async (event, ctx) => {
-    if (event.toolName !== 'browser_screenshot' || event.isError) {
+    if (event.toolName !== 'browser' || event.isError) {
       return undefined;
     }
 
