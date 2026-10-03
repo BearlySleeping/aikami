@@ -21,11 +21,6 @@ dependsOn:
   - 'logger'
 
 fileGroups:
-  sources:
-    - 'src/**/*'
-  configs:
-    - 'package.json'
-    - 'tsconfig.json'
   tests:
     - 'src/**/*.test.ts'
 

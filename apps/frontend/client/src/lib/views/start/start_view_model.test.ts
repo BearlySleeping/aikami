@@ -586,10 +586,14 @@ describe('StartViewModel (C-317 Campaign-First)', () => {
     });
 
     test('probes once during initialize and never blocks on it', async () => {
-      harness.setWebGpuStatus('unsupported');
+      const check = harness.capabilities.webgpu.check.bind(harness.capabilities.webgpu);
+      harness.capabilities.webgpu.check = () => {
+        void check();
+        return new Promise(() => {});
+      };
       const vm = newViewModel();
 
-      await vm.initialize();
+      await expect(vm.initialize()).resolves.toBeUndefined();
 
       expect(harness.webGpuCheckCalls()).toBe(1);
     });
