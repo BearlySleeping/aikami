@@ -21,8 +21,6 @@ import {
 import { BaseFrontendClass, type BaseFrontendClassOptions } from '@aikami/frontend/services/base';
 import { configService } from '../config/config_service.svelte.ts';
 import type { ResolvedDecisionBackend } from '../config/decision_backend_resolution';
-import type { NpcActionDecisionMode } from '../game/npc_action_decision.ts';
-import { npcActionDecisionService } from '../game/npc_action_decision_service.svelte.ts';
 import {
   adapterForBackend,
   DECISION_TEST_TIMEOUT_MS,
@@ -53,12 +51,6 @@ export type DecisionBackendServiceInterface = {
   summary(): DecisionBackendSummary;
   gameplayRouting(): DecisionGameplayRouting;
   test(): Promise<DecisionTestOutcome | undefined>;
-  /**
-   * Switches the persisted Off/Shadow/On mode and resolves once saved.
-   *
-   * Must not invalidate the test verdict; see the implementation.
-   */
-  setGameplayMode(mode: NpcActionDecisionMode): Promise<void>;
   invalidate(): void;
   persist(): Promise<void>;
 };
@@ -216,23 +208,6 @@ class DecisionBackendService
   /** Persists a configuration change and drops the now-stale verdict. */
   async persist(): Promise<void> {
     this.invalidate();
-    await this._capabilities.persist();
-  }
-
-  /**
-   * Switches the persisted Off/Shadow/On mode, and resolves once it is saved.
-   *
-   * Deliberately does NOT call `this.persist()`. That method invalidates the
-   * cached test verdict, so routing a mode change through it made the section
-   * report `disabled` immediately after a successful "Test connection" — the
-   * backend looked switched off because the player changed a setting, not
-   * because anything about the backend changed.
-   *
-   * The gameplay consumer owns the mode and persists it through canonical
-   * config, so there is exactly one writer.
-   */
-  async setGameplayMode(mode: NpcActionDecisionMode): Promise<void> {
-    npcActionDecisionService.setMode(mode);
     await this._capabilities.persist();
   }
 }

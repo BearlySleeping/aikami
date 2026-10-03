@@ -9,14 +9,11 @@
 // is built for it, that the qualification gate reads the backend's own dialect
 // rather than a constant, and that Off/Shadow/On is persisted and refuses.
 
-import { describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { DECISION_PROVIDERS, decisionProviderEntry } from '@aikami/constants';
-import {
-  type DecisionReadinessVerdict,
-  NATIVE_LLAMACPP_DIALECT,
-  SYSTEM_ONE_DIALECT,
-} from '@aikami/frontend/ai-gateway/decision';
-import type { DecisionBackendServiceInterface } from '../../ai/decision_backend_service.svelte';
+import { NATIVE_LLAMACPP_DIALECT, SYSTEM_ONE_DIALECT } from '@aikami/frontend/ai-gateway/decision';
+import { setDialogCapabilities } from '@aikami/frontend/services/base';
+import { createDecisionSettingsViewModel } from '../../../views/settings/ai/decision/decision_settings_view_model.svelte';
 import type { ResolvedDecisionBackend } from '../../config/decision_backend_resolution';
 import { resolveNpcActionQualification } from '../../game/npc_action_decision_qualification.ts';
 import { decisionGameplayModeOptions, dialectForBackend } from './decision_backend_logic.ts';
@@ -215,38 +212,89 @@ describe('Off / Shadow / On is a projection, not template logic', () => {
   });
 });
 
-describe('changing the mode must not erase the Test connection verdict', () => {
-  // Found by CodeRabbit: the view model called `persist()` after switching the
-  // mode, and `persist()` invalidates the cached verdict. The section then
-  // reported `disabled` immediately after a successful test — the backend looked
-  // switched off because the player changed a setting. The mode now persists
-  // through its own owner and nothing invalidates the verdict.
-  test('setGameplayMode persists without touching lastVerdict', async () => {
-    const persisted: string[] = [];
-    const service = {
-      lastVerdict: { state: 'ready' } as DecisionReadinessVerdict,
+// The section reports refusals through the dialog seam, which is unset outside
+// a mounted app. Installed per test, exactly as the section's own suite does.
+const dialogStack: Array<ReturnType<typeof setDialogCapabilities>> = [];
+beforeEach(() => {
+  dialogStack.push(
+    setDialogCapabilities({
+      showSnackbar: () => {},
+      showConditionalSnackbar: () => {},
+      setAppLoading: () => {},
+      open: async () => undefined,
+    }),
+  );
+});
+afterEach(() => {
+  setDialogCapabilities(dialogStack.pop());
+});
+
+describe('changing the mode cannot invalidate the Test connection verdict', () => {
+  // The writer is an injected capability precisely so that switching a mode
+  // never routes through `DecisionBackendService.persist()` — which calls
+  // `invalidate()` and drops the cached verdict, making the section report
+  // `disabled` immediately after a successful "Test connection".
+  test('the section writes only through the injected mode writer', async () => {
+    const calls: string[] = [];
+    const decisions = {
+      lastVerdict: { state: 'ready' },
       isTesting: false,
       resolve: () => backend(),
       summary: () => ({}) as never,
       gameplayRouting: () => ({ allowed: true, reason: 'qualified' }),
       test: async () => undefined,
       invalidate: () => {
-        service.lastVerdict = undefined;
+        calls.push('invalidate');
       },
       persist: async () => {
-        persisted.push('persist');
+        calls.push('persist');
       },
-      setGameplayMode: async (mode: string) => {
-        persisted.push(`mode:${mode}`);
+    };
+    const viewModel = createDecisionSettingsViewModel({
+      className: 'DecisionSettingsViewModel',
+      config: {} as never,
+      decisions: decisions as never,
+      gameplayMode: {
+        setMode: async (mode: string) => {
+          calls.push(`mode:${mode}`);
+        },
       },
-    } as unknown as DecisionBackendServiceInterface;
+    });
 
-    await service.setGameplayMode('shadow');
+    await viewModel.setGameplayMode('shadow');
 
-    // Persisted exactly once, by setGameplayMode itself.
-    expect(persisted).toEqual(['mode:shadow']);
-    // The verdict survived, so the state projection is unchanged.
-    expect(service.lastVerdict?.state).toBe('ready');
+    // The mode was written, and nothing touched the backend service.
+    expect(calls).toEqual(['mode:shadow']);
+    expect(decisions.lastVerdict.state).toBe('ready');
+  });
+
+  test('a mode that would not take effect is refused without writing', async () => {
+    const calls: string[] = [];
+    const viewModel = createDecisionSettingsViewModel({
+      className: 'DecisionSettingsViewModel',
+      config: {} as never,
+      decisions: {
+        lastVerdict: undefined,
+        isTesting: false,
+        resolve: () => backend(),
+        summary: () => ({}) as never,
+        // Unqualified: `on` is refused, `off`/`shadow` are not.
+        gameplayRouting: () => ({ allowed: false, reason: 'not qualified' }),
+        test: async () => undefined,
+        invalidate: () => {},
+        persist: async () => {},
+      } as never,
+      gameplayMode: {
+        setMode: async (mode: string) => {
+          calls.push(`mode:${mode}`);
+        },
+      },
+    });
+
+    await viewModel.setGameplayMode('on');
+    expect(calls).toEqual([]);
+    await viewModel.setGameplayMode('shadow');
+    expect(calls).toEqual(['mode:shadow']);
   });
 });
 

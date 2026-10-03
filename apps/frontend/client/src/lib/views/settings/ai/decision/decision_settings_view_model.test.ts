@@ -245,8 +245,32 @@ const stubDecisions = (
   };
 };
 
-const buildViewModel = (config: DecisionSettingsConfigCapabilities, decisions = stubDecisions()) =>
-  createDecisionSettingsViewModel({ className: 'DecisionSettingsViewModel', config, decisions });
+/**
+ * A mode writer that records what the section asked for.
+ *
+ * Required because the section can no longer reach the mode through
+ * `DecisionBackendService`: doing so would make that service import the gameplay
+ * service to reach it, a static cycle that is a hard bundle-budget gate and
+ * threw a temporal-dead-zone error on boot.
+ */
+const stubModeWriter = (calls: string[] = []) => ({
+  setMode: async (mode: string) => {
+    calls.push(mode);
+  },
+  calls,
+});
+
+const buildViewModel = (
+  config: DecisionSettingsConfigCapabilities,
+  decisions = stubDecisions(),
+  gameplayMode = stubModeWriter(),
+) =>
+  createDecisionSettingsViewModel({
+    className: 'DecisionSettingsViewModel',
+    config,
+    decisions,
+    gameplayMode,
+  });
 
 // ── Dialog seam ──────────────────────────────────────────────────────────
 

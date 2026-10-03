@@ -121,6 +121,8 @@ class NpcActionDecisionService
   private _mode: NpcActionDecisionMode = 'off';
   /** Bumped on every configuration change; late results are dropped. */
   private _generation = 0;
+  /** Whether {@link hydrate} has run. Guards the lazy first read. */
+  private _hydrated = false;
 
   private readonly _caps: NpcActionDecisionCapabilities;
 
@@ -141,7 +143,18 @@ class NpcActionDecisionService
             // reason.
             backendDialect: dialectForBackend(backend),
           })),
-      readMode: injected.readMode ?? (() => this._caps.resolveBackend()?.gameplayMode),
+      // Read from canonical config, NOT through `decisionBackendService`.
+      //
+      // `decision_backend_service` imports THIS module (to own the mode), so
+      // routing this through `resolveBackend()` closes a cycle: the singleton
+      // below is constructed during module initialisation, and at that moment
+      // `decisionBackendService` is still in its temporal dead zone. Constructing
+      // then calling it threw `Cannot access 'decisionBackendService' before
+      // initialization` and blanked the whole app on boot.
+      //
+      // `configService` is the actual source of truth for the mode, and it has no
+      // path back here, so it is both cycle-free and more direct.
+      readMode: injected.readMode ?? (() => configService.resolveDecisionBackend()?.gameplayMode),
       persistMode:
         injected.persistMode ??
         (async (next) => {
@@ -155,10 +168,14 @@ class NpcActionDecisionService
           await configService.save();
         }),
     };
-    this.hydrate();
+    // Deliberately NOT hydrated here. The singleton is built during module
+    // initialisation, and reading any other service at that point makes
+    // construction order load-bearing. The first `mode()` or `qualification()`
+    // call hydrates instead — by then every module is initialised.
   }
 
   mode(): NpcActionDecisionMode {
+    this.hydrate();
     return this._mode;
   }
 
@@ -179,21 +196,36 @@ class NpcActionDecisionService
     }
     this._mode = next;
     this._generation += 1;
+    // The in-memory value is now authoritative; a later hydrate must not
+    // resurrect the pre-change value from config before the write lands.
+    this._hydrated = true;
     void this._caps.persistMode?.(next);
     this.info('npc action decision mode changed', { mode: next });
   }
 
   /**
-   * Restores the persisted mode at construction.
+   * Restores the persisted mode, once, on first use.
    *
    * Fail-closed: an absent or unreadable value leaves the service at `off`.
    * Starting at `on` because a read failed would turn a config problem into a
    * state-changing NPC action.
+   *
+   * Idempotent and guarded, because it is reachable from both `mode()` and
+   * `qualification()`, and because a read that throws must not wedge the service
+   * in a half-initialised state.
    */
   hydrate(): NpcActionDecisionMode {
-    const persisted = this._caps.readMode?.();
-    if (persisted === 'shadow' || persisted === 'on') {
-      this._mode = persisted;
+    if (this._hydrated) {
+      return this._mode;
+    }
+    this._hydrated = true;
+    try {
+      const persisted = this._caps.readMode?.();
+      if (persisted === 'shadow' || persisted === 'on') {
+        this._mode = persisted;
+      }
+    } catch (error) {
+      this.warn('npc action decision mode could not be restored; staying off', { error });
     }
     return this._mode;
   }
@@ -203,6 +235,7 @@ class NpcActionDecisionService
   }
 
   qualification(): NpcActionQualification {
+    this.hydrate();
     const backend = this._caps.resolveBackend();
     if (backend === undefined) {
       return UNQUALIFIED('no decision backend is configured');

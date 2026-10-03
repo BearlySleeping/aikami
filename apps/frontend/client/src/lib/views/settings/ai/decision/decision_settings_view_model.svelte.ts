@@ -90,9 +90,26 @@ export type DecisionSettingsConfigCapabilities = {
 };
 
 /** Options accepted by the ViewModel. */
+/**
+ * Writes the persisted gameplay mode.
+ *
+ * Injected rather than reached through `DecisionBackendService`, which was where
+ * this lived first. Routing it that way made the backend service import the
+ * gameplay service to reach it, and the gameplay service already imported the
+ * backend service — a static cycle, which is a hard bundle-budget gate AND threw
+ * `Cannot access 'decisionBackendService' before initialization` on boot. The
+ * mode belongs to the gameplay service; the settings section is only a control
+ * surface for it.
+ */
+export type DecisionGameplayModeWriter = {
+  setMode(mode: DecisionGameplayMode): Promise<void>;
+};
+
 export type DecisionSettingsViewModelOptions = BaseViewModelOptions & {
   readonly config: DecisionSettingsConfigCapabilities;
   readonly decisions: DecisionBackendServiceInterface;
+  /** Required: without it the section could render a mode it cannot set. */
+  readonly gameplayMode: DecisionGameplayModeWriter;
 };
 
 /** Public surface of the section. */
@@ -197,6 +214,7 @@ class DecisionSettingsViewModel
 
   private readonly _config: DecisionSettingsConfigCapabilities;
   private readonly _decisions: DecisionBackendServiceInterface;
+  private readonly _gameplayMode: DecisionGameplayModeWriter;
   private _draft = $state<DecisionDraft>(draftFor('jev-external'));
   private _lastOutcome = $state<DecisionTestOutcome | undefined>(undefined);
 
@@ -207,6 +225,7 @@ class DecisionSettingsViewModel
     super(options);
     this._config = options.config;
     this._decisions = options.decisions;
+    this._gameplayMode = options.gameplayMode;
   }
 
   override async initialize(): Promise<void> {
@@ -299,7 +318,7 @@ class DecisionSettingsViewModel
       });
       return;
     }
-    await this._decisions.setGameplayMode(mode);
+    await this._gameplayMode.setMode(mode);
   }
 
   get isTesting(): boolean {
