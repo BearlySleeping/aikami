@@ -89,7 +89,12 @@ const _readEngineState = async (page: Page): Promise<EngineState> =>
     if (!state || state.entityCount === undefined) {
       throw new Error('__AIKAMI_ENGINE_STATE__ not available — engine may not have started');
     }
-    return { entityCount: state.entityCount, npcCount: state.npcCount, cameraX: state.cameraX, cameraY: state.cameraY };
+    return {
+      entityCount: state.entityCount,
+      npcCount: state.npcCount,
+      cameraX: state.cameraX,
+      cameraY: state.cameraY,
+    };
   });
 
 /**
@@ -233,7 +238,10 @@ test.describe('Click-to-Move — production /game route', () => {
     const clickX = canvasBox.x + canvasBox.width / 2 + canvasBox.width * 0.12;
     const clickY = canvasBox.y + canvasBox.height / 2;
 
-    const before = { position: await _readPlayerPosition(page), state: await _readEngineState(page) };
+    const before = {
+      position: await _readPlayerPosition(page),
+      state: await _readEngineState(page),
+    };
     await page.mouse.click(clickX, clickY);
 
     // The player must actually displace toward the click…

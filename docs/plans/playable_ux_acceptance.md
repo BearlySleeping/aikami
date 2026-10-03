@@ -172,6 +172,40 @@ hardcoded an 800x600 / scale-4 / centre mapping the sandbox does not guarantee.
 Timeout failures throw with the last observed snapshot attached. No fixture was
 invented, no timeout widened, no skip added.
 
+## 8. Tutorial dismissal selector scoping (POM defect from the native-map probe)
+
+`EmberwatchHousePage.dismissTutorial()` used
+`getByRole('button', { name: /skip/i }).first()`. That pattern is **not scoped to
+the tutorial**:
+
+- the onboarding hint (the "tutorial") renders `aria-label="Skip tutorial"` in
+  `hud/onboarding_hint.svelte`;
+- the music player in the **same overlay layer** renders
+  `aria-label="Skip to similar song"` (`hud/music_player_overlay.svelte:97`),
+  and it is normally **disabled** because no track is playing.
+
+Once the first-run hint is gone, the loose match binds to the disabled music
+button, the click waits on a permanently disabled control, and the run dies on a
+30 s timeout unrelated to the tutorial (captured in
+`.evidence/engine-polish/baseline/map-probe.log`).
+
+Fix:
+
+- `onboarding_hint.svelte` gains `data-testid="onboarding-hint"` (additive DOM
+  hook, in scope).
+- `dismissTutorial()` now resolves
+  `getByTestId('onboarding-hint').getByRole('button', { name: 'Skip tutorial', exact: true })`.
+  An absent hint makes the scoped locator resolve immediately, so "later run"
+  stays a cheap no-op instead of a probe that waits.
+- New regression `apps/e2e/tests/game/emberwatch_house_pom.spec.ts` drives the
+  POM against HUD markup that contains **both** controls: with the hint absent
+  it must return `false` and leave the music control at zero clicks; with the
+  hint present it must click the tutorial skip exactly once and still never
+  touch the music control. The regression asserts on click counters, so it
+  fails if the selector ever widens again — no timeout is involved.
+
+Product labels were not changed to make the selector work.
+
 ---
 
 ## Execution report
@@ -185,6 +219,7 @@ Bun/Moon.
 | `bun moon run client:test-unit` | **4712 pass / 0 fail** (7 skip, 2 todo — all pre-existing) |
 | `bun moon run e2e:typecheck --force` | green |
 | `validate` (fix + typecheck + 10 structural guards) | green; `client:typecheck` svelte-check 0 errors |
+| `bun moon run e2e:test-game --force -- tests/game/emberwatch_house_pom.spec.ts` | **not run here** — DOM-only, but the lane's preflight would still start/purge services while another agent's capture is in flight. Ready for your run. |
 | cognitive-complexity guard | my release-gate edit first **grew** the worst function 36->39; extracting `assertPauseMenuKeyboardJourney` dropped it to **33**, locked via the sanctioned reduction-only `--update-baseline` |
 | `e2e:test-client` / `e2e:test-game` on the production route | **not run in this worktree** — see "Limitations" |
 
@@ -222,7 +257,8 @@ were left alone — this diff adds no overlapping styling or behaviour.
                                         tests/client/npc_identity_persistence.spec.ts \
                                         tests/client/game_page.spec.ts \
                                         tests/client/release_gate.spec.ts
-  bun moon run e2e:test-game   --force -- tests/game/click_to_move.spec.ts
+  bun moon run e2e:test-game   --force -- tests/game/click_to_move.spec.ts \
+                                         tests/game/emberwatch_house_pom.spec.ts
   ```
 
   The POM/spec changes are therefore verified by typecheck + lint only; the
