@@ -30,7 +30,12 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { buildNpcActionDecisionContext } from '@aikami/frontend/ai-gateway/decision/tasks';
 import type { ContentPackManifest } from '@aikami/types';
-import { NPC_ACTION_SELECTION_SPLITS } from '../../../../../frontend/ai-gateway/src/lib/decision/tasks/npc_action_corpus.ts';
+// Seven levels up reaches the repository root from
+// `apps/frontend/client/src/lib/services/game/`, then into the decision package.
+// Imported by path rather than through the barrel on purpose: the corpus is
+// 91 KB of authored persona and exchange text, and keeping it off the barrel is
+// exactly what keeps it out of the shipped client bundle.
+import { NPC_ACTION_SELECTION_SPLITS } from '../../../../../../../packages/frontend/ai-gateway/src/lib/decision/tasks/npc_action_corpus.ts';
 import { buildNpcPersona } from './npc_dialogue_persona.ts';
 
 /** The real Emberwatch manifest — the same file the generator reads. */
