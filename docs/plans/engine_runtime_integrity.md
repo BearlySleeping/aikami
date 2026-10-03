@@ -159,7 +159,7 @@ settle a pending request are still forwarded, so the boot/restore
 
 ## Verification actually run
 
-- `bun moon run frontend-engine:test` — **1954 pass / 0 fail** (127 files).
+- `bun moon run frontend-engine:test` — **1962 pass / 0 fail** (128 files).
 - `bun moon run frontend-engine:typecheck` — clean.
 - `moon_detect_affected` → `frontend-engine`.
 - `validate` (fix + typecheck + structural guards) — clean after the
