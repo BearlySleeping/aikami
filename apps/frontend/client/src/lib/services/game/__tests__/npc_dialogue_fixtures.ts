@@ -210,6 +210,22 @@ export const expectAbortRejection = async (promise: Promise<unknown>): Promise<v
  */
 export const resetDialogueServiceFixture = (): void => {
   questStateService.getDiscoverableEvidence = () => [];
+  // C-568: `offerQuest` is authorized against `getOfferableQuests(npcId)` —
+  // ownership AND current offerability — not merely "does this quest exist".
+  // Without this stub the quest service has no pack loader, returns an empty
+  // list, and every `offerQuest` in every dialogue suite is refused, which
+  // reads as a broken precondition rather than an unconfigured fixture.
+  //
+  // Derived from the same fixture pack the content provider serves, so the
+  // quest an NPC may offer here is the one the pack says they own.
+  questStateService.getOfferableQuests = (npcId: string) =>
+    makeContentProvider()
+      .getAllQuests()
+      .filter((quest) => {
+        const owner = (quest as { offeredByNpcId?: string }).offeredByNpcId;
+        return owner === undefined || owner === npcId;
+      })
+      .map((quest) => ({ id: quest.id, name: quest.name }));
   // The service resolves dialogue against the active campaign; pin a stable
   // one (individual tests may override this).
   Object.defineProperty(campaignService, 'activeCampaign', {
