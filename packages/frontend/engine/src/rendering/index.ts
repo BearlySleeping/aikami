@@ -33,6 +33,7 @@ export {
   resolveLpcSheetGeometry,
 } from './lpc_sheet_geometry.ts';
 export { initLpcShaders, packRecipeToUboBuffer, SpriteComposer } from './sprite_composer.ts';
+export { type SpritesheetLease, SpritesheetRegistry } from './spritesheet_registry.ts';
 export { installNearestTextureDefault } from './texture_defaults.ts';
 export type { LpcAtlasData, TextureManagerConfig } from './texture_manager.ts';
 export {

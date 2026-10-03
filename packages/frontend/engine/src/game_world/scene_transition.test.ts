@@ -756,6 +756,47 @@ describe('SceneTransitionRunner — the checkpoint is the recovery', () => {
     expect(harness.emitted[0]).toContain('Map load failed');
   });
 
+  test('a snapshot failure is transient: the world is untouched and a retry succeeds', async () => {
+    // Fail-closed is only acceptable if it is also recoverable: the old world
+    // must be exactly as it was, and the NEXT switch must go through.
+    let captures = 0;
+    const harness = createSceneTransitionHarness({
+      captureCheckpoint: async () => {
+        captures++;
+        if (captures === 2) {
+          return undefined;
+        }
+        return JSON.stringify(harness.world);
+      },
+    });
+    await harness.runner.load(makeLoadOptions({ mapUrl: 'maps:first.json' }));
+    playForAWhile(harness);
+    harness.emitted.length = 0;
+
+    await expect(
+      harness.runner.load(makeLoadOptions({ mapUrl: 'maps:second.json' })),
+    ).rejects.toThrow(/world state/i);
+
+    // Nothing was destroyed: same world, same camera seed, same state.
+    expect(harness.state.resetCount).toBe(1);
+    expect(harness.state.running).toBe(true);
+    expect(harness.state.inputLocked).toBe(false);
+    expect(harness.world).toEqual({
+      playerX: 512,
+      playerY: 640,
+      playerHealth: 37,
+      equipped: 'ember-blade',
+      npcMood: 'furious',
+      loadCount: 1,
+    });
+
+    // Retry: the same switch now succeeds and leaves the world consistent.
+    await harness.runner.load(makeLoadOptions({ mapUrl: 'maps:second.json' }));
+    expect(harness.emitted.filter((event) => event.startsWith('MAP_LOADED'))).toHaveLength(1);
+    expect(harness.state.inputLocked).toBe(false);
+    expect(harness.world.loadCount).toBe(2);
+  });
+
   test('a failed checkpoint restore holds the engine locked rather than faking progress', async () => {
     const { harness, arm } = harnessAfterCommit('restore');
     await harness.runner.load(makeLoadOptions({ mapUrl: 'maps:first.json' }));

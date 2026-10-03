@@ -4,6 +4,15 @@ import { describe, expect, test } from 'bun:test';
 import { Rectangle, Spritesheet, Texture } from 'pixi.js';
 import { type SpritesheetLease, SpritesheetRegistry } from './spritesheet_registry.ts';
 
+/** A parse whose resolution the test controls. */
+const deferred = <T>(): { promise: Promise<T>; resolve: (value: T) => void } => {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+};
+
 const ATLAS = {
   frames: {
     // biome-ignore lint/style/useNamingConvention: spritesheet frame labels are snake_case
@@ -265,5 +274,68 @@ describe('SpritesheetRegistry — leases pin sheets', () => {
       expect(frame.frame.x).toBe(8);
       expect(frame.frame instanceof Rectangle).toBe(true);
     });
+  });
+});
+
+describe('SpritesheetRegistry — concurrent destroy during parse', () => {
+  test('two holders of one unpooled sheet destroy it exactly once', async () => {
+    // destroy() mid-parse leaves concurrent acquirers holding the SAME sheet
+    // outside the pool. Releasing both must not double-destroy it.
+    const registry = new SpritesheetRegistry();
+    const gate = deferred<Spritesheet>();
+    const create = (): Promise<Spritesheet> => gate.promise;
+
+    const first = registry.acquire({ cacheKey: 'orphan', create });
+    const second = registry.acquire({ cacheKey: 'orphan', create });
+    await Promise.resolve();
+
+    registry.destroy();
+    gate.resolve(await makeSheet());
+
+    const [a, b] = await Promise.all([first, second]);
+    expect(a.spritesheet).toBe(b.spritesheet);
+    expect(registry.count).toBe(0);
+    expect(registry.orphanCount).toBe(1);
+
+    const sheet = a.spritesheet;
+    let destroyCalls = 0;
+    const originalDestroy = sheet.destroy.bind(sheet);
+    sheet.destroy = (destroyBase?: boolean): void => {
+      destroyCalls++;
+      originalDestroy(destroyBase);
+    };
+
+    a.release();
+    // The other holder still has it: nothing is destroyed yet.
+    expect(destroyCalls).toBe(0);
+    expect(sheet.textures).not.toBeNull();
+
+    b.release();
+    // Last holder out frees it — once.
+    expect(destroyCalls).toBe(1);
+    expect(sheet.textures).toBeNull();
+    expect(registry.orphanCount).toBe(0);
+  });
+
+  test('a double release of an orphan still destroys only once', async () => {
+    const registry = new SpritesheetRegistry();
+    const gate = deferred<Spritesheet>();
+    const leasePromise = registry.acquire({ cacheKey: 'orphan', create: () => gate.promise });
+    await Promise.resolve();
+    registry.destroy();
+    gate.resolve(await makeSheet());
+
+    const lease = await leasePromise;
+    let destroyCalls = 0;
+    const originalDestroy = lease.spritesheet.destroy.bind(lease.spritesheet);
+    lease.spritesheet.destroy = (destroyBase?: boolean): void => {
+      destroyCalls++;
+      originalDestroy(destroyBase);
+    };
+
+    lease.release();
+    lease.release();
+    expect(destroyCalls).toBe(1);
+    expect(lease.spritesheet.textures).toBeNull();
   });
 });

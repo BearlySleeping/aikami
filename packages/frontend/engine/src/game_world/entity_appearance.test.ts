@@ -50,6 +50,38 @@ const makeLoader = (options?: { failUrl?: string; unmapped?: boolean }): Harness
   return harness;
 };
 
+/** A loader backed by a real TextureManager, so leases are really taken. */
+const makeLeaseHarness = (): { loader: EntityAppearanceLoader; manager: TextureManager } => {
+  const manager = new TextureManager();
+  const loader = new EntityAppearanceLoader({
+    resolveAssetUrl: (_slot, assetId) => `/assets/${assetId}.png`,
+    loadTexture: async () => makeTexture(),
+    textureManager: manager,
+  });
+  return { loader, manager };
+};
+
+/**
+ * Churns `count` extra leases through the manager and releases them, forcing
+ * eviction to settle inside the 128-sheet budget. Any sheet still pinned by a
+ * leaked lease survives this as an over-budget entry.
+ */
+const churnPastBudget = async (manager: TextureManager, prefix: string): Promise<void> => {
+  const held = [];
+  for (let i = 0; i < 140; i++) {
+    held.push(
+      await manager.acquireSpritesheet({
+        baseTexture: Texture.WHITE,
+        layout: { frameWidth: 8, frameHeight: 8, columns: 2, rows: 1 },
+        cacheKey: `${prefix}-${i}`,
+      }),
+    );
+  }
+  for (const lease of held) {
+    lease.release();
+  }
+};
+
 describe('EntityAppearanceLoader — prepare', () => {
   test('loads layers off-scene without touching a live container', async () => {
     const { loader } = makeLoader();
@@ -153,17 +185,6 @@ describe('EntityAppearanceLoader — commit and dispose', () => {
 });
 
 describe('EntityAppearanceLoader — spritesheet lease lifetime', () => {
-  /** A loader backed by a real TextureManager, so leases are really taken. */
-  const makeLeaseHarness = (): { loader: EntityAppearanceLoader; manager: TextureManager } => {
-    const manager = new TextureManager();
-    const loader = new EntityAppearanceLoader({
-      resolveAssetUrl: (_slot, assetId) => `/assets/${assetId}.png`,
-      loadTexture: async () => makeTexture(),
-      textureManager: manager,
-    });
-    return { loader, manager };
-  };
-
   test('a prepared layer pins its sheet and disposePrepared gives the pin back', async () => {
     const harness = makeLeaseHarness();
     const prepared = await harness.loader.prepare({
@@ -230,5 +251,57 @@ describe('EntityAppearanceLoader — spritesheet lease lifetime', () => {
 
     // Idempotent: the second dispose must not double-release a pin.
     expect(manager.spritesheetCount).toBe(1);
+  });
+});
+
+describe('EntityAppearanceLoader — lease lifetime follows the sprite', () => {
+  test('destroying a sprite releases its sheet without going through the loader', async () => {
+    // The teardown that matters: a scene surface reset or a world restore
+    // destroys display objects directly. A pin stranded there would make the
+    // sheet permanently unevictable.
+    const { loader, manager } = makeLeaseHarness();
+    const prepared = await loader.prepare({ recipes: [recipe('body', 'body.1')], state: 'walk' });
+    const sprite = prepared.layers[0]?.sprite;
+
+    expect(manager.spritesheetCount).toBe(1);
+
+    sprite?.destroy({ children: true });
+
+    await churnPastBudget(manager, 'churn');
+    expect(manager.spritesheetCount).toBeLessThanOrEqual(128);
+  });
+
+  test('repeated map/entity cycles do not ratchet the pin count up', async () => {
+    // The plateau test: every cycle acquires, commits and then has its live
+    // display objects destroyed by a scene reset. One leaked pin per cycle
+    // would show up as a growing cache that refuses to shrink.
+    const { loader, manager } = makeLeaseHarness();
+
+    for (let cycle = 0; cycle < 10; cycle++) {
+      const target = new Container();
+      const prepared = await loader.prepare({
+        recipes: [recipe('body', `body-${cycle}`)],
+        state: 'walk',
+      });
+      loader.commit({ target, prepared });
+      target.destroy({ children: true });
+    }
+
+    // Every cycle's sheet was released, so nothing survives the churn.
+    await churnPastBudget(manager, 'plateau');
+    expect(manager.spritesheetCount).toBeLessThanOrEqual(128);
+  });
+
+  test('a stale prepare whose sprites are destroyed still releases its pin', async () => {
+    // A load that is superseded after staging: nobody commits it and nobody
+    // calls disposePrepared — the staged sprites are simply destroyed.
+    const { loader, manager } = makeLeaseHarness();
+    const prepared = await loader.prepare({ recipes: [recipe('body', 'stale.1')], state: 'walk' });
+
+    expect(manager.spritesheetCount).toBe(1);
+    prepared.container.destroy({ children: true });
+
+    await churnPastBudget(manager, 'stale');
+    expect(manager.spritesheetCount).toBeLessThanOrEqual(128);
   });
 });

@@ -117,12 +117,6 @@ export class EntityAppearanceLoader {
   private readonly _textureManager: TextureManager | undefined;
   private readonly _loadTexture: (url: string) => Promise<Texture>;
   private readonly _onLoadError: ((info: { url: string; error: string }) => void) | undefined;
-  /**
-   * Sprite → the release that ends that sprite's spritesheet pin. Weak, so a
-   * sprite that is destroyed without going through `commit` cannot keep its
-   * release alive; `disposePrepared` is the explicit path for that case.
-   */
-  private readonly _sheetReleases = new WeakMap<Container, () => void>();
 
   constructor(options: EntityAppearanceLoaderOptions) {
     this._resolveAssetUrl = options.resolveAssetUrl;
@@ -233,7 +227,6 @@ export class EntityAppearanceLoader {
   commit(options: { target: Container; prepared: PreparedAppearance }): void {
     const stale = options.target.removeChildren();
     for (const child of stale) {
-      this._releaseSpriteSheet(child);
       child.destroy();
     }
     for (const layer of options.prepared.layers) {
@@ -257,17 +250,19 @@ export class EntityAppearanceLoader {
   }
 
   /**
-   * Releases the spritesheet lease a destroyed sprite was holding. Keyed by
-   * sprite identity so a replaced child can give its pin back even though the
-   * layer object that acquired it is long gone.
+   * Binds a spritesheet lease to the sprite's DESTROY LIFECYCLE.
+   *
+   * Not a bookkeeping table keyed by sprite identity: a `WeakMap` entry dies
+   * with its key without ever running its closure, so every teardown that
+   * destroys display objects directly — a scene surface reset, a world
+   * restore clearing render entries, world destroy — would strand the pin
+   * forever and make the sheet permanently unevictable. Listening to Pixi's
+   * own `destroyed` event means every path releases, whether it goes through
+   * this loader or not. The registry's `release` is idempotent, so the
+   * explicit `disposePrepared` release and this listener can both fire.
    */
-  private _releaseSpriteSheet(sprite: Container): void {
-    const release = this._sheetReleases.get(sprite);
-    if (!release) {
-      return;
-    }
-    this._sheetReleases.delete(sprite);
-    release();
+  private _bindSheetToLifetime(sprite: Sprite, release: () => void): void {
+    sprite.once('destroyed', release);
   }
 
   private async _loadLayer(
@@ -282,6 +277,10 @@ export class EntityAppearanceLoader {
       return undefined;
     }
 
+    // Declared outside the try so the failure path can release a pin taken
+    // before whatever threw.
+    let releaseSheet: (() => void) | undefined;
+
     try {
       const texture = await this._loadTexture(url);
       texture.source.scaleMode = 'nearest';
@@ -293,7 +292,6 @@ export class EntityAppearanceLoader {
       // The lease is held for this layer's whole life: eviction nulls
       // `sheet.textures`, which the per-frame path reads.
       let spritesheet: Spritesheet | undefined;
-      let releaseSheet: (() => void) | undefined;
       if (this._textureManager && geometry.columns > 0 && geometry.rows > 0) {
         const lease = await this._textureManager.acquireSpritesheet({
           baseTexture: texture,
@@ -311,9 +309,11 @@ export class EntityAppearanceLoader {
       }
 
       const sprite = new Sprite(Texture.WHITE);
-      this._sheetReleases.set(sprite, () => {
-        releaseSheet?.();
-      });
+      // Bind BEFORE the awaits that follow: if any of them throws, the catch
+      // below returns `undefined` and the sprite must still give its pin back.
+      if (releaseSheet) {
+        this._bindSheetToLifetime(sprite, releaseSheet);
+      }
       sprite.eventMode = 'none';
       // C-428: anchor the logical body. Feet are at bottom-center for the
       // standard 64px cell; oversize 128px cells center the body, so feet sit
@@ -341,6 +341,9 @@ export class EntityAppearanceLoader {
 
       return { sprite, recipe, texture, spritesheet, definition, releaseSheet };
     } catch (error) {
+      // A lease taken before the failure is a permanent pin unless released
+      // here: this layer never reaches `commit`/`disposePrepared`.
+      releaseSheet?.();
       this._onLoadError?.({ url, error: String(error) });
       return undefined;
     }

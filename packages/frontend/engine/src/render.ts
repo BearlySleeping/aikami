@@ -79,9 +79,10 @@ export {
   packRecipeToUboBuffer,
   SpriteComposer,
 } from './rendering/sprite_composer.ts';
+// Texture manager
+export type { SpritesheetLease } from './rendering/spritesheet_registry.ts';
 // Texture defaults
 export { installNearestTextureDefault } from './rendering/texture_defaults.ts';
-// Texture manager
 export type { TextureManagerConfig } from './rendering/texture_manager.ts';
 export { TextureManager } from './rendering/texture_manager.ts';
 // Tilemap chunk renderer

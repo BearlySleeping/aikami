@@ -6,11 +6,14 @@
 // via Assets.load() + Spritesheet.parse(), then swaps in the correctly
 // cropped frame once the GPU texture is ready.
 
-import type { LpcBatchManager, TextureManager } from '@aikami/frontend/engine/render';
+import type {
+  LpcBatchManager,
+  SpritesheetLease,
+  TextureManager,
+} from '@aikami/frontend/engine/render';
 import type { LpcLayerRecipe } from '@aikami/frontend/engine/sim';
 import type { LpcAnimationState, LpcDirection } from '@aikami/lpc';
-// biome-ignore lint/correctness/noUnusedImports: Spritesheet type used in Svelte template
-import { Assets, Sprite, type Spritesheet, Texture } from 'pixi.js';
+import { Assets, Sprite } from 'pixi.js';
 import { getContext, onDestroy } from 'svelte';
 import { LPC_BATCH_MANAGER_KEY, LPC_STAGE_CONTAINER_KEY } from './lpc_context_keys.ts';
 
@@ -59,8 +62,29 @@ let loading = $state(true);
 // Internal pixi display object (set after async load completes).
 let displaySprite: Sprite | undefined = $state(undefined);
 
-// Per-layer Spritesheet cache — one parsed sheet per URL.
-let layerSpritesheets: Map<string, Spritesheet> = $state(new Map());
+// Per-layer sheet LEASES — one per URL. A lease pins the sheet in the shared
+// registry for as long as this component animates from it, and `release()`
+// gives the pin back. The sheet itself is owned by the registry (and by
+// PixiJS' asset cache underneath): this component must never destroy it.
+let sheetLeases: Map<string, SpritesheetLease> = $state(new Map());
+
+// Monotonic cycle counter. Every async continuation checks it, so a load that
+// was superseded mid-flight releases its own lease instead of resurrecting a
+// sheet into the next cycle's map.
+let loadCycle = 0;
+
+/** Releases every held lease and drops the display sprite. */
+const releaseSheets = (): void => {
+  for (const lease of sheetLeases.values()) {
+    lease.release();
+  }
+  sheetLeases = new Map();
+  displaySprite?.destroy();
+  displaySprite = undefined;
+};
+
+/** True when `cycle` is no longer the current load cycle. */
+const isStaleCycle = (cycle: number): boolean => cycle !== loadCycle;
 
 /**
  * Loads LPC layer textures and creates cached Spritesheets for
@@ -81,17 +105,16 @@ $effect(() => {
   const currentResolver = assetUrlResolver;
   const currentTextureManager = textureManager;
 
+  const cycle = ++loadCycle;
   loading = true;
 
   void (async () => {
     try {
       const stateStr = 'walk';
 
-      // Clear previous spritesheet cache
-      for (const sheet of layerSpritesheets.values()) {
-        sheet.destroy();
-      }
-      layerSpritesheets = new Map();
+      // Previous cycle's pins go back to the registry before new ones are
+      // taken, so repeated cycles cannot ratchet the pin count up.
+      releaseSheets();
 
       const loadPromises = currentRecipes.map(async (recipe) => {
         if (!recipe.assetId || !currentResolver) {
@@ -107,34 +130,46 @@ $effect(() => {
           const texture = await Assets.load(url);
           texture.source.scaleMode = 'nearest';
 
-          // Create cached Spritesheet when TextureManager is available
-          if (currentTextureManager) {
-            const columns = Math.floor(texture.width / 64);
-            const rows = Math.floor(texture.height / 64);
-            if (columns > 0 && rows > 0) {
-              const spritesheet = await currentTextureManager.getOrCreateSpritesheet({
-                baseTexture: texture,
-                layout: {
-                  frameWidth: 64,
-                  frameHeight: 64,
-                  columns,
-                  rows,
-                  keyPrefix: stateStr,
-                },
-                cacheKey: url,
-              });
-              layerSpritesheets.set(url, spritesheet);
+          if (!currentTextureManager) {
+            return;
+          }
 
-              // Set initial frame (idle = frame 0, down direction)
-              const idleFrame = spritesheet.textures.walk_2_0;
-              if (idleFrame && !displaySprite) {
-                const sprite = new Sprite(idleFrame);
-                sprite.eventMode = 'none';
-                sprite.x = x;
-                sprite.y = y;
-                displaySprite = sprite;
-              }
-            }
+          const columns = Math.floor(texture.width / 64);
+          const rows = Math.floor(texture.height / 64);
+          if (columns <= 0 || rows <= 0) {
+            return;
+          }
+
+          const lease = await currentTextureManager.acquireSpritesheet({
+            baseTexture: texture,
+            layout: {
+              frameWidth: 64,
+              frameHeight: 64,
+              columns,
+              rows,
+              keyPrefix: stateStr,
+            },
+            cacheKey: url,
+          });
+
+          // The cycle may have been superseded while the sheet was parsing.
+          // Releasing here is what stops a late lease from pinning a sheet
+          // nobody will ever animate from.
+          if (isStaleCycle(cycle)) {
+            lease.release();
+            return;
+          }
+
+          sheetLeases.set(url, lease);
+
+          // Set initial frame (idle = frame 0, down direction)
+          const idleFrame = lease.spritesheet.textures.walk_2_0;
+          if (idleFrame && !displaySprite) {
+            const sprite = new Sprite(idleFrame);
+            sprite.eventMode = 'none';
+            sprite.x = x;
+            sprite.y = y;
+            displaySprite = sprite;
           }
         } catch {
           // Silently skip failed loads — placeholder remains visible.
@@ -143,26 +178,24 @@ $effect(() => {
 
       await Promise.all(loadPromises);
     } finally {
-      loading = false;
+      // A superseded cycle must not clear the flag of the live one.
+      if (!isStaleCycle(cycle)) {
+        loading = false;
+      }
     }
   })();
 
-  // Cleanup on recipe change or unmount
+  // Cleanup on recipe change or unmount.
   return () => {
-    for (const sheet of layerSpritesheets.values()) {
-      sheet.destroy();
-    }
-    layerSpritesheets = new Map();
-    displaySprite = undefined;
+    loadCycle++;
+    releaseSheets();
     loading = true;
   };
 });
 
 onDestroy(() => {
-  for (const sheet of layerSpritesheets.values()) {
-    sheet.destroy();
-  }
-  layerSpritesheets = new Map();
+  loadCycle++;
+  releaseSheets();
 });
 </script>
 
@@ -172,5 +205,5 @@ onDestroy(() => {
   class="absolute pointer-events-none opacity-0 w-0 h-0 overflow-hidden"
   aria-hidden="true"
   data-loading={loading}
-  data-spritesheet-count={layerSpritesheets.size}
+  data-spritesheet-count={sheetLeases.size}
 ></div>

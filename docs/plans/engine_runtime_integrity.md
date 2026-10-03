@@ -118,10 +118,22 @@ memory claim is made for this change.
 New `SpritesheetRegistry` (`rendering/spritesheet_registry.ts`). Consumers take
 a **lease**; eviction only ever considers unleased sheets, so a live actor can
 never be FIFO-evicted out from under `layer.spritesheet.textures[…]`.
-`EntityAppearanceLoader` acquires the lease per layer and gives it back on
-`disposePrepared` and when `commit` replaces a child (tracked by sprite
-identity in a `WeakMap`). `destroy()` retires leased sheets and frees them when
-the last lease drops.
+`EntityAppearanceLoader` acquires the lease per layer and binds it to the
+sprite's **PixiJS `destroyed` event** (`entity_appearance.ts:_bindSheetToLifetime`).
+That is the only binding that actually holds: a `WeakMap<Sprite, release>`
+looked right and leaked, because a collected key never runs its closure — so
+every teardown that destroys display objects directly (scene surface reset,
+world restore clearing render entries, world destroy) stranded its pin forever
+and made the sheet permanently unevictable. Any destruction path now releases,
+including ones that never touch this loader. `release()` is idempotent, so the
+explicit `disposePrepared` release and the lifecycle listener can both fire.
+A failure after the lease is taken releases in the `catch` — that layer never
+reaches `commit`/`disposePrepared` and would otherwise pin forever.
+
+`destroy()` retires leased sheets and frees them when the last lease drops.
+A parse in flight when the registry is destroyed hands its sheet out
+**unpooled**, and holders of that same sheet are counted (`SpritesheetRegistry._orphanLease`)
+so concurrent acquirers destroy it exactly once between them, not once each.
 
 `Spritesheet.destroy()` is called with `destroyBase = false`: the base texture
 is `Assets.load`-owned and shared with the texture caches, so the registry
@@ -182,6 +194,20 @@ read only by tests), so exporting one would be an orphaned public API. The
 per-key estimate and its eviction use are unchanged and honest for what they
 measure — cached textures, not GPU sources.
 
+### 5b. Client consumer of the same API
+
+`apps/frontend/client/src/lib/components/game/lpc_character_renderer.svelte`
+acquired sheets through the old unpinned accessor **and called
+`sheet.destroy()` itself** in its effect cleanup and `onDestroy`. That destroys
+a registry-owned sheet: `textures` becomes `null` while the registry still
+lists the key alive, so a later `acquire` for that key returns a dead sheet —
+precisely the `TypeError` the registry exists to prevent.
+
+It now acquires leases, never destroys a sheet, releases on effect cleanup and
+`onDestroy`, destroys only its own `displaySprite`, and carries a monotonic
+`loadCycle` so a load superseded mid-parse **releases its own lease** instead
+of resurrecting a sheet into the next cycle's map.
+
 ### 6. Worker session — stale replies stop at the boundary
 
 A terminal reply whose `requestId` no longer has a pending request is stale by
@@ -207,7 +233,7 @@ settle a pending request are still forwarded, so the boot/restore
 
 ## Verification actually run
 
-- `bun moon run frontend-engine:test` — **1983 pass / 0 fail** (132 files).
+- `bun moon run frontend-engine:test` — **1992 pass / 0 fail** (132 files).
 - `bun moon run frontend-engine:typecheck` — clean.
 - `moon_detect_affected` → `frontend-engine`.
 - `validate` (fix + typecheck + structural guards) — clean after the
@@ -222,6 +248,43 @@ for the full suite.
 **Not run here (captain owns integration evidence):** Playwright / E2E, dev
 servers, production WebGL capture. No production-path claim in this report
 rests on an unexecuted run.
+
+## The checkpoint: why fail-closed is the right trade
+
+A reviewer argued the mandatory checkpoint is itself a blocker, because one
+`REQUEST_SNAPSHOT` timeout would permanently block every zone crossing. The
+checkpoint is kept; what changed is that the claim is now **tested and
+measured** rather than asserted.
+
+**Proved by test** (`scene_transition.test.ts` — "a snapshot failure is
+transient"): when the capture fails, `resetCount` stays at its pre-switch
+value, the engine is running and unlocked, the world is byte-for-byte the one
+the player was in (position, health, equipment, NPC state, load count), and
+the **next switch succeeds**. So the failure mode is "this crossing is
+refused", not "the game is bricked".
+
+**Measured** — `serializeWorld` pre-pass, 5 runs after a warm-up, median:
+
+| entities | median ms |
+|---|---|
+| 100 | 0.10 |
+| 1 000 | 0.84 |
+| 5 000 | 3.59 |
+| 10 000 | 7.51 |
+
+Method caveat, stated rather than hidden: the harness entities carried no
+persistent slice, so these numbers are the `hasPersistentData` scan — a **lower
+bound**; the JSON payload adds a proportional amount on top. The scan is
+synchronous inside the simulation worker, so it pauses the sim for that
+duration once per zone crossing. The main thread's added cost is one
+`postMessage` round-trip.
+
+**Known limitation:** the checkpoint does not cover main-thread-only state
+(camera VFX, overlay state). That is restored by the scene replay instead.
+And on the `_holdLocked` path the worker may still be holding the abandoned
+map behind an empty surface — the player is told to reload, which is the only
+outward signal that the session is not consistent. A future change could
+terminate the worker there; it was left out of this pass deliberately.
 
 ## Known limitations
 

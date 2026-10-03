@@ -58,6 +58,13 @@ const destroySheet = (sheet: Spritesheet): void => {
 export class SpritesheetRegistry {
   private readonly _entries = new Map<string, SheetEntry>();
   private readonly _pending = createDeferredLoadRegistry<string, Spritesheet>();
+  /**
+   * Unpooled sheets handed to holders after the registry was destroyed, with
+   * the number of holders sharing each one. A single parse can be observed by
+   * several concurrent acquirers; without counting, the first release would
+   * destroy a sheet the others are still holding.
+   */
+  private readonly _orphans = new Map<Spritesheet, number>();
   private readonly _maxEntries: number;
   private _tick = 0;
   private _destroyed = false;
@@ -110,7 +117,7 @@ export class SpritesheetRegistry {
     // have inserted first, and after `destroy()` nothing is inserted at all.
     const entry = this._entries.get(options.cacheKey);
     if (!entry || entry.retired) {
-      return { spritesheet: created, release: () => destroySheet(created) };
+      return this._orphanLease(created);
     }
     const lease = this._lease(entry);
     // Evict AFTER the lease exists: a fresh entry starts unpinned, so
@@ -139,6 +146,38 @@ export class SpritesheetRegistry {
       destroySheet(entry.sheet);
       this._entries.delete(key);
     }
+  }
+
+  /** Number of unpooled sheets currently handed out (diagnostics/tests). */
+  get orphanCount(): number {
+    return this._orphans.size;
+  }
+
+  /**
+   * Hands out a sheet that is no longer pooled (the registry was destroyed
+   * mid-parse). Holders are counted so the sheet is destroyed exactly once,
+   * by the LAST of them — never twice on the same object.
+   */
+  private _orphanLease(sheet: Spritesheet): SpritesheetLease {
+    this._orphans.set(sheet, (this._orphans.get(sheet) ?? 0) + 1);
+
+    let released = false;
+    return {
+      spritesheet: sheet,
+      release: () => {
+        if (released) {
+          return;
+        }
+        released = true;
+        const holders = (this._orphans.get(sheet) ?? 1) - 1;
+        if (holders <= 0) {
+          this._orphans.delete(sheet);
+          destroySheet(sheet);
+          return;
+        }
+        this._orphans.set(sheet, holders);
+      },
+    };
   }
 
   /** Registers a freshly parsed sheet as the cache entry for `key`. */
