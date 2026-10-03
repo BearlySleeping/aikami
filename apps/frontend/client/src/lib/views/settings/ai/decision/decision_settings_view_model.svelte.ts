@@ -25,10 +25,12 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services/base';
-import type { AiConnection, AiProvider } from '@aikami/types';
+import type { AiConnection, AiProvider, DecisionGameplayMode } from '@aikami/types';
 import type { ConnectionCapability } from '$types';
+import { decisionGameplayModeOptions } from '../../../../services/ai/decision/decision_backend_logic';
 import type {
   DecisionBackendSummary,
+  DecisionGameplayModeOption,
   DecisionGameplayRouting,
   DecisionTestOutcome,
 } from '../../../../services/ai/decision/types';
@@ -76,7 +78,8 @@ export type DecisionSettingsConfigCapabilities = {
     model: string;
     params: {
       checkpoint: string;
-      runtime: 'ollama' | 'jev';
+      /** Mirrors the registry's runtime kind, including native `llamacpp`. */
+      runtime: 'ollama' | 'jev' | 'llamacpp';
       languages?: ('en' | 'multi')[];
       qualifiedForGameplay?: boolean;
     };
@@ -87,9 +90,26 @@ export type DecisionSettingsConfigCapabilities = {
 };
 
 /** Options accepted by the ViewModel. */
+/**
+ * Writes the persisted gameplay mode.
+ *
+ * Injected rather than reached through `DecisionBackendService`, which was where
+ * this lived first. Routing it that way made the backend service import the
+ * gameplay service to reach it, and the gameplay service already imported the
+ * backend service — a static cycle, which is a hard bundle-budget gate AND threw
+ * `Cannot access 'decisionBackendService' before initialization` on boot. The
+ * mode belongs to the gameplay service; the settings section is only a control
+ * surface for it.
+ */
+export type DecisionGameplayModeWriter = {
+  setMode(mode: DecisionGameplayMode): Promise<void>;
+};
+
 export type DecisionSettingsViewModelOptions = BaseViewModelOptions & {
   readonly config: DecisionSettingsConfigCapabilities;
   readonly decisions: DecisionBackendServiceInterface;
+  /** Required: without it the section could render a mode it cannot set. */
+  readonly gameplayMode: DecisionGameplayModeWriter;
 };
 
 /** Public surface of the section. */
@@ -133,6 +153,8 @@ export type DecisionSettingsViewModelInterface = BaseViewModelInterface & {
     readonly badgeClass: string;
     readonly qualificationLabel: string;
   })[];
+  /** Persisted Off/Shadow/On rows, each with whether it would take effect. */
+  readonly gameplayModeOptions: readonly DecisionGameplayModeOption[];
   toggleDocs(): void;
   toggleCredential(): void;
   setProvider(registryId: string): void;
@@ -142,6 +164,8 @@ export type DecisionSettingsViewModelInterface = BaseViewModelInterface & {
   save(): Promise<void>;
   test(): Promise<void>;
   disable(): Promise<void>;
+  /** Switches the persisted gameplay mode. Refuses a mode that would not apply. */
+  setGameplayMode(mode: DecisionGameplayMode): Promise<void>;
   reset(): void;
 };
 
@@ -190,6 +214,7 @@ class DecisionSettingsViewModel
 
   private readonly _config: DecisionSettingsConfigCapabilities;
   private readonly _decisions: DecisionBackendServiceInterface;
+  private readonly _gameplayMode: DecisionGameplayModeWriter;
   private _draft = $state<DecisionDraft>(draftFor('jev-external'));
   private _lastOutcome = $state<DecisionTestOutcome | undefined>(undefined);
 
@@ -200,6 +225,7 @@ class DecisionSettingsViewModel
     super(options);
     this._config = options.config;
     this._decisions = options.decisions;
+    this._gameplayMode = options.gameplayMode;
   }
 
   override async initialize(): Promise<void> {
@@ -265,6 +291,34 @@ class DecisionSettingsViewModel
 
   get gameplayRouting(): DecisionGameplayRouting {
     return this._decisions.gameplayRouting();
+  }
+
+  get gameplayModeOptions(): readonly DecisionGameplayModeOption[] {
+    const backend = this._decisions.resolve();
+    return decisionGameplayModeOptions({
+      routing: this.gameplayRouting,
+      persisted: backend?.gameplayMode ?? 'off',
+    });
+  }
+
+  /**
+   * Switches the persisted mode.
+   *
+   * The `allowed` check happens HERE as well as in the router, deliberately: a
+   * template that can select a mode the router would refuse produces a settings
+   * screen that lies, and the player only finds out on the next turn.
+   */
+  async setGameplayMode(mode: DecisionGameplayMode): Promise<void> {
+    const option = this.gameplayModeOptions.find((candidate) => candidate.mode === mode);
+    if (option === undefined || !option.allowed) {
+      this.errorMessage = option?.detail ?? 'That mode is not available.';
+      this.showSnackbar({
+        text: this.errorMessage,
+        type: 'error',
+      });
+      return;
+    }
+    await this._gameplayMode.setMode(mode);
   }
 
   get isTesting(): boolean {

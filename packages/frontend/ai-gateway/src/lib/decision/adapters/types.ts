@@ -36,6 +36,35 @@ export type DecisionRequest = {
   readonly stateRevision: number;
 };
 
+/**
+ * Facts an adapter can attach to any outcome, without widening the result type
+ * per provider.
+ *
+ * Deliberately a closed, provider-neutral shape. A native `llamacpp` adapter
+ * reports token usage (including the always-zero `output_tokens` that a
+ * decision call legitimately produces) and the checkpoint's own limit
+ * violations; a `jev` adapter reports neither today, and neither is forced to.
+ * What an adapter CANNOT do is invent a new field per dialect — that is how a
+ * telemetry path ends up understanding two unrelated result shapes.
+ */
+export type DecisionAdapterDiagnostics = {
+  /** Raw usage exactly as the backend reported it. Never estimated. */
+  readonly usage?: {
+    // biome-ignore lint/style/useNamingConvention: verbatim wire field name
+    readonly input_tokens?: number;
+    // biome-ignore lint/style/useNamingConvention: verbatim wire field name
+    readonly output_tokens?: number;
+  };
+  /** Checkpoint the backend says actually answered, when it names one. */
+  readonly servedCheckpoint?: string;
+  /** The loaded checkpoint's own structural limits that stopped this dispatch. */
+  readonly limitViolations?: readonly {
+    readonly code: 'option-limit-exceeded' | 'question-limit-exceeded';
+    readonly questionKey?: string;
+    readonly detail: string;
+  }[];
+};
+
 /** What an adapter returns. */
 export type DecisionAdapterResponse =
   | {
@@ -50,6 +79,7 @@ export type DecisionAdapterResponse =
       readonly checkpoint?: string;
       readonly runtime?: string;
       readonly resourceId?: string;
+      readonly diagnostics?: DecisionAdapterDiagnostics;
     }
   | {
       readonly ok: false;
@@ -62,6 +92,7 @@ export type DecisionAdapterResponse =
       readonly detail: string;
       readonly queueMs: number;
       readonly inferenceMs: number;
+      readonly diagnostics?: DecisionAdapterDiagnostics;
     };
 
 /**

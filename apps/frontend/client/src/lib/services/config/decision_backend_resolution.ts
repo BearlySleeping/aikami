@@ -13,7 +13,13 @@
 // load-bearing: without them a `decisions` role could be pointed at a surviving
 // chat connection and the player would be told a decision backend exists.
 
-import type { AiConnection, AiProvider, ConfigState, DecisionRuntime } from '@aikami/types';
+import type {
+  AiConnection,
+  AiProvider,
+  ConfigState,
+  DecisionGameplayMode,
+  DecisionRuntime,
+} from '@aikami/types';
 
 /**
  * A configured decision backend, resolved but NOT routed.
@@ -25,7 +31,7 @@ import type { AiConnection, AiProvider, ConfigState, DecisionRuntime } from '@ai
 export type ResolvedDecisionBackend = {
   /** Connection id, for provenance and cache identity. */
   readonly connectionId: string;
-  /** Provider registry id (ollama | jev-external | jev-hosted). */
+  /** Provider registry id (ollama | llamacpp | jev-external | jev-hosted). */
   readonly registryId: string;
   /** Endpoint base URL, never with credentials embedded. */
   readonly endpoint: string;
@@ -44,6 +50,14 @@ export type ResolvedDecisionBackend = {
    * in for it.
    */
   readonly qualifiedForGameplay: boolean;
+  /**
+   * Persisted Off/Shadow/On. Defaults to `off`.
+   *
+   * Read from the connection rather than held in a service, because a mode that
+   * lives only in memory is lost on reload — and a decision path whose mode
+   * silently reverts is a rollback nobody can rely on.
+   */
+  readonly gameplayMode: DecisionGameplayMode;
 
   /**
    * The measured qualification, if one has been recorded.
@@ -130,8 +144,84 @@ export const resolveDecision = (
     languages: connection.params.languages ?? ['en'],
     ...(provider.credential === undefined ? {} : { credential: provider.credential }),
     qualifiedForGameplay: connection.params.qualifiedForGameplay === true,
+    // Absent means `off`: a connection saved before this field existed must not
+    // start dispatching decisions because a newer build added a mode field.
+    gameplayMode: connection.params.gameplayMode ?? 'off',
     ...(qualificationOf(connection.params) === undefined
       ? {}
       : { qualification: qualificationOf(connection.params) }),
   };
+};
+
+/**
+ * Writes a mode onto a decision connection's params.
+ *
+ * Only `gameplayMode` is written — re-sending the whole `params` object would
+ * let a stale caller that read `params` once clobber a `qualification` record it
+ * never looked at, silently un-qualifying a backend that had qualified.
+ */
+const withGameplayMode = (
+  params: Extract<AiConnection['params'], { runtime: DecisionRuntime }>,
+  mode: DecisionGameplayMode,
+): Extract<AiConnection['params'], { runtime: DecisionRuntime }> => ({
+  ...params,
+  gameplayMode: mode,
+});
+
+/**
+ * The decision connection's params with `gameplayMode` set, or undefined when
+ * there is no decision connection to write to.
+ *
+ * Separate from the write itself so the 1600-line config service can delegate
+ * in one line: a missing connection, a non-decision connection, or a connection
+ * without decision params all mean the same thing — there is nothing to persist
+ * the mode on.
+ */
+const decisionParamsWithMode = (
+  state: DecisionConfigState,
+  mode: DecisionGameplayMode,
+):
+  | {
+      readonly id: string;
+      readonly params: Extract<AiConnection['params'], { runtime: DecisionRuntime }>;
+    }
+  | undefined => {
+  const backend = resolveDecision(state);
+  if (backend === undefined) {
+    return undefined;
+  }
+  const connection = state.aiConnections.find((candidate) => candidate.id === backend.connectionId);
+  if (connection === undefined || connection.capability !== 'decision') {
+    return undefined;
+  }
+  return {
+    id: connection.id,
+    params: withGameplayMode(
+      connection.params as Extract<AiConnection['params'], { runtime: DecisionRuntime }>,
+      mode,
+    ),
+  };
+};
+
+/**
+ * Applies a mode through an injected writer.
+ *
+ * The writer is injected so this stays a pure decision about WHICH connection
+ * and WHAT params, leaving the 1600-line config service free of the lookup. It
+ * is also what makes the function testable without a service instance.
+ */
+export const applyDecisionGameplayMode = (
+  state: DecisionConfigState,
+  mode: DecisionGameplayMode,
+  write: (
+    id: string,
+    params: Extract<AiConnection['params'], { runtime: DecisionRuntime }>,
+  ) => void,
+): boolean => {
+  const target = decisionParamsWithMode(state, mode);
+  if (target === undefined) {
+    return false;
+  }
+  write(target.id, target.params);
+  return true;
 };

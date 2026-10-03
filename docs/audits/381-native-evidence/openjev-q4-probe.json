@@ -1,0 +1,27 @@
+{
+  "checkpoint": "openjev-q4",
+  "singleRequestMs": 213836.50158399905,
+  "response": {
+    "model": "<models>/OpenJev-Q4_K_M.gguf",
+    "answers": {
+      "actionId": {
+        "type": "choice",
+        "choice": "none",
+        "probabilities": {
+          "none": 0.9160494745628065,
+          "offerQuest:fading_ward": 0.024690787436379574,
+          "presentEvidence:sella_receipt": 0.0592597380008139
+        },
+        "confidence": 0.8740742118442097
+      },
+      "urgent": {
+        "type": "noul",
+        "noul": 0.7642501493251925
+      }
+    },
+    "usage": {
+      "input_tokens": 379,
+      "output_tokens": 0
+    }
+  }
+}
