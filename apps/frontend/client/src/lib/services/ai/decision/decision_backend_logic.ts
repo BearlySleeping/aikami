@@ -105,11 +105,14 @@ export const deriveDecisionBackendState = (
  * The automatic-gameplay gate.
  *
  * It exists as a function so the refusal is a DECISION the code makes rather
- * than an absence of code. In this release it refuses unconditionally, and the
- * reason says why: the frozen gate has not been run against a qualified backend
- * by a shipped measurement. A future consumer must be able to flip it by
- * satisfying all three legs, and none of them are reachable from a settings
- * selection.
+ * than an absence of code.
+ *
+ * The three legs are unchanged and all three still have to hold: a backend is
+ * configured, it is `qualified` (not merely `ready`), and a measurement has
+ * cleared the frozen gate. What changed in C-568 is only WHY the last leg is
+ * currently unsatisfiable — it is no longer "the workload pilot has not
+ * landed", it is a named task at a named version that a shipped measurement has
+ * to clear. `decision_action_qualification` is where that verdict is read from.
  */
 export const decisionGameplayRouting = (options: {
   readonly configured: boolean;
@@ -129,26 +132,40 @@ export const decisionGameplayRouting = (options: {
   if (!options.workloadQualified) {
     return {
       allowed: false,
-      reason: 'the frozen task gate has not been cleared on held-out data for this checkpoint',
+      reason:
+        'the frozen gate has not been cleared on held-out data for npc-action-selection at its current task version',
     };
   }
   return {
-    allowed: false,
+    allowed: true,
     reason:
-      'automatic gameplay routing ships disabled in this release; the workload pilot has not landed',
+      'npc-action-selection is qualified on held-out data for this checkpoint; the consumer still enforces per-turn qualification, staleness and one fallback',
   };
 };
 
-/** The tasks a decision backend could serve today. */
+/**
+ * The tasks a decision backend could serve today.
+ *
+ * Two entries, and the distinction between them is the point of this lane.
+ * The probe measures a bare discriminator and says so; the production task
+ * measures a choice among already-authorized, id-bearing candidates.
+ */
 export const decisionTaskSummaries = (
   workloadQualified: boolean,
 ): readonly DecisionTaskSummary[] => [
+  {
+    id: 'npc-action-selection',
+    label: 'NPC action (gameplay)',
+    description:
+      'Chooses which already-permitted action this NPC takes now — or none — from candidates carrying real content-pack ids. Used by the dialogue turn when enabled.',
+    qualified: workloadQualified,
+  },
   {
     id: 'npc-command-kind',
     label: 'NPC command kind (research probe)',
     description:
       'Chooses which bounded dialogue command, if any, a player message warrants. Measures the discriminator only — not the payloads, IDs or world preconditions production commands carry.',
-    qualified: workloadQualified,
+    qualified: false,
   },
 ];
 /**

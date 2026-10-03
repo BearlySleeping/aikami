@@ -38,13 +38,29 @@ export type ResolvedDecisionBackend = {
   /** Vault-held credential, when the endpoint needs one. */
   readonly credential?: string;
   /**
-   * Whether this backend was marked qualified for automatic gameplay.
+   * Whether the player opted this backend into automatic tasks.
    *
-   * Recorded, and NOTHING reads it for routing in this release: workload
-   * qualification is a separate gate that stays closed. It exists so a player
-   * can see the flag and a later qualified consumer can honour it.
+   * A master switch only. It can narrow the evidence below; it can never stand
+   * in for it.
    */
   readonly qualifiedForGameplay: boolean;
+
+  /**
+   * The measured qualification, if one has been recorded.
+   *
+   * Undefined means no shipped measurement cleared the gate for this
+   * checkpoint, and automatic routing must be refused. It is carried through so
+   * the consumer can compare all four of task, task version, dialect and
+   * checkpoint against what it supports NOW.
+   */
+  readonly qualification?: {
+    readonly taskId: string;
+    readonly taskVersion: number;
+    readonly dialect: string;
+    readonly checkpoint: string;
+    readonly measuredAt?: string;
+    readonly runId?: string;
+  };
 };
 
 /** The narrow shape this resolution reads. */
@@ -55,6 +71,24 @@ const isDecisionParams = (
   params: AiConnection['params'],
 ): params is Extract<AiConnection['params'], { runtime: DecisionRuntime }> =>
   'runtime' in params && 'checkpoint' in params;
+
+/** The recorded qualification, when the connection carries a well-formed one. */
+const qualificationOf = (
+  params: Extract<AiConnection['params'], { runtime: DecisionRuntime }>,
+): ResolvedDecisionBackend['qualification'] => {
+  const evidence = params.qualification;
+  if (evidence === undefined) {
+    return undefined;
+  }
+  return {
+    taskId: evidence.taskId,
+    taskVersion: evidence.taskVersion,
+    dialect: evidence.dialect,
+    checkpoint: evidence.checkpoint,
+    ...(evidence.measuredAt === undefined ? {} : { measuredAt: evidence.measuredAt }),
+    ...(evidence.runId === undefined ? {} : { runId: evidence.runId }),
+  };
+};
 
 /** The provider a decision connection points at, when it has one. */
 const providerFor = (
@@ -96,5 +130,8 @@ export const resolveDecision = (
     languages: connection.params.languages ?? ['en'],
     ...(provider.credential === undefined ? {} : { credential: provider.credential }),
     qualifiedForGameplay: connection.params.qualifiedForGameplay === true,
+    ...(qualificationOf(connection.params) === undefined
+      ? {}
+      : { qualification: qualificationOf(connection.params) }),
   };
 };

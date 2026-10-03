@@ -106,18 +106,27 @@ describe('decisionGameplayRouting', () => {
       workloadQualified: false,
     });
     expect(decision.allowed).toBe(false);
-    expect(decision.reason).toContain('frozen task gate');
+    expect(decision.reason).toContain('frozen gate has not been cleared');
   });
 
-  test('even fully qualified, this release ships routing disabled', () => {
+  // C-568: this replaced "even fully qualified, this release ships routing
+  // disabled". That test asserted the PRE-gated contract — it was passing
+  // against a function that refused unconditionally — so it could not tell a
+  // real qualification from a hard-coded `false`.
+  //
+  // The refusal now lives where it belongs: a qualification must be EVIDENCE
+  // for a specific task, version, dialect and checkpoint. See
+  // `npc_action_decision_qualification.test.ts`, which is where that rule is
+  // pinned. What this test now pins is that the gate opens when all three legs
+  // hold.
+  test('routing is permitted only once all three legs hold', () => {
     const decision = decisionGameplayRouting({
       configured: true,
       enabled: true,
       state: 'qualified',
       workloadQualified: true,
     });
-    expect(decision.allowed).toBe(false);
-    expect(decision.reason).toContain('ships disabled');
+    expect(decision.allowed).toBe(true);
   });
 });
 
@@ -149,11 +158,20 @@ describe('isTestResultCurrent', () => {
 describe('the task list', () => {
   test('no task is qualified unless a measurement says so', () => {
     expect(decisionTaskSummaries(false).every((task) => !task.qualified)).toBe(true);
-    expect(decisionTaskSummaries(true).every((task) => task.qualified)).toBe(true);
+    // With a measurement recorded, ONLY the task that measurement covered is
+    // qualified. The research probe is a different task: its qualification was
+    // never measured, so it does not inherit the gameplay task's.
+    expect(
+      decisionTaskSummaries(true).find((task) => task.id === 'npc-action-selection')?.qualified,
+    ).toBe(true);
+    expect(
+      decisionTaskSummaries(true).find((task) => task.id === 'npc-command-kind')?.qualified,
+    ).toBe(false);
   });
 
-  test('the shipped task is labelled a research probe, not a routing claim', () => {
-    expect(decisionTaskSummaries(false)[0]?.label).toContain('research probe');
+  test('the research probe is still labelled a probe, not a routing claim', () => {
+    const probe = decisionTaskSummaries(false).find((task) => task.id === 'npc-command-kind');
+    expect(probe?.label).toContain('research probe');
   });
 });
 

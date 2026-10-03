@@ -105,6 +105,21 @@ export const NPC_COMMAND_KIND_SPLITS: Readonly<Record<'dev' | 'heldout', Decisio
 };
 
 /**
+ * The `npc-action-selection` corpus (lane C).
+ *
+ * Each case carries an EXTRA `options` array the probe corpus does not have:
+ * the legal action set for that NPC in that world state. `EvaluationCase`
+ * ignores it, so these cases are still ordinary `EvaluationCase`s to the
+ * scorer; the measurement driver reads the option set to compile a per-case
+ * plan. The shared scorer is reused unchanged, deliberately.
+ */
+export type NpcActionFixtureCase = EvaluationCase & {
+  readonly npcId: string;
+  readonly options: readonly { readonly id: string; readonly description: string }[];
+  readonly rationale: string;
+};
+
+/**
  * Loads both splits after checking corpus integrity.
  *
  * A corpus whose case kinds and labels disagree is refused here rather than

@@ -64,6 +64,37 @@ export type DecisionAdapterResponse =
       readonly inferenceMs: number;
     };
 
+/**
+ * Runtime evidence about whether a checkpoint is currently RESIDENT.
+ *
+ * Why this exists (issue #381, lane C): "cold" and "warm" were originally
+ * inferred from a case's POSITION in a dispatch sequence — the first few cases
+ * were labelled cold because they ran first. That is an assumption about
+ * ordering dressed up as a measurement. It is wrong the moment a runtime
+ * pre-loads, evicts under memory pressure, or keeps a model warm across the
+ * whole run, and none of those are visible from the request index.
+ *
+ * Residency is a property of the RUNTIME, so only the runtime can report it.
+ * An adapter that cannot report it says so, and a condition that cannot be
+ * verified is not a condition — see {@link DecisionAdapter.residency}.
+ */
+export type ResidencyEvidence = {
+  /**
+   * Whether this observation is trustworthy at all.
+   *
+   * `false` means the runtime offers no way to ask. A harness that treats an
+   * unverifiable condition as satisfied will report a warm percentile it never
+   * established, which is the failure this type exists to prevent.
+   */
+  readonly verified: boolean;
+  /** Only meaningful when `verified`. */
+  readonly resident?: boolean;
+  /** How the runtime reported it, e.g. `ollama:/api/ps`. */
+  readonly method: string;
+  /** Credential-free, machine-readable. Never contains an endpoint with userinfo. */
+  readonly detail: string;
+};
+
 /** A decision backend. */
 export type DecisionAdapter = {
   /** Backend identity, stable across runs. */
@@ -77,6 +108,18 @@ export type DecisionAdapter = {
    * dialect that parses is not a checkpoint that has answered.
    */
   capability(options?: Pick<DecisionRequest, 'deadlineAt' | 'signal'>): Promise<DecisionCapability>;
+  /**
+   * Reports, from the runtime, whether the checkpoint is resident RIGHT NOW.
+   *
+   * Optional because not every runtime can answer. A missing implementation, or
+   * one that returns `verified: false`, means the caller has no basis for
+   * labelling a measurement cold or warm and must treat latency conditions as
+   * unestablished.
+   *
+   * This MUST be a cheap local query. It is called per dispatch to observe the
+   * state at that moment, and it is not a readiness probe.
+   */
+  residency?(options?: Pick<DecisionRequest, 'signal'>): Promise<ResidencyEvidence>;
   /** Answers one unit. Must honour `deadlineAt` and `signal`. */
   run(request: DecisionRequest): Promise<DecisionAdapterResponse>;
 };
