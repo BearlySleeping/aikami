@@ -9,7 +9,6 @@ import type {
   ReactionPolicy,
 } from '@aikami/types';
 import { DEFAULT_MOVEMENT_PER_TURN } from '@aikami/utils';
-import m from '$i18n';
 import {
   COMBAT_ACTION_SYSTEM_PROMPT,
   type CombatActionIntent,
@@ -2132,7 +2131,7 @@ export class CombatViewModel
    */
   reactionTimerSeconds: number | null = $state(null);
 
-  /** Stable i18n key for the reaction cost, resolved by the component. */
+  /** Stable message key for the reaction cost, resolved to English text here. */
   get reactionCostLabel(): string {
     return this.translateIntentMessage(REACTION_COST_MESSAGE_KEY);
   }
@@ -2222,7 +2221,7 @@ export class CombatViewModel
 
   /** @inheritdoc */
   translateIntentMessage(messageKey: string): string {
-    return COMBAT_INTENT_TRANSLATIONS[messageKey]?.() ?? m.combatIntentRefused();
+    return COMBAT_INTENT_TRANSLATIONS[messageKey] ?? 'That instruction was refused.';
   }
 
   /**

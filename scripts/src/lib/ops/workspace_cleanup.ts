@@ -199,8 +199,8 @@ const staleVerdict = (ws: WorkspaceInfo): StaleVerdict => {
   }
   // 🔴 Last gate, and the only overridable one. Everything above says the
   // work reached origin or is still live; this one says it never left the
-  // checkout. A contract worktree is dirty far more often than not (paraglide
-  // output, .svelte-kit, a `bun add` the implementer ran), so refusing every
+  // checkout. A contract worktree is dirty far more often than not (.svelte-kit,
+  // a `bun add` the implementer ran), so refusing every
   // dirty tree would make --stale useless — but silently deleting uncommitted
   // SOURCE edits that exist nowhere else is the one mistake this command must
   // never make on its own. Report the count and let --force decide.

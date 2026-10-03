@@ -110,7 +110,7 @@ Runtime validation across the platform is unified on TypeBox (shared schemas, ty
 - Main user-facing application for account management, character creation, AI chat, and the game client
 - ViewModel pattern: each view has a `{name}-view-model.svelte.ts` with `$state` runes
 - Routes: login, register, dashboard, chat, personas, NPCs, settings, game
-- i18n via Paraglide
+- English-only interface: no message catalogue or runtime locale negotiation
 - Playwright tests for E2E
 - Exported to desktop via Tauri v2 as a native app (<5MB bundle)
 

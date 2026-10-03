@@ -76,10 +76,6 @@ dist/
 storybook-static/
 *storybook.log
 
-##  TRANSLATION (Paraglide / inlang)
-**/project.inlang/cache/
-**/src/lib/paraglide
-
 ## 🖼️ Project: ComfyUI Image Microservice
 # Models and caches are too large; per-directory .gitignore keeps structure.
 

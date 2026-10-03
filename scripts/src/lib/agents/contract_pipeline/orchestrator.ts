@@ -816,7 +816,7 @@ const cleanupRunWorktree = async (options: {
       deleteRemoteBranch: !keepRemoteBranch,
       // 🔴 force: the run is over and its work is on the PR branch — whatever
       // is still uncommitted in the checkout is codegen and build residue
-      // (paraglide output, .svelte-kit, a `bun add` the implementer ran).
+      // (.svelte-kit, a `bun add` the implementer ran).
       // Without this, herdr's non-forced removal refuses the dirty tree and
       // the checkout is simply left behind: the reason a repo ends up with a
       // pile of dead contract-task-* worktrees that later have to be pruned

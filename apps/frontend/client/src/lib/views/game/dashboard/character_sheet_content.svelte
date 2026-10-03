@@ -8,7 +8,6 @@
 
 import { Modal, NumberStepper } from '@aikami/frontend/components';
 import { ABILITY_KEYS } from '@aikami/types';
-import m from '$lib/views/utils/i18n';
 import {
   CHARACTER_NARRATIVE_CATEGORIES,
   CHARACTER_NARRATIVE_LABELS,
@@ -104,7 +103,7 @@ const { viewModel, presentation, developerTools = false }: Props = $props();
           ></progress>
         </div>
         <div class="game-character-summary__stat game-surface--inset">
-          <span class="game-eyebrow">{m.character_ac()}</span>
+          <span class="game-eyebrow">Armor Class</span>
           <strong class="game-numeric game-numeric--defense">{viewModel.totalDefense}</strong>
           <span class="game-metadata">Damage avoided</span>
         </div>
@@ -219,16 +218,16 @@ const { viewModel, presentation, developerTools = false }: Props = $props();
                     type="checkbox"
                     class="checkbox checkbox-sm"
                     checked={ability.isSavingThrowProficient}
-                    aria-label={m.character_saving_throw_proficiency({ ability: ability.label })}
+                    aria-label={`Saving throw proficiency for ${ability.label}`}
                     onchange={() => viewModel.toggleSaveProficiency(ability.key)}
                   >
-                  <span class="game-metadata">{m.character_saving_throw()}</span>
+                  <span class="game-metadata">Saving throw</span>
                 </label>
               {:else}
                 <div class="flex items-center justify-between gap-2">
                   <strong class="game-numeric game-numeric--emphasis">{ability.score}</strong>
                   <span class="game-badge">
-                    {m.character_saving_throw()}
+                    Saving throw
                     {ability.isSavingThrowProficient ? ' ✓' : ' —'}
                   </span>
                 </div>

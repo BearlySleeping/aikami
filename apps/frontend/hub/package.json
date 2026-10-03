@@ -30,7 +30,6 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "5.20261002.1",
-    "@inlang/paraglide-js": "2.25.4",
     "@libsql/client": "0.18.0",
     "@sveltejs/adapter-cloudflare": "8.0.0",
     "@sveltejs/kit": "3.0.0",

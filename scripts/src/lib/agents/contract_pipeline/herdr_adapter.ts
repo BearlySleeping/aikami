@@ -1146,7 +1146,7 @@ export class ContractHerdrAdapter implements ContractHerdrAdapterInterface {
       mkdirSync(dirname(wcp), { recursive: true });
       copyFileSync(options.request.contractPath, wcp);
     }
-    // (Paraglide + .env seeding moved to bootstrapWorktree — it runs once
+    // (.env seeding moved to bootstrapWorktree — it runs once
     // at initialize(), so worker tabs no longer need to copy them.)
     const { command, env } = this._buildWorkerCommand(
       options.request,

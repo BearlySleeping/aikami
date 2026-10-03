@@ -70,8 +70,8 @@ export const countPhysicalLines = (content: string): number => {
 /**
  * Documented generated-artifact conventions. These are the repository's actual
  * markers — a SvelteKit/Vite declaration file, the vendored agent skills tree,
- * the generated static asset tree, an explicit `generated/` or `paraglide/`
- * directory, or a `_generated` / `.generated` filename suffix. A handwritten
+ * the generated static asset tree, an explicit `generated/` directory, or a
+ * `_generated` / `.generated` filename suffix. A handwritten
  * file cannot casually claim one of these without renaming itself to look
  * generated (and the suffix is itself the documented contract).
  */
@@ -79,7 +79,7 @@ export const isGeneratedFile = (relPath: string): boolean =>
   relPath.endsWith('.d.ts') ||
   relPath.startsWith('.pi/generated-skills/') ||
   relPath.startsWith('apps/frontend/client/static/') ||
-  /(^|\/)(generated|paraglide)\//.test(relPath) ||
+  /(^|\/)generated\//.test(relPath) ||
   /(^|\/)[^/]*_generated\.[cm]?[jt]sx?$/.test(relPath) ||
   /(^|\/)[^/]*\.generated\.[cm]?[jt]sx?$/.test(relPath);
 
