@@ -34,8 +34,8 @@ import type { DecisionAdapter } from './adapters/types.ts';
 import { analyzeDecisionSchema } from './analyzer.ts';
 import {
   type DecisionValueComparator,
-  type EvaluationCase,
   type EvaluateSplitOptions,
+  type EvaluationCase,
   type EvaluationLatencyGate,
   type EvaluationQualityGate,
   type EvaluationReport,

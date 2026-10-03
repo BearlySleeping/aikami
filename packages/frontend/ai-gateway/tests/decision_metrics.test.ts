@@ -21,10 +21,10 @@ import {
   type EvaluationQualityGate,
   evaluateQualityGates,
   evaluateSplit,
-  measureSplit,
   MIN_REPETITIONS_FOR_PERCENTILE,
-  runLiveDecisionMeasurement,
+  measureSplit,
   runDecision,
+  runLiveDecisionMeasurement,
 } from '../src/lib/decision/index.ts';
 import {
   NPC_COMMAND_KIND_COMPARATOR,

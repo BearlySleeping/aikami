@@ -8,17 +8,17 @@
 // open for three contracts because nothing could produce a number, and the
 // failure mode that keeps it open is reporting "no backend" as "no problems".
 
+import { describe, expect, spyOn, test } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, expect, spyOn, test } from 'bun:test';
 import { EXIT, parseOptions, renderSummary, run } from '../src/cli/decision_evaluate_node.ts';
 import {
   analyzeDecisionSchema,
   bindDecisionPolicy,
   createSystemOneDecisionAdapter,
-  evaluateSplit,
   evaluateBackend,
+  evaluateSplit,
   type SystemOneTransport,
 } from '../src/lib/decision/index.ts';
 import {

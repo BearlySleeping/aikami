@@ -19,7 +19,7 @@
     "fix": "biome check --write . --error-on-warnings"
   },
   "dependencies": {
-    "@tursodatabase/database": "0.7.2",
+    "@tursodatabase/database": "0.8.1",
     "@aikami/frontend-configs": "workspace:*",
     "@aikami/constants": "workspace:*",
     "@aikami/frontend-utils": "workspace:*",
@@ -30,7 +30,7 @@
     "@aikami/utils": "workspace:*",
     "bitecs": "^0.4.0",
     "jsonchunk": "^0.1.0",
-    "pixi.js": "8.21.0",
+    "pixi.js": "8.22.0",
     "typebox": "1.3.34"
   }
 }
