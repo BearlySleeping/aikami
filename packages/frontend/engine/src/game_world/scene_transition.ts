@@ -121,6 +121,18 @@ export type PrepareSceneOptions = {
   loadMap?: SceneLoader;
 };
 
+/**
+ * Raised when the pre-teardown checkpoint could not be captured. It stops the
+ * switch BEFORE anything destructive happens, so the live world is untouched
+ * and the failure path is a plain resume.
+ */
+export class SceneCheckpointUnavailableError extends Error {
+  constructor() {
+    super('Could not capture the world state before switching maps');
+    this.name = 'SceneCheckpointUnavailableError';
+  }
+}
+
 /** Sink for transition diagnostics. */
 export type SceneTransitionLog = {
   debug: (message: string, detail?: unknown) => void;
@@ -131,6 +143,13 @@ export type SceneTransitionLog = {
 /**
  * The last scene that completed the whole transition, kept so a failed switch
  * can be undone instead of leaving the engine running on nothing.
+ *
+ * Note what this is NOT: it holds no runtime state. Replaying `options` only
+ * re-seeds the world from the OLD load's spawn/target, which would reset a
+ * player who had since moved, taken damage and changed equipment. The state
+ * comes from the per-load checkpoint instead — see
+ * {@link SceneTransitionDeps.captureCheckpoint} — so this record stays exactly
+ * as large as the scene it restores.
  */
 export type CommittedScene = {
   scene: PreparedScene;
@@ -271,6 +290,26 @@ export type SceneTransitionDeps = {
   installScene: (scene: PreparedScene) => void;
   /** Reset cross-scene interpolation history at a discontinuity. */
   onDiscontinuity: () => void;
+  /**
+   * Captures the AUTHORITATIVE runtime state (a full ECS snapshot) so a failed
+   * destructive replacement can put it back.
+   *
+   * Called once per switch, after the replacement has parsed and immediately
+   * BEFORE the previous surface is destroyed — the last moment the old world
+   * still exists. Returns `undefined` when there is nothing to preserve (first
+   * boot) or when the capture fails; the runner then refuses to tear down at
+   * all rather than losing state it could not save.
+   */
+  captureCheckpoint: () => Promise<string | undefined>;
+  /**
+   * Rehydrates the world from a checkpoint after the previous surface has been
+   * restored.
+   *
+   * Deliberately does NOT supersede the in-flight transition: this runs inside
+   * the recovery itself, so invalidating the generation would abandon the
+   * recovery halfway and hand a half-restored world to the player.
+   */
+  restoreCheckpoint: (payload: string) => Promise<void>;
   setRunning: (running: boolean) => void;
   setInputLocked: (locked: boolean) => void;
   emitMapLoaded: () => void;
@@ -338,7 +377,7 @@ export class SceneTransitionRunner {
       return;
     }
 
-    const { mapUrl, packConfig } = options;
+    const { mapUrl } = options;
     this._deps.log.debug('loadMap', {
       mapUrl,
       targetX: options.targetX,
@@ -349,42 +388,32 @@ export class SceneTransitionRunner {
     const generation = ++this._generation;
     this._deps.onDiscontinuity();
 
+    // The runtime state captured immediately before THIS load tore the world
+    // down. It belongs to the load, not to the last commit: a switch taken
+    // minutes after the last successful map load still has to come back to
+    // where the player is NOW, not where they were then.
+    let checkpoint: string | undefined;
+
     try {
-      // 1. Pause the engine and stop accepting input.
-      this._deps.setRunning(false);
-      this._deps.setInputLocked(true);
+      const scene = await this._prepareAndCheckpoint({
+        options,
+        generation,
+        capture: (into) => {
+          checkpoint = into;
+        },
+      });
+      if (scene === undefined) {
+        return; // superseded, or abandoned before anything was destroyed
+      }
 
-      // 2. Load, parse, and derive the new scene BEFORE anything is torn
-      //    down. A parse/render failure here is recoverable for free: the
-      //    live surface and the worker world are still the old, consistent
-      //    scene, and the recovery path below simply resumes it.
-      const scene = await this._deps.prepare({ mapUrl, packConfig });
-      if (this._isStale(generation)) {
-        this._deps.log.debug('loadMap:superseded-after-parse', { mapUrl, generation });
+      // Past this point the previous world is unrecoverable without the
+      // checkpoint, so every failure goes through the replay path. A `false`
+      // result means the transition was superseded mid-flight: touch nothing.
+      const installed = await this._installReplacement({ scene, options, generation });
+      if (!installed || this._isStale(generation)) {
         return;
       }
 
-      // 3. The replacement is proven loadable — now the previous surface can
-      //    go. Nothing before this point was destructive.
-      this._deps.resetSurface();
-      this._deps.installScene(scene);
-
-      // 4. Render the new scene graph + overlays. A superseded render
-      //    releases its own resources and reports false.
-      const rendered = await this._deps.render(scene, () => generation === this._generation);
-      if (!rendered || this._isStale(generation)) {
-        this._deps.log.debug('loadMap:superseded-after-render', { mapUrl, generation });
-        return;
-      }
-
-      // 5. Round-trip to the worker.
-      await this._deps.postLoadMap(scene, options);
-      if (this._isStale(generation)) {
-        this._deps.log.debug('loadMap:superseded-after-worker', { mapUrl, generation });
-        return;
-      }
-
-      // 6. Resume the engine and signal completion.
       this._committed = { scene, options };
       this._deps.setRunning(true);
       this._deps.setInputLocked(false);
@@ -392,18 +421,141 @@ export class SceneTransitionRunner {
       this._deps.emitMapEntered(mapUrl);
       this._deps.log.debug('loadMap:complete');
     } catch (error) {
-      // A superseded load must not resume/unlock the engine or surface an
-      // error — the newer transition owns engine state now.
-      if (this._isStale(generation)) {
-        this._deps.log.debug('loadMap:superseded-error', { mapUrl, generation });
-        return;
-      }
-      const message = error instanceof Error ? error.message : String(error);
-      this._deps.log.error('loadMap:failed', { mapUrl, error: message });
-
-      await this._recoverFromFailure({ generation, mapUrl, error: message });
-      throw error;
+      await this._handleFailure({ generation, options, checkpoint, error });
     }
+  }
+
+  /**
+   * The non-destructive half of a switch: pause, parse, and capture the state
+   * that must survive a teardown.
+   *
+   * Returns `undefined` when the load was superseded, or when the checkpoint
+   * could not be captured and the switch was therefore abandoned BEFORE
+   * destroying anything — losing unsaved progress to a failed backup is
+   * strictly worse than not switching maps at all.
+   */
+  private async _prepareAndCheckpoint(options: {
+    options: LoadMapOptions;
+    generation: number;
+    capture: (checkpoint: string) => void;
+  }): Promise<PreparedScene | undefined> {
+    const { mapUrl, packConfig } = options.options;
+
+    this._deps.setRunning(false);
+    this._deps.setInputLocked(true);
+
+    const scene = await this._deps.prepare({ mapUrl, packConfig });
+    if (this._isStale(options.generation)) {
+      this._deps.log.debug('loadMap:superseded-after-parse', { mapUrl });
+      return undefined;
+    }
+
+    const checkpoint = await this._deps.captureCheckpoint();
+    if (this._isStale(options.generation)) {
+      this._deps.log.debug('loadMap:superseded-after-checkpoint', { mapUrl });
+      return undefined;
+    }
+    if (checkpoint === undefined) {
+      throw new SceneCheckpointUnavailableError();
+    }
+
+    options.capture(checkpoint);
+    return scene;
+  }
+
+  /**
+   * The destructive half: tear the old surface down, install the replacement,
+   * render it, and round-trip to the worker.
+   *
+   * Returns `false` when the transition was superseded mid-flight — the caller
+   * must then touch no engine state at all.
+   */
+  private async _installReplacement(options: {
+    scene: PreparedScene;
+    options: LoadMapOptions;
+    generation: number;
+  }): Promise<boolean> {
+    const { scene, generation } = options;
+
+    this._deps.resetSurface();
+    this._deps.installScene(scene);
+
+    const rendered = await this._deps.render(scene, () => generation === this._generation);
+    if (!rendered || this._isStale(generation)) {
+      this._deps.log.debug('loadMap:superseded-after-render');
+      return false;
+    }
+
+    await this._deps.postLoadMap(scene, options.options);
+    if (this._isStale(generation)) {
+      this._deps.log.debug('loadMap:superseded-after-worker');
+      return false;
+    }
+
+    return true;
+  }
+
+  /**
+   * Routes one failure to the semantics its stage allows: a superseded load
+   * says nothing at all, a pre-teardown failure retains or holds, and a
+   * destructive failure replays the scene and rehydrates the checkpoint.
+   */
+  private async _handleFailure(context: {
+    generation: number;
+    options: LoadMapOptions;
+    checkpoint: string | undefined;
+    error: unknown;
+  }): Promise<void> {
+    const { generation, checkpoint, error } = context;
+    const mapUrl = context.options.mapUrl;
+
+    if (this._isStale(generation)) {
+      this._deps.log.debug('loadMap:superseded-error', { mapUrl, generation });
+      return;
+    }
+
+    const message = error instanceof Error ? error.message : String(error);
+    // `checkpoint` is set exactly when the teardown happened.
+    const destructive = checkpoint !== undefined;
+    this._deps.log.error('loadMap:failed', { mapUrl, error: message, destructive });
+
+    if (destructive) {
+      await this._recoverFromFailure({ generation, mapUrl, error: message, checkpoint });
+    } else {
+      this._retainPreviousWorld({ generation, mapUrl, error: message });
+    }
+    throw error;
+  }
+
+  /**
+   * Failure BEFORE any teardown: the previous world is still whole and
+   * consistent on screen AND in the worker, so retaining and resuming it IS
+   * the recovery — re-loading it would only re-seed spawns and discard
+   * progress. First boot has no previous world to retain, so it holds.
+   */
+  private _retainPreviousWorld(context: {
+    generation: number;
+    mapUrl: string;
+    error: string;
+  }): void {
+    if (!this._committed) {
+      this._deps.log.warn('loadMap:first-boot-failed', { mapUrl: context.mapUrl });
+      if (!this._isStale(context.generation)) {
+        this._holdLocked({ mapUrl: context.mapUrl, error: context.error });
+      }
+      return;
+    }
+
+    this._deps.log.warn('loadMap:retained-previous-scene', {
+      mapUrl: context.mapUrl,
+      error: context.error,
+    });
+    if (this._isStale(context.generation)) {
+      return;
+    }
+    this._deps.setRunning(true);
+    this._deps.setInputLocked(false);
+    this._deps.emitError(`Map load failed: ${context.error}`);
   }
 
   /** Whether `generation` has been superseded or the runner retired. */
@@ -412,33 +564,53 @@ export class SceneTransitionRunner {
   }
 
   /**
-   * Restores a playable world after a failed transition.
+   * Restores a playable, PROGRESS-PRESERVING world after a destructive failure.
    *
-   * Two outcomes, and never the fake one:
+   * The old surface alone is not recovery — replaying its load options would
+   * re-seed the world from the previous entry point and discard everything the
+   * player did since. So recovery is two ordered halves:
    *
-   * - **Replayed**: the last committed scene is re-installed, re-rendered and
-   *   re-posted to the worker, so renderer and worker agree, then the engine
-   *   resumes with input unlocked. The original failure is still reported.
-   * - **Held**: there is nothing to replay (first boot) or the replay itself
-   *   failed. The engine stays paused with input LOCKED — never unlocked onto
-   *   a world that does not exist — and the error tells the player to reload.
+   * 1. put the previous SCENE back (surface, grids, worker load payload), then
+   * 2. rehydrate the CHECKPOINT captured just before teardown, which carries
+   *    the authoritative runtime state (player position/health/equipment and
+   *    NPC state).
+   *
+   * Input is unlocked only after both halves succeed. With no committed scene,
+   * no checkpoint, or a failed half, the engine holds paused with input LOCKED
+   * and an actionable message — never "running" on a world that does not hold
+   * the player's actual progress.
+   *
+   * The replay's `LOAD_MAP` and the restore's `LOAD_GAME` are correlated
+   * requests issued in that order, so the worker applies them in order: the
+   * rehydrated checkpoint lands last and wins over any load effect still in
+   * flight from the failed switch.
    */
   private async _recoverFromFailure(options: {
     generation: number;
     mapUrl: string;
     error: string;
+    /** Runtime state captured immediately before this load's teardown. */
+    checkpoint: string;
   }): Promise<void> {
+    // A newer transition, or a disposal, already owns engine state.
+    if (this._isStale(options.generation)) {
+      this._deps.log.debug('loadMap:recovery-abandoned', { mapUrl: options.mapUrl });
+      return;
+    }
+
     const committed = this._committed;
 
     if (!committed) {
-      // First boot (or nothing has ever completed): there is no world to
-      // return to. Running an empty scene would let the player drive a void.
-      this._deps.log.warn('loadMap:no-previous-scene', { mapUrl: options.mapUrl });
+      // First boot, or a switch that never captured one: nothing here holds
+      // the player's progress, so resuming would hand back a plausible-looking
+      // world that silently threw their run away.
+      this._deps.log.warn('loadMap:no-checkpoint-to-restore', { mapUrl: options.mapUrl });
       this._holdLocked(options);
       return;
     }
 
     try {
+      // Half 1 — the previous scene, on screen and in the worker.
       this._deps.resetSurface();
       this._deps.installScene(committed.scene);
 
@@ -455,14 +627,35 @@ export class SceneTransitionRunner {
         return;
       }
 
+      // Half 2 — the authoritative runtime state, over the top of that load.
+      await this._deps.restoreCheckpoint(options.checkpoint);
+      if (this._isStale(options.generation)) {
+        this._deps.log.debug('loadMap:recovery-superseded-after-restore', {
+          mapUrl: options.mapUrl,
+        });
+        return;
+      }
+
       this._deps.setRunning(true);
       this._deps.setInputLocked(false);
       this._deps.log.warn('loadMap:recovered-previous-scene', {
         mapUrl: committed.options.mapUrl,
+        restoredCheckpoint: true,
       });
       this._deps.emitError(`Map load failed: ${options.error}`);
     } catch (recoveryError) {
       const detail = recoveryError instanceof Error ? recoveryError.message : String(recoveryError);
+
+      // A recovery that failed AFTER being superseded must not lock input or
+      // emit an error on behalf of whoever owns engine state now.
+      if (this._isStale(options.generation)) {
+        this._deps.log.debug('loadMap:recovery-failed-after-supersession', {
+          mapUrl: options.mapUrl,
+          error: detail,
+        });
+        return;
+      }
+
       this._deps.log.error('loadMap:recovery-failed', {
         mapUrl: options.mapUrl,
         error: detail,

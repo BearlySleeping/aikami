@@ -16,7 +16,7 @@ request that had already failed reaching the UI.
 
 | # | Defect | Site |
 |---|---|---|
-| 1 | Surface torn down before the replacement was even parsed; failure resumed + unlocked an empty world; disposal did not retire the transition runner | `game_world/scene_transition.ts`, `game_world.ts` |
+| 1 | Surface torn down before the replacement was even parsed; failure resumed + unlocked an empty world; disposal did not retire the transition runner | `game_world/scene_transition.ts`, `game_world/world_restorer.ts`, `game_world.ts` |
 | 2 | Input lock kept the held-key set, so a post-lock release dispatched a movement key | `game_world/input_controller.ts` |
 | 3 | Cross-scene reset kept the outgoing state, so the next update resurrected old history for reused entity ids | `game_world/render_buffer_pool.ts` |
 | 4 | Spritesheet cache evicted FIFO and nulled `sheet.textures` under a live actor | `rendering/texture_manager.ts` |
@@ -25,33 +25,64 @@ request that had already failed reaching the UI.
 
 ## Ownership and failure semantics
 
-### 1. Scene transition — prepare before teardown, replay on failure
+### 1. Scene transition — prepare first, checkpoint before teardown, restore on failure
 
-`SceneTransitionRunner.load` now runs `prepare()` **before** `resetSurface()`.
-A parse/render failure therefore leaves the previous surface and the previous
-worker world intact and consistent, for free.
+Three stages, each with its own failure semantics.
 
-When the failure happens after teardown has begun, `running = true` is no
-longer treated as recovery. The runner keeps the last **committed** scene
-(`{ scene, options }` — a `PreparedScene` holds no display objects, so it is
-replayable) and:
+**Before the destructive stage** (`prepare`, `captureCheckpoint`) nothing has
+been destroyed, so the live surface and the worker world are still the old,
+*consistent* scene. A failure here needs no recovery at all: the runner
+**retains and resumes** the untouched world. It never reloads it — a reload
+would re-seed spawns and discard progress. First boot is the exception: with no
+previous world to retain, it **holds** (paused, locked, actionable error).
 
-- **replays** it: `resetSurface` → `installScene` → `render` → `postLoadMap` →
-  resume + unlock. The worker round-trip is part of the replay, so renderer and
-  worker agree again before input is handed back. The original failure is still
-  reported as `GAME_ERROR`.
-- **holds** when there is nothing to replay (first boot) or the replay itself
-  fails: the engine stays paused with input **locked** and the error says the
-  engine is paused and must be reloaded. `running = true` is never used to
-  describe a world that does not exist.
+**The checkpoint.** Once the replacement has parsed and the switch is about to
+destroy a live world, the runner first captures the **authoritative runtime
+state** — a full ECS snapshot (`REQUEST_SNAPSHOT scope=world`) — and only then
+tears down. If that capture fails, the switch is abandoned *before* anything
+is destroyed: losing unsaved progress to a failed backup is strictly worse than
+not switching maps.
 
-Supersession still wins everywhere: a stale generation performs no replay, no
-resume, no unlock, and emits nothing. `dispose()` (now called first thing in
-`GameWorld.destroy()`) retires the runner so a pending load can neither resume
-nor unlock a torn-down engine, and a post-dispose `load` is a no-op.
+**After the destructive stage** a failure replays the previous **scene**
+(`resetSurface` → `installScene` → `render` → `postLoadMap`) and then
+**rehydrates the checkpoint** (`LOAD_GAME`) on top of it. Both halves are
+correlated requests issued in that order, so the worker applies them in order
+and the checkpoint lands last, winning over any load effect still in flight
+from the failed switch.
 
-First-boot failure is still an explicit failure: the promise rejects and the
-UI-visible event shape (`GAME_ERROR: Map load failed: …`) is unchanged.
+> The checkpoint belongs to the **failing load**, not to the last commit. A
+> switch taken twenty minutes after the last successful map load must come back
+> to where the player is *now*. (Getting this wrong was a real bug caught by
+> the progress tests: the first version restored a stale checkpoint and silently
+> rewound the run.)
+
+**Holding.** With no committed scene, no checkpoint, or a failed half, the
+engine stays paused with input **locked** and says so. `running = true` is
+never used to describe a world that does not hold the player's actual progress —
+and no claim is made that a bare replay preserves anything.
+
+**Supersession wins everywhere.** A stale generation performs no replay, no
+restore, no resume, no unlock, and emits nothing — including from the recovery's
+`catch`: `_recoverFromFailure` re-checks generation/disposal before `_holdLocked`
+and before `restoreCheckpoint`, so a stale recovery can neither relock input nor
+emit a `GAME_ERROR` on behalf of whoever owns engine state now. `dispose()`
+(called first in `GameWorld.destroy()`) retires the runner, and a post-dispose
+`load` is a no-op.
+
+### 1b. Internal restoration collaborator
+
+`game_world/world_restorer.ts` owns the snapshot/restore seam with two
+deliberately different contracts:
+
+- `restore(payload)` — the public load-game path. A save IS a discontinuity, so
+  it supersedes in-flight transitions first.
+- `rehydrate(payload)` — the recovery path. It also teleports entities (so it
+  clears render entries and interpolation history), but it must **not**
+  supersede the transition that is running it: recovery calling the public
+  `restoreWorld` would bump the generation and abandon itself mid-restore,
+  handing back a half-restored world.
+
+`GameWorld.restoreWorld` now delegates to `restorer.restore(payload)`.
 
 ### 2. Input lock — the lock forgets
 
@@ -122,13 +153,28 @@ Dead state removed: `_frameSliceCache` / `_frameSliceRefCounts` were written by
 nothing (frame views are allocated directly over the shared source) and were
 only ever cleared.
 
-Two cohesive responsibilities were extracted so the ratcheted files could
-shrink rather than grow: `rendering/spritesheet_frames.ts` (frame geometry —
-`TextureManager` keeps thin delegating methods, API unchanged) and
-`rendering/spritesheet_registry.ts` (sheet lifetimes). `texture_manager.ts`
-went 923 → 825 lines, `game_world.ts` 2221 → 2207 (under the 2214 waiver
-ceiling). The size baseline was locked down to the reduction by the guard's own
-reduction-only update; no ceiling was raised.
+Five cohesive responsibilities were extracted so the ratcheted files could
+shrink rather than grow:
+
+| Module | Responsibility | `game_world.ts` / `texture_manager.ts` |
+|---|---|---|
+| `rendering/spritesheet_frames.ts` | frame geometry (thin delegating methods keep the `TextureManager` API) | 923 → 825 |
+| `rendering/spritesheet_registry.ts` | sheet lifetimes | |
+| `game_world/screen_projection.ts` | screen → world → tile-cell | 2221 → 2198 |
+| `game_world/world_restorer.ts` | snapshot/restore sequencing | |
+| `game_world/load_map_message.ts` | the `LOAD_MAP` payload (pure) | |
+| `game_world/engine_diagnostics_probe.ts` | E2E/visual state publication | |
+
+`game_world.ts` finishes at **2198** lines, under its 2214 waiver ceiling —
+**no ceiling was raised**. `texture_manager.ts`'s size baseline was contracted
+923 → 825 with the guard's own reduction-only update.
+
+`load` was also flattened so `cognitive complexity` for
+`scene_transition.ts` stayed at its recorded level: the stages are now
+`_prepareAndCheckpoint` / `_installReplacement` / `_handleFailure` /
+`_retainPreviousWorld` / `_recoverFromFailure`, each readable on its own. Two
+real bugs were caught while doing it (a dropped `if (!installed)` guard, and a
+floating promise in `rehydrate`) — both now have tests.
 
 **Not done, deliberately:** an honest *unique GPU source* estimate. There is no
 production consumer for a VRAM diagnostic anywhere in the repo (`bytesUsed` is
@@ -149,6 +195,8 @@ settle a pending request are still forwarded, so the boot/restore
 ## Production path exercised
 
 - Scene transition: `GameWorld.loadMap` → `SceneTransitionRunner.load` →
+  `WorldRestorer.captureCheckpoint` / `rehydrate` → `SceneTransitionRunner.load`;
+  `GameWorld.restoreWorld` → `WorldRestorer.restore`;
   `GameWorld.destroy` → `SceneTransitionRunner.dispose`.
 - Input: `GameWorld.setInputLocked` / pause / transition → `InputController`.
 - Buffers: worker `STATE_UPDATE` → `GameWorld._handleStateUpdate` →
@@ -159,7 +207,7 @@ settle a pending request are still forwarded, so the boot/restore
 
 ## Verification actually run
 
-- `bun moon run frontend-engine:test` — **1962 pass / 0 fail** (128 files).
+- `bun moon run frontend-engine:test` — **1983 pass / 0 fail** (132 files).
 - `bun moon run frontend-engine:typecheck` — clean.
 - `moon_detect_affected` → `frontend-engine`.
 - `validate` (fix + typecheck + structural guards) — clean after the
@@ -177,10 +225,19 @@ rests on an unexecuted run.
 
 ## Known limitations
 
-- Replay costs one full scene re-render plus one `LOAD_MAP` round-trip. It is
-  bounded to one attempt; a failed replay holds the engine locked.
-- A permanently broken renderer or a dead worker cannot be replayed out of —
+- **Every map switch now costs two extra worker round-trips**: one
+  `REQUEST_SNAPSHOT` before teardown, and — only on failure — one `LOAD_GAME`.
+  The snapshot is only taken when a previous scene exists, but it is on the
+  critical path of every switch. This is the deliberate cost of never losing
+  progress; if the latency proves unacceptable, the fix is a ring of recent
+  snapshots rather than skipping the capture.
+- Recovery costs one scene re-render plus `LOAD_MAP` + `LOAD_GAME`. It is
+  bounded to one attempt; a failed half holds the engine locked.
+- A permanently broken renderer or a dead worker cannot be recovered out of —
   by design, the engine holds and says so instead of faking a live world.
+- The checkpoint covers what the worker serialises. Anything that only exists
+  in the discarded *main-thread* scene graph (camera-relative VFX, overlay
+  state) is restored by the scene replay rather than by the checkpoint.
 - Leases make over-budget sheet caches possible while actors are pinned; the
   registry reports the condition through `pinnedCount` but nothing surfaces it
   to the UI yet.
