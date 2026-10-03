@@ -56,7 +56,7 @@ export default defineConfig({
       { find: /^\$components$/, replacement: clientSource('lib/components/index.ts') },
       {
         find: /^\$services$/,
-        replacement: clientSource('browser_tests/hotbar_services_stub.ts'),
+        replacement: clientSource('browser_tests/browser_services_stub.ts'),
       },
       { find: /^\$types$/, replacement: clientSource('lib/types/index.ts') },
       { find: /^\$lib\/(.*)$/, replacement: clientSource('lib/$1') },

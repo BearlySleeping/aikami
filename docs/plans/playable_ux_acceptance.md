@@ -145,6 +145,33 @@ close restores focus to the game surface; manual save reports outcome **and**
 timestamp (including the honest `Not saved yet` state before it); HUD
 customization opens from the Pause Menu and returns to it.
 
+## 7. Movement acceptance (production route)
+
+`apps/e2e/tests/game/click_to_move.spec.ts` asserted click-to-move against
+`/dev/sandbox/map` and treated a published `__AIKAMI_DEBUG__.playerX/playerY` as
+"map loaded". That state is reached **with a blank world** when the sandbox's
+`debug_tiles.png` 404s, so the assertion could pass against nothing — and it
+hardcoded an 800x600 / scale-4 / centre mapping the sandbox does not guarantee.
+
+- Both suites now gate on a loaded world. The sandbox `beforeEach` asserts
+  `__AIKAMI_ENGINE_STATE__.entityCount > 0` and fails with the real reason
+  ("debug atlas/tiles did not load") instead of clicking at a blank map.
+- New production suite on `/game`:
+  - **the world is loaded** — `entityCount > 0`, `npcCount > 0`, and
+    `__AIKAMI_DEBUG__.npcAppearance.village_elder` resolves. That last one only
+    populates once real entity textures pass the shared named-appearance
+    normalization, so it is an identity-level proof of a populated world rather
+    than a pixel-count guess.
+  - **a click to the right moves the player and the camera follows** — the click
+    target comes from the live canvas box (right of centre, where the camera
+    already places the player), so no tile coordinates are invented. It asserts
+    a real displacement (>= 8 world px), that the player **comes to rest** away
+    from spawn (no drift-back), and that `cameraX` advanced — i.e. the
+    world-to-screen transform the player sees tracked the movement.
+
+Timeout failures throw with the last observed snapshot attached. No fixture was
+invented, no timeout widened, no skip added.
+
 ---
 
 ## Execution report
@@ -154,19 +181,53 @@ Bun/Moon.
 
 | Command | Result |
 |---|---|
-| `bun moon run client:test-browser` | **28 files / 65 tests passed** (baseline before this change: 26 / 54) |
-| `bun moon run client:test-unit` | see "Validation" below |
-| `bun moon run client:typecheck`, `e2e` checks | see "Validation" |
-| `bun moon run e2e:test-client -- tests/client/emberwatch_journey.spec.ts` | **not run here** — reserved for the captain's final integration run against the merged diff |
-| `playable_ux_acceptance.spec.ts`, `npc_identity_persistence.spec.ts` additions | **not run here** — require the production route/dev server; left to the captain's run |
+| `bun moon run client:test-browser --force` | **28 files / 65 tests passed** (baseline before this change: 26 / 54) |
+| `bun moon run client:test-unit` | **4712 pass / 0 fail** (7 skip, 2 todo — all pre-existing) |
+| `bun moon run e2e:typecheck --force` | green |
+| `validate` (fix + typecheck + 10 structural guards) | green; `client:typecheck` svelte-check 0 errors |
+| cognitive-complexity guard | my release-gate edit first **grew** the worst function 36->39; extracting `assertPauseMenuKeyboardJourney` dropped it to **33**, locked via the sanctioned reduction-only `--update-baseline` |
+| `e2e:test-client` / `e2e:test-game` on the production route | **not run in this worktree** — see "Limitations" |
+
+### Captain baseline packet caveat (`.evidence/engine-polish/baseline`)
+
+The 15/15 WebGL/entity-guarded screenshots and the identity probe (24 visible
+entity textures, no `pageerror`) were captured against **Emberwatch 5.0.0,
+release `2026-09-27T13:34:17.944Z`, digest `a595c51a...`**, resolved from relative
+`/game-data` atlases plus `assets.bearlysleeping.com`. That packet is **not**
+proof that the latest candidate maps loaded: it is a floor, not a ceiling.
+
+Root guards initially tripped on a stale ignored Paraglide generated directory
+left behind by removed #427; it was quarantined outside `src` with no tracked
+diff, and this worktree never contained it.
+
+### Not duplicated
+
+`exploration_hud` + `pause_settings` were fresh-green on this baseline (9/9 with
+setup, including save timestamp and 200% pause scrolling). Those shipped fixes
+were left alone — this diff adds no overlapping styling or behaviour.
 
 ### Limitations / honest gaps
 
-- The Playwright production-route specs were **not executed** in this worktree:
-  starting the contract-scoped service stack is the captain's serialized step
-  (this run was told not to launch broad browser runs). The POM/spec changes
-  are therefore verified by typecheck + lint only; the compiled-DOM behaviour
-  they assert is independently covered by the Chromium browser-lane tests.
+- The Playwright production-route specs were **not executed** in this worktree.
+  While this work was finishing, ports `5274`/`5276` were live with another
+  agent's capture in flight, so no E2E stack was launched here rather than
+  contend for shared listeners. Moon's E2E/visual tasks also cache despite
+  absent `test-results` output — use `--force` for fresh evidence, copy
+  artifacts to `.evidence` immediately (a later lane overwrites same-checkout
+  output), and serialize visual vs E2E per checkout. Fresh commands:
+
+  ```
+  bun moon run e2e:test-client --force -- tests/client/emberwatch_journey.spec.ts \
+                                        tests/client/playable_ux_acceptance.spec.ts \
+                                        tests/client/npc_identity_persistence.spec.ts \
+                                        tests/client/game_page.spec.ts \
+                                        tests/client/release_gate.spec.ts
+  bun moon run e2e:test-game   --force -- tests/game/click_to_move.spec.ts
+  ```
+
+  The POM/spec changes are therefore verified by typecheck + lint only; the
+  compiled-DOM behaviour they assert is independently covered by the Chromium
+  browser-lane tests.
 - `modern-web-guidance` search tooling was not available in this environment, so
   the CSS change was driven purely by measured Chromium evidence rather than by
   a guideline lookup.
@@ -177,3 +238,13 @@ Bun/Moon.
   owns the canvas view.
 - If the production `/game` route cannot obtain a WebGL context in the runner's
   browser, these specs **fail**. They were not made to skip.
+- The sandbox click-to-move `beforeEach` now requires `entityCount > 0`. Where
+  `/dev/sandbox/map` still 404s its debug atlas, AC-4/AC-7 fail at setup with an
+  explicit "debug atlas/tiles did not load" message instead of clicking at a
+  blank world. That is intended: the sandbox 404 is a sandbox fixture problem,
+  **not** evidence that production movement is broken.
+- The browser-lane `$services` stub was renamed
+  `browser_tests/browser_services_stub.ts` (was `hotbar_services_stub.ts`) so
+  its name matches its actual role, with a stated rule: add a binding only for
+  the specific view a browser test mounts, keep it inert, and never let it grow
+  into a service inventory.
