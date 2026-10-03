@@ -1,4 +1,5 @@
 export * from './lib/assets.ts';
+export * from './lib/assets_catalog_snapshot.ts';
 export * from './lib/assets_community.ts';
 export * from './lib/assets_generated.ts';
 export * from './lib/generation_records.ts';
