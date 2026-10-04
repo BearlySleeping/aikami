@@ -1,3 +1,5 @@
+// .pi/extensions/lib/process_runner.test.ts
+
 import { describe, expect, test } from 'bun:test';
 import { realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -193,6 +195,85 @@ describe('startCommand', () => {
     const result = await handle.completion;
     expect(result.killed).toBe(true);
     expect(result.durationMs).toBeLessThan(6000);
+  });
+});
+
+describe('post-exit pipe draining', () => {
+  const waitForExit = async (handle: ReturnType<typeof startCommand>) => {
+    const deadline = Date.now() + 2000;
+    while (handle.exitCode() === undefined && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    expect(handle.exitCode()).toBe(0);
+  };
+
+  test.skipIf(process.platform === 'win32')(
+    'timeout still kills descendants after the direct child exits successfully',
+    async () => {
+      const handle = startCommand('sh', ['-c', 'sleep 10 & echo parent-exited'], {
+        timeoutMs: 500,
+      });
+      try {
+        await waitForExit(handle);
+        expect(handle.running()).toBe(true);
+        const result = await handle.completion;
+        expect(result.stdout).toBe('parent-exited');
+        expect(result.killed).toBe(true);
+        expect(result.code).toBeNull();
+        expect(result.durationMs).toBeLessThan(2500);
+        expect(handle.running()).toBe(false);
+        expect(handle.exitCode()).toBeNull();
+      } finally {
+        handle.kill(true);
+      }
+    },
+  );
+
+  test.skipIf(process.platform === 'win32')(
+    'force kill remains effective while descendants hold the pipes open',
+    async () => {
+      const handle = startCommand('sh', ['-c', 'sleep 10 & echo parent-exited'], {
+        timeoutMs: 15_000,
+      });
+      try {
+        await waitForExit(handle);
+        expect(handle.running()).toBe(true);
+        handle.kill(true);
+        const result = await handle.completion;
+        expect(result.killed).toBe(true);
+        expect(result.code).toBeNull();
+        expect(result.durationMs).toBeLessThan(2500);
+      } finally {
+        handle.kill(true);
+      }
+    },
+  );
+
+  test.skipIf(process.platform === 'win32')(
+    'SIGKILL escalation survives parent exit when a descendant ignores SIGTERM',
+    async () => {
+      const handle = startCommand('sh', ['-c', '(trap "" TERM; sleep 10) & echo parent-exited'], {
+        timeoutMs: 500,
+      });
+      try {
+        await waitForExit(handle);
+        const result = await handle.completion;
+        expect(result.killed).toBe(true);
+        expect(result.code).toBeNull();
+        expect(result.durationMs).toBeGreaterThanOrEqual(3000);
+        expect(result.durationMs).toBeLessThan(5000);
+      } finally {
+        handle.kill(true);
+      }
+    },
+    6000,
+  );
+
+  test('preserves trailing output on normal successful completion', async () => {
+    const result = await runCommand('node', ['-e', 'process.stdout.write("trailing output");']);
+    expect(result.stdout).toBe('trailing output');
+    expect(result.code).toBe(0);
+    expect(result.killed).toBe(false);
   });
 });
 

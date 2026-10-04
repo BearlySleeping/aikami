@@ -12,14 +12,20 @@ import type { AgentToolUpdateCallback, ExtensionAPI } from '@earendil-works/pi-c
 import { Type } from 'typebox';
 import { abortableSleep } from './lib/async.ts';
 import { resolvePrSelector, runGh, tokenizeArgs } from './lib/gh.ts';
+import { waitForCheckCompletion } from './lib/review_checks.ts';
+import {
+  currentCodeRabbitReviewState,
+  describeAutofixOutcome,
+  parseActionableCount,
+  readReadyPrSnapshot,
+} from './lib/review_evidence.ts';
+import { mergeReviewedHead } from './lib/review_merge.ts';
 import { defineAction, registerNamespace } from './lib/tool_namespace.ts';
 
 const TIMEOUT = 60_000;
 const POLL_INTERVAL = 15_000;
 const MAX_WAIT_MS = 30 * 60 * 1000;
-const CHECKS_POLL_INTERVAL = 10_000;
-const MAX_CHECKS_WAIT_MS = 90 * 1000; // 90s — LLM connection timeout safe
-const TERMINAL_REVIEW_STATES = ['APPROVED', 'COMMENTED', 'CHANGES_REQUESTED', 'DISMISSED'] as const;
+const TERMINAL_REVIEW_STATES = ['APPROVED', 'COMMENTED', 'CHANGES_REQUESTED'] as const;
 const CODERABBIT_LOGINS = ['coderabbitai', 'coderabbitai[bot]'];
 
 // ── gh adapter ──────────────────────────────────────────────────────
@@ -93,31 +99,36 @@ const cancelledResult = (
 ): {
   content: Array<{ type: 'text'; text: string }>;
   details: Record<string, unknown>;
+  isError: true;
 } => ({
   content: [
     {
       type: 'text' as const,
-      text: `⏹️ Cancelled — CodeRabbit operation on PR #${num} was aborted. No changes made.`,
+      text: `⏹️ Cancelled — CodeRabbit operation on PR #${num} was aborted. Inspect the PR for any work already triggered.`,
     },
   ],
+  isError: true,
   details: { pr: num, cancelled: true },
 });
 
-type PrViewResult = {
-  headRefOid: string;
-  headRefName: string;
-  reviews: Array<{ author: { login: string }; state: string }>;
-};
-
 type Params = { pr: string; merge?: boolean };
 
-/** Get the current CodeRabbit review state, or empty string if no review yet. */
-const getReviewState = async (num: string): Promise<string> =>
-  (
+const readActionableCount = async (
+  num: string,
+  signal?: AbortSignal,
+): Promise<number | undefined> =>
+  parseActionableCount(
     await gh(
-      `pr view ${num} --json reviews --jq '[.reviews[] | select(.author.login=="coderabbitai" or .author.login=="coderabbitai[bot]") | .state] | join(",")'`,
-    )
-  ).trim();
+      `pr view ${num} --json headRefOid,reviews --jq '.headRefOid as $head | [.reviews[] | select((.author.login=="coderabbitai" or .author.login=="coderabbitai[bot]") and .commit.oid==$head)] | sort_by(.submittedAt) | last | .body // ""'`,
+      signal,
+    ),
+  );
+
+/** Get the current CodeRabbit review state, or empty string if no review yet. */
+const getReviewState = async (num: string, signal?: AbortSignal): Promise<string> =>
+  currentCodeRabbitReviewState(
+    await ghJson<unknown>(`pr view ${num} --json headRefOid,isDraft,reviews`, signal),
+  );
 
 /**
  * Parse rate-limit wait minutes from the NEWEST CodeRabbit comment only.
@@ -136,7 +147,7 @@ const parseRateLimitMinutes = async (num: string): Promise<number | undefined> =
 
 /**
  * Phase 1: Ensure a CodeRabbit review exists.
- * Returns the terminal review state (APPROVED / COMMENTED / CHANGES_REQUESTED / DISMISSED)
+ * Returns the terminal review state (APPROVED / COMMENTED / CHANGES_REQUESTED)
  * or undefined if timed out.
  */
 const ensureReview = async (
@@ -145,7 +156,7 @@ const ensureReview = async (
   signal?: AbortSignal,
 ): Promise<string | undefined> => {
   // Check if review already exists.
-  const existing = await getReviewState(num);
+  const existing = await getReviewState(num, signal);
   if (existing && TERMINAL_REVIEW_STATES.some((s) => existing.includes(s))) {
     report(`📋 Existing CodeRabbit review: ${existing}`);
     return existing;
@@ -158,7 +169,7 @@ const ensureReview = async (
   let deadline = Date.now() + MAX_WAIT_MS;
 
   while (Date.now() < deadline) {
-    const state = await getReviewState(num);
+    const state = await getReviewState(num, signal);
 
     if (state && TERMINAL_REVIEW_STATES.some((s) => state.includes(s))) {
       report(`✅ CodeRabbit review complete: ${state}`);
@@ -302,55 +313,6 @@ const getAutofixStatus = async (num: string): Promise<string | undefined> => {
 };
 
 /**
- * Check if any CI checks are pending on the PR.
- * Returns { pending: boolean, pendingCount: number }.
- */
-const getChecksPending = async (
-  num: string,
-): Promise<{ pending: boolean; pendingCount: number }> => {
-  const checksRaw = await gh(`pr checks ${num}`);
-  if (!checksRaw) {
-    return { pending: false, pendingCount: 0 };
-  }
-  // Parse `gh pr checks` output — lines containing "pending" or "in_progress"
-  const lines = checksRaw.split('\n');
-  let pendingCount = 0;
-  for (const line of lines) {
-    const lower = line.toLowerCase();
-    if (lower.includes('pending') || lower.includes('in_progress') || lower.includes('⏳')) {
-      pendingCount++;
-    }
-  }
-  return { pending: pendingCount > 0, pendingCount };
-};
-
-/**
- * Wait for all CI checks to complete (pass or fail), not just pending.
- * Returns true if all checks completed (none pending), false if timed out.
- */
-const waitForChecks = async (
-  num: string,
-  report: Reporter,
-  signal?: AbortSignal,
-): Promise<boolean> => {
-  const deadline = Date.now() + MAX_CHECKS_WAIT_MS;
-  report('⏳ Waiting for CI checks to complete (max 90s)...');
-  while (Date.now() < deadline) {
-    const { pending, pendingCount } = await getChecksPending(num);
-    if (!pending) {
-      report('✅ All CI checks completed.');
-      return true;
-    }
-    report(`  ⏳ ${pendingCount} check(s) pending...`);
-    if (!(await abortableSleep(CHECKS_POLL_INTERVAL, signal))) {
-      return false;
-    }
-  }
-  report('⚠️  CI checks still running after 90s — bailing out gracefully.');
-  return false;
-};
-
-/**
  * Phase 2: Trigger autofix (review anchors it now)
  * Phase 3: Poll for autofix commit
  * Returns the new commit SHA or undefined.
@@ -445,21 +407,7 @@ export default function codeRabbitExtension(pi: ExtensionAPI): void {
           const num = resolvePrSelector(params.pr);
 
           // ── Capture baseline ────────────────────────────────
-          const prInfo = await ghJson<PrViewResult>(
-            `pr view ${num} --json headRefOid,headRefName,reviews`,
-          );
-          if (!prInfo) {
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text: `❌ Could not read PR #${num}. Check gh auth.\n${ghError()}`,
-                },
-              ],
-              isError: true,
-              details: { pr: num, error: 'pr_unreadable' },
-            };
-          }
+          const prInfo = await readReadyPrSnapshot({ pr: num, signal });
           const baselineCommit = prInfo.headRefOid;
           const headRefName = prInfo.headRefName;
           report(`📌 Baseline commit: ${baselineCommit.slice(0, 7)} (${headRefName})`);
@@ -468,8 +416,11 @@ export default function codeRabbitExtension(pi: ExtensionAPI): void {
           // ── Phase 0: Wait for CI checks ───────────────────
           // Don't trigger CodeRabbit while CI is still running — the review
           // needs the full code context including build/lint results.
-          const checksReady = await waitForChecks(num, report, signal);
+          const checksReady = await waitForCheckCompletion({ pr: num, report, signal });
           if (!checksReady) {
+            if (signal?.aborted) {
+              return cancelledResult(num);
+            }
             return {
               content: [
                 {
@@ -495,6 +446,9 @@ export default function codeRabbitExtension(pi: ExtensionAPI): void {
           // ── Phase 1: Ensure review exists ───────────────────
           const reviewState = await ensureReview(num, report, signal);
           if (!reviewState) {
+            if (signal?.aborted) {
+              return cancelledResult(num);
+            }
             return {
               content: [
                 {
@@ -509,11 +463,15 @@ export default function codeRabbitExtension(pi: ExtensionAPI): void {
           // If already approved, no autofix needed.
           if (reviewState.includes('APPROVED')) {
             report('✅ CodeRabbit approved — no autofix needed.');
-            if (params.merge) {
-              report('🚀 Merging...');
-              const result = await gh(`pr merge ${num} --squash --delete-branch`);
-              report(result ? `✅ Merged PR #${num}` : '❌ Merge failed.');
-            }
+            await mergeReviewedHead({
+              requested: params.merge,
+              actionableCount: await readActionableCount(num, signal),
+              pr: num,
+              head: baselineCommit,
+              report,
+              signal,
+              readReviewState: () => getReviewState(num, signal),
+            });
             return {
               content: [
                 {
@@ -621,7 +579,7 @@ export default function codeRabbitExtension(pi: ExtensionAPI): void {
 
           // 🔴 POST-AUTOFIX SYNC: Verify remote HEAD matches local worktree.
           // If CodeRabbit pushed an autofix commit, the local worktree is stale.
-          // The caller MUST git fetch + reset --hard before proceeding.
+          // The caller must fetch and fast-forward; preserve any local changes.
           const finalAutofixState = await getAutofixCommentState(num);
           const autofixApplied =
             autofixCommit !== undefined || finalAutofixState === 'autofix_applied';
@@ -659,16 +617,8 @@ export default function codeRabbitExtension(pi: ExtensionAPI): void {
 
           // ── Evaluate outcome ────────────────────────────────
           // Count actionable findings for metadata
-          const commentsBody = await gh(
-            `pr view ${num} --json comments --jq '[.comments[] | select(.author.login=="coderabbitai" or .author.login=="coderabbitai[bot]") | .body] | join(" ")'`,
-          );
-          const hasActionable = commentsBody.includes('Actionable comments posted:');
-          const actionableCount = hasActionable
-            ? Number.parseInt(
-                commentsBody.match(/Actionable comments posted: (\d+)/)?.[1] ?? '0',
-                10,
-              )
-            : 0;
+          const actionableCount = await readActionableCount(num, signal);
+          const hasActionable = actionableCount !== 0;
 
           if (autofixCommit) {
             report(`🎯 Autofix commit: ${autofixCommit.slice(0, 7)}`);
@@ -682,12 +632,12 @@ export default function codeRabbitExtension(pi: ExtensionAPI): void {
                     `**Autofix commit:** \`${autofixCommit.slice(0, 7)}\``,
                     `**Branch:** \`${headRefName}\``,
                     `**Review state:** \`${reviewState}\``,
-                    `**Actionable findings remaining:** ${actionableCount}`,
+                    `**Actionable findings remaining:** ${actionableCount ?? 'unknown'}`,
                     '',
                     '🔴 **REQUIRED: Sync your local worktree:**',
                     '```bash',
                     `git fetch origin ${headRefName}`,
-                    `git reset --hard origin/${headRefName}`,
+                    `git merge --ff-only origin/${headRefName}`,
                     '```',
                   ].join('\n'),
                 },
@@ -706,17 +656,20 @@ export default function codeRabbitExtension(pi: ExtensionAPI): void {
             };
           }
 
-          // No autofix commit — either skipped (clean) or approved mid-wait.
-          if (params.merge && reviewState.includes('APPROVED') && !hasActionable) {
-            report('🚀 No autofix needed — merging...');
-            const result = await gh(`pr merge ${num} --squash --delete-branch`);
-            report(result ? `✅ Merged PR #${num}` : '❌ Merge failed.');
-          }
+          await mergeReviewedHead({
+            requested: params.merge,
+            actionableCount,
+            pr: num,
+            head: baselineCommit,
+            report,
+            signal,
+            readReviewState: () => getReviewState(num, signal),
+          });
 
           const findingsWarning = hasActionable
             ? [
                 '',
-                '⚠️  **CodeRabbit found actionable comments that autofix could not resolve.**',
+                '⚠️ **Findings remain or their remaining count is unverified.**',
                 'Call the `code_rabbit` tool, action "findings", to inspect them. The Captain should decide',
                 'whether these are blocking before merging.',
               ].join('\n')
@@ -728,18 +681,7 @@ export default function codeRabbitExtension(pi: ExtensionAPI): void {
                 type: 'text',
                 text: [
                   `✅ CodeRabbit review complete on PR #${num}: ${reviewState}.`,
-                  (() => {
-                    if (rateLimited) {
-                      return '⚠️  CodeRabbit is rate-limited — autofix could not run.';
-                    }
-                    if (autofixSkipped) {
-                      return 'No autofix changes were needed (clean review).';
-                    }
-                    if (hasActionable) {
-                      return `⚠️  ${actionableCount} actionable comments — autofix could not resolve them.`;
-                    }
-                    return 'No autofix changes were needed (clean review).';
-                  })(),
+                  describeAutofixOutcome({ rateLimited, skipped: autofixSkipped, actionableCount }),
                   findingsWarning,
                   duplicatePrevented
                     ? '🔍 Duplicate autofix command was prevented (was already in flight).'
@@ -949,7 +891,7 @@ export default function codeRabbitExtension(pi: ExtensionAPI): void {
 
           while (Date.now() < deadline) {
             // Check review state
-            const state = await getReviewState(num);
+            const state = await getReviewState(num, signal);
             if (state && TERMINAL_REVIEW_STATES.some((s) => state.includes(s))) {
               report(`✅ Review complete: ${state}`);
               return {

@@ -74,6 +74,7 @@ import {
   makeInstanceRecorder,
   makeListenerOwnershipProbe,
 } from './service_probes.ts';
+import { assertServiceTabOwnership } from './service_tab_ownership.ts';
 
 // ── Types ──────────────────────────────────────────────────
 
@@ -1576,6 +1577,12 @@ export const startServices = async (config: SessionConfig): Promise<string> => {
     assertNoRunningServiceConflicts(services, existingTabNames, mode, offset);
   }
 
+  if (force && existingWsId) {
+    throw new Error(
+      'Refusing whole-workspace recreation: stop proved-owned services individually.',
+    );
+  }
+
   // ── Force-ports: kill whatever's squatting on our target ports first ──
   // Distinct from `force` (which recreates the whole workspace) — this only
   // clears the ports, so it's safe to use even when the workspace/tabs
@@ -1597,19 +1604,7 @@ export const startServices = async (config: SessionConfig): Promise<string> => {
     );
   }
 
-  // ── Mode mismatch guard: force-recreate workspace if requested ──
-  if (force && existingWsId) {
-    console.log(`🔄 Force mode: recreating workspace ${workspaceLabel}...`);
-    await herdr(['workspace', 'close', existingWsId]);
-    await new Promise((r) => setTimeout(r, 500));
-    // Fall through to create new workspace
-  } else if (existingWsId && !force) {
-    // Workspace exists — check if wrong mode is stored
-    // (herdr doesn't store mode, but we check by existence)
-    // Just proceed to add missing tabs
-  }
-
-  let workspaceId = existingWsId && !force ? existingWsId : null;
+  let workspaceId = existingWsId;
 
   // ── Create workspace if needed ──────────────────────────
   if (!workspaceId) {
@@ -1698,6 +1693,10 @@ export const startServices = async (config: SessionConfig): Promise<string> => {
               port,
             );
             if (readResult.state === 'crashed') {
+              await assertServiceTabOwnership({
+                panePids: await paneProcessIds(servicePane.pane_id),
+                expected: identity,
+              });
               console.log(`  ↻ Tab: ${svc.name} crashed, restarting...`);
               // No --env here — this pane already has its offset env vars
               // from its original `tab create`, and they persist for the
@@ -1715,10 +1714,9 @@ export const startServices = async (config: SessionConfig): Promise<string> => {
               continue;
             }
             if (readResult.state === 'unavailable') {
-              console.log(
-                `  ⚠ Tab: ${svc.name} port occupied by foreign instance (${readResult.reason ?? 'identity mismatch'}), skipping`,
+              throw new Error(
+                `Refusing reuse of ${svc.name}: ${readResult.reason ?? 'identity mismatch'}`,
               );
-              continue;
             }
           }
         }
@@ -1865,6 +1863,15 @@ export const stopServices = async (config: {
     const name = SERVICE_DEFS[service].name;
     const tabId = await findTab(workspaceId, name);
     if (tabId) {
+      const panePids = (await getWorkspacePanes(workspaceId)).filter(
+        (pane) => pane.tab_id === tabId,
+      );
+      const processIds = await Promise.all(panePids.map((pane) => paneProcessIds(pane.pane_id)));
+      await assertServiceTabOwnership({
+        panePids: processIds.flat(),
+        unresolvedPane: processIds.some((ids) => ids.length === 0),
+        expected: buildServiceIdentity(service),
+      });
       await herdr(['tab', 'close', tabId]);
       // KNOWN GAP (Windows): `tab close` only reliably reaps the pane's
       // top-level process — see portsToCleanupForService's doc. Sweep every

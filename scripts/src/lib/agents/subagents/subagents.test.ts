@@ -169,7 +169,19 @@ describe('prompt + args', () => {
   it('removes mutation tools for read agents', () => {
     const args = buildPiArgs({ spec, sessionId: 's1', task: 'do it' });
     const excluded = args[args.indexOf('--exclude-tools') + 1] ?? '';
-    for (const t of ['edit', 'write', 'subagent', 'gh_pr', 'foo']) {
+    for (const t of [
+      'edit',
+      'write',
+      'subagent',
+      'gh_pr',
+      'foo',
+      'gcloud_exec',
+      'direnv',
+      'gh_project',
+      'validate',
+      'moon_run_task',
+      'blackbox_test',
+    ]) {
       expect(excluded.split(',')).toContain(t);
     }
     expect(args).toContain('--no-skills');
@@ -187,7 +199,18 @@ describe('prompt + args', () => {
   });
 
   it('rejects excluded tools in an explicit allowlist', () => {
-    for (const tool of ['edit', 'subagent', 'foo', 'read,edit']) {
+    for (const tool of [
+      'edit',
+      'subagent',
+      'foo',
+      'read,edit',
+      'gcloud_exec',
+      'direnv',
+      'gh_project',
+      'validate',
+      'moon_run_task',
+      'blackbox_test',
+    ]) {
       expect(() =>
         buildPiArgs({ spec: { ...spec, tools: ['read', tool] }, sessionId: 's', task: 't' }),
       ).toThrow(/excluded/);
@@ -216,6 +239,8 @@ describe('run state and timeout', () => {
         }),
       );
       const request = { name: 'timer', task: 'do it', repoRoot };
+      expect(buildSpec(request).completionAlerts).toBe(false);
+      expect(buildSpec({ ...request, completionAlerts: true }).completionAlerts).toBe(true);
       expect(buildSpec({ ...request, timeoutMinutes: 0 }).timeoutMs).toBe(60_000);
       expect(buildSpec({ ...request, timeoutMinutes: -5 }).timeoutMs).toBe(60_000);
       expect(buildSpec({ ...request, timeoutMinutes: 35_791 }).timeoutMs).toBe(2_147_460_000);

@@ -259,7 +259,8 @@ export default function (pi: ExtensionAPI) {
       'checkout, mutation tools removed, no worktree. kind=write: isolated herdr worktree (returned checkoutPath ' +
       'lets you read its code), auto PR to main with optional CodeRabbit review/autofix. Background by default: ' +
       'you are woken with the result when each finishes — keep working, then subagent.wait / wait_all only when ' +
-      'you have nothing else to do. Default model is a FREE stealth model; pass model "inherit" for yours, ' +
+      'you have nothing else to do. Herdr completion alerts are quiet by default; result delivery is unchanged. ' +
+      'Default model is a FREE stealth model; pass model "inherit" for yours, ' +
       '"pro"/"flash" for .env tiers, or provider/id. Give each agent a self-contained task — it cannot ask you questions.',
     promptSnippet:
       'Use subagent to fan out independent research (kind read) or isolated implementation (kind write, PR) in parallel',
@@ -305,7 +306,16 @@ export default function (pi: ExtensionAPI) {
           pr: PR_SCHEMA,
           timeoutMinutes: Type.Optional(Type.Number({ description: 'Kill after (default 45)' })),
           notify: Type.Optional(
-            Type.Boolean({ description: 'Wake me on completion (default true)' }),
+            Type.Boolean({
+              description:
+                'Deliver result and wake captain on completion (default true; separate from Herdr alerts)',
+            }),
+          ),
+          completionAlerts: Type.Optional(
+            Type.Boolean({
+              description:
+                'Opt into Herdr completion alerts (default false; does not change captain result delivery)',
+            }),
           ),
         }),
         async execute(_id, params, signal, onUpdate, ctx) {

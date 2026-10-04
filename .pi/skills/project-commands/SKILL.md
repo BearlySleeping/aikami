@@ -32,19 +32,21 @@ bun run herdr:start hub             # Hub SSR dev server
 bun moon run client:dev
 ```
 
-After starting a herdr workspace, wait 3-5 seconds then use `browser inspect` to
-verify the page is accessible.
+After starting a service, prove its checkout/service identity at
+`/.aikami/identity` on the checkout-scoped port. HTTP200 alone is not identity.
+Use browser inspection only after that proof; do not substitute a sleep.
 
 ### 2. Finite Tasks → Set Timeout & Predict Duration
 
-For `moon_run_task` and `bash` commands that should complete within a finite
-time, **always provide a `timeout` value**. Default to **5 minutes (300s)**
-unless you have a concrete reason to expect a different duration.
+Bound finite commands with the timeout field their tool actually exposes.
+`bash` uses seconds; `bg.run` uses `params.timeoutMs`. `moon_run_task` has no
+caller-supplied timeout parameter; for a longer Moon task use `bg` with a
+bounded command. `validate` exposes `timeoutSeconds` per phase.
 
 ```bash
 # ✅ CORRECT — timeout provided
-bash("npm test 2>&1", timeout=300)
-moon_run_task("client:build", timeout=600)   # longer for build
+bash("git status --short", timeout=10)
+bg({action: "run", params: {command: "bun moon run client:build", timeoutMs: 600000}})
 
 # ❌ WRONG — no timeout, may hang forever
 bash("npm test 2>&1")
@@ -66,7 +68,7 @@ bun run herdr:status
 
 # Start (only if not already running)
 bun run herdr:start client
-bun run herdr:start all --force     # Kill + recreate
+# Stop/restart only proved-owned services; unknown/foreign tabs require manual inspection.
 
 # Join to inspect
 bun run herdr:join hub
@@ -541,7 +543,7 @@ curl -s http://localhost:3000/health
 bun run scripts -- test-webhook
 
 # Test a hub server/api route locally
-bun test apps/frontend/hub/src/lib/server/api/tests/**/*.ts
+bun moon run hub:test
 ```
 
 ### Blackbox tests
@@ -578,7 +580,9 @@ All herdr workspaces use a unified naming convention: `aikami-{mode}`.
 | `bun run herdr:status`          | List all running workspaces    |
 
 All scripts respect `$AIKAMI_MODE` from direnv. Override with `--mode <mode>`.
-Use `--force` with `herdr:start` to kill and recreate an existing workspace.
+Whole-workspace force recreation is refused. Service stop/restart fails closed
+when foreground process ownership cannot be proved. Inspect unrecorded or
+foreign tabs manually; never weaken the guard or kill another captain's listener.
 
 ### Quick reference
 
@@ -631,12 +635,11 @@ bun run test:blackbox --no-emulator
 
 The unified library (`scripts/src/lib/herdr/session.ts`) handles:
 
-1. **Workspace naming**: `aikami-{mode}` stored as a herdr workspace variable
-2. **Mode detection**: Checks `AIKAMI_HERDR_MODE` env var in the workspace
-3. **Start logic**:
-    - Workspace doesn't exist → create new
-    - Workspace exists, same mode → reuse (no-op)
-    - Workspace exists, different mode → error (use `--force` to override)
-4. **Command wrapping**: Uses `direnv exec . bash -c '...'` to load Nix env
-5. **Keepalive**: Appends `; echo; echo '=== Stopped. Press Enter to close ==='; read`
-   so the pane stays open after the command exits
+1. **Workspace naming**: `aikami-{mode}`, or the current contract's workspace.
+2. **Start logic**: Creates missing tabs and assesses instance-bound readiness
+   before reuse; foreign or unverified services are not healthy evidence.
+3. **Command wrapping**: Uses the detected pane shell and checkout environment.
+4. **Ownership**: Stop/restart and crash recovery require proved-owned
+   foreground PIDs before touching a tab. Missing records fail closed.
+5. **Persistence**: Service panes survive the launching agent. Finite builds/tests
+   belong in `bg`; descendants holding pipes open do not disable its timeout.

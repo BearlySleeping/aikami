@@ -85,6 +85,8 @@ export type SubagentSpec = {
   timeoutMs: number;
   /** Launch inside a herdr tab (visible) vs. a detached process. */
   herdr: boolean;
+  /** Opt into Herdr completion alerts. Missing/false is quiet, including old run specs. */
+  completionAlerts?: boolean;
   /** Repo root of the captain that spawned this run. */
   repoRoot: string;
   /** Captain pi session id — lets a restarted captain re-attach watchers. */

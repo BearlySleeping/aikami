@@ -20,6 +20,36 @@ Models, observational memory, context-mode, theme, and Telegram bridge are globa
 
 ---
 
+## Captain sessions
+
+Start with `/captain <bounded goal>`. Read the prior captain's local playbook at
+`tmp/captain-session-playbook.md` when present; recheck its dated PR ownership.
+Use isolated bootstrapped worktrees, explicit file ownership and one integration
+writer. Root main and other captains' checkouts stay untouched.
+
+- Subagents are quiet in Herdr by default: the supervisor releases its own hook
+  instead of reporting an idle/Done transition. Completed state and results stay
+  in the run record; automatic captain delivery (`notify:true`) is unchanged.
+  `completionAlerts:true` explicitly restores Herdr's completion report. This
+  does not change global Herdr sound settings; `HERDR_DISABLE_SOUND` in a child
+  is not a per-pane mute switch for the running Herdr client.
+- Service stop/restart and crash recovery fail closed on unproved foreground
+  process ownership, including missing records, PID reuse and shared/external
+  processes. Unrecorded preview/crashed/Windows-wrapper tabs may need manual
+  cleanup. Whole-workspace force recreation is refused; no automatic fallback
+  may close somebody else's tab. Readiness requires instance identity, not
+  merely an open port. Inspect `/.aikami/identity` before acceptance.
+- AI image tools optimize disposable copies, never original evidence. Preserve
+  paired captures/checksums and treat VLM scores as advisory.
+- CodeRabbit completion uses the newest current-head review; drafts, skipped or
+  dismissed reviews do not qualify. Unknown/no CI checks fail closed in autofix.
+  Completed failing checks are not passing CI, and unknown findings are not zero.
+- Read-agent tool exclusions reduce accidental mutations, not OS permissions:
+  `bash` and context-mode execution remain available. They are not a sandbox.
+
+No commit/push/publication without explicit authorization. Changes to extensions
+only take effect in a session loading that checkout (restart or `/reload`).
+
 ## 🔴 Tool surface is a per-turn tax
 
 Every registered tool pins its name, description, `promptSnippet`, `promptGuidelines` and full

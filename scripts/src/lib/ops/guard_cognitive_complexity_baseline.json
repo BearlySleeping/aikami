@@ -14,7 +14,7 @@
   ".pi/extensions/code_rabbit.ts": {
     "counts": {
       "excessive": 5,
-      "worst": 52
+      "worst": 44
     }
   },
   ".pi/extensions/contract_factory.ts": {
@@ -49,7 +49,7 @@
   },
   ".pi/extensions/herdr_orchestrator.ts": {
     "counts": {
-      "excessive": 6,
+      "excessive": 3,
       "worst": 140
     }
   },
@@ -1994,7 +1994,7 @@
   "scripts/src/lib/herdr/session.ts": {
     "counts": {
       "excessive": 4,
-      "worst": 84
+      "worst": 80
     }
   },
   "scripts/src/lib/herdr/start_autofix.ts": {
