@@ -27,7 +27,7 @@ must be rechecked.
 - Preserve original paired evidence and verify checksums. Image tools prepare
   disposable copies; visual AI scoring is advisory, not human art acceptance.
 - Do not commit, push, open/promote/merge PRs without explicit authorization.
-  Once authorized, validate first, publish a cohesive PR under100 files,
+  Once authorized, validate first, publish a cohesive PR under 100 files,
   promote only after scoped gates pass, then await real current-head review and
   applicable passing CI. Draft skips, COMMENTED reviews, skipped autofix, absent
   checks or unknown findings are not approvals. Preserve local changes when

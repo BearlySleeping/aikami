@@ -198,6 +198,26 @@
       "class": "pi_extensions",
       "active": true
     },
+    ".pi/extensions/lib/review_gh.ts": {
+      "class": "pi_extensions",
+      "active": true
+    },
+    ".pi/extensions/lib/service_status.ts": {
+      "class": "pi_extensions",
+      "active": true
+    },
+    ".pi/extensions/lib/service_status.test.ts": {
+      "class": "pi_extensions",
+      "active": true
+    },
+    ".pi/extensions/lib/review_polling.ts": {
+      "class": "pi_extensions",
+      "active": true
+    },
+    ".pi/extensions/lib/review_polling.test.ts": {
+      "class": "pi_extensions",
+      "active": true
+    },
     ".pi/extensions/lib/repetition.ts": {
       "class": "pi_extensions",
       "active": true
@@ -415,6 +435,10 @@
       "active": true
     },
     ".pi/prompts/assets-verify.md": {
+      "class": "agent_prompts",
+      "active": true
+    },
+    ".pi/prompts/captain.md": {
       "class": "agent_prompts",
       "active": true
     },

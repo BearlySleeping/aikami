@@ -33,7 +33,7 @@ bun moon run client:dev
 ```
 
 After starting a service, prove its checkout/service identity at
-`/.aikami/identity` on the checkout-scoped port. HTTP200 alone is not identity.
+`/.aikami/identity` on the checkout-scoped port. HTTP 200 alone is not identity.
 Use browser inspection only after that proof; do not substitute a sleep.
 
 ### 2. Finite Tasks → Set Timeout & Predict Duration

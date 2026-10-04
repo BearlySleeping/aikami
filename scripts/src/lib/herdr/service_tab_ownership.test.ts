@@ -1,8 +1,12 @@
 // scripts/src/lib/herdr/service_tab_ownership.test.ts
 
 import { describe, expect, test } from 'bun:test';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { InstanceRecord, ProcessInspector } from './instance_registry.ts';
-import { assertServiceTabOwnership } from './service_tab_ownership.ts';
+import { readInstanceRecords } from './instance_registry.ts';
+import { assertServiceTabOwnership, recordCreatedServicePane } from './service_tab_ownership.ts';
 
 const expected = { service: 'client', checkout: '/owned-checkout', runId: 'owned-run' };
 const record: InstanceRecord = {
@@ -82,5 +86,48 @@ describe('service tab ownership before destructive actions', () => {
         inspector,
       }),
     ).rejects.toThrow('another run');
+  });
+});
+
+describe('idle pane ownership', () => {
+  test('created pane shell evidence permits cleanup after the service exits', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'pane-ownership-'));
+    try {
+      await recordCreatedServicePane({
+        paneId: 'owned:p1',
+        shellPids: [record.pid],
+        expected,
+        startTimeMs: inspector.startTimeMs,
+        dir,
+      });
+      const records = readInstanceRecords({ dir });
+      const options = {
+        expected,
+        panePids: [],
+        idlePanes: [{ paneId: 'owned:p1', pid: record.pid }],
+        records,
+        inspector,
+      };
+      await expect(assertServiceTabOwnership(options)).resolves.toBeUndefined();
+      // A shell record must not prove service ownership/readiness.
+      await expect(
+        assertServiceTabOwnership({ ...options, panePids: [record.pid], idlePanes: [] }),
+      ).rejects.toThrow();
+      for (const invalid of [
+        { records: [] },
+        { idlePanes: [{ paneId: 'foreign:p1', pid: record.pid }] },
+        { expected: { ...expected, runId: 'other-run' } },
+        { expected: { ...expected, runId: undefined } },
+        { expected: { ...expected, checkout: '/foreign' } },
+        { expected: { ...expected, service: 'hub' } },
+        { inspector: { ...inspector, startTimeMs: async () => 30_000 } },
+        { unresolvedPane: true },
+        { panePids: [9999] },
+      ]) {
+        await expect(assertServiceTabOwnership({ ...options, ...invalid })).rejects.toThrow();
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

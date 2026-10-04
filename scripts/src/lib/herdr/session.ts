@@ -74,7 +74,7 @@ import {
   makeInstanceRecorder,
   makeListenerOwnershipProbe,
 } from './service_probes.ts';
-import { assertServiceTabOwnership } from './service_tab_ownership.ts';
+import { assertServiceTabOwnership, recordCreatedServicePane } from './service_tab_ownership.ts';
 
 // ── Types ──────────────────────────────────────────────────
 
@@ -1355,13 +1355,40 @@ export type ReadinessResult = {
 };
 
 /** Foreground process IDs reported for a trusted service pane. */
-export const paneProcessIds = async (paneId: string): Promise<number[]> => {
+const paneProcesses = async (paneId: string): Promise<{ name: string; pid: number }[]> => {
   try {
     const result = await herdrJson<PaneProcessInfo>(['pane', 'process-info', '--pane', paneId]);
-    return result?.result?.process_info?.foreground_processes?.map((process) => process.pid) ?? [];
+    return result?.result?.process_info?.foreground_processes ?? [];
   } catch {
     return [];
   }
+};
+
+/** Service PIDs exclude idle shells, whose ownership is checked separately. */
+export const paneProcessIds = async (paneId: string): Promise<number[]> =>
+  (await paneProcesses(paneId))
+    .filter((process) => !isIdleShellName(process.name))
+    .map((process) => process.pid);
+
+const servicePaneOwnership = async (paneId: string) => {
+  const processes = await paneProcesses(paneId);
+  const panePids = processes
+    .filter((process) => !isIdleShellName(process.name))
+    .map(({ pid }) => pid);
+  return {
+    panePids,
+    idlePanes: panePids.length > 0 ? [] : processes.map(({ pid }) => ({ paneId, pid })),
+    unresolvedPane: processes.length === 0,
+  };
+};
+
+const recordNewServicePane = async (paneId: string, service: DevService): Promise<void> => {
+  const evidence = await servicePaneOwnership(paneId);
+  await recordCreatedServicePane({
+    paneId,
+    shellPids: evidence.idlePanes.map(({ pid }) => pid),
+    expected: buildServiceIdentity(service),
+  });
 };
 
 const identityMismatchReason = (
@@ -1630,6 +1657,7 @@ export const startServices = async (config: SessionConfig): Promise<string> => {
 
     // Rename initial tab and run command
     const rootPaneId = r.result.root_pane.pane_id;
+    await recordNewServicePane(rootPaneId, first);
     await herdr(['tab', 'rename', `${workspaceId}:1`, svc.name]);
     await herdr([
       'pane',
@@ -1659,6 +1687,7 @@ export const startServices = async (config: SessionConfig): Promise<string> => {
         ),
       );
       if (tabR?.result) {
+        await recordNewServicePane(tabR.result.root_pane.pane_id, service);
         await herdr([
           'pane',
           'run',
@@ -1694,7 +1723,7 @@ export const startServices = async (config: SessionConfig): Promise<string> => {
             );
             if (readResult.state === 'crashed') {
               await assertServiceTabOwnership({
-                panePids: await paneProcessIds(servicePane.pane_id),
+                ...(await servicePaneOwnership(servicePane.pane_id)),
                 expected: identity,
               });
               console.log(`  ↻ Tab: ${svc.name} crashed, restarting...`);
@@ -1740,6 +1769,7 @@ export const startServices = async (config: SessionConfig): Promise<string> => {
         ),
       );
       if (tabR?.result) {
+        await recordNewServicePane(tabR.result.root_pane.pane_id, service);
         await herdr([
           'pane',
           'run',
@@ -1866,10 +1896,13 @@ export const stopServices = async (config: {
       const panePids = (await getWorkspacePanes(workspaceId)).filter(
         (pane) => pane.tab_id === tabId,
       );
-      const processIds = await Promise.all(panePids.map((pane) => paneProcessIds(pane.pane_id)));
+      const evidence = await Promise.all(
+        panePids.map((pane) => servicePaneOwnership(pane.pane_id)),
+      );
       await assertServiceTabOwnership({
-        panePids: processIds.flat(),
-        unresolvedPane: processIds.some((ids) => ids.length === 0),
+        panePids: evidence.flatMap((pane) => pane.panePids),
+        idlePanes: evidence.flatMap((pane) => pane.idlePanes),
+        unresolvedPane: evidence.some((pane) => pane.unresolvedPane),
         expected: buildServiceIdentity(service),
       });
       await herdr(['tab', 'close', tabId]);

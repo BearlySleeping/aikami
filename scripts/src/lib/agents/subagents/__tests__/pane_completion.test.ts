@@ -1,7 +1,8 @@
-// scripts/src/lib/agents/subagents/pane_completion.test.ts
+// scripts/src/lib/agents/subagents/__tests__/pane_completion.test.ts
 
-import { describe, expect, test } from 'bun:test';
-import { completionPaneArgs, settleSubagentPane } from './pane_completion.ts';
+import { describe, expect, spyOn, test } from 'bun:test';
+import { logger } from '$logger';
+import { completionPaneArgs, settleSubagentPane } from '../pane_completion.ts';
 
 describe('quiet subagent completion', () => {
   test('default and legacy specs release our own hook without an idle/Done report', () => {
@@ -40,6 +41,7 @@ describe('quiet subagent completion', () => {
         expect(args[1]).toBe('release-agent');
         await gate;
         released = true;
+        return { code: 0, stderr: '' };
       },
     });
     expect(released).toBe(false);
@@ -68,8 +70,31 @@ describe('quiet subagent completion', () => {
       message: 'succeeded',
       runHerdr: async () => {
         calls++;
+        return { code: 0, stderr: '' };
       },
     });
     expect(calls).toBe(0);
   });
+});
+
+test('nonzero release exits are diagnosed and never settle or report idle', async () => {
+  const warn = spyOn(logger, 'warn').mockImplementation(() => {});
+  const commands: string[][] = [];
+  try {
+    const settled = await settleSubagentPane({
+      paneId: 'owned:p1',
+      message: 'succeeded',
+      runHerdr: async (args) => {
+        commands.push(args);
+        return { code: 1, stderr: 'release rejected' };
+      },
+    });
+    expect(settled).toBe(false);
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0]?.[0]).toBe('Subagent pane settlement failed');
+    expect(commands).toHaveLength(1);
+    expect(commands[0]?.[1]).toBe('release-agent');
+  } finally {
+    warn.mockRestore();
+  }
 });

@@ -1,7 +1,7 @@
 // .pi/extensions/lib/service_status.test.ts
 
 import { describe, expect, test } from 'bun:test';
-import { formatServiceStatus } from './service_status.ts';
+import { formatServiceStatus, formatWorkspaceServiceStatus } from './service_status.ts';
 
 const service = {
   name: 'client',
@@ -25,10 +25,38 @@ describe('canonical service status presentation', () => {
   );
 
   test('unprobed panes cannot claim identity-verified readiness', () => {
-    expect(formatServiceStatus({ ...service, readyPort: undefined })).not.toContain('✅');
+    const status = formatServiceStatus({ ...service, readyPort: undefined });
+    expect(status).toContain('running (no port check)');
+    expect(status).not.toContain('identity-verified');
   });
 
   test('stopped service is not ready even with stale status metadata', () => {
     expect(formatServiceStatus({ ...service, running: false })).toContain('not running');
   });
+});
+
+test('status selects the requested service within the current workspace', () => {
+  const sessions = [
+    { name: 'foreign', services: [{ ...service, service: 'client', name: 'foreign-client' }] },
+    {
+      name: 'owned',
+      services: [
+        { ...service, service: 'hub', name: 'owned-hub' },
+        { ...service, service: 'client', name: 'owned-client' },
+      ],
+    },
+  ];
+  expect(
+    formatWorkspaceServiceStatus({ sessions, workspace: 'owned', service: 'client' }),
+  ).toContain('owned-client');
+  expect(formatWorkspaceServiceStatus({ sessions, workspace: 'missing', service: 'client' })).toBe(
+    '⏸️ client — not running',
+  );
+  expect(
+    formatWorkspaceServiceStatus({
+      sessions: sessions.slice(0, 1),
+      workspace: 'owned',
+      service: 'client',
+    }),
+  ).toBe('⏸️ client — not running');
 });

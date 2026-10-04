@@ -27,7 +27,7 @@ import {
 import type { AikamiMode } from '../../scripts/src/lib/env/mode';
 import { type BridgeOptions, runPiScript } from './lib/bridge.ts';
 import { runCommand } from './lib/process_runner.ts';
-import { formatServiceStatus } from './lib/service_status.ts';
+import { formatServiceStatus, formatWorkspaceServiceStatus } from './lib/service_status.ts';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TYPES
@@ -1072,14 +1072,11 @@ export default function (pi: ExtensionAPI) {
             { mode },
             bridgeOptions,
           );
-          const status = sessions
-            .flatMap((session) => session.services)
-            .find((entry) => entry.service === service);
           return {
             content: [
               {
                 type: 'text',
-                text: status ? formatServiceStatus(status) : `⏸️ ${service} — not running`,
+                text: formatWorkspaceServiceStatus({ sessions, workspace: await label(), service }),
               },
             ],
             details: {},
