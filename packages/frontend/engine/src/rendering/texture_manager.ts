@@ -517,6 +517,11 @@ export class TextureManager {
     return this._spritesheets.count;
   }
 
+  /** Number of spritesheets with active leases. */
+  get pinnedSpritesheetCount(): number {
+    return this._spritesheets.pinnedCount;
+  }
+
   /**
    * Decrements the reference count for a texture and removes it from the
    * cache. The underlying GPU texture is destroyed.

@@ -112,10 +112,6 @@ $effect(() => {
     try {
       const stateStr = 'walk';
 
-      // Previous cycle's pins go back to the registry before new ones are
-      // taken, so repeated cycles cannot ratchet the pin count up.
-      releaseSheets();
-
       const loadPromises = currentRecipes.map(async (recipe) => {
         if (!recipe.assetId || !currentResolver) {
           return;

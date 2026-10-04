@@ -113,6 +113,33 @@ describe('DeferredLoadRegistry — single flight', () => {
     expect(commits).toEqual([]);
   });
 
+  test.each(['resolve', 'reject'] as const)(
+    'an old load that settles via %s preserves the newer in-flight entry',
+    async (settlement) => {
+      const registry = makeRegistry();
+      const oldGate = deferred<string>();
+      const newGate = deferred<string>();
+      const oldLoad = registry.run({ key: 1, load: () => oldGate.promise, commit: () => {} });
+      const oldOutcome = oldLoad.catch(() => 'rejected');
+      registry.invalidate();
+      const options = { key: 1, load: () => newGate.promise, commit: () => {} };
+      const newLoad = registry.run(options);
+
+      if (settlement === 'resolve') {
+        oldGate.resolve('old');
+      } else {
+        oldGate.reject(new Error('old failure'));
+      }
+      await oldOutcome;
+      expect(registry.inFlightCount).toBe(1);
+      expect(registry.run(options)).toBe(newLoad);
+
+      newGate.resolve('new');
+      expect(await newLoad).toBe('new');
+      expect(registry.inFlightCount).toBe(0);
+    },
+  );
+
   test('after invalidate a new load still runs but still never commits', async () => {
     const registry = makeRegistry();
     const commits: string[] = [];

@@ -597,6 +597,7 @@ class AssetStoreImpl implements AssetStore {
 
     const pending = catalogSnapshotDigest(snapshot);
     this._digestPromise = pending;
+    void pending.catch(() => {});
 
     logger.debug('assetStore: catalog loaded', {
       count: seed.rows.length,
@@ -644,13 +645,17 @@ class AssetStoreImpl implements AssetStore {
 
   private async _checkOriginForNewerRelease(): Promise<void> {
     const baseUrl = publicEnv.PUBLIC_ASSETS_BASE_URL;
-    if (!baseUrl || !this._digestPromise) {
+    const pendingDigest = this._digestPromise;
+    if (!baseUrl || !pendingDigest) {
       return;
     }
     try {
-      const activeDigest = await this._digestPromise;
+      const activeDigest = await pendingDigest;
       const resolved = await resolveCatalogRelease({ originUrl: baseUrl });
       const digest = await catalogSnapshotDigest(AssetStoreImpl._toSnapshot(resolved));
+      if (this._digestPromise !== pendingDigest) {
+        return;
+      }
       if (digest === activeDigest) {
         this._newerReleaseId = undefined;
         logger.debug('assetStore: origin agrees with the active catalog', {
@@ -664,6 +669,9 @@ class AssetStoreImpl implements AssetStore {
         newerReleaseId: resolved.releaseId,
       });
     } catch (error) {
+      if (this._digestPromise !== pendingDigest) {
+        return;
+      }
       // An unreachable or broken origin is the normal offline case: the active
       // catalog stays exactly as it is.
       logger.debug('assetStore: origin check failed, keeping the active catalog', {

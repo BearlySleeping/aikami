@@ -106,7 +106,7 @@ test.describe('NPC appearance identity (C-504 AC-5)', () => {
 
   test('a completed save is still reported as saved after a reload', async ({ page }) => {
     const game = new GamePage(page);
-    await page.goto('/game');
+    await game.goto();
     await game.waitForEngineReady();
 
     await game.saveGame();

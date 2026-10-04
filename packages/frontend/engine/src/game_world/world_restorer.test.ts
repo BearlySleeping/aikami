@@ -7,7 +7,7 @@
 
 import { describe, expect, test } from 'bun:test';
 import { SceneTransitionRunner } from './scene_transition.ts';
-import { makePreparedScene } from './testing/scene_transition_harness.ts';
+import { makeLoadOptions, makePreparedScene } from './testing/scene_transition_harness.ts';
 import { WorkerSession } from './worker_session.ts';
 import { WorldRestorer, type WorldRestorerDeps } from './world_restorer.ts';
 
@@ -47,6 +47,7 @@ const makeRestorer = (
       calls.push('invalidateInFlight');
     },
     log: { debug: () => {}, warn: () => {}, error: () => {} },
+    ...overrides,
   });
 
   return {
@@ -135,9 +136,10 @@ describe('WorldRestorer — checkpoint capture', () => {
   });
 
   test('a snapshot failure is swallowed into undefined', async () => {
-    const harness = makeRestorer();
+    const calls: string[] = [];
     const broken = new WorldRestorer({
-      requestSnapshot: async () => {
+      requestSnapshot: async (scope) => {
+        calls.push(`snapshot:${scope}`);
         throw new Error('worker timed out');
       },
       requestRestore: async () => {},
@@ -149,7 +151,7 @@ describe('WorldRestorer — checkpoint capture', () => {
     });
 
     expect(await broken.captureCheckpoint()).toBeUndefined();
-    expect(harness.calls).toEqual([]);
+    expect(calls).toEqual(['snapshot:world']);
   });
 });
 
@@ -190,14 +192,20 @@ describe('WorldRestorer — against a real WorkerSession', () => {
     const harness = makeSession();
     await harness.start();
 
-    const pending = harness.session.request({
-      message: { type: 'REQUEST_SNAPSHOT', scope: 'world' },
-      expect: 'SNAPSHOT_RESPONSE',
+    const { restorer } = makeRestorer({
+      requestSnapshot: async (scope) => {
+        const response = await harness.session.request({
+          message: { type: 'REQUEST_SNAPSHOT', scope },
+          expect: 'SNAPSHOT_RESPONSE',
+        });
+        return response.payload ?? '';
+      },
     });
+    const pending = restorer.captureCheckpoint();
     const requestId = (harness.worker.posted.at(-1)?.message.requestId ?? 0) as number;
     harness.reply({ type: 'SNAPSHOT_RESPONSE', requestId, payload: '{"entities":42}' });
 
-    expect(await pending).toMatchObject({ payload: '{"entities":42}' });
+    expect(await pending).toBe('{"entities":42}');
     const snapshotPost = harness.messages.find((message) => message.type === 'REQUEST_SNAPSHOT');
     // 'world', not the player-scoped save scope: recovery also restores NPCs.
     expect(snapshotPost?.scope).toBe('world');
@@ -234,62 +242,65 @@ describe('WorldRestorer — against a real WorkerSession', () => {
     await harness.start();
 
     let invalidations = 0;
-    // The runner is never loaded here, so its generation is exactly the two
-    // invalidations below.
-    const generationBefore = 2;
+    let failRender = false;
+    let running = false;
+    let inputLocked = true;
+    const { restorer } = makeRestorer({
+      snapshot: 'cp',
+      requestRestore: async (payload) => {
+        const pending = harness.session.request({
+          message: { type: 'LOAD_GAME', payload },
+          expect: 'ENGINE_READY',
+        });
+        const requestId = harness.worker.posted.at(-1)?.message.requestId;
+        harness.reply({ type: 'ENGINE_READY', requestId });
+        await pending;
+      },
+      invalidateInFlight: () => {
+        invalidations++;
+        runner.invalidateInFlight();
+      },
+    });
     const runner = new SceneTransitionRunner({
       prepare: async () => makePreparedScene(),
-      render: async () => true,
+      render: async () => {
+        if (failRender) {
+          failRender = false;
+          throw new Error('renderer failed');
+        }
+        return true;
+      },
       postLoadMap: async () => {},
       resetSurface: () => {},
       installScene: () => {},
       onDiscontinuity: () => {},
-      captureCheckpoint: async () => 'cp',
-      restoreCheckpoint: async (payload) => {
-        // The real chain: post LOAD_GAME to the worker and await its reply.
-        await harness.session.request({
-          message: { type: 'LOAD_GAME', payload },
-          expect: 'ENGINE_READY',
-        });
+      captureCheckpoint: () => restorer.captureCheckpoint(),
+      restoreCheckpoint: (payload) => restorer.rehydrate(payload),
+      setRunning: (value) => {
+        running = value;
       },
-      setRunning: () => {},
-      setInputLocked: () => {},
+      setInputLocked: (value) => {
+        inputLocked = value;
+      },
       emitMapLoaded: () => {},
       emitMapEntered: () => {},
       emitError: () => {},
       log: { debug: () => {}, warn: () => {}, error: () => {} },
     });
-    // Move the generation the recovery would run under.
-    runner.invalidateInFlight();
-    runner.invalidateInFlight();
-    expect(runner.generation).toBe(generationBefore);
+    await runner.load(makeLoadOptions({ mapUrl: 'first' }));
+    const generationBefore = runner.generation;
+    failRender = true;
+    await expect(runner.load(makeLoadOptions({ mapUrl: 'second' }))).rejects.toThrow(
+      'renderer failed',
+    );
 
-    const restorer = new WorldRestorer({
-      requestSnapshot: async () => '{}',
-      requestRestore: (payload) =>
-        harness.session
-          .request({ message: { type: 'LOAD_GAME', payload }, expect: 'ENGINE_READY' })
-          .then(() => undefined),
-      clearRenderEntries: () => {},
-      resetNpcDiagnostics: () => {},
-      resetInterpolationHistory: () => {},
-      invalidateInFlight: () => {
-        invalidations++;
-      },
-      log: { debug: () => {}, warn: () => {}, error: () => {} },
-    });
-
-    // The restore posts its own correlated request; reply to exactly that one.
-    const rehydrating = restorer.rehydrate('cp');
-    const requestId = (harness.worker.posted.at(-1)?.message.requestId ?? 0) as number;
-    harness.reply({ type: 'ENGINE_READY', requestId });
-    await rehydrating;
-
-    // This is the whole point: the recovery's restore left the runner alone.
     expect(invalidations).toBe(0);
-    expect(runner.generation).toBe(generationBefore);
+    expect(runner.generation).toBe(generationBefore + 1);
+    expect(running).toBe(true);
+    expect(inputLocked).toBe(false);
     const loadGame = harness.messages.filter((message) => message.type === 'LOAD_GAME');
     expect(loadGame).toHaveLength(1);
     expect(loadGame[0]?.payload).toBe('cp');
+    harness.session.terminate();
   });
 });

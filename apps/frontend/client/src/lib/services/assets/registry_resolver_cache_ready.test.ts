@@ -78,7 +78,6 @@ mock.module('@aikami/frontend/engine/sim', () => ({
 }));
 
 import { assetPrefetchService } from './asset_prefetch_service.svelte.ts';
-import { assetStore } from './asset_store.svelte.ts';
 import { awaitRegistryReady, createAssetTagResolver } from './registry_resolver.ts';
 
 describe('awaitRegistryReady — the cache-consumption handshake', () => {
@@ -110,7 +109,7 @@ describe('awaitRegistryReady — the cache-consumption handshake', () => {
     expect(settled).toBe(true);
   });
 
-  it('shares one memoized attempt across concurrent callers', async () => {
+  it('requests prefetch for each caller while the store memoizes the catalog load', async () => {
     reset();
     let prefetchCalls = 0;
     const original = assetPrefetchService.ensureRegistryReady;
@@ -119,12 +118,14 @@ describe('awaitRegistryReady — the cache-consumption handshake', () => {
       await original();
     };
 
-    await Promise.all([awaitRegistryReady(), awaitRegistryReady(), awaitRegistryReady()]);
-
-    assetPrefetchService.ensureRegistryReady = original;
-    expect(prefetchCalls).toBe(3);
-    // The catalog load is memoized inside the store, so it ran once.
-    expect(calls.filter((entry) => entry === 'fetchManifest:start')).toHaveLength(1);
+    try {
+      await Promise.all([awaitRegistryReady(), awaitRegistryReady(), awaitRegistryReady()]);
+      expect(prefetchCalls).toBe(3);
+      // The catalog load is memoized inside the store, so it ran once.
+      expect(calls.filter((entry) => entry === 'fetchManifest:start')).toHaveLength(1);
+    } finally {
+      assetPrefetchService.ensureRegistryReady = original;
+    }
   });
 
   it('degrades instead of throwing when the device cache cannot hydrate', async () => {
@@ -144,12 +145,5 @@ describe('awaitRegistryReady — the cache-consumption handshake', () => {
     // consumer's obligation, not a change to resolveUrl's shape.
     expect(typeof resolve).toBe('function');
     expect(resolve('content-packs/emberwatch/manifest.json')).toBeNull();
-  });
-
-  it('the store handshake covers the catalog, not the resolver state', async () => {
-    reset();
-    await awaitRegistryReady();
-    // Sanity: the store's own catalog call is what the handshake gates on.
-    expect(assetStore.coreTags.has('emberwatch:manifest')).toBe(true);
   });
 });

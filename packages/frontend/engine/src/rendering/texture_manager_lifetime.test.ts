@@ -229,8 +229,9 @@ describe('TextureManager — teardown', () => {
 
     expect(frame).toBeDefined();
     expect(frame?.frame.x).toBe(8);
-    // Released immediately, so the sheet is collectable again.
-    expect(manager.spritesheetCount).toBe(1);
+    // The borrowed lease is released on the next macrotask.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(manager.pinnedSpritesheetCount).toBe(0);
   });
 });
 
@@ -321,11 +322,17 @@ describe('TextureManager — spritesheet leases past the cache budget', () => {
     second.release();
   });
 
-  test('recipe-driven lookups never leak a lease', () => {
+  test('recipe-driven lookups never leak a lease', async () => {
     // Sanity: the batch path slices through getFrameAt, which allocates a
     // frame view over the shared source and holds nothing.
-    const manager = new TextureManager();
-    expect(recipe('body').assetId).toBe('body');
+    const texture = new Texture({ source: new TextureSource({ width: 16, height: 8 }) });
+    const manager = new TextureManager({ loadTexture: async () => texture });
+    const frames = await manager.getLayeredTextureBatch({
+      recipes: [recipe('1')],
+      frameIndex: 1,
+      layout: LAYOUT,
+    });
+    expect(frames[0]?.frame.x).toBe(8);
     expect(manager.spritesheetCount).toBe(0);
   });
 });
@@ -412,7 +419,7 @@ describe('TextureManager — one-shot accessors under cache saturation', () => {
       lease.release();
     }
     // The borrow is gone and the entry is collectable again.
-    expect(manager.spritesheetCount).toBeLessThanOrEqual(1);
+    expect(manager.pinnedSpritesheetCount).toBe(0);
     manager.destroy();
   });
 

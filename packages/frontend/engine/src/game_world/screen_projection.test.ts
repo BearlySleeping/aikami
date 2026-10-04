@@ -28,6 +28,29 @@ describe('resolveScreenToCell', () => {
     expect(resolveScreenToCell({ world: { x: 96, y: 0 } })).toEqual({ cellX: 3, cellY: 0 });
   });
 
+  test.each([0, -32, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY])(
+    'falls back to 32px for invalid tile size %s',
+    (tileSize) => {
+      expect(resolveScreenToCell({ world: { x: 96, y: 64 }, tileSize })).toEqual({
+        cellX: 3,
+        cellY: 2,
+      });
+    },
+  );
+
+  test.each([Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY])(
+    'uses zero for a non-finite world coordinate %s',
+    (coordinate) => {
+      expect(resolveScreenToCell({ world: { x: coordinate, y: 64 } })).toEqual({
+        cellX: 0,
+        cellY: 2,
+      });
+      expect(
+        resolveScreenToCell({ world: { x: 900, y: coordinate }, terrain: makeGrid(4, 4) }),
+      ).toEqual({ cellX: 3, cellY: 0 });
+    },
+  );
+
   test('clamps a click in the void to the map bounds', () => {
     const terrain = makeGrid(4, 4);
     expect(resolveScreenToCell({ world: { x: -500, y: 900 }, tileSize: 32, terrain })).toEqual({

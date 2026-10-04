@@ -33,10 +33,6 @@ const CLIENT_ORIGIN = `http://localhost:${EMULATOR_PORTS.client}`;
 // ── Shared Helpers ──────────────────────────────────────────
 
 /**
- * Install error collection on a page and return a teardown function.
- * Call `await collector()` in test.afterEach to assert zero errors.
- */
-/**
  * AC-3b: a keyboard-only pause-menu open lands on the primary action, and the
  * Tab / Shift+Tab cycle never escapes the named dialog.
  */
@@ -53,6 +49,10 @@ const assertPauseMenuKeyboardJourney = async (page: import('@playwright/test').P
   }
 };
 
+/**
+ * Install error collection on a page and return a teardown function.
+ * Call `await collector()` in test.afterEach to assert zero errors.
+ */
 const installErrorCollection = (page: import('@playwright/test').Page) => {
   const collector = setupErrorCollection(page);
   return async () => {

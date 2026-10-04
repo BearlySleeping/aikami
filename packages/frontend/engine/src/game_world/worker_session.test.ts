@@ -405,17 +405,14 @@ describe('WorkerSession — stale correlated replies', () => {
       expect: 'ENGINE_READY',
     });
     const requestId = lastRequestId(worker);
+    const inbound = worker.onmessage;
+    expect(inbound).toBeFunction();
     session.terminate();
     await expect(pending).rejects.toThrow(/disposed/);
 
-    // terminate() detached the handler, so re-attach a fake one to prove the
-    // correlation guard — not the detach — is what drops it.
-    worker.onmessage = ((event: MessageEvent) => {
-      session.post({ type: 'PING' });
-      void event;
-    }) as unknown as typeof worker.onmessage;
+    // Exercise the real inbound path even though terminate detached it.
     messages.length = 0;
-    worker.emit({ type: 'ENGINE_READY', requestId });
+    inbound?.(new MessageEvent('message', { data: { type: 'ENGINE_READY', requestId } }));
     expect(messages).toHaveLength(0);
   });
 

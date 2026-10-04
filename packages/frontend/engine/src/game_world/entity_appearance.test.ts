@@ -250,7 +250,7 @@ describe('EntityAppearanceLoader — spritesheet lease lifetime', () => {
     loader.disposePrepared(stale);
 
     // Idempotent: the second dispose must not double-release a pin.
-    expect(manager.spritesheetCount).toBe(1);
+    expect(manager.pinnedSpritesheetCount).toBe(0);
   });
 });
 

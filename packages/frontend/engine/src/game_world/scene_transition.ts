@@ -450,6 +450,10 @@ export class SceneTransitionRunner {
       return undefined;
     }
 
+    if (!this._committed) {
+      return scene;
+    }
+
     const checkpoint = await this._deps.captureCheckpoint();
     if (this._isStale(options.generation)) {
       this._deps.log.debug('loadMap:superseded-after-checkpoint', { mapUrl });

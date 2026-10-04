@@ -38,9 +38,13 @@ export type ResolveScreenToCellOptions = {
  */
 export const resolveScreenToCell = (options: ResolveScreenToCellOptions): TileCell => {
   const { world, terrain, pathGrid } = options;
-  const tileSize = options.tileSize ?? DEFAULT_TILE_SIZE;
-  let cellX = Math.floor(world.x / tileSize);
-  let cellY = Math.floor(world.y / tileSize);
+  const candidateSize = options.tileSize ?? DEFAULT_TILE_SIZE;
+  const tileSize =
+    Number.isFinite(candidateSize) && candidateSize > 0 ? candidateSize : DEFAULT_TILE_SIZE;
+  const rawX = Math.floor(world.x / tileSize);
+  const rawY = Math.floor(world.y / tileSize);
+  let cellX = Number.isFinite(rawX) ? rawX : 0;
+  let cellY = Number.isFinite(rawY) ? rawY : 0;
 
   if (terrain) {
     cellX = Math.max(0, Math.min(terrain.width - 1, cellX));

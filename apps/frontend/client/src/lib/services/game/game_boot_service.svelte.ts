@@ -792,18 +792,24 @@ class GameBootService
       const sampled = sampleTruthVariant(pack.manifest, this._campaign.seed ?? 0);
       if (sampled) {
         const sampledCampaign = { ...this._campaign, sampledTruthId: sampled };
+        if (generation !== this._bootGeneration) {
+          return;
+        }
         this._adoptResolvedCampaign(sampledCampaign, generation);
         try {
-          await campaignStorageRepo.update(this._campaign);
+          await campaignStorageRepo.update(sampledCampaign);
         } catch (error) {
           this.warn('stage:preloading_content:truth-persist-failed', {
             error: String(error),
           });
           throw error;
         }
+        if (generation !== this._bootGeneration) {
+          return;
+        }
         this.debug('stage:preloading_content:truth-sampled', {
           sampledTruthId: sampled,
-          seed: this._campaign.seed,
+          seed: sampledCampaign.seed,
         });
       }
     }

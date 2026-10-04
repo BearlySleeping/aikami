@@ -146,7 +146,17 @@ const canonicalPayload = (snapshot: CatalogSnapshot): string =>
     seed: {
       generatedAt: snapshot.seed.generatedAt,
       originUrl: snapshot.seed.originUrl,
-      rows: [...snapshot.seed.rows].sort((left, right) => left.tag.localeCompare(right.tag)),
+      rows: [...snapshot.seed.rows].sort((left, right) => {
+        if (left.tag !== right.tag) {
+          return left.tag < right.tag ? -1 : 1;
+        }
+        const leftValue = stableStringify(left);
+        const rightValue = stableStringify(right);
+        if (leftValue === rightValue) {
+          return 0;
+        }
+        return leftValue < rightValue ? -1 : 1;
+      }),
       schemaVersion: snapshot.seed.schemaVersion,
     },
   });

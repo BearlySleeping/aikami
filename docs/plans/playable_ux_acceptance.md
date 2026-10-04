@@ -75,12 +75,12 @@ branch swapped (menu → quit confirmation).
   `pauseDialogFocus` Svelte action — initial focus, closed Tab/Shift+Tab cycle,
   focus re-anchoring on content change, and focus restoration on destroy.
   Dismissal semantics stay in the View/ViewModel.
-- The View uses `use:pauseDialogFocus={{ focusKey: viewModel.confirmingQuit }}`
-  and marks Resume with `data-pause-menu-initial-focus`.
+- The View uses `use:pauseDialogFocus` with `focusKey: viewModel.confirmingQuit`
+  and `onEscape: () => viewModel.resumeGame()`, and marks Resume with
+  `data-pause-menu-initial-focus`.
 - Restoration prefers the element that owned focus when the menu opened and
-  falls back to the game surface (`#game-canvas-container`), which is not a
-  native tab stop — a transient `tabindex="-1"` is used and removed immediately,
-  so no tab order changes.
+  falls back to the game surface (`#game-canvas-container`), whose permanent
+  `tabindex="-1"` allows programmatic focus without adding a sequential tab stop.
 - Proof: `pause_menu_focus.test.ts` (arithmetic) and
   `src/browser_tests/pause_menu_focus.browser.test.ts`, which mounts the real
   compiled View in Chromium with a feature-owned ViewModel and asserts initial
@@ -267,11 +267,9 @@ were left alone — this diff adds no overlapping styling or behaviour.
 - `modern-web-guidance` search tooling was not available in this environment, so
   the CSS change was driven purely by measured Chromium evidence rather than by
   a guideline lookup.
-- `#game-canvas-container` has no `tabindex`, and `views/game/canvas/**` is
-  outside this task's scope. Focus restoration therefore sets a **transient**
-  `tabindex="-1"` rather than relying on the surface being natively focusable.
-  Making that surface permanently focusable is a one-line follow-up for whoever
-  owns the canvas view.
+- Integration added a permanent `tabindex="-1"` to `#game-canvas-container`.
+  `restoreFocus` focuses that surface directly when the prior target is absent;
+  it does not add or remove a tabindex.
 - If the production `/game` route cannot obtain a WebGL context in the runner's
   browser, these specs **fail**. They were not made to skip.
 - The sandbox click-to-move `beforeEach` now requires `entityCount > 0`. Where

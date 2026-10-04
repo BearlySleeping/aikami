@@ -727,15 +727,28 @@ describe('SceneTransitionRunner — the checkpoint is the recovery', () => {
     expect(harness.emitted).toEqual(['GAME_ERROR:Map load failed: 404 not found']);
   });
 
-  test('a switch is abandoned BEFORE teardown when the checkpoint cannot be captured', async () => {
-    // Losing unsaved progress to a failed backup is worse than not switching
-    // maps, so an unavailable checkpoint cancels the switch.
+  test('the first scene installs without asking for a checkpoint', async () => {
     let captures = 0;
     const harness = createSceneTransitionHarness({
       captureCheckpoint: async () => {
         captures++;
-        return captures > 1 ? undefined : JSON.stringify(harness.world);
+        return undefined;
       },
+    });
+
+    await harness.runner.load(makeLoadOptions({ mapUrl: 'maps:first.json' }));
+
+    expect(captures).toBe(0);
+    expect(harness.state.running).toBe(true);
+    expect(harness.state.inputLocked).toBe(false);
+    expect(harness.world.loadCount).toBe(1);
+  });
+
+  test('a switch is abandoned BEFORE teardown when the checkpoint cannot be captured', async () => {
+    // Losing unsaved progress to a failed backup is worse than not switching
+    // maps, so an unavailable checkpoint cancels the switch.
+    const harness = createSceneTransitionHarness({
+      captureCheckpoint: async () => undefined,
     });
     await harness.runner.load(makeLoadOptions({ mapUrl: 'maps:first.json' }));
     playForAWhile(harness);
@@ -763,7 +776,7 @@ describe('SceneTransitionRunner — the checkpoint is the recovery', () => {
     const harness = createSceneTransitionHarness({
       captureCheckpoint: async () => {
         captures++;
-        if (captures === 2) {
+        if (captures === 1) {
           return undefined;
         }
         return JSON.stringify(harness.world);

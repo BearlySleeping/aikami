@@ -17,9 +17,8 @@
 //    renderer then interpolated every reused entity id from stale coordinates
 //    (alpha 0 — the player snapped back to where they were before the switch).
 // 2. **The adopted buffer is sized.** A buffer whose byteLength disagrees with
-//    the engine layout is handed straight back to the recycle pool instead of
-//    being adopted, so a malformed message cannot make the renderer read
-//    `undefined` (NaN) coordinates out of bounds.
+//    the engine layout is dropped, so neither thread reads out of bounds.
+//    A correctly sized buffer with invalid timing is recycled without adoption.
 
 import { BUFFER_SIZE, createEngineBuffer, FALLBACK_BUFFER_COUNT } from '../config/memory_config.ts';
 import type { StateUpdateMessage } from '../worker/worker_protocol.ts';
@@ -156,9 +155,11 @@ export class RenderBufferPool {
         reason: rejection,
         ...(newBuffer ? { byteLength: newBuffer.byteLength } : {}),
       });
-      // The buffer is DROPPED, not recycled: handing a wrong-sized buffer back
-      // would let the worker adopt it and emit the same malformed state again.
-      // A rejected state is a protocol violation and is meant to be loud.
+      // Invalid timing does not damage the buffer; preserve the worker pool.
+      // Wrong-sized buffers must never be handed back to the worker.
+      if (rejection === 'non-finite-timing' && newBuffer) {
+        recycle(newBuffer);
+      }
       return;
     }
 

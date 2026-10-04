@@ -48,11 +48,8 @@ const toCloneableProperties = (properties: SpawnPoint['properties']): Record<str
   JSON.parse(JSON.stringify(properties)) as Record<string, unknown>;
 
 /**
- * Copies the collision grid out of its typed array.
- *
- * A typed array does clone, but the grid also carries a `grid` field that
- * render code may hold as a view; sending a plain array keeps the worker's
- * copy independent of main-thread buffers.
+ * Copies the boolean-array grid so the worker payload is detached from the
+ * main-thread array that render code may still mutate before posting.
  */
 const toCloneableCollisionGrid = (
   collisionGrid: CollisionGrid | undefined,

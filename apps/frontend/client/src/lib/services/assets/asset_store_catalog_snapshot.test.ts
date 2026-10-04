@@ -87,7 +87,6 @@ const sha256 = (value: string): Promise<string> => sha256Hex(new Blob([value]));
 
 const makeDocuments = async (options: {
   releaseId: string;
-  bodyHash: string;
   seedHashes: { body: string; music: string };
 }): Promise<Map<string, string>> => {
   const seedJson = JSON.stringify({
@@ -156,15 +155,13 @@ const makeDocuments = async (options: {
 const releaseOne = (): Promise<Map<string, string>> =>
   makeDocuments({
     releaseId: 'release-one',
-    bodyHash: HASH_BODY,
     seedHashes: { body: HASH_BODY, music: HASH_MUSIC },
   });
 
-/** Release N+1: SAME release id, DIFFERENT bytes — a real content update. */
+/** Release N+1: a different release ID and seed bytes — a real content update. */
 const releaseTwo = (): Promise<Map<string, string>> =>
   makeDocuments({
     releaseId: 'release-two',
-    bodyHash: HASH_BODY,
     seedHashes: { body: '9'.repeat(64), music: HASH_MUSIC },
   });
 
@@ -436,14 +433,13 @@ describe('AssetStore — verified catalog snapshot (offline boot)', () => {
     expect(persistedRecord).toBe(recordAfterSuccess);
   });
 
-  it('restores the snapshot after an explicit rescan fails with no active catalog', async () => {
+  it('keeps the active snapshot after an explicit rescan fails', async () => {
     serve(await releaseOne());
     const online = await bootStore();
     online.setSnapshotStore(createDeviceBackend());
     await online.rescanAssets();
 
-    // A boot whose first load failed closed (nothing active), then an explicit
-    // rescan while offline: the verified record is still better than nothing.
+    // Restore the verified record on an offline boot before rescanning.
     serveUnreachable();
     const offline = await bootStore();
     offline.setSnapshotStore(createDeviceBackend());
@@ -505,6 +501,44 @@ describe('AssetStore — verified catalog snapshot (offline boot)', () => {
     const persisted = await decodeCatalogSnapshot(persistedRecord ?? '');
     expect(persisted?.releaseId).toBe('release-two');
     expect(persisted?.seed.rows.find((row) => row.tag === CORE_TAG)?.hash).toBe('9'.repeat(64));
+  });
+
+  it('discards an origin check that finishes after a rescan replaces its catalog', async () => {
+    serve(await releaseOne());
+    const online = await bootStore();
+    online.setSnapshotStore(createDeviceBackend());
+    await online.rescanAssets();
+
+    const documents = await releaseTwo();
+    serve(documents);
+    const fetchRelease = globalThis.fetch;
+    let releaseCheck = (): void => {};
+    const gate = new Promise<void>((resolve) => {
+      releaseCheck = resolve;
+    });
+    let checkStarted = false;
+    globalThis.fetch = mock(async (input: RequestInfo | URL) => {
+      if (!checkStarted) {
+        checkStarted = true;
+        await gate;
+      }
+      return fetchRelease(input);
+    }) as typeof fetch;
+
+    const next = await bootStore();
+    next.setSnapshotStore(createDeviceBackend());
+    await next.fetchManifest();
+    await waitFor(() => checkStarted, 'the pending origin check');
+    try {
+      await next.rescanAssets();
+      expect(next.releaseId).toBe('release-two');
+    } finally {
+      releaseCheck();
+    }
+    // Let the detached check finish resolving the same release graph.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(next.newerReleaseId).toBeUndefined();
+    expect(next.catalogOrigin).toBe('network');
   });
 
   it('leaves the catalog untouched when the background origin check fails', async () => {

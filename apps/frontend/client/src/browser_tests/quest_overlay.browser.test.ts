@@ -49,7 +49,7 @@ const COUNTER_QUEST: QuestData = {
 };
 
 describe('Quest overlay View — rendered ARIA semantics', () => {
-  test('the objective progress bar exposes its objective as an accessible name', () => {
+  test('the objective progress bar exposes its objective as an accessible name', async () => {
     const harness = createReactiveQuestOverlayHarness();
     const viewModel = createQuestOverlayViewModel({
       className: 'QuestOverlayVM',
@@ -68,6 +68,7 @@ describe('Quest overlay View — rendered ARIA semantics', () => {
     const progressBar = page.getByRole('progressbar', {
       name: 'Objective progress: Defeat the slimes in the cellar, 3 of 5',
     });
+    await expect.element(progressBar).toBeInTheDocument();
     expect(progressBar.element().getAttribute('aria-valuenow')).toBe('60');
   });
 

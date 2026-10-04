@@ -190,9 +190,9 @@ shrink rather than grow:
 
 | Module | Responsibility | `game_world.ts` / `texture_manager.ts` |
 |---|---|---|
-| `rendering/spritesheet_frames.ts` | frame geometry (thin delegating methods keep the `TextureManager` API) | 923 → 746 |
+| `rendering/spritesheet_frames.ts` | frame geometry (thin delegating methods keep the `TextureManager` API) | 923 → 751 |
 | `rendering/spritesheet_registry.ts` | sheet lifetimes | |
-| `game_world/screen_projection.ts` | screen → world → tile-cell | 2221 → 2198 |
+| `game_world/screen_projection.ts` | screen → world → tile-cell | 2221 → 2206 |
 | `game_world/world_restorer.ts` | snapshot/restore sequencing | |
 | `game_world/load_map_message.ts` | the `LOAD_MAP` payload (pure) | |
 | `rendering/lpc_sheet.ts` | sheet identity + atlas/sheet construction | |
@@ -200,7 +200,8 @@ shrink rather than grow:
 
 `game_world.ts` finishes under its 2214 waiver ceiling — **no ceiling was
 raised**. `texture_manager.ts` graduated from the size baseline via the
-guard's own reduction-only update (923 → 746).
+guard's own reduction-only update (923 → 746 at extraction; 751 after follow-up).
+The table reports current review counts; 2198 / 746 were intermediate extraction counts.
 
 `load` was also flattened so `cognitive complexity` for
 `scene_transition.ts` stayed at its recorded level: the stages are now
@@ -267,9 +268,14 @@ settle a pending request are still forwarded, so the boot/restore
 - `bun moon run frontend-engine:typecheck` — clean.
 - `moon_detect_affected` → `frontend-engine`.
 - `validate` (fix + typecheck + structural guards) — clean after the
-  `texture_manager.ts` extraction (923 → 910 lines) and the `game_world.ts`
-  `screenToCell` extraction (2221 → 2207, under the 2214 waiver ceiling). No
+  intermediate extraction state: `texture_manager.ts` (923 → 910 lines) and
+  `game_world.ts` (2221 → 2207, under the 2214 waiver ceiling). No
   baseline, waiver, ceiling, skip or timeout was changed.
+
+Review follow-up: `wc -l` reports **2206** for `game_world.ts` and **751** for
+`texture_manager.ts`, matching the table. Engine typecheck and the affected
+`src/game_world` / `src/rendering` suite pass (**317 tests**). The full suite
+also exposes a combat-preview failure and missing generated atlas fixtures.
 
 Engine tests were driven from `packages/frontend/engine` via `bun test` on the
 specific files while iterating, and through `bun moon run frontend-engine:test`

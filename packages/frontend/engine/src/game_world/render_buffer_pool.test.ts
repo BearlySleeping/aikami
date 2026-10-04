@@ -427,10 +427,11 @@ describe('RenderBufferPool — ingestion boundary', () => {
       now: 1000,
       recycle: (buffer) => recycled.push(buffer),
     });
+    const rejectedBuffer = engineBufferWith(3, 4);
     pool.ingest({
       message: {
         type: 'STATE_UPDATE',
-        buffer: engineBufferWith(3, 4),
+        buffer: rejectedBuffer,
         tick: Number.NaN,
         simTimeMs: 20,
         stepMs: 16,
@@ -445,7 +446,7 @@ describe('RenderBufferPool — ingestion boundary', () => {
     expect(Array.from((pool.activeView ?? []).slice(0, 2))).toEqual([1, 2]);
     // A rejected state leaves the previous state as the interpolation origin.
     expect(pool.previousView).toBeUndefined();
-    expect(recycled).toEqual([undefined]);
+    expect(recycled).toEqual([undefined, rejectedBuffer]);
   });
 
   test('a finite partial timing payload is still accepted', () => {

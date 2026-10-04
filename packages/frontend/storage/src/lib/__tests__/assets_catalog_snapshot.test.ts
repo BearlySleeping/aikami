@@ -19,6 +19,7 @@ import { ASSET_REGISTRY_SEEDED_KEY, AssetRegistryRepository } from '../assets.ts
 import type { CatalogSnapshot } from '../assets_catalog_snapshot.ts';
 import {
   CATALOG_SNAPSHOT_META_KEY,
+  catalogSnapshotDigest,
   decodeCatalogSnapshot,
   encodeCatalogSnapshot,
   parseCatalogSnapshot,
@@ -278,6 +279,30 @@ describe('catalog snapshot persistence', () => {
     expect(parseCatalogSnapshot('nope')).toBeUndefined();
   });
 
+  test('the digest is independent of locale and the ordering of duplicate tags', async () => {
+    const snapshot = makeSnapshot();
+    const row = snapshot.seed.rows[0];
+    if (!row) {
+      throw new Error('fixture must contain a row');
+    }
+    snapshot.seed.rows = [
+      { ...row, tag: 'z' },
+      { ...row, tag: 'ä' },
+      { ...row, tag: 'z', hash: HASH_MUSIC },
+    ];
+    const original = String.prototype.localeCompare;
+    try {
+      String.prototype.localeCompare = () => {
+        throw new Error('locale-dependent sort');
+      };
+      const digest = await catalogSnapshotDigest(snapshot);
+      snapshot.seed.rows = [...snapshot.seed.rows].reverse();
+      expect(await catalogSnapshotDigest(snapshot)).toBe(digest);
+    } finally {
+      String.prototype.localeCompare = original;
+    }
+  });
+
   test('the digest describes the value, not its serialization', async () => {
     const snapshot = makeSnapshot();
     const encoded = await encodeCatalogSnapshot(snapshot);
@@ -386,7 +411,6 @@ describe('catalog snapshot persistence', () => {
       await writeCatalogSnapshot(registry, publishedSnapshot());
       const stored = JSON.parse((await readRaw(registry)) ?? '{}');
       // Swap one real hash for another real-looking one.
-      stored.snapshot.rows = undefined;
       stored.snapshot.seed.rows[0].hash = '0'.repeat(64);
 
       await registry.setMeta(CATALOG_SNAPSHOT_META_KEY, JSON.stringify(stored));

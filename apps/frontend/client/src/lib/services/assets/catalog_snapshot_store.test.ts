@@ -17,6 +17,7 @@
 //     src/lib/services/assets/catalog_snapshot_store.test.ts
 
 import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
+import type { CatalogSnapshot } from '@aikami/frontend/storage';
 
 mock.module('$logger', () => ({
   logger: {
@@ -53,6 +54,7 @@ const metaTable = new Map<string, string>();
 let databaseOpenCalls = 0;
 let flushCalls = 0;
 let failingFlush = false;
+let failingOpen = false;
 
 /**
  * The real storage module with ONLY the platform connection swapped — the
@@ -65,6 +67,9 @@ mock.module('@aikami/frontend/storage', () => ({
   ...realStorage,
   getLocalDatabase: async () => {
     databaseOpenCalls += 1;
+    if (failingOpen) {
+      throw new Error('Local store unavailable');
+    }
     return {
       query: async ({ args }: { sql: string; args: readonly unknown[] }) => {
         const key = String(args[0]);
@@ -125,6 +130,7 @@ describe('catalogSnapshotStore — the production device-database seam', () => {
     databaseOpenCalls = 0;
     flushCalls = 0;
     failingFlush = false;
+    failingOpen = false;
   });
 
   afterEach(() => {
@@ -218,19 +224,16 @@ describe('catalogSnapshotStore — the production device-database seam', () => {
   });
 
   it('survives a device whose local store cannot be opened', async () => {
-    const failing = await import('@aikami/frontend/storage');
-    expect(failing.CATALOG_SNAPSHOT_META_KEY).toBe('asset_catalog_snapshot');
-
-    // With the meta write going nowhere, an online boot still completes and
-    // the failure is contained inside the seam.
+    failingOpen = true;
+    // An unavailable device database must not prevent an online boot.
     serveLegacyAliases();
     const store = (await import('./asset_store.svelte.ts?boot=failing')).assetStore;
     metaTable.clear();
 
     await store.rescanAssets();
-    // Whether or not this fake connection accepted the write, the catalog is
-    // active and nothing threw at the caller.
+    // The catalog is active even though no connection could be opened.
     expect(store.catalogOrigin).toBe('network');
     expect(store.manifest?.count).toBe(1);
+    expect(metaTable.size).toBe(0);
   });
 });

@@ -55,18 +55,17 @@ export const createDeferredLoadRegistry = <TKey, TValue>(): DeferredLoadRegistry
       }
 
       const pending = (async () => {
-        try {
-          const value = await options.load();
-          if (!invalidated) {
-            options.commit(value);
-          }
-          return value;
-        } finally {
-          // Runs on success AND on failure: a rejected load must not poison
-          // the key, or every later caller reuses the rejection forever.
+        const value = await options.load();
+        if (!invalidated) {
+          options.commit(value);
+        }
+        return value;
+      })().finally(() => {
+        // A pre-invalidation load must not remove a newer load for this key.
+        if (inFlight.get(options.key) === pending) {
           inFlight.delete(options.key);
         }
-      })();
+      });
 
       inFlight.set(options.key, pending);
       return pending;
