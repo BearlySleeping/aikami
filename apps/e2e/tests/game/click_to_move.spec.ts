@@ -118,7 +118,7 @@ const _readLiveView = async (page: Page): Promise<LiveView> =>
     /** Counts terrain chunk meshes under a node — the actual terrain draw calls. */
     const countChunks = (node: unknown): number =>
       (startsWith(node, 'chunk-') ? 1 : 0) +
-      childrenOf(node).reduce((total, child) => total + countChunks(child), 0);
+      childrenOf(node).reduce<number>((total, child) => total + countChunks(child), 0);
 
     const globals = window as unknown as Dict;
     const app = required(globals.__PIXI_APP__, '__PIXI_APP__');
