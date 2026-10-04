@@ -28,7 +28,7 @@
   "apps/frontend/client/src/lib/services/game/game_boot_service.svelte.ts": {
     "counts": {
       "s11": 1,
-      "s12": 17
+      "s12": 14
     },
     "identities": [
       "s11:5a13815b",
@@ -40,9 +40,6 @@
       "s12:7f92b4be",
       "s12:7f92b4be",
       "s12:8d223f4d",
-      "s12:99a386af",
-      "s12:99a386af",
-      "s12:99a386af",
       "s12:99a386af",
       "s12:99a386af",
       "s12:b43a0086",

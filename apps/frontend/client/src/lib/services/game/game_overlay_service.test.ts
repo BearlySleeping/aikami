@@ -1,10 +1,13 @@
 // apps/frontend/client/src/lib/services/game/game_overlay_service.test.ts
 
 import { afterAll, beforeEach, describe, expect, mock, spyOn, test } from 'bun:test';
-import type { EngineBridge } from '@aikami/frontend/engine';
+import { createEngineBridge, type EngineBridge } from '@aikami/frontend/engine';
 import type { GameOverlayType, OverlayStackEntry } from '$types';
 import { createRealLocalDatabase } from '../__tests__/local_database_fixture.ts';
+import { campaignService } from '../campaign/campaign_service.svelte.ts';
+import { gameSaveService } from './game_save_service.svelte.ts';
 import { onboardingHintService } from './onboarding_hint_service.svelte.ts';
+import * as saveMapBlock from './save_map_block.ts';
 
 // $state, $derived are polyfilled by test_setup.ts
 
@@ -509,6 +512,73 @@ describe('GameOverlayService', () => {
     }
     // Verify the service's internal stack was not affected
     expect(service.stackDepth).toBe(originalLength);
+  });
+
+  test('manual save reports failure when the durable resume pointer fails', async () => {
+    service.setBridge(createEngineBridge());
+    const map = spyOn(saveMapBlock, 'buildSaveMapBlock').mockResolvedValue({
+      packId: 'emberwatch',
+      mapId: 'village',
+      playerX: 1024,
+      playerY: 1440,
+    });
+    const name = spyOn(saveMapBlock, 'getCurrentMapName').mockResolvedValue('Emberwatch');
+    const slot = spyOn(gameSaveService, 'saveGame').mockResolvedValue(undefined);
+    const pointer = spyOn(campaignService, 'saveCampaign').mockRejectedValue(
+      new Error('IndexedDB snapshot commit failed'),
+    );
+    try {
+      await service.saveGame();
+      expect(slot).toHaveBeenCalledTimes(1);
+      expect(pointer).toHaveBeenCalledWith({ slotId: 'manual-1' });
+      expect(service.saveMessage).toBe('Save failed');
+      expect(service.isSaving).toBe(false);
+    } finally {
+      map.mockRestore();
+      name.mockRestore();
+      slot.mockRestore();
+      pointer.mockRestore();
+    }
+  });
+
+  test('manual save waits for durable resume metadata before reporting success', async () => {
+    service.setBridge(createEngineBridge());
+    const map = spyOn(saveMapBlock, 'buildSaveMapBlock').mockResolvedValue({
+      packId: 'emberwatch',
+      mapId: 'village',
+      playerX: 1024,
+      playerY: 1440,
+    });
+    const name = spyOn(saveMapBlock, 'getCurrentMapName').mockResolvedValue('Emberwatch');
+    const slot = spyOn(gameSaveService, 'saveGame').mockResolvedValue(undefined);
+    let releasePointer: (() => void) | undefined;
+    let startedPointer: (() => void) | undefined;
+    const pointerStarted = new Promise<void>((resolve) => {
+      startedPointer = resolve;
+    });
+    const pendingPointer = new Promise<void>((resolve) => {
+      releasePointer = resolve;
+    });
+    const pointer = spyOn(campaignService, 'saveCampaign').mockImplementation(async () => {
+      startedPointer?.();
+      await pendingPointer;
+    });
+    try {
+      const save = service.saveGame();
+      await pointerStarted;
+      expect(service.saveMessage).toBeUndefined();
+      expect(service.isSaving).toBe(true);
+      releasePointer?.();
+      await save;
+      expect(service.saveMessage).toBe('Game Saved!');
+      expect(service.isSaving).toBe(false);
+    } finally {
+      releasePointer?.();
+      map.mockRestore();
+      name.mockRestore();
+      slot.mockRestore();
+      pointer.mockRestore();
+    }
   });
 
   // ── Focus restore tracking (C-332 AC-4) ──

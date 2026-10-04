@@ -308,7 +308,7 @@
   "apps/e2e/tests/client/release_gate.spec.ts": {
     "counts": {
       "excessive": 2,
-      "worst": 36
+      "worst": 33
     }
   },
   "apps/frontend/client/scripts/check_bundle.ts": {
@@ -511,8 +511,8 @@
   },
   "apps/frontend/client/src/lib/services/game/game_boot_service.svelte.ts": {
     "counts": {
-      "excessive": 5,
-      "worst": 41
+      "excessive": 4,
+      "worst": 39
     }
   },
   "apps/frontend/client/src/lib/services/game/game_overlay_service.svelte.ts": {

@@ -48,6 +48,7 @@ export type HeartbeatEvent =
       syncWithBuffer: number;
       syncWithoutBuffer: number;
       recycled: number;
+      lateReplies: number;
     }
   | { kind: 'missed'; elapsedMs: number; missedCount: number };
 
@@ -77,6 +78,12 @@ export type WorkerSessionOptions = {
   onFailure: (failure: WorkerFailure) => void;
   /** Optional heartbeat observation sink for logging. */
   onHeartbeat?: (event: HeartbeatEvent) => void;
+  /**
+   * Called when a correlated reply is dropped because no request is waiting
+   * for it any more (late after a timeout/disposal, or a duplicate). Such a
+   * reply is stale by construction, so it is reported rather than forwarded.
+   */
+  onLateReply?: (detail: { type: WorkerTerminalType; requestId: number }) => void;
   /** Injected worker factory (tests, Vite `?worker` at the call site). */
   workerFactory?: () => Worker;
   /** Loads the default Vite worker constructor lazily. */
@@ -127,6 +134,9 @@ export class WorkerSession {
   private readonly _onMessage: (message: WorkerMessage) => void;
   private readonly _onFailure: (failure: WorkerFailure) => void;
   private readonly _onHeartbeat: ((event: HeartbeatEvent) => void) | undefined;
+  private readonly _onLateReply:
+    | ((detail: { type: WorkerTerminalType; requestId: number }) => void)
+    | undefined;
   private readonly _workerFactory: (() => Worker) | undefined;
   private readonly _loadWorkerConstructor: () => Promise<EcsWorkerConstructor>;
   private readonly _heartbeatIntervalMs: number;
@@ -154,11 +164,13 @@ export class WorkerSession {
   private _syncWithBufferCount = 0;
   private _syncWithoutBufferCount = 0;
   private _recycledBufferCount = 0;
+  private _lateReplyCount = 0;
 
   constructor(options: WorkerSessionOptions) {
     this._onMessage = options.onMessage;
     this._onFailure = options.onFailure;
     this._onHeartbeat = options.onHeartbeat;
+    this._onLateReply = options.onLateReply;
     this._workerFactory = options.workerFactory;
     this._loadWorkerConstructor = options.loadWorkerConstructor ?? defaultLoadWorkerConstructor;
     this._heartbeatIntervalMs = options.heartbeatIntervalMs ?? DEFAULT_HEARTBEAT_INTERVAL_MS;
@@ -431,7 +443,23 @@ export class WorkerSession {
       typeof message.requestId === 'number' &&
       isWorkerTerminalMessage(message)
     ) {
-      this._settle(message.requestId, message);
+      // A terminal reply that still has a pending request belongs to that
+      // request: settle it, then forward it so the facade's own ready/error
+      // path stays intact.
+      if (this._pending.has(message.requestId)) {
+        this._settle(message.requestId, message);
+        this._onMessage(message);
+        return;
+      }
+      // No pending request for this id: the reply is either late (its request
+      // already timed out or was settled) or a duplicate. Both are stale by
+      // definition, and forwarding them re-rendered the UI for an operation
+      // that had already failed — a GAME_ERROR for a request the caller saw
+      // time out, or a GAME_READY for a restore that was superseded. Genuinely
+      // unsolicited traffic carries no requestId and still flows through.
+      this._lateReplyCount++;
+      this._onLateReply?.({ type: message.type, requestId: message.requestId });
+      return;
     }
     this._onMessage(message);
   }
@@ -551,6 +579,7 @@ export class WorkerSession {
           syncWithBuffer: this._syncWithBufferCount,
           syncWithoutBuffer: this._syncWithoutBufferCount,
           recycled: this._recycledBufferCount,
+          lateReplies: this._lateReplyCount,
         });
         this.post({ type: 'RESET_TICK_LOOP' });
         this._staleTickCycles = 0;

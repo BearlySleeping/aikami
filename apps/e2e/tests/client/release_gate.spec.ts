@@ -19,10 +19,35 @@
 //   AC-8 → C-336 (deterministic rules kernel)
 
 import { expect, test } from '@playwright/test';
-import { GamePage } from '$pom';
+import { GamePage, isFocusInsidePauseMenu, pauseMenuResumeButton } from '$pom';
+import { EMULATOR_PORTS } from '../../src/config';
 import { setupErrorCollection } from '../../src/error_allowlist';
 
+/**
+ * Origin of THIS run's client. Contract-scoped runs bind the client to
+ * `5274 + PUBLIC_EMULATOR_PORT_OFFSET` (scripts/src/lib/herdr/session.ts), so a
+ * hardcoded 5274 silently tests a foreign checkout's dev server.
+ */
+const CLIENT_ORIGIN = `http://localhost:${EMULATOR_PORTS.client}`;
+
 // ── Shared Helpers ──────────────────────────────────────────
+
+/**
+ * AC-3b: a keyboard-only pause-menu open lands on the primary action, and the
+ * Tab / Shift+Tab cycle never escapes the named dialog.
+ */
+const assertPauseMenuKeyboardJourney = async (page: import('@playwright/test').Page) => {
+  await page.keyboard.press('Escape');
+  await expect(pauseMenuResumeButton(page)).toBeVisible({ timeout: 5000 });
+  await expect(pauseMenuResumeButton(page)).toBeFocused({ timeout: 5000 });
+
+  for (const key of ['Tab', 'Shift+Tab'] as const) {
+    for (let step = 0; step < 10; step++) {
+      await page.keyboard.press(key);
+      expect(await isFocusInsidePauseMenu(page)).toBe(true);
+    }
+  }
+};
 
 /**
  * Install error collection on a page and return a teardown function.
@@ -58,7 +83,7 @@ test.describe('Release Gate', () => {
       const game = new GamePage(page);
 
       // Step 1: Cold launch — navigate from root to game
-      await page.goto('http://localhost:5274/', { waitUntil: 'domcontentloaded' });
+      await page.goto(`${CLIENT_ORIGIN}/`, { waitUntil: 'domcontentloaded' });
 
       // Step 2: Start menu — click "New Adventure" via POM (asserts real label)
       await game.startNewAdventure();
@@ -191,7 +216,7 @@ test.describe('Release Gate', () => {
       });
 
       // Navigate to game with QA bypass disabled
-      await page.goto('http://localhost:5274/game', { waitUntil: 'domcontentloaded' });
+      await page.goto(`${CLIENT_ORIGIN}/game`, { waitUntil: 'domcontentloaded' });
       await game.waitForEngineReady();
       await game.waitForPlayingState();
 
@@ -239,7 +264,7 @@ test.describe('Release Gate', () => {
       const game = new GamePage(page);
 
       // Step 1: Navigate (mouse-based goto is acceptable for initial load)
-      await page.goto('http://localhost:5274/', { waitUntil: 'domcontentloaded' });
+      await page.goto(`${CLIENT_ORIGIN}/`, { waitUntil: 'domcontentloaded' });
 
       // Tab to "New Adventure" and press Enter
       for (let i = 0; i < 10; i++) {
@@ -325,19 +350,7 @@ test.describe('Release Gate', () => {
       await game.expectInventoryClosed();
 
       // AC-3b: Pause menu with Escape — focus trap test
-      await page.keyboard.press('Escape');
-      const resumeButton = page.getByText('Resume Game');
-      await expect(resumeButton).toBeVisible({ timeout: 5000 });
-
-      // Tab through focusable elements — must stay in pause dialog
-      for (let i = 0; i < 10; i++) {
-        await page.keyboard.press('Tab');
-        const isContained = await page.evaluate(() => {
-          const dialog = document.querySelector('[role="dialog"][aria-label="Pause Menu"]');
-          return dialog?.contains(document.activeElement) ?? false;
-        });
-        expect(isContained).toBe(true);
-      }
+      await assertPauseMenuKeyboardJourney(page);
 
       // Close pause menu
       await page.keyboard.press('Escape');
@@ -376,7 +389,7 @@ test.describe('Release Gate', () => {
       const game = new GamePage(page);
 
       // Navigate to root without QA bypass
-      await page.goto('http://localhost:5274/', { waitUntil: 'domcontentloaded' });
+      await page.goto(`${CLIENT_ORIGIN}/`, { waitUntil: 'domcontentloaded' });
 
       // Verify the capability gate is active
       const capabilityMsg = page.getByText(/text ai|ai provider|capability|offline demo/i);

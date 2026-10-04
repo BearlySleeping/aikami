@@ -85,6 +85,15 @@ export type QuestOverlayViewModelInterface = BaseViewModelInterface & {
   /** Percentage (0-100) of the current objective's progress. */
   readonly currentObjectivePercent: number;
 
+  /**
+   * Accessible name for the objective progress bar.
+   *
+   * A bare `role="progressbar"` with only valuenow/valuemin/valuemax announces
+   * "progress bar, 50%" — the player never learns WHICH step they are on. This
+   * names the objective and its step count.
+   */
+  readonly currentObjectiveProgressLabel: string | undefined;
+
   /** Whether the active quest authors ending choices. */
   readonly hasEndingOptions: boolean;
 
@@ -194,6 +203,25 @@ class QuestOverlayViewModel
       return 0;
     }
     return Math.round((obj.current / obj.max) * 100);
+  }
+
+  /**
+   * Accessible name for the objective progress bar.
+   *
+   * Derived from the same ViewModel-owned objective the bar visualises, so the
+   * announcement can never drift from the rendered values. `undefined` when
+   * there is no objective in flight (nothing to describe).
+   */
+  get currentObjectiveProgressLabel(): string | undefined {
+    const quest = this.activeQuest;
+    const objective = quest?.objectives[this.currentObjectiveIndex];
+    if (!objective) {
+      return undefined;
+    }
+    const step = `${Math.min(objective.current, objective.max)} of ${objective.max}`;
+    return objective.max > 1
+      ? `Objective progress: ${objective.label}, ${step}`
+      : `Objective progress: ${objective.label}`;
   }
 
   get endingOptions(): readonly QuestOverlayEndingOption[] {

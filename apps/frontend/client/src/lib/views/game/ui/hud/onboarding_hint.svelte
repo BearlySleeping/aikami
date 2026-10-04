@@ -39,6 +39,7 @@ const {
     data-hud-anchor={anchor}
     data-hud-density={density}
     data-hud-scale={effectiveScale}
+    data-testid="onboarding-hint"
     role="status"
     aria-live="polite"
   >
