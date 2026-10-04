@@ -89,6 +89,46 @@ describe('QuestOverlayViewModel', () => {
     expect(viewModel.currentObjectivePercent).toBe(60);
   });
 
+  test('names the objective progress bar with the objective and its step count', () => {
+    const counterQuest: QuestData = {
+      ...ACTIVE_QUEST,
+      objectives: [
+        { label: 'Ask Elder Thalia about the failing ward', current: 1, max: 1 },
+        { label: 'Defeat the slimes in the cellar', current: 3, max: 5 },
+      ],
+    };
+    const viewModel = createViewModel({
+      questState: createQuestStateCapabilities([counterQuest]),
+    });
+
+    expect(viewModel.currentObjectivePercent).toBe(60);
+    expect(viewModel.currentObjectiveProgressLabel).toBe(
+      'Objective progress: Defeat the slimes in the cellar, 3 of 5',
+    );
+  });
+
+  test('omits the step count for single-step objectives and for no quest', () => {
+    const singleStep = createViewModel({
+      questState: createQuestStateCapabilities([ACTIVE_QUEST]),
+    });
+    expect(singleStep.currentObjectiveProgressLabel).toBe(
+      'Objective progress: Find the Ward Wand keeper at the inn',
+    );
+
+    expect(createViewModel().currentObjectiveProgressLabel).toBeUndefined();
+
+    // A quest whose objectives are all finished has no step in flight to name.
+    const finished = createViewModel({
+      questState: createQuestStateCapabilities([
+        {
+          ...ACTIVE_QUEST,
+          objectives: [{ label: 'Report back', current: 1, max: 1 }],
+        },
+      ]),
+    });
+    expect(finished.currentObjectiveProgressLabel).toBeUndefined();
+  });
+
   test('presents ending options only at the resolution point', () => {
     const chooseEnding = mock(() => true);
     const eligible = () => [

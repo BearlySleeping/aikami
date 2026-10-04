@@ -848,13 +848,10 @@ export class GameOverlayService
       // Point the campaign at this slot so Continue/refresh resumes here.
       // Without this, the boot pipeline finds no lastSaveSlotId and fresh-
       // spawns at the starting map (C-334).
-      try {
-        await campaignService.saveCampaign({ slotId: 'manual-1' });
-      } catch (campaignError) {
-        this.warn('saveGame:campaign-slot-update-failed', {
-          error: String(campaignError),
-        });
-      }
+      // A durable slot alone is not a completed save: Continue must also
+      // have a durable resume pointer. Let metadata/flush failures reach the
+      // failure surface instead of reporting success for a partial write.
+      await campaignService.saveCampaign({ slotId: 'manual-1' });
       this.saveMessage = 'Game Saved!';
     } catch (error) {
       this.warn('saveGame:error', { error: String(error) });

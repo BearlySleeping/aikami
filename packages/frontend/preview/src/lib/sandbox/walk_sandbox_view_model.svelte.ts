@@ -5,13 +5,19 @@
 // Generalised from apps/frontend/client/src/lib/views/dev/sandbox/map/map_sandbox_view_model.svelte.ts (C-445).
 
 import {
+  createEngineBridge,
+  type EngineBridge,
+  GameWorld,
+  type GameWorldOptions,
+  TextureManager,
+} from '@aikami/frontend/engine';
+import {
   BaseDevViewModel,
   type BaseDevViewModelInterface,
   type BaseDevViewModelOptions,
 } from '@aikami/frontend/services/base';
 import type { AssetResolver } from '@aikami/types';
-import type { EngineBridge, GameWorldOptions } from '../../../../engine/src/index.ts';
-import { createEngineBridge, GameWorld, TextureManager } from '../../../../engine/src/index.ts';
+import { createWalkSandboxAssetBindings } from './walk_sandbox_assets';
 
 export type WalkSandboxViewModelInterface = BaseDevViewModelInterface & {
   readonly engineReady: boolean;
@@ -59,8 +65,7 @@ class WalkSandboxViewModel
         className: 'WalkSandboxGameWorld',
         bridge: this._engineBridge,
         textureManager: this._textureManager,
-        assetUrlResolver: (_slot: string, assetId: string, _state: string): string | null =>
-          this._resolver.resolve(assetId),
+        ...createWalkSandboxAssetBindings({ resolver: this._resolver }),
       };
 
       this._gameWorld = new GameWorld(gameWorldOptions);

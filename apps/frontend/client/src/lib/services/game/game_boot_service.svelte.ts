@@ -27,6 +27,7 @@ import { campaignService } from '../campaign/campaign_service.svelte';
 import { campaignStorage as campaignStorageRepo } from '../campaign/campaign_storage.svelte';
 import { personaService } from '../persona/persona_service.svelte';
 import { actorVisualResolverFor } from './actor_visual_presentation.ts';
+import { resolveBootCampaign } from './campaign_boot_resolution.ts';
 import { sampleTruthVariant } from './dramatic_structure_service';
 import { equipmentService } from './equipment_service.svelte.ts';
 import { gameEngineService } from './game_engine_service.svelte';
@@ -177,6 +178,11 @@ class GameBootService
     this._input = input;
     this._resetProgress();
 
+    // This attempt's generation token. Used to publish the resolved campaign
+    // so a stale/cancelled attempt can never overwrite the active campaign of
+    // a newer boot (see _adoptResolvedCampaign).
+    const generation = this._bootGeneration;
+
     const t0 = performance.now();
 
     for (let i = 0; i < bootStageOrder.length; i++) {
@@ -235,7 +241,7 @@ class GameBootService
                 updatedAt: new Date().toISOString(),
               };
               await campaignStorage.update(updated);
-              this._campaign = updated;
+              this._adoptResolvedCampaign(updated, generation);
             } catch (transitionError) {
               this.warn('boot:campaign-fail-transition', { error: String(transitionError) });
             }
@@ -276,7 +282,7 @@ class GameBootService
           updatedAt: new Date().toISOString(),
         };
         await campaignStorage.update(updated);
-        this._campaign = updated;
+        this._adoptResolvedCampaign(updated, generation);
       } catch (error) {
         // Campaign persistence failure is a boot failure
         const message = error instanceof Error ? error.message : String(error);
@@ -442,94 +448,49 @@ class GameBootService
     }
   }
 
+  /**
+   * Adopts a campaign resolved by this boot attempt as the boot's campaign AND
+   * publishes it as the session's active campaign.
+   *
+   * The boot pipeline used to set only its private `_campaign`, leaving
+   * `campaignService.activeCampaign` stale (undefined, or a previous boot's
+   * record). Every consumer of the published identity — the pause overlay's
+   * "Last saved" label, NPC memory scoping, save↔campaign linkage — therefore
+   * reported a fresh page reload as "Not Saved Yet" even though the campaign
+   * record in storage carried `lastSavedAt`/`lastSaveSlotId`.
+   *
+   * Generation-guarded: a cancelled or superseded attempt returns without
+   * touching either slot, so a late resolve can never overwrite the campaign a
+   * newer boot already published.
+   */
+  private _adoptResolvedCampaign(campaign: Campaign, generation: number): void {
+    if (generation !== this._bootGeneration) {
+      this.debug('stage:loading_campaign:stale-adoption-skipped', {
+        campaignId: campaign.id,
+        generation,
+        currentGeneration: this._bootGeneration,
+      });
+      return;
+    }
+    this._campaign = campaign;
+    campaignService.activateResolvedCampaign({ campaign });
+  }
+
   /** Stage: resolve campaign + persona. */
   private async _stageLoadCampaign(input: GameBootInput, generation: number): Promise<void> {
     const t0 = performance.now();
 
-    // Resolve campaign
-    let campaign: Campaign | undefined;
-    if (input.campaignId) {
-      // Load specific campaign via repository
-      const { campaignStorage } = await import('../campaign/campaign_storage.svelte');
-      campaign = await campaignStorage.getById(input.campaignId);
-    }
-
-    // Check generation after async operation
-    if (generation !== this._bootGeneration) {
-      return;
-    }
-
+    // Resolve the campaign for this attempt and drive it to a loadable state.
+    const campaign = await resolveBootCampaign({
+      campaignId: input.campaignId,
+      isCurrent: () => generation === this._bootGeneration,
+      adopt: (resolved) => this._adoptResolvedCampaign(resolved, generation),
+      debug: (message, data) => this.debug(message, data),
+      warn: (message, data) => this.warn(message, data),
+    });
     if (!campaign) {
-      // Fallback: latest campaign or default transient
-      const latest = campaignService.getLatestCampaign();
-      if (latest) {
-        campaign = latest;
-        this.debug('stage:loading_campaign:latest-campaign', { campaignId: latest.id });
-      } else {
-        // No campaign exists (e.g. straight to /game without setup) — create
-        // the default Emberwatch campaign so save/continue work end-to-end.
-        campaign = await campaignService.ensureDefaultCampaign();
-        this.debug('stage:loading_campaign:default-created', { campaignId: campaign.id });
-      }
-    }
-
-    // Drive state machine: LOAD_REQUESTED → loading
-    // Skip if campaign is already playing (e.g., new game via completeSetup)
-    if (campaign) {
-      if (campaign.state === 'playing') {
-        this.debug('stage:loading_campaign:already-playing');
-        // Only mutate if generation is current
-        if (generation === this._bootGeneration) {
-          this._campaign = campaign;
-        }
-      } else if (campaign.state === 'creating') {
-        // Campaign is still in setup — auto-complete to playing so the boot
-        // pipeline can proceed. This happens when the user navigates to /game
-        // without finishing the persona creation flow (C-435 regression).
-        this.debug('stage:loading_campaign:auto-completing-setup');
-        try {
-          const playingState = transition(campaign.state, { type: 'SETUP_COMPLETE' });
-          const { campaignStorage } = await import('../campaign/campaign_storage.svelte');
-          campaign = { ...campaign, state: playingState, updatedAt: new Date().toISOString() };
-          await campaignStorage.update(campaign);
-          if (generation === this._bootGeneration) {
-            this._campaign = campaign;
-          }
-          this.debug('stage:loading_campaign:setup-completed', { campaignId: campaign.id });
-        } catch (error) {
-          this.warn('stage:loading_campaign:auto-setup-failed', {
-            currentState: campaign.state,
-            error: String(error),
-          });
-          if (generation === this._bootGeneration) {
-            this._campaign = campaign;
-          }
-        }
-      } else {
-        try {
-          // Validate transition is legal from current state
-          const loadingState = transition(campaign.state, {
-            type: 'LOAD_REQUESTED',
-            campaignId: campaign.id,
-          });
-          // Persist the loading state
-          const { campaignStorage } = await import('../campaign/campaign_storage.svelte');
-          campaign = { ...campaign, state: loadingState, updatedAt: new Date().toISOString() };
-          await campaignStorage.update(campaign);
-          // Only mutate if generation is still current after await
-          if (generation === this._bootGeneration) {
-            this._campaign = campaign;
-          }
-        } catch (error) {
-          this.warn('stage:loading_campaign:transition-failed', {
-            currentState: campaign.state,
-            error: String(error),
-          });
-          if (generation === this._bootGeneration) {
-            this._campaign = campaign;
-          }
-        }
-      }
+      // Superseded attempt — abandon the stage rather than touch shared state.
+      return;
     }
 
     // Resolve persona — prefer campaign.personaId, then active persona, then localStorage
@@ -830,18 +791,25 @@ class GameBootService
     if (this._campaign && !this._campaign.sampledTruthId) {
       const sampled = sampleTruthVariant(pack.manifest, this._campaign.seed ?? 0);
       if (sampled) {
-        this._campaign = { ...this._campaign, sampledTruthId: sampled };
+        const sampledCampaign = { ...this._campaign, sampledTruthId: sampled };
+        if (generation !== this._bootGeneration) {
+          return;
+        }
+        this._adoptResolvedCampaign(sampledCampaign, generation);
         try {
-          await campaignStorageRepo.update(this._campaign);
+          await campaignStorageRepo.update(sampledCampaign);
         } catch (error) {
           this.warn('stage:preloading_content:truth-persist-failed', {
             error: String(error),
           });
           throw error;
         }
+        if (generation !== this._bootGeneration) {
+          return;
+        }
         this.debug('stage:preloading_content:truth-sampled', {
           sampledTruthId: sampled,
-          seed: this._campaign.seed,
+          seed: sampledCampaign.seed,
         });
       }
     }

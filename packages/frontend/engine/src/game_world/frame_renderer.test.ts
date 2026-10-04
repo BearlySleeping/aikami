@@ -72,7 +72,7 @@ const defaultOptions = (
 describe('FrameRenderer — entity transform', () => {
   test('no-ops until a state buffer arrives', () => {
     const renderer = new FrameRenderer({});
-    const pool = new RenderBufferPool();
+    const pool = new RenderBufferPool({ expectedBufferBytes: 20 });
     const entry = makeEntry();
     renderer.render(defaultOptions(pool, new Map([[1, entry]])));
     expect(entry.displayObject.x).toBe(0);
@@ -80,7 +80,7 @@ describe('FrameRenderer — entity transform', () => {
 
   test('applies interpolated positions and z-depth to entries', () => {
     const renderer = new FrameRenderer({});
-    const pool = new RenderBufferPool();
+    const pool = new RenderBufferPool({ expectedBufferBytes: 20 });
     feed(pool, [123, 456]);
     const entry = makeEntry();
     const options = defaultOptions(pool, new Map([[1, entry]]));
@@ -94,7 +94,7 @@ describe('FrameRenderer — entity transform', () => {
 
   test('does not apply non-finite coordinates to a display entry', () => {
     const renderer = new FrameRenderer({});
-    const pool = new RenderBufferPool();
+    const pool = new RenderBufferPool({ expectedBufferBytes: 20 });
     feed(pool, [Number.NaN, 2]);
     const entry = makeEntry();
     renderer.render(defaultOptions(pool, new Map([[1, entry]])));
@@ -108,7 +108,7 @@ describe('FrameRenderer — entity transform', () => {
 describe('FrameRenderer — camera transform', () => {
   test('centers the world container on the camera at the zoomed scale', () => {
     const renderer = new FrameRenderer({});
-    const pool = new RenderBufferPool();
+    const pool = new RenderBufferPool({ expectedBufferBytes: 20 });
     feed(pool, [0, 0]);
     const worldContainer = new Container();
     const options = {
@@ -129,7 +129,7 @@ describe('FrameRenderer — camera transform', () => {
 describe('FrameRenderer — diagnostics throttle', () => {
   test('logs at most once per interval', () => {
     const renderer = new FrameRenderer({ now: () => 2000 });
-    const pool = new RenderBufferPool();
+    const pool = new RenderBufferPool({ expectedBufferBytes: 20 });
     feed(pool, [1, 1]);
     const logs: string[] = [];
     const options = defaultOptions(pool, new Map([[1, makeEntry()]]));

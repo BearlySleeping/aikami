@@ -40,6 +40,16 @@ mock.module('@aikami/frontend/configs', () => ({
 import { LpcAnimationState, lpcTag } from '@aikami/lpc';
 import { assetStore } from './asset_store.svelte';
 
+/**
+ * The snapshot seam is inert here: this file covers resolution and URL
+ * construction, and the device-database round trip is covered by
+ * `asset_store_catalog_snapshot.test.ts` / `catalog_snapshot_store.test.ts`.
+ */
+assetStore.setSnapshotStore({
+  read: async (): Promise<undefined> => undefined,
+  write: async (): Promise<void> => {},
+});
+
 // ── Fixtures ──────────────────────────────────────────────────────────────
 
 const HASH_APRON = 'a'.repeat(64);
