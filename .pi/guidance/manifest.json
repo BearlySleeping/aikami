@@ -158,6 +158,14 @@
       "class": "pi_extensions",
       "active": true
     },
+    ".pi/extensions/lib/image_preparation.test.ts": {
+      "class": "pi_extensions",
+      "active": true
+    },
+    ".pi/extensions/lib/image_preparation.ts": {
+      "class": "pi_extensions",
+      "active": true
+    },
     ".pi/extensions/lib/output_filter.ts": {
       "class": "pi_extensions",
       "active": true
@@ -195,6 +203,50 @@
       "active": true
     },
     ".pi/extensions/lib/repetition.test.ts": {
+      "class": "pi_extensions",
+      "active": true
+    },
+    ".pi/extensions/lib/review_checks.test.ts": {
+      "class": "pi_extensions",
+      "active": true
+    },
+    ".pi/extensions/lib/review_checks.ts": {
+      "class": "pi_extensions",
+      "active": true
+    },
+    ".pi/extensions/lib/review_evidence.test.ts": {
+      "class": "pi_extensions",
+      "active": true
+    },
+    ".pi/extensions/lib/review_evidence.ts": {
+      "class": "pi_extensions",
+      "active": true
+    },
+    ".pi/extensions/lib/review_merge.test.ts": {
+      "class": "pi_extensions",
+      "active": true
+    },
+    ".pi/extensions/lib/review_merge.ts": {
+      "class": "pi_extensions",
+      "active": true
+    },
+    ".pi/extensions/lib/review_gh.ts": {
+      "class": "pi_extensions",
+      "active": true
+    },
+    ".pi/extensions/lib/service_status.ts": {
+      "class": "pi_extensions",
+      "active": true
+    },
+    ".pi/extensions/lib/service_status.test.ts": {
+      "class": "pi_extensions",
+      "active": true
+    },
+    ".pi/extensions/lib/review_polling.ts": {
+      "class": "pi_extensions",
+      "active": true
+    },
+    ".pi/extensions/lib/review_polling.test.ts": {
       "class": "pi_extensions",
       "active": true
     },
@@ -415,6 +467,10 @@
       "active": true
     },
     ".pi/prompts/assets-verify.md": {
+      "class": "agent_prompts",
+      "active": true
+    },
+    ".pi/prompts/captain.md": {
       "class": "agent_prompts",
       "active": true
     },

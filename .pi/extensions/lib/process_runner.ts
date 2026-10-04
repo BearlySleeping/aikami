@@ -36,7 +36,7 @@ export type RunCommandResult = {
   stderr: string;
   /** Exit code, or null if killed by signal. */
   code: number | null;
-  /** True when the process was killed due to timeout. */
+  /** True when timeout, cancellation or an explicit kill terminated the operation. */
   killed: boolean;
   /** Wall-clock duration in milliseconds. */
   durationMs: number;
@@ -164,7 +164,7 @@ export type CommandHandle = {
   output(): string;
   stdout(): string;
   stderr(): string;
-  /** True until the process exits. */
+  /** True until exit and output draining complete (descendants may hold pipes open). */
   running(): boolean;
   /** Exit code once exited; undefined while still running. */
   exitCode(): number | null | undefined;
@@ -260,7 +260,7 @@ export function startCommand(
   let escalateHandle: NodeJS.Timeout | undefined;
 
   const terminate = (reason?: string) => {
-    if (finished) {
+    if (finished || killed) {
       return;
     }
     killed = true;
@@ -271,6 +271,11 @@ export function startCommand(
     escalateHandle = setTimeout(() => {
       if (!finished) {
         killProcessTreeForce(child.pid);
+        // A detached descendant (or a dead Windows parent) may escape the
+        // tree kill. Bound pipe draining too; it must not disable timeout.
+        child.stdout?.destroy();
+        child.stderr?.destroy();
+        child.stdin?.destroy();
       }
     }, SIGTERM_GRACE_MS);
   };
@@ -298,15 +303,16 @@ export function startCommand(
         resolve(null);
       });
     });
-    finished = true;
-    exitCode = code;
+    exitCode = killed ? null : code;
 
+    // A child's exit does not close pipes inherited by its descendants.
+    // Keep timeout, cancellation and kill active until draining also ends.
+    await Promise.all([readPromise, stdinPromise]);
+    finished = true;
+    exitCode = killed ? null : code;
     clearTimeout(timeoutHandle);
     clearTimeout(escalateHandle);
     options.signal?.removeEventListener('abort', onAbort);
-
-    // Let the pipes finish draining so no trailing output is lost.
-    await Promise.all([readPromise, stdinPromise]);
 
     return {
       stdout: stdout.trim(),
@@ -339,6 +345,9 @@ export function startCommand(
         // completion must report code null for a handle-performed kill.
         killed = true;
         killProcessTreeForce(child.pid);
+        child.stdout?.destroy();
+        child.stderr?.destroy();
+        child.stdin?.destroy();
         return;
       }
       terminate('Killed by request');

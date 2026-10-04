@@ -12,21 +12,27 @@
 // the image is embedded as base64 in the text prompt as a degraded fallback.
 
 import { existsSync } from 'node:fs';
+import { resolve } from 'node:path';
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import { Type } from 'typebox';
-import { runPiScript } from './lib/bridge.ts';
+import { type BridgeOptions, runPiScript } from './lib/bridge.ts';
+import { prepareImageDataUri } from './lib/image_preparation.ts';
 
 // ── Shared helpers ────────────────────────────────────────────
 
-/** Resolves and validates an image path, returning the absolute path. */
-const _resolveImagePath = (imagePath: string): string =>
-  imagePath.startsWith('/') ? imagePath : `${process.cwd()}/${imagePath}`;
-
-/** Optimises and base64-encodes an image at the given path. */
-const _prepareImage = async (filepath: string): Promise<string> => {
-  await runPiScript('ai.optimizeImage', { filepath });
-  return runPiScript<string>('ai.toDataUri', { filepath });
-};
+/** Optimises a disposable copy; never writes to the caller's image. */
+const _prepareImage = (options: {
+  filepath: string;
+  bridgeOptions: BridgeOptions;
+}): Promise<string> =>
+  prepareImageDataUri({
+    filepath: options.filepath,
+    signal: options.bridgeOptions.signal,
+    optimizeImage: (filepath) =>
+      runPiScript('ai.optimizeImage', { filepath }, options.bridgeOptions),
+    encodeImage: (filepath) =>
+      runPiScript<string>('ai.toDataUri', { filepath }, options.bridgeOptions),
+  });
 
 // ── Validate schema ───────────────────────────────────────────
 
@@ -66,7 +72,7 @@ export default function (pi: ExtensionAPI) {
       'Send a screenshot or image to the configured VLM provider and get ' +
       'back a plain-text description of what is visible. Uses the shared ' +
       'VLM client — respects VLM_PROVIDER, VLM_MODEL, and OPENROUTER_API_KEY ' +
-      'environment variables. Optimises the image before sending.',
+      'environment variables. Optimises a disposable copy; preserves the original image.',
     parameters: Type.Object({
       imagePath: Type.String({
         description: 'Absolute or relative path to the image file (PNG or WebP).',
@@ -84,9 +90,10 @@ export default function (pi: ExtensionAPI) {
         }),
       ),
     }),
-    async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
+    async execute(_toolCallId, params, signal, _onUpdate, ctx) {
       const { imagePath, prompt, model } = params;
-      const resolvedPath = _resolveImagePath(imagePath);
+      const resolvedPath = resolve(ctx.cwd, imagePath);
+      const bridgeOptions = { cwd: ctx.cwd, signal };
 
       if (!existsSync(resolvedPath)) {
         return {
@@ -96,7 +103,7 @@ export default function (pi: ExtensionAPI) {
       }
 
       try {
-        const dataUri = await _prepareImage(resolvedPath);
+        const dataUri = await _prepareImage({ filepath: resolvedPath, bridgeOptions });
 
         const descriptionPrompt =
           prompt ??
@@ -109,6 +116,7 @@ export default function (pi: ExtensionAPI) {
             prompt: descriptionPrompt,
             model,
           },
+          bridgeOptions,
         );
 
         if (result.error) {
@@ -145,7 +153,7 @@ export default function (pi: ExtensionAPI) {
       'Send a screenshot to the configured VLM with an expectation description ' +
       'and get back a score (0-100) plus a review explaining what matches and ' +
       'what does not. Uses the shared VLM client — respects VLM_PROVIDER, ' +
-      'VLM_MODEL, and OPENROUTER_API_KEY env vars.',
+      'VLM_MODEL, and OPENROUTER_API_KEY env vars. Preserves the original image.',
     parameters: Type.Object({
       imagePath: Type.String({
         description: 'Absolute or relative path to the image file (PNG or WebP).',
@@ -161,9 +169,10 @@ export default function (pi: ExtensionAPI) {
         }),
       ),
     }),
-    async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
+    async execute(_toolCallId, params, signal, _onUpdate, ctx) {
       const { imagePath, expectation, model } = params;
-      const resolvedPath = _resolveImagePath(imagePath);
+      const resolvedPath = resolve(ctx.cwd, imagePath);
+      const bridgeOptions = { cwd: ctx.cwd, signal };
 
       if (!existsSync(resolvedPath)) {
         return {
@@ -173,7 +182,7 @@ export default function (pi: ExtensionAPI) {
       }
 
       try {
-        const dataUri = await _prepareImage(resolvedPath);
+        const dataUri = await _prepareImage({ filepath: resolvedPath, bridgeOptions });
 
         const prompt = [
           'You are an expert QA Visual Inspector. Evaluate whether the provided screenshot',
@@ -205,12 +214,16 @@ export default function (pi: ExtensionAPI) {
           };
           error?: string;
           fromCache?: boolean;
-        }>('ai.evaluateImage', {
-          imageDataUri: dataUri,
-          prompt,
-          schema: VALIDATE_SCHEMA,
-          model,
-        });
+        }>(
+          'ai.evaluateImage',
+          {
+            imageDataUri: dataUri,
+            prompt,
+            schema: VALIDATE_SCHEMA,
+            model,
+          },
+          bridgeOptions,
+        );
 
         if (result.error) {
           return {

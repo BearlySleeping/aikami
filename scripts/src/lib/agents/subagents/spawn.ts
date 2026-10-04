@@ -57,6 +57,7 @@ export type SpawnRequest = {
   pr?: Partial<PrOptions> | boolean;
   timeoutMinutes?: number;
   herdr?: boolean;
+  completionAlerts?: boolean;
   repoRoot: string;
   captainSessionId?: string;
 };
@@ -117,6 +118,7 @@ export const buildSpec = (request: SpawnRequest): SubagentSpec => {
     pr: resolvePr(kind === 'write' ? request.pr : false, base),
     timeoutMs,
     herdr: request.herdr ?? true,
+    completionAlerts: request.completionAlerts ?? false,
     repoRoot: request.repoRoot,
     captainSessionId: request.captainSessionId,
     createdAt: new Date().toISOString(),
@@ -188,7 +190,7 @@ const placeReadAgent = async (spec: SubagentSpec): Promise<Placement> => {
 };
 
 const supervisorCommand = (spec: SubagentSpec): string =>
-  `bun run ${JSON.stringify(CLI_PATH)} supervise ${spec.id} --repo ${JSON.stringify(spec.repoRoot)}`;
+  `HERDR_DISABLE_SOUND=1 bun run ${JSON.stringify(CLI_PATH)} supervise ${spec.id} --repo ${JSON.stringify(spec.repoRoot)}`;
 
 /** Start (or restart, for follow-up rounds) the supervisor for a run. */
 export const launchSupervisor = async (spec: SubagentSpec, state: SubagentState): Promise<void> => {
@@ -213,6 +215,7 @@ export const launchSupervisor = async (spec: SubagentSpec, state: SubagentState)
     ['run', CLI_PATH, 'supervise', spec.id, '--repo', spec.repoRoot],
     {
       cwd: spec.repoRoot,
+      env: { ...process.env, HERDR_DISABLE_SOUND: '1' },
       detached: true,
       stdio: ['ignore', fd, fd],
     },
@@ -261,7 +264,13 @@ const provision = async (
   const useHerdr = spec.herdr && (await herdrReachable());
   const provisioned = spec.kind === 'write' ? await provisionWorktree(spec, useHerdr) : { state };
   if (useHerdr && !provisioned.placement) {
-    return { ...provisioned, placement: await placeReadAgent(spec) };
+    return {
+      ...provisioned,
+      placement: await placeReadAgent({
+        ...spec,
+        repoRoot: provisioned.state.checkoutPath ?? spec.repoRoot,
+      }),
+    };
   }
   return provisioned;
 };
