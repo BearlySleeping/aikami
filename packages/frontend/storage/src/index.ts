@@ -10,3 +10,4 @@ export * from './lib/opfs_asset_cache.ts';
 export * from './lib/storage_adapter.ts';
 export * from './lib/turso_storage_adapter.ts';
 export * from './lib/wasm_storage_adapter.ts';
+export * from './lib/world_gen_drafts.ts';

@@ -14,7 +14,6 @@ import {
 import type {
   ActiveSessionData,
   InteractableStateEntry,
-  WorldEvent,
   WorldGenOutput,
   WorldLocation,
   WorldPickupState,
@@ -76,20 +75,15 @@ export type WorldStateServiceInterface = BaseFrontendClassInterface & {
     },
   ): void;
 
-  subscribeToWorld(worldId: string): Promise<void>;
+  // G01 removed `subscribeToWorld`, `addLocation`, `addNpc`, `setVariable` and
+  // `recordEvent` along with the world-generation seeding path that was their
+  // only caller. They existed to let a "preview" screen materialise entities in
+  // whatever world the player happened to have open. With the seeding path
+  // gone, keeping them is keeping five ways to mutate a live world that nothing
+  // can reach — the next wiring mistake would find them waiting.
   unsubscribeFromWorld(): void;
-  addLocation(location: { name: string; description?: string }): void;
   updateLocation(locationId: string): Promise<void>;
-  setVariable(key: string, value: unknown): Promise<void>;
-  addNpc(npcId: string): Promise<void>;
   removeNpc(npcId: string): Promise<void>;
-  recordEvent(options: {
-    title: string;
-    description: string;
-    participantIds?: string[];
-    locationId?: string;
-    isMajor: boolean;
-  }): Promise<void>;
   addEventListener(listener: GameStateListener): () => void;
   addActiveContext(entry: ActiveContextEntry): void;
   removeActiveContext(entityId: string): void;
@@ -192,66 +186,10 @@ class WorldStateService
 
   // ── World subscription ──
 
-  async subscribeToWorld(worldId: string): Promise<void> {
-    this.currentWorld = {
-      id: worldId,
-      uid: this._uid,
-      name: 'New World',
-      description: '',
-      locations: [],
-      events: [],
-      variables: {},
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-
-    this._unsubscribeWorld = () => {
-      this.currentWorld = undefined;
-      this.currentLocation = undefined;
-    };
-
-    this._emitEvent({
-      type: 'location_changed',
-      payload: { worldId },
-      timestamp: new Date().toISOString(),
-    });
-  }
-
   unsubscribeFromWorld(): void {
     if (this._unsubscribeWorld) {
       this._unsubscribeWorld();
       this._unsubscribeWorld = undefined;
-    }
-  }
-
-  /**
-   * Creates a new location in the current world and sets it as active.
-   * The first location added also becomes the initial currentLocation
-   * so NPCs can be attached immediately.
-   */
-  addLocation(location: { name: string; description?: string }): void {
-    const world = this.currentWorld;
-    if (!world) {
-      throw new Error('No world loaded');
-    }
-
-    const newLocation: WorldLocation = {
-      id: crypto.randomUUID(),
-      name: location.name,
-      description: location.description ?? '',
-      connections: [],
-      npcIds: [],
-    };
-
-    this.currentWorld = {
-      ...world,
-      locations: [...world.locations, newLocation],
-      updatedAt: new Date().toISOString(),
-    };
-
-    // Auto-select first location as current so NPC seeding works immediately
-    if (!this.currentLocation) {
-      this.currentLocation = newLocation;
     }
   }
 
@@ -281,45 +219,6 @@ class WorldStateService
     });
   }
 
-  async setVariable(key: string, value: unknown): Promise<void> {
-    const world = this.currentWorld;
-    if (!world) {
-      throw new Error('No world loaded');
-    }
-
-    this.currentWorld = {
-      ...world,
-      variables: { ...world.variables, [key]: value },
-      updatedAt: new Date().toISOString(),
-    };
-
-    this._emitEvent({
-      type: 'variable_updated',
-      payload: { key, value },
-      timestamp: new Date().toISOString(),
-    });
-  }
-
-  async addNpc(npcId: string): Promise<void> {
-    const location = this.currentLocation;
-    if (!location) {
-      throw new Error('No location loaded');
-    }
-
-    if (!location.npcIds.includes(npcId)) {
-      this.currentLocation = {
-        ...location,
-        npcIds: [...location.npcIds, npcId],
-      };
-
-      this._emitEvent({
-        type: 'npc_added',
-        payload: { npcId, locationId: location.id },
-        timestamp: new Date().toISOString(),
-      });
-    }
-  }
-
   async removeNpc(npcId: string): Promise<void> {
     const location = this.currentLocation;
     if (!location) {
@@ -334,41 +233,6 @@ class WorldStateService
     this._emitEvent({
       type: 'npc_removed',
       payload: { npcId, locationId: location.id },
-      timestamp: new Date().toISOString(),
-    });
-  }
-
-  async recordEvent(options: {
-    title: string;
-    description: string;
-    participantIds?: string[];
-    locationId?: string;
-    isMajor: boolean;
-  }): Promise<void> {
-    const world = this.currentWorld;
-    if (!world) {
-      throw new Error('No world loaded');
-    }
-
-    const newEvent: WorldEvent = {
-      id: crypto.randomUUID(),
-      title: options.title,
-      description: options.description,
-      participantIds: options.participantIds ?? [],
-      locationId: options.locationId,
-      timestamp: new Date().toISOString(),
-      isMajor: options.isMajor,
-    };
-
-    this.currentWorld = {
-      ...world,
-      events: [...world.events, newEvent],
-      updatedAt: new Date().toISOString(),
-    };
-
-    this._emitEvent({
-      type: 'event_triggered',
-      payload: newEvent,
       timestamp: new Date().toISOString(),
     });
   }

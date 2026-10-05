@@ -1,9 +1,23 @@
 // apps/frontend/client/src/lib/services/worldgen/world_gen_seeding_service.svelte.ts
 //
-// Dispatches world-gen output to the GameStateService and related subsystems.
-// Seeds NPCs, locations, party arcs, and HUD widgets into the active game state.
+// G01 — LEGACY world-gen adapter, prompt projection only.
 //
-// Contract: C-233
+// 🔴 The four `seedNpcs` / `seedLocations` / `seedPartyArcs` / `seedHudWidgets`
+// methods that used to live here were REMOVED. Each of them wrote to the live
+// game from a "preview" screen: they called `worldStateService.addNpc`,
+// `setVariable` and `recordEvent`, and `npcService.createNpc` with the signed-in
+// user's uid. A generated world in G01 has no playable form, so nothing about
+// accepting one may mutate a running campaign. That call path is gone; see
+// `world_gen_draft_service.svelte.ts` for what replaces it.
+//
+// What remains is `assembleGmPrompt`, which is a LIVE production consumer: the
+// combat ViewModel calls it to fold a world's narrative text into the GM
+// prompt (`views/combat/combat_view_model.svelte.ts`, wired in
+// `combat_composition.ts`). It is pure string assembly over data it is given
+// and mutates nothing. Do not delete this service or its `$services` export
+// line while that consumer exists.
+//
+// Contract: C-233 (legacy adapter), G01 (retirement of the seeding path)
 
 import {
   BaseFrontendClass,
@@ -11,9 +25,6 @@ import {
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services/base';
 import type { HudWidgetBlueprint, PartyArc, WorldGenNpc, WorldGenOutput } from '@aikami/types';
-import { authService } from '../auth/auth_service.svelte.ts';
-import { worldStateService } from '../game/world_state_service.svelte.ts';
-import { npcService } from '../npc/npc_service.svelte.ts';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -22,20 +33,8 @@ import { npcService } from '../npc/npc_service.svelte.ts';
 /** Options for constructing the WorldGenSeedingService. */
 export type WorldGenSeedingServiceOptions = BaseFrontendClassOptions & {};
 
-/** Public interface for the seeding service. */
+/** Public interface for the legacy adapter. */
 export type WorldGenSeedingServiceInterface = BaseFrontendClassInterface & {
-  /** Seeds generated NPCs into the game state / JTON pipeline. */
-  seedNpcs(options: { npcs: WorldGenNpc[] }): Promise<void>;
-
-  /** Seeds the generated location list into the game state. */
-  seedLocations(options: { locations: string[]; worldName: string }): Promise<void>;
-
-  /** Seeds generated party arcs into the game state / quest system. */
-  seedPartyArcs(options: { arcs: PartyArc[] }): Promise<void>;
-
-  /** Seeds HUD widget blueprints into the UI preferences. */
-  seedHudWidgets(options: { widgets: HudWidgetBlueprint[] }): Promise<void>;
-
   /** Assembles a full GM prompt text from the generated output. */
   assembleGmPrompt(options: { output: WorldGenOutput; playerGoals: string }): string;
 };
@@ -45,152 +44,21 @@ export type WorldGenSeedingServiceInterface = BaseFrontendClassInterface & {
 // ---------------------------------------------------------------------------
 
 /**
- * Seeds world generation output into the game's state management layer.
+ * Legacy world-generation adapter.
  *
- * Each seed method dispatches structured data to the appropriate subsystem:
- * - NPCs → JTON pipeline (entity creation)
- * - Locations → WorldState (map nodes)
- * - Party Arcs → QuestService (quest chain scaffold)
- * - HUD Widgets → UI preferences (widget registry)
+ * Prompt projection only — it writes nothing to world state, the NPC service,
+ * the campaign or any save.
  */
 export class WorldGenSeedingService
   extends BaseFrontendClass<WorldGenSeedingServiceOptions>
   implements WorldGenSeedingServiceInterface
 {
-  async seedNpcs(options: { npcs: WorldGenNpc[] }): Promise<void> {
-    const { npcs } = options;
-
-    if (npcs.length === 0) {
-      this.debug('seedNpcs:no-npcs');
-      return;
-    }
-
-    this.debug('seedNpcs', { count: npcs.length });
-
-    const uid = authService.uid;
-
-    for (const worldNpc of npcs) {
-      this.debug('seedNpcs:creating', {
-        name: worldNpc.name,
-        role: worldNpc.role,
-        race: worldNpc.race,
-      });
-
-      try {
-        if (uid) {
-          await npcService.createNpc({
-            data: {
-              name: worldNpc.name,
-              occupation: worldNpc.role,
-              personality: `${worldNpc.personality}\n\nRace: ${worldNpc.race}\nClass: ${worldNpc.class}\nDescription: ${worldNpc.description}`,
-              isFriendly: true,
-            },
-            uid,
-          });
-        }
-
-        // Also register in game state for runtime presence
-        worldStateService.addNpc(worldNpc.name);
-      } catch (error) {
-        this.error('seedNpcs:failed', { name: worldNpc.name, error });
-      }
-    }
-
-    // Record a world event for NPC population
-    worldStateService.recordEvent({
-      title: 'World Populated',
-      description: `${npcs.length} NPCs were generated and seeded into the world.`,
-      isMajor: false,
-    });
-  }
-
-  async seedLocations(options: { locations: string[]; worldName: string }): Promise<void> {
-    const { locations, worldName } = options;
-
-    if (locations.length === 0) {
-      this.debug('seedLocations:no-locations');
-      return;
-    }
-
-    this.debug('seedLocations', { worldName, count: locations.length });
-
-    // Store locations as world variables for the game state
-    await worldStateService.setVariable('worldName', worldName);
-    await worldStateService.setVariable('locations', locations);
-
-    // Record each location for world state tracking
-    for (const location of locations) {
-      this.debug('seedLocations:location', { location });
-
-      worldStateService.recordEvent({
-        title: `Location Discovered: ${location}`,
-        description: `${location} was added to the world of ${worldName}.`,
-        isMajor: false,
-      });
-    }
-  }
-
-  async seedPartyArcs(options: { arcs: PartyArc[] }): Promise<void> {
-    const { arcs } = options;
-
-    if (arcs.length === 0) {
-      this.debug('seedPartyArcs:no-arcs');
-      return;
-    }
-
-    this.debug('seedPartyArcs', { count: arcs.length });
-
-    // Store party arcs as world variables (quest chain data)
-    await worldStateService.setVariable('partyArcs', arcs);
-
-    // Record each arc as a major world event
-    for (const arc of arcs) {
-      this.debug('seedPartyArcs:arc', {
-        chapter: arc.chapter,
-        objectiveCount: arc.objectives.length,
-      });
-
-      worldStateService.recordEvent({
-        title: `Story Arc: ${arc.chapter}`,
-        description: arc.description,
-        participantIds: arc.questGivers,
-        isMajor: true,
-      });
-    }
-  }
-
-  async seedHudWidgets(options: { widgets: HudWidgetBlueprint[] }): Promise<void> {
-    const { widgets } = options;
-
-    if (widgets.length === 0) {
-      this.debug('seedHudWidgets:no-widgets');
-      return;
-    }
-
-    this.debug('seedHudWidgets', { count: widgets.length });
-
-    // Store HUD widget blueprints as world variables
-    await worldStateService.setVariable('hudWidgets', widgets);
-
-    // Register each widget blueprint
-    for (const widget of widgets) {
-      this.debug('seedHudWidgets:widget', {
-        slot: widget.slot,
-        label: widget.label,
-        defaultVisibility: widget.defaultVisibility,
-      });
-    }
-
-    // Record a world event for HUD registration
-    worldStateService.recordEvent({
-      title: 'HUD Widgets Registered',
-      description: `${widgets.length} HUD widgets were registered from the generated world.`,
-      isMajor: false,
-    });
-  }
-
   assembleGmPrompt(options: { output: WorldGenOutput; playerGoals: string }): string {
     const { output, playerGoals } = options;
+
+    const npcs: readonly WorldGenNpc[] = output.npcs;
+    const arcs: readonly PartyArc[] = output.partyArcs;
+    const widgets: readonly HudWidgetBlueprint[] = output.hudWidgets;
 
     const lines: string[] = [
       `# World: ${output.worldName}`,
@@ -198,25 +66,28 @@ export class WorldGenSeedingService
       output.worldDescription,
       '',
       '## Locations',
-      ...output.locations.map((l) => `- ${l}`),
+      ...output.locations.map((location) => `- ${location}`),
       '',
       '## Key NPCs',
-      ...output.npcs.map(
+      ...npcs.map(
         (npc) => `- **${npc.name}** (${npc.race} ${npc.class}) — ${npc.role}: ${npc.description}`,
       ),
       '',
       '## Story Arcs',
-      ...output.partyArcs.map(
-        (arc, _i) =>
-          `### ${arc.chapter}\n${arc.description}\n\n**Objectives:**\n${arc.objectives.map((o) => `- ${o}`).join('\n')}`,
+      ...arcs.map(
+        (arc) =>
+          `### ${arc.chapter}\n${arc.description}\n\n**Objectives:**\n${arc.objectives
+            .map((objective) => `- ${objective}`)
+            .join('\n')}`,
       ),
       '',
       '## Player Goals',
       playerGoals,
       '',
       '## HUD Widgets',
-      ...output.hudWidgets.map(
-        (w) => `- ${w.label} (${w.slot}, ${w.defaultVisibility ? 'visible' : 'hidden'} by default)`,
+      ...widgets.map(
+        (widget) =>
+          `- ${widget.label} (${widget.slot}, ${widget.defaultVisibility ? 'visible' : 'hidden'} by default)`,
       ),
     ];
 

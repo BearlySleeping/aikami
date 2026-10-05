@@ -1,10 +1,17 @@
 // apps/e2e/src/pom/world_gen_wizard_page.ts
 // Page Object Model — WorldGenWizardPage
 //
-// Encapsulates locators and interaction primitives for the World Generation
-// Wizard (C-233). Provides step-aware selectors, form fillers, and
-// navigation helpers for the Genre/Tone → Setting/Difficulty → Goals →
-// Generating → Preview → Character Creation flow.
+// Encapsulates locators and interaction primitives for the G01 world-generation
+// wizard. The wizard produces a private NARRATIVE DRAFT: step flow is
+// Genre/Tone → Setting/Difficulty → Goals → Generating → Preview → Draft
+// Saved. There is deliberately no character-creation step.
+//
+// The dev sandbox route accepts `?wgDelay=<ms>`, `?wgDelayStage=<stage>` and
+// `?wgFail=1` so a browser test can make a run slow, slow ONE stage so the
+// stages before it settle first, or fail every stage — the three conditions
+// under which cancellation, navigation-away and retry exhaustion are actually
+// observable. `wgDelayStage` narrows `wgDelay` to the named stage rather than
+// adding to it.
 //
 // DOM reference:
 //   apps/frontend/client/src/lib/views/worldgen/world_gen_wizard_view.svelte
@@ -12,20 +19,17 @@
 
 import type { Page } from '@playwright/test';
 
-/**
- * Step names in the wizard state machine.
- */
-export type WizardStep =
-  | 'genre_tone'
-  | 'setting_difficulty'
-  | 'goals'
-  | 'generating'
-  | 'preview'
-  | 'character_creation';
+/** Query knobs the dev sandbox honours. */
+export type SandboxControl = {
+  /** Delay in ms. Applies to every stage, or to `delayStage` alone. */
+  delayMs?: number;
+  /** Narrow `delayMs` to a single stage instead of applying it to all of them. */
+  delayStage?: 'setting' | 'cast' | 'places' | 'hudWidgets' | 'arcs';
+  /** Make every stage fail. */
+  fail?: boolean;
+};
 
-/**
- * Page Object Model for the World Generation Wizard.
- */
+/** Page Object Model for the World Generation Wizard. */
 export class WorldGenWizardPage {
   readonly page: Page;
 
@@ -36,275 +40,195 @@ export class WorldGenWizardPage {
   // ── Navigation ────────────────────────────────────────────
 
   /**
-   * Navigate to the wizard's production route and wait for render.
+   * Navigate to the dev sandbox, optionally with mock-provider controls.
    */
-  async gotoSetup(): Promise<void> {
-    await this.page.goto('/worldgen');
-    await this.page.locator('progress.progress').waitFor({ timeout: 10000 });
+  async gotoDevSandbox(control: SandboxControl = {}): Promise<void> {
+    const params = new URLSearchParams();
+    if (control.delayMs !== undefined) {
+      params.set('wgDelay', String(control.delayMs));
+    }
+    if (control.delayStage !== undefined) {
+      params.set('wgDelayStage', control.delayStage);
+    }
+    if (control.fail === true) {
+      params.set('wgFail', '1');
+    }
+    const query = params.toString();
+    await this.page.goto(`/dev/world-gen${query === '' ? '' : `?${query}`}`);
+    await this.page.locator('progress.progress').waitFor({ timeout: 15_000 });
   }
 
-  /**
-   * Navigate to the dev sandbox and wait for the wizard to render.
-   */
-  async gotoDevSandbox(): Promise<void> {
-    await this.page.goto('/dev/world-gen');
-    // Wait for the wizard to fully render (progress bar appears after VM init)
-    await this.page.locator('progress.progress').waitFor({ timeout: 10000 });
+  /** Navigate to the production route. */
+  async gotoProduction(): Promise<void> {
+    await this.page.goto('/worldgen');
+    await this.page.locator('progress.progress').waitFor({ timeout: 15_000 });
   }
 
   // ── Step detection ────────────────────────────────────────
 
-  /**
-   * Get the current step title text.
-   */
   async getCurrentStepLabel(): Promise<string> {
     return await this.page.locator('h2').first().innerText();
   }
 
-  /**
-   * Check if the progress bar is visible.
-   */
   async isProgressBarVisible(): Promise<boolean> {
     return await this.page.locator('progress.progress').isVisible();
   }
 
-  /**
-   * Get the progress bar value.
-   */
   async getProgressValue(): Promise<number> {
     const value = await this.page.locator('progress.progress').getAttribute('value');
     return value ? Number.parseInt(value, 10) : 0;
   }
 
-  // ── Genre & Tone step ─────────────────────────────────────
+  // ── Inputs ────────────────────────────────────────────────
 
-  /**
-   * Select a genre by clicking the chip button.
-   */
   async selectGenre(genre: string): Promise<void> {
     await this.page.getByRole('button', { name: genre, exact: true }).click();
   }
 
-  /**
-   * Select a tone by clicking the chip button.
-   */
   async selectTone(tone: string): Promise<void> {
     await this.page.getByRole('button', { name: tone, exact: true }).click();
   }
 
-  /**
-   * Get the currently selected genre chip.
-   * Uses .btn-sm to avoid matching the Next/Gemini/Regenerate primary buttons.
-   */
   async getSelectedGenre(): Promise<string | null> {
-    const btn = this.page.locator('button.btn-sm.btn-primary').first();
-    return await btn.textContent();
+    return await this.page.locator('button.btn-sm.btn-primary').first().textContent();
   }
 
-  // ── Setting & Difficulty step ─────────────────────────────
-
-  /**
-   * Fill the setting textarea.
-   */
   async fillSetting(setting: string): Promise<void> {
-    const textarea = this.page.locator('#setting-input');
-    await textarea.fill(setting);
+    await this.page.locator('#setting-input').fill(setting);
   }
 
-  /**
-   * Select a difficulty by clicking the radio label.
-   */
   async selectDifficulty(difficulty: string): Promise<void> {
     await this.page.getByText(difficulty, { exact: true }).click();
   }
 
-  /**
-   * Check if a difficulty radio is selected.
-   */
-  async isDifficultySelected(difficulty: string): Promise<boolean> {
-    // Check by label clickable area
-    const label = this.page.locator('label.flex.items-center', {
-      has: this.page.locator(`span:text-is("${difficulty}")`),
-    });
-    return await label.locator('input[type="radio"]').isChecked();
-  }
-
-  // ── Goals step ────────────────────────────────────────────
-
-  /**
-   * Fill the goals textarea.
-   */
   async fillGoals(goals: string): Promise<void> {
-    const textarea = this.page.locator('#goals-input');
-    await textarea.fill(goals);
+    await this.page.locator('#goals-input').fill(goals);
   }
 
   // ── Actions ────────────────────────────────────────────────
 
-  /**
-   * Click the "Next →" button to advance.
-   */
   async clickNext(): Promise<void> {
     await this.page.getByRole('button', { name: 'Next →' }).click();
   }
 
-  /**
-   * Click the "← Back" button.
-   */
   async clickBack(): Promise<void> {
     await this.page.getByRole('button', { name: '← Back' }).click();
   }
 
-  /**
-   * Click "Generate World" to start generation.
-   */
-  async clickGenerateWorld(): Promise<void> {
-    await this.page.getByRole('button', { name: 'Generate World' }).click();
-  }
-
-  /**
-   * Click "Surprise Me!" button.
-   */
   async clickSurpriseMe(): Promise<void> {
     await this.page.getByRole('button', { name: /Surprise Me/i }).click();
   }
 
-  /**
-   * Click "Accept World" to approve the generated world.
-   */
-  async clickAcceptWorld(): Promise<void> {
-    await this.page.getByRole('button', { name: 'Accept World' }).click();
+  /** Start a generation run. */
+  async clickGenerateDraft(): Promise<void> {
+    await this.page.getByRole('button', { name: 'Generate Draft' }).click();
   }
 
-  /**
-   * Click "Regenerate" to retry generation.
-   */
-  async clickRegenerate(): Promise<void> {
-    await this.page.getByRole('button', { name: 'Regenerate' }).click();
+  /** Cancel an in-flight run from the generating step. */
+  async clickCancel(): Promise<void> {
+    await this.page.locator('[data-testid="worldgen-cancel"]').click();
   }
 
-  /**
-   * Click "Start Character Creation" after world is accepted.
-   */
-  async clickStartCharacterCreation(): Promise<void> {
-    const eventPromise = this.page.evaluate(
-      () =>
-        new Promise<string>((resolve) => {
-          document.addEventListener(
-            'world-accepted',
-            ((e: CustomEvent) => {
-              resolve(e.detail.worldName);
-            }) as EventListener,
-            { once: true },
-          );
-        }),
-    );
+  /** Retry after a failure. */
+  async clickRetry(): Promise<void> {
+    await this.page.locator('[data-testid="worldgen-retry"]').click();
+  }
 
-    await this.page.getByRole('button', { name: 'Start Character Creation' }).click();
+  /** Accept the draft as a private preview. */
+  async clickSaveDraft(): Promise<void> {
+    await this.page.locator('[data-testid="worldgen-accept"]').click();
+  }
 
-    // Wait for the custom event to fire
-    await eventPromise;
+  async clickSimulateFailure(): Promise<void> {
+    await this.page.locator('[data-testid="sandbox-simulate-failure"]').click();
+  }
+
+  async clickClearDelay(): Promise<void> {
+    await this.page.locator('[data-testid="sandbox-clear-delay"]').click();
+  }
+
+  /** The sandbox dev-tools "Reset Wizard" action (wizard `restart()`). */
+  async clickResetWizard(): Promise<void> {
+    await this.page.getByRole('button', { name: /Reset Wizard/i }).click();
   }
 
   // ── Waiting ───────────────────────────────────────────────
 
-  /**
-   * Wait for the generating spinner to appear.
-   */
   async waitForGenerating(): Promise<void> {
-    await this.page.locator('.loading-spinner').first().waitFor({ timeout: 5000 });
+    await this.page.locator('[data-testid="worldgen-generating"]').waitFor({ timeout: 15_000 });
   }
 
   /**
-   * Wait for the preview step (world output rendered).
-   * Looks for the card title or the NPC cards which only appear on the preview step.
+   * Waits until the live run reports `label` among its completed stages.
+   *
+   * Waiting on the rendered readout (rather than a timer) is what makes these
+   * assertions race-free: the element only exists while the run is in flight.
    */
+  async waitForCompletedStage(label: string): Promise<void> {
+    await this.page
+      .locator('[data-testid="worldgen-completed-stages"]', { hasText: label })
+      .waitFor({ timeout: 30_000 });
+  }
+
+  /** Wait for the run to enter the generating step. */
+  async waitForRunStarted(): Promise<void> {
+    await this.page
+      .locator('[data-testid="worldgen-generating"] [data-testid="worldgen-cancel"]')
+      .waitFor({ timeout: 15_000 });
+  }
+
   async waitForPreview(): Promise<void> {
-    await this.page
-      .locator('h3.card-title')
-      .or(this.page.locator('div.card h4.font-bold'))
-      .first()
-      .waitFor({ timeout: 10000 });
+    await this.page.locator('[data-testid="worldgen-preview-notice"]').waitFor({ timeout: 30_000 });
   }
 
-  /**
-   * Wait for the character creation step.
-   */
-  async waitForCharacterCreation(): Promise<void> {
+  async waitForDraftSaved(): Promise<void> {
+    await this.page.locator('[data-testid="worldgen-draft-saved"]').waitFor({ timeout: 15_000 });
+  }
+
+  /** Wait for the run to end in a cancelled/failed state showing the error alert. */
+  async waitForRunStopped(): Promise<void> {
     await this.page
-      .getByRole('button', { name: 'Start Character Creation' })
-      .waitFor({ timeout: 10000 });
+      .locator('[data-testid="worldgen-error"], [data-testid="worldgen-draft-saved"]')
+      .first()
+      .waitFor({ timeout: 30_000 });
   }
 
   // ── Preview selectors ────────────────────────────────────
 
-  /**
-   * Get the world name from the preview step.
-   */
   async getWorldName(): Promise<string | null> {
-    const title = this.page.locator('h3.card-title').first();
-    return await title.textContent();
+    return await this.page.locator('[data-testid="worldgen-world-name"]').textContent();
   }
 
-  /**
-   * Get the number of NPC cards displayed.
-   */
-  async getNpcCount(): Promise<number> {
-    return await this.page.locator('div.card div.card-body h4.font-bold').count();
+  async getCastCount(): Promise<number> {
+    return await this.page.getByRole('heading', { name: /^Cast \(/ }).count();
   }
 
-  /**
-   * Get the number of location badges.
-   */
-  async getLocationCount(): Promise<number> {
-    return await this.page.locator('span.badge.badge-outline').count();
+  async getPreviewNotice(): Promise<string> {
+    return await this.page.locator('[data-testid="worldgen-preview-notice"]').innerText();
+  }
+
+  async getCompletedStages(): Promise<string | null> {
+    return await this.page
+      .locator('[data-testid="worldgen-completed-stages"]')
+      .textContent()
+      .catch(() => null);
+  }
+
+  async isPreviewVisible(): Promise<boolean> {
+    return await this.page.locator('[data-testid="worldgen-preview-notice"]').first().isVisible();
   }
 
   // ── Error state ──────────────────────────────────────────
 
-  /**
-   * Check if an error alert is visible.
-   */
   async isErrorVisible(): Promise<boolean> {
-    return await this.page.locator('div.alert.alert-error').first().isVisible();
+    return await this.page.locator('[data-testid="worldgen-error"]').first().isVisible();
   }
 
-  /**
-   * Get the error message text.
-   */
   async getErrorMessage(): Promise<string | null> {
-    const alert = this.page.locator('div.alert.alert-error').first();
-    return await alert.textContent();
+    return await this.page.locator('[data-testid="worldgen-error"]').textContent();
   }
 
-  // ── Surprise Me overrides for dev sandbox ─────────────────
-
-  /**
-   * Click "Simulate Failure" button (dev sandbox only).
-   */
-  async clickSimulateFailure(): Promise<void> {
-    await this.page.getByRole('button', { name: /Simulate Failure/i }).click();
-  }
-
-  /**
-   * Click "Reset Sim" button (dev sandbox only).
-   */
-  async clickResetSimulation(): Promise<void> {
-    await this.page.getByRole('button', { name: /Reset Sim/i }).click();
-  }
-
-  /**
-   * Toggle the debug prompt panel (dev sandbox only).
-   */
-  async toggleDebugPanel(): Promise<void> {
-    await this.page.getByRole('button', { name: /Show Prompt|Hide Prompt/ }).click();
-  }
-
-  /**
-   * Get the debug prompt text (dev sandbox only).
-   */
-  async getDebugPromptText(): Promise<string> {
-    const pre = this.page.locator('pre.font-mono');
-    return await pre.innerText();
+  async getCompletedStagesNotice(): Promise<string | null> {
+    return this.getCompletedStages();
   }
 }

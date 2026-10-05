@@ -93,6 +93,7 @@ export * from './lib/game/session_summary.ts';
 export * from './lib/game/status_effect.ts';
 export * from './lib/game/swarm_handoff.ts';
 export * from './lib/game/theme.ts';
+export * from './lib/game/world_gen_draft.ts';
 export * from './lib/generation/asset_brief.ts';
 export * from './lib/generation/asset_recipe.ts';
 export * from './lib/generation/generated_asset.ts';
