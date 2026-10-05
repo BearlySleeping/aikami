@@ -95,6 +95,12 @@ const EXCLUDED_DIR_NAMES = new Set([
   '.svelte-kit',
   '.git',
   'generated-skills',
+  // The tsx quick-check sandbox (gitignored via `**/.fast-check/`): hundreds of
+  // transient transpiled files, none of them source. Its name does not contain
+  // `.cache`, so the substring catch below missed it and the guard reported two
+  // phantom oversized modules that no clean checkout contains — the same
+  // environment-dependent false failure the `.build` entry below documents.
+  '.fast-check',
   'coverage',
   '.turbo',
   '.moon',

@@ -16,6 +16,10 @@ const EXCLUDED_DIR_NAMES = new Set([
   'dist',
   '.git',
   'generated-skills',
+  // The tsx quick-check sandbox (gitignored via `**/.fast-check/`): hundreds of
+  // transient transpiled files, none of them source. Same gap as the
+  // source-size guard — this list only caught names containing `.cache`.
+  '.fast-check',
   // A live Playwright/Chromium instance churns lock/socket files here —
   // nothing under it is source, and walking it races the browser process.
   '.chromium-profile',
