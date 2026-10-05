@@ -29,7 +29,7 @@
     "deploy": "bun run scripts/deploy.ts"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "5.20261002.1",
+    "@cloudflare/workers-types": "5.20261004.1",
     "@libsql/client": "0.18.0",
     "@sveltejs/adapter-cloudflare": "8.0.0",
     "@sveltejs/kit": "3.0.0",

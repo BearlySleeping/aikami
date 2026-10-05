@@ -90,7 +90,7 @@ describe('head-specific multi-source CodeRabbit evidence', () => {
     '<!-- change_assessment_commit:invalid -->',
     reviewedBody().replace('"reviewed"', '"skipped"'),
     reviewedBody() + reviewedBody(),
-    reviewedBody() + '<!-- review_in_progress -->',
+    `${reviewedBody()}<!-- review_in_progress -->`,
     reviewedBody().replace('"coveredCommitId":', '"unknownField":'),
   ])('missing or malformed coverage fails closed %#', (body) => {
     const snapshot = incrementalReviewSnapshot();

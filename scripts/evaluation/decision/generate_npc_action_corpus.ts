@@ -263,6 +263,6 @@ for (const split of ['dev', 'heldout'] as const) {
   const positives = cases.filter((c) => c.kind === 'positive').length;
   const abstains = cases.filter((c) => c.kind === 'required-abstain').length;
   console.log(
-    `${split}: ${cases.length} cases (${positives} positive, ${abstains} required-abstain) -> ${target.replace(process.cwd() + '/', '')}`,
+    `${split}: ${cases.length} cases (${positives} positive, ${abstains} required-abstain) -> ${target.replace(`${process.cwd()}/`, '')}`,
   );
 }

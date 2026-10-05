@@ -119,6 +119,7 @@ logger.info(
 // for browser builds only, where those paths are never reached.
 run('vite build', 'bunx', ['vite', 'build', '--mode', mode], {
   cwd: CLIENT_DIR,
+  // biome-ignore lint/style/useNamingConvention: process env vars are SCREAMING_SNAKE
   env: { ...process.env, AIKAMI_DESKTOP_BUILD: 'true' },
 });
 

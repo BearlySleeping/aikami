@@ -44,6 +44,8 @@
 // Evidence (regenerable, gitignored): `.evidence/382-reasoning-control/`.
 // Content-free: counts, milliseconds, token counts, booleans. No prompt text,
 // no completion text, no credentials.
+//
+// biome-ignore-all lint/suspicious/noConsole: CLI probe — stdout IS its report
 
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -61,7 +63,6 @@ import { Value } from 'typebox/value';
 import {
   buildDigestSystemPrompt,
   buildDigestUserPrompt,
-  buildMemoryPromptFacts,
   buildOpenerSystemPrompt,
   buildOpenerUserPrompt,
   toMemoryLines,
@@ -312,6 +313,7 @@ const establish = async (
     const evicted = await fetchJson('/api/generate', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
+      // biome-ignore lint/style/useNamingConvention: Ollama's native API is snake_case
       body: JSON.stringify({ model: MODEL, prompt: '', keep_alive: 0, stream: false }),
     });
     await sleep(500);
@@ -388,6 +390,7 @@ const call = async (options: {
     stream: false,
     // The task's REAL production schema, as Ollama's native `format`.
     format: options.task.schema,
+    // biome-ignore lint/style/useNamingConvention: Ollama's native API is snake_case
     options: { num_predict: options.numPredict },
   };
   // `think: false` is the only half of the control Aikami can actually assert.
@@ -406,9 +409,13 @@ const call = async (options: {
     });
     const payload = (await response.json()) as {
       message?: { content?: string; thinking?: string };
+      // biome-ignore lint/style/useNamingConvention: Ollama's native API is snake_case
       prompt_eval_count?: number;
+      // biome-ignore lint/style/useNamingConvention: Ollama's native API is snake_case
       prompt_eval_cached_count?: number;
+      // biome-ignore lint/style/useNamingConvention: Ollama's native API is snake_case
       eval_count?: number;
+      // biome-ignore lint/style/useNamingConvention: Ollama's native API is snake_case
       done_reason?: string;
       error?: string;
     };

@@ -56,6 +56,7 @@ const opts: SpawnSyncOptions = {
   cwd: CLIENT_DIR,
   stdio: 'inherit',
   shell: process.platform === 'win32',
+  // biome-ignore lint/style/useNamingConvention: process env vars are SCREAMING_SNAKE
   env: { ...process.env, AIKAMI_DESKTOP_BUILD: 'true' },
 };
 
