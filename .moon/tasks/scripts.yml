@@ -345,6 +345,12 @@ tasks:
       - 'src/lib/ops/guards/**/*'
       - '/apps/frontend/client/src/lib/services/**/*'
       - '/packages/frontend/**/*'
+      # Same load-bearing exclusion as guard-scan: bun links each workspace dep
+      # into node_modules as a symlink-to-directory, and moon cannot hash a
+      # directory — it logged 71 `only files can be hashed` WARN lines for this
+      # task alone on every `bun run guard`. The guard reads source only, and
+      # dep contents are already covered by each package's own inputs.
+      - '!/packages/frontend/**/node_modules/**'
       - '/docs/contracts/**/*'
     options:
       cache: false
