@@ -1,18 +1,24 @@
 <script lang="ts">
 // apps/frontend/client/src/routes/(dev)/dev/world-gen/+page.svelte
 //
-// Dev sandbox for C-233 World Generation Wizard.
-// Provides isolated testing with mock LLM responses, debug prompt panel,
-// and failure simulation for retry logic verification.
+// Dev sandbox for the G01 world-generation wizard.
 //
-// Contract: C-233
+// The mock provider is deliberately SLOW and cancellable so the wizard's real
+// lifecycle — cancel mid-run, navigate away mid-run, restart mid-run — can be
+// exercised in a browser instead of only in unit tests. `?wgDelay=800` slows
+// every stage, `?wgDelayStage=arcs&wgDelay=1500` slows one, and `?wgFail=1`
+// makes every stage fail so retry exhaustion is reachable.
+//
+// Contract: G01 — safe private narrative-world drafts
 
+import { page } from '$app/state';
 import DevToolsPanel from '$lib/components/dev/dev_tools_panel.svelte';
 import { getWorldGenSandboxViewModel } from '$views/dev/world_gen_sandbox_composition.ts';
 import WorldGenWizardView from '$views/worldgen/world_gen_wizard_view.svelte';
 
 const viewModel = getWorldGenSandboxViewModel({
   className: 'WorldGenSandboxViewModel',
+  searchParams: page.url.searchParams,
 });
 </script>
 
@@ -38,6 +44,7 @@ const viewModel = getWorldGenSandboxViewModel({
         <button
           type="button"
           class="btn btn-sm btn-warning"
+          data-testid="sandbox-simulate-failure"
           onclick={() => viewModel.simulateFailure()}
         >
           Simulate Failure
@@ -45,9 +52,18 @@ const viewModel = getWorldGenSandboxViewModel({
         <button
           type="button"
           class="btn btn-sm btn-ghost"
+          data-testid="sandbox-reset-failure"
           onclick={() => viewModel.resetFailureSimulation()}
         >
           Reset Sim
+        </button>
+        <button
+          type="button"
+          class="btn btn-sm btn-ghost"
+          data-testid="sandbox-clear-delay"
+          onclick={() => viewModel.clearStageDelay()}
+        >
+          Clear Delay
         </button>
       </div>
     </div>

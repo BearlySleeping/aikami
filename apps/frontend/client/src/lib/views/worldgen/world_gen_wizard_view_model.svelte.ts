@@ -1,11 +1,30 @@
 // apps/frontend/client/src/lib/views/worldgen/world_gen_wizard_view_model.svelte.ts
 //
-// Wizard state machine for the World Generation Wizard (C-233).
-// Manages step flow: Genre/Tone → Setting/Difficulty → Goals → Generating →
-// Preview → Character Creation. Supports Surprise Me! one-click mode,
-// retry logic (3 auto-retries), and GM prompt assembly.
+// G01 — World Generation Wizard ViewModel.
 //
-// Contract: C-233
+// This ViewModel owns the WIZARD (step flow and user input) and nothing else.
+// Generation, cancellation, checkpointing and persistence belong to
+// {@link WorldGenDraftService}; the wizard observes it and renders it.
+//
+// What changed from C-233/C-405, and why each matters:
+//
+//   * The ViewModel no longer receives `campaign`, `worldState` or
+//     `worldGenSeeding`. Those capabilities were the only route by which a
+//     "preview" screen could call `subscribeToWorld`, `addLocation` and the
+//     four `seed*` methods against the player's LIVE campaign. Removing them
+//     from the type makes that a compile error rather than a code-review
+//     finding — there is now no capability in this feature that can mutate an
+//     active world.
+//   * Generation is single-flight. A second `generateWorld()` while a run is
+//     live is ignored instead of opening a second provider pipeline.
+//   * Restart, edit, navigation and disposal all cancel synchronously, and a
+//     late completion from a superseded run can no longer overwrite newer
+//     state.
+//   * The final step is "Draft Saved", not character creation: a G01 draft is
+//     a private narrative preview, and advancing to character creation would
+//     assert that it is playable.
+//
+// Contract: G01 — safe private narrative-world drafts
 
 import { STEP_LABELS } from '@aikami/constants';
 import {
@@ -13,137 +32,90 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services/base';
-import type { WizardStep, WorldGenInput, WorldGenOutput } from '@aikami/types';
+import type { WorldGenDraft, WorldGenDraftDiagnostic, WorldGenDraftStage } from '@aikami/schemas';
+import type { WizardStep, WorldGenInput } from '@aikami/types';
 import { getRandomPreset } from '@aikami/types';
-import {
-  WorldGenHudWidgetsStageSchema,
-  WorldGenLocationsStageSchema,
-  WorldGenNpcsStageSchema,
-  WorldGenPartyArcsStageSchema,
-  WorldGenSchema,
-  WorldGenSettingStageSchema,
-} from '$lib/data/ai_prompts/world_gen_schema';
-import { WORLD_GEN_SYSTEM_PROMPT } from '$lib/data/ai_prompts/world_gen_system_prompt';
-import type {
-  CampaignServiceInterface,
-  RouterServiceInterface,
-  TextGenerationServiceInterface,
-  WorldGenSeedingServiceInterface,
-  WorldStateServiceInterface,
-} from '$services';
+import type { RouterServiceInterface } from '$services';
+import type { WorldGenDraftPersistence } from '../../services/worldgen/types/world_gen_draft_service.types.ts';
+import type { WorldGenDraftServiceInterface } from '../../services/worldgen/world_gen_draft_service.svelte.ts';
+import { WORLD_GEN_STAGE_LABELS } from '../../services/worldgen/world_gen_stage_graph.ts';
 
 // ---------------------------------------------------------------------------
 // Capability contracts
 // ---------------------------------------------------------------------------
 
-/** The active campaign lookup the wizard reads when seeding a world. */
-export type WorldGenCampaignCapabilities = Pick<CampaignServiceInterface, 'activeCampaign'>;
-
 /** Navigation the wizard performs between steps. */
 export type WorldGenRouterCapabilities = Pick<RouterServiceInterface, 'goToRoute'>;
-
-/** Structured LLM extraction used by each generation stage. */
-export type WorldGenTextCapabilities = Pick<TextGenerationServiceInterface, 'extractStructure'>;
-
-/** World-state setup performed when the generated world is accepted. */
-export type WorldGenWorldStateCapabilities = Pick<
-  WorldStateServiceInterface,
-  'subscribeToWorld' | 'addLocation'
->;
-
-/** Seeding of the generated sections into game state. */
-export type WorldGenSeedingCapabilities = Pick<
-  WorldGenSeedingServiceInterface,
-  'seedNpcs' | 'seedLocations' | 'seedPartyArcs' | 'seedHudWidgets'
->;
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
 export type WorldGenWizardViewModelOptions = BaseViewModelOptions & {
-  /** Active campaign lookup capability. */
-  campaign: WorldGenCampaignCapabilities;
   /** Navigation capability. */
   router: WorldGenRouterCapabilities;
-  /** LLM structured-extraction capability. */
-  textGeneration: WorldGenTextCapabilities;
-  /** World-state setup capability. */
-  worldState: WorldGenWorldStateCapabilities;
-  /** World-gen seeding capability. */
-  worldGenSeeding: WorldGenSeedingCapabilities;
+  /** The draft orchestrator. Owns generation, cancellation and persistence. */
+  drafts: WorldGenDraftServiceInterface;
   /** Pre-populated inputs for editing (e.g. from a previous session). */
   initialInputs?: WorldGenInput;
-  /** Optional callback when the wizard completes world generation. */
-  onWorldAccepted?: (output: WorldGenOutput) => Promise<void>;
 };
 
 /** Public interface for the wizard ViewModel. */
 export type WorldGenWizardViewModelInterface = BaseViewModelInterface & {
-  /** Current wizard step. */
   readonly currentStep: WizardStep;
-  /** Ordered list of all steps for the step indicator. */
   readonly steps: readonly WizardStep[];
-  /** Current genre selection. */
   readonly genre: string;
-  /** Current tone selection. */
   readonly tone: string;
-  /** Current setting description. */
   readonly setting: string;
-  /** Current difficulty selection. */
   readonly difficulty: string;
-  /** Current goals text. */
   readonly goals: string;
-  /** Generated world output (undefined until generation completes). */
-  readonly worldOutput: WorldGenOutput | undefined;
-  /** Whether a generation request is in progress. */
+  readonly draft: WorldGenDraft | undefined;
   readonly isGenerating: boolean;
-  /** Error message from the last generation attempt. */
   readonly generationError: string | undefined;
-  /** Progress message shown during auto-retry. */
   readonly retryStatus: string | undefined;
-  /** Whether the current step can advance to the next. */
   readonly canAdvance: boolean;
-  /** Whether the wizard is on the first step (no going back). */
   readonly isFirstStep: boolean;
-  /** Whether the wizard is on the last input step (ready to generate). */
   readonly isLastInputStep: boolean;
-  /** Number of retries remaining. */
-  readonly retriesRemaining: number;
-  /** Human-readable step label for display. */
+  readonly canCancel: boolean;
+  /** Whether a completed draft can be accepted as a private preview. */
+  readonly canAccept: boolean;
+  /** 'durable' only when the draft really reached the device store. */
+  readonly persistence: WorldGenDraftPersistence;
+  readonly diagnostics: readonly WorldGenDraftDiagnostic[];
+  /** stage → human label, for the checkpoint/progress readout. */
+  readonly completedStageLabels: readonly string[];
+  /** stage → failure message, for the partial-failure readout. */
+  readonly stageFailures: readonly { stage: string; message: string }[];
   readonly currentStepLabel: string;
-  /** GM prompt preview — assembled inputs formatted for the LLM. */
-  readonly gmPromptPreview: string;
-  /** Whether Surprise Me mode is active (auto-generated inputs). */
   readonly isSurpriseMode: boolean;
-  /** Progress percentage through the wizard (0-100). */
   readonly progressPercent: number;
 
-  // ── Step setters ──
   setGenre(value: string): void;
   setTone(value: string): void;
   setDifficulty(value: string): void;
   setSetting(value: string): void;
   setGoals(value: string): void;
 
-  // ── Navigation ──
   advanceStep(): void;
   goBack(): void;
 
-  // ── Generation ──
   generateWorld(): Promise<void>;
   retryGeneration(): Promise<void>;
-  /** Navigates to /setup to change the AI connection. */
+  cancelGeneration(): void;
   changeConnection(): Promise<void>;
   acceptWorld(): Promise<void>;
 
-  // ── Surprise Me ──
+  /**
+   * Restores the newest durable draft and lands the wizard on the step that
+   * draft belongs to.
+   *
+   * This is the page-reload path. Without it a real reload produced an empty
+   * wizard even though the draft was on disk, because nothing re-read it.
+   */
+  initialize(): Promise<void>;
+
   surpriseMe(): void;
 
-  // ── Navigation to Character Creation ──
-  navigateToCharacterCreation(): Promise<void>;
-
-  // ── Reset / Edit ──
   restart(): void;
   editInputs(): void;
 };
@@ -159,62 +131,14 @@ const STEPS: readonly WizardStep[] = [
   'goals',
   'generating',
   'preview',
-  'character_creation',
+  'draft_saved',
 ] as const;
 
-/** Step index threshold for input vs output phases. */
+/** Index of the generating step. */
 const GENERATING_STEP_INDEX = 3;
 
-/** Maximum auto-retries on LLM failure before showing error. */
-const MAX_RETRIES = 3;
-
-// ---------------------------------------------------------------------------
-// C-405 AC-5: parallel generation stages
-// ---------------------------------------------------------------------------
-//
-// Dependency graph (written down before parallelizing — OQ-3):
-//   setting | npcs | locations | hudWidgets  — mutually independent
-//   partyArcs                                 — DEPENDS on npcs: arcs reference
-//                                               NPC names as questGivers, so
-//                                               the arcs call runs only after
-//                                               the NPC roster resolves.
-
-/** The five generation stages. */
-type GenerationStage = 'setting' | 'npcs' | 'locations' | 'hudWidgets' | 'partyArcs';
-
-/** Per-stage TypeBox schema used for LLM structured-output validation. */
-const STAGE_SCHEMAS: Record<string, Record<string, unknown>> = {
-  setting: WorldGenSettingStageSchema as unknown as Record<string, unknown>, // guard-ignore lint/type-safety/casting: world gen wizard state - dynamic form state shape not expressible in static types
-  npcs: WorldGenNpcsStageSchema as unknown as Record<string, unknown>, // guard-ignore lint/type-safety/casting: world gen wizard state - dynamic form state shape not expressible in static types
-  locations: WorldGenLocationsStageSchema as unknown as Record<string, unknown>, // guard-ignore lint/type-safety/casting: world gen wizard state - dynamic form state shape not expressible in static types
-  hudWidgets: WorldGenHudWidgetsStageSchema as unknown as Record<string, unknown>, // guard-ignore lint/type-safety/casting: world gen wizard state - dynamic form state shape not expressible in static types
-  partyArcs: WorldGenPartyArcsStageSchema as unknown as Record<string, unknown>, // guard-ignore lint/type-safety/casting: world gen wizard state - dynamic form state shape not expressible in static types
-};
-
-/** Human-readable label for each stage (used in stage prompts). */
-const STAGE_LABELS: Record<GenerationStage, string> = {
-  setting: 'the world name and description',
-  npcs: 'the NPC roster',
-  locations: 'the location list',
-  hudWidgets: 'the HUD widget blueprints',
-  partyArcs: 'the party story arcs',
-} as const;
-
-/** Minimal JSON shape hint embedded in each stage prompt. */
-const STAGE_SHAPE_HINTS: Record<GenerationStage, string> = {
-  setting: '{ "worldName": "...", "worldDescription": "..." }',
-  npcs: '{ "npcs": [ { "name": "...", "race": "...", "class": "...", "role": "...", "description": "...", "personality": "..." } ] }',
-  locations: '{ "locations": [ "...", "...", "..." ] }',
-  hudWidgets:
-    '{ "hudWidgets": [ { "slot": "...", "label": "...", "icon": "...", "defaultVisibility": true } ] }',
-  partyArcs:
-    '{ "partyArcs": [ { "chapter": "...", "description": "...", "objectives": [ "..." ], "questGivers": [ "<NPC name from the roster>" ] } ] }',
-} as const;
-
-/** Fallback step label if not found. */
 const FALLBACK_LABEL = 'Unknown';
 
-/** All available genre options for chips. */
 export const GENRE_OPTIONS = [
   'Fantasy',
   'Science Fiction',
@@ -224,7 +148,6 @@ export const GENRE_OPTIONS = [
   'Post-Apocalyptic',
 ] as const;
 
-/** All available tone options for chips. */
 export const TONE_OPTIONS = [
   'Heroic',
   'Dark',
@@ -239,8 +162,11 @@ export const TONE_OPTIONS = [
   'Grim',
 ] as const;
 
-/** All available difficulty options. */
 export const DIFFICULTY_OPTIONS = ['Easy', 'Medium', 'Hard'] as const;
+
+/** Maps a stage id to its label, tolerating an unknown id. */
+export const worldGenStageLabel = (stage: string): string =>
+  WORLD_GEN_STAGE_LABELS[stage as WorldGenDraftStage] ?? stage;
 
 // ---------------------------------------------------------------------------
 // ViewModel
@@ -250,30 +176,31 @@ export class WorldGenWizardViewModel
   extends BaseViewModel<WorldGenWizardViewModelOptions>
   implements WorldGenWizardViewModelInterface
 {
-  // ── Injected capabilities ──
-
-  private readonly _campaign: WorldGenCampaignCapabilities;
   private readonly _router: WorldGenRouterCapabilities;
-  private readonly _textGeneration: WorldGenTextCapabilities;
-  private readonly _worldState: WorldGenWorldStateCapabilities;
-  private readonly _worldGenSeeding: WorldGenSeedingCapabilities;
+  private readonly _drafts: WorldGenDraftServiceInterface;
 
-  // ── Instance fields ──
-
-  private readonly _onWorldAccepted: ((output: WorldGenOutput) => Promise<void>) | undefined;
   private _currentStepIndex = $state(0);
   private _genre = $state('');
   private _tone = $state('');
   private _setting = $state('');
   private _difficulty = $state('Medium');
   private _goals = $state('');
-  private _worldOutput = $state<WorldGenOutput | undefined>();
-  private _isGenerating = $state(false);
-  private _generationError = $state<string | undefined>();
-  private _retriesRemaining = $state(MAX_RETRIES);
   private _isSurpriseMode = $state(false);
-  /** Progress message during auto-retry (e.g. "Retrying... (2/3)"). */
-  private _retryStatus = $state<string | undefined>();
+
+  constructor(options: WorldGenWizardViewModelOptions) {
+    super(options);
+    this._router = options.router;
+    this._drafts = options.drafts;
+
+    const { initialInputs } = options;
+    if (initialInputs) {
+      this._genre = initialInputs.genre;
+      this._tone = initialInputs.tone;
+      this._setting = initialInputs.setting;
+      this._difficulty = initialInputs.difficulty;
+      this._goals = initialInputs.goals;
+    }
+  }
 
   // ── Getters ──
 
@@ -305,21 +232,34 @@ export class WorldGenWizardViewModel
     return this._goals;
   }
 
-  get worldOutput(): WorldGenOutput | undefined {
-    return this._worldOutput;
+  get draft(): WorldGenDraft | undefined {
+    return this._drafts.draft;
   }
 
   get isGenerating(): boolean {
-    return this._isGenerating;
+    return this._drafts.run?.status === 'running';
   }
 
   get generationError(): string | undefined {
-    return this._generationError;
+    const run = this._drafts.run;
+    if (run?.status === 'cancelled') {
+      return run.error ?? 'Cancelled';
+    }
+    if (run?.status === 'failed') {
+      return run.error;
+    }
+    return undefined;
   }
 
-  /** Progress message shown during auto-retry attempts. */
   get retryStatus(): string | undefined {
-    return this._retryStatus;
+    const run = this._drafts.run;
+    if (run === undefined || run.status !== 'running' || run.failures.length === 0) {
+      return undefined;
+    }
+    const last = run.failures[run.failures.length - 1];
+    return last === undefined
+      ? undefined
+      : `Retrying after ${worldGenStageLabel(last.stage)} failed: ${last.message}`;
   }
 
   get canAdvance(): boolean {
@@ -330,12 +270,8 @@ export class WorldGenWizardViewModel
         return this._setting.length > 0 && this._difficulty.length > 0;
       case 'goals':
         return this._goals.length > 0;
-      case 'generating':
-      case 'preview':
-      case 'character_creation':
-        return true;
       default:
-        return false;
+        return true;
     }
   }
 
@@ -347,16 +283,35 @@ export class WorldGenWizardViewModel
     return this._currentStepIndex === GENERATING_STEP_INDEX - 1;
   }
 
-  get retriesRemaining(): number {
-    return this._retriesRemaining;
+  get canCancel(): boolean {
+    return this.isGenerating;
+  }
+
+  get canAccept(): boolean {
+    return this._drafts.draft?.status === 'complete';
+  }
+
+  get persistence(): WorldGenDraftPersistence {
+    return this._drafts.persistence;
+  }
+
+  get diagnostics(): readonly WorldGenDraftDiagnostic[] {
+    return this._drafts.diagnostics;
+  }
+
+  get completedStageLabels(): readonly string[] {
+    return (this._drafts.run?.completedStages ?? []).map(worldGenStageLabel);
+  }
+
+  get stageFailures(): readonly { stage: string; message: string }[] {
+    return (this._drafts.run?.failures ?? []).map((failure) => ({
+      stage: worldGenStageLabel(failure.stage),
+      message: failure.message,
+    }));
   }
 
   get currentStepLabel(): string {
     return STEP_LABELS[this.currentStep] ?? FALLBACK_LABEL;
-  }
-
-  get gmPromptPreview(): string {
-    return this._assembleGmPrompt();
   }
 
   get isSurpriseMode(): boolean {
@@ -365,29 +320,6 @@ export class WorldGenWizardViewModel
 
   get progressPercent(): number {
     return Math.round((this._currentStepIndex / (STEPS.length - 1)) * 100);
-  }
-
-  // ── Constructor ──
-
-  constructor(options: WorldGenWizardViewModelOptions) {
-    super(options);
-
-    const { initialInputs, onWorldAccepted } = options;
-
-    this._campaign = options.campaign;
-    this._router = options.router;
-    this._textGeneration = options.textGeneration;
-    this._worldState = options.worldState;
-    this._worldGenSeeding = options.worldGenSeeding;
-    this._onWorldAccepted = onWorldAccepted;
-
-    if (initialInputs) {
-      this._genre = initialInputs.genre;
-      this._tone = initialInputs.tone;
-      this._setting = initialInputs.setting;
-      this._difficulty = initialInputs.difficulty;
-      this._goals = initialInputs.goals;
-    }
   }
 
   // ── Step setters ──
@@ -425,226 +357,155 @@ export class WorldGenWizardViewModel
     if (!this.canAdvance) {
       return;
     }
-
-    const nextIndex = this._currentStepIndex + 1;
-    if (nextIndex < STEPS.length) {
-      this._currentStepIndex = nextIndex;
-      this._generationError = undefined;
+    const next = this._currentStepIndex + 1;
+    if (next < STEPS.length) {
+      this._currentStepIndex = next;
     }
   }
 
   goBack(): void {
-    if (this._currentStepIndex > 0) {
-      this._currentStepIndex--;
-      this._generationError = undefined;
+    if (this._currentStepIndex <= 0) {
+      return;
     }
+    // Leaving the generating step by hand is a cancellation, not a pause.
+    this._cancelIfRunning();
+    this._currentStepIndex -= 1;
   }
 
   // ── Generation ──
 
   async generateWorld(): Promise<void> {
-    this._isGenerating = true;
-    this._generationError = undefined;
-    this._retryStatus = undefined;
-    this._retriesRemaining = MAX_RETRIES;
-
-    // Advance to generating step
-    this._currentStepIndex = GENERATING_STEP_INDEX;
-
-    await this._performGeneration();
-  }
-
-  async retryGeneration(): Promise<void> {
-    if (this._retriesRemaining <= 0 || this._isGenerating) {
+    // Single-flight: a second Generate while a run is live is ignored. The
+    // draft service owns this guard too; repeating it here keeps the wizard's
+    // own step machine from advancing a second time.
+    if (this.isGenerating) {
+      this.debug('generateWorld:ignored-already-running');
       return;
     }
-
-    this._retriesRemaining--;
-    this._generationError = undefined;
-    this._retryStatus = undefined;
-    this._isGenerating = true;
-
-    await this._performGeneration();
+    this._currentStepIndex = GENERATING_STEP_INDEX;
+    const draft = await this._drafts.generate({ input: this._buildInput() });
+    if (draft !== undefined && this.currentStep === 'generating') {
+      this._currentStepIndex = this._indexOf('preview');
+    }
   }
 
-  /** Navigates back to setup screen to change the AI connection. */
+  /**
+   * Re-runs generation after a failure.
+   *
+   * Stages that already succeeded keep their checkpoints, so only the stages
+   * that failed are re-issued.
+   */
+  async retryGeneration(): Promise<void> {
+    if (this.isGenerating) {
+      return;
+    }
+    await this.generateWorld();
+  }
+
+  cancelGeneration(): void {
+    this._drafts.cancel('Cancelled by the player');
+  }
+
   async changeConnection(): Promise<void> {
+    this._cancelIfRunning();
     await this._router.goToRoute('setup', {
       queryParameters: { reason: 'generation-failed' },
       pathParameters: undefined,
     });
   }
 
+  /**
+   * Accepts the draft, privately and durably.
+   *
+   * This does not create a world, a campaign, an NPC, a map or a save, and it
+   * publishes nothing to the live combat GM context. It marks the private draft
+   * row accepted; the wizard then reads that same row back.
+   */
   async acceptWorld(): Promise<void> {
-    if (!this._worldOutput) {
+    const accepted = await this._drafts.accept();
+    if (accepted !== undefined) {
+      this._currentStepIndex = this._indexOf('draft_saved');
+    }
+  }
+
+  // ── Hydration ──────────────────────────────────────────────────────────
+
+  async initialize(): Promise<void> {
+    const draft = await this._drafts.initialize();
+    if (draft === undefined) {
       return;
     }
-
-    const output = this._worldOutput;
-    this.debug('acceptWorld:seeding', { worldName: output.worldName });
-
-    // Initialize world state before seeding — creates the world and a
-    // default location so NPCs and events have a place to attach to.
-    const campaignId = this._campaign.activeCampaign?.id ?? crypto.randomUUID();
-    await this._worldState.subscribeToWorld(campaignId);
-    this._worldState.addLocation({
-      name: output.locations[0] ?? 'Town Square',
-      description: output.worldDescription,
-    });
-
-    // Seed generated data into game state
-    await this._worldGenSeeding.seedNpcs({ npcs: output.npcs });
-    await this._worldGenSeeding.seedLocations({
-      locations: output.locations,
-      worldName: output.worldName,
-    });
-    await this._worldGenSeeding.seedPartyArcs({ arcs: output.partyArcs });
-    await this._worldGenSeeding.seedHudWidgets({ widgets: output.hudWidgets });
-
-    if (this._onWorldAccepted) {
-      await this._onWorldAccepted(output);
-    }
-
-    // Advance to character creation step
-    const charCreationIndex = STEPS.indexOf('character_creation');
-    if (charCreationIndex >= 0) {
-      this._currentStepIndex = charCreationIndex;
-    }
+    // The inputs come back with the draft, so the wizard's own fields match
+    // what the user actually typed before the reload rather than resetting to
+    // the defaults.
+    this._genre = draft.input.genre;
+    this._tone = draft.input.tone;
+    this._setting = draft.input.setting;
+    this._difficulty = draft.input.difficulty;
+    this._goals = draft.input.goals;
+    this._isSurpriseMode = false;
+    this._currentStepIndex = this._indexOf(
+      draft.status === 'accepted_preview' ? 'draft_saved' : 'preview',
+    );
   }
 
   // ── Surprise Me ──
 
   surpriseMe(): void {
     const preset = getRandomPreset();
-
     this._genre = preset.genre;
     this._tone = preset.tone;
     this._setting = preset.setting;
     this._difficulty = preset.difficulty;
     this._goals = preset.goals;
     this._isSurpriseMode = true;
-
-    this._generationError = undefined;
-  }
-
-  // ── Navigation to Character Creation ──
-
-  async navigateToCharacterCreation(): Promise<void> {
-    this.debug('navigateToCharacterCreation');
-    await this._router.goToRoute('personas', {
-      queryParameters: undefined,
-      pathParameters: undefined,
-    });
   }
 
   // ── Reset / Edit ──
 
   restart(): void {
+    this._cancelIfRunning();
     this._currentStepIndex = 0;
     this._genre = '';
     this._tone = '';
     this._setting = '';
     this._difficulty = 'Medium';
     this._goals = '';
-    this._worldOutput = undefined;
-    this._isGenerating = false;
-    this._generationError = undefined;
-    this._retriesRemaining = MAX_RETRIES;
     this._isSurpriseMode = false;
   }
 
   editInputs(): void {
-    // Go back to the first input step
+    this._cancelIfRunning();
     this._currentStepIndex = 0;
-    this._worldOutput = undefined;
-    this._generationError = undefined;
+  }
+
+  // ── Disposal ──
+
+  /**
+   * Cancels any live run before the base class tears the reactive roots down.
+   *
+   * Abort is synchronous, so a provider call that is still in flight observes
+   * it immediately and cannot write into a disposed ViewModel.
+   */
+  override async dispose(): Promise<void> {
+    this._drafts.cancel('Wizard disposed');
+    await this._drafts.dispose();
+    await super.dispose();
   }
 
   // ── Private helpers ──
 
-  /**
-   * Calls the LLM to generate a world from current inputs.
-   * On failure, triggers auto-retry logic.
-   * C-405 AC-5: independent stages (setting, npcs, locations, hudWidgets) are
-   * issued concurrently; partyArcs run after npcs resolves.
-   */
-  private async _performGeneration(): Promise<void> {
-    try {
-      const input = this._buildInput();
-
-      // Stage A — mutually independent sections, issued concurrently. Every
-      // active stage promise must settle before a retry can begin: a
-      // fast-failing stage must not start the retry path while sibling
-      // requests are still in flight (which would multiply provider requests).
-      const settledStages = await Promise.allSettled([
-        this._generateStage(input, 'setting'),
-        this._generateStage(input, 'npcs'),
-        this._generateStage(input, 'locations'),
-        this._generateStage(input, 'hudWidgets'),
-      ]);
-
-      const failedStage = settledStages.find(
-        (result): result is PromiseRejectedResult => result.status === 'rejected',
-      );
-      if (failedStage) {
-        throw failedStage.reason instanceof Error
-          ? failedStage.reason
-          : new Error('World generation stage failed');
-      }
-
-      const [settingRaw, npcsRaw, locationsRaw, hudWidgetsRaw] = settledStages
-        .filter(
-          (result): result is PromiseFulfilledResult<Record<string, unknown>> =>
-            result.status === 'fulfilled',
-        )
-        .map((result) => result.value);
-
-      // Stage B — party arcs reference NPC names as quest-givers, so they
-      // must wait for the NPC roster before resolving.
-      const npcNames = this._extractNpcNames(Array.isArray(npcsRaw.npcs) ? npcsRaw.npcs : []);
-      const arcsRaw = await this._generateStage(input, 'partyArcs', npcNames);
-
-      const parsed = this._mergeStages({
-        settingRaw,
-        npcsRaw,
-        locationsRaw,
-        hudWidgetsRaw,
-        arcsRaw,
-      });
-
-      if (!parsed.worldName || !parsed.worldDescription || !Array.isArray(parsed.npcs)) {
-        throw new Error('LLM response missing required fields');
-      }
-
-      this._worldOutput = parsed;
-      this._isGenerating = false;
-      this._retryStatus = undefined;
-
-      const previewIndex = STEPS.indexOf('preview');
-      if (previewIndex >= 0) {
-        this._currentStepIndex = previewIndex;
-      }
-    } catch (error) {
-      this.warn('_performGeneration:failed', error);
-
-      const reason = error instanceof Error ? error.message : 'Unknown error';
-
-      if (this._retriesRemaining > 0) {
-        this._retriesRemaining--;
-        const attempt = MAX_RETRIES - this._retriesRemaining;
-        this._retryStatus = `Failed: ${reason}. Retrying... (${attempt}/${MAX_RETRIES})`;
-        await this._performGeneration();
-      } else {
-        this._generationError = reason;
-        this._isGenerating = false;
-        this._retryStatus = undefined;
-      }
+  private _cancelIfRunning(): void {
+    if (this.isGenerating) {
+      this._drafts.cancel('Wizard navigated away');
     }
   }
 
-  /**
-   * Builds a WorldGenInput from current state.
-   */
+  private _indexOf(step: WizardStep): number {
+    const index = STEPS.indexOf(step);
+    return index < 0 ? 0 : index;
+  }
+
   private _buildInput(): WorldGenInput {
     return {
       genre: this._genre,
@@ -653,156 +514,6 @@ export class WorldGenWizardViewModel
       difficulty: this._difficulty,
       goals: this._goals,
     };
-  }
-
-  /**
-   * Assembles the prompt text sent to the LLM.
-   * Combines the system prompt with user input values.
-   */
-  private _assembleGmPrompt(): string {
-    const input = this._buildInput();
-    return [
-      WORLD_GEN_SYSTEM_PROMPT,
-      '',
-      '## User Input',
-      JSON.stringify(input, null, 2),
-      '',
-      '## Response',
-      'Return ONLY valid JSON matching the schema. No markdown fences, no explanations.',
-    ].join('\n');
-  }
-
-  /**
-   * Calls the LLM to generate a world.
-   * C-405 AC-5: generation is split into stages; `schema` selects the
-   * per-stage TypeBox schema for structured output validation. The dev
-   * sandbox overrides this method with a fixed signature and returns the
-   * full mock output — each stage parser extracts its own section from it.
-   */
-  protected async _callLlm(
-    _input: WorldGenInput,
-    prompt: string,
-    schema: Record<string, unknown> = WorldGenSchema as unknown as Record<string, unknown>, // guard-ignore lint/type-safety/casting: world gen wizard state - dynamic form state shape not expressible in static types
-  ): Promise<string | undefined> {
-    this.debug('_callLlm:calling-textGenerationService');
-
-    try {
-      const result = await this._textGeneration.extractStructure({
-        schema,
-        schemaName: 'WorldGenOutput',
-        prompt,
-        systemPrompt: WORLD_GEN_SYSTEM_PROMPT,
-      });
-
-      if (result === undefined) {
-        return undefined;
-      }
-
-      this.debug('_callLlm:success', { outputLength: JSON.stringify(result).length });
-      return JSON.stringify(result);
-    } catch (error) {
-      this.error('_callLlm:failed', { error });
-      throw error;
-    }
-  }
-
-  /**
-   * Runs one generation stage: assembles the stage prompt, calls the LLM with
-   * the stage schema, and parses the JSON response. Throws 'LLM returned
-   * empty response' when the LLM yields nothing — the same contract the
-   * retry logic in {@link _performGeneration} already handles.
-   */
-  private async _generateStage(
-    input: WorldGenInput,
-    stage: GenerationStage,
-    npcNames?: string[],
-  ): Promise<Record<string, unknown>> {
-    const prompt = this._assembleStagePrompt(input, stage, npcNames);
-    const rawOutput = await this._callLlm(input, prompt, STAGE_SCHEMAS[stage]);
-
-    if (!rawOutput) {
-      throw new Error('LLM returned empty response');
-    }
-
-    return JSON.parse(rawOutput) as Record<string, unknown>;
-  }
-
-  /**
-   * Assembles a stage-specific prompt. For partyArcs, the resolved NPC roster
-   * is embedded so questGivers reference real NPC names.
-   */
-  private _assembleStagePrompt(
-    input: WorldGenInput,
-    stage: GenerationStage,
-    npcNames?: string[],
-  ): string {
-    const lines = [WORLD_GEN_SYSTEM_PROMPT, '', '## User Input', JSON.stringify(input, null, 2)];
-
-    if (stage === 'partyArcs') {
-      lines.push('', '## NPC Roster (already generated)', JSON.stringify(npcNames ?? [], null, 2));
-      lines.push('The questGivers array MUST contain only names from this roster.');
-    }
-
-    lines.push(
-      '',
-      `## Task`,
-      `Generate ONLY ${STAGE_LABELS[stage]} for this world. Do NOT generate any other section.`,
-      '',
-      '## Response',
-      `Return ONLY valid JSON matching this shape: ${STAGE_SHAPE_HINTS[stage]}. No markdown fences, no explanations.`,
-    );
-
-    return lines.join('\n');
-  }
-
-  /**
-   * Extracts the NPC name list from a raw npcs stage array. Used both to
-   * feed the partyArcs prompt (quest-givers must be roster names) and to
-   * validate the merged output.
-   */
-  private _extractNpcNames(npcs: unknown[]): string[] {
-    return npcs.map((npc: unknown) => String((npc as { name?: unknown }).name ?? ''));
-  }
-
-  /**
-   * Merges the per-stage results into a full WorldGenOutput.
-   * Party arcs must reference quest-givers that exist in the generated NPC
-   * roster — an arc pointing at a missing NPC is rejected so the retry path
-   * in _performGeneration re-runs the stages.
-   */
-  private _mergeStages(options: {
-    settingRaw: Record<string, unknown>;
-    npcsRaw: Record<string, unknown>;
-    locationsRaw: Record<string, unknown>;
-    hudWidgetsRaw: Record<string, unknown>;
-    arcsRaw: Record<string, unknown>;
-  }): WorldGenOutput {
-    const { settingRaw, npcsRaw, locationsRaw, hudWidgetsRaw, arcsRaw } = options;
-
-    const npcs = Array.isArray(npcsRaw.npcs) ? npcsRaw.npcs : [];
-    const npcNames = new Set(this._extractNpcNames(npcs));
-
-    const partyArcs = Array.isArray(arcsRaw.partyArcs) ? arcsRaw.partyArcs : [];
-    for (const arc of partyArcs) {
-      const questGivers = Array.isArray((arc as { questGivers?: unknown }).questGivers)
-        ? (arc as { questGivers: unknown[] }).questGivers
-        : [];
-      const unknownGiver = questGivers.find(
-        (giver: unknown) => typeof giver !== 'string' || !npcNames.has(giver),
-      );
-      if (unknownGiver !== undefined) {
-        throw new Error('Party arc references an NPC not in the generated roster');
-      }
-    }
-
-    return {
-      worldName: String(settingRaw.worldName ?? ''),
-      worldDescription: String(settingRaw.worldDescription ?? ''),
-      npcs,
-      locations: Array.isArray(locationsRaw.locations) ? locationsRaw.locations : [],
-      partyArcs,
-      hudWidgets: Array.isArray(hudWidgetsRaw.hudWidgets) ? hudWidgetsRaw.hudWidgets : [],
-    } as WorldGenOutput;
   }
 }
 

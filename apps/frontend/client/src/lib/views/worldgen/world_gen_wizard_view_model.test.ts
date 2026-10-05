@@ -1,474 +1,344 @@
 // apps/frontend/client/src/lib/views/worldgen/world_gen_wizard_view_model.test.ts
 //
-// Unit tests for WorldGenWizardViewModel — state machine, step navigation,
-// retry logic, Surprise Me, and input validation.
+// G01 — wizard ViewModel tests.
 //
-// Run with:
-//   bun test --preload ./src/lib/test_setup.ts --tsconfig tsconfig.test.json \
-//     src/lib/views/worldgen/world_gen_wizard_view_model.test.ts
+// The wizard's own responsibility is the step machine and user input;
+// generation, cancellation and persistence are the draft service's. These
+// tests therefore drive the wizard over a REAL draft service (with a
+// controllable provider) rather than a stubbed one, and assert on the steps,
+// the labels, and — critically — on which capabilities the wizard can reach.
 //
-// Contract: C-233
+// Contract: G01 — safe private narrative-world drafts
 
 import { describe, expect, test } from 'bun:test';
-import type { WorldGenInput } from '@aikami/types';
+import { createWorldGenDraftService } from '../../services/worldgen/world_gen_draft_service.svelte.ts';
 import {
-  WorldGenHudWidgetsStageSchema,
-  WorldGenLocationsStageSchema,
-  WorldGenNpcsStageSchema,
-  WorldGenPartyArcsStageSchema,
-  WorldGenSettingStageSchema,
-} from '$lib/data/ai_prompts/world_gen_schema';
-import { createWorldGenCapabilities } from './testing/world_gen_fixtures.ts';
+  coherentPayloads,
+  createControllableProvider,
+  createMemoryStore,
+  WORLD_GEN_WIZARD_INPUT,
+} from './testing/world_gen_fixtures.ts';
 import {
   createWorldGenWizardViewModel,
-  WorldGenWizardViewModel,
-  type WorldGenWizardViewModelOptions,
+  type WorldGenWizardViewModelInterface,
 } from './world_gen_wizard_view_model.svelte.ts';
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
+/** Strips whole-line and block comments so prose cannot trip a code check. */
+const stripComments = (source: string): string =>
+  source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 
-const DEFAULT_INPUTS = {
-  genre: 'Fantasy',
-  tone: 'Heroic',
-  setting: 'A mystical forest kingdom threatened by a void corruption.',
-  difficulty: 'Medium',
-  goals: 'Find the Heart of the Forest and seal the void rift.',
+type Harness = {
+  vm: WorldGenWizardViewModelInterface;
+  provider: ReturnType<typeof createControllableProvider>;
+  store: ReturnType<typeof createMemoryStore>;
 };
 
-const createViewModel = (options?: Partial<WorldGenWizardViewModelOptions>) =>
-  createWorldGenWizardViewModel({
+const build = (providerOptions: Parameters<typeof createControllableProvider>[0] = {}): Harness => {
+  const provider = createControllableProvider({ payloads: coherentPayloads(), ...providerOptions });
+  const store = createMemoryStore();
+  const vm = createWorldGenWizardViewModel({
     className: 'WorldGenWizardViewModelTest',
-    ...createWorldGenCapabilities(),
-    ...options,
+    initialInputs: WORLD_GEN_WIZARD_INPUT,
+    router: { goToRoute: async () => {} },
+    drafts: createWorldGenDraftService({
+      className: 'WorldGenDraftServiceTest',
+      text: provider.capability,
+      resolveStore: async () => store,
+      maxAttemptsPerStage: 1,
+    }),
   });
-
-/** Create a VM pre-filled with inputs at the goals step. */
-const createPrefilledViewModel = () => createViewModel({ initialInputs: DEFAULT_INPUTS });
+  return { vm, provider, store };
+};
 
 // ---------------------------------------------------------------------------
-// Tests
+// Step machine + inputs (unchanged behaviour from C-233)
 // ---------------------------------------------------------------------------
 
-describe('WorldGenWizardViewModel — C-233', () => {
-  describe('initial state', () => {
-    test('starts at genre_tone step', () => {
-      const vm = createViewModel();
-      expect(vm.currentStep).toBe('genre_tone');
-      expect(vm.isFirstStep).toBe(true);
-      expect(vm.isLastInputStep).toBe(false);
-    });
+describe('WorldGenWizardViewModel — inputs and steps', () => {
+  test('starts at genre_tone with the supplied inputs', () => {
+    const { vm } = build();
 
-    test('initial inputs are empty', () => {
-      const vm = createViewModel();
-      expect(vm.genre).toBe('');
-      expect(vm.tone).toBe('');
-      expect(vm.setting).toBe('');
-      expect(vm.goals).toBe('');
-      expect(vm.difficulty).toBe('Medium');
-    });
-
-    test('initial state is not generating and has no error', () => {
-      const vm = createViewModel();
-      expect(vm.isGenerating).toBe(false);
-      expect(vm.generationError).toBeUndefined();
-      expect(vm.worldOutput).toBeUndefined();
-      expect(vm.retriesRemaining).toBe(3);
-      expect(vm.isSurpriseMode).toBe(false);
-    });
-
-    test('pre-fills inputs from initialInputs option', () => {
-      const vm = createPrefilledViewModel();
-      expect(vm.genre).toBe('Fantasy');
-      expect(vm.tone).toBe('Heroic');
-      expect(vm.setting).toBe(DEFAULT_INPUTS.setting);
-      expect(vm.difficulty).toBe('Medium');
-      expect(vm.goals).toBe(DEFAULT_INPUTS.goals);
-    });
+    expect(vm.currentStep).toBe('genre_tone');
+    expect(vm.isFirstStep).toBe(true);
+    expect(vm.genre).toBe(WORLD_GEN_WIZARD_INPUT.genre);
+    expect(vm.difficulty).toBe('Medium');
   });
 
-  describe('step navigation', () => {
-    test('canAdvance is false when inputs are empty at genre_tone', () => {
-      const vm = createViewModel();
-      expect(vm.canAdvance).toBe(false);
-    });
+  test('pre-fills from initialInputs', () => {
+    const { vm } = build();
 
-    test('canAdvance is true when genre and tone are set', () => {
-      const vm = createViewModel();
-      vm.setGenre('Fantasy');
-      vm.setTone('Heroic');
-      expect(vm.canAdvance).toBe(true);
-    });
-
-    test('advanceStep moves to next step', () => {
-      const vm = createViewModel();
-      vm.setGenre('Fantasy');
-      vm.setTone('Heroic');
-      vm.advanceStep();
-      expect(vm.currentStep).toBe('setting_difficulty');
-    });
-
-    test('advanceStep does nothing when canAdvance is false', () => {
-      const vm = createViewModel();
-      vm.advanceStep();
-      expect(vm.currentStep).toBe('genre_tone');
-    });
-
-    test('goBack returns to previous step', () => {
-      const vm = createPrefilledViewModel();
-      vm.advanceStep(); // to setting_difficulty
-      expect(vm.currentStep).toBe('setting_difficulty');
-      vm.goBack();
-      expect(vm.currentStep).toBe('genre_tone');
-    });
-
-    test('goBack does nothing on first step', () => {
-      const vm = createViewModel();
-      vm.goBack();
-      expect(vm.currentStep).toBe('genre_tone');
-    });
-
-    test('full navigation through input steps', () => {
-      const vm = createPrefilledViewModel();
-      expect(vm.currentStep).toBe('genre_tone');
-      vm.advanceStep();
-      expect(vm.currentStep).toBe('setting_difficulty');
-      vm.advanceStep();
-      expect(vm.currentStep).toBe('goals');
-      expect(vm.isLastInputStep).toBe(true);
-    });
+    expect(vm.genre).toBe(WORLD_GEN_WIZARD_INPUT.genre);
+    expect(vm.goals).toBe(WORLD_GEN_WIZARD_INPUT.goals);
   });
 
-  describe('canAdvance per step', () => {
-    test('canAdvance for genre_tone requires genre and tone', () => {
-      const vm = createViewModel();
-      vm.setGenre('Fantasy');
-      expect(vm.canAdvance).toBe(false);
-      vm.setTone('Heroic');
-      expect(vm.canAdvance).toBe(true);
-    });
+  test('canAdvance gates on the inputs each step actually needs', () => {
+    const { vm } = build();
 
-    test('canAdvance for setting_difficulty requires setting', () => {
-      const vm = createPrefilledViewModel();
-      vm.advanceStep(); // now at setting_difficulty
-      expect(vm.currentStep).toBe('setting_difficulty');
-      expect(vm.canAdvance).toBe(true); // setting already filled
+    vm.setGenre('');
+    expect(vm.canAdvance).toBe(false);
+    vm.setGenre('Fantasy');
+    expect(vm.canAdvance).toBe(true);
 
-      // Clear setting
-      vm.setSetting('');
-      expect(vm.canAdvance).toBe(false);
-    });
-
-    test('canAdvance for goals requires goals', () => {
-      const vm = createPrefilledViewModel();
-      vm.advanceStep(); // setting_difficulty
-      vm.advanceStep(); // goals
-      expect(vm.canAdvance).toBe(true); // goals already filled
-
-      vm.setGoals('');
-      expect(vm.canAdvance).toBe(false);
-    });
+    vm.advanceStep();
+    expect(vm.currentStep).toBe('setting_difficulty');
+    vm.setSetting('');
+    expect(vm.canAdvance).toBe(false);
   });
 
-  describe('step setters', () => {
-    test('setGenre updates genre and clears surprise mode', () => {
-      const vm = createViewModel();
-      vm.surpriseMe();
-      expect(vm.isSurpriseMode).toBe(true);
-      vm.setGenre('Science Fiction');
-      expect(vm.genre).toBe('Science Fiction');
-      expect(vm.isSurpriseMode).toBe(false);
-    });
+  test('setDifficulty rejects a value outside the option list', () => {
+    const { vm } = build();
 
-    test('setTone updates tone', () => {
-      const vm = createViewModel();
-      vm.setTone('Dark');
-      expect(vm.tone).toBe('Dark');
-    });
+    vm.setDifficulty('Hard');
+    vm.setDifficulty('Impossible');
 
-    test('setDifficulty only accepts valid options', () => {
-      const vm = createViewModel();
-      vm.setDifficulty('Hard');
-      expect(vm.difficulty).toBe('Hard');
-      vm.setDifficulty('Invalid' as 'Easy');
-      expect(vm.difficulty).toBe('Hard'); // unchanged
-    });
-
-    test('setSetting updates setting', () => {
-      const vm = createViewModel();
-      vm.setSetting('A dark forest');
-      expect(vm.setting).toBe('A dark forest');
-    });
-
-    test('setGoals updates goals', () => {
-      const vm = createViewModel();
-      vm.setGoals('Save the world');
-      expect(vm.goals).toBe('Save the world');
-    });
+    expect(vm.difficulty).toBe('Hard');
   });
 
-  describe('Surprise Me', () => {
-    test('surpriseMe fills all inputs', () => {
-      const vm = createViewModel();
-      vm.surpriseMe();
-      expect(vm.genre.length).toBeGreaterThan(0);
-      expect(vm.tone.length).toBeGreaterThan(0);
-      expect(vm.setting.length).toBeGreaterThan(0);
-      expect(vm.goals.length).toBeGreaterThan(0);
-      expect(vm.difficulty.length).toBeGreaterThan(0);
-      expect(vm.isSurpriseMode).toBe(true);
-    });
+  test('advancing through the input steps reaches the last one', () => {
+    const { vm } = build();
 
-    test('surpriseMe can be called multiple times', () => {
-      const vm = createViewModel();
-      vm.surpriseMe();
-      const _firstGenre = vm.genre;
-      vm.surpriseMe();
-      // Always valid even if same preset rolled
-      expect(vm.genre.length).toBeGreaterThan(0);
-      // At least one call should give a valid preset
-      expect(vm.difficulty).toMatch(/^(Easy|Medium|Hard)$/);
-    });
+    vm.advanceStep();
+    vm.advanceStep();
 
-    test('surpriseMe clears generation error', () => {
-      const vm = createViewModel();
-      vm.surpriseMe();
-      expect(vm.generationError).toBeUndefined();
-    });
+    expect(vm.currentStep).toBe('goals');
+    expect(vm.isLastInputStep).toBe(true);
   });
 
-  describe('reset / edit', () => {
-    test('restart resets all state', () => {
-      const vm = createPrefilledViewModel();
-      vm.advanceStep();
-      vm.restart();
-      expect(vm.currentStep).toBe('genre_tone');
-      expect(vm.genre).toBe('');
-      expect(vm.tone).toBe('');
-      expect(vm.setting).toBe('');
-      expect(vm.goals).toBe('');
-      expect(vm.difficulty).toBe('Medium');
-      expect(vm.worldOutput).toBeUndefined();
-      expect(vm.isGenerating).toBe(false);
-      expect(vm.generationError).toBeUndefined();
-      expect(vm.retriesRemaining).toBe(3);
-      expect(vm.isSurpriseMode).toBe(false);
-    });
+  test('goBack walks backwards and stops at the first step', () => {
+    const { vm } = build();
 
-    test('editInputs goes back to first step and clears output', () => {
-      const vm = createPrefilledViewModel();
-      vm.advanceStep();
-      vm.editInputs();
-      expect(vm.currentStep).toBe('genre_tone');
-      expect(vm.worldOutput).toBeUndefined();
-      // Inputs preserved
-      expect(vm.genre).toBe('Fantasy');
-    });
+    vm.advanceStep();
+    vm.goBack();
+    expect(vm.currentStep).toBe('genre_tone');
+    vm.goBack();
+    expect(vm.currentStep).toBe('genre_tone');
   });
 
-  describe('progressPercent', () => {
-    test('starts at 0', () => {
-      const vm = createViewModel();
-      expect(vm.progressPercent).toBe(0);
-    });
+  test('Surprise Me fills every input and clears itself on manual edit', () => {
+    const { vm } = build();
 
-    test('increases as steps advance', () => {
-      const vm = createPrefilledViewModel();
-      expect(vm.progressPercent).toBe(0);
-      vm.advanceStep();
-      expect(vm.progressPercent).toBeGreaterThan(0);
-      expect(vm.progressPercent).toBeLessThanOrEqual(100);
-    });
+    vm.surpriseMe();
+    expect(vm.genre.length).toBeGreaterThan(0);
+    expect(vm.isSurpriseMode).toBe(true);
+
+    vm.setGenre('Horror');
+    expect(vm.isSurpriseMode).toBe(false);
   });
 
-  describe('gmPromptPreview', () => {
-    test('returns assembled prompt with current inputs', () => {
-      const vm = createViewModel();
-      vm.setGenre('Fantasy');
-      vm.setTone('Heroic');
-      const prompt = vm.gmPromptPreview;
-      expect(prompt).toContain('Fantasy');
-      expect(prompt).toContain('Heroic');
-      expect(prompt).toContain('master world-builder');
-      expect(prompt).toContain('## User Input');
-    });
+  test('progressPercent advances and stays in range', () => {
+    const { vm } = build();
+
+    expect(vm.progressPercent).toBe(0);
+    vm.advanceStep();
+    expect(vm.progressPercent).toBeGreaterThan(0);
+    expect(vm.progressPercent).toBeLessThanOrEqual(100);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Generation flow
+// ---------------------------------------------------------------------------
+
+describe('WorldGenWizardViewModel — generation', () => {
+  test('a successful run lands on preview with a draft', async () => {
+    const { vm } = build();
+
+    await vm.generateWorld();
+
+    expect(vm.isGenerating).toBe(false);
+    expect(vm.currentStep).toBe('preview');
+    expect(vm.draft?.setting?.worldName).toBe('Duskhollow');
+    expect(vm.generationError).toBeUndefined();
   });
 
-  // ── C-405 AC-5: parallel generation ──────────────────────────────────
+  test('a failed run stays on generating and surfaces the reason', async () => {
+    const { vm } = build({ failEverything: 'provider unreachable' });
 
-  describe('parallel generation (C-405 AC-5)', () => {
-    // Stage-specific fixtures — each generation stage returns only its own
-    // section, exercising the real per-stage output contract (C-405 AC-5).
-    const StageResponses: Record<string, string> = {
-      setting: JSON.stringify({
-        worldName: 'Duskhollow',
-        worldDescription:
-          'Duskhollow is a lantern-lit frontier town in a perpetual twilight valley, where the ember-crowned mountains swallow the sun by midday.',
+    await vm.generateWorld();
+
+    expect(vm.currentStep).toBe('generating');
+    expect(vm.isGenerating).toBe(false);
+    expect(vm.generationError).toBeTruthy();
+    expect(vm.draft).toBeUndefined();
+  });
+
+  test('partial failure reports WHICH stage failed', async () => {
+    const { vm } = build({ failStages: { places: 'provider unavailable' } });
+
+    await vm.generateWorld();
+
+    expect(vm.stageFailures.map((failure) => failure.stage)).toContain('locations');
+  });
+
+  test('completed stages are shown while a run is in flight', async () => {
+    const { vm, provider } = build({ delayMs: { cast: 60, places: 60, arcs: 60 } });
+
+    const run = vm.generateWorld();
+    await provider.waitForCalls('cast', 1);
+    expect(vm.completedStageLabels).toContain('world premise');
+    await run;
+  });
+
+  test('a completed draft can be accepted and then lands on draft_saved', async () => {
+    const { vm } = build();
+
+    await vm.generateWorld();
+    expect(vm.canAccept).toBe(true);
+
+    await vm.acceptWorld();
+
+    expect(vm.currentStep).toBe('draft_saved');
+    expect(vm.draft?.status).toBe('accepted_preview');
+  });
+
+  test('a cancelled run is reported as cancelled, not as a failure', async () => {
+    const { vm, provider } = build({ delayMs: { setting: 60, cast: 60, places: 60, arcs: 60 } });
+
+    const run = vm.generateWorld();
+    await provider.waitForCalls('setting', 1);
+    vm.cancelGeneration();
+    await run;
+
+    expect(vm.generationError).toBe('Cancelled by the player');
+    expect(vm.draft).toBeUndefined();
+  });
+
+  test('persistence state is surfaced so the UI never claims more than it knows', async () => {
+    const { vm } = build();
+
+    expect(vm.persistence).toBe('unknown');
+    await vm.generateWorld();
+
+    expect(vm.persistence).toBe('durable');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Lifecycle cancellation
+// ---------------------------------------------------------------------------
+
+describe('WorldGenWizardViewModel — lifecycle cancellation', () => {
+  test('restart during a run cancels it and discards the result', async () => {
+    const { vm, provider } = build({ delayMs: { setting: 80, cast: 80, places: 80 } });
+
+    const run = vm.generateWorld();
+    await provider.waitForCalls('setting', 1);
+    vm.restart();
+    await run;
+
+    expect(vm.draft).toBeUndefined();
+    expect(vm.currentStep).toBe('genre_tone');
+  });
+
+  test('editInputs during a run cancels it', async () => {
+    const { vm, provider } = build({ delayMs: { setting: 80, cast: 80, places: 80 } });
+
+    const run = vm.generateWorld();
+    await provider.waitForCalls('setting', 1);
+    vm.editInputs();
+    await run;
+
+    expect(vm.draft).toBeUndefined();
+    expect(vm.currentStep).toBe('genre_tone');
+  });
+
+  test('going back from the generating step cancels the run', async () => {
+    const { vm, provider } = build({ delayMs: { setting: 80, cast: 80, places: 80 } });
+
+    const run = vm.generateWorld();
+    await provider.waitForCalls('setting', 1);
+    vm.goBack();
+    await run;
+
+    expect(vm.draft).toBeUndefined();
+    expect(vm.isGenerating).toBe(false);
+  });
+
+  test('changing the connection cancels the run before navigating away', async () => {
+    const provider = createControllableProvider({
+      payloads: coherentPayloads(),
+      delayMs: { setting: 80, cast: 80, places: 80 },
+    });
+    const routes: string[] = [];
+    const vm = createWorldGenWizardViewModel({
+      className: 'WorldGenWizardViewModelTest',
+      initialInputs: WORLD_GEN_WIZARD_INPUT,
+      router: {
+        goToRoute: async (route) => {
+          routes.push(route);
+        },
+      },
+      drafts: createWorldGenDraftService({
+        className: 'WorldGenDraftServiceTest',
+        text: provider.capability,
+        resolveStore: async () => createMemoryStore(),
       }),
-      npcs: JSON.stringify({
-        npcs: [
-          {
-            name: 'Maren',
-            race: 'Human',
-            class: 'Innkeeper',
-            role: 'Quest Giver',
-            description: 'A weathered innkeeper with a knowing smile and a ledger full of secrets.',
-            personality:
-              'Hospitable but sharp-tongued, she sizes up every traveler within seconds.',
-          },
-          {
-            name: 'Thorn',
-            race: 'Elf',
-            class: 'Ranger',
-            role: 'Ally',
-            description: 'A quiet elf ranger whose cloak is stitched with dried silverleaf.',
-            personality: 'Speaks in short sentences and trusts actions over words.',
-          },
-          {
-            name: 'Grimble',
-            race: 'Gnome',
-            class: 'Tinkerer',
-            role: 'Merchant',
-            description: 'A goggle-wearing gnome surrounded by humming brass contraptions.',
-            personality: 'Bubbly and distractible, he will trade anything for rare cogs.',
-          },
-        ],
-      }),
-      locations: JSON.stringify({
-        locations: ['The Ember Market', 'Sunken Chapel', 'Ashfall Bridge', 'Cinder Mines'],
-      }),
-      hudWidgets: JSON.stringify({
-        hudWidgets: [
-          { slot: 'top-left', label: 'Ember Compass', icon: 'compass', defaultVisibility: true },
-        ],
-      }),
-      partyArcs: JSON.stringify({
-        partyArcs: [
-          {
-            chapter: 'Chapter 1: The Fading Ward',
-            description:
-              'Maren tasks the party with rekindling the wardstone before the valley dims.',
-            objectives: ['Find the wardstone', 'Collect three ember shards', 'Return to Maren'],
-            questGivers: ['Maren'],
-          },
-        ],
-      }),
-    };
-
-    // The VM passes the per-stage TypeBox schema as the third arg — identity
-    // matching tells the mock which stage is being generated.
-    const SchemaToStage = new Map<unknown, string>([
-      [WorldGenSettingStageSchema, 'setting'],
-      [WorldGenNpcsStageSchema, 'npcs'],
-      [WorldGenLocationsStageSchema, 'locations'],
-      [WorldGenHudWidgetsStageSchema, 'hudWidgets'],
-      [WorldGenPartyArcsStageSchema, 'partyArcs'],
-    ]);
-
-    // The NPC stage is intentionally slower so the "arcs wait for npcs"
-    // ordering is observable: if partyArcs ever ran concurrently with npcs it
-    // would start while npcs is still in flight.
-    const StageDelays: Record<string, number> = {
-      setting: 30,
-      npcs: 90,
-      locations: 30,
-      hudWidgets: 30,
-      partyArcs: 30,
-    };
-
-    test('independent stages are issued concurrently, arcs after npcs', async () => {
-      const stageLog: Array<{ stage: string; start: number; end: number }> = [];
-      let activeCalls = 0;
-      let maxConcurrent = 0;
-
-      class RecordingViewModel extends WorldGenWizardViewModel {
-        protected override async _callLlm(
-          _input: WorldGenInput,
-          prompt: string,
-          schema?: Record<string, unknown>,
-        ): Promise<string | undefined> {
-          const stage = SchemaToStage.get(schema ?? {});
-          if (!stage) {
-            throw new Error('Mock received an unexpected stage schema');
-          }
-
-          // Inspect the stage inputs instead of ignoring them: every stage
-          // prompt carries the shared task section, and partyArcs must embed
-          // the resolved NPC roster.
-          expect(prompt).toContain('## Task');
-          if (stage === 'partyArcs') {
-            expect(prompt).toContain('## NPC Roster (already generated)');
-          }
-
-          const start = Date.now();
-          activeCalls++;
-          maxConcurrent = Math.max(maxConcurrent, activeCalls);
-          await new Promise((resolve) => setTimeout(resolve, StageDelays[stage] ?? 30));
-          activeCalls--;
-          stageLog.push({ stage, start, end: Date.now() });
-
-          const response = StageResponses[stage];
-          if (!response) {
-            throw new Error(`Mock missing response for stage: ${stage}`);
-          }
-          return response;
-        }
-      }
-
-      const vm = RecordingViewModel.create({
-        className: 'WorldGenConcurrencyTest',
-        initialInputs: DEFAULT_INPUTS,
-        ...createWorldGenCapabilities(),
-      });
-
-      await vm.generateWorld();
-
-      const npcEntry = stageLog.find((entry) => entry.stage === 'npcs');
-      const arcsEntry = stageLog.find((entry) => entry.stage === 'partyArcs');
-      if (!npcEntry || !arcsEntry) {
-        throw new Error('npcs/partyArcs stage entries were not recorded');
-      }
-
-      // 4 independent stages overlap (concurrent); the 5th (partyArcs) runs
-      // only after the NPC roster resolves, so it never raises the max.
-      expect(maxConcurrent).toBe(4);
-      // partyArcs may only begin after npcs has completed (questGivers must
-      // reference roster names) — the distinct NPC delay makes a concurrent
-      // start observable.
-      expect(arcsEntry.start).toBeGreaterThanOrEqual(npcEntry.end);
-      expect(vm.isGenerating).toBe(false);
-      expect(vm.currentStep).toBe('preview');
-      expect(vm.worldOutput?.worldName).toBe('Duskhollow');
-      expect(vm.worldOutput?.npcs).toHaveLength(3);
-      expect(vm.worldOutput?.partyArcs?.[0]?.questGivers).toContain('Maren');
-      expect(vm.worldOutput?.locations).toHaveLength(4);
-      expect(vm.worldOutput?.hudWidgets).toHaveLength(1);
     });
 
-    test('a failed stage propagates the empty-response error into retry state', async () => {
-      class FailingViewModel extends WorldGenWizardViewModel {
-        protected override async _callLlm(
-          _input: WorldGenInput,
-          _prompt: string,
-          _schema?: Record<string, unknown>,
-        ): Promise<string | undefined> {
-          return undefined;
-        }
-      }
+    const run = vm.generateWorld();
+    await provider.waitForCalls('setting', 1);
+    await vm.changeConnection();
+    await run;
 
-      const vm = FailingViewModel.create({
-        className: 'WorldGenFailureTest',
-        initialInputs: DEFAULT_INPUTS,
-        ...createWorldGenCapabilities(),
-      });
+    expect(routes).toEqual(['setup']);
+    // Cancelled first: the wizard does not navigate away from a live provider
+    // call and hope the page unload cleans it up.
+    expect(vm.draft).toBeUndefined();
+  });
 
-      await vm.generateWorld();
+  test('dispose cancels the live run', async () => {
+    const { vm, provider } = build({ delayMs: { setting: 80, cast: 80, places: 80 } });
 
-      expect(vm.isGenerating).toBe(false);
-      expect(vm.generationError).toBe('LLM returned empty response');
-      expect(vm.retriesRemaining).toBe(0);
-      expect(vm.worldOutput).toBeUndefined();
-    });
+    const run = vm.generateWorld();
+    await provider.waitForCalls('setting', 1);
+    await vm.dispose();
+    await run;
+
+    expect(vm.draft).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Capability boundary
+// ---------------------------------------------------------------------------
+
+describe('WorldGenWizardViewModel — capability boundary (G01)', () => {
+  test('the wizard has no capability that can mutate a campaign or world state', async () => {
+    const source = stripComments(
+      await Bun.file(new URL('./world_gen_wizard_view_model.svelte.ts', import.meta.url)).text(),
+    );
+
+    for (const forbidden of [
+      'subscribeToWorld',
+      'addLocation',
+      'addNpc',
+      'seedNpcs',
+      'seedLocations',
+      'seedPartyArcs',
+      'seedHudWidgets',
+      'WorldGenSeedingServiceInterface',
+      'activeCampaign',
+    ]) {
+      expect(source).not.toContain(forbidden);
+    }
+  });
+
+  test('the wizard options type exposes no world-state or seeding capability', async () => {
+    const source = stripComments(
+      await Bun.file(new URL('./world_gen_wizard_view_model.svelte.ts', import.meta.url)).text(),
+    );
+
+    expect(source).not.toContain('worldState');
+    expect(source).not.toContain('worldGenSeeding');
+  });
+
+  test('the final step is draft_saved, not character creation', async () => {
+    const { vm } = build();
+
+    await vm.generateWorld();
+    await vm.acceptWorld();
+
+    expect(vm.currentStep).toBe('draft_saved');
+    expect(vm.steps).not.toContain('character_creation' as never);
   });
 });

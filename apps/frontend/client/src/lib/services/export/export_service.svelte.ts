@@ -485,6 +485,10 @@ class ExportService
       { sql: 'DELETE FROM generation_artifacts', args: [] },
       { sql: 'DELETE FROM generation_candidates', args: [] },
       { sql: 'DELETE FROM game_operations', args: [] },
+      // Private narrative-world drafts (G01). Device-local and NOT
+      // campaign-scoped, so nothing above cascades to it — omitting this line
+      // would let generated drafts survive a "delete all local data".
+      { sql: 'DELETE FROM worldgen_drafts', args: [] },
     ]);
 
     // The browser adapter batches writes into a debounced IndexedDB snapshot
