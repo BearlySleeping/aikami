@@ -54,20 +54,23 @@ const ensureReview = async (options: {
   signal?: AbortSignal;
   report: Reporter;
 }) => {
-  if (codeRabbitLifecycle(options.initial).lifecycle === 'completed') {
+  const lifecycle = codeRabbitLifecycle(options.initial).lifecycle;
+  if (lifecycle === 'completed') {
     return options.initial;
   }
   const pr = reviewPrSelector(options.initial);
   const deadline = Date.now() + MAX_WAIT_MS;
-  await readySnapshot({ pr, head: options.initial.head, signal: options.signal, deadline });
-  const posted = await runGh(['pr', 'comment', pr, '--body', '@coderabbitai review'], {
-    signal: options.signal,
-  });
-  options.signal?.throwIfAborted();
-  if (!posted.success) {
-    throw new Error(`CodeRabbit review request failed: ${posted.text.slice(0, 300)}`);
+  if (lifecycle !== 'running' && lifecycle !== 'rate-limited') {
+    await readySnapshot({ pr, head: options.initial.head, signal: options.signal, deadline });
+    const posted = await runGh(['pr', 'comment', pr, '--body', '@coderabbitai review'], {
+      signal: options.signal,
+    });
+    options.signal?.throwIfAborted();
+    if (!posted.success) {
+      throw new Error(`CodeRabbit review request failed: ${posted.text.slice(0, 300)}`);
+    }
+    options.report('Requested CodeRabbit review once; waiting within a fixed deadline');
   }
-  options.report('Requested CodeRabbit review once; waiting within a fixed deadline');
   const result = await waitForCodeRabbit({
     head: options.initial.head,
     timeoutMs: Math.max(1, deadline - Date.now()),

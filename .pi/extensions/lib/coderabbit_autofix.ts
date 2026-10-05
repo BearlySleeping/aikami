@@ -157,10 +157,13 @@ const startAutofixRequest = async (options: {
     options.report('Autofix already requested; watching the existing request');
     return { since, duplicatePrevented: true };
   }
-  // GitHub timestamps have second precision. Exclude all pre-existing IDs so a
-  // reply in the request's own second is fresh without adopting older evidence.
+  // Anchor freshness to GitHub's clock. Exclude pre-existing IDs so replies
+  // in the same second remain fresh without adopting older evidence.
   const request: AutofixRequest = {
-    since: Math.floor(Date.now() / 1000) * 1000,
+    since: options.ready.comments.reduce((latest, comment) => {
+      const createdAt = Date.parse(comment.createdAt);
+      return Number.isFinite(createdAt) ? Math.max(latest, createdAt) : latest;
+    }, 0),
     duplicatePrevented: false,
     excludeIds: new Set(options.ready.comments.map((comment) => comment.id)),
   };
@@ -234,7 +237,19 @@ const watchAutofix = async (options: {
   const duplicatePrevented = options.request.duplicatePrevented;
   while (Date.now() < options.deadline) {
     options.signal?.throwIfAborted();
-    const snapshot = await options.readSnapshot();
+    let snapshot: CodeRabbitSnapshot;
+    try {
+      snapshot = await options.readSnapshot();
+    } catch (error) {
+      options.signal?.throwIfAborted();
+      options.report(`GitHub evidence unavailable; retrying: ${String(error).slice(0, 300)}`);
+      await delay(
+        Math.max(0, Math.min(options.intervalMs, options.deadline - Date.now())),
+        undefined,
+        { signal: options.signal },
+      );
+      continue;
+    }
     options.signal?.throwIfAborted();
     if (Date.now() >= options.deadline) {
       break;

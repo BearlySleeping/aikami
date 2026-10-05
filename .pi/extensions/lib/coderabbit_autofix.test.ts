@@ -131,6 +131,120 @@ describe('autofix request and commit provenance', () => {
     expect(result.status).toBe('failed');
     expect(result.commit).toBeUndefined();
   });
+  test.each([
+    { timestamps: ['2020-01-01T00:00:02Z', 'invalid', '2020-01-01T00:00:01Z'] },
+    { timestamps: [] },
+    { timestamps: ['invalid'] },
+  ])('fresh replies use the GitHub clock with baseline timestamps %j', async ({ timestamps }) => {
+    const initial = formalReviewSnapshot();
+    initial.comments = timestamps.map((createdAt, index) => ({
+      ...request(),
+      id: `existing-${index}`,
+      login: 'coderabbitai[bot]',
+      body: 'Autofix skipped',
+      createdAt,
+    }));
+    let reads = 0;
+    const result = await applyCodeRabbitAutofix({
+      initial,
+      report: () => {},
+      timeoutMs: 1000,
+      intervalMs: 1,
+      readSnapshot: async () => {
+        const snapshot = { ...initial, comments: [...initial.comments] };
+        if (++reads === 2) {
+          snapshot.comments.push({
+            ...request(),
+            id: 'older-unseen',
+            login: 'coderabbitai[bot]',
+            body: 'Autofix skipped',
+            createdAt: '2019-12-31T23:59:59Z',
+          });
+          // Only the populated baseline can reject an unseen older reply.
+          if (timestamps.some((timestamp) => Number.isFinite(Date.parse(timestamp)))) {
+            return snapshot;
+          }
+          snapshot.comments.pop();
+        }
+        if (reads > 1) {
+          snapshot.comments.push({
+            ...request(),
+            id: 'fresh',
+            login: 'coderabbitai[bot]',
+            body: 'No autofix changes were needed',
+            createdAt: '2020-01-01T00:00:02Z',
+          });
+        }
+        return snapshot;
+      },
+      query: async () => ({ success: true, text: '' }),
+    });
+    expect(result.status).toBe('no-change');
+  });
+  test('transient snapshot failures recover to a verified autofix', async () => {
+    let reads = 0;
+    const reports: string[] = [];
+    const result = await applyCodeRabbitAutofix({
+      initial: formalReviewSnapshot(),
+      report: (line) => reports.push(line),
+      timeoutMs: 1000,
+      intervalMs: 1,
+      readSnapshot: async () => {
+        reads++;
+        if (reads === 2) {
+          throw new Error('HTTP 503');
+        }
+        return reads === 1 ? formalReviewSnapshot() : attestedSnapshot();
+      },
+      query: async (args) => ({
+        success: true,
+        text: '',
+        json: args[0] === 'api' ? commit() : undefined,
+      }),
+    });
+    expect(result.status).toBe('committed');
+    expect(reports.some((line) => line.includes('HTTP 503'))).toBe(true);
+  });
+  test('persistent read failures respect the deadline even with a longer interval', async () => {
+    let reads = 0;
+    const result = await applyCodeRabbitAutofix({
+      initial: formalReviewSnapshot(),
+      report: () => {},
+      timeoutMs: 20,
+      intervalMs: 60_000,
+      readSnapshot: async () => {
+        if (++reads > 1) {
+          throw new Error('HTTP 503');
+        }
+        return formalReviewSnapshot();
+      },
+      query: async () => ({ success: true, text: '' }),
+    });
+    expect(result.status).toBe('timeout');
+    expect(reads).toBe(2);
+  });
+  test('aborting a failed snapshot read propagates without retrying', async () => {
+    const controller = new AbortController();
+    let reads = 0;
+    const reports: string[] = [];
+    await expect(
+      applyCodeRabbitAutofix({
+        initial: formalReviewSnapshot(),
+        report: (line) => reports.push(line),
+        signal: controller.signal,
+        readSnapshot: async () => {
+          if (++reads > 1) {
+            controller.abort(new Error('cancelled'));
+            throw new Error('HTTP 503');
+          }
+          return formalReviewSnapshot();
+        },
+        query: async () => ({ success: true, text: '' }),
+      }),
+    ).rejects.toThrow('cancelled');
+    expect(reads).toBe(2);
+    expect(reports.some((line) => line.includes('retrying'))).toBe(false);
+  });
   test('concurrent human pushes are rejected, not reported as autofix', async () => {
     let reads = 0;
     await expect(
@@ -138,10 +252,15 @@ describe('autofix request and commit provenance', () => {
         initial: formalReviewSnapshot(),
         report: () => {},
         timeoutMs: 100,
-        readSnapshot: async () =>
-          ++reads === 1
+        intervalMs: 1,
+        readSnapshot: async () => {
+          if (++reads === 2) {
+            throw new Error('HTTP 503');
+          }
+          return reads === 1
             ? formalReviewSnapshot()
-            : { ...formalReviewSnapshot(), head: OLD_REVIEW_HEAD },
+            : { ...formalReviewSnapshot(), head: OLD_REVIEW_HEAD };
+        },
         query: async (args) => ({
           success: true,
           text: '',
