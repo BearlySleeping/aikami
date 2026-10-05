@@ -41,9 +41,17 @@ writer. Root main and other captains' checkouts stay untouched.
   merely an open port. Inspect `/.aikami/identity` before acceptance.
 - AI image tools optimize disposable copies, never original evidence. Preserve
   paired captures/checksums and treat VLM scores as advisory.
-- CodeRabbit completion uses the newest current-head review; drafts, skipped or
-  dismissed reviews do not qualify. Unknown/no CI checks fail closed in autofix.
-  Completed failing checks are not passing CI, and unknown findings are not zero.
+- CodeRabbit completion requires current-head formal evidence, or authenticated
+  exact-head `Review completed` status plus validated sticky-summary coverage.
+  Completion is **not approval**; green paused/skipped statuses do not qualify.
+  Sticky edits are activity, not new comment counts. Findings are fully paginated
+  and classified as current, historical, resolved or outdated; historical threads
+  are not automatic autofix targets, but unresolved ones still block merge.
+  Unknown/no CI checks fail closed. Merge requires fresh formal approval and
+  exact-SHA CI. Autofix requires signed direct-child ancestry plus a fresh bot
+  success reply naming the full resulting SHA; missing provenance needs manual
+  inspection, never an inferred bot commit. Wait deadlines cannot be extended by
+  repeated rate-limit advisories.
 - Read-agent tool exclusions reduce accidental mutations, not OS permissions:
   `bash` and context-mode execution remain available. They are not a sandbox.
 
@@ -138,6 +146,13 @@ exists.
 | `gh_workflow` | run, status, logs, deploy                                        |
 | `gh_release`  | list, view                                                       |
 | `code_rabbit` | autofix, findings, wait                                          |
+
+The Node-safe `lib/coderabbit_{evidence,reader,wait,autofix}.ts` kernel is shared
+with the detached subagent supervisor, so review semantics cannot diverge.
+Provider-private coverage markers are isolated and fail closed if their format
+changes. Large findings reports expose `fullOutputPath` rather than silently
+losing comments. Resumed-agent pushes invalidate prior head-specific review
+outcomes; an autofix push also requires a new review and CI before merge.
 
 ### Contracts and pipeline
 

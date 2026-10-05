@@ -139,9 +139,19 @@ export const publishRun = async (options: {
     timeoutMs: spec.pr.reviewTimeoutMs,
     report,
   });
-  Object.assign(review, { state: reviewed.state, findings: reviewed.findings });
+  Object.assign(review, {
+    head: reviewed.head,
+    state: reviewed.state,
+    findings: reviewed.findings,
+    unresolvedFindings: reviewed.unresolvedFindings,
+  });
 
-  if (!spec.pr.autofix || !reviewed.state || reviewed.findings === 0) {
+  if (
+    !spec.pr.autofix ||
+    !reviewed.state ||
+    reviewed.findings === undefined ||
+    reviewed.findings === 0
+  ) {
     review.autofix = 'skipped';
     patchState(repoRoot, id, { review });
     return;
@@ -149,6 +159,12 @@ export const publishRun = async (options: {
   patchState(repoRoot, id, { review: { ...review, autofix: 'requested' }, activity: 'autofix' });
   Object.assign(review, await runAutofix({ pr: prNumber, report }));
   if (review.autofix === 'committed') {
+    // The bot push invalidates approval and findings on the previously reviewed head.
+    review.head = review.autofixCommit;
+    review.state = undefined;
+    review.findings = undefined;
+    review.unresolvedFindings = undefined;
+    review.reason = 'autofix changed head; fresh review and CI required';
     // Keep the worktree in sync so the captain reads the fixed code.
     try {
       runGit(`pull --ff-only origin ${headBranch}`, { cwd: checkoutPath });
@@ -156,5 +172,8 @@ export const publishRun = async (options: {
       report('⚠️ could not fast-forward worktree to the autofix commit');
     }
   }
-  patchState(repoRoot, id, { review });
+  patchState(repoRoot, id, {
+    review,
+    pr: { url: prUrl, number: prNumber, headCommit: review.autofixCommit ?? headCommit },
+  });
 };

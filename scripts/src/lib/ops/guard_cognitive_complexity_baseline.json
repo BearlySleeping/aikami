@@ -11,12 +11,6 @@
       "worst": 52
     }
   },
-  ".pi/extensions/code_rabbit.ts": {
-    "counts": {
-      "excessive": 5,
-      "worst": 44
-    }
-  },
   ".pi/extensions/contract_factory.ts": {
     "counts": {
       "excessive": 3,

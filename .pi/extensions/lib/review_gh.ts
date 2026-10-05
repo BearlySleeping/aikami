@@ -1,7 +1,7 @@
 // .pi/extensions/lib/review_gh.ts
 
 import { runGh, tokenizeArgs } from './gh.ts';
-import { currentCodeRabbitReviewState } from './review_evidence.ts';
+import { readReviewSnapshot, reviewSnapshotState } from './review_snapshot.ts';
 
 const TIMEOUT = 60_000;
 
@@ -38,8 +38,6 @@ export const ghJson = async <T>(args: string, signal?: AbortSignal): Promise<T |
 /** Diagnostics for the most recent gh failure ('' when the last call succeeded). */
 export const ghError = (): string => _lastGhError;
 
-/** Get the current CodeRabbit review state, or empty string if no review yet. */
+/** Get verified current-head completion, preserving formal approval separately. */
 export const getReviewState = async (num: string, signal?: AbortSignal): Promise<string> =>
-  currentCodeRabbitReviewState(
-    await ghJson<unknown>(`pr view ${num} --json headRefOid,isDraft,reviews`, signal),
-  );
+  reviewSnapshotState(await readReviewSnapshot({ pr: num, signal }));

@@ -1,8 +1,9 @@
 // .pi/extensions/lib/review_polling.ts
 
 import { abortableSleep } from './async.ts';
-import { type GhResult, runGh } from './gh.ts';
+import type { GhResult } from './gh.ts';
 import { currentCodeRabbitReviewState } from './review_evidence.ts';
+import { readReviewSnapshot, reviewSnapshotState } from './review_snapshot.ts';
 
 /** Retry unavailable CLI evidence without weakening the strict merge-state reader. */
 export const pollReviewState = async (options: {
@@ -14,14 +15,14 @@ export const pollReviewState = async (options: {
   query?: () => Promise<GhResult>;
 }): Promise<string> => {
   const deadline = options.deadline ?? Date.now() + 30 * 60_000;
-  const query =
-    options.query ??
-    (() =>
-      runGh(['pr', 'view', options.pr, '--json', 'headRefOid,isDraft,reviews'], {
-        parseJson: true,
-        signal: options.signal,
-        timeoutMs: Math.min(60_000, Math.max(1, deadline - Date.now())),
-      }));
+  // Legacy raw-query seam is retained for formal-review regressions. Production
+  // always uses the shared multi-source reader, not a formal-review-only query.
+  const query = options.query;
+  if (!query) {
+    return reviewSnapshotState(
+      await readReviewSnapshot({ pr: options.pr, signal: options.signal, deadline }),
+    );
+  }
   while (Date.now() < deadline && !options.signal?.aborted) {
     const result = await query();
     options.signal?.throwIfAborted();
