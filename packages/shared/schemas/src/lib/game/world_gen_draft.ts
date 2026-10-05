@@ -356,6 +356,7 @@ export const WorldGenDraftDiagnosticSchema = Type.Object(
       Type.Literal('size_limit'),
       Type.Literal('missing_setting'),
       Type.Literal('duplicate_name'),
+      Type.Literal('unreadable_storage'),
     ]),
     message: Type.String({ minLength: 1, maxLength: 400 }),
   },
@@ -363,6 +364,24 @@ export const WorldGenDraftDiagnosticSchema = Type.Object(
 );
 
 export type WorldGenDraftDiagnostic = Static<typeof WorldGenDraftDiagnosticSchema>;
+
+/**
+ * The diagnostic emitted when the DEVICE STORE answered but the draft could
+ * not be read back.
+ *
+ * Deliberately distinct from `size_limit`: a truncated column, a hand-edited
+ * row and a store that throws all land here, and none of them is a size
+ * problem. Labelling a corrupt row "size_limit" sends whoever reads the
+ * diagnostics looking for an oversized draft that does not exist.
+ */
+export const WORLD_GEN_UNREADABLE_STORAGE_CODE = 'unreadable_storage' as const;
+
+/** Builds the diagnostic shown when a stored draft could not be loaded. */
+export const unreadableStorageDiagnostic = (reason: string): WorldGenDraftDiagnostic => ({
+  path: 'draft',
+  code: WORLD_GEN_UNREADABLE_STORAGE_CODE,
+  message: `The stored draft could not be loaded and was ignored: ${reason}`,
+});
 
 /**
  * Checks a candidate draft for the properties the TypeBox schemas cannot

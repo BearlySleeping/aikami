@@ -21,6 +21,7 @@ import {
   createWorldGenDraftService,
   type WorldGenDraftServiceInterface,
 } from '../../services/worldgen/world_gen_draft_service.svelte.ts';
+import { readSandboxDelayQuery, resolveSandboxDelay } from './world_gen_sandbox_delay.ts';
 import type {
   WorldGenSandboxViewModelInterface,
   WorldGenSandboxViewModelOptions,
@@ -159,31 +160,31 @@ export const getSandboxDraftService = (
  * Builds the dev sandbox wizard ViewModel.
  *
  * `searchParams` lets an E2E run drive the mock provider deterministically —
- * `wgDelay` (ms per stage), `wgDelayStage` (one stage) and `wgFail=1` (make
- * every stage fail). Without a controllable provider a browser test can only
- * race the happy path; with it, cancellation and navigation-away have a real
- * window to be observed.
+ * `wgDelay` (ms), `wgDelayStage` (apply that ms to ONE stage instead of all
+ * of them) and `wgFail=1` (make every stage fail). Without a controllable
+ * provider a browser test can only race the happy path; with it,
+ * cancellation and navigation-away have a real window to be observed. The delay
+ * itself is resolved by `world_gen_sandbox_delay.ts`, which is where that
+ * scoping rule — and the "Clear Delay" override — is tested.
  */
 export const getWorldGenSandboxViewModel = (
   options: WorldGenSandboxPublicOptions,
 ): WorldGenSandboxViewModelInterface => {
   const store = createSandboxStore();
-  const search = options.searchParams;
-  const globalDelay = clampDelay(search?.get('wgDelay'));
-  const focusedStage = search?.get('wgDelayStage');
-  const focusedDelay = clampDelay(search?.get('wgDelay'));
-  const shouldFail = search?.get('wgFail') === '1';
+  const delayQuery = readSandboxDelayQuery(options.searchParams);
+  const shouldFail = options.searchParams?.get('wgFail') === '1';
 
   // The controls read back off the VM, which only exists after construction;
   // they are resolved lazily through a holder the VM fills in below.
   const controls = {
     failAll: () => shouldFail || (holder.viewModel?.sandboxFailure ?? false),
-    delayFor: (stage: string) => {
-      if (focusedStage !== null && focusedStage !== undefined && stage === focusedStage) {
-        return focusedDelay;
-      }
-      return globalDelay > 0 ? globalDelay : (holder.viewModel?.sandboxDelayFor(stage) ?? 0);
-    },
+    delayFor: (stage: string) =>
+      resolveSandboxDelay(
+        stage,
+        delayQuery,
+        holder.viewModel?.stageDelaysCleared === true,
+        holder.viewModel?.sandboxDelayFor(stage) ?? 0,
+      ),
     recordPrompt: (prompt: string) => holder.viewModel?.sandboxRecordPrompt(prompt),
     worldName: () => holder.viewModel?.draft?.setting?.worldName ?? 'Duskhollow',
   };
@@ -196,16 +197,4 @@ export const getWorldGenSandboxViewModel = (
   });
   holder.viewModel = viewModel;
   return viewModel;
-};
-
-/** Clamps a query-supplied delay into a sane, non-negative integer. */
-const clampDelay = (raw: string | null | undefined): number => {
-  if (raw === null || raw === undefined) {
-    return 0;
-  }
-  const parsed = Number.parseInt(raw, 10);
-  if (!Number.isFinite(parsed) || parsed <= 0) {
-    return 0;
-  }
-  return Math.min(parsed, 10_000);
 };

@@ -30,7 +30,16 @@ export type WorldGenSandboxViewModelInterface = WorldGenWizardViewModelInterface
   resetFailureSimulation(): void;
   /** Per-stage delay in ms, so a run can be cancelled mid-flight. */
   setStageDelay(stage: string, delayMs: number): void;
+  /**
+   * Clears every delay, INCLUDING one the URL query asked for.
+   *
+   * The mock provider's delay can come from `?wgDelay=`, which lives outside
+   * this ViewModel; without a flag the sandbox's own "Clear Delay" button was
+   * a no-op on exactly the route that documents the query.
+   */
   clearStageDelay(): void;
+  /** Whether {@link clearStageDelay} has been pressed since the last set. */
+  readonly stageDelaysCleared: boolean;
   /** Whether the mock provider is in permanent-failure mode. */
   readonly sandboxFailure: boolean;
   /** Per-stage delay the mock provider should apply. */
@@ -50,7 +59,8 @@ export class WorldGenSandboxViewModel
   private _debugPromptText = $state('');
   private _lastStagePrompt = $state('');
   private _simulateFailure = false;
-  private readonly _stageDelays = new Map<string, number>();
+  private _stageDelays = new Map<string, number>();
+  private _stageDelaysCleared = false;
   private readonly _screenshotMode: boolean;
 
   constructor(options: WorldGenSandboxViewModelOptions) {
@@ -87,10 +97,16 @@ export class WorldGenSandboxViewModel
 
   setStageDelay(stage: string, delayMs: number): void {
     this._stageDelays.set(stage, delayMs);
+    this._stageDelaysCleared = false;
   }
 
   clearStageDelay(): void {
     this._stageDelays.clear();
+    this._stageDelaysCleared = true;
+  }
+
+  get stageDelaysCleared(): boolean {
+    return this._stageDelaysCleared;
   }
 
   /** @internal — read by the sandbox mock text capability. */
@@ -100,7 +116,10 @@ export class WorldGenSandboxViewModel
 
   /** @internal — read by the sandbox mock text capability. */
   sandboxDelayFor(stage: string): number {
-    return this._screenshotMode ? 0 : (this._stageDelays.get(stage) ?? 120);
+    if (this._screenshotMode || this._stageDelaysCleared) {
+      return 0;
+    }
+    return this._stageDelays.get(stage) ?? 120;
   }
 
   /** @internal — records the prompt the mock provider was asked to fulfil. */

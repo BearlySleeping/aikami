@@ -254,6 +254,36 @@ describe('WorldGenWizardViewModel — lifecycle cancellation', () => {
     expect(vm.isGenerating).toBe(false);
   });
 
+  test('going back from preview skips the generating step instead of parking on it', async () => {
+    // `generating` renders only while a run is live. Decrementing into it from
+    // the preview showed an empty screen with a Cancel button aimed at a run
+    // that had already finished.
+    const { vm } = build();
+
+    await vm.generateWorld();
+    expect(vm.currentStep).toBe('preview');
+
+    vm.goBack();
+
+    expect(vm.currentStep).toBe('goals');
+    expect(vm.currentStep).not.toBe('generating');
+    // Skipping is navigation, not cancellation: the finished draft survives.
+    expect(vm.draft?.status).toBe('complete');
+    expect(vm.generationError).toBeUndefined();
+  });
+
+  test('going back from the saved draft also skips the generating step', async () => {
+    const { vm } = build();
+
+    await vm.generateWorld();
+    await vm.acceptWorld();
+    expect(vm.currentStep).toBe('draft_saved');
+
+    vm.goBack();
+
+    expect(vm.currentStep).toBe('preview');
+  });
+
   test('changing the connection cancels the run before navigating away', async () => {
     const provider = createControllableProvider({
       payloads: coherentPayloads(),

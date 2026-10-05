@@ -72,7 +72,7 @@ by the Retry action.
 Captain verification is recorded in the isolated checkout's `.evidence/G01/`
 lane. Commands use Moon prerequisites/project scripts and preserve their actual
 exit codes; piping through a log filter is not a pass. All listed gates passed:
-942 schema tests, 147 storage tests, 4,830 client tests, 75 compiled-browser tests,
+944 schema tests, 147 storage tests, 4,850 client tests, 78 compiled-browser tests,
 six project typechecks, structural guards, and 16 Playwright cases (including
 setup and two error-policy negative-control cases). A post-freeze focused run
 also passed all 36 draft-service cases. The final scoped validation tool passed

@@ -36,20 +36,26 @@ const build = (
 ): {
   vm: ReturnType<typeof createWorldGenWizardViewModel>;
   provider: ReturnType<typeof createControllableProvider>;
+  // The injected service, so a test can read the LIVE RUN identity. The wizard
+  // exposes draft state, and `vm.draft` is undefined until a run finishes —
+  // asking it for the run id mid-run captured `undefined` and made every
+  // "not the abandoned run" assertion vacuous.
+  service: ReturnType<typeof createWorldGenDraftService>;
 } => {
   const provider = createControllableProvider({ payloads: coherentPayloads(), ...providerOptions });
+  const service = createWorldGenDraftService({
+    className: 'WorldGenDraftRegressionTest',
+    text: provider.capability,
+    resolveStore: async () => createMemoryStore(),
+    maxAttemptsPerStage: 3,
+  });
   const vm = createWorldGenWizardViewModel({
     className: 'WorldGenDraftRegressionTest',
     initialInputs: WORLD_GEN_WIZARD_INPUT,
     router: { goToRoute: async () => {} },
-    drafts: createWorldGenDraftService({
-      className: 'WorldGenDraftRegressionTest',
-      text: provider.capability,
-      resolveStore: async () => createMemoryStore(),
-      maxAttemptsPerStage: 3,
-    }),
+    drafts: service,
   });
-  return { vm, provider };
+  return { vm, provider, service };
 };
 
 describe('G01 regression 1 — duplicate generate', () => {
@@ -166,11 +172,15 @@ describe('G01 regression 4 — late completion cannot revive a superseded run', 
   });
 
   test('a newer run is not overwritten by an older run finishing late', async () => {
-    const { vm, provider } = build({ delayMs: { setting: 30 } });
+    const { vm, provider, service } = build({ delayMs: { setting: 30 } });
 
     const first = vm.generateWorld();
-    const firstRunId = vm.draft?.runId;
     await provider.waitForCalls('setting', 1);
+    // Read the abandoned run's identity from the live run, once it DEFINITELY
+    // exists. Capturing it before the provider was ever called read `undefined`.
+    const abandonedRunId = service.run?.runId;
+    expect(abandonedRunId).toBeTruthy();
+
     // The player gives up on the slow run and starts over.
     vm.cancelGeneration();
     await first;
@@ -180,7 +190,9 @@ describe('G01 regression 4 — late completion cannot revive a superseded run', 
     // The wizard exposes state, not a return value: the newer run owns the
     // draft, and the abandoned run left nothing behind.
     expect(vm.draft?.status).toBe('complete');
-    expect(vm.draft?.runId).not.toBe(firstRunId);
+    expect(service.run?.runId).not.toBe(abandonedRunId);
+    expect(vm.draft?.runId).not.toBe(abandonedRunId);
+    expect(vm.draft?.runId).toBe(service.run?.runId);
   });
 });
 

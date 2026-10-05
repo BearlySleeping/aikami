@@ -6,8 +6,10 @@
 // The mock provider is deliberately SLOW and cancellable so the wizard's real
 // lifecycle — cancel mid-run, navigate away mid-run, restart mid-run — can be
 // exercised in a browser instead of only in unit tests. `?wgDelay=800` slows
-// every stage, `?wgDelayStage=arcs&wgDelay=1500` slows one, and `?wgFail=1`
-// makes every stage fail so retry exhaustion is reachable.
+// every stage; adding `?wgDelayStage=arcs` narrows that delay to that ONE stage
+// so the earlier stages finish quickly; `?wgFail=1` makes every stage fail so
+// retry exhaustion is reachable. "Clear Delay" clears a query-driven delay
+// too, not just the sandbox's own per-stage map.
 //
 // Contract: G01 — safe private narrative-world drafts
 

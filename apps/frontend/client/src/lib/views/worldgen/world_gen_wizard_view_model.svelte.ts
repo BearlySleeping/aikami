@@ -367,9 +367,11 @@ export class WorldGenWizardViewModel
     if (this._currentStepIndex <= 0) {
       return;
     }
-    // Leaving the generating step by hand is a cancellation, not a pause.
+    // Leaving a live run by hand is a cancellation, not a pause. This runs
+    // BEFORE the step is moved, because `isGenerating` is derived from the
+    // draft service's live run and is independent of which step we land on.
     this._cancelIfRunning();
-    this._currentStepIndex -= 1;
+    this._currentStepIndex = this._previousStepIndex(this._currentStepIndex);
   }
 
   // ── Generation ──
@@ -499,6 +501,23 @@ export class WorldGenWizardViewModel
     if (this.isGenerating) {
       this._drafts.cancel('Wizard navigated away');
     }
+  }
+
+  /**
+   * The step Back lands on.
+   *
+   * `generating` is a progress screen, not a step a player can return to: it
+   * only has content while a run is live, and there is no run to go back to
+   * once one has finished. Decrementing straight into it — which is what the
+   * previous version did, from `preview` and `draft_saved` — parked the wizard
+   * on an empty screen whose only button was Cancel against a run that had
+   * already ended. It is skipped, so Back from the preview lands on the last
+   * answer the player actually gave.
+   */
+  private _previousStepIndex(from: number): number {
+    const candidate = from - 1;
+    const index = candidate === GENERATING_STEP_INDEX ? candidate - 1 : candidate;
+    return index < 0 ? 0 : index;
   }
 
   private _indexOf(step: WizardStep): number {

@@ -47,6 +47,7 @@ import {
 import {
   parseWorldGenDraft,
   schemaCheck,
+  unreadableStorageDiagnostic,
   validateWorldGenDraft,
   WORLD_GEN_DRAFT_SCHEMA_VERSION,
   type WorldGenDraft,
@@ -491,14 +492,7 @@ class WorldGenDraftService
       // is on disk but unreadable is how a player concludes their work was
       // never saved.
       this.warn('initialize:failed', { reason: read.reason });
-      this._diagnostics = [
-        ...this._diagnostics,
-        {
-          path: 'draft',
-          code: 'size_limit',
-          message: `The stored draft could not be loaded and was ignored: ${read.reason}`,
-        },
-      ];
+      this._diagnostics = [...this._diagnostics, unreadableStorageDiagnostic(read.reason)];
       this._persistence = 'memory';
       return undefined;
     }

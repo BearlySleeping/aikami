@@ -7,9 +7,11 @@
 // Saved. There is deliberately no character-creation step.
 //
 // The dev sandbox route accepts `?wgDelay=<ms>`, `?wgDelayStage=<stage>` and
-// `?wgFail=1` so a browser test can make a run slow, slow one stage, or fail
-// every stage — the three conditions under which cancellation, navigation-away
-// and retry exhaustion are actually observable.
+// `?wgFail=1` so a browser test can make a run slow, slow ONE stage so the
+// stages before it settle first, or fail every stage — the three conditions
+// under which cancellation, navigation-away and retry exhaustion are actually
+// observable. `wgDelayStage` narrows `wgDelay` to the named stage rather than
+// adding to it.
 //
 // DOM reference:
 //   apps/frontend/client/src/lib/views/worldgen/world_gen_wizard_view.svelte
@@ -19,9 +21,9 @@ import type { Page } from '@playwright/test';
 
 /** Query knobs the dev sandbox honours. */
 export type SandboxControl = {
-  /** Delay applied to every stage, in ms. */
+  /** Delay in ms. Applies to every stage, or to `delayStage` alone. */
   delayMs?: number;
-  /** Restrict the delay to a single stage. */
+  /** Narrow `delayMs` to a single stage instead of applying it to all of them. */
   delayStage?: 'setting' | 'cast' | 'places' | 'hudWidgets' | 'arcs';
   /** Make every stage fail. */
   fail?: boolean;

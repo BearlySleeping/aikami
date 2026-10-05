@@ -130,6 +130,30 @@ describe('WorldGenDraftService — checkpoint retention (G01)', () => {
     expect(service.run?.status).toBe('failed');
   });
 
+  test('a stage payload the FINAL schema would reject never becomes a checkpoint', async () => {
+    // An arc with no objectives is legal against the arcs stage schema unless
+    // the schema says otherwise, and `absorbStageResult` records a checkpoint
+    // purely on that schema. So a stage schema that permits it lets an
+    // unbuildable draft hold a checkpoint: the run then fails at the final
+    // parse with every stage's work discarded.
+    const payloads = coherentPayloads();
+    const arcs = payloads.arcs as { arcs: { objectives: string[] }[] };
+    const arc = arcs.arcs[0];
+    if (arc === undefined) {
+      throw new Error('The coherent fixture must contain an arc.');
+    }
+    arc.objectives = [];
+    const { service, provider } = build({ payloads });
+
+    const draft = await service.generate({ input: WORLD_GEN_TEST_INPUT });
+
+    expect(draft).toBeUndefined();
+    expect(service.run?.status).toBe('failed');
+    // The arcs stage was re-issued to its attempt budget: it never
+    // checkpointed, so nothing downstream could adopt it.
+    expect(provider.countStage('arcs')).toBe(3);
+  });
+
   test('a transient failure retries only that stage and then completes', async () => {
     const { service, provider } = build({ flakyStages: { hudWidgets: 1 } });
 
@@ -472,7 +496,35 @@ describe('WorldGenDraftService — durable reload vs in-memory cache (G01)', () 
     expect(hydrated).toBeUndefined();
     expect(second.draft).toBeUndefined();
     expect(second.persistence).toBe('memory');
-    expect(second.diagnostics.length).toBeGreaterThan(0);
+    // The diagnostic must NAME the real fault. This row is not oversized, and
+    // labelling it `size_limit` sends the reader hunting for a size problem
+    // that does not exist.
+    expect(second.diagnostics).toHaveLength(1);
+    expect(second.diagnostics[0]?.code).toBe('unreadable_storage');
+    expect(second.diagnostics[0]?.message).toContain('structural validation');
+  });
+
+  test('a store that throws on read is reported as unreadable storage too', async () => {
+    // A different fault with the same honest answer: the row was never even
+    // returned, and calling that `size_limit` would be as wrong as above.
+    const store = createMemoryStore();
+    const service = createWorldGenDraftService({
+      className: 'WorldGenDraftServiceTest',
+      text: createControllableProvider({ payloads: coherentPayloads() }).capability,
+      resolveStore: async () => ({
+        ...store,
+        latest: async () => {
+          throw new Error('database is locked by another process');
+        },
+      }),
+    });
+
+    const hydrated = await service.initialize();
+
+    expect(hydrated).toBeUndefined();
+    expect(service.persistence).toBe('memory');
+    expect(service.diagnostics[0]?.code).toBe('unreadable_storage');
+    expect(service.diagnostics[0]?.message).toContain('database is locked');
   });
 });
 
@@ -542,7 +594,11 @@ describe('WorldGenDraftService — superseded runs cannot write (G01)', () => {
   });
 
   test('a persistence result from a superseded run never claims durable', async () => {
-    const provider = createDeferredProvider();
+    // The cancel has to land while the REAL write is in flight. Cancelling
+    // while a stage was still outstanding meant `_persist` was never reached,
+    // so the assertion below held no matter what the persistence guard did —
+    // the previous version of this test did exactly that and passed vacuously.
+    const provider = createControllableProvider({ payloads: coherentPayloads() });
     const store = createMemoryStore();
     const service = createWorldGenDraftService({
       className: 'WorldGenDraftServiceTest',
@@ -551,25 +607,27 @@ describe('WorldGenDraftService — superseded runs cannot write (G01)', () => {
       maxAttemptsPerStage: 1,
     });
 
-    const first = service.generate({ input: WORLD_GEN_TEST_INPUT });
-    await provider.waitForCall('setting');
-    provider.resolve('setting');
-    // Once `setting` lands, the sibling stages go out together — and
-    // `Promise.allSettled` waits for every sibling, so the test has to settle
-    // them all. The player navigates away while they are outstanding.
-    await provider.waitForCall('cast');
-    await provider.waitForCall('places');
-    await provider.waitForCall('hudWidgets');
+    // Every stage succeeds, so the run reaches its single durable write…
+    store.holdUpsert = true;
+    const run = service.generate({ input: WORLD_GEN_TEST_INPUT });
+    // …and this resolves only once `store.upsert` has actually been entered.
+    await store.waitForHeldUpsert?.();
+
+    // The player gives up in that exact window: the write is open, and the run
+    // it belongs to is over.
     service.cancel('player navigated away');
-    provider.resolve('cast');
-    provider.resolve('places');
-    provider.resolve('hudWidgets');
+    store.releaseUpserts?.();
+    await run;
 
-    await first;
+    // Non-vacuity first: the write really did happen and really did land.
+    expect(store.upserts).toBe(1);
+    expect(store.rows.size).toBe(1);
+    expect(service.run?.status).toBe('cancelled');
 
-    // The run was cancelled, so its `_persist` must not have stamped the
-    // service 'durable' on the way out.
+    // And the outcome of that write, which succeeded, is NOT claimed: the draft
+    // the player was no longer looking at must not be stamped 'durable'.
     expect(service.persistence).not.toBe('durable');
+    expect(service.persistence).toBe('unknown');
   });
 });
 

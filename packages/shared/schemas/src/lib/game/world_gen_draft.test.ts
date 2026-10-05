@@ -211,7 +211,20 @@ describe('validateWorldGenDraft — G01 coherence rules', () => {
     });
 
     test('distinct ids with distinct names are clean', () => {
-      expect(validateWorldGenDraft(draftFixture())).toEqual([]);
+      // Behavioural, not a restatement of "a coherent draft has no
+      // diagnostics": the SAME pair of cast members that produced
+      // `duplicate_id` and `duplicate_name` above is clean once it is given a
+      // distinct id AND a distinct name. The defect is the collision, not the
+      // cast.
+      const base = draftFixture();
+      const fixed = draftFixture({
+        cast: [
+          base.cast[0] as WorldGenDraft['cast'][number],
+          { ...(base.cast[1] as WorldGenDraft['cast'][number]), id: 'npc_second', name: 'Bryn' },
+        ],
+      });
+
+      expect(validateWorldGenDraft(fixed)).toEqual([]);
     });
   });
 
@@ -252,7 +265,6 @@ describe('validateWorldGenDraft — G01 coherence rules', () => {
 
   describe('size limit', () => {
     test('a draft past the byte ceiling is rejected with its real size', () => {
-      const base = draftFixture();
       const oversized = draftFixture({
         setting: {
           worldName: 'Duskhollow',
@@ -268,12 +280,19 @@ describe('validateWorldGenDraft — G01 coherence rules', () => {
         code: 'size_limit',
         message: `Draft is ${new TextEncoder().encode(JSON.stringify(oversized)).length} bytes; the limit is ${WORLD_GEN_DRAFT_LIMITS.maxBytes} bytes.`,
       });
-      expect(base.setting?.worldName).toBe('Duskhollow');
+    });
+
+    test('a draft just under the ceiling is NOT reported as oversized', () => {
+      // The other half of the boundary: without it, a validator that reported
+      // `size_limit` unconditionally would pass the test above.
+      const draft = draftFixture();
+
+      expect(worldGenDraftByteLength(draft)).toBeLessThanOrEqual(WORLD_GEN_DRAFT_LIMITS.maxBytes);
+      expect(validateWorldGenDraft(draft).some((entry) => entry.code === 'size_limit')).toBe(false);
     });
   });
 
   test('count limits are re-asserted even when the schema is bypassed', () => {
-    const base = draftFixture();
     const tooManyHud = draftFixture({
       hudWidgets: Array.from({ length: WORLD_GEN_DRAFT_LIMITS.maxHudWidgets + 1 }, (_, index) => ({
         id: `hud_${index}`,
@@ -287,7 +306,22 @@ describe('validateWorldGenDraft — G01 coherence rules', () => {
     expect(validateWorldGenDraft(tooManyHud).some((entry) => entry.code === 'count_limit')).toBe(
       true,
     );
-    expect(base.hudWidgets.length).toBe(1);
+  });
+
+  test('a count within the limit is not reported as over-count', () => {
+    const atLimit = draftFixture({
+      hudWidgets: Array.from({ length: WORLD_GEN_DRAFT_LIMITS.maxHudWidgets }, (_, index) => ({
+        id: `hud_${index}`,
+        slot: 'top-left',
+        label: `Widget ${index}`,
+        icon: 'star',
+        defaultVisibility: true,
+      })),
+    });
+
+    expect(validateWorldGenDraft(atLimit).some((entry) => entry.code === 'count_limit')).toBe(
+      false,
+    );
   });
 });
 // ---------------------------------------------------------------------------

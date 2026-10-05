@@ -13,7 +13,6 @@
 // roadmap below names the next real step rather than linking a closed ticket
 // that implies the work is merely waiting to be turned on.
 
-import { onMount } from 'svelte';
 import { routerService } from '$services';
 import { getWorldGenWizardViewModel } from '$views/worldgen/world_gen_wizard_composition.ts';
 import WorldGenWizardView from '$views/worldgen/world_gen_wizard_view.svelte';
@@ -21,12 +20,14 @@ import WorldGenWizardView from '$views/worldgen/world_gen_wizard_view.svelte';
 const viewModel = getWorldGenWizardViewModel({ className: 'WorldGenWizardViewModel' });
 
 // A real page reload builds a brand-new ViewModel and a brand-new draft
-// service, neither of which holds anything in memory. Without this the wizard
-// came back empty even though the draft row was sitting in the device
-// database — the durable claim was true only within one tab's lifetime.
-onMount(() => {
-  void viewModel.initialize();
-});
+// service, neither of which holds anything in memory, so the durable draft on
+// the device has to be re-read or the wizard comes back empty.
+//
+// That read is NOT initiated here: the wizard renders inside
+// `BaseViewModelContainer`, which owns the ViewModel's lifecycle and calls
+// `initialize()` exactly once per mount. An extra `onMount(initialize)` here
+// was a second owner of the same instance — two concurrent hydrations of the
+// same device row, one of them racing the container's own dispose.
 </script>
 
 <div class="min-h-screen bg-base-100">

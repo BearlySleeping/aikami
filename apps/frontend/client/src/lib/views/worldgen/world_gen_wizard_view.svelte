@@ -170,7 +170,10 @@ const draft = $derived(viewModel.draft);
         {/if}
         {#if viewModel.stageFailures.length > 0}
           <ul class="text-xs text-base-content/60 mt-2" data-testid="worldgen-stage-failures">
-            {#each viewModel.stageFailures as failure (failure.stage + failure.message)}
+            <!-- A retried stage that fails the same way twice produces two
+                 IDENTICAL entries (the failure list is per round, not per
+                 stage), so stage+message is not a unique key. -->
+            {#each viewModel.stageFailures as failure, failureIndex (failureIndex)}
               <li>{failure.stage}: {failure.message}</li>
             {/each}
           </ul>
@@ -255,7 +258,9 @@ const draft = $derived(viewModel.draft);
                   <div class="mt-2">
                     <p class="text-xs font-medium text-base-content/60">Objectives:</p>
                     <ul class="list-disc list-inside text-sm">
-                      {#each arc.objectives as objective (objective)}
+                      <!-- Objectives are free text: the same objective can
+                           legitimately appear twice in one arc. -->
+                      {#each arc.objectives as objective, objectiveIndex (objectiveIndex)}
                         <li>{objective}</li>
                       {/each}
                     </ul>
@@ -303,7 +308,9 @@ const draft = $derived(viewModel.draft);
           {#if viewModel.diagnostics.length > 0}
             <div class="alert alert-error" data-testid="worldgen-diagnostics">
               <ul>
-                {#each viewModel.diagnostics as diagnostic (diagnostic.path + diagnostic.code)}
+                <!-- `path`+`code` names a KIND of problem, not one entry: two
+                     duplicated cast names both report at `cast`. -->
+                {#each viewModel.diagnostics as diagnostic, diagnosticIndex (diagnosticIndex)}
                   <li class="text-sm">{diagnostic.path || 'draft'}: {diagnostic.message}</li>
                 {/each}
               </ul>

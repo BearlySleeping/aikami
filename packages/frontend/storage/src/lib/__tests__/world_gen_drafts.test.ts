@@ -1,4 +1,4 @@
-// packages/frontend/storage/src/lib/world_gen_drafts.test.ts
+// packages/frontend/storage/src/lib/__tests__/world_gen_drafts.test.ts
 //
 // G01 — WorldGenDraftRepository tests.
 //
@@ -12,9 +12,12 @@
 import { Database, type SQLQueryBindings } from 'bun:sqlite';
 import { beforeEach, describe, expect, test } from 'bun:test';
 import type { WorldGenDraft } from '@aikami/schemas';
-import { AIKAMI_MIGRATIONS } from './migrations.ts';
-import type { LocalDatabaseInterface, QueryResult, SqlQuery } from './storage_adapter.ts';
-import { createWorldGenDraftRepository, type WorldGenDraftRepository } from './world_gen_drafts.ts';
+import { AIKAMI_MIGRATIONS } from '../migrations.ts';
+import type { LocalDatabaseInterface, QueryResult, SqlQuery } from '../storage_adapter.ts';
+import {
+  createWorldGenDraftRepository,
+  type WorldGenDraftRepository,
+} from '../world_gen_drafts.ts';
 
 /**
  * A real SQLite database wrapped in the production {@link LocalDatabaseInterface}

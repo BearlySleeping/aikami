@@ -7,7 +7,7 @@
 // asks the provider for, while the service is the lifecycle that asks. Adding a
 // stage field is a change here; adding a cancellation rule is a change there.
 
-import type { WorldGenDraftStage } from '@aikami/schemas';
+import { WORLD_GEN_DRAFT_LIMITS, type WorldGenDraftStage } from '@aikami/schemas';
 import {
   WORLD_GEN_STAGE_LABELS,
   type WorldGenStageContext,
@@ -19,6 +19,33 @@ export const WORLD_GEN_DRAFT_SYSTEM_PROMPT =
   'You are a master world-builder. You produce bounded, internally consistent JSON. ' +
   'You never emit markdown fences, commentary, or fields outside the requested schema. ' +
   'Every id you emit must match ^[a-z]+_[a-z0-9-]{1,48}$ and be unique within its stage.';
+
+/** A bounded free-text field: non-empty, and no longer than `maxLength`. */
+const text = (maxLength: number): Record<string, unknown> => ({
+  type: 'string',
+  minLength: 1,
+  maxLength,
+});
+
+/** A bounded list of non-empty strings. */
+const textList = (maxItems: number, maxLength: number): Record<string, unknown> => ({
+  type: 'array',
+  items: text(maxLength),
+  maxItems,
+});
+
+/**
+ * These per-stage schemas are a CHECKPOINT GATE, not documentation.
+ *
+ * `absorbStageResult` records a stage's checkpoint only after the payload
+ * passes the schema declared here, so anything this file permits is allowed to
+ * become a checkpoint — and a checkpoint that later fails the whole-draft parse
+ * throws away every stage's work and fails the run. Each bound below therefore
+ * mirrors the corresponding `WorldGenDraft*Schema` constraint EXACTLY: an arc
+ * with zero objectives (`minItems: 1`) or a blank theme/objective string
+ * (`minLength: 1`) is refused at the stage that produced it rather than
+ * becoming a checkpoint that can only ever fail.
+ */
 
 const objectSchema = (
   properties: Record<string, unknown>,
@@ -37,7 +64,7 @@ export const WORLD_GEN_STAGE_SCHEMAS: Record<WorldGenDraftStage, Record<string, 
     {
       worldName: { type: 'string', minLength: 1, maxLength: 120 },
       worldDescription: { type: 'string', minLength: 10, maxLength: 4000 },
-      themes: { type: 'array', items: { type: 'string', maxLength: 120 }, maxItems: 8 },
+      themes: textList(WORLD_GEN_DRAFT_LIMITS.maxThemes, 120),
     },
     ['worldName', 'worldDescription'],
   ),
@@ -104,11 +131,14 @@ export const WORLD_GEN_STAGE_SCHEMAS: Record<WorldGenDraftStage, Record<string, 
           {
             chapter: { type: 'string', minLength: 1, maxLength: 160 },
             description: { type: 'string', minLength: 1, maxLength: 2000 },
-            objectives: { type: 'array', items: { type: 'string', maxLength: 400 }, maxItems: 8 },
+            objectives: {
+              ...textList(WORLD_GEN_DRAFT_LIMITS.maxObjectivesPerArc, 400),
+              minItems: 1,
+            },
             // Names, resolved to ids after the cast exists. The prompt says so
             // explicitly so the provider is not asked to invent ids it cannot
             // have seen.
-            questGiverNames: { type: 'array', items: { type: 'string' }, maxItems: 4 },
+            questGiverNames: textList(WORLD_GEN_DRAFT_LIMITS.maxQuestGiversPerArc, 120),
           },
           ['chapter', 'description', 'objectives', 'questGiverNames'],
         ),

@@ -7,7 +7,7 @@
 // and that invalidation is transitive.
 
 import { describe, expect, test } from 'bun:test';
-import type { WorldGenDraftInput } from '@aikami/schemas';
+import { schemaCheck, WORLD_GEN_DRAFT_LIMITS, type WorldGenDraftInput } from '@aikami/schemas';
 import {
   allocateStableIds,
   invalidatedStages,
@@ -19,7 +19,7 @@ import {
   type WorldGenStageContext,
   worldGenStageInputs,
 } from './world_gen_stage_graph.ts';
-import { assembleWorldGenStagePrompt } from './world_gen_stage_prompts.ts';
+import { assembleWorldGenStagePrompt, WORLD_GEN_STAGE_SCHEMAS } from './world_gen_stage_prompts.ts';
 
 const INPUT: WorldGenDraftInput = {
   genre: 'Fantasy',
@@ -430,5 +430,100 @@ describe('prompt scope and fingerprint scope agree (G01)', () => {
         );
       }
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Stage schemas are a checkpoint gate
+//
+// `absorbStageResult` records a checkpoint only after the payload passes
+// `WORLD_GEN_STAGE_SCHEMAS[stage]`, and a checkpoint that later fails the
+// whole-draft parse throws away every stage's work. So a stage schema must
+// refuse exactly what the final `WorldGenDraft*Schema` refuses — no more, so
+// legitimate payloads are not retried forever, and no less, so an unbuildable
+// draft never holds a checkpoint.
+// ---------------------------------------------------------------------------
+
+describe('WORLD_GEN_STAGE_SCHEMAS — checkpoint gate (G01)', () => {
+  const validArcs = (objectives: string[]): unknown => ({
+    arcs: [
+      {
+        chapter: 'Chapter 1',
+        description: 'The ward fades.',
+        objectives,
+        questGiverNames: ['Maren'],
+      },
+    ],
+  });
+
+  test('an arc with no objectives is refused, because the draft requires one', () => {
+    expect(schemaCheck(WORLD_GEN_STAGE_SCHEMAS.arcs, validArcs(['Find the wardstone']))).toBe(true);
+    expect(schemaCheck(WORLD_GEN_STAGE_SCHEMAS.arcs, validArcs([]))).toBe(false);
+  });
+
+  test('a blank objective string is refused, because the draft requires minLength 1', () => {
+    expect(schemaCheck(WORLD_GEN_STAGE_SCHEMAS.arcs, validArcs(['', 'Return to Maren']))).toBe(
+      false,
+    );
+  });
+
+  test('repeated objectives are allowed — the draft has no uniqueness rule for them', () => {
+    expect(
+      schemaCheck(
+        WORLD_GEN_STAGE_SCHEMAS.arcs,
+        validArcs(['Relight the ward', 'Relight the ward']),
+      ),
+    ).toBe(true);
+  });
+
+  test('a blank theme string is refused, because the draft requires minLength 1', () => {
+    const base = {
+      worldName: 'Duskhollow',
+      worldDescription: 'A lantern-lit frontier town.',
+      themes: ['frontier'],
+    };
+
+    expect(schemaCheck(WORLD_GEN_STAGE_SCHEMAS.setting, base)).toBe(true);
+    expect(
+      schemaCheck(WORLD_GEN_STAGE_SCHEMAS.setting, { ...base, themes: ['frontier', ''] }),
+    ).toBe(false);
+  });
+
+  test('a blank quest-giver name is refused rather than resolving to nothing', () => {
+    const blank = {
+      arcs: [
+        {
+          chapter: 'Chapter 1',
+          description: 'The ward fades.',
+          objectives: ['Find the wardstone'],
+          questGiverNames: [''],
+        },
+      ],
+    };
+
+    expect(schemaCheck(WORLD_GEN_STAGE_SCHEMAS.arcs, blank)).toBe(false);
+  });
+
+  test('the count ceilings match the draft limits the schema re-asserts', () => {
+    const manyArcs = {
+      arcs: Array.from({ length: WORLD_GEN_DRAFT_LIMITS.maxArcs + 1 }, (_, index) => ({
+        chapter: `Chapter ${index}`,
+        description: 'Something happens.',
+        objectives: ['Do the thing'],
+        questGiverNames: [],
+      })),
+    };
+
+    expect(schemaCheck(WORLD_GEN_STAGE_SCHEMAS.arcs, manyArcs)).toBe(false);
+    expect(
+      schemaCheck(WORLD_GEN_STAGE_SCHEMAS.setting, {
+        worldName: 'Duskhollow',
+        worldDescription: 'A lantern-lit frontier town.',
+        themes: Array.from(
+          { length: WORLD_GEN_DRAFT_LIMITS.maxThemes + 1 },
+          (_, index) => `theme-${index}`,
+        ),
+      }),
+    ).toBe(false);
   });
 });
