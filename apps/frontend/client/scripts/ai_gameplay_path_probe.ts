@@ -49,6 +49,8 @@
 //
 // Evidence (regenerable, gitignored): `.evidence/382-gameplay-path/`.
 // Every line of output is content-free: counts, milliseconds, booleans.
+//
+// biome-ignore-all lint/suspicious/noConsole: CLI probe — stdout IS its report
 
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -62,7 +64,7 @@ import {
   type AiTransportAttemptEvent,
   createAdapterRegistry,
   createAiProviderGateway,
-} from '@aikami/frontend-ai-gateway';
+} from '@aikami/frontend/ai-gateway';
 import type { AiModeResolution } from '@aikami/types';
 import { createStructuredCallCoalescer } from '../src/lib/services/ai/structured_call_coalescer';
 import { textContentionDomain } from '../src/lib/services/ai/text_contention_domain';

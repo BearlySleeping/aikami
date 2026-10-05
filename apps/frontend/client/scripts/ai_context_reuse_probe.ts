@@ -28,6 +28,8 @@
 // prompt builders from this app's own `src`. C-455 forbids one app importing
 // another's source, and a probe that re-implements the prompts it is measuring
 // measures nothing.
+//
+// biome-ignore-all lint/suspicious/noConsole: CLI probe — stdout IS its report
 
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -176,15 +178,13 @@ const runP1 = (): Record<string, unknown> => {
   const digestSystem = buildDigestSystemPrompt({ persona: PERSONA, npcName: NPC_NAME });
   // Rendered BOTH ways, so the probe reports the before/after of the
   // projection rather than only the state after it.
-  const render = renderBackgroundFacts;
-  const join = (facts: readonly string[]): string => render(facts);
   // BEFORE (unprojected dialogue-grade facts, as the task used to receive them).
   const digestUserUnprojected = buildDigestUserPrompt({
     record: priorRecord,
     npcName: NPC_NAME,
     lines: record.lastExchange,
     gameStateFacts: WORLD_STATE_FACTS,
-    renderFacts: join,
+    renderFacts: renderBackgroundFacts,
   });
   // AFTER (projected for a bounded background task).
   const digestUser = buildDigestUserPrompt({
@@ -192,18 +192,18 @@ const runP1 = (): Record<string, unknown> => {
     npcName: NPC_NAME,
     lines: record.lastExchange,
     gameStateFacts: buildBackgroundWorldStateProjection(WORLD_STATE_FACTS),
-    renderFacts: join,
+    renderFacts: renderBackgroundFacts,
   });
   const openerSystem = buildOpenerSystemPrompt({ persona: PERSONA, npcName: NPC_NAME });
   const openerUser = buildOpenerUserPrompt({
     record,
     gameStateFacts: buildBackgroundWorldStateProjection(WORLD_STATE_FACTS),
-    renderFacts: join,
+    renderFacts: renderBackgroundFacts,
   });
   const openerUserUnprojected = buildOpenerUserPrompt({
     record,
     gameStateFacts: WORLD_STATE_FACTS,
-    renderFacts: join,
+    renderFacts: renderBackgroundFacts,
   });
   const memoryFacts = buildMemoryPromptFacts(record);
 
@@ -237,7 +237,7 @@ const runP1 = (): Record<string, unknown> => {
   const openerUserLater = buildOpenerUserPrompt({
     record: buildRecord({ lastTalkedAt: 1_700_000_060_000 }),
     gameStateFacts: buildBackgroundWorldStateProjection(WORLD_STATE_FACTS),
-    renderFacts: join,
+    renderFacts: renderBackgroundFacts,
   });
   const digestSystemLater = buildDigestSystemPrompt({ persona: PERSONA, npcName: NPC_NAME });
 
@@ -362,8 +362,12 @@ const runP2 = (): Record<string, unknown> => {
   // look unnecessary. The opener is, by construction, the one the player was
   // just handed — so it starts at t=0.
   const StartGeneratedAt = 0;
+  const fixtureOpener = record.opener;
+  if (fixtureOpener === undefined) {
+    throw new Error('buildRecord() fixture must carry an opener to replay');
+  }
   let opener: NpcMemoryRecord['opener'] = {
-    ...record.opener!,
+    ...fixtureOpener,
     generatedAt: StartGeneratedAt,
   };
   let conversationCount = record.conversationCount;
@@ -526,6 +530,7 @@ const runNativeCall = async (options: {
     ],
     stream: false,
     format: options.schema,
+    // biome-ignore lint/style/useNamingConvention: Ollama's native API is snake_case
     options: { num_predict: options.numPredict },
   };
   // A 200 is NOT a honoured field. `think` is only counted as honoured if the
@@ -545,8 +550,11 @@ const runNativeCall = async (options: {
     const text = await response.text();
     const payload = JSON.parse(text) as {
       message?: { content?: string; thinking?: string };
+      // biome-ignore lint/style/useNamingConvention: Ollama's native API is snake_case
       prompt_eval_count?: number;
+      // biome-ignore lint/style/useNamingConvention: Ollama's native API is snake_case
       eval_count?: number;
+      // biome-ignore lint/style/useNamingConvention: Ollama's native API is snake_case
       done_reason?: string;
       error?: string;
     };

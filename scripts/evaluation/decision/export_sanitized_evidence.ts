@@ -131,8 +131,8 @@ const expectedByCase = new Map<string, string | null>(
 /** Parsed CLI arguments. `args` above is the PARSER; this is its result. */
 const options = args(process.argv.slice(2));
 
-const input = resolve(options['in'] ?? '.evidence/381/npc-action-selection-decision-arms.json');
-const output = resolve(options['out'] ?? 'docs/audits/381-evidence/measurement.json');
+const input = resolve(options.in ?? '.evidence/381/npc-action-selection-decision-arms.json');
+const output = resolve(options.out ?? 'docs/audits/381-evidence/measurement.json');
 
 const artifact = JSON.parse(readFileSync(input, 'utf8')) as Artifact;
 
