@@ -1,12 +1,12 @@
 // .pi/extensions/lib/review_evidence.ts
 
+import { codeRabbitLifecycle, type ReviewEvidence } from './coderabbit_evidence.ts';
 import { type GhResult, runGh } from './gh.ts';
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
 const CHECK_BUCKETS = new Set(['pending', 'pass', 'fail', 'skipping', 'cancel']);
-const COMPLETED_REVIEW_STATES = new Set(['APPROVED', 'COMMENTED', 'CHANGES_REQUESTED']);
 
 /** Unknown or missing CI evidence must never be interpreted as completed checks. */
 export const summarizeCheckCompletion = (result: GhResult): { pendingCount: number } => {
@@ -109,12 +109,18 @@ export const haveChecksPassed = (result: GhResult): boolean => {
   );
 };
 
-const reviewTimestamp = (value: unknown): number => {
-  if (!isRecord(value) || typeof value.submittedAt !== 'string') {
-    return Number.POSITIVE_INFINITY;
+const normalizeFormalReview = (value: unknown): ReviewEvidence | undefined => {
+  if (!isRecord(value) || !isRecord(value.author) || typeof value.author.login !== 'string') {
+    return undefined;
   }
-  const timestamp = Date.parse(value.submittedAt);
-  return Number.isFinite(timestamp) ? timestamp : Number.POSITIVE_INFINITY;
+  return {
+    id: typeof value.id === 'string' ? value.id : '',
+    login: value.author.login,
+    head: isRecord(value.commit) && typeof value.commit.oid === 'string' ? value.commit.oid : '',
+    state: typeof value.state === 'string' ? value.state : '',
+    body: typeof value.body === 'string' ? value.body : '',
+    submittedAt: typeof value.submittedAt === 'string' ? value.submittedAt : undefined,
+  };
 };
 
 /** Only the newest CodeRabbit review of the current, non-draft head is evidence. */
@@ -127,32 +133,24 @@ export const currentCodeRabbitReviewState = (value: unknown): string => {
   ) {
     throw new Error('Cannot establish CodeRabbit review state: missing or malformed PR snapshot');
   }
-  if (value.isDraft === true) {
-    return '';
-  }
-  const reviews = value.reviews.filter(
-    (review) =>
-      isRecord(review) &&
-      isRecord(review.author) &&
-      (review.author.login === 'coderabbitai' || review.author.login === 'coderabbitai[bot]'),
-  );
-  // Pending/undated reviews sort last and cannot authorize completion.
-  reviews.sort((first, second) => reviewTimestamp(first) - reviewTimestamp(second));
-  const latest: unknown = reviews.at(-1);
-  if (
-    !isRecord(latest) ||
-    !Number.isFinite(reviewTimestamp(latest)) ||
-    !isRecord(latest.commit) ||
-    latest.commit.oid !== value.headRefOid ||
-    typeof latest.state !== 'string' ||
-    !COMPLETED_REVIEW_STATES.has(latest.state)
-  ) {
-    return '';
-  }
-  if (typeof latest.body === 'string' && /review (?:was )?skipped/i.test(latest.body)) {
+  const reviews = value.reviews
+    .map(normalizeFormalReview)
+    .filter((review): review is ReviewEvidence => review !== undefined);
+  const evidence = codeRabbitLifecycle({
+    number: 0,
+    repository: '',
+    branch: '',
+    head: value.headRefOid,
+    draft: value.isDraft === true,
+    reviews,
+    comments: [],
+    statuses: [],
+    threads: [],
+  });
+  if (evidence.lifecycle === 'skipped') {
     throw new Error(
-      'CodeRabbit skipped the current-head review; inspect eligibility and request a real review before retrying.',
+      'CodeRabbit skipped the current-head review; request a real review before retrying.',
     );
   }
-  return latest.state;
+  return evidence.lifecycle === 'completed' ? (evidence.verdict ?? '') : '';
 };

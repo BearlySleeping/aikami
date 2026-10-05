@@ -114,6 +114,38 @@
       "class": "pi_extensions",
       "active": true
     },
+    ".pi/extensions/lib/coderabbit_autofix.test.ts": {
+      "class": "pi_extensions",
+      "active": true
+    },
+    ".pi/extensions/lib/coderabbit_autofix.ts": {
+      "class": "pi_extensions",
+      "active": true
+    },
+    ".pi/extensions/lib/coderabbit_evidence.ts": {
+      "class": "pi_extensions",
+      "active": true
+    },
+    ".pi/extensions/lib/coderabbit_reader.test.ts": {
+      "class": "pi_extensions",
+      "active": true
+    },
+    ".pi/extensions/lib/coderabbit_reader.ts": {
+      "class": "pi_extensions",
+      "active": true
+    },
+    ".pi/extensions/lib/coderabbit_snapshot.test.ts": {
+      "class": "pi_extensions",
+      "active": true
+    },
+    ".pi/extensions/lib/coderabbit_wait.test.ts": {
+      "class": "pi_extensions",
+      "active": true
+    },
+    ".pi/extensions/lib/coderabbit_wait.ts": {
+      "class": "pi_extensions",
+      "active": true
+    },
     ".pi/extensions/lib/cost_accounting.ts": {
       "class": "pi_extensions",
       "active": true
@@ -222,6 +254,10 @@
       "class": "pi_extensions",
       "active": true
     },
+    ".pi/extensions/lib/review_findings_report.ts": {
+      "class": "pi_extensions",
+      "active": true
+    },
     ".pi/extensions/lib/review_merge.test.ts": {
       "class": "pi_extensions",
       "active": true
@@ -231,6 +267,18 @@
       "active": true
     },
     ".pi/extensions/lib/review_gh.ts": {
+      "class": "pi_extensions",
+      "active": true
+    },
+    ".pi/extensions/lib/review_pinned_checks.test.ts": {
+      "class": "pi_extensions",
+      "active": true
+    },
+    ".pi/extensions/lib/review_pinned_checks.ts": {
+      "class": "pi_extensions",
+      "active": true
+    },
+    ".pi/extensions/lib/review_snapshot.ts": {
       "class": "pi_extensions",
       "active": true
     },
@@ -279,6 +327,10 @@
       "active": true
     },
     ".pi/extensions/lib/subagent_watch.ts": {
+      "class": "pi_extensions",
+      "active": true
+    },
+    ".pi/extensions/lib/testing/coderabbit_fixtures.ts": {
       "class": "pi_extensions",
       "active": true
     },

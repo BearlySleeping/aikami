@@ -117,9 +117,13 @@ export type SubagentUsage = {
 export type ReviewOutcome = {
   decision: 'review' | 'skip';
   reason: string;
-  /** Terminal CodeRabbit review state, when one arrived. */
+  /** Head whose evidence established this outcome; pushes invalidate prior verdicts. */
+  head?: string;
+  /** Formal verdict, or COMPLETED for provider completion without a formal verdict. */
   state?: string;
   findings?: number;
+  /** Includes historical/outdated open threads requiring disposition before merge. */
+  unresolvedFindings?: number;
   autofix?: 'requested' | 'committed' | 'no-change' | 'timeout' | 'skipped';
   autofixCommit?: string;
 };

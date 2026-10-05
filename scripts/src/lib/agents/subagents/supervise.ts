@@ -293,6 +293,15 @@ const publishIfWanted = async (
       }
       patchState(spec.repoRoot, spec.id, {
         pr: { ...existingPr, headCommit },
+        // Resumed agents used to retain the old head's approval after pushing.
+        review:
+          headCommit === existingPr.headCommit
+            ? readState(spec.repoRoot, spec.id)?.review
+            : {
+                decision: 'skip',
+                head: headCommit,
+                reason: 'PR head changed; previous review invalidated; fresh review required',
+              },
         activity: `PR #${existingPr.number} branch updated`,
       });
       return undefined;

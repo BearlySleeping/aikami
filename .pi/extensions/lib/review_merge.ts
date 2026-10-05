@@ -1,5 +1,10 @@
 // .pi/extensions/lib/review_merge.ts
 
+import {
+  type CodeRabbitSnapshot,
+  codeRabbitFindings,
+  codeRabbitLifecycle,
+} from './coderabbit_evidence.ts';
 import { type GhResult, runGh } from './gh.ts';
 import { haveChecksPassed } from './review_evidence.ts';
 
@@ -12,7 +17,10 @@ export const mergeReviewedHead = async (options: {
   signal?: AbortSignal;
   report: (line: string) => void;
   readReviewState: () => Promise<string>;
-  queryChecks?: () => Promise<GhResult>;
+  /** Approval, lifecycle, head and findings must come from one final validated snapshot. */
+  readDisposition: () => Promise<CodeRabbitSnapshot>;
+  /** Callers must supply exact-SHA CI; moving-PR checks cannot authorize merge. */
+  queryChecks: () => Promise<GhResult>;
   mergeHead?: (args: string[]) => Promise<GhResult>;
 }): Promise<boolean> => {
   if (!options.requested || options.actionableCount !== 0 || options.signal?.aborted) {
@@ -21,21 +29,24 @@ export const mergeReviewedHead = async (options: {
   if ((await options.readReviewState()) !== 'APPROVED') {
     return false;
   }
-  const queryChecks =
-    options.queryChecks ??
-    (() =>
-      runGh(['pr', 'checks', options.pr, '--json', 'name,bucket,state'], {
-        signal: options.signal,
-        parseJson: true,
-        allowExitCodes: [1, 8],
-      }));
-  if (!haveChecksPassed(await queryChecks()) || options.signal?.aborted) {
+  if (!haveChecksPassed(await options.queryChecks()) || options.signal?.aborted) {
     options.report('⚠️ CI is not passing; merge was not attempted.');
     return false;
   }
   if ((await options.readReviewState()) !== 'APPROVED' || options.signal?.aborted) {
     return false;
   }
+  const finalSnapshot = await options.readDisposition();
+  if (
+    finalSnapshot.draft ||
+    finalSnapshot.head !== options.head ||
+    codeRabbitLifecycle(finalSnapshot).verdict !== 'APPROVED' ||
+    codeRabbitFindings(finalSnapshot).unresolvedCount !== 0
+  ) {
+    options.report('⚠️ Approval, head or unresolved findings changed; merge was not attempted.');
+    return false;
+  }
+  options.signal?.throwIfAborted();
   options.report('🚀 Current review approved and CI passed — merging pinned head...');
   const mergeHead = options.mergeHead ?? ((args) => runGh(args, { signal: options.signal }));
   const result = await mergeHead([

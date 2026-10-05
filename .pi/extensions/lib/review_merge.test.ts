@@ -3,6 +3,52 @@
 import { describe, expect, test } from 'bun:test';
 import type { GhResult } from './gh.ts';
 import { mergeReviewedHead } from './review_merge.ts';
+import {
+  formalReviewSnapshot,
+  incrementalReviewSnapshot,
+  reviewThread,
+  runningReviewSnapshot,
+} from './testing/coderabbit_fixtures.ts';
+
+const approvedSnapshot = () => {
+  const snapshot = formalReviewSnapshot();
+  snapshot.head = 'expected-head';
+  for (const review of snapshot.reviews) {
+    review.head = snapshot.head;
+  }
+  return snapshot;
+};
+
+const finalSnapshotFor = (change: string) => {
+  const snapshot = approvedSnapshot();
+  const changes: Record<string, (value: ReturnType<typeof approvedSnapshot>) => void> = {
+    running: (value) => {
+      value.statuses = runningReviewSnapshot().statuses;
+      for (const review of value.reviews) {
+        review.submittedAt = '2026-10-05T02:00:00Z';
+      }
+    },
+    dismissed: (value) => {
+      for (const review of value.reviews) {
+        review.state = 'DISMISSED';
+      }
+    },
+    findings: (value) => {
+      value.threads.push({ ...reviewThread(), head: value.head });
+    },
+    'head-changed': (value) => {
+      value.head = 'other-head';
+    },
+    draft: (value) => {
+      value.draft = true;
+    },
+    'completion-only': (value) => {
+      Object.assign(value, incrementalReviewSnapshot());
+    },
+  };
+  changes[change]?.(snapshot);
+  return snapshot;
+};
 
 const passingChecks: GhResult = { success: true, code: 0, text: '', json: [{ bucket: 'pass' }] };
 const noReport = () => {};
@@ -21,6 +67,7 @@ const attempt = async (options: {
     report: noReport,
     readReviewState: async () => options.review ?? 'APPROVED',
     queryChecks: async () => options.checks ?? passingChecks,
+    readDisposition: async () => approvedSnapshot(),
     mergeHead: async (args) => {
       merges.push(args);
       return { success: true, code: 0, text: '' };
@@ -71,6 +118,7 @@ describe('current-head merge safeguards', () => {
         head: 'expected-head',
         report: noReport,
         readReviewState: async () => (++reviews === 1 ? 'APPROVED' : 'DISMISSED'),
+        readDisposition: async () => approvedSnapshot(),
         queryChecks: async () => passingChecks,
         mergeHead: async () => {
           merges++;
@@ -82,6 +130,30 @@ describe('current-head merge safeguards', () => {
     expect(merges).toBe(0);
   });
 
+  test.each(['running', 'dismissed', 'findings', 'head-changed', 'draft', 'completion-only'])(
+    'final combined snapshot rejects %s even after previous approval and zero findings',
+    async (change) => {
+      const snapshot = finalSnapshotFor(change);
+      let merges = 0;
+      expect(
+        await mergeReviewedHead({
+          requested: true,
+          actionableCount: 0,
+          pr: '123',
+          head: change === 'completion-only' ? snapshot.head : 'expected-head',
+          report: noReport,
+          readReviewState: async () => 'APPROVED',
+          readDisposition: async () => snapshot,
+          queryChecks: async () => passingChecks,
+          mergeHead: async () => {
+            merges++;
+            return { success: true, code: 0, text: '' };
+          },
+        }),
+      ).toBe(false);
+      expect(merges).toBe(0);
+    },
+  );
   test('a failed merge command is never reported as merged', async () => {
     const reports: string[] = [];
     await expect(
@@ -92,6 +164,7 @@ describe('current-head merge safeguards', () => {
         head: 'expected-head',
         report: (line) => reports.push(line),
         readReviewState: async () => 'APPROVED',
+        readDisposition: async () => approvedSnapshot(),
         queryChecks: async () => passingChecks,
         mergeHead: async () => ({ success: false, code: 1, text: 'head changed' }),
       }),

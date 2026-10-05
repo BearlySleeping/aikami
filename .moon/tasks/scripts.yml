@@ -178,6 +178,11 @@ tasks:
   automation-unit:
     command: 'bun run test:automation-unit'
     inputs:
+      # Runtime dependency of the detached supervisor; changes must invalidate CI cache.
+      - '/.pi/extensions/lib/coderabbit_evidence.ts'
+      - '/.pi/extensions/lib/coderabbit_reader.ts'
+      - '/.pi/extensions/lib/coderabbit_wait.ts'
+      - '/.pi/extensions/lib/coderabbit_autofix.ts'
       - 'src/lib/agents/contract_pipeline/**/*'
       - 'src/lib/agents/evaluation/**/*'
       - 'src/lib/herdr/**/*'
