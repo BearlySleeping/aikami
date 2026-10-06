@@ -1,4 +1,4 @@
-// apps/frontend/client/src/lib/services/game/combat_intent_service.test.ts
+// apps/frontend/client/tests/combat_intent_service.test.ts
 //
 // C-525 (Combat-05) interpreter-adapter coverage.
 //
@@ -14,7 +14,7 @@
 //
 // Contract: C-525 AC-2, AC-6, AC-8
 
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, jest } from 'bun:test';
 import { COMBAT_INTENT_BOUNDS } from '@aikami/schemas';
 import type { CombatState } from '@aikami/types';
 import { createCombatState } from '@aikami/utils';
@@ -24,12 +24,12 @@ import {
   buildCombatIntentSystemPrompt,
   COMBAT_INTENT_UNTRUSTED_CLOSE,
   COMBAT_INTENT_UNTRUSTED_OPEN,
-} from './combat_intent_prompt';
+} from '../src/lib/services/game/combat_intent_prompt';
 import {
   type CombatIntentServiceOptions,
   getCombatIntentService,
-} from './combat_intent_service.svelte';
-import type { CombatIntentRequest } from './types/combat_intent.ts';
+} from '../src/lib/services/game/combat_intent_service.svelte';
+import type { CombatIntentRequest } from '../src/lib/services/game/types/combat_intent.ts';
 
 // ── Fixtures ───────────────────────────────────────────────────────────────
 
@@ -535,50 +535,60 @@ describe('CombatIntentService request lifetime', () => {
   });
 
   it('draws ONE soft budget across attempts rather than restarting it', async () => {
-    const softDeadlineMs = 30;
-    const attempts: { calledAt: number; deadlineAt: number | undefined }[] = [];
-    let attempt = 0;
-    const service = serviceOver(
-      (options) => {
-        attempt += 1;
-        const mine = attempt;
-        attempts.push({ calledAt: Date.now(), deadlineAt: options.deadlineAt });
-        return new Promise((resolve) => {
-          // Both attempts take 20 ms. The first answer is invalid, which is
-          // what triggers the retry; the second WOULD have been valid.
-          setTimeout(() => resolve(mine === 1 ? { nonsense: true } : validDraft()), 20);
-        });
-      },
-      { softDeadlineMs, hardDeadlineMs: 500 },
-    );
+    jest.useFakeTimers({ now: 1_000 });
+    try {
+      const softDeadlineMs = 30;
+      const attempts: { calledAt: number; deadlineAt: number | undefined }[] = [];
+      let attempt = 0;
+      const retryStarted = Promise.withResolvers<void>();
+      const service = serviceOver(
+        (options) => {
+          attempt += 1;
+          const mine = attempt;
+          if (mine === 2) {
+            retryStarted.resolve();
+          }
+          attempts.push({ calledAt: Date.now(), deadlineAt: options.deadlineAt });
+          return new Promise((resolve) => {
+            // Both attempts take 20 ms. The first answer is invalid, which is
+            // what triggers the retry; the second WOULD have been valid.
+            setTimeout(() => resolve(mine === 1 ? { nonsense: true } : validDraft()), 20);
+          });
+        },
+        { softDeadlineMs, hardDeadlineMs: 500 },
+      );
 
-    const result = await service.interpret(requestOf());
+      const pending = service.interpret(requestOf());
+      jest.advanceTimersByTime(20);
+      await retryStarted.promise;
+      jest.advanceTimersByTime(10);
+      const result = await pending;
 
-    // The retry WAS attempted, but it only had the 10 ms the first attempt left
-    // — not a fresh 30 ms. Before, each attempt raced its own soft deadline, so
-    // this returned a model result at ~40 ms and the player waited twice the
-    // budget they were promised.
-    //
-    // Assert the ABSOLUTE deadline handed to each provider call, not elapsed
-    // wall-clock time: the shared clock is visible in the deadline, while a
-    // 30 ms budget sits below a loaded runner's timer resolution (CI overshoots
-    // it by >10 ms, which is what made the old wall-clock bound flaky).
-    expect(attempt).toBe(2);
-    expect(result).toEqual({ ok: false, reason: 'unparseable' });
-    const [first, second] = attempts;
-    if (first === undefined || second === undefined) {
-      throw new Error(`expected one provider call per attempt, got ${attempts.length}`);
+      // The retry WAS attempted, but it only had the 10 ms the first attempt left
+      // — not a fresh 30 ms. Before, each attempt raced its own soft deadline, so
+      // this returned a model result at ~40 ms and the player waited twice the
+      // budget they were promised.
+      // The fake clock controls both provider delays and absolute deadlines.
+      expect(attempt).toBe(2);
+      expect(result).toEqual({ ok: false, reason: 'unparseable' });
+      const [first, second] = attempts;
+      if (first === undefined || second === undefined) {
+        throw new Error(`expected one provider call per attempt, got ${attempts.length}`);
+      }
+      if (first.deadlineAt === undefined || second.deadlineAt === undefined) {
+        throw new Error('every attempt must be bounded by an absolute deadline');
+      }
+      // ONE clock: the retry is bounded by the deadline the FIRST attempt was
+      // given. Restarting the budget would hand it a later one.
+      expect(second.deadlineAt).toBe(first.deadlineAt);
+      // Anchored to the soft budget, not the hard one: no attempt is ever granted
+      // more than the whole budget ahead of the moment it was made.
+      expect(first.deadlineAt - first.calledAt).toBe(softDeadlineMs);
+      expect(second.deadlineAt - second.calledAt).toBe(10);
+    } finally {
+      jest.clearAllTimers();
+      jest.useRealTimers();
     }
-    if (first.deadlineAt === undefined || second.deadlineAt === undefined) {
-      throw new Error('every attempt must be bounded by an absolute deadline');
-    }
-    // ONE clock: the retry is bounded by the deadline the FIRST attempt was
-    // given. Restarting the budget would hand it a later one.
-    expect(second.deadlineAt).toBe(first.deadlineAt);
-    // Anchored to the soft budget, not the hard one: no attempt is ever granted
-    // more than the whole budget ahead of the moment it was made.
-    expect(first.deadlineAt - first.calledAt).toBeLessThanOrEqual(softDeadlineMs);
-    expect(second.deadlineAt - second.calledAt).toBeLessThanOrEqual(softDeadlineMs);
   });
 
   it('a slow first attempt followed by a VALID retry is abandoned, not honoured', async () => {

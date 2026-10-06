@@ -1,6 +1,6 @@
-// packages/frontend/local-runtime/src/lib/ort_runtime.test.ts
+// packages/frontend/local-runtime/tests/ort_runtime.test.ts
 import { describe, expect, test } from 'bun:test';
-import { ORT_RUNTIME_VERSION, ortWasmPaths, resolveOrtBaseUrl } from './ort_runtime.ts';
+import { ORT_RUNTIME_VERSION, ortWasmPaths, resolveOrtBaseUrl } from '../src/lib/ort_runtime.ts';
 
 // Check the installed glue, not just a mocked runtime configuration surface.
 describe('ORT native WebGPU ABI', () => {
