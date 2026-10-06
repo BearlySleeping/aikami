@@ -191,9 +191,27 @@ export const installGameTestSeam = (deps: GameTestSeamOptions): void => {
     let combatCleanupResumeCount = 0;
     let combatCleanupResumeBaseline = 0;
     let combatEndTurnDispatchCount = 0;
+    let startedEncounter:
+      | {
+          encounterId?: string | null;
+          participantIds: number[];
+          enemyName?: string;
+          engine?: string;
+        }
+      | undefined;
     // C-531: flipped by MAP_LOADED — see `isMapReady` below.
     let mapLoaded = false;
     const testBridge = createEngineBridge();
+    bridgeUnsubscribers.push(
+      testBridge.on('COMBAT_STARTED', (event) => {
+        startedEncounter = {
+          encounterId: event.encounterId,
+          participantIds: [...event.participantIds],
+          enemyName: event.enemyName,
+          engine: event.engine,
+        };
+      }),
+    );
     bridgeUnsubscribers.push(
       testBridge.onCommand('COMBAT_END_TURN', () => {
         combatEndTurnDispatchCount += 1;
@@ -283,6 +301,32 @@ export const installGameTestSeam = (deps: GameTestSeamOptions): void => {
           combatCleanupResumeBaseline = combatCleanupResumeCount;
           gameOverlayService.startCombat(options);
         },
+        // Only the conversation opener is deterministic; the chip, executor,
+        // content-pack projection and worker start are all production code.
+        openCombatDialogue: (npcId: string): void => {
+          const npc = contentPack.getNpc(npcId);
+          if (!npc) {
+            return;
+          }
+          npcDialogueService.startDialogue({
+            npcData: {
+              npcId,
+              npcName: npc.name,
+              dialog: 'Hands off!',
+              initialSuggestions: [
+                {
+                  id: 'fight_back_punch',
+                  label: 'Fight back',
+                  intentType: 'combat',
+                  prefillText: 'Fight back',
+                },
+              ],
+            },
+            setOverlay: () => gameOverlayService.setActive('DIALOGUE'),
+            pauseEngine: () => gameEngineService.pauseEngine(),
+          });
+        },
+        getStartedEncounter: () => startedEncounter,
         getCombatEndTurnDispatchCount: (): number => combatEndTurnDispatchCount,
         scheduleCombatEndedCleanup: (): void => {
           testBridge.emit({ type: 'COMBAT_ENDED', victory: true });

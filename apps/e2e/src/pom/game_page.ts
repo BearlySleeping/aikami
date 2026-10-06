@@ -448,6 +448,13 @@ export class GamePage {
     });
   }
 
+  /** Verifies the NPC identity in either legacy portrait or v2 tactical UI. */
+  async expectCombatEnemy(name: string): Promise<void> {
+    const { expect } = await import('@playwright/test');
+    await expect(this.page.getByRole('region', { name: 'Combat actions' })).toContainText(name);
+    await expect(this.page.getByTestId('enemy-hp-text')).toBeVisible();
+  }
+
   /** Assert the complete combat surface is mounted and visible. */
   async expectCombatUiVisible(): Promise<void> {
     const { expect } = await import('@playwright/test');

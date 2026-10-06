@@ -98,23 +98,23 @@ const _currentRound = (world: World): number => getDriverActiveTurn(world)?.roun
 // Public API
 // ---------------------------------------------------------------------------
 
-const initCombat = (world: World, bridge: EngineBridge, seed?: number): void => {
-  if (!world || !bridge) {
+const initCombat = (
+  world: World,
+  bridge: EngineBridge,
+  seed?: number,
+  encounter?: { encounterId: string; playerEntityId: number },
+): void => {
+  if (!world || !bridge || hasCombatTurns(world)) {
     return;
   }
 
-  if (hasCombatTurns(world)) {
-    return;
-  }
-
-  if (seed !== undefined) {
-    setCombatSeed({ world, seed });
-  } else {
-    setCombatSeed({ world, seed: null });
-  }
+  setCombatSeed({ world, seed: seed ?? null });
 
   startCombatTurns(world, bridge, {
-    playerEntityId: 1,
+    playerEntityId: encounter?.playerEntityId ?? 1,
+    encounterId: encounter?.encounterId,
+    seed: seed ?? 0,
+    engine: 'legacy',
     playerCombatantId: 'player',
     hooks: {
       runAiTurn: _runAiTurn,

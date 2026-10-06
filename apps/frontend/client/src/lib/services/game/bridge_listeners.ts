@@ -250,6 +250,7 @@ export const setupBridgeListeners = async (params: SetupBridgeListenersParams): 
   bridge.on('COMBAT_STARTED', (event) => {
     if (
       gameOverlayService.activeOverlay !== 'NONE' &&
+      gameOverlayService.activeOverlay !== 'DIALOGUE' &&
       gameOverlayService.activeOverlay !== 'COMBAT'
     ) {
       return;
@@ -257,8 +258,18 @@ export const setupBridgeListeners = async (params: SetupBridgeListenersParams): 
     // Review F9: the presentation now belongs to THIS run. A delayed callback
     // scheduled by a previous encounter is inert from here on.
     combatSettlementLedger.begin(presentationIdentityFor(event.encounterId, event.encounterRunId));
+    const dialogueNpc =
+      gameOverlayService.activeOverlay === 'DIALOGUE' ? npcDialogueService.activeNpc : undefined;
+    const sameEncounter = event.encounterId === combatService.encounterId;
+    if (gameOverlayService.activeOverlay === 'DIALOGUE') {
+      gameOverlayService.endDialogue();
+    }
     combatService.startCombat({
-      enemyName: event.enemyName ?? 'Unknown Enemy',
+      enemyName:
+        event.enemyName ??
+        dialogueNpc?.npcName ??
+        (sameEncounter ? combatService.enemyName : 'Unknown Enemy'),
+      enemyNpcId: dialogueNpc?.npcId ?? (sameEncounter ? combatService.enemyNpcId : undefined),
       // No invented HP: the legacy funnel reports the enemy's HP on the event,
       // the v2 funnel reports it through COMBAT_STATE_UPDATE (which the driver
       // and the sync snapshot both emit). A placeholder here showed an 80-HP
@@ -287,12 +298,7 @@ export const setupBridgeListeners = async (params: SetupBridgeListenersParams): 
       reasonCode: event.reasonCode,
       messageKey: event.messageKey,
     });
-    if (gameOverlayService.activeOverlay === 'COMBAT') {
-      // No `COMBAT_STARTED` arrived for this command, so the combat service was
-      // never seeded: clearing the stack is enough, and it restores EXPLORE
-      // input (the engine was paused when the overlay opened).
-      gameOverlayService.closeCombat();
-    }
+    gameOverlayService.rejectCombatStart();
   });
 
   bridge.on('COMBAT_LOG', (event) => {

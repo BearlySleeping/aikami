@@ -153,7 +153,9 @@ class CombatService
       allowNonCombatResolution: options.allowNonCombatResolution,
     };
     options.setActive('COMBAT');
-    gameEngineService.pauseEngine();
+    // COMBAT mode gates exploration input. Keep renderer/worker ticks alive:
+    // pausing here froze legacy turns and the tactical stage after entry.
+    gameEngineService.resumeEngine();
   }
 
   retryEncounter(options: { setActive: (overlay: GameOverlayType) => void }): void {

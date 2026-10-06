@@ -557,14 +557,14 @@ export class GameCompositionRoot
           if (roster === undefined) {
             return false;
           }
-          gameOverlayService.startCombat({
+          const outcome = gameOverlayService.startCombat({
             enemyName: opts.npcName,
             encounterId,
             // Same seed for the same encounter: a retry reproduces the fight.
             seed: djb2Hash(encounterId ?? ''),
             roster,
           });
-          return true;
+          return outcome.ok;
         },
         recruit: (opts) => {
           // Use partyRosterService to recruit the companion (C-340)

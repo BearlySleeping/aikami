@@ -129,11 +129,9 @@ export type GameOverlayServiceInterface = BaseFrontendClassInterface & {
     /** Pinned engine choice; defaults to the resolved `combatEngine` flag. */
     engine?: CombatEngineKind;
   }): CombatStartOutcome;
-  /**
-   * Dismisses an active combat overlay and restores engine input (C-500).
-   * Combat entry pauses the engine, so leaving must resume it — otherwise
-   * Escape would pop the overlay but leave the world paused.
-   */
+  /** Shows a worker rejection; an active dialogue remains intact. */
+  rejectCombatStart(): void;
+  /** Dismisses an active combat overlay and restores exploration (C-500). */
   closeCombat(): void;
 
   // ── Auto-Save Scheduling (C-334) ──

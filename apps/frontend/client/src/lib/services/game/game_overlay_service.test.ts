@@ -2,6 +2,7 @@
 
 import { afterAll, beforeEach, describe, expect, mock, spyOn, test } from 'bun:test';
 import { createEngineBridge, type EngineBridge } from '@aikami/frontend/engine';
+import { setDialogCapabilities } from '@aikami/frontend/services/base';
 import type { GameOverlayType, OverlayStackEntry } from '$types';
 import { createRealLocalDatabase } from '../__tests__/local_database_fixture.ts';
 import { campaignService } from '../campaign/campaign_service.svelte.ts';
@@ -232,6 +233,38 @@ describe('GameOverlayService', () => {
     expect(outcome).toEqual({ ok: true });
     expect(service.activeOverlay).toBe('COMBAT');
     expect(send).toHaveBeenCalledTimes(1);
+  });
+
+  test('dialogue survives dispatch and worker rejection with a visible error', () => {
+    const bridge = createEngineBridge();
+    const send = spyOn(bridge, 'send').mockImplementation(() => {});
+    const showSnackbar = mock(() => {});
+    const previous = setDialogCapabilities({
+      showSnackbar,
+      showConditionalSnackbar: () => {},
+      setAppLoading: () => {},
+      open: async () => undefined,
+    });
+    try {
+      service.setBridge(bridge);
+      service.setActive('DIALOGUE');
+      const outcome = service.startCombat({
+        enemyName: 'Rollo',
+        encounterId: 'inn_wand_encounter',
+      });
+      expect(outcome.ok).toBe(true);
+      expect(send).toHaveBeenCalledTimes(1);
+      expect(service.activeOverlay).toBe('DIALOGUE');
+      service.rejectCombatStart();
+      expect(service.activeOverlay).toBe('DIALOGUE');
+      expect(showSnackbar).toHaveBeenCalledWith({
+        text: 'Combat could not start. Please try again.',
+        type: 'error',
+      });
+    } finally {
+      setDialogCapabilities(previous);
+      send.mockRestore();
+    }
   });
 
   // ── Keyboard handler ──

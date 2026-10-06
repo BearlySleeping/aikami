@@ -10,6 +10,7 @@
 //     src/lib/views/combat/combat_view_model.test.ts
 
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
+import { createEngineBridge } from '@aikami/frontend/engine';
 
 import {
   type CombatViewModelInterface,
@@ -67,6 +68,27 @@ const armViewModel = (
 // ── Tests ─────────────────────────────────────────────────────────────────
 
 describe('CombatViewModel — C-148 Combat Immersion', () => {
+  test('metadata-free combat sync preserves seeded NPC identity and real HP', async () => {
+    const bridge = createEngineBridge();
+    const vm = createViewModel({ engine: { createBridge: async () => bridge } });
+    vm.enemyName = 'Rollo the Grasper';
+    vm.enemyNpcId = 'rollo_grasper';
+    vm.enemyHp = 20;
+    vm.enemyMaxHp = 20;
+    await vm.initialize();
+    bridge.emit({
+      type: 'COMBAT_STARTED',
+      participantIds: [1, 2],
+      firstTurnEntityId: 1,
+      encounterId: 'inn_wand_encounter',
+      engine: 'v2',
+    });
+    expect(vm.enemyName).toBe('Rollo the Grasper');
+    expect(vm.enemyNpcId).toBe('rollo_grasper');
+    expect(vm.enemyHp).toBe(20);
+    expect(vm.enemyMaxHp).toBe(20);
+    await vm.dispose();
+  });
   // -----------------------------------------------------------------------
   // Dice roll state
   // -----------------------------------------------------------------------

@@ -1123,11 +1123,8 @@ export class GameOverlayService
   /**
    * Starts a production encounter through the ENGINE (C-516 AC-2).
    *
-   * The overlay opens immediately and the engine answers with a real
-   * `COMBAT_STARTED` (real participants, real HP), which the bridge listener
-   * forwards to the combat service — there is no hardcoded roster here any
-   * more. `engine` is the resolved `combatEngine` flag, read ONCE here and
-   * pinned on the encounter.
+   * Dialogue remains open until the engine acknowledges real participants.
+   * Other callers open immediately. Engine preference is pinned per encounter.
    */
   startCombat(options: {
     enemyName: string;
@@ -1142,15 +1139,10 @@ export class GameOverlayService
     const encounterId = options.encounterId ?? options.enemyNpcId ?? '';
     const engine = options.engine ?? featureFlags.combatEngine;
 
-    // Open the combat overlay first: `COMBAT_STARTED` is ignored when another
-    // overlay is active, and the overlay must own the screen while the engine
-    // spawns the roster.
-    this.setActive('COMBAT');
-    if (this.activeOverlay !== 'COMBAT') {
-      // The overlay router refused the activation (an incompatible overlay is
-      // on screen). Starting the engine here would spawn a fight the player
-      // cannot see, so NOTHING is dispatched and the caller gets a typed
-      // reason instead of silence (C-525 R-5).
+    // Dialogue stays intact until COMBAT_STARTED acknowledges a valid roster.
+    const fromDialogue = this.activeOverlay === 'DIALOGUE';
+    if (!this._bridge || (!this.canOpenOverlay('COMBAT') && this.activeOverlay !== 'COMBAT')) {
+      // No dispatch without a bridge and an available combat surface (C-525).
       this.debug('startCombat:overlay-unavailable', { encounterId });
       return {
         ok: false,
@@ -1158,7 +1150,10 @@ export class GameOverlayService
         messageKey: COMBAT_START_OVERLAY_UNAVAILABLE_KEY,
       };
     }
-    this._bridge?.send({
+    if (!fromDialogue) {
+      this.setActive('COMBAT');
+    }
+    this._bridge.send({
       type: 'COMBAT_START_ENCOUNTER',
       encounterId,
       seed: options.seed ?? 0,
@@ -1174,11 +1169,13 @@ export class GameOverlayService
     return { ok: true };
   }
 
-  /**
-   * Dismisses the combat overlay and restores engine input (C-500). Combat
-   * entry pauses the engine, so the first cleanup clears the stack, restores
-   * EXPLORE, and resumes input. Repeated delayed cleanup is a no-op.
-   */
+  /** Surfaces worker rejection without closing an active conversation. */
+  rejectCombatStart(): void {
+    this.showSnackbar({ text: 'Combat could not start. Please try again.', type: 'error' });
+    this.closeCombat();
+  }
+
+  /** Dismisses combat and restores exploration; delayed cleanup is a no-op. */
   closeCombat(): void {
     if (this.activeOverlay !== 'COMBAT') {
       return;

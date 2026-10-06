@@ -1204,9 +1204,9 @@ export class CombatViewModel
       // Review F9: the previous encounter's pending reaction window and its
       // optional countdown must not survive into this one.
       this._reactionFlow.reset();
-      this.enemyName = event.enemyName || 'Unknown Enemy';
-      this.enemyHp = event.enemyHp ?? 80;
-      this.enemyMaxHp = event.enemyMaxHp ?? 80;
+      this.enemyName = event.enemyName || this.enemyName;
+      this.enemyHp = event.enemyHp ?? this.enemyHp;
+      this.enemyMaxHp = event.enemyMaxHp ?? this.enemyMaxHp;
       this.enemyEntityId =
         event.enemyId ??
         event.participantIds.find((id: number) => id !== this._playerEntityId) ??

@@ -61,6 +61,7 @@ describe('setupBridgeListeners (AC-5)', () => {
       getInteractableStates: mock(() => ({})),
       startCombat: mock(() => {}),
       endDialogue: mock(() => {}),
+      rejectCombatStart: mock(() => {}),
     };
 
     mockNpcDialogueService = {
@@ -362,7 +363,9 @@ describe('setupBridgeListeners (AC-5)', () => {
 
   // ── Combat Events ──
 
-  test('COMBAT_STARTED should call combatService.startCombat', async () => {
+  test('COMBAT_STARTED acknowledges dialogue and preserves NPC identity', async () => {
+    mockGameOverlayService.activeOverlay = 'DIALOGUE';
+    mockNpcDialogueService.activeNpc = { npcId: 'rollo_grasper', npcName: 'Rollo the Grasper' };
     await setupBridgeListeners({
       gameOverlayService: mockGameOverlayService as never,
       npcDialogueService: mockNpcDialogueService as never,
@@ -387,7 +390,19 @@ describe('setupBridgeListeners (AC-5)', () => {
     });
 
     const startCombat = mockCombatService.startCombat as ReturnType<typeof mock>;
-    expect(startCombat).toHaveBeenCalled();
+    expect(startCombat).toHaveBeenCalledWith(
+      expect.objectContaining({ enemyNpcId: 'rollo_grasper', participantIds: [1, 2] }),
+    );
+    expect(mockGameOverlayService.endDialogue).toHaveBeenCalledTimes(1);
+
+    mockGameOverlayService.activeOverlay = 'DIALOGUE';
+    bridgeListeners.get('COMBAT_START_REJECTED')?.({
+      encounterId: 'inn_wand_encounter',
+      reasonCode: 'invalidStateShape',
+    });
+    expect(mockGameOverlayService.activeOverlay).toBe('DIALOGUE');
+    expect(mockGameOverlayService.closeCombat).not.toHaveBeenCalled();
+    expect(mockGameOverlayService.rejectCombatStart).toHaveBeenCalledTimes(1);
   });
 
   // ── All events registered ──
