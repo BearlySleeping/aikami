@@ -109,6 +109,7 @@ tasks:
       # silently ignoring the opt-in. A `$`-prefixed input is moon's
       # environment-variable input form.
       - '$AIKAMI_INCLUDE_DEV_ROUTES'
+      - '$AIKAMI_BUILD_MODE'
       # 🔴 Load-bearing. Vite bundles these workspace packages FROM SOURCE via
       # TS path aliases — the emitted bundle contains their code, so their
       # files are real build inputs. They were previously absent from the hash,

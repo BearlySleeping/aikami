@@ -84,8 +84,9 @@ Two surfaces:
   browse published assets by category with licence and attribution for each.
   This is the player-facing surface.
 - **`/dev/asset-browser`** — a development-only route with a folder tree, file
-  grid, and category tabs. It is compiled out of production builds and is
-  reached when running from source. It is currently compiled **in** to `staging`
+  grid, and category tabs. It is compiled out of production builds by default;
+  `AIKAMI_INCLUDE_DEV_ROUTES=true` includes it. It is reached when running from
+  source. It is currently compiled **in** to `staging`
   builds as well — a temporary escape hatch — and can be stripped from any build
   with `AIKAMI_INCLUDE_DEV_ROUTES=false`. See
   `apps/frontend/client/.env.example`.
