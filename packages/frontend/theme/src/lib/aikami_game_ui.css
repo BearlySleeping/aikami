@@ -1069,6 +1069,30 @@
     outline-offset: 2px;
   }
 
+  /* Warm parchment surfaces (pause menu, management host, dialogue, settings)
+   * use the ember accent for focus so it harmonizes with their brass-warmed
+   * backgrounds instead of clashing with the cool violet primary. */
+  [data-aikami-theme-scope]
+    .game-pause-panel
+    :is(a, button, input, textarea, select, [tabindex]):focus-visible,
+  [data-aikami-theme-scope]
+    .game-workspace
+    :is(a, button, input, textarea, select, [tabindex]):focus-visible,
+  [data-aikami-theme-scope]
+    .game-stage
+    :is(a, button, input, textarea, select, [tabindex]):focus-visible,
+  [data-aikami-theme-scope]
+    .game-settings-panel
+    :is(a, button, input, textarea, select, [tabindex]):focus-visible,
+  [data-aikami-theme-scope]
+    .game-pause-scrim
+    :is(a, button, input, textarea, select, [tabindex]):focus-visible,
+  [data-aikami-theme-scope]
+    .game-workspace-backdrop
+    :is(a, button, input, textarea, select, [tabindex]):focus-visible {
+    outline-color: var(--ui-accent);
+  }
+
   /* ── HUD widget scaling (C-543 PART G — no zoom, no transform) ─────── */
 
   :where([data-aikami-theme-scope]) {

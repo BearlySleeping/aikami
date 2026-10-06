@@ -73,7 +73,11 @@ describe('resolveIncludeDevRoutes', () => {
 
   test('the explicit false override wins on a dev server', () => {
     expect(
-      resolveIncludeDevRoutes({ command: 'serve', mode: 'development', env: { [DEV_ROUTES_ENV_VAR]: 'false' } }),
+      resolveIncludeDevRoutes({
+        command: 'serve',
+        mode: 'development',
+        env: { [DEV_ROUTES_ENV_VAR]: 'false' },
+      }),
     ).toBe(false);
   });
 

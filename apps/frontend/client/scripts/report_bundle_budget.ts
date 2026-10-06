@@ -506,7 +506,7 @@ export const runCli = (argv: string[] = process.argv.slice(2)): number => {
     console.log(
       [
         'report_bundle_budget: --expect-dev-routes — ratchet skipped.',
-        '  This build\'s route graph is not the one the committed baseline measures, so',
+        "  This build's route graph is not the one the committed baseline measures, so",
         '  the numbers above are informational only; they are not comparable to the',
         '  baseline and are not written to it.',
         '',

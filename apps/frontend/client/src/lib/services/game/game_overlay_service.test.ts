@@ -358,6 +358,79 @@ describe('GameOverlayService', () => {
     expect(service.activeOverlay).toBe('NONE');
   });
 
+  // ── Interaction prompt (C-327 AC-2) ──
+  //
+  // The prompt has exactly ONE input: the target the engine published. These
+  // cover the failure the derived flag exists to prevent — a prompt restored
+  // from a remembered target, which the dirty-checked engine can never correct.
+
+  const guardTarget = { verb: 'Talk to', targetName: 'Bram the Guard' };
+
+  test('shows the prompt only while the engine reports a target', () => {
+    expect(service.interactionPromptVisible).toBe(false);
+    expect(service.interactionPromptLabel).toBe('');
+
+    service.setInteractionPrompt({ target: guardTarget, targetScreenX: 10, targetScreenY: 20 });
+
+    expect(service.interactionPromptVisible).toBe(true);
+    expect(service.interactionPromptLabel).toMatch(/Talk to Bram the Guard$/);
+    expect(service.interactionPromptScreenX).toBe(10);
+    expect(service.interactionPromptScreenY).toBe(20);
+
+    service.clearInteractionPrompt();
+
+    expect(service.interactionPromptVisible).toBe(false);
+    expect(service.interactionPromptLabel).toBe('');
+    expect(service.interactionPromptScreenX).toBeUndefined();
+  });
+
+  test('withdraws the prompt for any overlay and hands it back on close', () => {
+    service.setInteractionPrompt({ target: guardTarget });
+    expect(service.interactionPromptVisible).toBe(true);
+
+    service.setActive('DIALOGUE');
+    expect(service.interactionPromptVisible).toBe(false);
+
+    service.clearActive();
+    expect(service.interactionPromptVisible).toBe(true);
+  });
+
+  test('a cleared target is NOT resurrected by closing an overlay', () => {
+    // The regression: the overlay router used to restore visibility from
+    // remembered metadata. `INTERACTION_TARGET_CHANGED` is dirty-checked, so
+    // once the engine had published the clear there was no later event to undo
+    // the stale restore — the prompt stayed until a map transition or a reload.
+    service.setInteractionPrompt({ target: guardTarget });
+    service.setActive('PAUSE_MENU');
+    service.clearInteractionPrompt();
+
+    service.popOverlay();
+
+    expect(service.interactionPromptVisible).toBe(false);
+    expect(service.interactionPromptLabel).toBe('');
+  });
+
+  test('a map load drops the previous map target', () => {
+    service.setInteractionPrompt({ target: guardTarget, targetScreenX: 5, targetScreenY: 5 });
+
+    service.onMapLoaded();
+
+    expect(service.interactionPromptVisible).toBe(false);
+    expect(service.interactionPromptScreenX).toBeUndefined();
+  });
+
+  test('a retained target keeps tracking the camera while overlays open and close', () => {
+    service.setInteractionPrompt({ target: guardTarget, targetScreenX: 5, targetScreenY: 5 });
+    service.setActive('INVENTORY');
+
+    service.setInteractionPromptPosition({ targetScreenX: 40, targetScreenY: 60 });
+    service.popOverlay();
+
+    expect(service.interactionPromptVisible).toBe(true);
+    expect(service.interactionPromptScreenX).toBe(40);
+    expect(service.interactionPromptScreenY).toBe(60);
+  });
+
   // ── Overlay Stack (C-332 AC-2) ──
 
   test('should push overlay onto stack', () => {

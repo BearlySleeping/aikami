@@ -120,7 +120,7 @@ const ANCHORS: readonly HudSlot[] = HUD_ANCHOR_ORDER;
             {:else if widget.widgetId === 'interaction'}
               <InteractionPrompt
                 label={viewModel.interactionPromptLabel}
-                visible={true}
+                visible={viewModel.interactionPromptVisible}
                 screenX={viewModel.interactionPromptScreenX}
                 screenY={viewModel.interactionPromptScreenY}
               />

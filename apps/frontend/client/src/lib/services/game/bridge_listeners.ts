@@ -46,7 +46,6 @@ import type { CombatServiceInterface } from './combat_service.svelte';
 import { combatSettlementLedger } from './combat_settlement_ledger.svelte.ts';
 import type { GameEngineServiceInterface } from './game_engine_service.svelte';
 import type { GameOverlayServiceInterface } from './game_overlay_service.svelte';
-import type { InputActionServiceInterface } from './input_action_service.svelte.ts';
 import type { NpcDialogueServiceInterface } from './npc_dialogue_service.svelte';
 import type { OnboardingHintServiceInterface } from './onboarding_hint_service.svelte.ts';
 import type { PartyFollowServiceInterface } from './party_follow_service.svelte.ts';
@@ -63,7 +62,6 @@ export type SetupBridgeListenersParams = {
   combatService: CombatServiceInterface;
   timeService: TimeServiceInterface;
   audioService: AudioServiceInterface;
-  inputActionService: InputActionServiceInterface;
   onboardingHintService: OnboardingHintServiceInterface;
   partyFollowService: PartyFollowServiceInterface;
   /**
@@ -86,7 +84,6 @@ export const setupBridgeListeners = async (params: SetupBridgeListenersParams): 
     combatService,
     timeService,
     audioService,
-    inputActionService,
     onboardingHintService,
     partyFollowService,
     contextualTriggerService,
@@ -367,26 +364,17 @@ export const setupBridgeListeners = async (params: SetupBridgeListenersParams): 
 
   bridge.on('INTERACTION_TARGET_CHANGED', (event) => {
     if (event.targetEntityId !== undefined && event.targetName && event.targetType) {
-      // Store target metadata so the display label can react to device/binding changes.
-      // The prompt ViewModel/GUI derives the label from inputActionService.actionDisplayLabel()
-      // whenever the prompt is rendered or device/bindings change.
+      // Record only WHAT the engine selected. Whether that prompt is on screen is
+      // the overlay service's call — it already knows the overlay stack, and a
+      // second opinion computed here is a value nothing could later correct.
       const verb = event.targetType === 'npc' ? 'Talk to' : 'Pick up';
-      const keyLabel = inputActionService.actionDisplayLabel('interact');
       gameOverlayService.setInteractionPrompt({
-        label: `${keyLabel} — ${verb} ${event.targetName}`,
-        visible: gameOverlayService.activeOverlay === 'NONE',
-        targetMetadata: { verb, targetName: event.targetName },
+        target: { verb, targetName: event.targetName },
         targetScreenX: event.targetScreenX,
         targetScreenY: event.targetScreenY,
       });
     } else {
-      gameOverlayService.setInteractionPrompt({
-        label: '',
-        visible: false,
-        targetMetadata: undefined,
-        targetScreenX: undefined,
-        targetScreenY: undefined,
-      });
+      gameOverlayService.clearInteractionPrompt();
     }
 
     // Forward target changes to the onboarding service for near_interactable hints
