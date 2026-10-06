@@ -44,7 +44,8 @@ import {
 // utils barrel drags in the API client + logger. The probe itself is the
 // single source of truth shared with the text LLM worker and the start menu.
 import { isWebGPUSupported } from '@aikami/frontend/utils/browser/webgpu';
-import { env } from '@huggingface/transformers';
+import { env, PreTrainedTokenizer, StyleTextToSpeech2Model } from '@huggingface/transformers';
+import { createKokoroFetch, kokoroLoadPlan } from './kokoro_runtime.ts';
 import type {
   ErrorResponse,
   InitializeMessage,
@@ -56,12 +57,21 @@ import type {
 } from './kokoro_worker_protocol.ts';
 
 // Model files resolve through their canonical HuggingFace URLs, pinned to the
-// same revision the download control caches under. The bytes still come from
-// the app-controlled Cache Storage — a network fetch only happens for files
-// the bundle does not carry (e.g. tokenizer_config.json).
+// same revision the download control caches under. local_files_only forbids
+// model network requests, including optional tokenizer_config.json.
 configurePinnedRemoteModelResolution(env as OrtConfigurableEnv, {
   revision: KOKORO_REVISION,
 });
+// Transformers requires this flag with local_files_only. The owned cache still
+// refuses relative keys; only canonical pinned remote cache keys can answer.
+env.allowLocalModels = true;
+globalThis.fetch = createKokoroFetch({
+  fetch: globalThis.fetch.bind(globalThis),
+  match: async (cache, key) => (await caches.open(cache)).match(key),
+});
+// Transformers 4 captures fetch at import time; Kokoro's voice loader uses
+// the global instead. Both must enforce the same cache-only boundary.
+env.fetch = globalThis.fetch;
 
 // Own the cache. `useCustomCache` is only consulted when `useBrowserCache` is
 // off, so both are set; without this the relative `/models/...` lookup hits
@@ -236,18 +246,26 @@ const handleInitialize = async (message: InitializeMessage): Promise<void> => {
     // must agree with the transformers env.
     ort.env.wasm.wasmPaths = wasmPaths;
 
-    const useWebGpu = device !== 'wasm' && gpuOk;
-
-    session = await KokoroTTS.from_pretrained(modelId, {
-      dtype: 'q8',
-      device: useWebGpu ? 'webgpu' : 'wasm',
-      ...(useWebGpu ? { enableGraphCapture: true } : {}),
-    });
-    activeBackend = useWebGpu ? 'webgpu' : 'wasm';
+    if (modelId !== KOKORO_MODEL_ID || message.revision !== KOKORO_REVISION) {
+      throw new Error('Kokoro model/revision does not match the downloaded bundle.');
+    }
+    const plan = kokoroLoadPlan({ device, gpuSupported: gpuOk });
+    // Kokoro 1.2.1's from_pretrained drops revision/local_files_only options.
+    // Its public constructor accepts explicitly loaded model and tokenizer.
+    const [model, tokenizerJson] = await Promise.all([
+      StyleTextToSpeech2Model.from_pretrained(modelId, plan.model),
+      (await fetch(plan.tokenizer.key)).json(),
+    ]);
+    // Transformers 4's AutoTokenizer probes tokenizer_config.json before
+    // forwarding local_files_only. This bundle predates that required file;
+    // use its public constructor and the pinned metadata shipped in the plan.
+    session = new KokoroTTS(model, new PreTrainedTokenizer(tokenizerJson, plan.tokenizer.config));
+    activeBackend = plan.model.device;
 
     const response: InitializeResponse = {
       type: 'ready',
       backend: activeBackend,
+      fallbackReason: plan.fallbackReason,
       instanceId: INSTANCE_ID,
     };
     self.postMessage(response);
