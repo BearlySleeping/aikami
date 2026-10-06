@@ -225,6 +225,11 @@ class SessionService
     }
 
     this.isEndingSession = true;
+    const endingSession = this.activeSession;
+    const endingCampaignId = campaignService.activeCampaign?.id;
+    const isCurrent = (): boolean =>
+      this.activeSession === endingSession &&
+      campaignService.activeCampaign?.id === endingCampaignId;
 
     try {
       const messageCount = chatService.messages.length;
@@ -234,15 +239,10 @@ class SessionService
 
       let summary: SessionSummary | undefined;
 
-      // Only generate summary if there are enough messages
-      if (messageCount >= MIN_MESSAGES_FOR_SUMMARY) {
+      // NPC conversations count even when the separate GM chat is empty.
+      if (messageCount >= MIN_MESSAGES_FOR_SUMMARY || sessionSummaryService.hasDialogue) {
         try {
           summary = await sessionSummaryService.generateSummary(playtimeMinutes);
-          this.latestSummary = summary;
-          this.debug('endSession:summary-generated', {
-            summaryId: summary.id,
-            synopsisLength: summary.synopsis.length,
-          });
         } catch (error) {
           this.warn('endSession:summary-failed', { error: String(error) });
           // Proceed without summary — session still ends
@@ -251,27 +251,37 @@ class SessionService
         this.debug('endSession:skipping-summary', { messageCount });
       }
 
-      // Build the completed session
+      if (!isCurrent()) {
+        return;
+      }
+      if (summary) {
+        this.latestSummary = summary;
+      }
+      // Build the completed session from the identity captured before any await.
       const endedSession: GameSession = {
-        ...this.activeSession,
+        ...endingSession,
         endedAt: new Date().toISOString(),
         isActive: false,
         summary,
         messageCount,
         durationMinutes: playtimeMinutes,
-        characterSnapshots: await this._captureCharacterSnapshots(),
+        characterSnapshots: {
+          player: {
+            level: playerStateService.playerLevel,
+            xp: playerStateService.playerXp,
+            hp: playerStateService.playerHp,
+          },
+        },
       };
 
       await this._put(endedSession);
+      if (!isCurrent()) {
+        return;
+      }
       this.activeSession = endedSession;
 
       // Refresh sessions list
       await this.loadSessions({ gameId: endedSession.gameId });
-
-      this.debug('endSession:complete', {
-        sessionNumber: endedSession.sessionNumber,
-        messageCount,
-      });
 
       // Trigger async context compaction if threshold reached
       if (campaignId) {
@@ -813,21 +823,6 @@ class SessionService
   }
 
   // ── Private: Recap generation ───────────────────────────────────────
-
-  /**
-   * Captures a snapshot of party member stats for the session summary.
-   */
-  private async _captureCharacterSnapshots(): Promise<
-    Record<string, { level: number; xp: number; hp: number }>
-  > {
-    return {
-      player: {
-        level: playerStateService.playerLevel,
-        xp: playerStateService.playerXp,
-        hp: playerStateService.playerHp,
-      },
-    };
-  }
 
   /**
    * Generates a recap message from the previous session's summary.

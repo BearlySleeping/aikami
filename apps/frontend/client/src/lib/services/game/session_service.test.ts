@@ -5,7 +5,8 @@
 //
 // Contract: C-240 Session Management
 
-import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test';
+import { afterAll, beforeEach, describe, expect, mock, spyOn, test } from 'bun:test';
+import type { SessionSummary } from '$types';
 import { createRealLocalDatabase } from '../__tests__/local_database_fixture.ts';
 
 const fixture = await createRealLocalDatabase();
@@ -81,6 +82,40 @@ describe('SessionService', () => {
     await service.endSession({ playtimeMinutes: 0 });
     expect(service.chatLocked).toBe(true);
     expect(service.activeSession?.isActive).toBe(false);
+  });
+
+  test('a pending session end cannot end or save over a newly started session', async () => {
+    const { chatService } = await import('../chat/chat.svelte.ts');
+    const { sessionSummaryService } = await import('../gm/session_summary_service.svelte.ts');
+    let rejectSummary: ((reason: Error) => void) | undefined;
+    const generation = spyOn(sessionSummaryService, 'generateSummary').mockImplementation(
+      () =>
+        new Promise<SessionSummary>((_resolve, reject) => {
+          rejectSummary = reject;
+        }),
+    );
+    try {
+      await service.startSession({ gameId: 'old-game' });
+      for (let index = 0; index < 10; index++) {
+        chatService.addMessage({
+          id: `stale-message-${index}`,
+          text: 'Recorded dialogue',
+          sender: 'user',
+          timestamp: new Date(),
+        });
+      }
+      const pending = service.endSession({ playtimeMinutes: 5 });
+      await service.startSession({ gameId: 'new-game' });
+      rejectSummary?.(new Error('retired generation'));
+      await pending;
+      expect(service.activeSession?.gameId).toBe('new-game');
+      expect(service.activeSession?.isActive).toBe(true);
+      await service.loadSessions({ gameId: 'new-game' });
+      expect(service.sessions[0]?.isActive).toBe(true);
+    } finally {
+      generation.mockRestore();
+      chatService.clear();
+    }
   });
 
   test('should not generate summary for sessions with < 10 messages', async () => {

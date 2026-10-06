@@ -241,7 +241,7 @@ class NpcMemoryService
   }): Promise<void> {
     this._syncCampaign();
     const lines = toMemoryLines(options.messages);
-    if (!lines.some((line) => line.role === 'player')) {
+    if (!lines.some((line) => line.role === 'player') && lines.length < 2) {
       this.debug('recordConversation:skip-no-player-turn', { npcId: options.npcId });
       return Promise.resolve();
     }

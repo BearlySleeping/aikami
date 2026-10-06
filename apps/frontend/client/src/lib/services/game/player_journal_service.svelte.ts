@@ -82,6 +82,9 @@ class PlayerJournalService
   extends BaseFrontendClass<PlayerJournalServiceOptions>
   implements PlayerJournalServiceInterface, SerializableService<PlayerJournalSnapshot>
 {
+  private _generation = 0;
+  private _campaignId: string | undefined;
+  private _loadTicket = 0;
   entries = $state<PlayerJournalEntry[]>([]);
 
   constructor(options: PlayerJournalServiceOptions) {
@@ -98,6 +101,8 @@ class PlayerJournalService
     tags?: readonly string[];
   }): Promise<PlayerJournalEntry> {
     const { campaignId, sessionNumber, title, content, tags = [] } = options;
+    this._campaignId ??= campaignId;
+    const generation = this._generation;
 
     // Validate
     const trimmedTitle = title.trim();
@@ -138,7 +143,9 @@ class PlayerJournalService
       ],
     });
 
-    this.entries = [entry, ...this.entries];
+    if (generation === this._generation && (!this._campaignId || this._campaignId === campaignId)) {
+      this.entries = [entry, ...this.entries];
+    }
     this.debug('journal:created', { id: entry.id, title: trimmedTitle });
 
     return entry;
@@ -147,6 +154,13 @@ class PlayerJournalService
   /** @inheritdoc */
   async loadEntries(options: { campaignId: string }): Promise<void> {
     const { campaignId } = options;
+    if (this._campaignId !== campaignId) {
+      this._campaignId = campaignId;
+      this._generation++;
+      this.entries = [];
+    }
+    const generation = this._generation;
+    const ticket = ++this._loadTicket;
 
     const db = await getLocalDatabase();
     const result = await db.query({
@@ -154,6 +168,9 @@ class PlayerJournalService
       args: [campaignId],
     });
 
+    if (generation !== this._generation || ticket !== this._loadTicket) {
+      return;
+    }
     this.entries = result.rows.map((row: Record<string, unknown>) => ({
       id: row.id as string,
       campaignId: row.campaign_id as string,
@@ -252,6 +269,8 @@ class PlayerJournalService
 
   /** @inheritdoc */
   reset(): void {
+    this._generation++;
+    this._campaignId = undefined;
     this.entries = [];
   }
 
@@ -262,7 +281,9 @@ class PlayerJournalService
   }
 
   hydrate(data: PlayerJournalSnapshot): void {
+    this._generation++;
     this.entries = data.entries ?? [];
+    this._campaignId = this.entries[0]?.campaignId;
   }
 }
 

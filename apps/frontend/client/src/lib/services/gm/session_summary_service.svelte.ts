@@ -1,7 +1,7 @@
 // apps/frontend/client/src/lib/services/gm/session_summary_service.svelte.ts
 //
-// End-of-session summarization service. Generates a SessionSummary via
-// a low-temperature LLM call, stores it in memory, and provides the
+// End-of-session summarization service. Builds a SessionSummary from
+// recorded conversation evidence, stores it in memory, and provides the
 // resumePoint for the GameSaveService to restore game state.
 //
 // Contract: C-235 GM Narrative Director
@@ -11,9 +11,10 @@ import {
   type BaseFrontendClassInterface,
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services/base';
+import { readConversationRecap } from '$lib/utils/journal/conversation_recap.ts';
 import type { SessionSummary } from '$types';
-import { textGenerationService } from '../ai/text_generation_service.svelte.ts';
 import { campaignService } from '../campaign/campaign_service.svelte.ts';
+import { playerJournalService } from '../game/player_journal_service.svelte.ts';
 import { registerSerializable, type SerializableService } from '../game/serializable_service';
 import { worldStateService } from '../game/world_state_service.svelte.ts';
 
@@ -29,12 +30,12 @@ export type SessionSummaryServiceInterface = BaseFrontendClassInterface & {
 
   /** Whether a summarization call is in progress. */
   readonly isGenerating: boolean;
+  /** NPC dialogue can warrant a summary even when the GM chat is empty. */
+  readonly hasDialogue: boolean;
 
   /**
-   * Generates a session summary via a low-t LLM call.
-   *
-   * Collects the session's conversation history, notable events,
-   * and character state, then sends them to the LLM for summarization.
+   * Builds a bounded, factual summary from local conversation records.
+   * No provider call is required; unrecorded events are never invented.
    * The result includes a resumePoint for GameSaveService.
    *
    * The generated summary is guaranteed to be under 2 KB.
@@ -55,6 +56,7 @@ export type SessionSummaryServiceInterface = BaseFrontendClassInterface & {
 // ---------------------------------------------------------------------------
 
 type SessionSummarySnapshot = {
+  campaignId?: string;
   summary: SessionSummary | null;
 };
 
@@ -66,6 +68,8 @@ class SessionSummaryService
   extends BaseFrontendClass<SessionSummaryServiceOptions>
   implements SessionSummaryServiceInterface, SerializableService<SessionSummarySnapshot>
 {
+  private _generation = 0;
+  private _summaryCampaignId: string | undefined;
   private _currentSummary = $state<SessionSummary | null>(null);
   private _isGenerating = $state(false);
 
@@ -75,11 +79,22 @@ class SessionSummaryService
   }
 
   get currentSummary(): SessionSummary | null {
+    if (this._summaryCampaignId !== campaignService.activeCampaign?.id) {
+      return null;
+    }
     return this._currentSummary;
   }
 
   get isGenerating(): boolean {
     return this._isGenerating;
+  }
+
+  get hasDialogue(): boolean {
+    return playerJournalService.entries.some(
+      (entry) =>
+        entry.campaignId === campaignService.activeCampaign?.id &&
+        readConversationRecap(entry) !== undefined,
+    );
   }
 
   /** @inheritdoc */
@@ -89,10 +104,16 @@ class SessionSummaryService
     }
 
     this._isGenerating = true;
+    const generation = this._generation;
+    const campaignId = campaignService.activeCampaign?.id;
+    const resumePoint = this._buildResumePoint();
 
     try {
       const worldName = worldStateService.worldGenOutput?.worldName ?? 'Unknown';
       const synopsisResult = await this._generateSynopsis({ worldName, playtimeMinutes });
+      if (generation !== this._generation || campaignId !== campaignService.activeCampaign?.id) {
+        throw new Error('Session summary invalidated by campaign change or hydration');
+      }
 
       const summary: SessionSummary = {
         id: crypto.randomUUID(),
@@ -106,9 +127,10 @@ class SessionSummaryService
           itemsAcquired: [], // TODO: wire to inventory system
           questsCompleted: [], // TODO: wire to quest system
         },
-        resumePoint: this._buildResumePoint(),
+        resumePoint,
       };
 
+      this._summaryCampaignId = campaignId;
       this._currentSummary = summary;
       this.debug('generateSummary', {
         summaryId: summary.id,
@@ -117,12 +139,16 @@ class SessionSummaryService
 
       return summary;
     } finally {
-      this._isGenerating = false;
+      if (generation === this._generation) {
+        this._isGenerating = false;
+      }
     }
   }
 
   /** @inheritdoc */
   clearSummary(): void {
+    this._generation++;
+    this._isGenerating = false;
     this._currentSummary = null;
     this.debug('clearSummary');
   }
@@ -130,20 +156,19 @@ class SessionSummaryService
   // ── SerializableService ─────────────────────────────────────────────
 
   serialize(): SessionSummarySnapshot {
-    return { summary: this._currentSummary };
+    return { campaignId: this._summaryCampaignId, summary: this.currentSummary };
   }
 
   hydrate(data: SessionSummarySnapshot): void {
+    this._generation++;
+    this._isGenerating = false;
+    this._summaryCampaignId = data.campaignId ?? campaignService.activeCampaign?.id;
     this._currentSummary = data.summary;
   }
 
   // ── Private helpers ─────────────────────────────────────────────────
 
-  /**
-   * Calls the LLM to generate a synopsis and key events from the session data.
-   *
-   * Uses a low temperature (0.3) for consistent, focused summarization.
-   */
+  /** Projects recent device records, keeping quotes attributed and prose bounded. */
   private async _generateSynopsis(options: {
     worldName: string;
     playtimeMinutes: number;
@@ -152,66 +177,28 @@ class SessionSummaryService
     keyEvents: string[];
     npcInteractions: Array<{ npcName: string; context: string }>;
   }> {
-    const { worldName, playtimeMinutes } = options;
-
-    const prompt = [
-      `Summarize a ${playtimeMinutes}-minute play session in ${worldName}.`,
-      '',
-      'Respond with JSON:',
-      '{',
-      '  "synopsis": "3-5 sentence summary of the session",',
-      '  "keyEvents": ["Event 1", "Event 2", ...],',
-      '  "npcInteractions": [{"npcName": "...", "context": "..."}]',
-      '}',
-      '',
-      'Keep the entire response under 2 KB.',
-    ].join('\n');
-
-    const result = (await textGenerationService.extractStructure({
-      schema: {
-        type: 'object',
-        properties: {
-          synopsis: { type: 'string', minLength: 1 },
-          keyEvents: {
-            type: 'array',
-            items: { type: 'string' },
-            minItems: 1,
-          },
-          npcInteractions: {
-            type: 'array',
-            items: {
-              type: 'object',
-              properties: {
-                npcName: { type: 'string' },
-                context: { type: 'string' },
-              },
-              required: ['npcName', 'context'],
-            },
-          },
-        },
-        required: ['synopsis', 'keyEvents', 'npcInteractions'],
-        additionalProperties: false,
-      },
-      schemaName: 'SessionSummary',
-      prompt,
-      systemPrompt: 'Summarize RPG sessions concisely. JSON only. No markdown, no explanations.',
-      // Routes to the summarization role and its low-temperature token budget.
-      task: 'summarization',
-      // A session summary IS campaign state — it becomes the resume point the
-      // player continues from. Scoped, so a summary computed for one campaign
-      // can never be handed to a request in another, and so two summaries of
-      // the same text in the same campaign still share one call.
-      scope: campaignService.activeCampaign?.id ?? 'no-campaign',
-    })) as {
-      synopsis: string;
-      keyEvents: string[];
-      npcInteractions: Array<{ npcName: string; context: string }>;
-    };
-
+    const recaps = playerJournalService.entries
+      .filter(
+        (entry) =>
+          entry.campaignId === campaignService.activeCampaign?.id &&
+          Date.parse(entry.createdAt) >= Date.now() - Math.max(1, options.playtimeMinutes) * 60_000,
+      )
+      .flatMap((entry) => {
+        const recap = readConversationRecap(entry);
+        return recap ? [recap] : [];
+      })
+      .slice(0, 3);
+    // The former prompt contained only world name and duration, no events.
+    // Never ask a model to invent a session: use recorded, attributed evidence.
     return {
-      synopsis: result.synopsis,
-      keyEvents: result.keyEvents ?? [],
-      npcInteractions: result.npcInteractions ?? [],
+      synopsis:
+        recaps
+          .map((recap) => recap.objective)
+          .join('\n\n')
+          .slice(0, 1200) ||
+        `No recorded conversations in ${options.worldName} during this ${options.playtimeMinutes}-minute session.`,
+      keyEvents: recaps.map((recap) => recap.title),
+      npcInteractions: [],
     };
   }
 

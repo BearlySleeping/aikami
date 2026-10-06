@@ -132,6 +132,11 @@ export * from './lorebook/keyword_scanner';
 export { lorebookStore } from './lorebook/lorebook_store.svelte.ts';
 export * from './memory/index.ts';
 export * from './npc/autonomous_message_service.svelte.ts';
+export { conversationRecapService } from './npc/conversation_recap_composition.ts';
+export type {
+  ConversationRecapServiceInterface,
+  ConversationRecapServiceOptions,
+} from './npc/conversation_recap_service.svelte.ts';
 export * from './npc/npc_awareness_service.svelte.ts';
 export * from './npc/npc_memory_service.svelte.ts';
 export * from './npc/npc_schedule_service.svelte.ts';
