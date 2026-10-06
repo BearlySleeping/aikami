@@ -76,6 +76,8 @@ export type InitializeResponse = {
   type: 'ready';
   /** Which backend actually loaded. */
   backend: KokoroDevice;
+  /** Expected capability/bundle degradation, never a swallowed setup error. */
+  fallbackReason?: string;
   /**
    * Identifies the worker module instance that loaded the model.
    *
@@ -131,7 +133,8 @@ export type SynthResult = { pcmData: Float32Array; sampleRate: number };
  * the devtools console.
  */
 export const formatWorkerReady = (payload: InitializeResponse): string =>
-  `initialize:ready worker=${payload.instanceId ?? '?'} backend=${payload.backend}`;
+  `initialize:ready worker=${payload.instanceId ?? '?'} backend=${payload.backend}` +
+  (payload.fallbackReason ? ` fallback=${payload.fallbackReason}` : '');
 
 /**
  * Renders a worker failure as one flat, console-safe string.

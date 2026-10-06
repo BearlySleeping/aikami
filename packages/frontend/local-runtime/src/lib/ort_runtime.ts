@@ -72,6 +72,12 @@ const PUBLIC_ORT_WASM_URL = (import.meta.env as Record<string, string | undefine
  */
 export const resolveOrtBaseUrl = (configured?: string | undefined): string => {
   const trimmed = typeof configured === 'string' ? configured.trim() : '';
+  const versionMatch = trimmed.match(/\/models\/ort\/([^/]+)\/?$/);
+  if (versionMatch && versionMatch[1] !== ORT_RUNTIME_VERSION) {
+    throw new Error(
+      `ORT runtime version mismatch: URL specifies ${versionMatch[1]}, but the installed runtime requires ${ORT_RUNTIME_VERSION}. Clear PUBLIC_ORT_WASM_URL or publish the matching WASM/MJS pair.`,
+    );
+  }
   const base =
     trimmed.length > 0
       ? trimmed
@@ -89,8 +95,10 @@ export const resolveOrtBaseUrl = (configured?: string | undefined): string => {
 export const ortWasmPaths = (baseUrl?: string): { mjs: string; wasm: string } => {
   const base = resolveOrtBaseUrl(baseUrl);
   return {
-    mjs: `${base}${ORT_VARIANT_FILES.jsep.mjs}`,
-    wasm: `${base}${ORT_VARIANT_FILES.jsep.wasm}`,
+    // ORT 1.31's native WebGPU EP calls webgpuInit. Asyncify exports it
+    // without requiring browser JSPI support; legacy JSEP has a different ABI.
+    mjs: `${base}${ORT_VARIANT_FILES.asyncify.mjs}`,
+    wasm: `${base}${ORT_VARIANT_FILES.asyncify.wasm}`,
   };
 };
 
