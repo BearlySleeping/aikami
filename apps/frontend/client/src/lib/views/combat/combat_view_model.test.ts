@@ -10,6 +10,7 @@
 //     src/lib/views/combat/combat_view_model.test.ts
 
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
+import { createEngineBridge } from '@aikami/frontend/engine';
 
 import {
   type CombatViewModelInterface,
@@ -67,6 +68,74 @@ const armViewModel = (
 // ── Tests ─────────────────────────────────────────────────────────────────
 
 describe('CombatViewModel — C-148 Combat Immersion', () => {
+  test('combat state sync forwards enemy HP after updating the ViewModel', async () => {
+    const bridge = createEngineBridge();
+    const updates: Array<{ enemyHp: number; enemyMaxHp: number }> = [];
+    const vm = createViewModel({
+      engine: { createBridge: async () => bridge },
+      combatState: {
+        updateEnemyHp: (hp) => {
+          expect(vm.enemyHp).toBe(hp.enemyHp);
+          expect(vm.enemyMaxHp).toBe(hp.enemyMaxHp);
+          updates.push(hp);
+        },
+      },
+    });
+    try {
+      await vm.initialize();
+      bridge.emit({
+        type: 'COMBAT_STARTED',
+        participantIds: [1, 2, 3],
+        firstTurnEntityId: 1,
+        enemyHp: 80,
+        enemyMaxHp: 80,
+      });
+      bridge.emit({
+        type: 'COMBAT_STATE_UPDATE',
+        entityHpMap: { 1: 90, 2: 13, 3: 45 },
+        entityMaxHpMap: { 1: 100, 2: 20, 3: 50 },
+      });
+      bridge.emit({
+        type: 'COMBAT_STATE_UPDATE',
+        entityHpMap: { 1: 85 },
+        entityMaxHpMap: { 1: 100 },
+      });
+      bridge.emit({
+        type: 'COMBAT_STATE_UPDATE',
+        entityHpMap: { 2: 0 },
+        entityMaxHpMap: {},
+      });
+
+      expect(updates).toEqual([
+        { enemyHp: 13, enemyMaxHp: 20 },
+        { enemyHp: 0, enemyMaxHp: 20 },
+      ]);
+    } finally {
+      await vm.dispose();
+    }
+  });
+
+  test('metadata-free combat sync preserves seeded NPC identity and real HP', async () => {
+    const bridge = createEngineBridge();
+    const vm = createViewModel({ engine: { createBridge: async () => bridge } });
+    vm.enemyName = 'Rollo the Grasper';
+    vm.enemyNpcId = 'rollo_grasper';
+    vm.enemyHp = 20;
+    vm.enemyMaxHp = 20;
+    await vm.initialize();
+    bridge.emit({
+      type: 'COMBAT_STARTED',
+      participantIds: [1, 2],
+      firstTurnEntityId: 1,
+      encounterId: 'inn_wand_encounter',
+      engine: 'v2',
+    });
+    expect(vm.enemyName).toBe('Rollo the Grasper');
+    expect(vm.enemyNpcId).toBe('rollo_grasper');
+    expect(vm.enemyHp).toBe(20);
+    expect(vm.enemyMaxHp).toBe(20);
+    await vm.dispose();
+  });
   // -----------------------------------------------------------------------
   // Dice roll state
   // -----------------------------------------------------------------------

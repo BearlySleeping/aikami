@@ -197,12 +197,13 @@ export const registerGameUIOverlayLifecycle = (options: GameUIOverlayLifecycleOp
         npcData: untrack(() => options.npcMemory?.resolveGreeting(npc) ?? npc),
         onEndChat: () => overlays.endDialogue(),
         npcDialogueService: npcDialogue,
-        onStartCombat: (combatNpcData) => {
-          overlays.startCombat({
-            enemyName: combatNpcData.npcName,
-            enemyNpcId: combatNpcData.npcId,
-          });
-        },
+        onStartCombat: (combatNpcData) =>
+          npcDialogue.executeCommand({
+            kind: 'startCombat',
+            npcId: combatNpcData.npcId,
+            npcName: combatNpcData.npcName,
+            command: { kind: 'startCombat' },
+          }),
       });
       dialogueNpcId = npc.npcId;
       options.setDialogueViewModel(dialogueViewModel);
