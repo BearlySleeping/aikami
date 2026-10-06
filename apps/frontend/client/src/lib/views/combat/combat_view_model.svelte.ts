@@ -312,6 +312,8 @@ export class CombatViewModel
   /** C-234: Current turn state. */
   turnState: TurnState | null = $state(null);
 
+  private readonly _combatState: CombatViewModelOptions['combatState'];
+
   /** Status-effect + death-save domain helpers. */
   private readonly _statusEffects: CombatStatusEffectsCapabilities;
 
@@ -450,6 +452,7 @@ export class CombatViewModel
 
   constructor(options: CombatViewModelOptions) {
     super(options);
+    this._combatState = options.combatState;
     this._engine = options.engine;
     this._images = options.images;
     this._text = options.text;
@@ -1204,9 +1207,9 @@ export class CombatViewModel
       // Review F9: the previous encounter's pending reaction window and its
       // optional countdown must not survive into this one.
       this._reactionFlow.reset();
-      this.enemyName = event.enemyName || 'Unknown Enemy';
-      this.enemyHp = event.enemyHp ?? 80;
-      this.enemyMaxHp = event.enemyMaxHp ?? 80;
+      this.enemyName = event.enemyName || this.enemyName;
+      this.enemyHp = event.enemyHp ?? this.enemyHp;
+      this.enemyMaxHp = event.enemyMaxHp ?? this.enemyMaxHp;
       this.enemyEntityId =
         event.enemyId ??
         event.participantIds.find((id: number) => id !== this._playerEntityId) ??
@@ -1424,6 +1427,10 @@ export class CombatViewModel
         } else if (this.enemyEntityId !== null && numericEid === this.enemyEntityId) {
           this.enemyHp = hp ?? this.enemyHp;
           this.enemyMaxHp = maxHp ?? this.enemyMaxHp;
+          this._combatState.updateEnemyHp({
+            enemyHp: this.enemyHp,
+            enemyMaxHp: this.enemyMaxHp,
+          });
         }
         if (this.initiativeEntries.some((entry) => entry.entityId === numericEid)) {
           hasInitiativeChange.push(numericEid);

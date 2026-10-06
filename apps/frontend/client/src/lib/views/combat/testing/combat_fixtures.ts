@@ -223,6 +223,7 @@ export const createCombatTestOptions = (
   overrides: Partial<CombatViewModelOptions> = {},
 ): CombatViewModelOptions => ({
   className: 'CombatViewModelTest',
+  combatState: { updateEnemyHp: () => {} },
   engine: createCombatEngine(),
   images: createCombatImages(),
   text: createCombatText(),

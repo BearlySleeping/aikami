@@ -72,7 +72,10 @@ export const handleStartEncounterCommand = (options: {
       // supplies the legacy AI hooks itself.
       hooks: { runAiTurn: () => {}, emitStateUpdate: emitCombatStateUpdate },
       startLegacy: (targetWorld, targetBridge, seed) => {
-        initCombat(targetWorld, targetBridge, seed);
+        initCombat(targetWorld, targetBridge, seed, {
+          encounterId: command.encounterId,
+          playerEntityId,
+        });
       },
     });
 

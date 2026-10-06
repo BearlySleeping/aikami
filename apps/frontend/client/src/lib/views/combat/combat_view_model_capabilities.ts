@@ -24,6 +24,7 @@ import type {
   IntentInterpreterResult,
   WorldGenOutput,
 } from '@aikami/types';
+import type { CombatServiceInterface } from '$services';
 import type { ExpressionId } from '$types';
 import type { CombatLogServiceInterface } from './combat_log_service.svelte.ts';
 import type { StatusEffectsServiceInterface } from './status_effects_service.svelte.ts';
@@ -211,6 +212,8 @@ export type CombatViewModelPublicOptions = BaseViewModelOptions & {
 };
 
 export type CombatViewModelOptions = CombatViewModelPublicOptions & {
+  /** Authoritative enemy HP shared with encounter retries. */
+  combatState: Pick<CombatServiceInterface, 'updateEnemyHp'>;
   /** Engine bridge factory. */
   engine: CombatEngineCapabilities;
   /** Image generation state + requests. */

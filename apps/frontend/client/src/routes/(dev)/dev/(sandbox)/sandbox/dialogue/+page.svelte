@@ -431,6 +431,7 @@ const viewModel: DialogueDevViewModelInterface = DialogueDevViewModel.create({
   },
   onStartCombat: () => {
     goBack();
+    return true;
   },
   initialDiceOutcome: 'always_succeed',
   initialUseMockAi: true,
