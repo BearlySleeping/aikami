@@ -83,14 +83,23 @@ export const fallbackSummary = (options: {
   lines: readonly NpcMemoryLine[];
 }): string => {
   const playerLines = options.lines.filter((line) => line.role === 'player');
-  if (playerLines.length === 0) {
+  const replies = options.lines
+    .slice(options.lines[0]?.role === 'npc' ? 1 : 0)
+    .filter((line) => line.role === 'npc');
+  if (playerLines.length === 0 && replies.length === 0) {
     return options.previous;
   }
   const topics = clampText({
     text: playerLines.map((line) => line.content).join(' / '),
     max: 220,
   });
-  const entry = `The player talked with me about: ${topics}.`;
+  const response = clampText({ text: replies.map((line) => line.content).join(' / '), max: 300 });
+  const entry = [
+    topics ? `The player talked with me about: ${topics}.` : '',
+    response ? `I said: ${response}` : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
   return clampSummary(options.previous ? `${options.previous} ${entry}` : entry);
 };
 

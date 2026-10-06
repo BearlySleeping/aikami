@@ -173,6 +173,9 @@ export const registerGameUIOverlayLifecycle = (options: GameUIOverlayLifecycleOp
   };
 
   options.registerEffectRoot(() => {
+    // Dispose may occur without an overlay transition (navigation/teardown).
+    // A dependency-free cleanup captures that final transcript exactly once.
+    $effect(() => () => clearDialogueViewModel());
     // ── Dialogue ──
     // Inventory can be a temporary surface above an active conversation. Keep
     // the dialogue ViewModel alive while DIALOGUE remains anywhere in the

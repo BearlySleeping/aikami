@@ -533,12 +533,6 @@
       "worst": 16
     }
   },
-  "apps/frontend/client/src/lib/services/game/game_test_seam.ts": {
-    "counts": {
-      "excessive": 1,
-      "worst": 25
-    }
-  },
   "apps/frontend/client/src/lib/services/game/input_action_service.svelte.ts": {
     "counts": {
       "excessive": 2,

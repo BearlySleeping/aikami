@@ -7,6 +7,7 @@
 import type { BaseViewModelOptions } from '@aikami/frontend/services/base';
 import {
   campaignService,
+  conversationRecapService,
   gameOverlayService,
   playerJournalService,
   questStateService,
@@ -43,6 +44,7 @@ export const getJournalViewModel = (options: BaseViewModelOptions): JournalViewM
       updateEntry: (entryOptions) => playerJournalService.updateEntry(entryOptions),
       deleteEntry: (entryOptions) => playerJournalService.deleteEntry(entryOptions),
     },
+    diary: conversationRecapService,
     recap: {
       get summary() {
         return sessionSummaryService.currentSummary;
