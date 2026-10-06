@@ -16,11 +16,19 @@ const MANIFEST_PATH = resolve(
 
 type UnknownRecord = Record<string, unknown>;
 
-type PropFootprint = {
+export type PropFootprint = {
   width: number;
   height: number;
   anchorX: number;
   anchorY: number;
+};
+
+export type PropFootprintAudit = PropFootprint & {
+  collision: { width: number; height: number } | undefined;
+  visualCellCount: number;
+  collisionCellCount: number;
+  originCovered: boolean;
+  styleClass: string;
 };
 
 const isRecord = (value: unknown): value is UnknownRecord => value instanceof Object;
@@ -30,6 +38,22 @@ const finiteNumber = (value: unknown): value is number =>
 
 const positiveNumber = (value: unknown): number | undefined =>
   finiteNumber(value) && value > 0 ? value : undefined;
+
+/** The axis-aligned collision footprint used by the cell coverage audit. */
+export const collisionFootprintSize = (
+  value: unknown,
+): { width: number; height: number } | undefined => {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  if (value.type === 'circle') {
+    const radius = positiveNumber(value.radius);
+    return radius === undefined ? undefined : { width: radius * 2, height: radius * 2 };
+  }
+  const width = positiveNumber(value.width);
+  const height = positiveNumber(value.height);
+  return width === undefined || height === undefined ? undefined : { width, height };
+};
 
 const readManifestProps = (): Record<string, UnknownRecord> => {
   const raw: unknown = JSON.parse(readFileSync(MANIFEST_PATH, 'utf8'));
@@ -47,9 +71,9 @@ const readManifestProps = (): Record<string, UnknownRecord> => {
 
 const readSize = (definition: UnknownRecord): { width: number; height: number } | undefined => {
   const renderSize = isRecord(definition.renderSize) ? definition.renderSize : undefined;
-  const collision = isRecord(definition.collision) ? definition.collision : undefined;
-  const width = positiveNumber(renderSize?.width) ?? positiveNumber(collision?.width);
-  const height = positiveNumber(renderSize?.height) ?? positiveNumber(collision?.height);
+  const collision = collisionFootprintSize(definition.collision);
+  const width = positiveNumber(renderSize?.width) ?? collision?.width;
+  const height = positiveNumber(renderSize?.height) ?? collision?.height;
   return width === undefined || height === undefined ? undefined : { width, height };
 };
 
@@ -71,6 +95,32 @@ export const readPropFootprint = (propId: string): PropFootprint => {
  * Origins use the same world-pixel convention as `placeProp`; the rectangle is
  * anchored at the prop's declared point and expanded toward its top-left.
  */
+/** Read a prop's visual and collision footprints for authoring/evidence review. */
+export const readPropFootprintAudit = (propId: string): PropFootprintAudit => {
+  const definition = readManifestProps()[propId];
+  if (definition === undefined) {
+    throw new Error(`emberwatch_prop_footprint: missing prop "${propId}"`);
+  }
+  const footprint = readPropFootprint(propId);
+  const collision = collisionFootprintSize(definition.collision);
+  const cellCount = (width: number, height: number): number => {
+    const left = -width * footprint.anchorX;
+    const top = -height * footprint.anchorY;
+    return (
+      (Math.ceil((left + width) / 32) - Math.floor(left / 32)) *
+      (Math.ceil((top + height) / 32) - Math.floor(top / 32))
+    );
+  };
+  return {
+    ...footprint,
+    collision,
+    visualCellCount: cellCount(footprint.width, footprint.height),
+    collisionCellCount: collision === undefined ? 0 : cellCount(collision.width, collision.height),
+    originCovered: collision !== undefined,
+    styleClass: typeof definition.styleClass === 'string' ? definition.styleClass : 'unclassified',
+  };
+};
+
 export const propFootprintCells = (options: {
   propId: string;
   x: number;

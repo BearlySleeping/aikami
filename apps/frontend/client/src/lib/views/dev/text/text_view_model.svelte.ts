@@ -9,8 +9,13 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services/base';
+import type { TextTelemetrySummary } from '@aikami/types';
 import { page } from '$app/state';
-import type { ConfigServiceInterface, TextGenerationServiceInterface } from '$services';
+import type {
+  ConfigServiceInterface,
+  TextGenerationServiceInterface,
+  TextTelemetryServiceInterface,
+} from '$services';
 
 // ── Capability contracts ────────────────────────────────────────────────
 
@@ -21,6 +26,12 @@ export type TextConfigCapabilities = Pick<ConfigServiceInterface, 'getActiveText
 export type TextGenerationCapabilities = Pick<
   TextGenerationServiceInterface,
   'streamChat' | 'extractStructure'
+>;
+
+/** The rolling critical-path telemetry the sandbox reports. */
+export type TextTelemetryCapabilities = Pick<
+  TextTelemetryServiceInterface,
+  'spans' | 'summary' | 'clear'
 >;
 
 // ---------------------------------------------------------------------------
@@ -74,6 +85,36 @@ export type TextViewModelInterface = BaseViewModelInterface & {
   readonly schemaResult: unknown;
   readonly schemaError: string;
   validateSchema(): Promise<void>;
+
+  // ── Diagnostics (issue #382) ──────────────────────────────────────────
+  /**
+   * The rolling critical-path summary for the calls this page made.
+   *
+   * This sandbox is where a developer actually issues a call and then asks
+   * "where did the time go", so the summary belongs here rather than only in
+   * Settings. It is content-free metadata: token counts with their provenance,
+   * latency percentiles, deadline outcome and cache layer — never the prompt
+   * or the reply.
+   */
+  readonly diagnostics: TextTelemetrySummary;
+  /** Cache hits across all measured layers. */
+  readonly cacheHitTotal: number;
+  /** Recorded spans, newest first — one row per logical call. */
+  readonly diagnosticRows: readonly TextDiagnosticRow[];
+  /** Clears the diagnostic buffer so the next call is measured alone. */
+  clearDiagnostics(): void;
+};
+
+/** One recorded call, projected for the diagnostics table. */
+export type TextDiagnosticRow = {
+  id: number;
+  taskLabel: string;
+  routeLabel: string;
+  totalLabel: string;
+  tokenLabel: string;
+  /** `provider` or `est` — the provenance of the counts above. */
+  tokenSourceLabel: string;
+  outcomeLabel: string;
 };
 
 export type TextViewModelOptions = BaseViewModelOptions & {
@@ -81,6 +122,8 @@ export type TextViewModelOptions = BaseViewModelOptions & {
   config: TextConfigCapabilities;
   /** Text generation transport. */
   textGeneration: TextGenerationCapabilities;
+  /** Rolling critical-path telemetry. */
+  telemetry: TextTelemetryCapabilities;
 };
 
 // ---------------------------------------------------------------------------
@@ -118,17 +161,55 @@ class TextViewModel extends BaseViewModel<TextViewModelOptions> implements TextV
 
   private readonly _config: TextConfigCapabilities;
   private readonly _textGeneration: TextGenerationCapabilities;
+  private readonly _telemetry: TextTelemetryCapabilities;
 
   constructor(options: TextViewModelOptions) {
     super(options);
     this._config = options.config;
     this._textGeneration = options.textGeneration;
+    this._telemetry = options.telemetry;
   }
 
   // ── Getters ──────────────────────────────────────────────────────────
 
   get tabs(): readonly TextTabMeta[] {
     return TAB_META;
+  }
+
+  // ── Diagnostics (issue #382) ──────────────────────────────────────────
+
+  /** @inheritdoc */
+  get cacheHitTotal(): number {
+    const hits = this.diagnostics.counters.cacheHits;
+    return hits['in-flight-dedup'] + hits['exact-result'] + hits['provider-prompt-cache'];
+  }
+
+  get diagnostics(): TextTelemetrySummary {
+    return this._telemetry.summary;
+  }
+
+  /**
+   * @inheritdoc
+   *
+   * A span row carries no prompt and no reply: only the route, the timing, the
+   * counts and their provenance. That is what makes this table safe to keep
+   * open while working, and safe to screenshot into a bug report.
+   */
+  get diagnosticRows(): readonly TextDiagnosticRow[] {
+    return this._telemetry.spans.map((span) => ({
+      id: span.id,
+      taskLabel: span.task ?? 'text',
+      routeLabel: span.model || span.provider,
+      totalLabel: `${span.totalMs}ms`,
+      tokenLabel: `${span.promptTokens + span.completionTokens} tok`,
+      tokenSourceLabel: span.tokenSource === 'provider' ? 'provider' : 'est',
+      outcomeLabel: span.ok ? 'ok' : (span.errorCode ?? 'error'),
+    }));
+  }
+
+  /** @inheritdoc */
+  clearDiagnostics(): void {
+    this._telemetry.clear();
   }
 
   // ── Public: navigation ────────────────────────────────────────────────

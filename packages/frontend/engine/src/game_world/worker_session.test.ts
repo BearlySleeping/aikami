@@ -336,3 +336,112 @@ describe('WorkerSession — correlated ENGINE_ERROR settles the request', () => 
     await expect(promise).resolves.toMatchObject({ type: 'MAP_LOADED' });
   });
 });
+
+describe('WorkerSession — stale correlated replies', () => {
+  test('a reply that settles a pending request is still forwarded', async () => {
+    // Boot and restore rely on the facade seeing its own ready/error path.
+    const { session, worker, messages } = makeHarness();
+    await start(session);
+
+    const pending = session.request({
+      message: { type: 'LOAD_GAME', payload: '{}' },
+      expect: 'ENGINE_READY',
+    });
+    worker.emit({ type: 'ENGINE_READY', requestId: lastRequestId(worker) });
+
+    await expect(pending).resolves.toMatchObject({ type: 'ENGINE_READY' });
+    expect(messages.filter((m) => m.type === 'ENGINE_READY')).toHaveLength(1);
+  });
+
+  test('a reply arriving after the request timed out never reaches the facade', async () => {
+    // The defect: the timeout settled the request, but the reply was still
+    // forwarded, so the UI rendered GAME_ERROR/GAME_READY for an operation the
+    // caller had already given up on.
+    const late: Array<{ type: string; requestId: number }> = [];
+    const { session, worker, messages } = makeHarness({
+      onLateReply: (detail) => late.push(detail),
+    });
+    await start(session);
+
+    const pending = session.request({
+      message: { type: 'LOAD_GAME', payload: '{}' },
+      expect: 'ENGINE_READY',
+      timeoutMs: 5,
+    });
+    const requestId = lastRequestId(worker);
+
+    await expect(pending).rejects.toThrow(/did not respond/);
+
+    worker.emit({ type: 'ENGINE_READY', requestId });
+    worker.emit({ type: 'ENGINE_ERROR', requestId, message: 'late failure' });
+
+    expect(messages).toHaveLength(0);
+    expect(late.map((detail) => detail.type)).toEqual(['ENGINE_READY', 'ENGINE_ERROR']);
+    expect(late[0]?.requestId).toBe(requestId);
+  });
+
+  test('a duplicate reply for an already-settled request is dropped', async () => {
+    const { session, worker, messages } = makeHarness();
+    await start(session);
+
+    const pending = session.request({
+      message: { type: 'LOAD_GAME', payload: '{}' },
+      expect: 'ENGINE_READY',
+    });
+    const requestId = lastRequestId(worker);
+    worker.emit({ type: 'ENGINE_READY', requestId });
+    await pending;
+
+    worker.emit({ type: 'ENGINE_READY', requestId });
+    expect(messages.filter((m) => m.type === 'ENGINE_READY')).toHaveLength(1);
+  });
+
+  test('a reply arriving after termination is dropped', async () => {
+    const { session, worker, messages } = makeHarness();
+    await start(session);
+
+    const pending = session.request({
+      message: { type: 'LOAD_GAME', payload: '{}' },
+      expect: 'ENGINE_READY',
+    });
+    const requestId = lastRequestId(worker);
+    const inbound = worker.onmessage;
+    expect(inbound).toBeFunction();
+    session.terminate();
+    await expect(pending).rejects.toThrow(/disposed/);
+
+    // Exercise the real inbound path even though terminate detached it.
+    messages.length = 0;
+    inbound?.(new MessageEvent('message', { data: { type: 'ENGINE_READY', requestId } }));
+    expect(messages).toHaveLength(0);
+  });
+
+  test('truly unsolicited terminal traffic still reaches the facade', async () => {
+    // An uncorrelated ENGINE_FATAL (or a boot ready that no request awaits)
+    // carries no requestId and must keep flowing.
+    const { session, worker, messages } = makeHarness();
+    await start(session);
+
+    worker.emit({ type: 'ENGINE_FATAL', message: 'detached buffer flood' });
+
+    expect(messages.map((m) => m.type)).toEqual(['ENGINE_FATAL']);
+  });
+
+  test('a correlated reply of an unexpected type for a pending request is forwarded', async () => {
+    // The request is still waiting on a different terminal type; this reply
+    // is not its answer, so it must not settle it — but it is live traffic.
+    const { session, worker, messages } = makeHarness();
+    await start(session);
+
+    const pending = session.request({
+      message: { type: 'LOAD_GAME', payload: '{}' },
+      expect: 'SNAPSHOT_RESPONSE',
+      timeoutMs: 500,
+    });
+    worker.emit({ type: 'ENGINE_READY', requestId: lastRequestId(worker) });
+
+    expect(messages.map((m) => m.type)).toEqual(['ENGINE_READY']);
+    worker.emit({ type: 'SNAPSHOT_RESPONSE', requestId: lastRequestId(worker) });
+    await expect(pending).resolves.toMatchObject({ type: 'SNAPSHOT_RESPONSE' });
+  });
+});

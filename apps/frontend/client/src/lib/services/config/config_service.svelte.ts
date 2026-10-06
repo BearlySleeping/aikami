@@ -41,7 +41,9 @@ import type {
   Lorebook,
   LorebookEntry,
 } from '$types';
+import { capabilityTables } from './capability_tables.ts';
 import { migrateVaultV1ToV2, migrateVaultV2ToV3 } from './config_migration.ts';
+import { type ResolvedDecisionBackend, resolveDecision } from './decision_backend_resolution';
 
 // ---------------------------------------------------------------------------
 // Re-exports from @aikami/constants and @aikami/types for backward compatibility
@@ -175,7 +177,7 @@ export type ConfigServiceInterface = BaseFrontendClassInterface & {
    * Returns undefined if the role has no assignment or the connection is gone.
    */
   resolveRole(role: AiRole): ResolvedTextProvider | undefined;
-
+  resolveDecisionBackend(): ResolvedDecisionBackend | undefined;
   // ── Preset management (C-230) ─────────────────────────────────────
 
   /** Adds a user-defined preset. */
@@ -229,44 +231,7 @@ export type ConfigServiceInterface = BaseFrontendClassInterface & {
 // Defaults
 // ---------------------------------------------------------------------------
 
-/** Every capability, in a stable order for projection. */
-const CAPABILITIES: readonly ConnectionCapability[] = ['text', 'image', 'voice'];
-
-/** Roles each capability owns. */
-const ROLES_BY_CAPABILITY: Record<ConnectionCapability, readonly AiRole[]> = {
-  text: ['narration', 'dialogue', 'summarization', 'structured'],
-  image: ['portrait', 'scene'],
-  voice: ['narrator-voice', 'npc-voice'],
-};
-
-/**
- * The role a capability's "default" maps onto. `defaultByCapability` and the
- * legacy `defaultConnectionId` are projections of these three.
- */
-const PRIMARY_ROLE: Record<ConnectionCapability, AiRole> = {
-  text: 'narration',
-  image: 'portrait',
-  voice: 'narrator-voice',
-};
-
-/**
- * The capability each role can be served by. A role may only point at a
- * connection of its own capability: `_reproject()` prunes roles whose
- * connection is *gone*, but it cannot tell that a surviving connection has
- * become the wrong kind. Without this, a voice connection could be projected
- * as `defaultByCapability.text`, and a capability-aware consumer that filters
- * it out is then left with no text provider at all.
- */
-const ROLE_CAPABILITY: Record<AiRole, ConnectionCapability> = {
-  narration: 'text',
-  dialogue: 'text',
-  summarization: 'text',
-  structured: 'text',
-  portrait: 'image',
-  scene: 'image',
-  'narrator-voice': 'voice',
-  'npc-voice': 'voice',
-};
+const { capabilities, primaryRole, roleCapability, rolesByCapability } = capabilityTables;
 
 const DEFAULT_VOICE_CONFIG: VoiceConfig = {
   autoSpeech: false,
@@ -847,8 +812,7 @@ class ConfigService
       params: this._paramsFromLegacy(connection, capability),
     });
 
-    const claimsDefault =
-      connection.isDefault || this.state.roles[PRIMARY_ROLE[capability]] == null;
+    const claimsDefault = connection.isDefault || this.state.roles[primaryRole[capability]] == null;
     if (claimsDefault) {
       this._assignCapabilityRoles({ id, capability });
     }
@@ -1048,7 +1012,7 @@ class ConfigService
   setRoleAssignment(role: AiRole, connectionId: ConnectionId): void {
     // A role may only be served by a connection of its own capability.
     const connection = this.state.aiConnections.find((c) => c.id === connectionId);
-    if (!connection || connection.capability !== ROLE_CAPABILITY[role]) {
+    if (!connection || connection.capability !== roleCapability[role]) {
       return;
     }
     this.state.roles = { ...this.state.roles, [role]: connectionId };
@@ -1066,6 +1030,9 @@ class ConfigService
     return { ...this.state.roles };
   }
 
+  resolveDecisionBackend(): ResolvedDecisionBackend | undefined {
+    return resolveDecision(this.state);
+  }
   resolveRole(role: AiRole): ResolvedTextProvider | undefined {
     const connectionId = this.state.roles[role];
     if (!connectionId) {
@@ -1073,7 +1040,7 @@ class ConfigService
     }
 
     const aiConn = this.state.aiConnections.find((c) => c.id === connectionId);
-    if (!aiConn || aiConn.capability !== ROLE_CAPABILITY[role]) {
+    if (!aiConn || !capabilityTables.canServeRole(roleCapability[role], aiConn.capability)) {
       return undefined;
     }
 
@@ -1087,7 +1054,7 @@ class ConfigService
       provider: provider.registryId,
       endpoint: provider.baseUrl || '',
       apiKey: provider.credential || '',
-      params: aiConn.params,
+      params: aiConn.params as TextParams | ImageParams | VoiceParams,
     };
   }
 
@@ -1246,14 +1213,14 @@ class ConfigService
 
     // Seed roles from the legacy defaults for anything still unassigned.
     const byCapability = (payload.defaultByCapability ?? {}) as Record<string, string | null>;
-    for (const capability of CAPABILITIES) {
+    for (const capability of capabilities) {
       const id = byCapability[capability];
       if (id && this.state.aiConnections.some((c) => c.id === id)) {
         this._assignCapabilityRoles({ id, capability, onlyUnassigned: true });
       }
     }
-    for (const capability of CAPABILITIES) {
-      if (this.state.roles[PRIMARY_ROLE[capability]]) {
+    for (const capability of capabilities) {
+      if (this.state.roles[primaryRole[capability]]) {
         continue;
       }
       const first = this.state.aiConnections.find((c) => c.capability === capability);
@@ -1317,8 +1284,8 @@ class ConfigService
   }): void {
     const next = { ...this.state.roles };
     const valid = new Set(this.state.aiConnections.map((c) => c.id));
-    for (const role of ROLES_BY_CAPABILITY[options.capability]) {
-      const isPrimary = role === PRIMARY_ROLE[options.capability];
+    for (const role of rolesByCapability[options.capability]) {
+      const isPrimary = role === primaryRole[options.capability];
       const current = next[role];
       const currentIsStale = current !== undefined && !valid.has(current);
       if ((isPrimary && !options.onlyUnassigned) || current === undefined || currentIsStale) {
@@ -1346,7 +1313,7 @@ class ConfigService
     const next = Object.fromEntries(
       Object.entries(this.state.roles).filter(
         ([role, id]) =>
-          id !== connectionId || ROLE_CAPABILITY[role as AiRole] === connection.capability,
+          id !== connectionId || roleCapability[role as AiRole] === connection.capability,
       ),
     );
     if (Object.keys(next).length !== Object.keys(this.state.roles).length) {
@@ -1366,7 +1333,7 @@ class ConfigService
 
     const next = this.state.aiConnections.map((aiConn) => {
       const provider = this.state.providers.find((p) => p.id === aiConn.providerId);
-      const isDefault = this.state.roles[PRIMARY_ROLE[aiConn.capability]] === aiConn.id;
+      const isDefault = this.state.roles[primaryRole[aiConn.capability]] === aiConn.id;
       return this._projectConnection({ aiConn, provider, isDefault });
     });
 
@@ -1395,8 +1362,8 @@ class ConfigService
     }
 
     const defaults: Record<string, string | null> = {};
-    for (const capability of CAPABILITIES) {
-      const id = this.state.roles[PRIMARY_ROLE[capability]];
+    for (const capability of capabilities) {
+      const id = this.state.roles[primaryRole[capability]];
       if (id) {
         defaults[capability] = id;
       }
@@ -1417,7 +1384,7 @@ class ConfigService
       candidate.capability === capability &&
       this.state.providers.find((p) => p.id === candidate.providerId)?.registryId === provider;
 
-    const primaryId = this.state.roles[PRIMARY_ROLE[capability]];
+    const primaryId = this.state.roles[primaryRole[capability]];
     const preferred = primaryId
       ? this.state.aiConnections.find((c) => c.id === primaryId && onProvider(c))
       : undefined;

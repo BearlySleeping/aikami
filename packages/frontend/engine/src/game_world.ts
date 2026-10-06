@@ -7,27 +7,32 @@ import { Container, type UniformGroup } from 'pixi.js';
 import { autotileLayers, type TerrainLayerEmission } from './assets/autotile.ts';
 import type { AssetTagResolver } from './assets/map_loader.ts';
 import { BaseEngineClass, type BaseEngineClassOptions } from './base_engine_class.ts';
-import type { LpcLayerRecipe } from './components/appearance.ts';
+import { type LpcLayerRecipe, withExtraLayers } from './components/appearance.ts';
 import { COMPONENT_STRIDE } from './config/memory_config.ts';
 import type { EngineBridge } from './engine_bridge.ts';
 import { unprojectScreenPoint } from './frame_pacing.ts';
+import { toAppearanceIdentity } from './game_events/appearance_changed.ts';
 import { loadStaticVisual } from './game_world/actor_visual_transport.ts';
 import { CombatSelectionHighlights } from './game_world/combat_selection_highlights.ts';
 import { setupGameCommandForwarding } from './game_world/command_forwarding.ts';
+import { syncContentIdentityOverlay } from './game_world/content_identity_overlay.ts';
 import { DebugSceneController } from './game_world/debug_scene_controller.ts';
 import {
-  exposeEngineState,
-  isE2ETestMode,
-  isVisualScreenshotMode,
+  clearContentIdentity,
   publishNpcEntityIds,
   publishPlayerVisibleByMask,
   resetEntityPositions,
 } from './game_world/diagnostics.ts';
+import {
+  createEngineDiagnosticsProbe,
+  type EngineDiagnosticsProbe,
+} from './game_world/engine_diagnostics_probe.ts';
 import { EntityAppearanceLoader } from './game_world/entity_appearance.ts';
 import { createEntityDisplay } from './game_world/entity_display.ts';
 import { FrameRenderer } from './game_world/frame_renderer.ts';
 import { reportHeartbeatEvent } from './game_world/heartbeat_reporter.ts';
 import { InputController } from './game_world/input_controller.ts';
+import { buildLoadMapMessage } from './game_world/load_map_message.ts';
 import { PointerController } from './game_world/pointer_controller.ts';
 import { RenderBufferPool } from './game_world/render_buffer_pool.ts';
 import type { RenderEntry } from './game_world/render_entry.ts';
@@ -44,6 +49,7 @@ import {
   prepareScene,
   SceneTransitionRunner,
 } from './game_world/scene_transition.ts';
+import { resolveScreenToCell } from './game_world/screen_projection.ts';
 import { WeatherFxController } from './game_world/weather_fx_controller.ts';
 import {
   type WorkerFailure,
@@ -51,6 +57,7 @@ import {
   WorkerSession,
 } from './game_world/worker_session.ts';
 import { applyWorldResize } from './game_world/world_resize.ts';
+import { WorldRestorer } from './game_world/world_restorer.ts';
 import { createPixiApp, type PixiAppInstance, type PixiAppOptions } from './pixi_app.ts';
 import { sanitizeCanvasDimension } from './pixi_init_options.ts';
 import { WORLD_Z_BANDS } from './rendering/layer_bands.ts';
@@ -61,7 +68,6 @@ import type { TextureManager } from './rendering/texture_manager.ts';
 import type { TilemapChunk } from './rendering/tilemap_chunk_renderer.ts';
 import type { GameAiService } from './services/ai_service.ts';
 import type { GameApiService } from './services/api_service.ts';
-import { findNearestPathableCell } from './systems/actor_footprint.ts';
 import type { CollisionGrid } from './systems/collision_system.ts';
 import { dirtyCheckAppearance } from './systems/render_system.ts';
 import { type FrameUvResolver, renderTilemap } from './systems/tilemap_render_system.ts';
@@ -404,6 +410,16 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
   /** Owns the map-transition sequence and its supersession generation. */
   private readonly _sceneTransition: SceneTransitionRunner;
 
+  /**
+   * Snapshot/restore boundary. Split out because a map switch needs to
+   * rehydrate a checkpoint from INSIDE a running transition, and the public
+   * `restoreWorld` deliberately supersedes in-flight transitions.
+   */
+  private readonly _restorer: WorldRestorer;
+
+  /** Read-only engine state for E2E and visual tooling. */
+  private readonly _diagnosticsProbe: EngineDiagnosticsProbe;
+
   /** Current camera position received from the worker (world-space pixels). */
   private _cameraX = 0;
 
@@ -552,7 +568,10 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     this._resolveTag = options.resolveTag;
     this._releaseUrl = options.releaseUrl;
 
-    this._renderBufferPool = new RenderBufferPool();
+    this._renderBufferPool = new RenderBufferPool({
+      onRejectedState: (detail) =>
+        this.warn('[GameWorld] worker state rejected at the buffer boundary', detail),
+    });
     this._frameRenderer = new FrameRenderer({
       textureManager: options.textureManager,
     });
@@ -598,7 +617,49 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       onFailure: (failure) => this._handleWorkerFailure(failure),
       onHeartbeat: (event) =>
         reportHeartbeatEvent(event, (message, detail) => this.warn(message, detail)),
+      onLateReply: (detail) => this.warn('[GameWorld] dropped a stale worker reply', detail),
       shouldCheckStall: () => !this._inputController.locked,
+    });
+
+    this._diagnosticsProbe = createEngineDiagnosticsProbe({
+      readState: () => ({
+        frozen: !this._running,
+        entityCount: this._renderEntries.size,
+        // C-400 AC-1: spawned NPC count (entities created with npcData —
+        // authored manifest NPCs plus restored/programmatic NPCs) — asserted
+        // by game_boot.spec.ts against the manifest-derived count.
+        npcCount: this._npcMeta.size,
+        playerEntityId: this._playerEntityId,
+        cameraX: this._cameraX,
+        cameraY: this._cameraY,
+      }),
+    });
+
+    this._restorer = new WorldRestorer({
+      requestSnapshot: (scope) => this.snapshotWorld(scope),
+      requestRestore: async (payload) => {
+        if (!this._worker) {
+          throw new Error('Worker not running — cannot restore');
+        }
+        await this._session.request({
+          message: { type: 'LOAD_GAME', payload },
+          expect: 'ENGINE_READY',
+        });
+      },
+      clearRenderEntries: () => {
+        for (const entry of this._renderEntries.values()) {
+          entry.displayObject.destroy({ children: true });
+        }
+        this._renderEntries.clear();
+      },
+      resetNpcDiagnostics: () => this._resetNpcDiagnostics(),
+      resetInterpolationHistory: () => this._resetInterpolationHistory(),
+      invalidateInFlight: () => this._sceneTransition.invalidateInFlight(),
+      log: {
+        debug: (message, detail) => this.debug(message, detail),
+        warn: (message, detail) => this.warn(message, detail),
+        error: (message, detail) => this.error(message, detail),
+      },
     });
 
     this._sceneTransition = new SceneTransitionRunner({
@@ -613,6 +674,8 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       resetSurface: () => this._resetSceneSurface(),
       installScene: (scene) => this._installScene(scene),
       onDiscontinuity: () => this._resetInterpolationHistory(),
+      captureCheckpoint: () => this._restorer.captureCheckpoint(),
+      restoreCheckpoint: async (payload) => this._restorer.rehydrate(payload),
       setRunning: (running) => {
         this._running = running;
       },
@@ -907,6 +970,9 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     this.debug('[GameWorld] destroy:called');
     // Flag disposal so in-flight async init paths (worker import) abort
     this._disposed = true;
+    // Retire the transition runner FIRST: a map load awaiting a parse must
+    // not resume or unlock input on an engine that is being torn down.
+    this._sceneTransition.dispose();
     // Stop the render loop
     this._running = false;
     this._combatMoveMode = false;
@@ -963,6 +1029,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     }
 
     this._worldContainer = undefined;
+    clearContentIdentity();
     this.debugScene.clear();
   }
 
@@ -978,7 +1045,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    * Delegates to the diagnostics boundary; see {@link isE2ETestMode}.
    */
   private _isE2ETestMode(): boolean {
-    return isE2ETestMode();
+    return this._diagnosticsProbe.isE2ETestMode();
   }
 
   /**
@@ -986,7 +1053,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    * which memoizes the immutable URL check.
    */
   private _isVisualScreenshotMode(): boolean {
-    return isVisualScreenshotMode();
+    return this._diagnosticsProbe.isVisualScreenshotMode();
   }
 
   /**
@@ -994,17 +1061,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    * can await specific bitECS conditions before capturing screenshots.
    */
   private _exposeEngineState(): void {
-    exposeEngineState({
-      frozen: !this._running,
-      entityCount: this._renderEntries.size,
-      // C-400 AC-1: spawned NPC count (entities created with npcData — authored
-      // manifest NPCs plus restored/programmatic NPCs) — asserted by
-      // game_boot.spec.ts against the manifest-derived count.
-      npcCount: this._npcMeta.size,
-      playerEntityId: this._playerEntityId,
-      cameraX: this._cameraX,
-      cameraY: this._cameraY,
-    });
+    this._diagnosticsProbe.exposeState();
   }
 
   /**
@@ -1248,7 +1305,10 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
           });
           const entry = this._renderEntries.get(gameEvent.eid);
           if (entry && this._recipeResolver) {
-            let recipes = this._recipeResolver(gameEvent.layerIds);
+            let recipes = withExtraLayers(
+              this._recipeResolver(gameEvent.layerIds),
+              gameEvent.extraLayers,
+            );
             // C-374: merge equipped items into the player's recipe so the
             // sprite reflects current gear (torso/feet replace the base
             // layer; hat/shoulders/weapon/shield are appended).
@@ -1256,13 +1316,9 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
               recipes = this._mergeEquipmentRecipes(recipes, this._equipmentRecipeProvider());
             }
             entry.recipes = recipes;
-            // C-504 AC-5: record the RESOLVED per-NPC appearance (slot →
-            // assetId) so E2E can assert named identities in the live game.
             const npcId = this._npcMeta.get(gameEvent.eid)?.npcId;
             if (npcId) {
-              this._debugNpcAppearance[npcId] = Object.fromEntries(
-                recipes.filter((r) => r.assetId).map((r) => [r.slot, r.assetId]),
-              );
+              this._debugNpcAppearance[npcId] = toAppearanceIdentity(recipes);
             }
             // Bump revision to invalidate any in-flight loads for this entity.
             const nextRevision = (this._entityLoadRevisions.get(gameEvent.eid) ?? 0) + 1;
@@ -1548,8 +1604,16 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
   /**
    * Sets the global input lock state.
    *
-   * When `true`, keyboard movement keys (WASD/arrows) are suppressed.
-   * Interaction keys ('E', 'Enter') continue to work.
+   * When `true`, ALL game keyboard input is suppressed: movement keys
+   * (WASD/arrows) and the in-world interaction key. The previous comment here
+   * claimed 'E'/'Enter' kept working — it has not: `InputController` gates the
+   * interact key on the same lock, and `_handleInteractKey` re-checks it, so
+   * the world-level E never fires while locked. Keys typed into a focused DOM
+   * control are unaffected; that path is deliberately left to the UI, which
+   * handles its own activation.
+   *
+   * Locking also forgets the held-key set, so no movement survives the
+   * transition in either direction.
    */
   setInputLocked(locked: boolean): void {
     // The controller always posts zero velocity on a lock transition so the
@@ -1737,27 +1801,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
     if (!this._worker) {
       throw new Error('Worker not running — cannot restore');
     }
-
-    // A full-world restore is a scene discontinuity: supersede any in-flight
-    // transition and drop cross-scene interpolation history.
-    this._sceneTransition.invalidateInFlight();
-    this._resetInterpolationHistory();
-
-    // Clear all existing render entries (PixiJS display objects) before the
-    // worker hydrates the world. Done synchronously so the scene is empty
-    // the moment the restore is requested.
-    for (const entry of this._renderEntries.values()) {
-      entry.displayObject.destroy({ children: true });
-    }
-    this._renderEntries.clear();
-    this._resetNpcDiagnostics();
-
-    // Wait for the worker to finish restoring. WorkerSession correlates the
-    // reply and rejects on timeout/crash/disposal exactly once.
-    await this._session.request({
-      message: { type: 'LOAD_GAME', payload },
-      expect: 'ENGINE_READY',
-    });
+    await this._restorer.restore(payload);
   }
 
   /**
@@ -1997,6 +2041,7 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
         debugGrid: this._isE2ETestMode(),
       });
     }
+    this._app && syncContentIdentityOverlay({ stage: this._app.stage });
 
     return true;
   }
@@ -2010,44 +2055,9 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
       return Promise.reject(new Error('Worker not running — cannot load map'));
     }
 
-    // Sanitize spawn-point properties for postMessage — some Tiled
-    // property values (e.g. Python bools read as Proxy) may not be
-    // structurally clonable by the Worker API.
-    const safeSpawnPoints = scene.spawnPoints.map((sp) => ({
-      ...sp,
-      properties: JSON.parse(JSON.stringify(sp.properties)),
-    }));
-
-    // Sanitize collision grid — ensure it is a plain boolean array,
-    // not a typed array or proxy that postMessage cannot clone.
-    const safeCollisionGrid = scene.collisionGrid
-      ? { ...scene.collisionGrid, grid: [...scene.collisionGrid.grid] }
-      : undefined;
-
     return this._session
       .request({
-        message: {
-          type: 'LOAD_MAP',
-          spawnPoints: safeSpawnPoints,
-          transitionZones: scene.transitionZones,
-          collisionGrid: safeCollisionGrid,
-          // C-379 AC-4: the authoritative terrain grid — typed arrays clone
-          // structurally, no sanitization needed.
-          terrainGrid: scene.terrainGrid,
-          packConfig: scene.packConfig,
-          mapPixelWidth: scene.mapPixelWidth,
-          mapPixelHeight: scene.mapPixelHeight,
-          targetX: options.targetX,
-          targetY: options.targetY,
-          defeatedEnemies: options.defeatedEnemies,
-          collectedPickups: options.collectedPickups,
-          interactableStates: options.interactableStates,
-          targetSpawnHash: options.targetSpawnHash,
-          defaultSpawnHash: options.defaultSpawnHash,
-          spawnPointEntities: scene.spawnPointEntities,
-          disableClamping: options.disableClamping,
-          mapId: scene.mapId,
-        },
+        message: buildLoadMapMessage(scene, options),
         expect: 'MAP_LOADED',
       })
       .then(() => undefined);
@@ -2180,26 +2190,12 @@ class GameWorld extends BaseEngineClass<GameWorldOptions> {
    * @returns The resolved tile cell coordinates.
    */
   screenToCell(screenX: number, screenY: number): { cellX: number; cellY: number } {
-    const world = this.unprojectScreenToWorld(screenX, screenY);
-    const tileSize = this._activeTileSize ?? 32;
-    let cellX = Math.floor(world.x / tileSize);
-    let cellY = Math.floor(world.y / tileSize);
-
-    const terrain = this._activeTerrainGrid;
-    if (terrain) {
-      cellX = Math.max(0, Math.min(terrain.width - 1, cellX));
-      cellY = Math.max(0, Math.min(terrain.height - 1, cellY));
-    }
-
-    const pathGrid = this._activePathGrid;
-    if (pathGrid) {
-      const nearest = findNearestPathableCell(pathGrid, cellX, cellY);
-      if (nearest) {
-        return { cellX: nearest.x, cellY: nearest.y };
-      }
-    }
-
-    return { cellX, cellY };
+    return resolveScreenToCell({
+      world: this.unprojectScreenToWorld(screenX, screenY),
+      tileSize: this._activeTileSize,
+      terrain: this._activeTerrainGrid,
+      pathGrid: this._activePathGrid,
+    });
   }
 }
 

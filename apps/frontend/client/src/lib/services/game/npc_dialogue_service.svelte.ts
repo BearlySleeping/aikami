@@ -22,7 +22,6 @@ import {
   type BaseFrontendClassOptions,
 } from '@aikami/frontend/services/base';
 import {
-  NpcDialogueAiEnvelopeSchema,
   NpcDialogueCommandSchema,
   NpcDialogueTurnSchema,
   NpcIntentAnalysisOutputSchema,
@@ -56,7 +55,17 @@ import { companionReactionService } from './companion_reaction_service.svelte.ts
 import { resolveAccounts } from './dramatic_structure_service';
 import { inventoryService } from './inventory_service.svelte.ts';
 import { narrativeEventService } from './narrative_event_service.svelte.ts';
+import { npcActionDecisionService } from './npc_action_decision_service.svelte.ts';
+import {
+  noteDialogueSessionStarted,
+  planTurnExtraction,
+  runTurnExtraction,
+  type TurnExtractionParse,
+} from './npc_action_turn.ts';
+import { compareConsequenceDeltas } from './npc_consequence_order';
 import { buildNpcPersona } from './npc_dialogue_persona';
+import { buildNarrativeSystemPrompt } from './npc_dialogue_prompts';
+import { questOfferPrecondition } from './npc_dialogue_quest_authorization.ts';
 import { partyRosterService } from './party_roster_service.svelte.ts';
 import { questStateService } from './quest_state_service.svelte.ts';
 import { relationshipService } from './relationship_service.svelte.ts';
@@ -64,57 +73,6 @@ import { relationshipService } from './relationship_service.svelte.ts';
 export type NpcDialogueServiceOptions = BaseFrontendClassOptions;
 
 /** Fixed application order for a batch (Failure Recovery) — never model order. */
-const CONSEQUENCE_KIND_ORDER = [
-  'flag_clear',
-  'flag_set',
-  'inventory_remove',
-  'inventory_grant',
-  'relationship_update',
-  'trust_change',
-] as const satisfies readonly NpcStateDelta['kind'][];
-
-/**
- * Canonical sort for a consequence batch (Failure Recovery): by kind in the
- * fixed order, then target (code-point), label (missing first, then code-point),
- * then numeric value (missing first, then ascending). Exact duplicates are
- * equivalent — their occurrence number is assigned after this sort.
- */
-const compareConsequenceDeltas = (a: NpcStateDelta, b: NpcStateDelta): number => {
-  const kindDiff = CONSEQUENCE_KIND_ORDER.indexOf(a.kind) - CONSEQUENCE_KIND_ORDER.indexOf(b.kind);
-  if (kindDiff !== 0) {
-    return kindDiff;
-  }
-  if (a.target < b.target) {
-    return -1;
-  }
-  if (a.target > b.target) {
-    return 1;
-  }
-  const aMissingLabel = a.label === undefined || a.label === null;
-  const bMissingLabel = b.label === undefined || b.label === null;
-  if (aMissingLabel !== bMissingLabel) {
-    return aMissingLabel ? -1 : 1;
-  }
-  if ((a.label ?? '') < (b.label ?? '')) {
-    return -1;
-  }
-  if ((a.label ?? '') > (b.label ?? '')) {
-    return 1;
-  }
-  const aMissingValue = !Number.isFinite(a.value);
-  const bMissingValue = !Number.isFinite(b.value);
-  if (aMissingValue !== bMissingValue) {
-    return aMissingValue ? -1 : 1;
-  }
-  if ((a.value ?? 0) < (b.value ?? 0)) {
-    return -1;
-  }
-  if ((a.value ?? 0) > (b.value ?? 0)) {
-    return 1;
-  }
-  return 0;
-};
-
 // ---------------------------------------------------------------------------
 // Injected interfaces — all external dependencies passed through configure()
 // ---------------------------------------------------------------------------
@@ -192,6 +150,19 @@ type NpcDialogueTextGenerator = (options: {
   signal?: AbortSignal;
   /** Called with each narrative token as it arrives. */
   onChunk?: (text: string) => void;
+  /**
+   * The turn's ABSOLUTE end-to-end budget, shared by both of its calls. The
+   * 120 s budget used to be a timer around the promise, which cannot reach the
+   * transport — the adapter applies its own shorter watchdog (#382).
+   */
+  deadlineAt?: number;
+  /** Identity of the dialogue TURN, shared by both of its calls. */
+  requestId?: string;
+  /**
+   * The campaign this turn belongs to. The composition root knows the id; the
+   * orchestrator does not, so it is passed down rather than guessed at.
+   */
+  scope?: string;
 }) => Promise<{ text: string; structured?: unknown }>;
 
 /**
@@ -213,7 +184,7 @@ type DialogueTurnState =
     };
 
 /**
- * Thrown when a generation call exceeds the configured timeout.
+/** Thrown when a generation call exceeds the configured timeout.
  * Distinguished from other failures so callers can surface an actionable
  * error naming the provider (AC-4).
  */
@@ -385,6 +356,17 @@ export type NpcDialogueServiceInterface = BaseFrontendClassInterface & {
   }): DialogueContextProjection;
 
   /**
+   * The NPC's persona block alone, with no turn context.
+   *
+   * For background callers (NPC memory digest, opener refresh) that need the
+   * persona and nothing else. {@link buildContext} additionally walks every
+   * account in the content manifest, selects a companion witness, derives
+   * allowed commands and projects a memory window — all of which a background
+   * prompt discards.
+   */
+  buildNpcPersonaForPrompt(options: { npcId: string; npcName: string }): string;
+
+  /**
    * Marks a command as executed for a given turn, preventing re-execution on regenerate.
    */
   markCommandExecuted(turnId: string, kind: NpcDialogueCommandKind): void;
@@ -482,6 +464,9 @@ export class NpcDialogueService
   /** Per-call generation timeout (AC-4). */
   private _timeoutMs = DEFAULT_DIALOGUE_TIMEOUT_MS;
 
+  /** Turn counter, behind the per-turn request identity. */
+  private _turnSequence = 0;
+
   /**
    * UI-visible state of the current dialogue turn (C-401).
    * Public by design — the dialogue ViewModel renders it reactively.
@@ -572,6 +557,7 @@ export class NpcDialogueService
       suggestionCount: initialSuggestions?.length ?? 0,
     });
 
+    noteDialogueSessionStarted();
     this._activeNpc = {
       npcId: options.npcData.npcId,
       npcName: options.npcData.npcName,
@@ -638,16 +624,31 @@ export class NpcDialogueService
     });
   }
 
+  /**
+   * The NPC's persona block alone, with no turn context (issue #382).
+   *
+   * The background memory tasks (digest, opener refresh) need the persona and
+   * nothing else. They were calling {@link buildContext} and discarding
+   * everything but `.persona`, which walks every account in every situation of
+   * the content manifest, selects a companion witness, derives allowed
+   * commands and projects a memory window — O(manifest) work per background
+   * call, twice per call (once to dispatch, once to revalidate), for one
+   * string.
+   *
+   * Still `assertConfigured`, still derives from the AUTHORED identity, and
+   * still logs the generic-persona diagnostic. The only thing removed is the
+   * work whose result the caller threw away.
+   */
+  buildNpcPersonaForPrompt(options: { npcId: string; npcName: string }): string {
+    this._assertConfigured();
+    const npc = this._contentProvider!.getNpc(options.npcId);
+    return this._buildPersona({ npcId: options.npcId, npcName: options.npcName, npc });
+  }
+
   /** @inheritdoc */
-  async generateTurn(options: {
-    npcId: string;
-    npcName: string;
-    messages: Array<{ role: 'player' | 'npc'; content: string }>;
-    signal: AbortSignal;
-    gameStateFacts?: string[];
-    activeEncounterId?: string;
-    onChunk?: (text: string) => void;
-  }): Promise<NpcDialogueTurn> {
+  async generateTurn(
+    options: Parameters<NpcDialogueServiceInterface['generateTurn']>[0],
+  ): Promise<NpcDialogueTurn> {
     this._assertConfigured();
 
     // ── Concurrency gate: cancel any in-flight turn ───────────────────
@@ -659,6 +660,10 @@ export class NpcDialogueService
     const controller = new AbortController();
     this._activeAbortController = controller;
     const linkedSignal = this._linkSignals(options.signal, controller.signal, controller);
+    // ONE budget for the whole TURN, shared by both calls.
+    const turnDeadlineAt = Date.now() + this._timeoutMs;
+    this._turnSequence += 1;
+    const turnRequestId = `dialogue-turn-${this._turnSequence}`;
 
     try {
       const npc = this._contentProvider!.getNpc(options.npcId);
@@ -695,6 +700,8 @@ export class NpcDialogueService
           signal: linkedSignal,
           turnCtx,
           onChunk: options.onChunk,
+          deadlineAt: turnDeadlineAt,
+          requestId: turnRequestId,
         });
         const pendingWitness = contextProjection.pendingCompanionWitness;
         if (pendingWitness) {
@@ -845,15 +852,9 @@ export class NpcDialogueService
   // ── Public: two-call pipeline (C-371) ─────────────────────────────────
 
   /** @inheritdoc */
-  async analyzeIntent(options: {
-    npcId: string;
-    npcName: string;
-    messages: Array<{ role: 'player' | 'npc'; content: string }>;
-    signal: AbortSignal;
-    gameStateFacts?: string[];
-    playerContext?: { characterSheetSummary: string; level: number; classId: string };
-    onChunk?: (text: string) => void;
-  }): Promise<NpcIntentAnalysisOutput> {
+  async analyzeIntent(
+    options: Parameters<NpcDialogueServiceInterface['analyzeIntent']>[0],
+  ): Promise<NpcIntentAnalysisOutput> {
     this._assertConfigured();
 
     // E2E seeding hook (C-487): deterministic intent envelope for the /game
@@ -882,6 +883,9 @@ export class NpcDialogueService
     const controller = new AbortController();
     this._activeAbortController = controller;
     const linkedSignal = this._linkSignals(options.signal, controller.signal, controller);
+    const turnDeadlineAt = Date.now() + this._timeoutMs;
+    this._turnSequence += 1;
+    const turnRequestId = `dialogue-turn-${this._turnSequence}`;
 
     try {
       const npc = this._contentProvider!.getNpc(options.npcId);
@@ -902,6 +906,8 @@ export class NpcDialogueService
             classId: 'fighter',
           },
           onChunk: options.onChunk,
+          deadlineAt: turnDeadlineAt,
+          requestId: turnRequestId,
         });
       } catch (error) {
         if (this._isAbortError(error)) {
@@ -932,19 +938,9 @@ export class NpcDialogueService
   }
 
   /** @inheritdoc */
-  async resolveRoll(options: {
-    npcId: string;
-    npcName: string;
-    messages: Array<{ role: 'player' | 'npc'; content: string }>;
-    signal: AbortSignal;
-    gameStateFacts?: string[];
-    checkType: string;
-    difficultyClass: number;
-    rollTotal: number;
-    outcome: 'pass' | 'fail';
-    playerInput: string;
-    onChunk?: (text: string) => void;
-  }): Promise<NpcRollResolutionOutput> {
+  async resolveRoll(
+    options: Parameters<NpcDialogueServiceInterface['resolveRoll']>[0],
+  ): Promise<NpcRollResolutionOutput> {
     this._assertConfigured();
 
     // Concurrency gate
@@ -954,6 +950,9 @@ export class NpcDialogueService
     const controller = new AbortController();
     this._activeAbortController = controller;
     const linkedSignal = this._linkSignals(options.signal, controller.signal, controller);
+    const turnDeadlineAt = Date.now() + this._timeoutMs;
+    this._turnSequence += 1;
+    const turnRequestId = `dialogue-turn-${this._turnSequence}`;
 
     try {
       try {
@@ -969,6 +968,8 @@ export class NpcDialogueService
           outcome: options.outcome,
           playerInput: options.playerInput,
           onChunk: options.onChunk,
+          deadlineAt: turnDeadlineAt,
+          requestId: turnRequestId,
         });
       } catch (error) {
         if (this._isAbortError(error)) {
@@ -1001,63 +1002,12 @@ export class NpcDialogueService
   // ── Private: AI generation path ───────────────────────────────────────
 
   /**
-   * Parses and validates the raw structured envelope from the AI response.
-   * Returns a parsed envelope or null if validation fails.
-   */
-  private _parseEnvelope(
-    narrative: string,
-    rawEnvelope: unknown,
-  ): {
-    narrative?: string;
-    command?: NpcDialogueCommand;
-    choices?: NpcDialogueChoice[];
-  } | null {
-    if (!rawEnvelope || typeof rawEnvelope !== 'object') {
-      return null;
-    }
-
-    const env = rawEnvelope as Record<string, unknown>;
-
-    // First attempt: check raw envelope directly
-    if (Value.Check(NpcDialogueAiEnvelopeSchema, env)) {
-      return env as {
-        narrative?: string;
-        command?: NpcDialogueCommand;
-        choices?: NpcDialogueChoice[];
-      };
-    }
-
-    // One repair attempt: try merging with narrative
-    const repaired = {
-      narrative: narrative || (env.narrative as string) || '',
-      command: env.command,
-      choices: env.choices,
-    };
-    if (Value.Check(NpcDialogueAiEnvelopeSchema, repaired)) {
-      this.warn('_generateAiTurn:repaired', {
-        narrativeLength: narrative.length,
-      });
-      return repaired as {
-        narrative?: string;
-        command?: NpcDialogueCommand;
-        choices?: NpcDialogueChoice[];
-      };
-    }
-
-    this.warn('_generateAiTurn:invalid-output', {
-      narrativeLength: narrative.length,
-      envelopeKeys: Object.keys(env),
-    });
-    return null;
-  }
-
-  /**
    * Calls the gateway text generator with the projected context.
    *
    * C-401: split into two calls — call 1 streams plain narrative prose
-   * (no schema, via `onChunk`), call 2 extracts the structured command
-   * envelope from the completed narrative under the TypeBox schema. If
-   * call 2 fails or returns a malformed envelope, the turn degrades to
+   * (no schema, via `onChunk`), call 2 extracts metadata (`command`,
+   * `choices`) from the completed narrative under the TypeBox schema. If
+   * call 2 fails or returns a malformed extraction, the turn degrades to
    * narrative-only with derived choices — the streamed text the player
    * already read is never discarded (AC-7).
    */
@@ -1067,12 +1017,13 @@ export class NpcDialogueService
     signal: AbortSignal;
     turnCtx: TurnContext;
     onChunk?: (text: string) => void;
+    /** The turn's shared absolute budget; see {@link NpcDialogueTextGenerator}. */
+    deadlineAt?: number;
+    requestId?: string;
   }): Promise<NpcDialogueTurn> {
-    const { contextProjection, messages, signal, onChunk } = options;
+    const { contextProjection, messages, signal, onChunk, deadlineAt, requestId } = options;
 
     const narrativeSystemPrompt = this._buildNarrativeSystemPrompt(contextProjection);
-    const extractionSystemPrompt = this._buildExtractionSystemPrompt(contextProjection);
-
     // Build adapter messages: system + conversation (bounded window)
     const conversationMessages = messages
       .slice(-20) // bounded memory window — last 20 turns max
@@ -1098,26 +1049,66 @@ export class NpcDialogueService
           onChunk,
           path: 'turn-narrative',
           call: 1,
+          deadlineAt,
+          requestId,
         }),
         'narrative',
       );
       this._checkAbort(signal);
 
-      // ── Call 2: extract the command envelope from the narrative ────
+      // 🔴 The streamed narrative is authoritative, and it is the ONLY source of
+      // narrative for this turn. Call 2 returns metadata only, so an empty call 1
+      // can no longer be silently backfilled — and `NpcDialogueTurnSchema.narrative`
+      // permits `''`, which would let a provider that said nothing pass as a
+      // successful AI turn.
+      //
+      // Empty is treated as what it is: call 1 produced nothing, which is a
+      // provider failure. `generateTurn` already documents that provider
+      // failures are surfaced and "never faked with authored dialogue", so this
+      // reuses that existing contract rather than inventing a new one. The check
+      // runs before call 2 because a turn with no narrative can never be a
+      // successful turn, so the extraction would be spent for nothing.
+      if (narrative.trim().length === 0) {
+        this.warn('_generateAiTurn:empty-narrative', { path: 'turn' });
+        // Thrown, not returned: `generateTurn` already maps a non-abort,
+        // non-timeout error to `kind: 'failed'` with `reason: 'provider_error'`.
+        throw new Error('AI dialogue produced no narrative; refusing to report a successful turn');
+      }
+
       this.turnState = { kind: 'awaiting_envelope', text: narrative };
-      let rawEnvelope: unknown;
+      const turnCtx = options.turnCtx;
+      const plan = await planTurnExtraction({
+        npcId: turnCtx.npcId,
+        npcName: turnCtx.npcName,
+        persona: contextProjection.persona,
+        allowedCommands: contextProjection.allowedCommands,
+        npcEntry: turnCtx.npcEntry,
+        narrative,
+        currentCampaignId: () => campaignService.activeCampaign?.id,
+        deadlineAt,
+        signal,
+        readTurnSequence: () => this._turnSequence,
+        readConfigRevision: () => npcActionDecisionService.configRevision(),
+        mode: npcActionDecisionService.mode(),
+        log: (detail: Record<string, unknown>) => this.info('npc action decision', detail),
+      });
+
+      let parsedExtraction: TurnExtractionParse;
       try {
-        rawEnvelope = await this._withTimeout(
-          this._extractEnvelope({
-            narrative,
-            systemPrompt: extractionSystemPrompt,
-            schema: NpcDialogueAiEnvelopeSchema as unknown as Record<string, unknown>, // guard-ignore lint/type-safety/casting: TypeBox schema cast for AI envelope or rAF polyfill
-            schemaName: 'NpcDialogueAiEnvelope',
-            signal,
-            path: 'turn-envelope',
-            call: 2,
-          }),
-          'envelope',
+        parsedExtraction = await runTurnExtraction(plan, (config) =>
+          this._withTimeout(
+            this._extractEnvelope({
+              narrative,
+              ...config,
+              schema: config.schema as Record<string, unknown>,
+              signal,
+              path: 'turn-envelope',
+              call: 2,
+              deadlineAt,
+              requestId,
+            }),
+            'envelope',
+          ),
         );
       } catch (error) {
         this._checkAbort(signal);
@@ -1127,21 +1118,16 @@ export class NpcDialogueService
       }
       this._checkAbort(signal);
 
-      // ── Parse and validate the structured envelope ────────────────
-      const parsedEnvelope = this._parseEnvelope(narrative, rawEnvelope);
-
-      if (!parsedEnvelope) {
-        // Malformed envelope — same AC-7 degrade path.
-        this.warn('_generateAiTurn:malformed-envelope', {
-          narrativeLength: narrative.length,
-        });
+      if (!parsedExtraction.ok) {
+        this.warn('_generateAiTurn:invalid-extraction', { narrativeLength: narrative.length });
         return this._assembleNarrativeTurn({ narrative, contextProjection });
       }
 
-      // The streamed narrative is authoritative — the player already read it.
-      const finalNarrative = narrative || parsedEnvelope.narrative || '';
-      const command = parsedEnvelope.command;
-      let choices = this._filterChoices(parsedEnvelope.choices ?? []);
+      // A decided command came from an authorized candidate and still goes
+      // through `_validateCommandPreconditions` below.
+      const finalNarrative = narrative;
+      const command = plan.decidedByDecision ? plan.command : parsedExtraction.value.command;
+      let choices = this._filterChoices(parsedExtraction.value.choices ?? []);
 
       // If no choices came back, derive from context
       if (choices.length === 0) {
@@ -1154,7 +1140,7 @@ export class NpcDialogueService
           command,
           allowedCommands: contextProjection.allowedCommands,
           npcId: options.turnCtx.npcId,
-          npcEntry: options.turnCtx.npcEntry,
+          npcEntry: turnCtx.npcEntry,
         });
         if (!precondResult.allowed) {
           this.warn('_generateAiTurn:command-denied', {
@@ -1209,8 +1195,10 @@ export class NpcDialogueService
     onChunk?: (text: string) => void;
     path: string;
     call: number;
+    deadlineAt?: number;
+    requestId?: string;
   }): Promise<string> {
-    const { adapterMessages, signal, onChunk, path, call } = options;
+    const { adapterMessages, signal, onChunk, path, call, deadlineAt, requestId } = options;
     const callStart = performance.now();
     // Capture the turn token: a timeout bumps `_streamTurnId`, so chunks
     // arriving after the timeout from the still-running provider are dropped
@@ -1236,6 +1224,8 @@ export class NpcDialogueService
         }
         this._forwardChunk(onChunk, text);
       },
+      ...(deadlineAt === undefined ? {} : { deadlineAt }),
+      ...(requestId === undefined ? {} : { requestId }),
     });
 
     return result.text?.trim() || this._streamText.trim() || '';
@@ -1253,8 +1243,20 @@ export class NpcDialogueService
     signal: AbortSignal;
     path: string;
     call: number;
+    deadlineAt?: number;
+    requestId?: string;
   }): Promise<unknown> {
-    const { narrative, systemPrompt, schema, schemaName, signal, path, call } = options;
+    const {
+      narrative,
+      systemPrompt,
+      schema,
+      schemaName,
+      signal,
+      path,
+      call,
+      deadlineAt,
+      requestId,
+    } = options;
     const callStart = performance.now();
     this._currentCallIndex = call;
     try {
@@ -1266,6 +1268,10 @@ export class NpcDialogueService
         schema,
         schemaName,
         signal,
+        // The SAME instant as call 1: it has less budget left, and that is
+        // the only number the transport can act on.
+        ...(deadlineAt === undefined ? {} : { deadlineAt }),
+        ...(requestId === undefined ? {} : { requestId }),
       });
       return result.structured;
     } catch (error) {
@@ -1275,8 +1281,8 @@ export class NpcDialogueService
   }
 
   /**
-   * Wraps a generation promise with the configured timeout. A stalled
-   * provider (never resolves) rejects with {@link DialogueTimeoutError}.
+   * Wraps a generation promise with the configured timeout. A stalled provider
+   * rejects with {@link DialogueTimeoutError}.
    *
    * On timeout the current turn is invalidated: the per-turn stream token
    * is bumped so late onChunk/_forwardChunk callbacks from the still-running
@@ -1547,78 +1553,14 @@ export class NpcDialogueService
   }
 
   /**
-   * Builds the system prompt for the streamed narrative call (call 1 of the
-   * C-401 split). Asks for plain prose — never JSON — so tokens stream as
-   * readable narrative.
+   * The system prompt for the streamed narrative call (call 1).
+   *
+   * Delegates to `buildNarrativeSystemPrompt`, which owns the section order —
+   * and specifically the stable-blocks-first ordering that lets a provider
+   * reuse a prompt prefix. See that module for why.
    */
   private _buildNarrativeSystemPrompt(projection: DialogueContextProjection): string {
-    const lines = [
-      '[NPC CONTEXT]',
-      projection.persona,
-      `Your name is ${projection.npcName}.`,
-      'Stay in character at all times. Respond as the NPC would.',
-      '',
-      'Keep responses concise — 1 to 3 sentences. Be immersive and natural.',
-      'Do not break character. Do not mention being an AI.',
-      "Reply with the NPC's spoken narrative ONLY — plain prose, no JSON.",
-    ];
-
-    if (projection.gameStateFacts.length > 0) {
-      lines.push('', '[GAME STATE]', ...projection.gameStateFacts);
-    }
-
-    if (projection.relationshipFacts && projection.relationshipFacts.length > 0) {
-      lines.push('', '[RELATIONSHIPS]', ...projection.relationshipFacts);
-    }
-
-    if (projection.memory.length > 0) {
-      lines.push('', '[CONVERSATION HISTORY]', ...projection.memory);
-    }
-
-    // C-494 AC-3: witness recall surfaces an event this companion actually
-    // witnessed, in their own voice. Injected as background — the companion
-    // raises it unprompted rather than as a numeric readout.
-    if (projection.companionWitnessed.length > 0) {
-      lines.push(
-        '',
-        '[COMPANION WITNESSED]',
-        ...projection.companionWitnessed,
-        'Bring this up naturally, in your own voice, without being asked.',
-      );
-    }
-
-    lines.push(
-      '',
-      '[ALLOWED ACTIONS]',
-      `In this scene the NPC has these actions available: ${projection.allowedCommands.join(', ') || 'none'}.`,
-      'These are scene context only — do not output actions in your reply.',
-    );
-
-    return lines.join('\n');
-  }
-
-  /**
-   * Builds the system prompt for the envelope extraction call (call 2 of
-   * the C-401 split). Operating on the completed narrative, it asks for the
-   * structured `{narrative, command, choices}` envelope — the same shape the
-   * single-call path used to request.
-   */
-  private _buildExtractionSystemPrompt(projection: DialogueContextProjection): string {
-    return [
-      '[NPC CONTEXT]',
-      projection.persona,
-      `You are ${projection.npcName}, staying in character.`,
-      '',
-      '[EXTRACTION]',
-      'You are given an NPC narrative that was just spoken to the player.',
-      'Extract the structured dialogue envelope from it:',
-      '"narrative" (string, required),',
-      'optionally "command" (one of the allowed actions),',
-      'and optionally "choices" (array of player options, at most 4).',
-      'Each choice has "id", "label", and optionally "command" or "nextDialogueKey".',
-      `Allowed actions: ${projection.allowedCommands.join(', ') || 'none'}.`,
-      'Do not invent new narrative — reuse the given narrative verbatim.',
-    ].join('\n');
+    return buildNarrativeSystemPrompt(projection);
   }
 
   // ── Private: precondition derivation ──────────────────────────────────
@@ -1707,17 +1649,13 @@ export class NpcDialogueService
         return { allowed: true };
       }
 
-      case 'offerQuest': {
-        const questId = c.questId as string | undefined;
-        if (!questId) {
-          return { allowed: false, reason: 'offerQuest missing questId' };
-        }
-        const quest = this._contentProvider!.getQuest(questId);
-        if (!quest) {
-          return { allowed: false, reason: `quest ${questId} not found` };
-        }
-        return { allowed: true };
-      }
+      case 'offerQuest':
+        return questOfferPrecondition({
+          questId: c.questId as string | undefined,
+          npcId,
+          contentProvider: this._contentProvider!,
+          questState: questStateService,
+        });
 
       case 'skillCheck': {
         const skill = c.skill as string | undefined;
@@ -1901,6 +1839,8 @@ export class NpcDialogueService
     gameStateFacts: string[];
     playerContext: { characterSheetSummary: string; level: number; classId: string };
     onChunk?: (text: string) => void;
+    deadlineAt: number;
+    requestId: string;
   }): Promise<NpcIntentAnalysisOutput> {
     this.debug('_analyzeIntent:start');
 
@@ -1955,6 +1895,8 @@ export class NpcDialogueService
           onChunk,
           path: 'intent-narrative',
           call: 1,
+          deadlineAt: options.deadlineAt,
+          requestId: options.requestId,
         }),
         'intent-narrative',
       );
@@ -1975,6 +1917,8 @@ export class NpcDialogueService
             signal: options.signal,
             path: 'intent-envelope',
             call: 2,
+            deadlineAt: options.deadlineAt,
+            requestId: options.requestId,
           }),
           'intent-envelope',
         );
@@ -2064,6 +2008,8 @@ export class NpcDialogueService
     outcome: 'pass' | 'fail';
     playerInput: string;
     onChunk?: (text: string) => void;
+    deadlineAt: number;
+    requestId: string;
   }): Promise<NpcRollResolutionOutput> {
     this.debug('_resolveRoll:start', {
       checkType: options.checkType,
@@ -2174,6 +2120,8 @@ export class NpcDialogueService
           onChunk,
           path: 'roll-narrative',
           call: 1,
+          deadlineAt: options.deadlineAt,
+          requestId: options.requestId,
         }),
         'roll-narrative',
       );
@@ -2192,6 +2140,8 @@ export class NpcDialogueService
             signal: options.signal,
             path: 'roll-envelope',
             call: 2,
+            deadlineAt: options.deadlineAt,
+            requestId: options.requestId,
           }),
           'roll-envelope',
         );

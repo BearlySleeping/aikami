@@ -46,7 +46,6 @@ import type { CombatServiceInterface } from './combat_service.svelte';
 import { combatSettlementLedger } from './combat_settlement_ledger.svelte.ts';
 import type { GameEngineServiceInterface } from './game_engine_service.svelte';
 import type { GameOverlayServiceInterface } from './game_overlay_service.svelte';
-import type { InputActionServiceInterface } from './input_action_service.svelte.ts';
 import type { NpcDialogueServiceInterface } from './npc_dialogue_service.svelte';
 import type { OnboardingHintServiceInterface } from './onboarding_hint_service.svelte.ts';
 import type { PartyFollowServiceInterface } from './party_follow_service.svelte.ts';
@@ -63,7 +62,6 @@ export type SetupBridgeListenersParams = {
   combatService: CombatServiceInterface;
   timeService: TimeServiceInterface;
   audioService: AudioServiceInterface;
-  inputActionService: InputActionServiceInterface;
   onboardingHintService: OnboardingHintServiceInterface;
   partyFollowService: PartyFollowServiceInterface;
   /**
@@ -86,7 +84,6 @@ export const setupBridgeListeners = async (params: SetupBridgeListenersParams): 
     combatService,
     timeService,
     audioService,
-    inputActionService,
     onboardingHintService,
     partyFollowService,
     contextualTriggerService,
@@ -250,6 +247,7 @@ export const setupBridgeListeners = async (params: SetupBridgeListenersParams): 
   bridge.on('COMBAT_STARTED', (event) => {
     if (
       gameOverlayService.activeOverlay !== 'NONE' &&
+      gameOverlayService.activeOverlay !== 'DIALOGUE' &&
       gameOverlayService.activeOverlay !== 'COMBAT'
     ) {
       return;
@@ -257,14 +255,21 @@ export const setupBridgeListeners = async (params: SetupBridgeListenersParams): 
     // Review F9: the presentation now belongs to THIS run. A delayed callback
     // scheduled by a previous encounter is inert from here on.
     combatSettlementLedger.begin(presentationIdentityFor(event.encounterId, event.encounterRunId));
+    const dialogueNpc =
+      gameOverlayService.activeOverlay === 'DIALOGUE' ? npcDialogueService.activeNpc : undefined;
+    const sameEncounter = event.encounterId === combatService.encounterId;
+    if (gameOverlayService.activeOverlay === 'DIALOGUE') {
+      gameOverlayService.endDialogue();
+    }
     combatService.startCombat({
-      enemyName: event.enemyName ?? 'Unknown Enemy',
-      // No invented HP: the legacy funnel reports the enemy's HP on the event,
-      // the v2 funnel reports it through COMBAT_STATE_UPDATE (which the driver
-      // and the sync snapshot both emit). A placeholder here showed an 80-HP
-      // enemy in a 20-HP fight.
-      enemyHp: event.enemyHp ?? 0,
-      enemyMaxHp: event.enemyMaxHp ?? 0,
+      enemyName:
+        event.enemyName ??
+        dialogueNpc?.npcName ??
+        (sameEncounter ? combatService.enemyName : 'Unknown Enemy'),
+      enemyNpcId: dialogueNpc?.npcId ?? (sameEncounter ? combatService.enemyNpcId : undefined),
+      // Preserve known HP until COMBAT_STATE_UPDATE supplies authoritative values.
+      enemyHp: event.enemyHp ?? combatService.enemyHp,
+      enemyMaxHp: event.enemyMaxHp ?? combatService.enemyMaxHp,
       participantIds: event.participantIds,
       firstTurnEntityId: event.firstTurnEntityId,
       combatSeed: event.combatSeed,
@@ -287,12 +292,7 @@ export const setupBridgeListeners = async (params: SetupBridgeListenersParams): 
       reasonCode: event.reasonCode,
       messageKey: event.messageKey,
     });
-    if (gameOverlayService.activeOverlay === 'COMBAT') {
-      // No `COMBAT_STARTED` arrived for this command, so the combat service was
-      // never seeded: clearing the stack is enough, and it restores EXPLORE
-      // input (the engine was paused when the overlay opened).
-      gameOverlayService.closeCombat();
-    }
+    gameOverlayService.rejectCombatStart();
   });
 
   bridge.on('COMBAT_LOG', (event) => {
@@ -364,26 +364,17 @@ export const setupBridgeListeners = async (params: SetupBridgeListenersParams): 
 
   bridge.on('INTERACTION_TARGET_CHANGED', (event) => {
     if (event.targetEntityId !== undefined && event.targetName && event.targetType) {
-      // Store target metadata so the display label can react to device/binding changes.
-      // The prompt ViewModel/GUI derives the label from inputActionService.actionDisplayLabel()
-      // whenever the prompt is rendered or device/bindings change.
+      // Record only WHAT the engine selected. Whether that prompt is on screen is
+      // the overlay service's call — it already knows the overlay stack, and a
+      // second opinion computed here is a value nothing could later correct.
       const verb = event.targetType === 'npc' ? 'Talk to' : 'Pick up';
-      const keyLabel = inputActionService.actionDisplayLabel('interact');
       gameOverlayService.setInteractionPrompt({
-        label: `${keyLabel} — ${verb} ${event.targetName}`,
-        visible: gameOverlayService.activeOverlay === 'NONE',
-        targetMetadata: { verb, targetName: event.targetName },
+        target: { verb, targetName: event.targetName },
         targetScreenX: event.targetScreenX,
         targetScreenY: event.targetScreenY,
       });
     } else {
-      gameOverlayService.setInteractionPrompt({
-        label: '',
-        visible: false,
-        targetMetadata: undefined,
-        targetScreenX: undefined,
-        targetScreenY: undefined,
-      });
+      gameOverlayService.clearInteractionPrompt();
     }
 
     // Forward target changes to the onboarding service for near_interactable hints

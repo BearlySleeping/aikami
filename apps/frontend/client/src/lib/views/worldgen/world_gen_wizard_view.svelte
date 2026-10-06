@@ -1,12 +1,10 @@
 <script lang="ts">
 // apps/frontend/client/src/lib/views/worldgen/world_gen_wizard_view.svelte
 //
-// Aikami UI template for the World Generation Wizard.
-// Implements a 5-step wizard with step indicator, genre/tone chips,
-// setting textarea, difficulty radio, goals textarea, generating spinner,
-// preview cards, and error state.
+// Zero-logic view for the G01 world-generation wizard.
 //
-// Contract: C-233
+// It renders DRAFT state, not a playable world: the preview step says so in
+// words, and the terminal step is "Draft Saved" rather than character creation.
 
 import { BaseViewModelContainer } from '$components';
 import type { WorldGenWizardViewModelInterface } from './world_gen_wizard_view_model.svelte.ts';
@@ -21,40 +19,42 @@ type Props = {
 };
 
 const { viewModel }: Props = $props();
+
+const draft = $derived(viewModel.draft);
 </script>
 
 <BaseViewModelContainer {viewModel}>
   <div class="max-w-3xl mx-auto p-6">
     <!-- Step indicator -->
     <div class="flex items-center mb-8">
-      {#each viewModel.steps as step, i}
+      {#each viewModel.steps as step, i (step)}
         <div class="flex items-center">
           <div
             class="w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium
             {i <= viewModel.steps.indexOf(viewModel.currentStep)
-  ? 'bg-primary text-primary-content'
-  : 'bg-base-300 text-base-content/50'}"
+              ? 'bg-primary text-primary-content'
+              : 'bg-base-300 text-base-content/50'}"
           >
             {i + 1}
           </div>
           {#if i < viewModel.steps.length - 1}
             <div
               class="h-1 w-12 mx-1 rounded
-              {i < viewModel.steps.indexOf(viewModel.currentStep) ? 'bg-primary' : 'bg-base-300'}"
+              {i < viewModel.steps.indexOf(viewModel.currentStep)
+                ? 'bg-primary'
+                : 'bg-base-300'}"
             ></div>
           {/if}
         </div>
       {/each}
     </div>
 
-    <!-- Progress bar -->
     <progress
       class="progress progress-primary w-full mb-6"
       value={viewModel.progressPercent}
       max="100"
     ></progress>
 
-    <!-- Step Title -->
     <h2 class="text-2xl font-bold mb-6">{viewModel.currentStepLabel}</h2>
 
     {#if viewModel.currentStep === 'genre_tone'}
@@ -62,7 +62,7 @@ const { viewModel }: Props = $props();
         <div>
           <span class="block text-sm font-medium mb-2">Genre</span>
           <div class="flex flex-wrap gap-2">
-            {#each GENRE_OPTIONS as genre}
+            {#each GENRE_OPTIONS as genre (genre)}
               <button
                 type="button"
                 class="btn btn-sm {viewModel.genre === genre ? 'btn-primary' : 'btn-outline'}"
@@ -76,7 +76,7 @@ const { viewModel }: Props = $props();
         <div>
           <span class="block text-sm font-medium mb-2">Tone</span>
           <div class="flex flex-wrap gap-2">
-            {#each TONE_OPTIONS as tone}
+            {#each TONE_OPTIONS as tone (tone)}
               <button
                 type="button"
                 class="btn btn-sm {viewModel.tone === tone ? 'btn-primary' : 'btn-outline'}"
@@ -105,7 +105,7 @@ const { viewModel }: Props = $props();
         <div>
           <span class="block text-sm font-medium mb-2">Difficulty</span>
           <div class="flex gap-4">
-            {#each DIFFICULTY_OPTIONS as diff}
+            {#each DIFFICULTY_OPTIONS as diff (diff)}
               <label class="flex items-center gap-2 cursor-pointer">
                 <input
                   type="radio"
@@ -138,13 +138,29 @@ const { viewModel }: Props = $props();
         </p>
       </div>
     {:else if viewModel.currentStep === 'generating'}
-      <div class="flex flex-col items-center justify-center py-16">
-        {#if viewModel.isGenerating && !viewModel.generationError}
+      <div
+        class="flex flex-col items-center justify-center py-16"
+        data-testid="worldgen-generating"
+      >
+        {#if viewModel.isGenerating}
           <span class="loading loading-spinner loading-lg text-primary mb-4"></span>
-          <p class="text-lg font-medium">Generating your world...</p>
+          <p class="text-lg font-medium">Drafting your world…</p>
           <p class="text-sm text-base-content/50 mt-2">
-            The AI is building NPCs, locations, story arcs, and more.
+            Building a private narrative draft on this device. Nothing is added to a campaign.
           </p>
+          {#if viewModel.completedStageLabels.length > 0}
+            <p class="text-xs text-base-content/60 mt-3" data-testid="worldgen-completed-stages">
+              Completed: {viewModel.completedStageLabels.join(', ')}
+            </p>
+          {/if}
+          <button
+            type="button"
+            class="btn btn-outline mt-6"
+            data-testid="worldgen-cancel"
+            onclick={() => viewModel.cancelGeneration()}
+          >
+            Cancel
+          </button>
         {/if}
         {#if viewModel.retryStatus}
           <div class="alert alert-warning mt-6 max-w-md">
@@ -152,25 +168,20 @@ const { viewModel }: Props = $props();
             <span>{viewModel.retryStatus}</span>
           </div>
         {/if}
-        {#if viewModel.generationError}
-          <div class="alert alert-error mt-6 max-w-md">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              class="h-6 w-6 shrink-0 stroke-current"
-              fill="none"
-              viewBox="0 0 24 24"
-              aria-hidden="true"
-            >
-              <title>Error</title>
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-              />
-            </svg>
+        {#if viewModel.stageFailures.length > 0}
+          <ul class="text-xs text-base-content/60 mt-2" data-testid="worldgen-stage-failures">
+            <!-- A retried stage that fails the same way twice produces two
+                 IDENTICAL entries (the failure list is per round, not per
+                 stage), so stage+message is not a unique key. -->
+            {#each viewModel.stageFailures as failure, failureIndex (failureIndex)}
+              <li>{failure.stage}: {failure.message}</li>
+            {/each}
+          </ul>
+        {/if}
+        {#if viewModel.generationError && !viewModel.isGenerating}
+          <div class="alert alert-error mt-6 max-w-md" data-testid="worldgen-error">
             <div>
-              <h3 class="font-bold">Generation Failed</h3>
+              <h3 class="font-bold">Draft Generation Failed</h3>
               <p class="text-sm">{viewModel.generationError}</p>
             </div>
           </div>
@@ -178,39 +189,45 @@ const { viewModel }: Props = $props();
             <button
               type="button"
               class="btn btn-warning"
-              disabled={viewModel.retriesRemaining <= 0 || viewModel.isGenerating}
+              data-testid="worldgen-retry"
+              disabled={viewModel.isGenerating}
               onclick={() => viewModel.retryGeneration()}
             >
-              🔄 Retry
-              {#if viewModel.retriesRemaining > 0}
-                ({viewModel.retriesRemaining}
-                left)
-              {/if}
+              Retry
             </button>
             <button
               type="button"
               class="btn btn-outline"
               onclick={() => viewModel.changeConnection()}
             >
-              ⚙️ Change Connection
+              Change Connection
             </button>
           </div>
         {/if}
       </div>
     {:else if viewModel.currentStep === 'preview'}
       <div class="space-y-6">
-        {#if viewModel.worldOutput}
+        {#if draft}
+          <div class="alert alert-info text-sm" data-testid="worldgen-preview-notice" role="status">
+            <span>
+              Narrative draft — not a playable world. Accepting saves it privately on this device.
+              It does not change the running game or create a campaign, map, or NPC.
+            </span>
+          </div>
+
           <div class="card bg-base-200">
             <div class="card-body">
-              <h3 class="card-title text-xl">{viewModel.worldOutput.worldName}</h3>
-              <p class="whitespace-pre-wrap text-sm">{viewModel.worldOutput.worldDescription}</p>
+              <h3 class="card-title text-xl" data-testid="worldgen-world-name">
+                {draft.setting?.worldName}
+              </h3>
+              <p class="whitespace-pre-wrap text-sm">{draft.setting?.worldDescription}</p>
             </div>
           </div>
 
           <div>
-            <h3 class="text-lg font-semibold mb-3">NPCs ({viewModel.worldOutput.npcs.length})</h3>
+            <h3 class="text-lg font-semibold mb-3">Cast ({draft.cast.length})</h3>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {#each viewModel.worldOutput.npcs as npc}
+              {#each draft.cast as npc (npc.id)}
                 <div class="card bg-base-200">
                   <div class="card-body p-4">
                     <h4 class="font-bold">{npc.name}</h4>
@@ -223,21 +240,17 @@ const { viewModel }: Props = $props();
           </div>
 
           <div>
-            <h3 class="text-lg font-semibold mb-3">
-              Locations ({viewModel.worldOutput.locations.length})
-            </h3>
+            <h3 class="text-lg font-semibold mb-3">Places ({draft.places.length})</h3>
             <div class="flex flex-wrap gap-2">
-              {#each viewModel.worldOutput.locations as location}
-                <span class="badge badge-outline badge-lg">{location}</span>
+              {#each draft.places as place (place.id)}
+                <span class="badge badge-outline badge-lg">{place.name}</span>
               {/each}
             </div>
           </div>
 
           <div>
-            <h3 class="text-lg font-semibold mb-3">
-              Story Arcs ({viewModel.worldOutput.partyArcs.length})
-            </h3>
-            {#each viewModel.worldOutput.partyArcs as arc}
+            <h3 class="text-lg font-semibold mb-3">Story Arcs ({draft.arcs.length})</h3>
+            {#each draft.arcs as arc (arc.id)}
               <div class="card bg-base-200 mb-3">
                 <div class="card-body p-4">
                   <h4 class="font-bold">{arc.chapter}</h4>
@@ -245,13 +258,15 @@ const { viewModel }: Props = $props();
                   <div class="mt-2">
                     <p class="text-xs font-medium text-base-content/60">Objectives:</p>
                     <ul class="list-disc list-inside text-sm">
-                      {#each arc.objectives as objective}
+                      <!-- Objectives are free text: the same objective can
+                           legitimately appear twice in one arc. -->
+                      {#each arc.objectives as objective, objectiveIndex (objectiveIndex)}
                         <li>{objective}</li>
                       {/each}
                     </ul>
                   </div>
                   <p class="text-xs text-base-content/50 mt-1">
-                    Quest givers: {arc.questGivers.join(', ')}
+                    Quest givers: {arc.questGiverIds.length}
                   </p>
                 </div>
               </div>
@@ -259,9 +274,7 @@ const { viewModel }: Props = $props();
           </div>
 
           <div>
-            <h3 class="text-lg font-semibold mb-3">
-              HUD Widgets ({viewModel.worldOutput.hudWidgets.length})
-            </h3>
+            <h3 class="text-lg font-semibold mb-3">HUD Widgets ({draft.hudWidgets.length})</h3>
             <div class="overflow-x-auto">
               <table class="table table-sm">
                 <thead>
@@ -273,7 +286,7 @@ const { viewModel }: Props = $props();
                   </tr>
                 </thead>
                 <tbody>
-                  {#each viewModel.worldOutput.hudWidgets as widget}
+                  {#each draft.hudWidgets as widget (widget.id)}
                     <tr>
                       <td>{widget.label}</td>
                       <td><span class="badge badge-ghost badge-sm">{widget.slot}</span></td>
@@ -292,47 +305,61 @@ const { viewModel }: Props = $props();
             </div>
           </div>
 
-          {#if viewModel.generationError}
-            <div class="alert alert-error">
-              <span>{viewModel.generationError}</span>
+          {#if viewModel.diagnostics.length > 0}
+            <div class="alert alert-error" data-testid="worldgen-diagnostics">
+              <ul>
+                <!-- `path`+`code` names a KIND of problem, not one entry: two
+                     duplicated cast names both report at `cast`. -->
+                {#each viewModel.diagnostics as diagnostic, diagnosticIndex (diagnosticIndex)}
+                  <li class="text-sm">{diagnostic.path || 'draft'}: {diagnostic.message}</li>
+                {/each}
+              </ul>
             </div>
           {/if}
         {:else}
-          <div class="alert alert-warning">
-            <span>No world data available. Please go back and generate again.</span>
+          <div class="alert alert-warning" data-testid="worldgen-no-draft">
+            <span>No draft available. Go back and generate again.</span>
           </div>
         {/if}
       </div>
-    {:else if viewModel.currentStep === 'character_creation'}
-      <div class="flex flex-col items-center justify-center py-16 text-center">
-        <div class="text-5xl mb-4">🎉</div>
-        <h3 class="text-xl font-bold mb-2">World Ready!</h3>
-        <p class="text-base-content/60 mb-6">
-          Your world "{viewModel.worldOutput?.worldName}" is ready. Proceed to character creation.
+    {:else if viewModel.currentStep === 'draft_saved'}
+      <div
+        class="flex flex-col items-center justify-center py-16 text-center"
+        data-testid="worldgen-draft-saved"
+      >
+        <h3 class="text-xl font-bold mb-2">Draft Saved</h3>
+        <p class="text-base-content/60 mb-6 max-w-md">
+          "{draft?.setting?.worldName}" is saved as a private narrative draft on this device
+          {#if viewModel.persistence === 'durable'}
+            and will still be here after a reload.
+          {:else}
+            — but the device database was unavailable, so it lives in memory only and will be lost
+            on reload.
+          {/if}
+          It is not a playable world.
         </p>
-        <button
-          type="button"
-          class="btn btn-primary"
-          onclick={() => viewModel.navigateToCharacterCreation()}
-        >
-          Start Character Creation
-        </button>
+        <div class="flex gap-3">
+          <button type="button" class="btn btn-outline" onclick={() => viewModel.editInputs()}>
+            Draft Another
+          </button>
+          <button type="button" class="btn btn-ghost" onclick={() => viewModel.restart()}>
+            Start Over
+          </button>
+        </div>
       </div>
     {/if}
 
     <!-- Navigation buttons -->
     <div class="flex justify-between mt-8 pt-4 border-t border-base-300">
       <div>
-        {#if !viewModel.isFirstStep &&
-  viewModel.currentStep !== 'generating' &&
-  viewModel.currentStep !== 'character_creation'}
+        {#if !viewModel.isFirstStep && viewModel.currentStep !== 'generating'}
           <button type="button" class="btn btn-ghost" onclick={() => viewModel.goBack()}>
             ← Back
           </button>
         {/if}
       </div>
       <div class="flex gap-3">
-        {#if viewModel.currentStep === 'genre_tone' || viewModel.currentStep === 'setting_difficulty'}
+        {#if viewModel.currentStep === 'genre_tone' || viewModel.currentStep === 'setting_difficulty' || viewModel.currentStep === 'goals'}
           <button
             type="button"
             class="btn btn-outline btn-sm"
@@ -342,17 +369,7 @@ const { viewModel }: Props = $props();
           </button>
         {/if}
 
-        {#if viewModel.currentStep === 'goals'}
-          <button
-            type="button"
-            class="btn btn-outline btn-sm"
-            onclick={() => viewModel.surpriseMe()}
-          >
-            ✨ Surprise Me!
-          </button>
-        {/if}
-
-        {#if viewModel.currentStep !== 'generating' && viewModel.currentStep !== 'character_creation'}
+        {#if viewModel.currentStep !== 'generating' && viewModel.currentStep !== 'draft_saved'}
           {#if viewModel.currentStep === 'goals'}
             <button
               type="button"
@@ -360,24 +377,25 @@ const { viewModel }: Props = $props();
               disabled={!viewModel.canAdvance}
               onclick={() => viewModel.generateWorld()}
             >
-              Generate World
+              Generate Draft
             </button>
           {:else if viewModel.currentStep === 'preview'}
             <button
               type="button"
               class="btn btn-primary"
               onclick={() => viewModel.retryGeneration()}
-              disabled={viewModel.retriesRemaining <= 0}
+              disabled={viewModel.isGenerating}
             >
               Regenerate
             </button>
             <button
               type="button"
               class="btn btn-success"
+              data-testid="worldgen-accept"
               onclick={() => viewModel.acceptWorld()}
-              disabled={!viewModel.worldOutput}
+              disabled={!viewModel.canAccept}
             >
-              Accept World
+              Save Draft
             </button>
           {:else}
             <button

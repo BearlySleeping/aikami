@@ -42,13 +42,15 @@ export const ORT_DIST_PATH = 'models/ort';
 /**
  * The ORT WASM/MJS variants Aikami publishes and can request at runtime.
  *
- * - `jsep` — the WebGPU-capable build. The shared seam pins this pair
- *   explicitly (see `ortWasmPaths`), so it is what most requests load; the
- *   JSEP binary also runs on the plain WASM backend.
- * - `asyncify` — the non-JSEP build. Published because onnxruntime-web can
- *   select it internally for the `wasm` backend when it is not overridden by
- *   an explicit filename mapping, so the object must exist even though the
- *   current seam prefers `jsep`.
+ * - `jsep` — legacy JavaScript execution-provider glue (jsepInit). It is
+ *   not ABI-compatible with the pinned runtime's native WebGPU provider,
+ *   which calls webgpuInit. Kept published for legacy JSEP consumers.
+ * - `asyncify` — native-WebGPU-capable glue exposing webgpuInit, also usable
+ *   by the plain WASM backend. The shared seam selects this complete pair.
+ *
+ * ORT also ships native-WebGPU JSPI glue, but it requires browser WebAssembly
+ * JSPI support. Aikami neither selects nor publishes that capability-specific
+ * variant; asyncify avoids making JSPI a browser prerequisite.
  */
 export const ORT_VARIANTS = ['jsep', 'asyncify'] as const;
 

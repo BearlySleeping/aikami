@@ -51,6 +51,7 @@ export type {
   DebugSceneSpec,
   DebugSceneTeam,
 } from './game_world/debug_scene_overlay.ts';
+export { publishContentIdentity } from './game_world/diagnostics.ts';
 // GameWorld (lifecycle manager)
 export type {
   GameWorldInitializeOptions,

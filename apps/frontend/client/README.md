@@ -15,7 +15,7 @@ This is the primary PWA application for Aikami - an AI-powered RPG experience. T
 
 - **Framework**: SvelteKit
 - **Styling**: Tailwind CSS + Aikami UI
-- **i18n**: Paraglide (inlang)
+- **Language**: English only (no runtime localization layer)
 - **Testing**: Playwright
 - **Deployment**: Google Cloud Run (Bun)
 
@@ -53,7 +53,6 @@ src/
 │   ├── client/      # Client-side services
 │   ├── components/  # Reusable Svelte components
 │   ├── constants/   # App-specific constants
-│   ├── paraglide/  # i18n generated files
 │   ├── server/      # Server-side utilities
 │   ├── types/       # App-specific types
 │   └── views/       # Page views and view models
@@ -71,6 +70,18 @@ This app depends on the following packages:
 - `@aikami/frontend-utils`
 - `@aikami/frontend-services`
 
-## Internationalization
+## Localization
 
-All user-facing text must be internationalized using Paraglide. See the [i18n guide](https://inlang.com/) for details.
+The client ships English only. There is no message catalogue, no runtime locale
+negotiation and no compiled translation layer — user-facing strings are written
+literally in the View or ViewModel that owns them.
+
+The former Paraglide/inlang setup was removed. Any key that used to come from
+`messages/en.json` is now a plain English string at its call site. Text that the
+engine emits as a stable key rather than prose (combat rejections, for example)
+keeps an explicit key→text table so the ViewModel stays the single place a key is
+resolved; see `src/lib/views/combat/combat_intent_translations.ts`.
+
+If localization is ever needed again, treat it as a new feature rather than a
+resurrection of the old pipeline: pick the layer first (build-time extraction vs.
+runtime), and keep the boot path free of a network dependency.

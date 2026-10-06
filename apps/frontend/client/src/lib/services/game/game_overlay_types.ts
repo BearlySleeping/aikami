@@ -43,6 +43,18 @@ export type OverlayEventHandlers = {
   onCameraZoomUpdate(event: { npcScreenX?: number; npcScreenY?: number }): void;
 };
 
+/**
+ * What the engine says the player can interact with right now.
+ *
+ * The verb is authored per target type (`Talk to` an NPC, `Pick up` an item) and
+ * the key label is resolved at render time, so rebinding a key or switching to a
+ * gamepad repaints the prompt without the engine republishing the target.
+ */
+export type InteractionPromptTarget = {
+  readonly verb: string;
+  readonly targetName: string;
+};
+
 export type GameOverlayServiceInterface = BaseFrontendClassInterface & {
   readonly activeOverlay: GameOverlayType;
   readonly overlayStack: readonly OverlayStackEntry[];
@@ -129,11 +141,9 @@ export type GameOverlayServiceInterface = BaseFrontendClassInterface & {
     /** Pinned engine choice; defaults to the resolved `combatEngine` flag. */
     engine?: CombatEngineKind;
   }): CombatStartOutcome;
-  /**
-   * Dismisses an active combat overlay and restores engine input (C-500).
-   * Combat entry pauses the engine, so leaving must resume it — otherwise
-   * Escape would pop the overlay but leave the world paused.
-   */
+  /** Shows a worker rejection; an active dialogue remains intact. */
+  rejectCombatStart(): void;
+  /** Dismisses an active combat overlay and restores exploration (C-500). */
   closeCombat(): void;
 
   // ── Auto-Save Scheduling (C-334) ──
@@ -192,21 +202,31 @@ export type GameOverlayServiceInterface = BaseFrontendClassInterface & {
   readonly vendorSessionOptions:
     | { vendorId: string; vendorName: string; vendorInventory: string }
     | undefined;
-  /** Interaction prompt label (C-327 AC-2). */
+  /** Interaction prompt label (C-327 AC-2), derived from the live target. */
   readonly interactionPromptLabel: string;
-  /** Whether the interaction prompt is visible (C-327 AC-2). */
+  /**
+   * Whether the interaction prompt is visible (C-327 AC-2).
+   *
+   * DERIVED, never cached: the engine's current target is the only input, and the
+   * prompt shows exactly when there is a target and the world is the focus. A
+   * cached flag needed a second writer (the overlay router restoring it on close),
+   * and any value the engine had not re-published left the prompt pinned until a
+   * map transition or a reload, because `INTERACTION_TARGET_CHANGED` is
+   * dirty-checked and stays silent once it believes it already reported that
+   * target.
+   */
   readonly interactionPromptVisible: boolean;
   /** Target-relative CSS-pixel position for the interaction prompt. */
   readonly interactionPromptScreenX: number | undefined;
   readonly interactionPromptScreenY: number | undefined;
-  /** Sets the interaction prompt state (called by bridge_listeners). */
+  /** Records the engine's current interaction target (called by bridge_listeners). */
   setInteractionPrompt(options: {
-    label: string;
-    visible: boolean;
-    targetMetadata?: { verb: string; targetName: string };
+    target: InteractionPromptTarget;
     targetScreenX?: number;
     targetScreenY?: number;
   }): void;
+  /** Drops the recorded target, so the prompt cannot outlive it. */
+  clearInteractionPrompt(): void;
   /** Refreshes only the retained target's projected prompt position. */
   setInteractionPromptPosition(options: { targetScreenX?: number; targetScreenY?: number }): void;
   /** Test/evidence seam: runs the real autosave transaction immediately. */

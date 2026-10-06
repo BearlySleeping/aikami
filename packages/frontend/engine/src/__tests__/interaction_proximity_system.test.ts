@@ -3,7 +3,7 @@
 // Tests for the interaction proximity system (C-327 AC-2).
 import { beforeEach, describe, expect, it } from 'bun:test';
 import type { World } from 'bitecs';
-import { addComponent, addEntity, createWorld, set } from 'bitecs';
+import { addComponent, addEntity, createWorld, removeEntity, set } from 'bitecs';
 import { CameraFocus } from '../components/camera_focus.ts';
 import { registerInteractableObservers } from '../components/interactable.ts';
 import { NPCDialog, registerNPCDialogObservers } from '../components/npc_dialog.ts';
@@ -203,6 +203,38 @@ describe('updateInteractionProximity', () => {
 
     // Move player closer to npc2
     addComponent(world, playerEid, set(Position, { x: 38, y: 0 }));
+    updateInteractionProximity({ world, playerEntityId: playerEid, bridge });
+
+    expect(events).toHaveLength(2);
+    expect(events[1].targetName).toBe('Second');
+  });
+
+  // ── Scene lifetime ─────────────────────────────────────────────────
+
+  it('republishes after the retained target is dropped for a new map', () => {
+    // A map load drops the retained target WITHOUT publishing: the entity it
+    // names is about to be destroyed, and the tick loop stops before the
+    // TRANSITIONING state can publish its own clear. Entity ids are then reused,
+    // so a surviving target could compare EQUAL to the new map's nearest
+    // interactable and the dirty check would never republish — leaving the
+    // prompt up for a neighbour who is no longer there.
+    const playerEid = addPlayer(world, 0, 0);
+    const npcEid = addNPC(world, 'npc-1', 'First', 30, 0, 50);
+
+    const events: Array<{ targetName?: string; targetEntityId?: number }> = [];
+    bridge.on('INTERACTION_TARGET_CHANGED', (e) =>
+      events.push(e as { targetName?: string; targetEntityId?: number }),
+    );
+
+    updateInteractionProximity({ world, playerEntityId: playerEid, bridge });
+    expect(events).toHaveLength(1);
+    expect(events[0].targetEntityId).toBe(npcEid);
+
+    // The worker drops the retained target on LOAD_MAP, and the replacement
+    // world reuses the id for a different NPC.
+    clearInteractionProximityState();
+    removeEntity(world, npcEid);
+    addNPC(world, 'npc-2', 'Second', 30, 0, 50);
     updateInteractionProximity({ world, playerEntityId: playerEid, bridge });
 
     expect(events).toHaveLength(2);

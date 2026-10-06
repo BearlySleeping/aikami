@@ -11,6 +11,7 @@ import {
   evictOldest,
   fallbackSummary,
   mergeNotes,
+  mergeRestoredDigestLines,
   toMemoryLines,
 } from './npc_memory_utils.ts';
 
@@ -70,5 +71,69 @@ describe('npc_memory_utils', () => {
     expect(Object.keys(records).length).toBe(NPC_MEMORY_LIMITS.maxRecords);
     expect(records.npc_0).toBeUndefined();
     expect(records[`npc_${NPC_MEMORY_LIMITS.maxRecords + 2}`]).toBeDefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Digest line restoration — chronology under supersession (issue #382)
+// ---------------------------------------------------------------------------
+
+const line = (content: string) => ({ role: 'player' as const, content });
+
+describe('mergeRestoredDigestLines', () => {
+  it("puts the failed digest's OLDER lines before the newer ones", () => {
+    const merged = mergeRestoredDigestLines({
+      claimed: [line('first'), line('second')],
+      // Arrived while the digest was in flight, so strictly newer.
+      accumulated: [line('third'), line('fourth')],
+      limit: 60,
+    });
+    expect(merged.map((entry) => entry.content)).toEqual(['first', 'second', 'third', 'fourth']);
+  });
+
+  it('a single restored line does not jump ahead of newer conversation', () => {
+    const merged = mergeRestoredDigestLines({
+      claimed: [line('oldest')],
+      accumulated: [line('newer')],
+      limit: 60,
+    });
+    // The previous implementation appended, producing ['newer', 'oldest'] — a
+    // buffer whose last line is the earliest thing in it.
+    expect(merged.map((entry) => entry.content)).toEqual(['oldest', 'newer']);
+  });
+
+  it('OVERFLOW keeps the intended chronology: the newest lines, in order', () => {
+    const claimed = Array.from({ length: 8 }, (_, index) => line(`old-${index}`));
+    const accumulated = Array.from({ length: 8 }, (_, index) => line(`new-${index}`));
+    const merged = mergeRestoredDigestLines({ claimed, accumulated, limit: 10 });
+
+    expect(merged).toHaveLength(10);
+    // The two newest OLD lines and all eight NEW ones, still in order. What is
+    // dropped is the oldest conversation — a bounded, stated loss — and never
+    // the newest, which is the failure the old ordering produced under the cap.
+    expect(merged.map((entry) => entry.content)).toEqual([
+      'old-6',
+      'old-7',
+      ...Array.from({ length: 8 }, (_, index) => `new-${index}`),
+    ]);
+    // And the tail is genuinely the tail: the newest line is last.
+    expect(merged[merged.length - 1]?.content).toBe('new-7');
+  });
+
+  it('overflow with no accumulated lines still keeps the newest claimed ones', () => {
+    const claimed = Array.from({ length: 12 }, (_, index) => line(`c-${index}`));
+    const merged = mergeRestoredDigestLines({ claimed, accumulated: [], limit: 5 });
+    expect(merged.map((entry) => entry.content)).toEqual(['c-7', 'c-8', 'c-9', 'c-10', 'c-11']);
+  });
+
+  it('an empty claim leaves the accumulated lines untouched and in order', () => {
+    const accumulated = [line('a'), line('b')];
+    expect(mergeRestoredDigestLines({ claimed: [], accumulated, limit: 60 })).toEqual(accumulated);
+  });
+
+  it('a zero limit retains nothing rather than throwing', () => {
+    expect(mergeRestoredDigestLines({ claimed: [line('a')], accumulated: [], limit: 0 })).toEqual(
+      [],
+    );
   });
 });

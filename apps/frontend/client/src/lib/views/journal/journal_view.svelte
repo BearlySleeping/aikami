@@ -91,6 +91,36 @@ const presentation = createJournalPresentationState({
         use:focusableScrollRegion
         data-testid="journal-panel"
       >
+        {#if viewModel.activeTab === 'recaps'}
+          <label for="journal-diary-voice" class="game-metadata mb-3 flex items-center gap-2">
+            <input
+              id="journal-diary-voice"
+              type="checkbox"
+              class="checkbox"
+              checked={viewModel.diaryVoice}
+              onchange={(event) => viewModel.setDiaryVoice(event.currentTarget.checked)}
+            >
+            Personal diary voice
+          </label>
+          {#each viewModel.conversationRecaps as conversation (conversation.id)}
+            <article
+              class="game-surface--raised mb-3 rounded-lg p-4"
+              data-testid="conversation-recap"
+            >
+              <h2 class="game-section-title">{conversation.title}</h2>
+              <p class="game-narrative mt-2 whitespace-pre-wrap">{conversation.prose}</p>
+              {#if viewModel.diaryVoice}
+                <details class="game-metadata mt-3">
+                  <summary>Objective record</summary>
+                  <p class="whitespace-pre-wrap">{conversation.objective}</p>
+                </details>
+              {/if}
+              <p class="game-metadata mt-3">
+                Local transcript record — quoted claims are not verified events.
+              </p>
+            </article>
+          {/each}
+        {/if}
         {#if viewModel.activeTab === 'quests'}
           {#if viewModel.activeQuests.length === 0 &&
       viewModel.completedQuests.length === 0 &&
@@ -397,12 +427,19 @@ const presentation = createJournalPresentationState({
               Generated at session end. The Journal never rewrites this record.
             </p>
           </section>
-        {:else}
+        {:else if viewModel.hasNoMatchingRecaps}
+          <div class="game-empty" data-testid="journal-recap-no-matches">
+            <span class="text-4xl" aria-hidden="true">☾</span>
+            <p class="game-section-title">No matching recaps</p>
+            <p class="game-metadata max-w-md">Clear the search to see your conversation recaps.</p>
+          </div>
+        {:else if viewModel.conversationRecaps.length === 0}
           <div class="game-empty" data-testid="journal-recap-empty">
             <span class="text-4xl" aria-hidden="true">☾</span>
             <p class="game-section-title">No session recap yet</p>
             <p class="game-metadata max-w-md">
-              A recap becomes available after you end a session. It remains read-only here.
+              Conversations are recorded here when dialogue closes. Session summaries appear after
+              you end a session.
             </p>
           </div>
         {/if}

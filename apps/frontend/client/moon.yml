@@ -35,7 +35,6 @@ fileGroups:
   sources:
     - 'src/**/*'
     - 'static/**/*'
-    - 'messages/**/*'
   configs:
     - 'package.json'
     - 'tsconfig.json'
@@ -46,39 +45,16 @@ fileGroups:
   unitTests:
     - 'src/**/*.test.ts'
     - 'tests/**/*.test.ts'
-  i18n:
-    - 'messages/**/*'
-    - 'project.inlang/**/*'
-    - '!project.inlang/cache/**'
 
 tasks:
-  # `src/lib/paraglide` (gitignored) is only ever generated as a side effect
-  # of `paraglideVitePlugin`'s vite build hook — so `build`/`dev`/`test` all
-  # self-heal via vite, but `typecheck` (svelte-kit sync + a standalone
-  # tsc-style checker, no vite involved) does not and fails with "Cannot
-  # find module '$lib/paraglide/...'" on any checkout where nothing else
-  # has run vite first. Usually masked by moon's task cache reusing an old
-  # green result, or by `build` happening to run earlier in the same CI
-  # job — exposed by C-468 needing a lockfile change, which busts every
-  # project's typecheck cache (root-configs) including this one.
-  paraglide:
-    command: 'bun run paraglide'
-    inputs:
-      - '@group(i18n)'
-      - 'package.json'
-    outputs:
-      - 'src/lib/paraglide'
-    options:
-      cache: true
-
   dev:
     command: 'bun run dev'
     preset: 'server'
     env:
-      # C-418 Feature B: belt-and-braces. The dev-route gate already includes
-      # `(dev)` for a Vite `serve` command, but pinning the flag here keeps the
-      # sandboxes present even if this task is ever run through a wrapper that
-      # presents itself as a build.
+      # C-418 Feature B: belt-and-braces, and now redundant with the default in
+      # scripts/dev_routes_gate.ts (an unset flag already includes `(dev)` on a
+      # Vite `serve` command). Pinned so the sandboxes stay present even if that
+      # default is ever reverted.
       AIKAMI_INCLUDE_DEV_ROUTES: 'true'
   build:
     # `bun run build` in package.json wraps back to `moon run client:build`
@@ -133,6 +109,7 @@ tasks:
       # silently ignoring the opt-in. A `$`-prefixed input is moon's
       # environment-variable input form.
       - '$AIKAMI_INCLUDE_DEV_ROUTES'
+      - '$AIKAMI_BUILD_MODE'
       # 🔴 Load-bearing. Vite bundles these workspace packages FROM SOURCE via
       # TS path aliases — the emitted bundle contains their code, so their
       # files are real build inputs. They were previously absent from the hash,
@@ -147,13 +124,13 @@ tasks:
       - '/packages/frontend/*/src/**/*'
     options:
       cache: true
-      # The dev-route gate excludes `(dev)` from every build — staging
-      # included: a normal distributable build never ships the `(dev)` sandbox
-      # routes. The dev server keeps them with no configuration (the gate is
-      # command-derived), and a QA/dev *build* opts in with
-      # AIKAMI_INCLUDE_DEV_ROUTES=true (the `test`/`typecheck` tasks do).
-      # `scripts/check_deploy_assets.ts` fails a normal build if `(dev)` output
-      # leaks back in.
+      # TEMPORARY: the dev-route gate includes `(dev)` in `staging` builds and in
+      # the dev server, and strips it everywhere else — production included. This
+      # task passes no mode of its own, so the effective mode comes from
+      # `--mode` / AIKAMI_BUILD_MODE (see scripts/dev_routes_gate.ts). The tasks
+      # that pin AIKAMI_INCLUDE_DEV_ROUTES=true below (`typecheck`,
+      # `test-prepare`, `test`, `test-unit`) stay explicit so they are unaffected
+      # by reverting the staging exception.
     outputs:
       - '.svelte-kit'
       - 'build'
@@ -161,12 +138,10 @@ tasks:
     command: 'bun run preview'
     preset: 'server'
   # Overrides the inherited .moon/tasks/all.yml typecheck task (same
-  # command/inputs) only to add the `paraglide` dependency explained above.
+  # command/inputs).
   typecheck:
     command: 'bun'
     args: ['run', 'typecheck']
-    deps:
-      - '~:paraglide'
     inputs:
       - '@group(sources)'
       - '@group(configs)'
@@ -251,12 +226,9 @@ tasks:
   # concern; until the input set below is proven complete, never cache a pass.
   test-browser:
     command: 'bun run test:browser'
-    deps:
-      # Browser tests can transitively import `$lib/paraglide` (generated, not
-      # committed). Generate it first, exactly as `typecheck` does.
-      - '~:paraglide'
     inputs:
       - 'src/browser_tests/**/*'
+      - 'tests/**/*.browser.test.ts'
       - 'vitest.config.ts'
       - '@group(sources)'
       - '@group(configs)'

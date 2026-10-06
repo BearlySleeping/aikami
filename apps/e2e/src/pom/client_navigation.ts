@@ -33,7 +33,7 @@ export class ClientNavigation {
 
   /**
    * Assert nav items with specific labels are visible.
-   * Labels are i18n: Home, Characters, Profile, Settings, Logout
+   * Labels are literal English: Home, Characters, Profile, Settings, Logout
    */
   async expectNavItem(label: string): Promise<void> {
     const { expect } = await import('@playwright/test');

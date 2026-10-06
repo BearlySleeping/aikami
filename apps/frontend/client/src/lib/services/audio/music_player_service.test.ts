@@ -9,12 +9,16 @@
 // `$services` stubs.
 
 import { afterEach, describe, expect, mock, test } from 'bun:test';
+import { MUSIC_PLAYER_PLAYBACK_KEY } from '@aikami/constants';
 import type { MusicSceneContext, Track } from '@aikami/types';
+import { isBgmSuppressedByPlayer } from '$lib/utils/music_playback_intent.ts';
 
 const audioService = {
   activeTrackUrl: null as string | null,
   isBgmPaused: false,
-  transitionToBgm: mock(async (_url: string) => {}),
+  transitionToBgm: mock(async (url: string) => {
+    audioService.activeTrackUrl = url;
+  }),
   pauseBgm: mock(() => {}),
   resumeBgm: mock(async () => {}),
   stopAll: mock(() => {}),
@@ -86,7 +90,13 @@ const COMBAT_SCENE: MusicSceneContext = {
 const resetMocks = (tracks: Track[]): void => {
   audioService.activeTrackUrl = null;
   audioService.isBgmPaused = false;
-  audioService.transitionToBgm = mock(async () => {});
+  // A real transition publishes the track it started. That is the ONLY success
+  // signal the player has, because `transitionToBgm` swallows load failures —
+  // so a no-op mock here would make every track look unloadable. Tests that
+  // need a failure override this.
+  audioService.transitionToBgm = mock(async (url: string) => {
+    audioService.activeTrackUrl = url;
+  });
   audioService.pauseBgm = mock(() => {});
   audioService.resumeBgm = mock(async () => {});
   audioService.stopAll = mock(() => {});
@@ -104,6 +114,114 @@ const transitionCalls = (): unknown[][] =>
 
 afterEach(() => {
   musicPlayerService.stop();
+});
+
+// ---------------------------------------------------------------------------
+// Playback intent (survives a reload)
+// ---------------------------------------------------------------------------
+
+describe('MusicPlayerService — playback intent survives a reload', () => {
+  test('stop is recorded, so a reload does not start music again', () => {
+    localStorage.removeItem(MUSIC_PLAYER_PLAYBACK_KEY);
+    resetMocks([FOREST_A, FOREST_B]);
+
+    musicPlayerService.stop();
+
+    const stored = JSON.parse(localStorage.getItem(MUSIC_PLAYER_PLAYBACK_KEY) ?? '{}') as {
+      state?: string;
+    };
+    expect(stored.state).toBe('stopped');
+    // And the scene cue path now stands down for this player.
+    expect(isBgmSuppressedByPlayer()).toBe(true);
+  });
+
+  test('pause records the intent and the track it applied to', async () => {
+    resetMocks([FOREST_A, FOREST_B]);
+    audioService.activeTrackUrl = FOREST_A.url;
+
+    musicPlayerService.pause();
+
+    expect(musicPlayerService.intent.state).toBe('paused');
+    expect(musicPlayerService.intent.trackId).toBe(FOREST_A.id);
+    expect(musicPlayerService.intentTrackTitle).toBe(FOREST_A.title);
+  });
+
+  test('🔴 teardown stops playback WITHOUT overwriting a real pause', async () => {
+    resetMocks([FOREST_A, FOREST_B]);
+    audioService.activeTrackUrl = FOREST_A.url;
+    musicPlayerService.pause();
+    expect(musicPlayerService.intent.state).toBe('paused');
+    (audioService.stopAll as ReturnType<typeof mock>).mockClear();
+
+    // This is what a page unload runs. It must stop the audio and leave the
+    // player's own decision standing, or closing the tab would silently
+    // discard a pause.
+    musicPlayerService.stopForTeardown();
+
+    expect(audioService.stopAll).toHaveBeenCalled();
+    expect(musicPlayerService.intent.state).toBe('paused');
+  });
+
+  test('a track the device cannot load falls through to one it can', async () => {
+    resetMocks([FOREST_A, FOREST_B, COMBAT]);
+    musicPlayerService.setSceneContext(FOREST_SCENE);
+
+    // 🔴 Reproduces the catalog defect: the device advertises a track whose
+    // bytes were never published, so the fetch 404s and transitionToBgm
+    // swallows it. The player must not stop there.
+    (audioService.transitionToBgm as ReturnType<typeof mock>).mockImplementation(
+      async (url: string) => {
+        if (url === FOREST_A.url) {
+          return; // failed: never becomes active
+        }
+        audioService.activeTrackUrl = url;
+      },
+    );
+
+    await musicPlayerService.playTrack(FOREST_A);
+
+    expect(audioService.activeTrackUrl).not.toBe(FOREST_A.url);
+    expect(audioService.activeTrackUrl).toBeTruthy();
+    // And the player is told what happened instead of silently going quiet.
+    expect(musicPlayerService.feedback).toContain('unavailable');
+  });
+
+  test('a dead track is not retried on the next press', async () => {
+    resetMocks([FOREST_A, FOREST_B]);
+    musicPlayerService.setSceneContext(FOREST_SCENE);
+    (audioService.transitionToBgm as ReturnType<typeof mock>).mockImplementation(
+      async (url: string) => {
+        if (url === FOREST_A.url) {
+          return;
+        }
+        audioService.activeTrackUrl = url;
+      },
+    );
+
+    await musicPlayerService.playTrack(FOREST_A);
+    (audioService.transitionToBgm as ReturnType<typeof mock>).mockClear();
+    await musicPlayerService.playTrack(FOREST_B);
+
+    // The dead entry is never re-fetched; only real candidates are attempted.
+    const attempted = (audioService.transitionToBgm as ReturnType<typeof mock>).mock.calls.map(
+      (c) => c[0],
+    );
+    expect(attempted).not.toContain(FOREST_A.url);
+  });
+
+  test('a player who never used the controls leaves no recorded opinion', async () => {
+    resetMocks([FOREST_A, FOREST_B, COMBAT]);
+    localStorage.removeItem(MUSIC_PLAYER_PLAYBACK_KEY);
+    await musicPlayerService.initialize();
+    musicPlayerService.setSceneContext(FOREST_SCENE);
+    musicPlayerService.stopForTeardown();
+    // Scene music must keep working for players who never opened the player.
+    // (The "no record reads as no opinion" rule itself is asserted as pure data
+    // in music_playback_intent.test.ts; this guards the service against ever
+    // writing a default.)
+    expect(localStorage.getItem(MUSIC_PLAYER_PLAYBACK_KEY)).toBeNull();
+    expect(isBgmSuppressedByPlayer()).toBe(false);
+  });
 });
 
 // ---------------------------------------------------------------------------

@@ -20,10 +20,12 @@
  */
 
 import { type SpawnSyncOptions, spawnSync } from 'node:child_process';
-import { dirname, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
+import { DEV_ROUTES_BUILD_MARKER_FILE } from '@aikami/constants';
 import { logger } from '@aikami/logger';
+import { loadEnv } from 'vite';
 import { DEV_ROUTES_ENV_VAR, resolveIncludeDevRoutes } from './dev_routes_gate.ts';
 
 const CLIENT_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -67,16 +69,37 @@ const run = (label: string, cmd: string, args: string[], opts: SpawnSyncOptions 
 };
 
 const modeArgs = mode ? ['--mode', mode] : [];
+const fileEnv = loadEnv(mode ?? 'production', CLIENT_DIR, ['AIKAMI_', 'PUBLIC_']);
+const buildEnv = { ...process.env, ...fileEnv };
 
-// 1. Dev-route gate — must see the same mode vite.config.ts will.
-run('gate dev routes', 'bun', ['scripts/gate_dev_routes.ts', ...modeArgs]);
+/**
+ * Whether this build's route graph contains `(dev)`.
+ *
+ * `buildEnv` — not `process.env` — is the authority for the override: it
+ * normally arrives from `.env.<mode>`, which is loaded here and is not
+ * otherwise exported into this process. `mode ?? 'production'` matches Vite's
+ * own default for a bare invocation, so this agrees with what vite.config.ts
+ * and scripts/gate_dev_routes.ts resolve for the same build.
+ *
+ * Desktop builds always opt in, because the desktop QA surface is the reason
+ * this flag exists.
+ */
+const allowDevRoutesForBuild =
+  resolveIncludeDevRoutes({
+    command: 'build',
+    mode: mode ?? 'production',
+    env: buildEnv,
+  }) || process.env.AIKAMI_DESKTOP_BUILD === 'true';
+
+// 1. Dev-route gate — must see the same mode and .env file vite.config.ts will.
+run('gate dev routes', 'bun', ['scripts/gate_dev_routes.ts', ...modeArgs], { env: buildEnv });
 
 // 2. Web bundle. Extra args are forwarded here, where they were aimed.
 //    AIKAMI_BUILD_MODE is exported so vite.config.ts sees the real mode:
 //    SvelteKit loads it during a config probe that runs before vite resolves
 //    `--mode`, and without this it falls back to production and demands the
 //    filtered routes copy a non-production build never creates.
-const viteEnv = { ...process.env };
+const viteEnv = { ...buildEnv };
 if (mode) {
   viteEnv.AIKAMI_BUILD_MODE = mode;
 }
@@ -88,6 +111,18 @@ if (!viteEnv.PUBLIC_MODE) {
   viteEnv.PUBLIC_MODE = mode ?? 'production';
 }
 run('vite build', 'bunx', ['vite', 'build', ...modeArgs, ...passthrough], { env: viteEnv });
+
+// 2a. Record the route decision inside the build output. The deploy
+//     orchestrator runs its own `check_deploy_assets` pass in a different
+//     process, where the mode env file is not loaded — so re-deriving the
+//     decision from `process.env` there silently disagreed with this build and
+//     rejected a dev-route output the build had explicitly produced. The record
+//     travels with the artifact (including checksum-cache and CI reuse), which
+//     makes "the guard cannot disagree with the build" true by construction.
+await Bun.write(
+  join(CLIENT_DIR, 'build', DEV_ROUTES_BUILD_MARKER_FILE),
+  `${JSON.stringify({ includeDevRoutes: allowDevRoutesForBuild }, null, 2)}\n`,
+);
 
 // 3. Guard the emitted chunk graph. A static-import cycle between chunks
 //    breaks module evaluation order and only surfaces at runtime.
@@ -109,9 +144,18 @@ run('check service worker', 'bun', ['scripts/check_service_worker.ts', 'build'])
 //
 //    The decision comes from the same resolver the gate itself uses, so the
 //    guard can never disagree with the route graph that was actually built.
-const allowDevRoutes = resolveIncludeDevRoutes('build');
+const allowDevRoutes = allowDevRoutesForBuild;
 if (allowDevRoutes) {
-  logger.info(`[build-client] ${DEV_ROUTES_ENV_VAR}=true — dev routes are expected in this build.`);
+  // Report the route graph, not the variable's value: the staging default
+  // includes `(dev)` with the variable unset, so "…=true" would misreport the
+  // most common case.
+  const desktopOverride = process.env.AIKAMI_DESKTOP_BUILD === 'true';
+  const envOverride = buildEnv[DEV_ROUTES_ENV_VAR] === 'true';
+  const decidedBy =
+    desktopOverride || envOverride
+      ? `${DEV_ROUTES_ENV_VAR}/desktop override`
+      : `${DEV_ROUTES_ENV_VAR} unset + mode '${mode ?? 'production'}'`;
+  logger.info(`[build-client] dev routes are expected in this build — decided by ${decidedBy}.`);
 }
 run('check deploy assets', 'bun', [
   'scripts/check_deploy_assets.ts',
@@ -128,12 +172,12 @@ run('check ineffective dynamic imports', 'bun', ['scripts/check_ineffective_dyna
 //    ratchet tracked metrics. Kept after the guards so the report reflects an
 //    output that already passed the hard gates.
 //
-//    When dev routes were deliberately included, the ratchet is skipped: the
-//    committed baseline measures the production route graph, so a sandbox build
-//    would otherwise always report a ~20% regression and fail the build. The
-//    flag comes from the same resolver the gate itself uses, so a normal build
-//    can never skip the ratchet by accident.
-run('report bundle budget', 'bun', [
-  'scripts/report_bundle_budget.ts',
-  ...(allowDevRoutes ? ['--expect-dev-routes'] : []),
-]);
+//    The committed baseline measures the STAGING route graph — the larger one,
+//    with the `(dev)` sandboxes — so the ratchet is meaningful there. A
+//    production build emits fewer bytes against that baseline and therefore
+//    clears it without help, which is why `--expect-dev-routes` is NOT passed:
+//    suppressing the ratchet for a smaller graph would only hide regressions.
+//    Passing it becomes correct again only once the baseline measures a
+//    production-graph build, which is part of reverting the staging exception
+//    in scripts/dev_routes_gate.ts.
+run('report bundle budget', 'bun', ['scripts/report_bundle_budget.ts']);

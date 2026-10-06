@@ -29,7 +29,14 @@ export type AppearanceLayer = {
   sprite: Sprite;
   recipe: LpcLayerRecipe;
   texture?: Texture;
+  /**
+   * Parsed sheet used for WebGPU-safe frame lookups. `sheet.textures` is read
+   * every animation frame, so the layer holds a LEASE on it for as long as the
+   * layer is alive; `releaseSheet` is what ends that pin.
+   */
   spritesheet?: Spritesheet;
+  /** Ends the spritesheet pin. Always defined when `spritesheet` is. */
+  releaseSheet?: () => void;
   /** C-496 AC-3: compiled shared visual definition for this layer. */
   definition?: CompleteSpriteDefinition;
   /**
@@ -213,7 +220,9 @@ export class EntityAppearanceLoader {
    * synchronous step that adds the new ones, so there is no blank frame.
    *
    * Only sprite display objects are destroyed — textures belong to shared
-   * caches and must survive.
+   * caches and must survive. What the old children DO own is their spritesheet
+   * lease, so each replaced child releases its pin here; that is what makes the
+   * sheet evictable again once the last actor using it is gone.
    */
   commit(options: { target: Container; prepared: PreparedAppearance }): void {
     const stale = options.target.removeChildren();
@@ -228,10 +237,32 @@ export class EntityAppearanceLoader {
 
   /**
    * Releases a prepared appearance that will not be committed (stale load,
-   * entity replaced, or partial failure). Destroys sprites only.
+   * entity replaced, or partial failure). Destroys sprites and drops the
+   * spritesheet leases they were holding.
    */
   disposePrepared(prepared: PreparedAppearance): void {
+    for (const layer of prepared.layers) {
+      layer.releaseSheet?.();
+      layer.releaseSheet = undefined;
+      layer.spritesheet = undefined;
+    }
     prepared.container.destroy({ children: true });
+  }
+
+  /**
+   * Binds a spritesheet lease to the sprite's DESTROY LIFECYCLE.
+   *
+   * Not a bookkeeping table keyed by sprite identity: a `WeakMap` entry dies
+   * with its key without ever running its closure, so every teardown that
+   * destroys display objects directly — a scene surface reset, a world
+   * restore clearing render entries, world destroy — would strand the pin
+   * forever and make the sheet permanently unevictable. Listening to Pixi's
+   * own `destroyed` event means every path releases, whether it goes through
+   * this loader or not. The registry's `release` is idempotent, so the
+   * explicit `disposePrepared` release and this listener can both fire.
+   */
+  private _bindSheetToLifetime(sprite: Sprite, release: () => void): void {
+    sprite.once('destroyed', release);
   }
 
   private async _loadLayer(
@@ -246,6 +277,10 @@ export class EntityAppearanceLoader {
       return undefined;
     }
 
+    // Declared outside the try so the failure path can release a pin taken
+    // before whatever threw.
+    let releaseSheet: (() => void) | undefined;
+
     try {
       const texture = await this._loadTexture(url);
       texture.source.scaleMode = 'nearest';
@@ -254,9 +289,11 @@ export class EntityAppearanceLoader {
       const geometry = resolveLpcSheetGeometry(texture);
 
       // C-168: create a cached Spritesheet so frame lookup is WebGPU-safe.
+      // The lease is held for this layer's whole life: eviction nulls
+      // `sheet.textures`, which the per-frame path reads.
       let spritesheet: Spritesheet | undefined;
       if (this._textureManager && geometry.columns > 0 && geometry.rows > 0) {
-        spritesheet = await this._textureManager.getOrCreateSpritesheet({
+        const lease = await this._textureManager.acquireSpritesheet({
           baseTexture: texture,
           layout: {
             frameWidth: geometry.pitch,
@@ -267,9 +304,16 @@ export class EntityAppearanceLoader {
           },
           cacheKey: `${url}::${geometry.pitch}`,
         });
+        spritesheet = lease.spritesheet;
+        releaseSheet = lease.release;
       }
 
       const sprite = new Sprite(Texture.WHITE);
+      // Bind BEFORE the awaits that follow: if any of them throws, the catch
+      // below returns `undefined` and the sprite must still give its pin back.
+      if (releaseSheet) {
+        this._bindSheetToLifetime(sprite, releaseSheet);
+      }
       sprite.eventMode = 'none';
       // C-428: anchor the logical body. Feet are at bottom-center for the
       // standard 64px cell; oversize 128px cells center the body, so feet sit
@@ -295,8 +339,11 @@ export class EntityAppearanceLoader {
         definition = undefined;
       }
 
-      return { sprite, recipe, texture, spritesheet, definition };
+      return { sprite, recipe, texture, spritesheet, definition, releaseSheet };
     } catch (error) {
+      // A lease taken before the failure is a permanent pin unless released
+      // here: this layer never reaches `commit`/`disposePrepared`.
+      releaseSheet?.();
       this._onLoadError?.({ url, error: String(error) });
       return undefined;
     }

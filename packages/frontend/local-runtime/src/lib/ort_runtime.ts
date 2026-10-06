@@ -72,6 +72,12 @@ const PUBLIC_ORT_WASM_URL = (import.meta.env as Record<string, string | undefine
  */
 export const resolveOrtBaseUrl = (configured?: string | undefined): string => {
   const trimmed = typeof configured === 'string' ? configured.trim() : '';
+  const versionMatch = trimmed.match(/\/models\/ort\/([^/]+)\/?$/);
+  if (versionMatch && versionMatch[1] !== ORT_RUNTIME_VERSION) {
+    throw new Error(
+      `ORT runtime version mismatch: URL specifies ${versionMatch[1]}, but the installed runtime requires ${ORT_RUNTIME_VERSION}. Clear PUBLIC_ORT_WASM_URL or publish the matching WASM/MJS pair.`,
+    );
+  }
   const base =
     trimmed.length > 0
       ? trimmed
@@ -89,8 +95,10 @@ export const resolveOrtBaseUrl = (configured?: string | undefined): string => {
 export const ortWasmPaths = (baseUrl?: string): { mjs: string; wasm: string } => {
   const base = resolveOrtBaseUrl(baseUrl);
   return {
-    mjs: `${base}${ORT_VARIANT_FILES.jsep.mjs}`,
-    wasm: `${base}${ORT_VARIANT_FILES.jsep.wasm}`,
+    // ORT 1.31's native WebGPU EP calls webgpuInit. Asyncify exports it
+    // without requiring browser JSPI support; legacy JSEP has a different ABI.
+    mjs: `${base}${ORT_VARIANT_FILES.asyncify.mjs}`,
+    wasm: `${base}${ORT_VARIANT_FILES.asyncify.wasm}`,
   };
 };
 
@@ -114,6 +122,10 @@ export type OrtConfigurableEnv = {
   allowLocalModels?: boolean;
   allowRemoteModels?: boolean;
   localModelPath?: string;
+  /** HuggingFace-compatible origin used when remote resolution is enabled. */
+  remoteHost?: string;
+  /** Path template used to build a remote model file URL. */
+  remotePathTemplate?: string;
 };
 
 /**
@@ -156,6 +168,32 @@ export const configureLocalModelResolution = (
   env.allowLocalModels = true;
   env.localModelPath = options?.modelPath ?? '/models/';
   env.allowRemoteModels = options?.allowRemote ?? false;
+};
+
+/**
+ * Resolve model files through canonical remote URLs while still serving the
+ * bytes from the app-controlled Cache Storage.
+ *
+ * Why not `localModelPath`: transformers.js resolves `/models/<repo>/<file>`
+ * against the app origin. A static SPA host (Cloudflare, and every Tauri
+ * build) answers that path with `index.html`, so a cache miss is not a 404 —
+ * it is a 200 carrying HTML, and the first JSON read dies with
+ * `Unexpected token '<'`. The pre-warmed entries are therefore keyed by the
+ * exact URL transformers.js asks for, which Cache Storage serves offline and
+ * a real network only reaches for files the bundle does not carry.
+ *
+ * @param env       The transformers.js `env`.
+ * @param revision  Pinned model revision; never `main`.
+ * @param host      Canonical model origin.
+ */
+export const configurePinnedRemoteModelResolution = (
+  env: OrtConfigurableEnv,
+  options: { revision: string; host?: string },
+): void => {
+  env.allowLocalModels = false;
+  env.allowRemoteModels = true;
+  env.remoteHost = options.host ?? 'https://huggingface.co/';
+  env.remotePathTemplate = `{model}/resolve/${options.revision}/`;
 };
 
 /**

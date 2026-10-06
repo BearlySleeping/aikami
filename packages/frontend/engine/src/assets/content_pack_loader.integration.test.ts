@@ -789,6 +789,11 @@ describe('ContentPackLoader — Emberwatch v2.0.0 Integration', () => {
   // ── Legacy onboarding step normalisation ──
 
   test('loads pack with legacy bare-string onboarding actions and normalizes them', async () => {
+    // The loader verifies `manifest.id === packId` (resolveContentIdentity), so
+    // a synthetic manifest that keeps the real pack's `id` must be REQUESTED
+    // under that id. Asking for an unrelated packId while serving an
+    // emberwatch manifest is an identity mismatch the loader correctly refuses
+    // — it is not a legacy-onboarding failure.
     const legacyManifest = {
       ...emberwatchManifest,
       onboarding: {
@@ -808,16 +813,17 @@ describe('ContentPackLoader — Emberwatch v2.0.0 Integration', () => {
         ],
       },
     };
+    const packId = legacyManifest.id;
 
     const fetcher = mock(async (url: string) => {
-      if (url === '/legacy-pack/manifest.json') {
+      if (url === `/${packId}/manifest.json`) {
         return new Response(JSON.stringify(legacyManifest), { status: 200 });
       }
       return new Response('Not Found', { status: 404 });
     });
 
     const loader = await loadContentPack({
-      packId: 'legacy-pack',
+      packId,
       fetchFn: fetcher as unknown as typeof fetch,
     });
 

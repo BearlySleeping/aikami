@@ -19,6 +19,10 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services/base';
+import {
+  CONVERSATION_RECAP_TAG,
+  readConversationRecap,
+} from '$lib/utils/journal/conversation_recap.ts';
 import type { PlayerJournalEntry, SessionSummary } from '$types';
 
 /** The three journal concepts, kept visually separate. */
@@ -72,6 +76,7 @@ export type JournalViewModelOptions = BaseViewModelOptions & {
   recap: JournalRecapCapabilities;
   campaign: JournalCampaignCapabilities;
   overlays: JournalOverlayCapabilities;
+  diary?: { readonly diaryVoice: boolean; setDiaryVoice(value: boolean): void };
 };
 
 export type JournalViewModelInterface = BaseViewModelInterface & {
@@ -113,6 +118,16 @@ export type JournalViewModelInterface = BaseViewModelInterface & {
   // Recaps
   readonly recap: SessionSummary | null;
   readonly recapWhenLabel: string | undefined;
+  readonly diaryVoice: boolean;
+  setDiaryVoice(value: boolean): void;
+  readonly conversationRecapCount: number;
+  readonly hasNoMatchingRecaps: boolean;
+  readonly conversationRecaps: ReadonlyArray<{
+    id: string;
+    title: string;
+    prose: string;
+    objective: string;
+  }>;
 
   /** Loads notes for the active campaign. */
   load(): Promise<void>;
@@ -131,6 +146,7 @@ class JournalViewModel
   private readonly _recap: JournalRecapCapabilities;
   private readonly _campaign: JournalCampaignCapabilities;
   private readonly _overlays: JournalOverlayCapabilities;
+  private readonly _diary: JournalViewModelOptions['diary'];
 
   activeTab = $state<JournalTab>('quests');
   searchQuery = $state('');
@@ -147,6 +163,7 @@ class JournalViewModel
     this._recap = options.recap;
     this._campaign = options.campaign;
     this._overlays = options.overlays;
+    this._diary = options.diary;
   }
 
   async initialize(): Promise<void> {
@@ -222,7 +239,11 @@ class JournalViewModel
   // ── Notes ─────────────────────────────────────────────────────────
 
   get notes(): readonly PlayerJournalEntry[] {
-    return this._notes.entries;
+    return this._notes.entries.filter(
+      (entry) =>
+        entry.campaignId === this._campaign.campaignId &&
+        !entry.tags.includes(CONVERSATION_RECAP_TAG),
+    );
   }
 
   get filteredNotes(): readonly PlayerJournalEntry[] {
@@ -316,6 +337,53 @@ class JournalViewModel
   }
 
   // ── Recaps ────────────────────────────────────────────────────────
+
+  get diaryVoice(): boolean {
+    return this._diary?.diaryVoice ?? false;
+  }
+
+  setDiaryVoice(value: boolean): void {
+    this._diary?.setDiaryVoice(value);
+  }
+
+  get conversationRecapCount(): number {
+    return this._notes.entries.filter(
+      (entry) =>
+        entry.campaignId === this._campaign.campaignId &&
+        readConversationRecap(entry) !== undefined,
+    ).length;
+  }
+
+  get hasNoMatchingRecaps(): boolean {
+    return (
+      this.hasSearchQuery && this.conversationRecapCount > 0 && this.conversationRecaps.length === 0
+    );
+  }
+
+  get conversationRecaps(): ReadonlyArray<{
+    id: string;
+    title: string;
+    prose: string;
+    objective: string;
+  }> {
+    return this._notes.entries.flatMap((entry) => {
+      if (entry.campaignId !== this._campaign.campaignId) {
+        return [];
+      }
+      const recap = readConversationRecap(entry);
+      if (!recap || !this._matches([recap.title, recap.objective])) {
+        return [];
+      }
+      return [
+        {
+          id: recap.id,
+          title: recap.title,
+          prose: this.diaryVoice ? recap.diary : recap.objective,
+          objective: recap.objective,
+        },
+      ];
+    });
+  }
 
   get recap(): SessionSummary | null {
     return this._recap.summary;

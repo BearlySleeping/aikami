@@ -7,7 +7,6 @@
 // region instead of floating a small card in it.
 
 import BaseViewModelContainer from '$lib/components/base_view_model_container.svelte';
-import m from '$lib/views/utils/i18n';
 import CharacterSheetContent from './character_sheet_content.svelte';
 import { createCharacterSheetPresentationState } from './character_sheet_presentation.svelte';
 import type { CharacterSheetViewModelInterface } from './character_sheet_view_model.svelte';
@@ -48,7 +47,7 @@ const presentation = createCharacterSheetPresentationState();
           data-testid="character-edit-toggle"
           onclick={() => presentation.toggleEditing()}
         >
-          {presentation.isEditing ? m.character_done() : m.character_edit()}
+          {presentation.isEditing ? 'Done editing' : 'Edit character'}
         </button>
       </div>
       <CharacterSheetContent {viewModel} {presentation} />

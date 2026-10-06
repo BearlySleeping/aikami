@@ -56,7 +56,6 @@ describe('classification', () => {
     expect(isGeneratedFile('apps/x/src/env.d.ts')).toBe(true);
     expect(isGeneratedFile('.pi/generated-skills/foo/bar.ts')).toBe(true);
     expect(isGeneratedFile('packages/x/src/generated/catalog.ts')).toBe(true);
-    expect(isGeneratedFile('packages/x/src/paraglide/messages.js')).toBe(true);
     expect(isGeneratedFile('apps/x/src/lpc_asset_catalog_generated.ts')).toBe(true);
     expect(isGeneratedFile('apps/x/src/catalog.generated.ts')).toBe(true);
     expect(isGeneratedFile('apps/frontend/client/static/content.js')).toBe(true);
@@ -84,6 +83,18 @@ describe('classification', () => {
       isExcludedDir({ name: 'target', relPath: 'apps/frontend/client/src-tauri/target' }),
     ).toBe(true);
     expect(isExcludedDir({ name: '.svelte-kit', relPath: 'apps/x/.svelte-kit' })).toBe(true);
+    // Gitignored tsx quick-check sandbox: transient transpiled output, not source.
+    for (const relPath of [
+      'apps/frontend/client/.fast-check',
+      'apps/frontend/client/.fast-check/tsx',
+    ]) {
+      expect(isExcludedDir({ name: '.fast-check', relPath })).toBe(true);
+    }
+    // Negative control: a real source directory that merely resembles it must
+    // still be scanned, or the exclusion could swallow genuine debt.
+    for (const relPath of ['apps/x/src/fast_check', 'apps/x/src/fast-checker']) {
+      expect(isExcludedDir({ name: relPath.split('/').pop() ?? '', relPath })).toBe(false);
+    }
     expect(isExcludedDir({ name: 'git', relPath: '.pi/git' })).toBe(true);
     expect(isExcludedDir({ name: 'workspaces', relPath: '.pi/workspaces' })).toBe(true);
     expect(isExcludedDir({ name: 'dist', relPath: 'scripts/src/lib/dist' })).toBe(false);

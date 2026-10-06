@@ -222,6 +222,18 @@ export const classifyHudViewport = (viewport: HudViewport): HudViewportClass => 
   return 'desktop';
 };
 
+/**
+ * Whether a region exists at all in this viewport.
+ *
+ * The editor needs this BEFORE it lets a player drop a widget somewhere: a
+ * region the resolver would collapse into the overflow entry is a drop target
+ * that silently does nothing, which is indistinguishable from a broken drag.
+ * Exposed here so the editor asks the resolver's own policy instead of
+ * re-deriving a second opinion about which regions exist.
+ */
+export const isHudAnchorAvailable = (viewport: HudViewport, anchor: HudSlot): boolean =>
+  availableAnchors(classifyHudViewport(viewport)).includes(anchor);
+
 /** Scale ceiling per viewport class — a compact viewport never enlarges widgets. */
 const SCALE_CEILING_BY_CLASS: Readonly<Record<HudViewportClass, number>> = {
   desktop: HUD_SCALE_MAX,
@@ -480,7 +492,7 @@ export const resolveHudLayout = (input: HudResolveInput): HudResolvedLayout => {
   }
 
   const availableHeight = anchorAvailableHeight(input.viewport);
-  const usableAnchors = new Set(availableAnchors(input.viewport, viewportClass));
+  const usableAnchors = new Set(availableAnchors(viewportClass));
 
   type Candidate = {
     readonly definition: HudWidgetDefinition;

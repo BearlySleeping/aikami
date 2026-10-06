@@ -68,14 +68,20 @@ export type WorldGenOutput = {
 // Wizard state types
 // ---------------------------------------------------------------------------
 
-/** Step in the wizard state machine. */
+/**
+ * Step in the wizard state machine.
+ *
+ * There is deliberately no character-creation step: accepting a G01 draft
+ * produces a private narrative preview, not a playable world, so advancing to
+ * character creation would assert something untrue about the draft.
+ */
 export type WizardStep =
   | 'genre_tone'
   | 'setting_difficulty'
   | 'goals'
   | 'generating'
   | 'preview'
-  | 'character_creation';
+  | 'draft_saved';
 
 /** Aggregate result of a world generation attempt. */
 export type WorldGenResult = {

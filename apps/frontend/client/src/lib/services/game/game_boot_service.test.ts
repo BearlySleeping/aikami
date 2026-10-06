@@ -197,6 +197,75 @@ describe('GameBootService — AC-4 Cancellation', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Catalog readiness: an empty catalog must never masquerade as a ready one
+// ---------------------------------------------------------------------------
+
+/** The private surface `_buildPlayerData` reads. */
+type AppearanceInternals = {
+  _persona: { id: string; name: string; appearance?: Record<string, unknown> } | undefined;
+  _cachedLpcSlots:
+    | readonly { slot: string; variants: readonly { assetId: string }[] }[]
+    | undefined;
+  _buildPlayerData: () => { name: string; appearanceLayers?: number[] } | undefined;
+};
+
+const internals = (): AppearanceInternals => gameBootService as unknown as AppearanceInternals;
+
+describe('GameBootService — LPC catalog readiness', () => {
+  test('an EMPTY catalog emits no appearance layers at all', () => {
+    resetService();
+    const svc = internals();
+    svc._persona = { id: 'persona-1', name: 'Tester' };
+    // The race under test: the pipeline was built from a catalog whose seed
+    // had not landed, so the cached slots are empty.
+    svc._cachedLpcSlots = [];
+
+    const playerData = svc._buildPlayerData();
+
+    // Previously this returned [3, 3, 0, 22, 0, 95] — a bare chest on a
+    // child body. An empty catalog must now produce NO layers, so the engine
+    // falls back to its own defaults instead of rendering a guessed look.
+    expect(playerData?.appearanceLayers).toBeUndefined();
+  });
+
+  test('a MISSING cache (undefined) also emits no appearance layers', () => {
+    resetService();
+    const svc = internals();
+    svc._persona = { id: 'persona-1', name: 'Tester' };
+    svc._cachedLpcSlots = undefined;
+
+    const playerData = svc._buildPlayerData();
+
+    expect(playerData?.appearanceLayers).toBeUndefined();
+  });
+
+  test('a POPULATED catalog produces one derived index per engine slot', () => {
+    resetService();
+    const svc = internals();
+    svc._persona = {
+      id: 'persona-1',
+      name: 'Tester',
+      appearance: { lpcRecipe: { head: 'head/heads/human_male' } },
+    };
+    svc._cachedLpcSlots = [
+      { slot: 'body', variants: [{ assetId: 'body/bodies_male' }] },
+      { slot: 'hair', variants: [{ assetId: 'hair/bangs_adult' }] },
+      {
+        slot: 'torso',
+        variants: [{ assetId: 'torso/clothes/longsleeve/longsleeve_male' }],
+      },
+      { slot: 'legs', variants: [{ assetId: 'legs/pants_male' }] },
+      { slot: 'feet', variants: [{ assetId: 'feet/shoes/basic_male' }] },
+      { slot: 'head', variants: [{ assetId: 'head/heads/human_male' }] },
+    ];
+
+    const playerData = svc._buildPlayerData();
+
+    expect(playerData?.appearanceLayers).toEqual([1, 1, 1, 1, 1, 1]);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // AC-5: Save Hydration vs. Fresh Spawn
 // ---------------------------------------------------------------------------
 

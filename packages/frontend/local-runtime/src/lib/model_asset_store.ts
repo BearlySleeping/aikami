@@ -515,12 +515,41 @@ export class ModelAssetStore implements ModelAssetStoreInterface {
       if (typeof caches !== 'undefined') {
         const cache = await caches.open(bundle.assets[0]?.cache ?? 'transformers-cache');
         await cache.delete(bundle.manifestKey);
+        // Best-effort sweep of the pre-fix document-relative manifest key.
+        // It only ever resolved on an http(s) origin (browser / WebView2), and
+        // WebKit rejects the relative form outright — so this must never be
+        // allowed to fail the removal of the current manifest.
+        await this._deleteLegacyManifestKey(cache, bundle);
       }
 
       this._setState(bundleId, { status: 'not-downloaded', bytes: this.totalBytes(bundleId) });
     } catch (error) {
       this._setState(bundleId, { status: 'error', message: 'Remove failed', retryable: true });
       throw error;
+    }
+  }
+
+  /**
+   * Deletes the pre-fix, document-relative manifest entry for a bundle.
+   *
+   * Bundles used modality-specific legacy keys before their manifests were pinned to
+   * an absolute https URL. Those entries survive on installs that ran on an
+   * http(s) origin and are unreachable on WebKit (which refuses the relative
+   * form), so the delete is best-effort and never throws.
+   */
+  private async _deleteLegacyManifestKey(cache: Cache, bundle: LocalModelBundle): Promise<void> {
+    const legacyKeys: Readonly<Record<string, string>> = {
+      'kokoro-82m': 'aikami-voice-model/manifest-v1',
+      'qwen3-0.6b': 'aikami-text-model/manifest-v1',
+    };
+    const legacyKey = legacyKeys[bundle.id];
+    if (!legacyKey || legacyKey === bundle.manifestKey) {
+      return;
+    }
+    try {
+      await cache.delete(legacyKey);
+    } catch {
+      // Unsupported scheme on this origin — nothing to clean up.
     }
   }
 }

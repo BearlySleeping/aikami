@@ -8,6 +8,8 @@
     "paths": {
       "@aikami/frontend/local-runtime": ["./src/index.ts"],
       "@aikami/frontend/local-runtime/*": ["./src/lib/*"],
+      "@aikami/frontend/utils": ["../utils/src/index.ts"],
+      "@aikami/frontend/utils/*": ["../utils/src/lib/*"],
       "@aikami/constants": ["../../shared/constants/src/index.ts"],
       "@aikami/constants/*": ["../../shared/constants/src/lib/*"],
       "@aikami/local-ai": ["../../shared/local-ai/src/index.ts"],

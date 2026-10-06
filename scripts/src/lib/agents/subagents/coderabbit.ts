@@ -1,156 +1,112 @@
 // scripts/src/lib/agents/subagents/coderabbit.ts
-//
-// Minimal, unattended CodeRabbit loop for subagent PRs: wait for the review
-// (auto_review is on for main, so normally it just arrives), then optionally
-// request `@coderabbitai autofix` and wait for its commit.
-//
-// The interactive, richer version lives in .pi/extensions/code_rabbit.ts; this
-// one runs inside the detached supervisor so it keeps going after the captain's
-// turn — or the captain itself — ends.
 
-import { spawnSync } from 'node:child_process';
+import { execFile } from 'node:child_process';
+import { applyCodeRabbitAutofix } from '../../../../../.pi/extensions/lib/coderabbit_autofix.ts';
+import {
+  codeRabbitFindings,
+  codeRabbitLifecycle,
+} from '../../../../../.pi/extensions/lib/coderabbit_evidence.ts';
+import {
+  type ReviewQuery,
+  readCodeRabbitSnapshot,
+} from '../../../../../.pi/extensions/lib/coderabbit_reader.ts';
+import { waitForCodeRabbit } from '../../../../../.pi/extensions/lib/coderabbit_wait.ts';
 import type { ReviewOutcome } from './types.ts';
-
-const POLL_MS = 30_000;
-/** If no review appears this long after opening, nudge with `@coderabbitai review`. */
-const NUDGE_AFTER_MS = 8 * 60_000;
-const AUTOFIX_TIMEOUT_MS = 25 * 60_000;
-
-const BOT = /^coderabbitai(\[bot\])?$/;
 
 type Report = (line: string) => void;
 
-const gh = (args: string[]): string => {
-  const r = spawnSync('gh', args, { encoding: 'utf8', timeout: 60_000 });
-  if (r.status !== 0) {
-    throw new Error(
-      `gh ${args.slice(0, 3).join(' ')} failed: ${(r.stderr ?? '').trim().slice(0, 300)}`,
+// The detached supervisor has no Pi runtime; keep only this transport adapter
+// different. Lifecycle, pagination, head pinning and finding disposition are shared.
+const query: ReviewQuery = (args, options) =>
+  new Promise((resolve) => {
+    execFile(
+      'gh',
+      args,
+      {
+        encoding: 'utf8',
+        timeout: options.timeoutMs,
+        signal: options.signal,
+        maxBuffer: 16 * 1024 * 1024,
+      },
+      (error, stdout, stderr) => {
+        if (error) {
+          resolve({ success: false, text: stderr.trim() || error.message });
+          return;
+        }
+        let json: unknown;
+        try {
+          json = JSON.parse(stdout);
+        } catch {
+          // Posting a command has non-JSON output; readers separately require JSON.
+        }
+        resolve({ success: true, text: stdout.trim(), json });
+      },
     );
-  }
-  return (r.stdout ?? '').trim();
-};
+  });
 
-const sleep = (ms: number): Promise<void> => new Promise((res) => setTimeout(res, ms));
-
-type PrSnapshot = {
-  headRefOid: string;
-  reviews: { author: { login: string }; state: string; submittedAt: string }[];
-  comments: { author: { login: string }; body: string; createdAt: string }[];
-};
-
-const snapshot = (pr: string): PrSnapshot =>
-  JSON.parse(gh(['pr', 'view', pr, '--json', 'headRefOid,reviews,comments'])) as PrSnapshot;
-
-const comment = (pr: string, body: string): void => {
-  gh(['pr', 'comment', pr, '--body', body]);
-};
-
-const inlineFindings = (pr: string): number => {
-  try {
-    const out = gh([
-      'api',
-      `repos/{owner}/{repo}/pulls/${pr}/comments`,
-      '--paginate',
-      '--jq',
-      '[.[] | select(.user.login | startswith("coderabbitai"))] | length',
-    ]);
-    return out
-      .split('\n')
-      .map((n) => Number.parseInt(n, 10) || 0)
-      .reduce((a, b) => a + b, 0);
-  } catch {
-    return 0;
-  }
-};
-
-const rateLimitMinutes = (
-  snap: PrSnapshot,
-  since: number,
-): { minutes: number; at: number } | undefined => {
-  const latest = snap.comments
-    .filter((c) => BOT.test(c.author.login) && Date.parse(c.createdAt) >= since)
-    .at(-1);
-  const m = latest?.body.match(/available in[\s\S]{0,40}?(\d+)\s*min/i);
-  return m?.[1] && latest
-    ? { minutes: Number.parseInt(m[1], 10) + 1, at: Date.parse(latest.createdAt) }
-    : undefined;
-};
-
-/** Wait for a CodeRabbit review submitted after `since`. */
+/** Wait for authenticated completion on one head, including incremental sticky-summary reviews. */
 export const waitForReview = async (options: {
   pr: string;
   since: number;
   timeoutMs: number;
   report: Report;
-}): Promise<{ state?: string; findings: number }> => {
-  const { pr, report } = options;
-  const startedAt = Date.now();
-  const hardDeadline = startedAt + options.timeoutMs * 2;
-  let deadline = startedAt + options.timeoutMs;
-  let lastRateLimitAt = options.since - 1;
-  let nudged = false;
-  while (Date.now() < Math.min(deadline, hardDeadline)) {
-    const snap = snapshot(pr);
-    if (Date.now() >= hardDeadline) {
-      break;
-    }
-    const review = snap.reviews
-      .filter((r) => BOT.test(r.author.login) && Date.parse(r.submittedAt) >= options.since)
-      .at(-1);
-    if (review) {
-      const findings = inlineFindings(pr);
-      report(`CodeRabbit review: ${review.state} (${findings} inline comments)`);
-      return { state: review.state, findings };
-    }
-    const limit = rateLimitMinutes(snap, Math.max(options.since, lastRateLimitAt + 1));
-    if (limit) {
-      lastRateLimitAt = limit.at;
-      report(`CodeRabbit rate-limited — retrying in ${limit.minutes} min`);
-      await sleep(Math.min(limit.minutes * 60_000, Math.max(0, hardDeadline - Date.now())));
-      if (Date.now() >= hardDeadline) {
-        break;
-      }
-      comment(pr, '@coderabbitai review');
-      deadline = Math.min(hardDeadline, Math.max(deadline, Date.now() + options.timeoutMs / 2));
-      continue;
-    }
-    if (!nudged && Date.now() - options.since > NUDGE_AFTER_MS) {
-      report('No review yet — requesting one explicitly');
-      comment(pr, '@coderabbitai review');
-      nudged = true;
-    }
-    await sleep(Math.min(POLL_MS, Math.max(0, Math.min(deadline, hardDeadline) - Date.now())));
+  signal?: AbortSignal;
+}): Promise<{ head?: string; state?: string; findings?: number; unresolvedFindings?: number }> => {
+  const deadline = Date.now() + options.timeoutMs;
+  const result = await waitForCodeRabbit({
+    timeoutMs: options.timeoutMs,
+    intervalMs: 30_000,
+    since: options.since,
+    signal: options.signal,
+    report: options.report,
+    readSnapshot: () =>
+      readCodeRabbitSnapshot({ pr: options.pr, query, signal: options.signal, deadline }),
+  });
+  if (result.reason !== 'completed') {
+    options.report('Timed out waiting for CodeRabbit; findings remain unknown');
+    return {};
   }
-  report('Timed out waiting for CodeRabbit review');
-  return { findings: 0 };
+  options.report(
+    `CodeRabbit completed (${result.findings.unresolvedCount} unresolved threads); verdict ${result.evidence.verdict ?? 'none'}`,
+  );
+  return {
+    head: result.snapshot.head,
+    state: result.evidence.verdict ?? 'COMPLETED',
+    findings: result.findings.actionableCount,
+    unresolvedFindings: result.findings.unresolvedCount,
+  };
 };
 
-/** Post `@coderabbitai autofix` and wait for CodeRabbit to push (or decline). */
+/** Request autofix only after current-head completion; reject unrelated pushes as bot commits. */
 export const runAutofix = async (options: {
   pr: string;
   report: Report;
+  signal?: AbortSignal;
 }): Promise<Pick<ReviewOutcome, 'autofix' | 'autofixCommit'>> => {
-  const { pr, report } = options;
-  const before = snapshot(pr).headRefOid;
-  const since = Date.now();
-  comment(pr, '@coderabbitai autofix');
-  report('Requested @coderabbitai autofix');
-  const deadline = since + AUTOFIX_TIMEOUT_MS;
-  while (Date.now() < deadline) {
-    await sleep(POLL_MS);
-    const snap = snapshot(pr);
-    if (snap.headRefOid !== before) {
-      report(`Autofix committed ${snap.headRefOid.slice(0, 7)}`);
-      return { autofix: 'committed', autofixCommit: snap.headRefOid };
-    }
-    const reply = snap.comments
-      .filter((c) => BOT.test(c.author.login) && Date.parse(c.createdAt) >= since)
-      .at(-1);
-    if (reply && /no (changes|fixes|actionable)|nothing to (fix|change)/i.test(reply.body)) {
-      report('Autofix: nothing to change');
-      return { autofix: 'no-change' };
-    }
+  const deadline = Date.now() + 30 * 60_000;
+  const readSnapshot = () =>
+    readCodeRabbitSnapshot({ pr: options.pr, query, signal: options.signal, deadline });
+  const initial = await readSnapshot();
+  if (codeRabbitLifecycle(initial).lifecycle !== 'completed') {
+    throw new Error(
+      'CodeRabbit review is not completed on the current head; autofix not requested',
+    );
   }
-  report('Autofix timed out');
-  return { autofix: 'timeout' };
+  if (codeRabbitFindings(initial).actionableCount === 0) {
+    return { autofix: 'skipped' };
+  }
+  const result = await applyCodeRabbitAutofix({
+    initial,
+    readSnapshot,
+    query,
+    report: options.report,
+    signal: options.signal,
+  });
+  if (result.status === 'committed') {
+    return { autofix: 'committed', autofixCommit: result.commit };
+  }
+  if (result.status === 'no-change') {
+    return { autofix: 'no-change' };
+  }
+  return { autofix: result.status === 'timeout' ? 'timeout' : 'skipped' };
 };

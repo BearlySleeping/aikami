@@ -4,6 +4,7 @@
 // a plain object — no `$services` barrel, no `mock.module`, and no dependency
 // on a shared test inventory.
 
+import { WEBGPU_COMPATIBILITY_CHECK_URL } from '@aikami/constants';
 import type { Campaign, PackIndexEntry } from '@aikami/types';
 import type { SaveSlotInfo } from '$types';
 import type {
@@ -18,6 +19,7 @@ import type {
   StartPlatformCapabilities,
   StartPlayerStateCapabilities,
   StartRouterCapabilities,
+  StartWebGpuCapabilities,
   StartWorldStateCapabilities,
 } from '../start_view_model.svelte.ts';
 
@@ -35,6 +37,7 @@ export type StartCapabilities = {
   packRegistry: StartPackRegistryCapabilities;
   assets: StartAssetPrefetchCapabilities;
   platform: StartPlatformCapabilities;
+  webgpu: StartWebGpuCapabilities;
 };
 
 /** A captured `router.goToRoute` invocation. */
@@ -80,6 +83,12 @@ export type StartHarness = {
   setAvailableSaves(next: SaveSlotInfo[]): void;
   setSessionMarker(campaignId: string | undefined): void;
   clearSessionMarkerCalls(): number;
+  /** Settles the WebGPU probe outcome the fixture reports. */
+  setWebGpuStatus(next: StartWebGpuCapabilities['status']): void;
+  /** How many times the start menu asked for the WebGPU probe. */
+  webGpuCheckCalls(): number;
+  /** How many times the start menu recorded a recommendation dismissal. */
+  webGpuDismissCalls(): number;
   reset(): void;
 };
 
@@ -92,6 +101,10 @@ export const createStartHarness = (): StartHarness => {
   const availableSaves: SaveSlotInfo[] = [];
   let sessionMarkerCampaignId: string | undefined;
   let clearSessionMarkerCount = 0;
+  let webGpuStatus: StartWebGpuCapabilities['status'] = 'unsupported';
+  let webGpuDismissed = false;
+  let webGpuCheckCallCount = 0;
+  let webGpuDismissCallCount = 0;
 
   const capabilities: StartCapabilities = {
     campaign: {
@@ -164,6 +177,26 @@ export const createStartHarness = (): StartHarness => {
       isTauri: () => false,
       closeWindow: async () => {},
     },
+    webgpu: {
+      // Mirrors the real service: the probe resolves immediately, so a test
+      // that wants to observe the "still probing" state sets `unknown` and
+      // only then settles it with `setWebGpuStatus`.
+      get status(): StartWebGpuCapabilities['status'] {
+        return webGpuStatus;
+      },
+      get shouldRecommend(): boolean {
+        return webGpuStatus === 'unsupported' && !webGpuDismissed;
+      },
+      compatibilityCheckUrl: WEBGPU_COMPATIBILITY_CHECK_URL,
+      check: async () => {
+        webGpuCheckCallCount++;
+        return webGpuStatus;
+      },
+      dismissRecommendation: () => {
+        webGpuDismissCallCount++;
+        webGpuDismissed = true;
+      },
+    },
   };
 
   return {
@@ -191,6 +224,15 @@ export const createStartHarness = (): StartHarness => {
     clearSessionMarkerCalls(): number {
       return clearSessionMarkerCount;
     },
+    setWebGpuStatus(next: StartWebGpuCapabilities['status']): void {
+      webGpuStatus = next;
+    },
+    webGpuCheckCalls(): number {
+      return webGpuCheckCallCount;
+    },
+    webGpuDismissCalls(): number {
+      return webGpuDismissCallCount;
+    },
     reset(): void {
       routeCalls.length = 0;
       newAdventureCalls.length = 0;
@@ -199,6 +241,10 @@ export const createStartHarness = (): StartHarness => {
       availableSaves.length = 0;
       sessionMarkerCampaignId = undefined;
       clearSessionMarkerCount = 0;
+      webGpuStatus = 'unsupported';
+      webGpuDismissed = false;
+      webGpuCheckCallCount = 0;
+      webGpuDismissCallCount = 0;
     },
   };
 };

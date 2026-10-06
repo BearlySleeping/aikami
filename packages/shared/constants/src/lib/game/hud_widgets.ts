@@ -82,6 +82,16 @@ export const LEGACY_MUSIC_PLAYER_VISIBLE_KEY = 'aikami:music-player:visible';
 /** Written only as `'1'`; absence means off and is NOT a lost explicit choice. */
 export const LEGACY_CLOCK_HUD_VISIBLE_KEY = 'aikami:clock-hud:visible';
 
+/**
+ * Where the player's BGM intent survives a reload.
+ *
+ * 🔴 Playback INTENT, never playback itself: an `AudioContext` cannot be
+ * built before a user gesture, so this stores what the player asked for
+ * (playing / paused / stopped) so a reload can honour it. `stopped` is the
+ * load-bearing value — it is the player's "do not start music at me again".
+ */
+export const MUSIC_PLAYER_PLAYBACK_KEY = 'aikami:music-player:playback';
+
 /** The preset a new player starts on. */
 export const HUD_DEFAULT_PRESET_ID = 'adventure';
 
@@ -325,10 +335,15 @@ type HudPresetDefinitionShape = {
 /**
  * The four shipped presets.
  *
- * `adventure` is the default. `minimal` favours the world; `tactical` keeps
- * combat affordances pinned; `readable` enlarges text-bearing widgets. Every
- * preset still leaves `system-notice` and `menu` reachable — the resolver
- * coerces those back to `always` regardless of what a preset claims.
+ * `adventure` is the default, and it is the one preset that promises the
+ * player their music player: `always`, bottom-right. The other three keep it
+ * `hidden` on purpose — `minimal` is "keep the world visible, only what matters
+ * right now", `tactical` pins combat affordances, `readable` is
+ * "larger text, fewer distractions". Those are deliberate choices, not
+ * oversights, so the default does not leak into them.
+ *
+ * Every preset still leaves `system-notice` and `menu` reachable — the
+ * resolver coerces those back to `always` regardless of what a preset claims.
  */
 export const HUD_LAYOUT_PRESETS = [
   {
@@ -419,7 +434,7 @@ export const HUD_LAYOUT_PRESETS = [
       },
       {
         widgetId: 'music-player',
-        visibility: 'hidden',
+        visibility: 'always',
         anchor: 'bottom-end',
         order: 0,
         density: 'compact',

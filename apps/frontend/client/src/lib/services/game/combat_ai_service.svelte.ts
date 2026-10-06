@@ -73,6 +73,14 @@ export type CombatAiServiceOptions = BaseFrontendClassOptions & {
       systemPrompt?: string;
       signal?: AbortSignal;
       task?: string;
+      /**
+       * Absolute epoch ms by which the whole call must finish. The decision
+       * service passes its own budget deadline so the transport's clock and the
+       * request's clock are the same instant (issue #382 P0).
+       */
+      deadlineAt?: number;
+      /** Correlates the call with the turn that caused it. */
+      requestId?: string;
     }): Promise<unknown>;
   };
   /** Soft deadline in ms — defaults to the §18 budget (1.5 s). */
@@ -394,6 +402,10 @@ class CombatAiService
             systemPrompt: buildCombatAiSystemPrompt(),
             signal: transport.signal,
             task: TASK,
+            // ONE clock for the whole request group: a cold local load inside
+            // the call cannot consume the budget the retry still needs.
+            deadlineAt: budget.deadlineAt,
+            requestId: requests.length === 1 ? requests[0]?.decisionId : transport.id,
           }),
       });
       const latencyMs = Date.now() - startedAt;

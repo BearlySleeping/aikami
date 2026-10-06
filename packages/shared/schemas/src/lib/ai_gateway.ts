@@ -6,7 +6,7 @@
 // Contract: C-320 AC-1
 
 import Type from 'typebox';
-import { TextParamsSchema } from './domain/providers_config.ts';
+import { AiReasoningSchema, TextParamsSchema } from './domain/providers_config.ts';
 
 /** Which adapter family serves a capability. */
 export const AiModeSchema = Type.Union([
@@ -62,6 +62,15 @@ export const AiModeResolutionSchema = Type.Object({
   model: Type.Optional(Type.String()),
   /** Text generation params from the resolved connection, when configured (C-463 wiring). */
   params: Type.Optional(TextParamsSchema),
+  /**
+   * This call's reasoning-channel preference, from its task preset.
+   *
+   * Deliberately NOT part of `params`: `params` is the persisted connection
+   * record, and a saved connection has no business overriding what a
+   * particular task measured for itself. Absent means the provider default,
+   * which is what every player-facing creative task wants.
+   */
+  reasoning: Type.Optional(AiReasoningSchema),
 });
 
 /** Detection result per capability (convertible to existing DetectionStatus). */

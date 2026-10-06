@@ -4,7 +4,7 @@
 // in the feature that imports the `$services` singleton; the ViewModel receives
 // it as a typed capability.
 
-import { sessionSummaryService } from '$services';
+import { sessionService, sessionSummaryService } from '$services';
 import {
   createSessionSummaryPanelViewModel,
   type SessionSummaryPanelViewModelInterface,
@@ -18,4 +18,19 @@ import {
 export const getSessionSummaryPanelViewModel = (
   options: Omit<SessionSummaryPanelViewModelOptions, 'summary'>,
 ): SessionSummaryPanelViewModelInterface =>
-  createSessionSummaryPanelViewModel({ ...options, summary: sessionSummaryService });
+  createSessionSummaryPanelViewModel({
+    ...options,
+    summary: {
+      generateSummary: async (playtimeMinutes) => {
+        const session = sessionService.activeSession;
+        if (!session) {
+          throw new Error('No active session to summarize');
+        }
+        return sessionSummaryService.generateSummary({
+          playtimeMinutes,
+          sessionNumber: session.sessionNumber,
+        });
+      },
+      clearSummary: () => sessionSummaryService.clearSummary(),
+    },
+  });

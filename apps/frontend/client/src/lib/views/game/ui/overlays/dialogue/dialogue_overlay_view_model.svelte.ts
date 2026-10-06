@@ -243,7 +243,7 @@ export type DialogueOverlayViewModelOptions = BaseViewModelOptions &
      *
      * Contract: C-157 Dialogue Skill Checks
      */
-    onStartCombat?: (npcData: DialogueNpcData) => void;
+    onStartCombat?: (npcData: DialogueNpcData) => boolean;
     /**
      * Whether this dialogue is part of consequential campaign play (the
      * production `/game` overlay). When true, transcript-rewinding controls
@@ -361,9 +361,6 @@ export type DialogueOverlayViewModelInterface = BaseViewModelInterface & {
    * is sending CAMERA_ZOOM_UPDATE events.
    */
   hasNpcScreenPosition: boolean;
-
-  /** Scrollable message container — bound by View via bind:this. */
-  messageContainerElement: HTMLDivElement | undefined;
 
   /** Textarea input — bound by View via bind:this for autofocus. */
   inputElement: HTMLTextAreaElement | undefined;
@@ -726,9 +723,6 @@ class DialogueOverlayViewModel
   /** @inheritdoc */
   hasNpcScreenPosition = $state<boolean>(false);
 
-  /** Scrollable message container — set by View via bind:this. */
-  messageContainerElement = $state.raw<HTMLDivElement | undefined>(undefined);
-
   /** Textarea input — set by View via bind:this for autofocus. */
   inputElement = $state.raw<HTMLTextAreaElement | undefined>(undefined);
 
@@ -801,7 +795,7 @@ class DialogueOverlayViewModel
 
   private readonly _onEndChat: () => void;
 
-  private readonly _onStartCombat?: (npcData: DialogueNpcData) => void;
+  private readonly _onStartCombat?: (npcData: DialogueNpcData) => boolean;
 
   private readonly _npcDialogueService: NpcDialogueServiceInterface;
 
@@ -1496,9 +1490,8 @@ class DialogueOverlayViewModel
         `*${this._npcData.npcName} is not convinced — words have failed. Combat begins!*`,
       );
       await new Promise<void>((resolve) => setTimeout(resolve, 1200));
-      this._onEndChat();
-      if (this._onStartCombat) {
-        this._onStartCombat(this._npcData);
+      if (!this._onStartCombat?.(this._npcData)) {
+        this.streamError = 'Combat could not start. Your conversation is still open.';
       }
     }
   }
@@ -2824,10 +2817,8 @@ class DialogueOverlayViewModel
         // UI transition message before executing
         this._appendNpcMessage(`*${this._npcData.npcName} reaches for a weapon — combat begins!*`);
         await new Promise<void>((resolve) => setTimeout(resolve, 1200));
-        this._onEndChat();
-
-        // Delegate combat start to the orchestrator
-        this._npcDialogueService.executeCommand({
+        // Keep dialogue until the worker confirms a valid encounter.
+        const dispatched = this._npcDialogueService.executeCommand({
           kind,
           npcId: this._npcData.npcId,
           npcName: this._npcData.npcName,
@@ -2837,8 +2828,8 @@ class DialogueOverlayViewModel
           >[0]['command'],
         });
 
-        if (this._onStartCombat) {
-          this._onStartCombat(this._npcData);
+        if (!dispatched) {
+          this.streamError = 'Combat could not start. Your conversation is still open.';
         }
         break;
       }
@@ -2883,12 +2874,10 @@ class DialogueOverlayViewModel
     // Brief delay so the player can read the transition message
     await new Promise<void>((resolve) => setTimeout(resolve, 1200));
 
-    // End the dialogue
-    this._onEndChat();
-
-    // Notify parent to start combat
-    if (this._onStartCombat) {
-      this._onStartCombat(this._npcData);
+    // The worker acknowledgement owns the transition; rejection must not
+    // destroy the transcript or dispatch a second, rosterless encounter.
+    if (!this._onStartCombat?.(this._npcData)) {
+      this.streamError = 'Combat could not start. Your conversation is still open.';
     }
   }
 

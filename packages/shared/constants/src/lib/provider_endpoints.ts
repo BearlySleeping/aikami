@@ -55,6 +55,12 @@ export const PROVIDER_ENDPOINTS: Record<string, ProviderEndpoint> = {
     verifyUrl: 'https://api.mistral.ai/v1/models',
     auth: { location: 'header', name: 'Authorization', prefix: 'Bearer ' },
   },
+  nanogpt: {
+    label: 'NanoGPT',
+    method: 'GET',
+    verifyUrl: 'https://api.nano-gpt.com/api/v1/models',
+    auth: { location: 'header', name: 'Authorization', prefix: 'Bearer ' },
+  },
 } as const;
 
 // ---------------------------------------------------------------------------

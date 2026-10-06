@@ -116,9 +116,15 @@ const buildConnectSrc = (): string => {
  * textures — which is what happened to staging.
  */
 const buildImgSrc = (): string =>
-  ["'self'", 'data:', 'blob:', 'tauri:', 'asset:', ...CATALOG_ORIGINS_ALLOWED, 'http://localhost:8188'].join(
-    ' ',
-  );
+  [
+    "'self'",
+    'data:',
+    'blob:',
+    'tauri:',
+    'asset:',
+    ...CATALOG_ORIGINS_ALLOWED,
+    'http://localhost:8188',
+  ].join(' ');
 
 type TauriConfig = {
   app: {
@@ -145,9 +151,7 @@ if (!imgSrcMatch) {
 
 const newConnectSrc = `connect-src ${buildConnectSrc()}`;
 const newImgSrc = `img-src ${buildImgSrc()}`;
-const newCsp = csp
-  .replace(connectSrcMatch[0], newConnectSrc)
-  .replace(imgSrcMatch[0], newImgSrc);
+const newCsp = csp.replace(connectSrcMatch[0], newConnectSrc).replace(imgSrcMatch[0], newImgSrc);
 
 if (newCsp === csp) {
   logger.info('✅ tauri.conf.json connect-src and img-src already up to date.');

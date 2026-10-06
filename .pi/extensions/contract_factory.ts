@@ -319,7 +319,9 @@ export default function (pi: ExtensionAPI) {
             }
           }
 
-          lines.push(`\nGenerate: \`contract_generate\` with the ID (e.g. \`C-312\`).`);
+          lines.push(
+            `\nGenerate with the \`contract\` tool, action "generate", and the ID (e.g. \`C-312\`).`,
+          );
 
           return {
             content: [{ type: 'text', text: lines.join('\n') }],
@@ -334,7 +336,7 @@ export default function (pi: ExtensionAPI) {
         parameters: Type.Object({
           featureCode: Type.String({
             description:
-              'Stable backlog ID from docs/TODO.md (e.g. "C-312"). Use contract_scan_backlog to discover available IDs.',
+              'Stable backlog ID from docs/TODO.md (e.g. "C-312"). Use the `contract` tool, action "backlog", to discover available IDs.',
           }),
         }),
         async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
@@ -350,7 +352,7 @@ export default function (pi: ExtensionAPI) {
                   text: [
                     `❌ ID \`${params.featureCode}\` not found in docs/TODO.md.`,
                     '',
-                    `Run \`contract_scan_backlog\` to see available IDs.`,
+                    `Run the \`contract\` tool, action "backlog", to see available IDs.`,
                     `If this is a raw request (not from TODO.md), use the /contract-create prompt instead.`,
                   ].join('\n'),
                 },
@@ -577,8 +579,8 @@ export default function (pi: ExtensionAPI) {
                   // --no-focus is used at creation: the checkout is NOT the
                   // agent's active cwd. Use it explicitly for all file/command ops.
                   'Use `w.checkoutPath` as the working directory for subsequent file and command operations.',
-                  'Use `contract_workspace_checkpoint` to save progress snapshots.',
-                  'Use `contract_workspace_complete` when the task is done.',
+                  'Use the `contract` tool, action "workspace_checkpoint", to save progress snapshots.',
+                  'Use the `contract` tool, action "workspace_complete", when the task is done.',
                   'Ship a PR with `bun herdr:task pr <id>` (or the task_pr tool).',
                 ].join('\n'),
               },
@@ -601,7 +603,7 @@ export default function (pi: ExtensionAPI) {
         parameters: Type.Object({
           workspacePath: Type.String({
             description:
-              'Absolute path to the Git Worktree directory (returned by contract_workspace_create).',
+              'Absolute path to the Git Worktree directory (returned by the `contract` tool, action "workspace_create").',
           }),
           message: Type.String({
             description:

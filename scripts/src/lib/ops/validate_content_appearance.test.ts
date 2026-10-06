@@ -185,7 +185,7 @@ describe('validateNpcAppearance', () => {
       components: [
         { slot: 'body', assetId: 'body/bodies_male' },
         { slot: 'body', assetId: 'body/bodies_female' },
-        { slot: 'cape', assetId: 'torso/chainmail_male' },
+        { slot: 'tail', assetId: 'torso/chainmail_male' },
       ],
     } as const;
     const errors = validateNpcAppearance({ ...base, appearance: named, catalog: CATALOG });

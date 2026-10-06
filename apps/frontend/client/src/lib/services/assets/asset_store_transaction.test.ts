@@ -49,6 +49,17 @@ mock.module('@aikami/frontend/configs', () => ({
 
 import { assetStore } from './asset_store.svelte';
 
+/**
+ * The snapshot seam is inert here: these cases are about catalog
+ * transactionality, and the device-database round trip is covered by
+ * `asset_store_catalog_snapshot.test.ts` / `catalog_snapshot_store.test.ts`.
+ */
+const inertSnapshotStore = {
+  read: async (): Promise<undefined> => undefined,
+  write: async (): Promise<void> => {},
+};
+assetStore.setSnapshotStore(inertSnapshotStore);
+
 const PACK_LOCK_ALIAS_KEY = 'index/v1/pack_lock.json';
 
 const sha256 = async (value: string): Promise<string> => sha256Hex(new Blob([value]));

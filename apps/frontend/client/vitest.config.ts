@@ -56,7 +56,7 @@ export default defineConfig({
       { find: /^\$components$/, replacement: clientSource('lib/components/index.ts') },
       {
         find: /^\$services$/,
-        replacement: clientSource('browser_tests/hotbar_services_stub.ts'),
+        replacement: clientSource('browser_tests/browser_services_stub.ts'),
       },
       { find: /^\$types$/, replacement: clientSource('lib/types/index.ts') },
       { find: /^\$lib\/(.*)$/, replacement: clientSource('lib/$1') },
@@ -65,7 +65,7 @@ export default defineConfig({
   test: {
     // Keep this lane strictly separate from the Bun *.test.ts files under
     // src/lib — those import Bun's test API and must never be collected here.
-    include: ['src/browser_tests/**/*.browser.test.ts'],
+    include: ['src/browser_tests/**/*.browser.test.ts', 'tests/**/*.browser.test.ts'],
     // Reject unexpected cross-origin application traffic; the local Vitest/Vite
     // harness is same-origin and never blocked. See the setup file.
     setupFiles: ['src/browser_tests/setup_browser_tests.ts'],
@@ -76,7 +76,14 @@ export default defineConfig({
       // its own here: this lane does not load the SvelteKit vite config, so
       // `PUBLIC_MUTE_AUDIO` is not inlined.
       provider: playwright({ launchOptions: { args: ['--mute-audio'] } }),
-      instances: [{ browser: 'chromium' }],
+      instances: [
+        {
+          browser: 'chromium',
+          // The playable-demo acceptance baseline: the smallest window the HUD is
+          // expected to stay usable in (long prompts at 200% text included).
+          viewport: { width: 800, height: 600 },
+        },
+      ],
       headless: true,
     },
   },

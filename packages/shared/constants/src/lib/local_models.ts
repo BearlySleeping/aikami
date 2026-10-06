@@ -37,15 +37,49 @@ export type LocalModelBundle = {
 // Kokoro-82M (TTS voice model, C-389)
 // ---------------------------------------------------------------------------
 
-const KOKORO_MODEL_ID = 'onnx-community/Kokoro-82M-ONNX';
-const KOKORO_REVISION = 'f46687f7e41512228ae953af24a11b2640ea0f22';
+/** Canonical Kokoro model repo — the worker resolves URLs against this id. */
+export const KOKORO_MODEL_ID = 'onnx-community/Kokoro-82M-ONNX';
+/** Pinned Kokoro revision — the worker and the cache keys must agree. */
+export const KOKORO_REVISION = 'f46687f7e41512228ae953af24a11b2640ea0f22';
 const KOKORO_VOICE_REPO = 'onnx-community/Kokoro-82M-v1.0-ONNX';
 const KOKORO_VOICE_REVISION = 'main';
 
 const TRANSFORMERS_CACHE = 'transformers-cache';
 const KOKORO_VOICES_CACHE = 'kokoro-voices';
 
-const kokoroCacheKey = (path: string): string => `/models/${KOKORO_MODEL_ID}/${path}`;
+/**
+ * Absolute origin every bundle manifest is keyed under in Cache Storage.
+ *
+ * A Cache Storage key given as a relative string is resolved against the
+ * document base URL. That is harmless in a browser and in WebView2 (Windows
+ * Tauri), where the app is served from `http://tauri.localhost`, but a
+ * packaged Linux/macOS Tauri build is served from the `tauri://localhost`
+ * custom protocol — and WebKit refuses a non-HTTP(S) request URL outright
+ * (`Request url is not HTTP/HTTPS`).
+ *
+ * The failure was silent and late: every model byte downloaded and verified
+ * fine, then the manifest write threw, so the whole download reported an
+ * error and the model never reached `ready` (which is also why `status()`
+ * kept answering `not-downloaded` and speech stayed silent). The manifest is
+ * pure app bookkeeping and is never fetched over the network, so pinning it
+ * to a stable absolute https URL is both sufficient and origin-independent.
+ */
+const MODEL_MANIFEST_ORIGIN = 'https://manifest.aikami.app/';
+
+/** Absolute, origin-independent Cache Storage key for a bundle manifest. */
+const modelManifestKey = (bundleId: string, version: number): string =>
+  `${MODEL_MANIFEST_ORIGIN}${bundleId}/manifest-v${version}.json`;
+
+/**
+ * Cache keys are the exact URLs the Kokoro worker requests.
+ *
+ * They used to be `/models/<repo>/<file>`, which a static SPA host answers
+ * with `index.html` — a cache miss surfaced as `Unexpected token '<'` rather
+ * than a 404. Keying by the canonical remote URL keeps the bytes app-owned
+ * (Cache Storage serves them offline) while making the request URL real.
+ */
+const kokoroCacheKey = (path: string): string =>
+  `https://huggingface.co/${KOKORO_MODEL_ID}/resolve/${KOKORO_REVISION}/${path}`;
 
 const kokoroVoiceCacheKey = (path: string): string =>
   `https://huggingface.co/${KOKORO_VOICE_REPO}/resolve/${KOKORO_VOICE_REVISION}/${path}`;
@@ -95,8 +129,13 @@ export const KOKORO_BUNDLE: LocalModelBundle = {
       key: kokoroVoiceCacheKey('voices/af_heart.bin'),
     },
   ],
-  manifestKey: 'aikami-voice-model/manifest-v1',
-  manifestVersion: 2,
+  manifestKey: modelManifestKey('kokoro-82m', 4),
+  // 3: cache keys moved from `/models/...` to the canonical HuggingFace URLs.
+  // Existing installs must re-download so the new keys are populated.
+  // 4: manifest key moved from the document-relative
+  // `aikami-voice-model/manifest-v1` to an absolute https URL, so it no
+  // longer resolves against the `tauri://localhost` origin on Linux/macOS.
+  manifestVersion: 4,
 };
 
 // ---------------------------------------------------------------------------
@@ -144,8 +183,8 @@ export const QWEN3_BUNDLE: LocalModelBundle = {
       key: qwen3CacheKey('onnx/model_q4f16.onnx'),
     },
   ],
-  manifestKey: 'aikami-text-model/manifest-v1',
-  manifestVersion: 1,
+  manifestKey: modelManifestKey('qwen3-0.6b', 2),
+  manifestVersion: 2,
 };
 
 /** Registry of all known bundles, keyed by bundle id. */

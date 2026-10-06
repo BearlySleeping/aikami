@@ -17,7 +17,17 @@
 
 // biome-ignore-all lint/style/useNamingConvention: Cloudflare binding names are SCREAMING_SNAKE_CASE
 
-import { afterAll, beforeAll, describe, expect, mock, test } from 'bun:test';
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  mock,
+  setSystemTime,
+  test,
+} from 'bun:test';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { MAX_UPLOAD_SIZE } from '@aikami/constants';
@@ -1189,7 +1199,29 @@ const firstUserId = async (): Promise<string> => {
 /** The window the hub enforces, mirrored here so the test documents the budget. */
 const PUBLISH_MAX_HITS = 30;
 
+/**
+ * A fixed instant, deliberately mid-window.
+ *
+ * The publish limiter meters into a fixed wall-clock bucket
+ * (`floor(now / 60_000) * 60_000`), so a burst of 30+ requests that straddles
+ * a minute boundary is legitimately re-metered into the NEXT window — the
+ * quota resets mid-burst and the expected 429 never arrives. These tests assert
+ * that a quota is *exhausted and shared across instances*, which is only
+ * meaningful inside one window, so they pin the clock. Without this the block
+ * fails whenever it happens to run within a burst-duration of a minute
+ * boundary (~0.3% of runs, and reliably on a loaded CI machine).
+ */
+const PINNED_NOW = new Date('2026-09-02T12:00:30.000Z');
+
 describe('Security/privacy: publish is rate-limited per account', () => {
+  beforeEach(() => {
+    setSystemTime(PINNED_NOW);
+  });
+
+  afterEach(() => {
+    setSystemTime();
+  });
+
   test('the D1 quota survives a new app instance and refuses the hit past its window', async () => {
     const cookie = await signInCookie('rate-limit-burst@example.com');
 
@@ -1276,6 +1308,35 @@ describe('Security/privacy: publish is rate-limited per account', () => {
     // for a normal publish followed by a long tail of retries and re-publishes.
     expect(statuses.slice(0, PUBLISH_MAX_HITS - 2).every((status) => status === 201)).toBe(true);
     expect(statuses[PUBLISH_MAX_HITS - 2]).toBe(429);
+  });
+
+  test('the window really does roll over — a pinned clock is not hiding a stuck quota', async () => {
+    // Guards the guard: if pinning the clock were masking a quota that never
+    // expires, the block above would pass for the wrong reason. Advancing past
+    // the boundary must genuinely re-open the budget.
+    const cookie = await signInCookie('rate-limit-rollover@example.com');
+    for (let attempt = 0; attempt < PUBLISH_MAX_HITS; attempt++) {
+      await app.handle(
+        request(
+          'POST',
+          '/api/assets/community',
+          reserveBody({ title: `Rollover ${attempt}` }),
+          cookie,
+        ),
+      );
+    }
+    const exhausted = await app.handle(
+      request('POST', '/api/assets/community', reserveBody({ title: 'Spent' }), cookie),
+    );
+    expect(exhausted.status).toBe(429);
+
+    // Cross into the next fixed window.
+    setSystemTime(new Date(PINNED_NOW.getTime() + 60_000));
+
+    const afterRollover = await app.handle(
+      request('POST', '/api/assets/community', reserveBody({ title: 'Next Window' }), cookie),
+    );
+    expect(afterRollover.status).toBe(201);
   });
 });
 

@@ -1,0 +1,344 @@
+{
+  "schemaVersion": "381-native-dev-calibration/1",
+  "taskId": "npc-action-selection",
+  "split": "dev",
+  "endpoint": "http://127.0.0.1:8422",
+  "checkpoint": "Laya-Q8_0.gguf",
+  "startedAt": "2026-10-03T16:07:17.586Z",
+  "finishedAt": "2026-10-03T16:07:47.461Z",
+  "note": "Thresholds calibrated on DEVELOPMENT data only. p(chosen) is the backend own distribution over options, not a probability of correctness. Held-out was not scored.",
+  "cases": [
+    {
+      "caseId": "dev-elder-quest-01",
+      "kind": "positive",
+      "category": "quest-offer",
+      "expected": "offerQuest:fading_ward",
+      "chosen": "none",
+      "pChosen": 0.4008770271866081,
+      "latencyMs": 1617,
+      "residencyVerified": true,
+      "resident": true
+    },
+    {
+      "caseId": "dev-elder-quest-02",
+      "kind": "positive",
+      "category": "quest-offer",
+      "expected": "offerQuest:fading_ward",
+      "chosen": "offerQuest:fading_ward",
+      "pChosen": 0.4297773923360365,
+      "latencyMs": 1664,
+      "residencyVerified": true,
+      "resident": true
+    },
+    {
+      "caseId": "dev-orra-quest-01",
+      "kind": "positive",
+      "category": "quest-offer",
+      "expected": "offerQuest:tools_for_tomorrow",
+      "chosen": "none",
+      "pChosen": 0.7030305467753118,
+      "latencyMs": 998,
+      "residencyVerified": true,
+      "resident": true
+    },
+    {
+      "caseId": "dev-sella-quest-01",
+      "kind": "positive",
+      "category": "quest-offer",
+      "expected": "offerQuest:a_room_kept_warm",
+      "chosen": "none",
+      "pChosen": 0.6112639127272513,
+      "latencyMs": 1035,
+      "residencyVerified": true,
+      "resident": true
+    },
+    {
+      "caseId": "dev-merchant-give-01",
+      "kind": "positive",
+      "category": "gift",
+      "expected": "giveItem:healthPotion",
+      "chosen": "none",
+      "pChosen": 0.40546194831423693,
+      "latencyMs": 1686,
+      "residencyVerified": true,
+      "resident": true
+    },
+    {
+      "caseId": "dev-merchant-give-02",
+      "kind": "positive",
+      "category": "gift",
+      "expected": "giveItem:ironSword",
+      "chosen": "none",
+      "pChosen": 0.4578011633304567,
+      "latencyMs": 1655,
+      "residencyVerified": true,
+      "resident": true
+    },
+    {
+      "caseId": "dev-merchant-trade-01",
+      "kind": "positive",
+      "category": "trade",
+      "expected": "trade",
+      "chosen": "none",
+      "pChosen": 0.5147272465555814,
+      "latencyMs": 1623,
+      "residencyVerified": true,
+      "resident": true
+    },
+    {
+      "caseId": "dev-guard-recruit-01",
+      "kind": "positive",
+      "category": "recruit",
+      "expected": "recruit",
+      "chosen": "none",
+      "pChosen": 0.7397457521084557,
+      "latencyMs": 1383,
+      "residencyVerified": true,
+      "resident": true
+    },
+    {
+      "caseId": "dev-guard-combat-01",
+      "kind": "positive",
+      "category": "combat",
+      "expected": "startCombat",
+      "chosen": "none",
+      "pChosen": 0.8234986369102838,
+      "latencyMs": 1344,
+      "residencyVerified": true,
+      "resident": true
+    },
+    {
+      "caseId": "dev-elder-evidence-01",
+      "kind": "positive",
+      "category": "evidence",
+      "expected": "presentEvidence:the_ledger",
+      "chosen": "none",
+      "pChosen": 0.3185304731099861,
+      "latencyMs": 1692,
+      "residencyVerified": true,
+      "resident": true
+    },
+    {
+      "caseId": "dev-elder-evidence-02",
+      "kind": "positive",
+      "category": "evidence",
+      "expected": "presentEvidence:sella_receipt",
+      "chosen": "offerQuest:fading_ward",
+      "pChosen": 0.3554763595374282,
+      "latencyMs": 1633,
+      "residencyVerified": true,
+      "resident": true
+    },
+    {
+      "caseId": "dev-nemi-evidence-01",
+      "kind": "positive",
+      "category": "evidence",
+      "expected": "presentEvidence:tess_component",
+      "chosen": "presentEvidence:tess_component",
+      "pChosen": 0.639062789421768,
+      "latencyMs": 1043,
+      "residencyVerified": true,
+      "resident": true
+    },
+    {
+      "caseId": "dev-elder-gossip-01",
+      "kind": "required-abstain",
+      "category": "smalltalk",
+      "expected": null,
+      "chosen": "offerQuest:fading_ward",
+      "pChosen": 0.41087898323625965,
+      "latencyMs": 1641,
+      "residencyVerified": true,
+      "resident": true
+    },
+    {
+      "caseId": "dev-elder-ask-01",
+      "kind": "required-abstain",
+      "category": "question",
+      "expected": null,
+      "chosen": "none",
+      "pChosen": 0.4435040930785452,
+      "latencyMs": 1678,
+      "residencyVerified": true,
+      "resident": true
+    },
+    {
+      "caseId": "dev-elder-refuse-quest-01",
+      "kind": "required-abstain",
+      "category": "wrong-npc",
+      "expected": null,
+      "chosen": "none",
+      "pChosen": 0.44423745755854716,
+      "latencyMs": 1677,
+      "residencyVerified": true,
+      "resident": true
+    },
+    {
+      "caseId": "dev-elder-refuse-gift-01",
+      "kind": "required-abstain",
+      "category": "not-vendor",
+      "expected": null,
+      "chosen": "none",
+      "pChosen": 0.4625060488577826,
+      "latencyMs": 1672,
+      "residencyVerified": true,
+      "resident": true
+    },
+    {
+      "caseId": "dev-merchant-refuse-recruit-01",
+      "kind": "required-abstain",
+      "category": "wrong-npc",
+      "expected": null,
+      "chosen": "giveItem:ironArmor",
+      "pChosen": 0.30158448478844496,
+      "latencyMs": 1708,
+      "residencyVerified": true,
+      "resident": true
+    },
+    {
+      "caseId": "dev-guard-refuse-trade-01",
+      "kind": "required-abstain",
+      "category": "not-vendor",
+      "expected": null,
+      "chosen": "none",
+      "pChosen": 0.794903927379927,
+      "latencyMs": 1419,
+      "residencyVerified": true,
+      "resident": true
+    },
+    {
+      "caseId": "dev-merchant-smalltalk-01",
+      "kind": "required-abstain",
+      "category": "smalltalk",
+      "expected": null,
+      "chosen": "none",
+      "pChosen": 0.34795537537653376,
+      "latencyMs": 1664,
+      "residencyVerified": true,
+      "resident": true
+    },
+    {
+      "caseId": "dev-sella-smalltalk-01",
+      "kind": "required-abstain",
+      "category": "smalltalk",
+      "expected": null,
+      "chosen": "none",
+      "pChosen": 0.5968672533066358,
+      "latencyMs": 1034,
+      "residencyVerified": true,
+      "resident": true
+    }
+  ],
+  "thresholdCurve": [
+    {
+      "threshold": 0,
+      "accepted": 20,
+      "coverage": 1,
+      "positiveRecall": 0.16666666666666666,
+      "answeredPositiveAccuracy": 0.16666666666666666,
+      "falseAcceptances": 2
+    },
+    {
+      "threshold": 0.3,
+      "accepted": 20,
+      "coverage": 1,
+      "positiveRecall": 0.16666666666666666,
+      "answeredPositiveAccuracy": 0.16666666666666666,
+      "falseAcceptances": 2
+    },
+    {
+      "threshold": 0.4,
+      "accepted": 16,
+      "coverage": 0.8,
+      "positiveRecall": 0.16666666666666666,
+      "answeredPositiveAccuracy": 0.2,
+      "falseAcceptances": 1
+    },
+    {
+      "threshold": 0.5,
+      "accepted": 8,
+      "coverage": 0.4,
+      "positiveRecall": 0.08333333333333333,
+      "answeredPositiveAccuracy": 0.16666666666666666,
+      "falseAcceptances": 0
+    },
+    {
+      "threshold": 0.6,
+      "accepted": 6,
+      "coverage": 0.3,
+      "positiveRecall": 0.08333333333333333,
+      "answeredPositiveAccuracy": 0.2,
+      "falseAcceptances": 0
+    },
+    {
+      "threshold": 0.7,
+      "accepted": 4,
+      "coverage": 0.2,
+      "positiveRecall": 0,
+      "answeredPositiveAccuracy": 0,
+      "falseAcceptances": 0
+    },
+    {
+      "threshold": 0.75,
+      "accepted": 2,
+      "coverage": 0.1,
+      "positiveRecall": 0,
+      "answeredPositiveAccuracy": 0,
+      "falseAcceptances": 0
+    },
+    {
+      "threshold": 0.8,
+      "accepted": 1,
+      "coverage": 0.05,
+      "positiveRecall": 0,
+      "answeredPositiveAccuracy": 0,
+      "falseAcceptances": 0
+    },
+    {
+      "threshold": 0.85,
+      "accepted": 0,
+      "coverage": 0,
+      "positiveRecall": 0,
+      "answeredPositiveAccuracy": 0,
+      "falseAcceptances": 0
+    },
+    {
+      "threshold": 0.9,
+      "accepted": 0,
+      "coverage": 0,
+      "positiveRecall": 0,
+      "answeredPositiveAccuracy": 0,
+      "falseAcceptances": 0
+    },
+    {
+      "threshold": 0.95,
+      "accepted": 0,
+      "coverage": 0,
+      "positiveRecall": 0,
+      "answeredPositiveAccuracy": 0,
+      "falseAcceptances": 0
+    },
+    {
+      "threshold": 0.98,
+      "accepted": 0,
+      "coverage": 0,
+      "positiveRecall": 0,
+      "answeredPositiveAccuracy": 0,
+      "falseAcceptances": 0
+    },
+    {
+      "threshold": 1.01,
+      "accepted": 0,
+      "coverage": 0,
+      "positiveRecall": 0,
+      "answeredPositiveAccuracy": 0,
+      "falseAcceptances": 0
+    }
+  ],
+  "unthresholded": {
+    "answeredPositives": 12,
+    "correctPositives": 2,
+    "falseAcceptances": 2,
+    "distinctOptionSets": 6
+  }
+}

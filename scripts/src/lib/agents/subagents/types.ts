@@ -85,6 +85,8 @@ export type SubagentSpec = {
   timeoutMs: number;
   /** Launch inside a herdr tab (visible) vs. a detached process. */
   herdr: boolean;
+  /** Opt into Herdr completion alerts. Missing/false is quiet, including old run specs. */
+  completionAlerts?: boolean;
   /** Repo root of the captain that spawned this run. */
   repoRoot: string;
   /** Captain pi session id — lets a restarted captain re-attach watchers. */
@@ -115,9 +117,13 @@ export type SubagentUsage = {
 export type ReviewOutcome = {
   decision: 'review' | 'skip';
   reason: string;
-  /** Terminal CodeRabbit review state, when one arrived. */
+  /** Head whose evidence established this outcome; pushes invalidate prior verdicts. */
+  head?: string;
+  /** Formal verdict, or COMPLETED for provider completion without a formal verdict. */
   state?: string;
   findings?: number;
+  /** Includes historical/outdated open threads requiring disposition before merge. */
+  unresolvedFindings?: number;
   autofix?: 'requested' | 'committed' | 'no-change' | 'timeout' | 'skipped';
   autofixCommit?: string;
 };

@@ -9,9 +9,13 @@ import {
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services/base';
-import type { AiConnection, RoleAssignments } from '@aikami/types';
+import type {
+  AiConnection,
+  RoleAssignments,
+  TextTelemetrySpan,
+  TextTelemetrySummary,
+} from '@aikami/types';
 import type { TextTelemetryServiceInterface } from '$services';
-import type { TextTelemetrySpan, TextTelemetrySummary } from '$types';
 import { buildTaskRoutingRows, type TaskRoutingRow } from './ai_roles';
 
 // ---------------------------------------------------------------------------
@@ -45,6 +49,12 @@ export type AiActivityRow = {
   ttftLabel: string;
   tokenLabel: string;
   showError: boolean;
+  /** Whether the token figures are the provider's own accounting or an estimate. */
+  tokenSourceLabel: string;
+  /** Deadline outcome for the call, when it ran under a shared budget. */
+  deadlineLabel?: string;
+  /** Cache layer that served or shaped the call. */
+  cacheLabel?: string;
 };
 
 /** One per-task activity aggregate, formatted for the view. */
@@ -54,6 +64,8 @@ export type AiActivityTaskRow = {
   medianTotalLabel: string;
   medianTtftLabel: string;
   errorCount: number;
+  p95Label: string;
+  p99Label: string;
 };
 
 // ---------------------------------------------------------------------------
@@ -71,6 +83,8 @@ export type AiActivityViewModelInterface = BaseViewModelInterface & {
   readonly activityRows: readonly AiActivityRow[];
   /** Aggregate stats over the current buffer. */
   readonly activitySummary: TextTelemetrySummary;
+  /** Cache hits across all measured layers. */
+  readonly cacheHitTotal: number;
   /** Per-task aggregates formatted for display. */
   readonly taskRows: readonly AiActivityTaskRow[];
   /** Whether any per-task rows exist. */
@@ -131,7 +145,19 @@ class AiActivityViewModel
       ttftLabel: span.ttftMs === undefined ? '—' : `${span.ttftMs}ms ttft`,
       tokenLabel: `${span.promptTokens + span.completionTokens} tok`,
       showError: !span.ok,
+      // The provenance travels with the number: a provider's own accounting and
+      // a 4-chars-per-token estimate are not the same claim.
+      tokenSourceLabel: span.tokenSource === 'provider' ? 'provider' : 'est',
+      ...(span.deadlineExceeded === true ? { deadlineLabel: 'over budget' } : {}),
+      ...(span.cacheLayer === undefined || span.cacheLayer === 'none'
+        ? {}
+        : { cacheLabel: span.cacheLayer }),
     }));
+  }
+
+  get cacheHitTotal(): number {
+    const hits = this.activitySummary.counters.cacheHits;
+    return hits['in-flight-dedup'] + hits['exact-result'] + hits['provider-prompt-cache'];
   }
 
   get activitySummary(): TextTelemetrySummary {
@@ -145,6 +171,10 @@ class AiActivityViewModel
       medianTotalLabel: `${row.medianTotalMs}ms`,
       medianTtftLabel: row.medianTtftMs === undefined ? '—' : `${row.medianTtftMs}ms`,
       errorCount: row.errorCount,
+      // A percentile is shown only when the sample count supports it; an
+      // unsupported one is absent, not approximated into looking measured.
+      p95Label: row.latency.p95Ms === undefined ? '—' : `${row.latency.p95Ms}ms`,
+      p99Label: row.latency.p99Ms === undefined ? '—' : `${row.latency.p99Ms}ms`,
     }));
   }
 

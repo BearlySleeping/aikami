@@ -18,6 +18,8 @@
         "inn_counter_2",
         "inn_crate",
         "inn_hearth",
+        "inn_perimeter_post_e",
+        "inn_perimeter_post_w",
         "inn_shelf",
         "inn_support",
         "inn_table",
@@ -47,6 +49,8 @@
         "shop_crate",
         "shop_crate_2",
         "shop_crate_3",
+        "shop_perimeter_post_e",
+        "shop_perimeter_post_w",
         "shop_shelf",
         "shop_shelf_2"
       ],
@@ -86,6 +90,8 @@
         "waystation_cart",
         "waystation_crate",
         "waystation_crate_2",
+        "waystation_perimeter_post_e",
+        "waystation_perimeter_post_w",
         "waystation_support"
       ],
       "dialogueKeys": ["ada_greeting", "tess_greeting"],
@@ -112,6 +118,8 @@
         "shrine_brazier",
         "shrine_crate",
         "shrine_oak",
+        "shrine_perimeter_post_e",
+        "shrine_perimeter_post_w",
         "ward_socket"
       ],
       "dialogueKeys": ["nemi_greeting"],

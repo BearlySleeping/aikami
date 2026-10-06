@@ -7,6 +7,7 @@
 import { describe, expect, test } from 'bun:test';
 import { HUD_DEFAULT_PRESET_ID } from '@aikami/constants';
 import type { HudUserPreferences } from '@aikami/schemas';
+import { HUD_ANCHOR_ORDER } from '$lib/utils/hud/hud_layout_policy.ts';
 import {
   applyHudEditorCommand,
   createHudEditorState,
@@ -110,7 +111,7 @@ describe('C-528 editor ViewModel — input parity (AC-2)', () => {
   test('pointer drag and keyboard anchor moves reach the same configuration', () => {
     const pointer = createVm();
     pointer.viewModel.beginDrag('objective');
-    pointer.viewModel.dropOnAnchor('bottom-end');
+    pointer.viewModel.dropOn({ kind: 'region', anchor: 'bottom-end' });
 
     const keyboard = createVm();
     keyboard.viewModel.selectWidget('objective');
@@ -196,18 +197,42 @@ describe('C-528 editor ViewModel — input parity (AC-2)', () => {
   });
 
   test('the visibility control routes through the same command as the keyboard', () => {
-    const { viewModel } = createVm();
+    // The default preset ships the music player `always`, so one step moves it
+    // to `contextual`. The claim under test is parity: the button and the
+    // keyboard must land on the same value, not a particular value.
+    const button = createVm();
+    button.viewModel.dispatch({
+      kind: 'set-visibility',
+      widgetId: 'music-player',
+      visibility: 'contextual',
+    });
+    const keyboard = createVm();
+    keyboard.viewModel.selectWidget('music-player');
+    keyboard.viewModel.handleKeyDown({ key: 'v', preventDefault: () => {} } as KeyboardEvent);
 
-    viewModel.cycleWidgetVisibility('music-player');
-    expect(viewModel.widgetRows.find((row) => row.widgetId === 'music-player')?.visibility).toBe(
-      'always',
-    );
+    const visibilityOf = (vm: HudLayoutEditorViewModelInterface): string | undefined =>
+      vm.widgetRows.find((row) => row.widgetId === 'music-player')?.visibility;
+    expect(visibilityOf(button.viewModel)).toBe('contextual');
+    expect(visibilityOf(keyboard.viewModel)).toBe(visibilityOf(button.viewModel));
+  });
+
+  test('a hidden widget is not reachable by a cycling control — removal is explicit', () => {
+    // 🔴 Cycling used to include `hidden`, which made one control carry two
+    // unrelated decisions AND dead-ended: the override writer strips the
+    // patch, so the value never advanced and the control stopped responding.
+    const { viewModel } = createVm();
+    viewModel.selectWidget('objective');
+    for (let press = 0; press < 6; press += 1) {
+      viewModel.handleKeyDown({ key: 'v', preventDefault: () => {} } as KeyboardEvent);
+    }
+    expect(viewModel.selectedRow?.visibility).not.toBe('hidden');
+    expect(viewModel.shelfRows).toHaveLength(0);
   });
 
   test('dropping a widget on its own region is not an edit', () => {
     const { viewModel } = createVm();
     viewModel.beginDrag('hotbar');
-    viewModel.dropOnAnchor('bottom-center');
+    viewModel.dropOn({ kind: 'region', anchor: 'bottom-center' });
     expect(viewModel.isDirty).toBe(false);
     expect(viewModel.isDragging).toBe(false);
     expect(viewModel.canUndo).toBe(false);
@@ -216,13 +241,59 @@ describe('C-528 editor ViewModel — input parity (AC-2)', () => {
   test('dropping a widget on a reserved region is refused and explains why', () => {
     const { viewModel } = createVm();
     viewModel.beginDrag('objective');
-    viewModel.dropOnAnchor('bottom-center');
+    viewModel.dropOn({ kind: 'region', anchor: 'bottom-center' });
     expect(viewModel.widgetRows.find((row) => row.widgetId === 'objective')?.anchor).toBe(
       'bottom-start',
     );
     expect(viewModel.isDirty).toBe(false);
     expect(viewModel.statusMessage).toBeDefined();
     expect(viewModel.isDragging).toBe(false);
+  });
+
+  test('the board marks every region this widget cannot use', () => {
+    // 🔴 The board always drew all five regions, but a reserved or absent one
+    // refused the drop in silence — indistinguishable from a broken drag. The
+    // player now sees which regions are live before committing a drag to one.
+    const { viewModel } = createVm();
+    viewModel.selectWidget('objective');
+
+    const droppable = viewModel.dropAnchors.filter((drop) => drop.droppable).map((d) => d.anchor);
+    // `bottom-center` carries the required interaction/hotbar surfaces.
+    expect(droppable).not.toContain('bottom-center');
+    expect(droppable).toContain('bottom-end');
+    // Every widget row has exactly one verdict per region — none are omitted.
+    expect(viewModel.dropAnchors).toHaveLength(HUD_ANCHOR_ORDER.length);
+  });
+
+  test('a region that does not exist in this viewport is refused and explained', () => {
+    // A touch-class viewport has no `bottom-end`; dropping there used to
+    // collapse the widget into the overflow entry with nothing to show for it.
+    const { viewModel, hud } = createVm({
+      view: { viewport: { width: 390, height: 844 }, textScale: 1 },
+    });
+    viewModel.selectWidget('music-player');
+    const bottomEnd = viewModel.dropAnchors.find((drop) => drop.anchor === 'bottom-end');
+    expect(bottomEnd?.allowed).toBe(true);
+    expect(bottomEnd?.available).toBe(false);
+    expect(bottomEnd?.droppable).toBe(false);
+
+    // Park it somewhere real first, so the refusal is visible as "it did not
+    // move" rather than as "it was already there".
+    viewModel.beginDrag('music-player');
+    viewModel.dropOn({ kind: 'region', anchor: 'top-end' });
+    expect(viewModel.widgetRows.find((row) => row.widgetId === 'music-player')?.anchor).toBe(
+      'top-end',
+    );
+
+    viewModel.beginDrag('music-player');
+    const beforeRefusal = JSON.stringify(hud.draft);
+    viewModel.dropOn({ kind: 'region', anchor: 'bottom-end' });
+    expect(viewModel.widgetRows.find((row) => row.widgetId === 'music-player')?.anchor).toBe(
+      'top-end',
+    );
+    // The refusal records nothing: the draft is byte-identical afterwards.
+    expect(JSON.stringify(hud.draft)).toBe(beforeRefusal);
+    expect(viewModel.statusMessage).toContain('window size');
   });
 
   test('the drag ghost tracks the pointer and clears when the drag ends', () => {
@@ -235,8 +306,12 @@ describe('C-528 editor ViewModel — input parity (AC-2)', () => {
     // No movement yet — no ghost, so a plain click does not flash one.
     expect(viewModel.dragPosition).toBeUndefined();
 
-    viewModel.updateDrag({ x: 10, y: 20, anchor: 'top-end' });
-    expect(viewModel.dragPosition).toEqual({ x: 10, y: 20, anchor: 'top-end' });
+    viewModel.updateDrag({ x: 10, y: 20, target: { kind: 'region', anchor: 'top-end' } });
+    expect(viewModel.dragPosition).toEqual({
+      x: 10,
+      y: 20,
+      target: { kind: 'region', anchor: 'top-end' },
+    });
 
     viewModel.endDrag();
     expect(viewModel.dragPosition).toBeUndefined();
@@ -304,9 +379,9 @@ describe('C-528 editor ViewModel — transactional editing (AC-3)', () => {
   test('a required widget is offered no way to be hidden', () => {
     const { viewModel } = createVm();
     viewModel.selectWidget('menu');
-    viewModel.cycleSelectedVisibility();
-    viewModel.cycleSelectedVisibility();
-    viewModel.cycleSelectedVisibility();
+    viewModel.handleKeyDown({ key: 'v', preventDefault: () => {} } as KeyboardEvent);
+    viewModel.handleKeyDown({ key: 'v', preventDefault: () => {} } as KeyboardEvent);
+    viewModel.handleGamepadAction('cycle-visibility');
     expect(viewModel.widgetRows.find((row) => row.widgetId === 'menu')?.visibility).toBe('always');
   });
 
@@ -322,9 +397,155 @@ describe('C-528 editor ViewModel — transactional editing (AC-3)', () => {
     expect(new Set(rowIds).size).toBe(rowIds.length);
 
     viewModel.beginDrag('music-player');
-    viewModel.dropOnAnchor('bottom-end');
-    viewModel.cycleWidgetVisibility('music-player');
+    viewModel.dropOn({ kind: 'region', anchor: 'bottom-end' });
+    viewModel.toggleWidgetHidden('music-player');
     const previewIds = viewModel.previewLayout.widgets.map((widget) => widget.widgetId);
     expect(new Set(previewIds).size).toBe(previewIds.length);
+  });
+});
+
+describe('C-528 AC-2 — removing a widget off the HUD', () => {
+  test('dragging a widget onto the Hidden shelf removes it', () => {
+    const { viewModel } = createVm();
+    viewModel.beginDrag('hotbar');
+    viewModel.dropOn({ kind: 'hidden' });
+
+    expect(viewModel.widgetRows.find((row) => row.widgetId === 'hotbar')?.visibility).toBe(
+      'hidden',
+    );
+    expect(viewModel.shelfRows.map((row) => row.widgetId)).toContain('hotbar');
+    expect(viewModel.hiddenShelfLabel).toBe('Hidden (1)');
+    expect(viewModel.isDirty).toBe(true);
+  });
+
+  test('a COMMITTED removal still says what it did', () => {
+    // 🔴 Regression: `dispatch` clears the status line so a stale sentence
+    // cannot survive a new edit, and the outcome message was being written
+    // BEFORE the dispatch — so every committed drop reported nothing at all.
+    // Only a refusal escaped it, which is why a test that asserted refusals
+    // never saw it.
+    const { viewModel } = createVm();
+    viewModel.beginDrag('hotbar');
+    viewModel.dropOn({ kind: 'hidden' });
+    expect(viewModel.isDirty).toBe(true);
+    expect(viewModel.statusMessage).toContain('removed from the HUD');
+
+    viewModel.beginDrag('hotbar');
+    viewModel.dropOn({ kind: 'region', anchor: 'bottom-end' });
+    expect(viewModel.statusMessage).toContain('put back');
+  });
+
+  test('the shelf is a real destination, not "anywhere off the board"', () => {
+    // A release with nothing under the pointer must SAY so. Silence is what
+    // made the editor feel broken, and it is what a near-miss drop still does
+    // if this ever regresses to a no-op.
+    const { viewModel } = createVm();
+    viewModel.beginDrag('hotbar');
+    viewModel.dropOn(undefined);
+
+    expect(viewModel.widgetRows.find((row) => row.widgetId === 'hotbar')?.visibility).not.toBe(
+      'hidden',
+    );
+    expect(viewModel.isDirty).toBe(false);
+    expect(viewModel.statusMessage).toContain('Hidden shelf');
+  });
+
+  test('pointer, keyboard and controller all remove the same widget', () => {
+    const pointer = createVm();
+    pointer.viewModel.beginDrag('hotbar');
+    pointer.viewModel.dropOn({ kind: 'hidden' });
+
+    const keyboard = createVm();
+    keyboard.viewModel.selectWidget('hotbar');
+    keyboard.viewModel.handleKeyDown({ key: 'h', preventDefault: () => {} } as KeyboardEvent);
+
+    const pad = createVm();
+    pad.viewModel.selectWidget('hotbar');
+    pad.viewModel.handleGamepadAction('toggle-hidden');
+
+    const expected = pointer.viewModel.widgetRows.find(
+      (row) => row.widgetId === 'hotbar',
+    )?.visibility;
+    expect(expected).toBe('hidden');
+    for (const vm of [keyboard.viewModel, pad.viewModel]) {
+      expect(vm.widgetRows.find((row) => row.widgetId === 'hotbar')?.visibility).toBe(expected);
+    }
+  });
+
+  test('a required widget refuses to be removed and explains why', () => {
+    const { viewModel } = createVm();
+    viewModel.selectWidget('menu');
+    viewModel.toggleWidgetHidden('menu');
+
+    expect(viewModel.widgetRows.find((row) => row.widgetId === 'menu')?.visibility).toBe('always');
+    expect(viewModel.isDirty).toBe(false);
+    // No phantom history entry: Undo must not be a dead press after a refusal.
+    expect(viewModel.canUndo).toBe(false);
+    expect(viewModel.statusMessage).toContain('required');
+  });
+
+  test('a hidden widget comes back exactly as it was, and in one undo step', () => {
+    const { viewModel } = createVm();
+    viewModel.selectWidget('hotbar');
+    viewModel.toggleWidgetHidden('hotbar');
+    expect(viewModel.widgetRows.find((row) => row.widgetId === 'hotbar')?.visibility).toBe(
+      'hidden',
+    );
+
+    viewModel.toggleWidgetHidden('hotbar');
+    expect(viewModel.widgetRows.find((row) => row.widgetId === 'hotbar')?.visibility).toBe(
+      'always',
+    );
+
+    // Two presses, two undos — the round trip is symmetric.
+    viewModel.dispatch({ kind: 'undo' });
+    viewModel.dispatch({ kind: 'undo' });
+    expect(viewModel.isDirty).toBe(false);
+  });
+
+  test('dragging a hidden widget back onto a region restores AND places it at once', () => {
+    const { viewModel } = createVm();
+    viewModel.beginDrag('hotbar');
+    viewModel.dropOn({ kind: 'hidden' });
+    viewModel.beginDrag('hotbar');
+    viewModel.dropOn({ kind: 'region', anchor: 'bottom-end' });
+
+    const row = viewModel.widgetRows.find((entry) => entry.widgetId === 'hotbar');
+    expect(row?.visibility).not.toBe('hidden');
+    expect(row?.anchor).toBe('bottom-end');
+
+    // One gesture, one undo: it goes back off the HUD in a single press.
+    viewModel.dispatch({ kind: 'undo' });
+    expect(viewModel.widgetRows.find((entry) => entry.widgetId === 'hotbar')?.visibility).toBe(
+      'hidden',
+    );
+  });
+
+  test('moving a hidden widget with the arrow keys is refused, not silently applied', () => {
+    const { viewModel } = createVm();
+    viewModel.beginDrag('hotbar');
+    viewModel.dropOn({ kind: 'hidden' });
+    const anchorBefore = viewModel.widgetRows.find((row) => row.widgetId === 'hotbar')?.anchor;
+
+    viewModel.selectWidget('hotbar');
+    viewModel.handleKeyDown({ key: 'ArrowRight', preventDefault: () => {} } as KeyboardEvent);
+
+    expect(viewModel.widgetRows.find((row) => row.widgetId === 'hotbar')?.anchor).toBe(
+      anchorBefore,
+    );
+    expect(viewModel.statusMessage).toContain('hidden');
+  });
+
+  test('Escape during a drag cancels the drag instead of closing the editor', () => {
+    const closes: number[] = [];
+    const { viewModel } = createVm({ onClose: () => closes.push(1) });
+    viewModel.beginDrag('hotbar');
+    viewModel.updateDrag({ x: 10, y: 20, target: { kind: 'hidden' } });
+
+    viewModel.handleKeyDown({ key: 'Escape', preventDefault: () => {} } as KeyboardEvent);
+
+    expect(viewModel.isDragging).toBe(false);
+    expect(viewModel.isDirty).toBe(false);
+    expect(closes).toHaveLength(0);
   });
 });

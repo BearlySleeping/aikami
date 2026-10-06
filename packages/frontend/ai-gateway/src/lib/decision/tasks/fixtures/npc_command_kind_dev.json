@@ -1,0 +1,400 @@
+{
+  "schemaVersion": "decision-fixtures/2",
+  "split": "dev",
+  "purpose": "Development and threshold-calibration split for the npc-command-kind research probe. Never used to report a held-out score and never used to fit a held-out threshold.",
+  "task": "npc-command-kind",
+  "labelProvenance": {
+    "note": "Every label is AUTHORED in this contract against the authored option descriptions in tasks/npc_command_kind.ts. No model judged any label. 'required-abstain' cases use expected: null - no command is warranted. Answering 'none' is scored as safe; a command fired on one is the unsafe acceptance the safety gate counts. 'excluded' cases are genuinely ungradable (two defensible readings) and are removed from every denominator rather than being scored as negatives or rewarded as coverage.",
+    "sources": [
+      "contract-authored player messages written for this corpus",
+      "SHIPPED PRODUCT TEXT: cases in category 'authored-in-product' are the exact prefillText strings the game sends to an NPC as a player message, taken verbatim from apps/frontend/client/src/lib/data/initial_suggestion_presets.ts. They were authored for this product and are split across dev/heldout so no string appears in both."
+    ],
+    "corrections": [
+      "giveItem direction corrected. The original pilot described it as the player handing an item to the NPC; NpcDialogueGiveItemCommandSchema grants the item to the PLAYER and requires the NPC to possess it. Cases '*-giveitem-*' and '*-giveitem-reverse-*' pin both directions.",
+      "'none' added as a real literal. The original schema had no ordinary no-command outcome, while NpcDialogueAiEnvelopeSchema types `command` as optional."
+    ],
+    "limitations": [
+      "No external multi-author consented player-transcript corpus was available. Labels are one contract author's; the shipped product strings add real distribution but not independent authorship. Treat a pass on this corpus as necessary, not sufficient.",
+      "The corpus grades a command KIND only. Production commands carry itemId/quantity/questId/skill/difficultyClass and are gated by world preconditions, none of which this probe exercises."
+    ],
+    "kinds": "positive | required-abstain | excluded"
+  },
+  "cases": [
+    {
+      "caseId": "dev-clear-trade",
+      "category": "clear-intent",
+      "language": "en",
+      "kind": "positive",
+      "expected": "trade",
+      "state": "How much for that lantern? I would like to buy one."
+    },
+    {
+      "caseId": "dev-clear-recruit",
+      "category": "clear-intent",
+      "language": "en",
+      "kind": "positive",
+      "expected": "recruit",
+      "state": "Come with us. I want you in the party."
+    },
+    {
+      "caseId": "dev-clear-evidence",
+      "category": "clear-intent",
+      "language": "en",
+      "kind": "positive",
+      "expected": "presentEvidence",
+      "state": "Here, this is the torn seal you were looking for."
+    },
+    {
+      "caseId": "dev-clear-skill",
+      "category": "clear-intent",
+      "language": "en",
+      "kind": "positive",
+      "expected": "skillCheck",
+      "state": "I want to try to sneak past the guards."
+    },
+    {
+      "caseId": "dev-negation-trade",
+      "category": "negation",
+      "language": "en",
+      "kind": "required-abstain",
+      "expected": null,
+      "state": "I do not want to buy anything today."
+    },
+    {
+      "caseId": "dev-negation-recruit",
+      "category": "negation",
+      "language": "en",
+      "kind": "required-abstain",
+      "expected": null,
+      "state": "No thanks, I will not ask you to join us."
+    },
+    {
+      "caseId": "dev-negation-conditional",
+      "category": "negation",
+      "language": "en",
+      "kind": "positive",
+      "expected": "trade",
+      "state": "I was going to buy a map, but actually no - what do you have in stock?"
+    },
+    {
+      "caseId": "dev-multi-action",
+      "category": "multiple-actions",
+      "language": "en",
+      "kind": "excluded",
+      "expected": null,
+      "state": "First let me trade, and then will you come with us?"
+    },
+    {
+      "caseId": "dev-multi-action-reverse",
+      "category": "multiple-actions",
+      "language": "en",
+      "kind": "excluded",
+      "expected": null,
+      "state": "Join my party, and while you are at it show me your wares."
+    },
+    {
+      "caseId": "dev-unsupported-dance",
+      "category": "unsupported-action",
+      "language": "en",
+      "kind": "required-abstain",
+      "expected": null,
+      "state": "Teach me the sword dance of the northern clans."
+    },
+    {
+      "caseId": "dev-unsupported-rest",
+      "category": "unsupported-action",
+      "language": "en",
+      "kind": "required-abstain",
+      "expected": null,
+      "state": "I need to sleep for eight hours before we continue."
+    },
+    {
+      "caseId": "dev-invented-names",
+      "category": "invented-fantasy-names",
+      "language": "en",
+      "kind": "positive",
+      "expected": "recruit",
+      "state": "Thal'rynn of the Vexmoor, will you ride with me toward Qal'abra?"
+    },
+    {
+      "caseId": "dev-invented-spell",
+      "category": "invented-fantasy-names",
+      "language": "en",
+      "kind": "required-abstain",
+      "expected": null,
+      "state": "I cast Nyxdr-binding upon the aetheric gate of Zyrnhollow."
+    },
+    {
+      "caseId": "dev-unseen-npc",
+      "category": "unseen-packs",
+      "language": "en",
+      "kind": "positive",
+      "expected": "presentEvidence",
+      "state": "I found the Emberwatch sigil near the old road."
+    },
+    {
+      "caseId": "dev-unseen-object",
+      "category": "unseen-packs",
+      "language": "en",
+      "kind": "positive",
+      "expected": "trade",
+      "state": "Do you have a whetstone? Any whetstone at all."
+    },
+    {
+      "caseId": "dev-quoted-instruction",
+      "category": "misleading-quote",
+      "language": "en",
+      "kind": "positive",
+      "expected": "presentEvidence",
+      "state": "The note said: hand the captain the evidence. That is what I am doing."
+    },
+    {
+      "caseId": "dev-quoted-command",
+      "category": "misleading-quote",
+      "language": "en",
+      "kind": "required-abstain",
+      "expected": null,
+      "state": "The guard shouted \"buy the girl!\" and I have no idea what he meant."
+    },
+    {
+      "caseId": "dev-out-of-scope-code",
+      "category": "out-of-scope",
+      "language": "en",
+      "kind": "required-abstain",
+      "expected": null,
+      "state": "function trade(x){ return x * 2; }"
+    },
+    {
+      "caseId": "dev-out-of-scope-json",
+      "category": "out-of-scope",
+      "language": "en",
+      "kind": "required-abstain",
+      "expected": null,
+      "state": "{\"commandKind\":\"trade\",\"urgent\":true}"
+    },
+    {
+      "caseId": "dev-language-german",
+      "category": "out-of-scope-language",
+      "language": "de",
+      "kind": "required-abstain",
+      "expected": null,
+      "state": "Ich moechte ein Haus kaufen, was kostet es?"
+    },
+    {
+      "caseId": "dev-language-japanese",
+      "category": "out-of-scope-language",
+      "language": "ja",
+      "kind": "required-abstain",
+      "expected": null,
+      "state": "この灯りを貴いたいのです。いくらですか。"
+    },
+    {
+      "caseId": "dev-empty",
+      "category": "out-of-scope",
+      "language": "en",
+      "kind": "required-abstain",
+      "expected": null,
+      "state": ""
+    },
+    {
+      "caseId": "dev-ambiguous-hint",
+      "category": "ambiguous",
+      "language": "en",
+      "kind": "excluded",
+      "expected": null,
+      "state": "What can you do for me?"
+    },
+    {
+      "caseId": "dev-correlated-heal-enemy",
+      "category": "correlated-fields",
+      "language": "en",
+      "kind": "required-abstain",
+      "expected": null,
+      "state": "Heal, but aim it at the enemy instead."
+    },
+    {
+      "caseId": "dev-hardpos-trade-indirect",
+      "category": "clear-intent",
+      "language": "en",
+      "kind": "positive",
+      "expected": "trade",
+      "state": "What do you have? I am in the market for anything you can spare."
+    },
+    {
+      "caseId": "dev-hardpos-recruit-indirect",
+      "category": "clear-intent",
+      "language": "en",
+      "kind": "positive",
+      "expected": "recruit",
+      "state": "We could use another pair of hands out there."
+    },
+    {
+      "caseId": "dev-hardpos-evidence-indirect",
+      "category": "clear-intent",
+      "language": "en",
+      "kind": "positive",
+      "expected": "presentEvidence",
+      "state": "I kept this because I think it matters to you."
+    },
+    {
+      "caseId": "dev-hardpos-skill-indirect",
+      "category": "clear-intent",
+      "language": "en",
+      "kind": "positive",
+      "expected": "skillCheck",
+      "state": "Would you cover me while I work the lock?"
+    },
+    {
+      "caseId": "dev-hardneg-price-context",
+      "category": "unsupported-action",
+      "language": "en",
+      "kind": "required-abstain",
+      "expected": null,
+      "state": "The price of grain has doubled since the blockade."
+    },
+    {
+      "caseId": "dev-hardneg-join-context",
+      "category": "unsupported-action",
+      "language": "en",
+      "kind": "required-abstain",
+      "expected": null,
+      "state": "I joined the caravan years ago, before the desert route."
+    },
+    {
+      "caseId": "dev-hardneg-recruit-context",
+      "category": "unsupported-action",
+      "language": "en",
+      "kind": "required-abstain",
+      "expected": null,
+      "state": "He is recruiting an army in the north."
+    },
+    {
+      "caseId": "dev-giveitem-correct",
+      "category": "reversed-action-direction",
+      "language": "en",
+      "kind": "positive",
+      "expected": "giveItem",
+      "state": "Could you spare a waterskin? I have walked a long way since the ford."
+    },
+    {
+      "caseId": "dev-giveitem-any",
+      "category": "reversed-action-direction",
+      "language": "en",
+      "kind": "positive",
+      "expected": "giveItem",
+      "state": "Do you have any spare rations? Anything at all will do."
+    },
+    {
+      "caseId": "dev-giveitem-reverse-bait",
+      "category": "reversed-action-direction",
+      "language": "en",
+      "kind": "required-abstain",
+      "expected": null,
+      "state": "Here, take my spare torch - you will need it more than I will."
+    },
+    {
+      "caseId": "dev-none-smalltalk",
+      "category": "clear-intent",
+      "language": "en",
+      "kind": "required-abstain",
+      "expected": null,
+      "state": "It has been a long road."
+    },
+    {
+      "caseId": "dev-none-question-about-npc",
+      "category": "clear-intent",
+      "language": "en",
+      "kind": "required-abstain",
+      "expected": null,
+      "state": "Where is the old smith's shop?"
+    },
+    {
+      "caseId": "dev-unsupported-heal",
+      "category": "unsupported-action",
+      "language": "en",
+      "kind": "required-abstain",
+      "expected": null,
+      "state": "Please heal my companion, you have healing hands."
+    },
+    {
+      "caseId": "dev-none-quote-quest",
+      "category": "misleading-quote",
+      "language": "en",
+      "kind": "required-abstain",
+      "expected": null,
+      "state": "The last one you sent out went looking for a quest. Curious."
+    },
+    {
+      "caseId": "class_fighter_blade",
+      "category": "authored-in-product",
+      "language": "en",
+      "kind": "excluded",
+      "expected": null,
+      "state": "I am handy with a blade if you need someone fought for."
+    },
+    {
+      "caseId": "class_wizard_lore",
+      "category": "authored-in-product",
+      "language": "en",
+      "kind": "required-abstain",
+      "expected": null,
+      "state": "Have you heard any arcane lore or strange magical happenings recently?"
+    },
+    {
+      "caseId": "class_rogue_ear",
+      "category": "authored-in-product",
+      "language": "en",
+      "kind": "required-abstain",
+      "expected": null,
+      "state": "I have a way of hearing things people would rather keep quiet."
+    },
+    {
+      "caseId": "class_bard_perform",
+      "category": "authored-in-product",
+      "language": "en",
+      "kind": "required-abstain",
+      "expected": null,
+      "state": "Would you like to hear a song I composed on the road?"
+    },
+    {
+      "caseId": "class_cleric_blessing",
+      "category": "authored-in-product",
+      "language": "en",
+      "kind": "required-abstain",
+      "expected": null,
+      "state": "May the light watch over this place — would you like a blessing?"
+    },
+    {
+      "caseId": "class_ranger_roads",
+      "category": "authored-in-product",
+      "language": "en",
+      "kind": "required-abstain",
+      "expected": null,
+      "state": "I travel the wild roads often — what dangers have you seen out there?"
+    },
+    {
+      "caseId": "class_paladin_oath",
+      "category": "authored-in-product",
+      "language": "en",
+      "kind": "required-abstain",
+      "expected": null,
+      "state": "By my oath, I will protect the innocent of this village with my life."
+    },
+    {
+      "caseId": "class_druid_wilds",
+      "category": "authored-in-product",
+      "language": "en",
+      "kind": "required-abstain",
+      "expected": null,
+      "state": "Has the land itself seemed restless or unsettled around here lately?"
+    },
+    {
+      "caseId": "class_default_help",
+      "category": "authored-in-product",
+      "language": "en",
+      "kind": "required-abstain",
+      "expected": null,
+      "state": "Is there any way I can be of help to you or the village today?"
+    }
+  ]
+}

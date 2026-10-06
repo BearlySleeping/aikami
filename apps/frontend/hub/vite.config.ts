@@ -99,10 +99,10 @@ export default defineConfig(({ mode }) => {
     forceExternalPlugin(),
     tailwindcss(),
     sveltekit({
-      // SvelteKit 3: configuration moved from svelte.config.js to here
-      experimental: {
-        explicitEnvironmentVariables: true,
-      },
+      // SvelteKit 3: configuration moved from svelte.config.js to here.
+      // Explicit environment variables are the only supported behavior in
+      // 3.0.0 — the `experimental.explicitEnvironmentVariables` flag was
+      // removed, so `src/env.ts` (defineEnvVars) is always enforced.
       preprocess: [vitePreprocess()],
       compilerOptions: {
         warningFilter: (warning: { code: string }) => warning.code !== 'state_referenced_locally',

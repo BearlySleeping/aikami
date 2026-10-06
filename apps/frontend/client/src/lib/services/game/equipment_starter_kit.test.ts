@@ -7,9 +7,9 @@
 // Contract: C-374 Equipment, Armour & Weapon Inventory UI
 
 import { beforeEach, describe, expect, test } from 'bun:test';
-import { STARTER_KIT } from '@aikami/constants';
+import { DEFAULT_LPC_RECIPE, STARTER_KIT } from '@aikami/constants';
 import { LEGACY_CATALOG_SNAPSHOT } from '@aikami/lpc';
-import { getItemDefinition } from '$utils/inventory_utils';
+import { getItemDefinition, ITEM_CATALOG } from '$utils/inventory_utils';
 import { equipmentService } from './equipment_service.svelte';
 import { inventoryService } from './inventory_service.svelte';
 import { playerStateService } from './player_state_service.svelte';
@@ -175,5 +175,68 @@ describe('STARTER_KIT (C-374)', () => {
     // Unequipping reveals the base appearance (persona outfit) — nothing is
     // silently re-granted or rewritten into the paperdoll.
     expect(equipmentService.serialize().slots?.feet).toBeUndefined();
+  });
+});
+
+describe('base recipe vs. equipment layers (C-374)', () => {
+  /**
+   * Regression: `mergeLpcRecipes` can only REPLACE a same-(slot, layerRole)
+   * base layer or APPEND a new one — it never removes one. So an equippable
+   * item whose `lpcAssetId` equals the base recipe's asset for that same
+   * `lpcSlot` renders identically equipped and unequipped, making the toggle a
+   * visual no-op. This happened with the old DEFAULT_LPC_RECIPE, which wore
+   * `torso/chainmail_male` + `feet/boots/basic_male` — byte-identical to
+   * chainmailArmor / leatherBoots, so unequipping chainmail changed nothing.
+   */
+  test('no equippable item collides with the base recipe asset for its lpcSlot', () => {
+    equipmentService.reset();
+    inventoryService.reset();
+
+    const collisions: string[] = [];
+    for (const itemId of Object.keys(ITEM_CATALOG)) {
+      const definition = getItemDefinition(itemId);
+      if (!definition.equippable || !definition.lpcSlot || !definition.lpcAssetId) {
+        continue;
+      }
+      if (DEFAULT_LPC_RECIPE[definition.lpcSlot] === definition.lpcAssetId) {
+        collisions.push(`${itemId} → ${definition.lpcAssetId} (base ${definition.lpcSlot})`);
+      }
+    }
+    expect(collisions).toEqual([]);
+  });
+
+  test('toggling chainmail actually changes the composed sprite layers', () => {
+    equipmentService.reset();
+    inventoryService.reset();
+    equipmentService.configureAppearanceContext({
+      bodyAssetId: DEFAULT_LPC_RECIPE.body,
+      catalogAssetIdsBySlot: LEGACY_CATALOG_SNAPSHOT,
+    });
+
+    /** Mirrors the engine's base-recipe + mergeLpcRecipes composition. */
+    const compose = (): string[] => {
+      const layers = Object.entries(DEFAULT_LPC_RECIPE)
+        .filter(([, assetId]) => assetId)
+        .map(([slot, assetId]) => ({ slot, assetId }));
+      for (const recipe of equipmentService.buildLpcRecipes()) {
+        const index = layers.findIndex((entry) => entry.slot === recipe.slot);
+        if (index >= 0) {
+          layers[index] = { slot: recipe.slot, assetId: recipe.assetId };
+        } else {
+          layers.push({ slot: recipe.slot, assetId: recipe.assetId });
+        }
+      }
+      return layers.map((entry) => `${entry.slot}=${entry.assetId}`).toSorted();
+    };
+
+    const unequipped = compose();
+    inventoryService.addItem({ itemId: 'chainmailArmor' });
+    equipmentService.equipItem({ itemId: 'chainmailArmor' });
+    const equipped = compose();
+
+    expect(equipped).not.toEqual(unequipped);
+
+    equipmentService.unequipItem({ slot: 'body' });
+    expect(compose()).toEqual(unequipped);
   });
 });

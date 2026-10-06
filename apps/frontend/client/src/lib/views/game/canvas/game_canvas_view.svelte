@@ -26,13 +26,15 @@ const bootViewModel = getGameBootViewModel({ className: 'GameBootViewModel' });
   -->
   <div class="relative w-full h-full overflow-hidden">
     <!-- Layer 0 (z-0): Game canvas — PixiJS owns this DOM element -->
-    <div
+    <section
       id="game-canvas-container"
+      aria-label="Game world"
+      tabindex="-1"
       class="absolute inset-0 z-0"
       class:animate-shake={viewModel.isShaking}
     >
       <canvas bind:this={viewModel.canvasElement} class="w-full h-full block touch-none"></canvas>
-    </div>
+    </section>
 
     <!-- Layer 10 (z-10): Svelte UI overlay — positioned on top of canvas -->
     <div id="game-canvas-ui-layer" class="absolute inset-0 z-10 pointer-events-none">

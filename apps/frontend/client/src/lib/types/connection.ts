@@ -11,8 +11,13 @@ export type ConnectionId = string;
 /** How a connection was sourced — used for indicator badges in the UI. */
 export type ConnectionSource = 'env' | 'stored' | 'detected';
 
-/** AI capability category. */
-export type ConnectionCapability = 'text' | 'image' | 'voice';
+/**
+ * AI capability category.
+ *
+ * `decision` is its own capability: a decision checkpoint answers bounded
+ * closed questions and cannot narrate, and a chat model cannot score them.
+ */
+export type ConnectionCapability = 'text' | 'image' | 'voice' | 'decision';
 
 /** Image-generation-specific connection options. */
 export type ImageConnectionOptions = {

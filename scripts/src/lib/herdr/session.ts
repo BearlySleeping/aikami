@@ -74,6 +74,7 @@ import {
   makeInstanceRecorder,
   makeListenerOwnershipProbe,
 } from './service_probes.ts';
+import { assertServiceTabOwnership, recordCreatedServicePane } from './service_tab_ownership.ts';
 
 // ── Types ──────────────────────────────────────────────────
 
@@ -1354,13 +1355,40 @@ export type ReadinessResult = {
 };
 
 /** Foreground process IDs reported for a trusted service pane. */
-export const paneProcessIds = async (paneId: string): Promise<number[]> => {
+const paneProcesses = async (paneId: string): Promise<{ name: string; pid: number }[]> => {
   try {
     const result = await herdrJson<PaneProcessInfo>(['pane', 'process-info', '--pane', paneId]);
-    return result?.result?.process_info?.foreground_processes?.map((process) => process.pid) ?? [];
+    return result?.result?.process_info?.foreground_processes ?? [];
   } catch {
     return [];
   }
+};
+
+/** Service PIDs exclude idle shells, whose ownership is checked separately. */
+export const paneProcessIds = async (paneId: string): Promise<number[]> =>
+  (await paneProcesses(paneId))
+    .filter((process) => !isIdleShellName(process.name))
+    .map((process) => process.pid);
+
+const servicePaneOwnership = async (paneId: string) => {
+  const processes = await paneProcesses(paneId);
+  const panePids = processes
+    .filter((process) => !isIdleShellName(process.name))
+    .map(({ pid }) => pid);
+  return {
+    panePids,
+    idlePanes: panePids.length > 0 ? [] : processes.map(({ pid }) => ({ paneId, pid })),
+    unresolvedPane: processes.length === 0,
+  };
+};
+
+const recordNewServicePane = async (paneId: string, service: DevService): Promise<void> => {
+  const evidence = await servicePaneOwnership(paneId);
+  await recordCreatedServicePane({
+    paneId,
+    shellPids: evidence.idlePanes.map(({ pid }) => pid),
+    expected: buildServiceIdentity(service),
+  });
 };
 
 const identityMismatchReason = (
@@ -1576,6 +1604,12 @@ export const startServices = async (config: SessionConfig): Promise<string> => {
     assertNoRunningServiceConflicts(services, existingTabNames, mode, offset);
   }
 
+  if (force && existingWsId) {
+    throw new Error(
+      'Refusing whole-workspace recreation: stop proved-owned services individually.',
+    );
+  }
+
   // ── Force-ports: kill whatever's squatting on our target ports first ──
   // Distinct from `force` (which recreates the whole workspace) — this only
   // clears the ports, so it's safe to use even when the workspace/tabs
@@ -1597,19 +1631,7 @@ export const startServices = async (config: SessionConfig): Promise<string> => {
     );
   }
 
-  // ── Mode mismatch guard: force-recreate workspace if requested ──
-  if (force && existingWsId) {
-    console.log(`🔄 Force mode: recreating workspace ${workspaceLabel}...`);
-    await herdr(['workspace', 'close', existingWsId]);
-    await new Promise((r) => setTimeout(r, 500));
-    // Fall through to create new workspace
-  } else if (existingWsId && !force) {
-    // Workspace exists — check if wrong mode is stored
-    // (herdr doesn't store mode, but we check by existence)
-    // Just proceed to add missing tabs
-  }
-
-  let workspaceId = existingWsId && !force ? existingWsId : null;
+  let workspaceId = existingWsId;
 
   // ── Create workspace if needed ──────────────────────────
   if (!workspaceId) {
@@ -1635,6 +1657,7 @@ export const startServices = async (config: SessionConfig): Promise<string> => {
 
     // Rename initial tab and run command
     const rootPaneId = r.result.root_pane.pane_id;
+    await recordNewServicePane(rootPaneId, first);
     await herdr(['tab', 'rename', `${workspaceId}:1`, svc.name]);
     await herdr([
       'pane',
@@ -1664,6 +1687,7 @@ export const startServices = async (config: SessionConfig): Promise<string> => {
         ),
       );
       if (tabR?.result) {
+        await recordNewServicePane(tabR.result.root_pane.pane_id, service);
         await herdr([
           'pane',
           'run',
@@ -1698,6 +1722,10 @@ export const startServices = async (config: SessionConfig): Promise<string> => {
               port,
             );
             if (readResult.state === 'crashed') {
+              await assertServiceTabOwnership({
+                ...(await servicePaneOwnership(servicePane.pane_id)),
+                expected: identity,
+              });
               console.log(`  ↻ Tab: ${svc.name} crashed, restarting...`);
               // No --env here — this pane already has its offset env vars
               // from its original `tab create`, and they persist for the
@@ -1715,10 +1743,9 @@ export const startServices = async (config: SessionConfig): Promise<string> => {
               continue;
             }
             if (readResult.state === 'unavailable') {
-              console.log(
-                `  ⚠ Tab: ${svc.name} port occupied by foreign instance (${readResult.reason ?? 'identity mismatch'}), skipping`,
+              throw new Error(
+                `Refusing reuse of ${svc.name}: ${readResult.reason ?? 'identity mismatch'}`,
               );
-              continue;
             }
           }
         }
@@ -1742,6 +1769,7 @@ export const startServices = async (config: SessionConfig): Promise<string> => {
         ),
       );
       if (tabR?.result) {
+        await recordNewServicePane(tabR.result.root_pane.pane_id, service);
         await herdr([
           'pane',
           'run',
@@ -1865,6 +1893,18 @@ export const stopServices = async (config: {
     const name = SERVICE_DEFS[service].name;
     const tabId = await findTab(workspaceId, name);
     if (tabId) {
+      const panePids = (await getWorkspacePanes(workspaceId)).filter(
+        (pane) => pane.tab_id === tabId,
+      );
+      const evidence = await Promise.all(
+        panePids.map((pane) => servicePaneOwnership(pane.pane_id)),
+      );
+      await assertServiceTabOwnership({
+        panePids: evidence.flatMap((pane) => pane.panePids),
+        idlePanes: evidence.flatMap((pane) => pane.idlePanes),
+        unresolvedPane: evidence.some((pane) => pane.unresolvedPane),
+        expected: buildServiceIdentity(service),
+      });
       await herdr(['tab', 'close', tabId]);
       // KNOWN GAP (Windows): `tab close` only reliably reaps the pane's
       // top-level process — see portsToCleanupForService's doc. Sweep every

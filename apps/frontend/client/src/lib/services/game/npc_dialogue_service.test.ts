@@ -23,6 +23,16 @@ import type { ConsequenceRequest, ConsequenceResult } from '$types';
 // longer reads the `$services` barrel).
 import { campaignService } from '../campaign/campaign_service.svelte.ts';
 import { npcAwarenessService } from '../npc/npc_awareness_service.svelte.ts';
+import {
+  execLog,
+  expectAbortRejection,
+  makeContentProvider,
+  makeExecutors,
+  makeStreamingTextGenerator,
+  makeTextGenerator,
+  resetDialogueServiceFixture,
+  STUB_EMBERWATCH,
+} from './__tests__/npc_dialogue_fixtures.ts';
 import { companionReactionService } from './companion_reaction_service.svelte.ts';
 import { narrativeEventService } from './narrative_event_service.svelte.ts';
 import { NpcDialogueService, npcDialogueService } from './npc_dialogue_service.svelte';
@@ -30,208 +40,14 @@ import { partyRosterService } from './party_roster_service.svelte.ts';
 import { questStateService } from './quest_state_service.svelte.ts';
 import { relationshipService } from './relationship_service.svelte.ts';
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-const STUB_EMBERWATCH = {
-  npcs: {
-    village_elder: { name: 'Elder Thalia', defaultDialogueKey: 'elder_thalia_greeting' },
-    traveling_merchant: {
-      name: 'Keth the Merchant',
-      defaultDialogueKey: 'merchant_keth_greeting',
-      isVendor: true,
-      vendorInventory: 'ironSword, healthPotion',
-    },
-    shade_guardian: {
-      name: 'Shade Guardian',
-      defaultDialogueKey: 'shade_guardian_manifest',
-      combatStats: { hitPoints: 30 },
-    },
-    village_guard: {
-      name: 'Bram the Guard',
-      defaultDialogueKey: 'bram_greeting',
-      isCompanion: true,
-      companionClassId: 'fighter',
-      initialApproval: 10,
-      personality: {
-        voice: 'Steady and plain-spoken.',
-        manner: 'Alert and loyal.',
-      },
-      agenda: [
-        'Keep the gates of Emberwatch shut against the Crimson Covenant',
-        'Prove to Elder Thalia that a guard oath can hold where a relic cannot',
-      ],
-      knowledge: ['The ward is renewed by the people who keep watch over it'],
-      boundaries: ['refuse|Threaten an innocent villager'],
-    },
-  },
-  dialogues: {
-    elder_thalia_greeting: '"Greetings, traveler. Our village has need of your aid."',
-    merchant_keth_greeting: '"Welcome! Finest wares this side of the kingdom!"',
-    shade_guardian_manifest: '"You shall not pass."',
-  },
-  quests: [
-    {
-      id: 'fading_ward',
-      name: 'The Fading Ward',
-      offerDialogueKey: 'elder_thalia_offer',
-      endings: {
-        renewed: { worldStateFlag: 'emberwatch.ending.renewed' },
-      },
-    },
-  ],
-  encounters: [{ id: 'ruined_ward_encounter', encounterNpcIds: ['shade_guardian'] }],
-};
-
-let execLog: string[] = [];
-
-const makeContentProvider = (overrides?: Partial<typeof STUB_EMBERWATCH>) => {
-  const data = { ...STUB_EMBERWATCH, ...overrides };
-  return {
-    getNpc: mock((npcId: string) => {
-      const npc = (data.npcs as Record<string, Record<string, unknown>>)[npcId];
-      return npc ? { ...npc } : undefined;
-    }),
-    getDialogue: mock((key: string) => {
-      const d = (data.dialogues as Record<string, string>)[key];
-      return d;
-    }),
-    getQuest: mock((questId: string) => data.quests.find((q) => q.id === questId)),
-    getAllQuests: mock(() => data.quests),
-    getAllEncounters: mock(() => data.encounters),
-    getEncounter: mock((encounterId: string) => data.encounters.find((e) => e.id === encounterId)),
-  };
-};
-
-const makeExecutors = () => {
-  execLog = [];
-  return {
-    trade: mock((_opts: { npcId: string }) => {
-      execLog.push('trade');
-      return true;
-    }),
-    offerQuest: mock((_opts: { npcId: string; questId: string }) => {
-      execLog.push('offerQuest');
-      return true;
-    }),
-    skillCheck: mock((_opts: { skill: string; difficultyClass: number }) => {
-      execLog.push('skillCheck');
-      return true;
-    }),
-    giveItem: mock((_opts: { itemId: string; quantity: number }) => {
-      execLog.push('giveItem');
-      return true;
-    }),
-    startCombat: mock((_opts: { npcId: string; npcName: string; encounterId?: string }) => {
-      execLog.push('startCombat');
-      return true;
-    }),
-    recruit: mock((_opts: { npcId: string; npcName: string }) => {
-      execLog.push('recruit');
-      return true;
-    }),
-    presentEvidence: mock((_opts: { npcId: string; evidenceId: string }) => {
-      execLog.push('presentEvidence');
-      return true;
-    }),
-  };
-};
-
-const makeTextGenerator = (options?: { text?: string; structured?: unknown; error?: Error }) =>
-  mock(async (_opts: Record<string, unknown>) => {
-    if (options?.error) {
-      throw options.error;
-    }
-    return {
-      text: options?.text ?? 'Hello.',
-      structured: options?.structured,
-    };
-  });
-
-/**
- * Two-call-aware generator: call 1 (no schema) streams `chunks` via
- * onChunk; call 2 (schema) returns the structured envelope (or throws).
- * C-401: mirrors the split production glue.
- */
-const makeStreamingTextGenerator = (options?: {
-  chunks?: string[];
-  structured?: unknown;
-  call2Error?: Error;
-  /** Call 1 never resolves — used for the AC-4 timeout test. */
-  neverResolve?: boolean;
-  /** Emits this many chunks on call 1, then never resolves (stall-after-chunks). */
-  stallAfterChunks?: number;
-}) => {
-  const chunks = options?.chunks ?? [];
-  return mock(async (opts: Record<string, unknown>) => {
-    const onChunk = opts.onChunk as ((text: string) => void) | undefined;
-    if (opts.schema) {
-      // Call 2 — envelope extraction
-      if (options?.call2Error) {
-        throw options.call2Error;
-      }
-      return { text: chunks.join(''), structured: options?.structured };
-    }
-    // Call 1 — narrative streaming
-    if (options?.neverResolve) {
-      await new Promise<void>(() => {});
-    }
-    const emitCount = options?.stallAfterChunks ?? chunks.length;
-    for (let i = 0; i < emitCount; i++) {
-      onChunk?.(chunks[i]);
-    }
-    if (options?.stallAfterChunks !== undefined && emitCount < chunks.length) {
-      // Emitted the requested prefix, then the provider hangs mid-stream.
-      await new Promise<void>(() => {});
-    }
-    return { text: chunks.join('') };
-  });
-};
-
-/** Asserts a promise rejects with an AbortError-shaped error (AC-3). */
-const expectAbortRejection = async (promise: Promise<unknown>): Promise<void> => {
-  let rejected = false;
-  try {
-    await promise;
-  } catch (error) {
-    rejected = (error as Error)?.name === 'AbortError' || /abort/i.test(String(error));
-  }
-  expect(rejected).toBe(true);
-};
-
-// ---------------------------------------------------------------------------
-// Setup / teardown
-// ---------------------------------------------------------------------------
-
 beforeEach(() => {
-  questStateService.getDiscoverableEvidence = () => [];
-  // The service resolves dialogue against the active campaign; pin a stable
-  // one (individual tests may override this).
-  Object.defineProperty(campaignService, 'activeCampaign', {
-    value: { id: 'default-emberwatch' },
-    configurable: true,
-  });
-  const contentProvider = makeContentProvider();
-  const textGenerator = makeTextGenerator();
-  npcDialogueService.configure({
-    contentProvider,
-    textGenerator,
-    executors: makeExecutors(),
-  });
+  resetDialogueServiceFixture();
 });
 
 afterEach(() => {
-  questStateService.getDiscoverableEvidence = () => [];
   Reflect.deleteProperty(globalThis, '__AIKAMI_E2E_DIALOGUE_INTENT__');
   // Reconfigure with fresh state to prevent test bleed
-  const contentProvider = makeContentProvider();
-  const textGenerator = makeTextGenerator();
-  npcDialogueService.configure({
-    contentProvider,
-    textGenerator,
-    executors: makeExecutors(),
-  });
+  resetDialogueServiceFixture();
 });
 
 describe('E2E intent seed', () => {
@@ -550,10 +366,14 @@ describe('AC-2: Malformed output rejection', () => {
     expect(turn.source).toBe('ai');
   });
 
-  test('one repair attempt on malformed envelope before fallback', async () => {
-    // Envelope is missing narrative but has extra fields
+  test('unknown extraction fields are rejected outright, with no repair attempt', async () => {
+    // The removed "one repair attempt" merged call-1 narrative into a malformed
+    // call-2 payload so the envelope's required `narrative` field could be
+    // satisfied. Under the C-401 call-2 contract (#382) call 2 returns metadata
+    // only, so there is nothing to repair: unknown fields are a hard reject and
+    // the turn degrades to the streamed narrative.
     const textGenerator = makeTextGenerator({
-      text: 'Greetings from the elder.', // will be used as repair narrative
+      text: 'Greetings from the merchant.',
       structured: {
         command: { kind: 'trade' },
         sideEffects: 'evil',
@@ -573,9 +393,9 @@ describe('AC-2: Malformed output rejection', () => {
       signal: controller.signal,
     });
 
-    // Should succeed with repaired envelope
-    expect(turn.narrative).toBe('Greetings from the elder.');
-    expect(turn.command?.kind).toBe('trade');
+    // The injected field does not smuggle a command through.
+    expect(turn.narrative).toBe('Greetings from the merchant.');
+    expect(turn.command).toBeUndefined();
     expect(turn.choices.length).toBeGreaterThanOrEqual(1);
   });
 });
@@ -606,10 +426,8 @@ describe('AC-3: Precondition whitelist and command dispatch', () => {
   test('AI-generated trade on vendor works', async () => {
     const textGenerator = makeTextGenerator({
       text: 'Let us trade.',
-      structured: {
-        narrative: 'Let us trade.',
-        command: { kind: 'trade' },
-      },
+      // Metadata only — call 1 produced the narrative (C-401 call 2, #382).
+      structured: { command: { kind: 'trade' } },
     });
     const contentProvider = makeContentProvider();
     const executors = makeExecutors();
@@ -1086,12 +904,11 @@ describe('C-401: two-call narrative streaming', () => {
     const textGenerator = mock(async (opts: Record<string, unknown>) => {
       calls.push({ schema: opts.schema, onChunk: opts.onChunk });
       if (opts.schema) {
+        // Call 2 extracts metadata only. C-401 call 1 already streamed the
+        // narrative, so the model is not asked to return it (#382).
         return {
-          text: 'The elder nods.',
-          structured: {
-            narrative: 'The elder nods.',
-            command: { kind: 'offerQuest', questId: 'fading_ward' },
-          },
+          text: '',
+          structured: { command: { kind: 'offerQuest', questId: 'fading_ward' } },
         };
       }
       (opts.onChunk as ((t: string) => void) | undefined)?.('The elder ');
@@ -1353,7 +1170,7 @@ describe('C-401: two-call narrative streaming', () => {
     try {
       const textGenerator = makeStreamingTextGenerator({
         chunks: ['The elder ', 'nods.'],
-        structured: { narrative: 'The elder nods.' },
+        structured: {},
       });
       npcDialogueService.configure({
         contentProvider: makeContentProvider(),

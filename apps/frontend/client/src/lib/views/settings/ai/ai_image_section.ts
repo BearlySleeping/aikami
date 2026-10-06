@@ -51,7 +51,10 @@ export const DEFAULT_IMAGE_PARAMS: ImageParams = {
 
 /** Resolves an image connection's params, falling back to the defaults. */
 export const imageParamsFor = (connection: AiConnection | undefined): ImageParams => {
-  if (connection?.capability !== 'image' || !('checkpoint' in connection.params)) {
+  // `'width' in params` rather than `'checkpoint' in params`: a DECISION params
+  // object also carries `checkpoint`, so the old discriminator would happily
+  // return a decision checkpoint as an image one.
+  if (connection?.capability !== 'image' || !('width' in connection.params)) {
     return DEFAULT_IMAGE_PARAMS;
   }
   return connection.params;

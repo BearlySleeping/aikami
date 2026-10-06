@@ -25,8 +25,9 @@ import {
   KNOWN_SERVICES,
 } from '../../packages/shared/constants/src/index.ts';
 import type { AikamiMode } from '../../scripts/src/lib/env/mode';
-import { runPiScript } from './lib/bridge.ts';
+import { type BridgeOptions, runPiScript } from './lib/bridge.ts';
 import { runCommand } from './lib/process_runner.ts';
+import { formatServiceStatus, formatWorkspaceServiceStatus } from './lib/service_status.ts';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TYPES
@@ -91,8 +92,9 @@ const bridgeServiceInfo = async (
   service: DevService,
   mode: AikamiMode,
   offset: number,
+  options: BridgeOptions = {},
 ): Promise<ServiceInfo> =>
-  runPiScript<ServiceInfo>('herdr.service.info', { service, mode, offset });
+  runPiScript<ServiceInfo>('herdr.service.info', { service, mode, offset }, options);
 
 // ═══════════════════════════════════════════════════════════════════════════
 // HERDR CLI HELPERS
@@ -301,8 +303,8 @@ export default function (pi: ExtensionAPI) {
   // verifier/review tabs instead of spawning a second, separately-orphaned
   // `aikami-emulator-C-XXX` workspace. Single source of truth:
   // buildSessionName in scripts/src/lib/herdr/session.ts, reached via the bridge.
-  const workspaceLabel = (): Promise<string> =>
-    runPiScript<string>('herdr.session.workspaceName', { mode });
+  const workspaceLabel = (options: BridgeOptions = {}): Promise<string> =>
+    runPiScript<string>('herdr.session.workspaceName', { mode }, options);
 
   if (herdrEnv && ownPaneId) {
     // ───────────────────────────────────────────────────────────
@@ -811,7 +813,7 @@ export default function (pi: ExtensionAPI) {
               `✅ **PR #${prNumber} opened** (branch \`${headBranch}\` @ \`${headCommit.slice(0, 7)}\`)`,
               `→ ${prUrl}`,
               '',
-              'Merge it with gh_merge_pr when CI passes. The worktree is preserved.',
+              'Merge it with the `gh_pr` tool, action "merge", when CI passes. The worktree is preserved.',
             ].join('\n'),
           },
         ],
@@ -828,7 +830,7 @@ export default function (pi: ExtensionAPI) {
     name: 'herdr_session',
     label: 'Herdr: Manage Dev Services',
     description:
-      'Manage Aikami dev services (firebase, client, image, text, voice, preview-client, site, preview-site) via herdr. ' +
+      'Manage Aikami dev services (client, hub, image, text, voice, previews, site) via herdr. ' +
       'Services survive pi restarts. Inside a contract run they become tabs in that ' +
       "contract's own workspace (aikami-contract-C-XXX), on contract-offset ports, " +
       'running from the worktree checkout; otherwise aikami-{mode}.',
@@ -839,21 +841,24 @@ export default function (pi: ExtensionAPI) {
       force: Type.Optional(
         Type.Boolean({
           description:
-            'start only: kill whatever is already bound to the target port before starting.',
+            'start only: clear proved-owned processes on the target port; never kill foreign listeners.',
         }),
       ),
     }),
-    async execute(_id, params, signal, _onUpdate, _ctx) {
+    async execute(_id, params, signal, _onUpdate, ctx) {
+      const bridgeOptions = { cwd: ctx.cwd, signal };
       const service = params.service as DevService | undefined;
 
       // Lazy, memoized bridge lookups — only spawn bun when an action needs them.
       let labelPromise: Promise<string> | undefined;
-      const label = (): Promise<string> => (labelPromise ??= workspaceLabel());
+      const label = (): Promise<string> => (labelPromise ??= workspaceLabel(bridgeOptions));
       let offsetPromise: Promise<number> | undefined;
       const offset = (): Promise<number> =>
-        (offsetPromise ??= runPiScript<string | null>('herdr.session.currentContractId', {}).then(
-          (contractId) => contractPortOffset(contractId ?? undefined),
-        ));
+        (offsetPromise ??= runPiScript<string | null>(
+          'herdr.session.currentContractId',
+          {},
+          bridgeOptions,
+        ).then((contractId) => contractPortOffset(contractId ?? undefined)));
 
       // ── Dispatch map ──────────────────────────────────────
 
@@ -861,7 +866,11 @@ export default function (pi: ExtensionAPI) {
         // ── list ──────────────────────────────────────────
         list: async () => {
           try {
-            const sessions = await runPiScript<SessionInfo[]>('herdr.session.list', { mode });
+            const sessions = await runPiScript<SessionInfo[]>(
+              'herdr.session.list',
+              { mode },
+              bridgeOptions,
+            );
             if (sessions.length === 0) {
               return {
                 content: [{ type: 'text', text: `No aikami-${mode} workspace running.` }],
@@ -872,28 +881,7 @@ export default function (pi: ExtensionAPI) {
             const lines: string[] = [`**Aikami Dev Services** (${await label()})\n`];
             for (const session of sessions) {
               for (const svcStatus of session.services) {
-                if (svcStatus.running) {
-                  let icon: string;
-                  if (svcStatus.state === 'crashed') {
-                    icon = '❌';
-                  } else if (svcStatus.portOpen) {
-                    icon = '✅';
-                  } else {
-                    icon = '⏳';
-                  }
-                  const port = svcStatus.readyPort ? ` — :${svcStatus.readyPort}` : '';
-                  let stateNote: string;
-                  if (svcStatus.state === 'crashed') {
-                    stateNote = ' — CRASHED';
-                  } else if (svcStatus.state === 'booting') {
-                    stateNote = ' — booting';
-                  } else {
-                    stateNote = '';
-                  }
-                  lines.push(`${icon} **${svcStatus.name}**${port}${stateNote}`);
-                } else {
-                  lines.push(`⏸️ **${svcStatus.name}** — not running`);
-                }
+                lines.push(formatServiceStatus(svcStatus));
               }
             }
             lines.push(`\nAttach: \`herdr session attach default\``);
@@ -919,34 +907,10 @@ export default function (pi: ExtensionAPI) {
             };
           }
 
-          const info = await bridgeServiceInfo(service, mode, await offset());
+          const info = await bridgeServiceInfo(service, mode, await offset(), bridgeOptions);
 
-          // Check if already running (skip when forcing — we're about to
-          // kill whatever's there anyway).
-          const wsId = await runPiScript<string | null>('herdr.workspace.find', {
-            label: await label(),
-          });
-          if (wsId && !params.force) {
-            const tabNames = await runPiScript<string[]>('herdr.workspace.tabNames', {
-              workspaceId: wsId,
-            });
-            const port = info.readyPort;
-            if (
-              tabNames.includes(info.name) &&
-              port &&
-              (await runPiScript<boolean>('herdr.port.ready', {
-                port,
-                check: info.readyCheck,
-              }))
-            ) {
-              return {
-                content: [
-                  { type: 'text', text: `✅ ${info.name} already running (port :${port})` },
-                ],
-                details: {},
-              };
-            }
-          }
+          // Always use canonical startup: HTTP/TCP liveness alone is not
+          // checkout identity, even when a same-named service tab exists.
 
           _onUpdate?.({
             content: [
@@ -966,10 +930,10 @@ export default function (pi: ExtensionAPI) {
               {
                 mode,
                 services: [service],
-                projectRoot: process.cwd(),
+                projectRoot: ctx.cwd,
                 forcePorts: params.force,
               },
-              { signal },
+              bridgeOptions,
             );
             const port = info.readyPort;
             return {
@@ -1001,7 +965,7 @@ export default function (pi: ExtensionAPI) {
             };
           }
 
-          const info = await bridgeServiceInfo(service, mode, await offset());
+          const info = await bridgeServiceInfo(service, mode, await offset(), bridgeOptions);
 
           _onUpdate?.({
             content: [{ type: 'text', text: `Restarting ${info.name}...` }],
@@ -1014,9 +978,9 @@ export default function (pi: ExtensionAPI) {
               {
                 mode,
                 services: [service],
-                projectRoot: process.cwd(),
+                projectRoot: ctx.cwd,
               },
-              { signal },
+              bridgeOptions,
             );
             const port = info.readyPort;
             return {
@@ -1051,16 +1015,24 @@ export default function (pi: ExtensionAPI) {
             };
           }
 
-          const wsId = await runPiScript<string | null>('herdr.workspace.find', {
-            label: await label(),
-          });
+          const wsId = await runPiScript<string | null>(
+            'herdr.workspace.find',
+            {
+              label: await label(),
+            },
+            bridgeOptions,
+          );
           if (!wsId) {
             return { content: [{ type: 'text', text: `${service} not running.` }], details: {} };
           }
 
-          const tabNames = await runPiScript<string[]>('herdr.workspace.tabNames', {
-            workspaceId: wsId,
-          });
+          const tabNames = await runPiScript<string[]>(
+            'herdr.workspace.tabNames',
+            {
+              workspaceId: wsId,
+            },
+            bridgeOptions,
+          );
           if (!tabNames.includes(service)) {
             return { content: [{ type: 'text', text: `${service} not running.` }], details: {} };
           }
@@ -1069,7 +1041,7 @@ export default function (pi: ExtensionAPI) {
             await runPiScript<string>(
               'herdr.session.stop',
               { mode, services: [service] },
-              { signal },
+              bridgeOptions,
             );
             return { content: [{ type: 'text', text: `🛑 Stopped ${service}` }], details: {} };
           } catch (e) {
@@ -1095,36 +1067,16 @@ export default function (pi: ExtensionAPI) {
             };
           }
 
-          const wsId = await runPiScript<string | null>('herdr.workspace.find', {
-            label: await label(),
-          });
-          if (!wsId) {
-            return {
-              content: [{ type: 'text', text: `⏸️ ${service} — not running` }],
-              details: {},
-            };
-          }
-
-          const tabNames = await runPiScript<string[]>('herdr.workspace.tabNames', {
-            workspaceId: wsId,
-          });
-          if (!tabNames.includes(service)) {
-            return {
-              content: [{ type: 'text', text: `⏸️ ${service} — not running` }],
-              details: {},
-            };
-          }
-
-          const info = await bridgeServiceInfo(service, mode, await offset());
-          const port = info.readyPort;
-          const ready = port
-            ? await runPiScript<boolean>('herdr.port.ready', { port, check: info.readyCheck })
-            : true;
+          const sessions = await runPiScript<SessionInfo[]>(
+            'herdr.session.list',
+            { mode },
+            bridgeOptions,
+          );
           return {
             content: [
               {
                 type: 'text',
-                text: `${ready ? '✅' : '❌'} ${info.name}${port ? ` :${port} ${ready ? 'responding' : 'NOT responding'}` : ''}`,
+                text: formatWorkspaceServiceStatus({ sessions, workspace: await label(), service }),
               },
             ],
             details: {},
@@ -1144,9 +1096,13 @@ export default function (pi: ExtensionAPI) {
           }
 
           const labelValue = await label();
-          const wsId = await runPiScript<string | null>('herdr.workspace.find', {
-            label: labelValue,
-          });
+          const wsId = await runPiScript<string | null>(
+            'herdr.workspace.find',
+            {
+              label: labelValue,
+            },
+            bridgeOptions,
+          );
           if (!wsId) {
             return {
               content: [{ type: 'text', text: `Workspace ${labelValue} not running.` }],

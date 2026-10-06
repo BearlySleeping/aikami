@@ -112,6 +112,57 @@ describe('C-528 AC-2 editor input parity', () => {
     });
     expect(effectiveHudWidgetPreference(state.draft, 'menu')?.visibility).toBe('always');
   });
+
+  test('removing a widget is its own command, and the machine refuses it for a required one', () => {
+    const hidden = applyHudEditorCommand(createHudEditorState(committed()), {
+      kind: 'hide-widget',
+      widgetId: 'hotbar',
+    });
+    expect(effectiveHudWidgetPreference(hidden.draft, 'hotbar')?.visibility).toBe('hidden');
+    // 🔴 Hiding keeps the anchor, so putting the widget back is a return rather
+    // than a guess — and the board can still show where it was.
+    expect(effectiveHudWidgetPreference(hidden.draft, 'hotbar')?.anchor).toBe('bottom-center');
+
+    // A refused removal must not leave a phantom history entry, or Undo becomes
+    // a dead press for the player with no way to tell why.
+    const refused = applyHudEditorCommand(createHudEditorState(committed()), {
+      kind: 'hide-widget',
+      widgetId: 'menu',
+    });
+    expect(refused).toEqual(createHudEditorState(committed()));
+    expect(hudEditorCanUndo(refused)).toBe(false);
+  });
+
+  test('restore-and-place is one undo step, because it was one gesture', () => {
+    const state = run(createHudEditorState(committed()), [
+      { kind: 'hide-widget', widgetId: 'hotbar' },
+      { kind: 'show-widget', widgetId: 'hotbar', visibility: 'contextual', anchor: 'bottom-end' },
+    ]);
+    const preference = effectiveHudWidgetPreference(state.draft, 'hotbar');
+    expect(preference?.visibility).toBe('contextual');
+    expect(preference?.anchor).toBe('bottom-end');
+    // Two commands in, two history entries: one for the removal, one for the
+    // single restore gesture.
+    expect(hudEditorCanUndo(state)).toBe(true);
+    expect(state.undoStack).toHaveLength(2);
+  });
+
+  test('the visibility cycle no longer includes hidden, so it cannot dead-end', () => {
+    // Cycling into `hidden` computed a value the override writer then stripped,
+    // so the value never advanced and the control stopped responding. Removal is
+    // a placement decision with its own command now.
+    let state = createHudEditorState(committed());
+    const visited = new Set<string>();
+    for (let press = 0; press < 6; press += 1) {
+      state = applyHudEditorCommand(state, {
+        kind: 'cycle-visibility',
+        widgetId: 'objective',
+        direction: 1,
+      });
+      visited.add(effectiveHudWidgetPreference(state.draft, 'objective')?.visibility ?? '');
+    }
+    expect(visited).toEqual(new Set(['always', 'contextual']));
+  });
 });
 
 describe('C-528 AC-3 transactional editing', () => {

@@ -2,7 +2,6 @@
 // apps/frontend/client/src/lib/views/link/link_view.svelte
 import { BaseViewModelContainer } from '$components';
 import LoginView from '$lib/views/auth/login/login_view.svelte';
-import m from '$lib/views/utils/i18n';
 import type { LinkViewModelInterface } from './link_view_model.svelte';
 
 let { viewModel }: { viewModel: LinkViewModelInterface } = $props();
@@ -18,27 +17,28 @@ let { viewModel }: { viewModel: LinkViewModelInterface } = $props();
         <div aria-live="polite">
           {#if viewModel.status === 'missing-code'}
             <p class="text-base-content/70">
-              {m.linkPageAutoOpened()}
+              This page is opened automatically by the Aikami desktop app — there's nothing to do
+              here directly.
             </p>
           {:else if viewModel.status === 'linked'}
             <p class="text-success font-medium mb-2">
               {viewModel.playerDisplayName
-  ? m.linkSignedInAs({ name: viewModel.playerDisplayName })
-  : m.linkSignedIn()}
+  ? `You're signed in as ${viewModel.playerDisplayName}.`
+  : "You're signed in."}
             </p>
             <p class="text-base-content/70 mb-4">
-              {m.linkCloseTab()}
+              You can close this tab and return to the desktop app.
             </p>
             {#if viewModel.handoffUrl}
               <a href={viewModel.handoffUrl} class="link link-primary text-sm">
-                {m.linkOpenDesktopApp()}
+                Didn't return automatically? Open the desktop app.
               </a>
             {/if}
           {:else if viewModel.status === 'linking'}
             <span class="loading loading-spinner" aria-hidden="true"></span>
-            <p class="text-base-content/70 mt-2">{m.linkLinking()}</p>
+            <p class="text-base-content/70 mt-2">Linking your account…</p>
           {:else if viewModel.status === 'confirm'}
-            <p class="text-base-content/70 mb-2">{m.linkConfirmPrompt()}</p>
+            <p class="text-base-content/70 mb-2">Link this device to your Aikami account?</p>
             {#if viewModel.playerDisplayName}
               <p class="font-medium mb-2">{viewModel.playerDisplayName}</p>
             {/if}
@@ -50,10 +50,10 @@ let { viewModel }: { viewModel: LinkViewModelInterface } = $props();
               class="btn btn-primary btn-lg"
               onclick={() => viewModel.confirmLink()}
             >
-              {m.linkConfirmButton()}
+              Link this device
             </button>
           {:else}
-            <p class="text-base-content/70 mb-6">{m.linkSignInPrompt()}</p>
+            <p class="text-base-content/70 mb-6">Sign in to link your desktop app.</p>
 
             {#if viewModel.status === 'error' && viewModel.errorMessage}
               <p class="text-error text-sm mb-4">{viewModel.errorMessage}</p>
@@ -62,7 +62,7 @@ let { viewModel }: { viewModel: LinkViewModelInterface } = $props();
                 class="btn btn-primary btn-lg mb-4"
                 onclick={() => viewModel.confirmLink()}
               >
-                {m.linkRetryButton()}
+                Try again
               </button>
             {/if}
 

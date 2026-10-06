@@ -191,6 +191,48 @@ export const clearActorMovement = (world: World, eid: number): void => {
 };
 
 /**
+ * Hands the locomotion executor back to direct input when a non-zero velocity
+ * is applied to an actor that still carries a PathFollow.
+ *
+ * `updatePathFollow` runs in the Navigation slot and rewrites Velocity every
+ * frame for every entity carrying PathFollow, and it runs immediately before
+ * `updateMovement`. A PathFollow therefore outranks a velocity written from
+ * the main thread: the actor walks the path regardless of the keys held, and —
+ * because releasing every key only posts `{0, 0}` — keeps walking long after
+ * the input stopped. That is the "player is stuck walking in one direction"
+ * report (a click destination, then keyboard input that appears to do
+ * nothing).
+ *
+ * Only a NON-zero velocity cancels. `{0, 0}` is a stop/flush, and a stop
+ * issued while a click path is in flight (a keyup, an input-lock toggle, a
+ * blur) must leave the path running — otherwise releasing a key would abort a
+ * click-to-move the player never asked to cancel.
+ *
+ * @param world - The bitECS world.
+ * @param eid - The entity the direct velocity applies to.
+ * @param velocity - The velocity being applied by direct input.
+ * @returns `true` when a live PathFollow was dropped.
+ */
+export const releasePathToDirectInput = (
+  world: World,
+  eid: number,
+  velocity: { x: number; y: number },
+): boolean => {
+  if (eid <= 0 || (velocity.x === 0 && velocity.y === 0)) {
+    return false;
+  }
+  if (!hasComponent(world, eid, PathFollow)) {
+    return false;
+  }
+  removeComponent(world, eid, PathFollow);
+  PathFollow.repathAtMs[eid] = 0;
+  _haltedForMs.delete(eid);
+  _haltYielded.delete(eid);
+  _setNpcHaltReason(eid, 'none');
+  return true;
+};
+
+/**
  * Returns true when the entity has a PathFollow component with a live path.
  *
  * World-aware: uses bitECS hasComponent so a component removed from THIS

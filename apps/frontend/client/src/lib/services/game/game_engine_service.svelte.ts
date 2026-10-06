@@ -1,14 +1,12 @@
 // apps/frontend/client/src/lib/services/game/game_engine_service.svelte.ts
 
-import { DEFAULT_LPC_RECIPE } from '@aikami/constants';
-
 import type {
   EngineBridge,
   GameCommand,
   GameWorld,
   InteractableStateMap,
 } from '@aikami/frontend/engine';
-import { createLpcPipeline, projectLpcCatalog } from '@aikami/frontend/engine/content';
+import { createLpcPipeline } from '@aikami/frontend/engine/content';
 import {
   BaseFrontendClass,
   type BaseFrontendClassInterface,
@@ -21,8 +19,10 @@ import type {
   PackConfig,
   PersonaData,
 } from '@aikami/types';
-import { getLpcAssetPath, getLpcCatalog, wireLpcUrlResolver } from '$lib/data/lpc_asset_catalog';
+import { ensureLpcCatalogReady, getLpcAssetPath } from '$lib/data/lpc_asset_catalog';
 import type { ActiveContextEntry, CombatantScreenState, FloatingTextInstance } from '$types';
+import { buildAppearanceLayerIndices } from '$utils/appearance_layers';
+import { buildEffectiveAppearanceRecipe } from '$utils/appearance_recipe';
 import { assetManager } from '../assets/asset_manager.svelte';
 import { assetTagResolver } from '../assets/registry_resolver';
 import {
@@ -772,11 +772,14 @@ class GameEngineService
       const { GameWorld: EngineGameWorld, TextureManager } = await import(
         '@aikami/frontend/engine'
       );
-      // C-372: ensure the manifest-backed LPC resolver is wired and the manifest
-      // is loaded before the engine boots (idempotent — catalog module scope
-      // also wires it).
-      await wireLpcUrlResolver();
-      const lpcCatalog = getLpcCatalog();
+      // C-372: ensure the manifest-backed LPC resolver is wired before the
+      // engine boots (idempotent — catalog module scope also wires it).
+      //
+      // The catalog is built from the asset-store SEED, which is a different
+      // fact from the manifest being wired, and it is populated by backgrounded
+      // registry work — reading `getLpcCatalog()` straight after the manifest
+      // fetch made appearance resolution a race. Await readiness explicitly.
+      const lpcCatalog = await ensureLpcCatalogReady();
 
       const textureManager = new TextureManager();
 
@@ -876,8 +879,10 @@ class GameEngineService
     const lpcRecipe = (this._activePersona.appearance as Record<string, unknown> | undefined)
       ?.lpcRecipe as Record<string, string> | undefined;
 
-    const { generatedLpcSlots } = this._getLpcCatalogSync();
-    if (generatedLpcSlots.length === 0) {
+    const generatedLpcSlots = this._getLpcCatalogSync();
+    // An empty catalog is a failure, not a valid state — every slot lookup
+    // below would miss. Bail loudly instead of emitting invented indices.
+    if (!generatedLpcSlots || generatedLpcSlots.length === 0) {
       this.warn('lpc.engine.noCatalog');
       return playerData;
     }
@@ -888,21 +893,19 @@ class GameEngineService
       slotIndexMap.set(generatedLpcSlots[i].slot, i);
     }
 
-    // Use DEFAULT_LPC_RECIPE as the base. Only allow persona's recipe
-    // to override slots where the asset ID is valid in the catalog.
-    const effectiveRecipe: Record<string, string> = { ...DEFAULT_LPC_RECIPE };
-    if (lpcRecipe) {
-      for (const [slot, assetId] of Object.entries(lpcRecipe)) {
+    // C-374: mirrors game_boot_service — base appearance, persona overlay, then
+    // stripped of any asset an equippable item also provides so equip/unequip is
+    // always visible. Personas persist their outfit, so this runs every boot.
+    const effectiveRecipe = buildEffectiveAppearanceRecipe({
+      personaRecipe: lpcRecipe,
+      isValidAsset: (slot, assetId) => {
         const catalogIdx = slotIndexMap.get(slot);
-        if (catalogIdx !== undefined) {
-          const slotDef = generatedLpcSlots[catalogIdx];
-          const found = slotDef?.variants.some((v) => v.assetId === assetId);
-          if (found) {
-            effectiveRecipe[slot] = assetId;
-          }
-        }
-      }
-    }
+        return (
+          catalogIdx !== undefined &&
+          !!generatedLpcSlots[catalogIdx]?.variants.some((v) => v.assetId === assetId)
+        );
+      },
+    });
 
     this.debug('lpc.engine.PlayerData', {
       personaId: this._activePersona.id,
@@ -936,39 +939,24 @@ class GameEngineService
     });
     const resolvedRecipe = resolvedBase.recipe;
 
-    const EngineSlots = ['body', 'hair', 'torso', 'legs', 'feet', 'head'] as const;
-
-    const SlotFallbacks: Record<string, number> = {
-      body: 3,
-      hair: 3,
-      legs: 22,
-      head: 95,
-    };
-
-    const appearanceLayers: number[] = [];
-    for (const slotName of EngineSlots) {
-      const assetId = resolvedRecipe[slotName];
-      if (!assetId) {
-        appearanceLayers.push(SlotFallbacks[slotName] ?? 0);
-        continue;
-      }
-      const catalogIdx = slotIndexMap.get(slotName);
-      if (catalogIdx === undefined) {
-        appearanceLayers.push(SlotFallbacks[slotName] ?? 0);
-        continue;
-      }
-      const slotDef = generatedLpcSlots[catalogIdx];
-      if (!slotDef) {
-        appearanceLayers.push(SlotFallbacks[slotName] ?? 0);
-        continue;
-      }
-      const variantIdx = slotDef.variants.findIndex((v) => v.assetId === assetId);
-      appearanceLayers.push(variantIdx >= 0 ? variantIdx + 1 : (SlotFallbacks[slotName] ?? 0));
+    // Indices are derived from assets the catalog actually serves; an
+    // unresolvable slot is omitted and reported, never filled with a literal
+    // index that happens to mean `*_child` in one catalog snapshot.
+    const { layers: appearanceLayers, unresolved } = buildAppearanceLayerIndices({
+      slots: generatedLpcSlots,
+      recipe: resolvedRecipe,
+    });
+    for (const miss of unresolved) {
+      this.warn('lpc.engine.unresolvedLayer', {
+        slot: miss.slot,
+        requestedAssetId: miss.requestedAssetId,
+        reason: miss.reason,
+      });
     }
 
     // C-430: zeroEquipmentOwnedAppearanceSlots removed — variable-length slots
     // replace the fixed six-slot ceiling. Equipment adds its own layers.
-    playerData.appearanceLayers = appearanceLayers;
+    playerData.appearanceLayers = [...appearanceLayers];
 
     this.debug('lpc.engine.appearanceLayers', { appearanceLayers });
 
@@ -976,18 +964,13 @@ class GameEngineService
   }
 
   /**
-   * Synchronous LPC catalog accessor — for use in _buildPlayerData
-   * where we can't await the dynamic import inside a non-async function.
+   * The catalog slots cached by `_buildLpcPipeline`, or `undefined` when no
+   * pipeline has been built yet — for use in the synchronous `_buildPlayerData`.
    */
-  private _getLpcCatalogSync(): {
-    generatedLpcSlots: readonly { slot: string; variants: readonly { assetId: string }[] }[];
-  } {
-    // Import at module level is not possible since it's dynamically resolved.
-    // We cache the result after first bootWithCanvas call.
-    if (this._cachedLpcSlots) {
-      return { generatedLpcSlots: this._cachedLpcSlots };
-    }
-    return { generatedLpcSlots: [] };
+  private _getLpcCatalogSync():
+    | readonly { slot: string; variants: readonly { assetId: string }[] }[]
+    | undefined {
+    return this._cachedLpcSlots;
   }
 
   private _cachedLpcSlots:
@@ -1008,7 +991,7 @@ class GameEngineService
     // worker and main thread share this exact function.
     this._cachedLpcSlots = generatedLpcSlots;
     return createLpcPipeline({
-      catalog: projectLpcCatalog(generatedLpcSlots),
+      catalog: generatedLpcSlots,
       // guard-ignore lint/type-safety/casting: bridge send() command literal or LPC state enum cast
       getLpcAssetPath: resolveLpcAssetPath as unknown as (
         slot: string,

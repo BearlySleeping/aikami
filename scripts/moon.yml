@@ -16,6 +16,11 @@ project:
 fileGroups:
   sources:
     - 'src/lib/**/*.ts'
+    # Detached review automation consumes the Node-safe extension kernel.
+    - '/.pi/extensions/lib/coderabbit_evidence.ts'
+    - '/.pi/extensions/lib/coderabbit_reader.ts'
+    - '/.pi/extensions/lib/coderabbit_wait.ts'
+    - '/.pi/extensions/lib/coderabbit_autofix.ts'
   configs:
     - 'package.json'
     - 'tsconfig.json'

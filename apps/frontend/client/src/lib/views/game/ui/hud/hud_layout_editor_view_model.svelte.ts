@@ -7,110 +7,101 @@
 // contract's "each method can reach the same valid configuration" is therefore a
 // property of the design, not three implementations kept in sync by hand.
 //
+// 🔴 Every widget lives in exactly one of six places: five board regions, or the
+// Hidden shelf. "Remove" is a placement, not a visibility side effect, so the
+// decision of what a drop means lives in ONE pure module
+// (`hud_layout_editor_placement.ts`) and this file only routes to it. The key
+// and button vocabularies are likewise tables in `hud_layout_editor_input.ts`.
+//
 // The preview is a read-only fixture presentation over a paused session: it
 // resolves the DRAFT against a fixture context and renders the real widgets. It
 // is not a second engine and not a combat simulator.
 
-import { HUD_WIDGET_REGISTRY } from '@aikami/constants';
 import {
   BaseViewModel,
   type BaseViewModelInterface,
   type BaseViewModelOptions,
 } from '@aikami/frontend/services/base';
-import type { HudUserPreferences } from '@aikami/schemas';
-import { isHudLayoutJsonWithinSizeLimit } from '@aikami/schemas';
-import type { HudDensity, HudSlot, HudVisibility, HudWidgetId } from '@aikami/types';
+import type { HudVisibility, HudWidgetId } from '@aikami/types';
+import type { HudResolvedLayout } from '$lib/utils/hud/hud_layout_policy.ts';
 import {
-  type HudResolvedLayout,
-  type HudViewport,
-  mergeHudPreferences,
-} from '$lib/utils/hud/hud_layout_policy.ts';
-import {
-  allowedHudAnchors,
   effectiveHudWidgetPreference,
   type HudEditorCommand,
 } from '$lib/utils/hud/hud_layout_state.ts';
-import { resolveGameHudLayout } from '../hud_layout_bridge.ts';
+import type {
+  HudEditorPreferenceCapabilities,
+  HudEditorViewportCapabilities,
+  HudEditorVisibilityCapabilities,
+  HudEditorWidgetRow,
+} from './hud_layout_editor_capabilities.ts';
+import {
+  type HudEditorDropAnchor,
+  hudEditorDropAnchors,
+} from './hud_layout_editor_drop_anchors.ts';
+import {
+  createHudEditorGamepadReader,
+  HUD_EDITOR_GUARDED_ACTIONS,
+  type HudEditorGamepadAction,
+  type HudEditorGamepadReader,
+  type HudEditorKeyIntent,
+  hudEditorKeyIntent,
+} from './hud_layout_editor_input.ts';
 import {
   createHudLayoutEditorInteractionAdapter,
   type HudLayoutEditorInteractionAdapter,
 } from './hud_layout_editor_interaction.ts';
+import {
+  canHideHudWidget,
+  HUD_EDITOR_NOTHING_DROPPED_MESSAGE,
+  type HudEditorBoardRow,
+  type HudEditorDropOutcome,
+  type HudEditorDropTarget,
+  type HudEditorPlacementRows,
+  hudEditorDropOutcome,
+  hudEditorHiddenEditSentence,
+  hudEditorHiddenShelfLabel,
+  hudEditorPlacementRows,
+  hudEditorRestoreVisibility,
+  labelFor,
+} from './hud_layout_editor_placement.ts';
+import {
+  HUD_EDITOR_EXPORT_NAME,
+  hudEditorExportPresetJson,
+  hudEditorImportFailureMessage,
+  readHudEditorPresetJson,
+} from './hud_layout_editor_presets.ts';
+import {
+  createHudEditorPreview,
+  type HudEditorPreview,
+  type HudPreviewContext,
+} from './hud_layout_editor_preview.svelte.ts';
 
-/** The fixture contexts the editor can preview. Presentation only. */
-export const HUD_PREVIEW_CONTEXTS = ['explore', 'dialogue', 'combat'] as const;
-
-export type HudPreviewContext = (typeof HUD_PREVIEW_CONTEXTS)[number];
-
-/** What a gamepad button press means to the editor. */
-export type HudEditorGamepadAction =
-  | 'next-widget'
-  | 'previous-widget'
-  | 'move-left'
-  | 'move-right'
-  | 'reorder-up'
-  | 'reorder-down'
-  | 'scale-up'
-  | 'scale-down'
-  | 'cycle-visibility'
-  | 'undo'
-  | 'redo'
-  | 'confirm'
-  | 'cancel';
-
-/** The HUD authority the editor writes drafts through. */
-export type HudEditorPreferenceCapabilities = {
-  readonly preferences: HudUserPreferences;
-  readonly draft: HudUserPreferences;
-  readonly isDirty: boolean;
-  readonly canUndo: boolean;
-  readonly canRedo: boolean;
-  readonly isEditorEnabled: boolean;
-  readonly recoveryNotice: string | undefined;
-  beginEdit(): void;
-  dispatch(command: HudEditorCommand): void;
-  save(): void;
-  cancel(): void;
-  exportPreset(name: string): unknown;
-  importPreset(preset: unknown): { reason: string } | undefined;
-};
-
-/** Session-scoped HUD visibility controlled from the editor header. */
-export type HudEditorVisibilityCapabilities = {
-  readonly isHudTemporarilyHidden: boolean;
-  toggleHudTemporarilyHidden(): void;
-};
-
-/** Measurement the preview reflows against. */
-export type HudEditorViewportCapabilities = {
-  readonly viewport: HudViewport;
-  readonly textScale: number;
-};
-
-/** One editable widget row. */
-export type HudEditorWidgetRow = {
-  readonly widgetId: HudWidgetId;
-  readonly label: string;
-  readonly description: string;
-  readonly required: boolean;
-  readonly dormant: boolean;
-  readonly visibility: HudVisibility;
-  readonly anchor: HudSlot;
-  readonly density: HudDensity;
-  readonly scale: number;
-  readonly allowedAnchors: readonly HudSlot[];
-};
+export type {
+  HudEditorPreferenceCapabilities,
+  HudEditorViewportCapabilities,
+  HudEditorVisibilityCapabilities,
+  HudEditorWidgetRow,
+} from './hud_layout_editor_capabilities.ts';
+export type { HudEditorGamepadAction } from './hud_layout_editor_input.ts';
+export {
+  createHudEditorPreview,
+  HUD_PREVIEW_CONTEXTS,
+  type HudEditorPreview,
+  type HudEditorPreviewInput,
+  type HudPreviewContext,
+} from './hud_layout_editor_preview.svelte.ts';
 
 /**
  * Live pointer state for the drag ghost.
  *
- * `anchor` is the region under the pointer right now (resolved by the DOM
- * interaction adapter); the ViewModel only holds the value so the ghost and
- * the highlighted region can be rendered without view-local state.
+ * `target` is the destination under the pointer right now (resolved by the DOM
+ * interaction adapter); the ViewModel only holds the value so the ghost and the
+ * highlighted region or shelf can be rendered without view-local state.
  */
 export type HudEditorDragPosition = {
   readonly x: number;
   readonly y: number;
-  readonly anchor: HudSlot | undefined;
+  readonly target: HudEditorDropTarget | undefined;
 };
 
 export type HudLayoutEditorViewModelOptions = BaseViewModelOptions & {
@@ -126,7 +117,6 @@ export type HudLayoutEditorViewModelOptions = BaseViewModelOptions & {
 };
 
 export type HudLayoutEditorViewModelInterface = BaseViewModelInterface & {
-  readonly isOpen: boolean;
   readonly isEditorEnabled: boolean;
   readonly isHudTemporarilyHidden: boolean;
   readonly recoveryNotice: string | undefined;
@@ -143,9 +133,19 @@ export type HudLayoutEditorViewModelInterface = BaseViewModelInterface & {
   readonly confirmingDiscard: boolean;
   readonly statusMessage: string | undefined;
   readonly isDragging: boolean;
+  /** The five board regions, annotated with whether this drag may use each. */
+  readonly dropAnchors: readonly HudEditorDropAnchor[];
+  /** Chips drawn in a region — every widget that is not on the shelf. */
+  readonly boardRows: readonly HudEditorBoardRow[];
+  /** Chips drawn on the Hidden shelf. Restoring is dragging one back out. */
+  readonly shelfRows: readonly HudEditorBoardRow[];
+  /** The shelf caption, counting what is on it. */
+  readonly hiddenShelfLabel: string;
+  /** Whether the dragged widget may be removed at all. */
+  readonly canHideDraggedWidget: boolean;
   /** Label of the widget being dragged, for the floating drag ghost. */
   readonly draggingLabel: string | undefined;
-  /** Live pointer position + region under the pointer while dragging. */
+  /** Live pointer position + destination while dragging. */
   readonly dragPosition: HudEditorDragPosition | undefined;
 
   selectWidget(widgetId: HudWidgetId): void;
@@ -154,21 +154,25 @@ export type HudLayoutEditorViewModelInterface = BaseViewModelInterface & {
   dispatch(command: HudEditorCommand): void;
   handleEditorKeyDown(event: KeyboardEvent): void;
   handleWidgetRowKeyDown(event: KeyboardEvent): void;
-  handlePointerDown(event: PointerEvent): void;
-  handleDragPointerUp(event: PointerEvent): void;
-  handleDragPointerMove(event: PointerEvent): void;
+  /**
+   * Forwards one raw pointer event from a drag source to the interaction
+   * adapter, which owns the whole pointerdown/move/up/capture protocol.
+   */
+  handlePointerEvent(event: PointerEvent): void;
   handleKeyDown(event: KeyboardEvent): void;
   handleGamepadAction(action: HudEditorGamepadAction): void;
   toggleHudTemporarilyHidden(): void;
   beginDrag(widgetId: HudWidgetId): void;
-  /** Records the pointer position (and region) for the drag ghost. */
+  /** Records the pointer position (and destination) for the drag ghost. */
   updateDrag(position: HudEditorDragPosition): void;
-  dropOnAnchor(anchor: HudSlot): void;
+  /** `undefined` = released with nothing under the pointer. */
+  dropOn(target: HudEditorDropTarget | undefined): void;
   endDrag(): void;
-  cycleSelectedVisibility(): void;
   nudgeSelectedScale(delta: number): void;
-  /** Pointer parity: cycles one widget's visibility through the shared command. */
-  cycleWidgetVisibility(widgetId: HudWidgetId): void;
+  /** Removes or restores one widget, whichever it currently needs. */
+  toggleWidgetHidden(widgetId: HudWidgetId): void;
+  /** Removes the selection, or restores it if it is already off the HUD. */
+  toggleSelectedHidden(): void;
   save(): void;
   cancel(): void;
   requestClose(): void;
@@ -181,29 +185,6 @@ export type HudLayoutEditorViewModelInterface = BaseViewModelInterface & {
 /** Scale step used by every input device. */
 const SCALE_STEP = 0.05;
 
-/** Gamepad button indices used by the editor's controller mapping. */
-const GAMEPAD_BUTTON = {
-  dpadUp: 12,
-  dpadDown: 13,
-  dpadLeft: 14,
-  dpadRight: 15,
-  a: 0,
-  b: 1,
-  lb: 4,
-  rb: 5,
-  back: 8,
-  start: 9,
-} as const;
-
-const GAMEPAD_POLL_MS = 100;
-
-/** Which widgets a fixture context makes relevant. Presentation fixtures only. */
-const PREVIEW_RELEVANCE: Readonly<Record<HudPreviewContext, readonly HudWidgetId[]>> = {
-  explore: ['objective', 'interaction', 'party-status', 'clock', 'onboarding-hint'],
-  dialogue: ['objective', 'interaction'],
-  combat: ['interaction', 'hotbar', 'party-status'],
-};
-
 class HudLayoutEditorViewModel
   extends BaseViewModel<HudLayoutEditorViewModelOptions>
   implements HudLayoutEditorViewModelInterface
@@ -214,10 +195,19 @@ class HudLayoutEditorViewModel
   private readonly _view: HudEditorViewportCapabilities;
   private readonly _capabilities: readonly string[];
   private readonly _interactionAdapter: HudLayoutEditorInteractionAdapter;
-  private readonly _pressedGamepadButtons = new Set<number>();
-  private _gamepadPollTimer: number | undefined;
+  private readonly _gamepad: HudEditorGamepadReader;
+  private readonly _preview: HudEditorPreview;
+  /**
+   * The visibility each widget had when it was removed, for this session.
+   *
+   * 🔴 Hide destroys the preference it overwrites, so without this a
+   * hide-then-show round trip would return the widget as `always` and quietly
+   * change a second setting the player never touched. Session-scoped on
+   * purpose: it is an undo buffer for one editing session, not saved state, and
+   * the shipped preset's own value is the honest fallback across sessions.
+   */
+  private readonly _rememberedVisibility = new Map<HudWidgetId, HudVisibility>();
 
-  isOpen = $state(true);
   /**
    * Edit-session revision.
    *
@@ -228,7 +218,6 @@ class HudLayoutEditorViewModel
    */
   revision = $state(0);
   selectedWidgetId = $state<HudWidgetId | undefined>(undefined);
-  previewContext = $state<HudPreviewContext>('explore');
   confirmingDiscard = $state(false);
   statusMessage = $state<string | undefined>(undefined);
   isDragging = $state(false);
@@ -243,6 +232,15 @@ class HudLayoutEditorViewModel
     this._view = options.view;
     this._capabilities = options.capabilities;
     this._interactionAdapter = createHudLayoutEditorInteractionAdapter();
+    this._gamepad = createHudEditorGamepadReader({
+      onAction: (action) => this.handleGamepadAction(action),
+    });
+    this._preview = createHudEditorPreview(() => ({
+      preferences: this._hud.draft,
+      capabilities: this._capabilities,
+      viewport: this._view.viewport,
+      textScale: this._view.textScale,
+    }));
     this.dormantWidgetIds = options.dormantWidgetIds;
     // Opening the editor starts an edit session, so the draft always equals the
     // committed snapshot when the surface appears.
@@ -255,13 +253,13 @@ class HudLayoutEditorViewModel
 
   /** Starts controller polling after the editor has mounted. */
   override async initialize(): Promise<void> {
-    this._startGamepadPolling();
+    this._gamepad.start();
     await super.initialize();
   }
 
   /** Stops controller polling with the editor lifecycle. */
   override async dispose(): Promise<void> {
-    this._stopGamepadPolling();
+    this._gamepad.stop();
     await super.dispose();
   }
 
@@ -283,26 +281,7 @@ class HudLayoutEditorViewModel
   /** @inheritdoc */
   get widgetRows(): readonly HudEditorWidgetRow[] {
     void this.revision;
-    const { merged } = mergeHudPreferences(this._hud.draft);
-    const capabilitySet = new Set(this._capabilities);
-    return merged.map((widget) => {
-      const definition = rowDefinition(widget.widgetId);
-      const dormant =
-        definition === undefined ||
-        (definition.capability !== undefined && !capabilitySet.has(definition.capability));
-      return {
-        widgetId: widget.widgetId as HudWidgetId,
-        label: definition?.label ?? widget.widgetId,
-        description: definition?.description ?? '',
-        required: definition?.required ?? false,
-        dormant,
-        visibility: widget.visibility,
-        anchor: widget.anchor,
-        density: widget.density,
-        scale: widget.scale,
-        allowedAnchors: allowedAnchorsFor(widget.widgetId as HudWidgetId),
-      };
-    });
+    return this._placementRows.rows;
   }
 
   /** @inheritdoc */
@@ -312,8 +291,13 @@ class HudLayoutEditorViewModel
   }
 
   /** @inheritdoc */
+  get previewContext(): HudPreviewContext {
+    return this._preview.context;
+  }
+
+  /** @inheritdoc */
   get previewContexts(): readonly HudPreviewContext[] {
-    return HUD_PREVIEW_CONTEXTS;
+    return this._preview.contexts;
   }
 
   /**
@@ -324,22 +308,58 @@ class HudLayoutEditorViewModel
    */
   get previewLayout(): HudResolvedLayout {
     void this.revision;
-    return resolveGameHudLayout({
-      preferences: this._hud.draft,
-      capabilities: this._capabilities,
-      overlay: 'NONE',
-      isTransitioning: false,
-      isTemporarilyHidden: false,
-      focusedWidgetIds: [],
-      relevantWidgetIds: PREVIEW_RELEVANCE[this.previewContext],
-      pendingWidgetIds: [],
-      viewport: this._view.viewport,
-      textScale: this._view.textScale,
-    });
+    return this._preview.layout;
   }
 
   toggleHudTemporarilyHidden(): void {
     this._visibility.toggleHudTemporarilyHidden();
+  }
+
+  /** @inheritdoc */
+  get dropAnchors(): readonly HudEditorDropAnchor[] {
+    void this.revision;
+    return hudEditorDropAnchors({
+      widgetId: this.selectedWidgetId,
+      viewport: this._view.viewport,
+    });
+  }
+
+  /** @inheritdoc */
+  get boardRows(): readonly HudEditorBoardRow[] {
+    return this._placementRows.board;
+  }
+
+  /** @inheritdoc */
+  get shelfRows(): readonly HudEditorBoardRow[] {
+    return this._placementRows.shelf;
+  }
+
+  /** @inheritdoc */
+  get hiddenShelfLabel(): string {
+    return hudEditorHiddenShelfLabel(this.shelfRows.length);
+  }
+
+  /** @inheritdoc */
+  get canHideDraggedWidget(): boolean {
+    const widgetId = this.selectedWidgetId;
+    return widgetId !== undefined && canHideHudWidget(widgetId);
+  }
+
+  /**
+   * The draft resolved into the editor's three lists: every row in registry
+   * order, the board chips, and the shelf chips.
+   *
+   * Reads the draft rather than the committed snapshot, and never applies the
+   * overlay-hidden policy: the editor is a paused surface, so blanking the
+   * preview would make it useless.
+   */
+  private get _placementRows(): HudEditorPlacementRows {
+    void this.revision;
+    return hudEditorPlacementRows({
+      preferences: this._hud.draft,
+      layout: this.previewLayout,
+      capabilities: this._capabilities,
+    });
   }
 
   /** @inheritdoc */
@@ -393,7 +413,7 @@ class HudLayoutEditorViewModel
 
   /** @inheritdoc */
   setPreviewContext(context: HudPreviewContext): void {
-    this.previewContext = context;
+    this._preview.setContext(context);
   }
 
   /** @inheritdoc */
@@ -413,19 +433,9 @@ class HudLayoutEditorViewModel
     this._interactionAdapter.handleWidgetRowKeyDown({ event, target: this });
   }
 
-  /** Begins a pointer drag through the DOM interaction adapter. */
-  handlePointerDown(event: PointerEvent): void {
-    this._interactionAdapter.handlePointerDown({ event, target: this });
-  }
-
-  /** Resolves and applies the pointer's current drop target. */
-  handleDragPointerUp(event: PointerEvent): void {
-    this._interactionAdapter.handleDragPointerUp({ event, target: this });
-  }
-
-  /** Updates the drag ghost and hover target from pointer coordinates. */
-  handleDragPointerMove(event: PointerEvent): void {
-    this._interactionAdapter.handleDragPointerMove({ event, target: this });
+  /** Forwards a raw pointer event; the adapter owns the drag protocol. */
+  handlePointerEvent(event: PointerEvent): void {
+    this._interactionAdapter.handlePointerEvent({ event, target: this });
   }
 
   /**
@@ -435,103 +445,119 @@ class HudLayoutEditorViewModel
    * the commands the pointer produces for the same intent.
    */
   handleKeyDown(event: KeyboardEvent): void {
-    const widgetId = this.selectedWidgetId;
-    if (event.key === 'Escape') {
+    const intent = hudEditorKeyIntent(event);
+    if (intent === undefined) {
+      return;
+    }
+    // 🔴 Escape is the drag's own undo before it is the modal's close. A drag
+    // that closes the editor and discards the session on the same keypress is
+    // the most expensive mis-fire this surface can have.
+    if (intent === 'close') {
+      if (this.isDragging) {
+        event.preventDefault();
+        this.endDrag();
+        this.statusMessage = 'Drag cancelled. Nothing was moved.';
+        return;
+      }
       this.requestClose();
       return;
     }
-    if (event.key === 'Tab') {
+    if (intent === 'next-widget' || intent === 'previous-widget') {
       event.preventDefault();
-      this.selectAdjacentWidget(event.shiftKey ? -1 : 1);
+      this.selectAdjacentWidget(intent === 'next-widget' ? 1 : -1);
       return;
     }
+    const widgetId = this.selectedWidgetId;
     if (!widgetId) {
       return;
     }
-    switch (event.key) {
-      case 'ArrowLeft':
-        this.dispatch({ kind: 'move-anchor', widgetId, direction: -1 });
-        break;
-      case 'ArrowRight':
-        this.dispatch({ kind: 'move-anchor', widgetId, direction: 1 });
-        break;
-      case 'ArrowUp':
-        this.dispatch({ kind: 'reorder', widgetId, direction: -1 });
-        break;
-      case 'ArrowDown':
-        this.dispatch({ kind: 'reorder', widgetId, direction: 1 });
-        break;
-      case '+':
-      case '=':
-        this.dispatch({ kind: 'nudge-scale', widgetId, delta: SCALE_STEP });
-        break;
-      case '-':
-      case '_':
-        this.dispatch({ kind: 'nudge-scale', widgetId, delta: -SCALE_STEP });
-        break;
-      case 'v':
-      case 'V':
-        this.dispatch({ kind: 'cycle-visibility', widgetId, direction: 1 });
-        break;
-      default:
-        return;
+    const guarded = this._guardHiddenWidget(widgetId, HUD_EDITOR_GUARDED_ACTIONS[intent]);
+    if (guarded) {
+      event.preventDefault();
+      this.statusMessage = guarded;
+      return;
     }
+    this._applyIntent({ intent, widgetId });
     event.preventDefault();
   }
 
-  /** Controller parity — the same commands, edge-triggered by the view's poll. */
-  handleGamepadAction(action: HudEditorGamepadAction): void {
-    const widgetId = this.selectedWidgetId;
-    switch (action) {
-      case 'next-widget':
-        this.selectAdjacentWidget(1);
+  /**
+   * Applies a placement/appearance intent to one widget.
+   *
+   * 🔴 The single crossing point for every device. A key, a controller button
+   * and a row button all arrive here, so "each method can reach the same valid
+   * configuration" is one `switch` rather than three that must agree.
+   */
+  private _applyIntent(options: {
+    readonly intent: Exclude<HudEditorKeyIntent, 'next-widget' | 'previous-widget' | 'close'>;
+    readonly widgetId: HudWidgetId;
+  }): void {
+    const { intent, widgetId } = options;
+    switch (intent) {
+      case 'move-left':
+        this.dispatch({ kind: 'move-anchor', widgetId, direction: -1 });
         return;
-      case 'previous-widget':
-        this.selectAdjacentWidget(-1);
+      case 'move-right':
+        this.dispatch({ kind: 'move-anchor', widgetId, direction: 1 });
         return;
-      case 'undo':
-        this.dispatch({ kind: 'undo' });
+      case 'reorder-up':
+        this.dispatch({ kind: 'reorder', widgetId, direction: -1 });
         return;
-      case 'redo':
-        this.dispatch({ kind: 'redo' });
+      case 'reorder-down':
+        this.dispatch({ kind: 'reorder', widgetId, direction: 1 });
         return;
-      case 'confirm':
-        this.save();
+      case 'scale-up':
+        this.dispatch({ kind: 'nudge-scale', widgetId, delta: SCALE_STEP });
         return;
-      case 'cancel':
-        this.requestClose();
+      case 'scale-down':
+        this.dispatch({ kind: 'nudge-scale', widgetId, delta: -SCALE_STEP });
         return;
-      default:
-        break;
+      case 'cycle-visibility':
+        this.dispatch({ kind: 'cycle-visibility', widgetId, direction: 1 });
+        return;
+      case 'toggle-hidden':
+        this.toggleWidgetHidden(widgetId);
+        return;
+      case 'hide-only':
+        // Delete means REMOVE and never means restore. Hiding something already
+        // off the HUD reports that and changes nothing, which is why this is
+        // not simply `toggleWidgetHidden`.
+        this._applyOutcome(this._dropOutcomeFor(widgetId, { kind: 'hidden' }));
     }
+  }
+
+  /** Controller parity — the same `_applyIntent`, edge-triggered by the view's poll. */
+  handleGamepadAction(action: HudEditorGamepadAction): void {
+    if (action === 'next-widget' || action === 'previous-widget') {
+      this.selectAdjacentWidget(action === 'next-widget' ? 1 : -1);
+      return;
+    }
+    if (action === 'undo') {
+      this.dispatch({ kind: 'undo' });
+      return;
+    }
+    if (action === 'redo') {
+      this.dispatch({ kind: 'redo' });
+      return;
+    }
+    if (action === 'confirm') {
+      this.save();
+      return;
+    }
+    if (action === 'cancel') {
+      this.requestClose();
+      return;
+    }
+    const widgetId = this.selectedWidgetId;
     if (!widgetId) {
       return;
     }
-    switch (action) {
-      case 'move-left':
-        this.dispatch({ kind: 'move-anchor', widgetId, direction: -1 });
-        break;
-      case 'move-right':
-        this.dispatch({ kind: 'move-anchor', widgetId, direction: 1 });
-        break;
-      case 'reorder-up':
-        this.dispatch({ kind: 'reorder', widgetId, direction: -1 });
-        break;
-      case 'reorder-down':
-        this.dispatch({ kind: 'reorder', widgetId, direction: 1 });
-        break;
-      case 'scale-up':
-        this.dispatch({ kind: 'nudge-scale', widgetId, delta: SCALE_STEP });
-        break;
-      case 'scale-down':
-        this.dispatch({ kind: 'nudge-scale', widgetId, delta: -SCALE_STEP });
-        break;
-      case 'cycle-visibility':
-        this.dispatch({ kind: 'cycle-visibility', widgetId, direction: 1 });
-        break;
-      default:
-        break;
+    const guarded = this._guardHiddenWidget(widgetId, HUD_EDITOR_GUARDED_ACTIONS[action]);
+    if (guarded) {
+      this.statusMessage = guarded;
+      return;
     }
+    this._applyIntent({ intent: action, widgetId });
   }
 
   /** Pointer drag start. */
@@ -546,40 +572,30 @@ class HudLayoutEditorViewModel
     this.dragPosition = position;
   }
 
-  /** Pointer drag — a drag and a keyboard anchor move reach the same command. */
-  dropOnAnchor(anchor: HudSlot): void {
+  /**
+   * Pointer drag — a drag, a keyboard move and a controller move all reach the
+   * same command through `hudEditorDropOutcome`.
+   *
+   * A drag onto the shelf REMOVES the widget; a drag onto a region either moves
+   * it or, when it came from the shelf, puts it back in one undo step.
+   */
+  dropOn(target: HudEditorDropTarget | undefined): void {
     const widgetId = this.selectedWidgetId;
     this.isDragging = false;
     this.dragPosition = undefined;
     if (!widgetId) {
       return;
     }
-    if (!allowedHudAnchors(widgetId).includes(anchor)) {
-      this.statusMessage = 'That region is reserved for other HUD surfaces.';
+    if (!target) {
+      this.statusMessage = HUD_EDITOR_NOTHING_DROPPED_MESSAGE;
       return;
     }
-    const current = effectiveHudWidgetPreference(this._hud.draft, widgetId)?.anchor;
-    if (current === anchor) {
-      // Dropping a widget back onto its own region is not an edit. Returning
-      // early keeps a stray drop from recording a redundant override.
-      return;
-    }
-    this.dispatch({ kind: 'set-anchor', widgetId, anchor });
+    this._applyOutcome(this._dropOutcomeFor(widgetId, target));
   }
-
-  /** Pointer drag cancelled. */
+  /** Pointer drag cancelled. Idempotent: `lostpointercapture` also fires on a normal drop. */
   endDrag(): void {
     this.isDragging = false;
     this.dragPosition = undefined;
-  }
-
-  /** @inheritdoc */
-  cycleSelectedVisibility(): void {
-    const widgetId = this.selectedWidgetId;
-    if (!widgetId) {
-      return;
-    }
-    this.dispatch({ kind: 'cycle-visibility', widgetId, direction: 1 });
   }
 
   /** @inheritdoc */
@@ -592,16 +608,119 @@ class HudLayoutEditorViewModel
   }
 
   /** @inheritdoc */
-  cycleWidgetVisibility(widgetId: HudWidgetId): void {
+  toggleWidgetHidden(widgetId: HudWidgetId): void {
     this.selectWidget(widgetId);
-    this.dispatch({ kind: 'cycle-visibility', widgetId, direction: 1 });
+    if (this._isHidden(widgetId)) {
+      this._restoreWidget(widgetId);
+      return;
+    }
+    // 🔴 Removal from the keyboard and from the row's Hide button goes through
+    // the SAME outcome function a drop onto the shelf does. That is what makes
+    // the refusal for a required widget impossible to state one way here and
+    // another way there — and it is why the refusal is raised before dispatch:
+    // the machine strips a required widget's visibility patch, so dispatching
+    // anyway would report success for a no-op.
+    this._applyOutcome(this._dropOutcomeFor(widgetId, { kind: 'hidden' }));
+  }
+
+  /** @inheritdoc */
+  toggleSelectedHidden(): void {
+    const widgetId = this.selectedWidgetId;
+    if (!widgetId) {
+      return;
+    }
+    this.toggleWidgetHidden(widgetId);
+  }
+
+  /**
+   * Puts a hidden widget back where it was, with the visibility it had.
+   *
+   * Deliberately NOT a drop: restoring to the widget's own region must not be
+   * refused because that region does not exist at the current window size. The
+   * widget is coming back either way, and the board shows it parked in a
+   * dimmed region until the window is wide enough to use it.
+   */
+  private _restoreWidget(widgetId: HudWidgetId): void {
+    const visibility = hudEditorRestoreVisibility({
+      widgetId,
+      preferences: this._hud.draft,
+      remembered: this._rememberedVisibility.get(widgetId),
+    });
+    this.dispatch({ kind: 'show-widget', widgetId, visibility });
+    this.statusMessage = `${labelFor(widgetId)} put back on the HUD, ${
+      visibility === 'contextual' ? 'showing when relevant' : 'always on'
+    }.`;
+  }
+
+  /**
+   * The single consumer of a drop outcome: dispatch, remember, say.
+   *
+   * Every route into a placement decision — the shelf, a region, the `H` key,
+   * Delete, the row's Hide button — ends here, so no path can dispatch without
+   * also reporting what it did and remembering what it destroyed.
+   *
+   * 🔴 The message is set AFTER the dispatch, never before: `dispatch` clears
+   * the status line so a stale sentence cannot survive a new edit, and writing
+   * the message first means every committed drop reports nothing at all. A
+   * refusal never dispatches, so it is unaffected — which is exactly why this
+   * stayed invisible to a test that only asserted refusals.
+   */
+  private _applyOutcome(outcome: HudEditorDropOutcome): void {
+    if (outcome.kind === 'command') {
+      if (outcome.command.kind === 'hide-widget') {
+        this._rememberVisibility(outcome.command.widgetId);
+      }
+      this.dispatch(outcome.command);
+    }
+    this.statusMessage = outcome.message;
+  }
+
+  /** What a drop of `widgetId` onto `target` means, against the current draft. */
+  private _dropOutcomeFor(
+    widgetId: HudWidgetId,
+    target: HudEditorDropTarget,
+  ): HudEditorDropOutcome {
+    return hudEditorDropOutcome({
+      widgetId,
+      target,
+      preferences: this._hud.draft,
+      viewport: this._view.viewport,
+      remembered: this._rememberedVisibility.get(widgetId),
+    });
+  }
+
+  private _isHidden(widgetId: HudWidgetId): boolean {
+    return effectiveHudWidgetPreference(this._hud.draft, widgetId)?.visibility === 'hidden';
+  }
+
+  private _rememberVisibility(widgetId: HudWidgetId): void {
+    const visibility = effectiveHudWidgetPreference(this._hud.draft, widgetId)?.visibility;
+    if (visibility === 'always' || visibility === 'contextual') {
+      this._rememberedVisibility.set(widgetId, visibility);
+    }
+  }
+
+  /**
+   * Refuses placement edits aimed at a hidden widget.
+   *
+   * Silently accepting them would be the worst version of this bug: pressing
+   * Right on a widget that is off the HUD would edit a preference the player
+   * cannot see change, and the widget would stay invisible with no explanation.
+   */
+  private _guardHiddenWidget(
+    widgetId: HudWidgetId,
+    action: string | undefined,
+  ): string | undefined {
+    if (action === undefined || !this._isHidden(widgetId)) {
+      return undefined;
+    }
+    return hudEditorHiddenEditSentence(labelFor(widgetId), action);
   }
 
   /** @inheritdoc */
   save(): void {
     this._hud.save();
     this.revision += 1;
-    this.isOpen = false;
     this._onClose();
   }
 
@@ -610,7 +729,6 @@ class HudLayoutEditorViewModel
     this._hud.cancel();
     this.revision += 1;
     this.statusMessage = undefined;
-    this.isOpen = false;
     this._onClose();
   }
 
@@ -639,23 +757,14 @@ class HudLayoutEditorViewModel
 
   /** @inheritdoc */
   importPresetJson(raw: string): void {
-    if (!isHudLayoutJsonWithinSizeLimit(raw)) {
-      this.statusMessage = 'That preset file is too large.';
+    const read = readHudEditorPresetJson(raw);
+    if (!read.ok) {
+      this.statusMessage = read.message;
       return;
     }
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(raw);
-    } catch {
-      this.statusMessage = 'That preset file is not valid JSON.';
-      return;
-    }
-    const failure = this._hud.importPreset(parsed);
+    const failure = this._hud.importPreset(read.preset);
     if (failure) {
-      this.statusMessage =
-        failure.reason === 'missing-required-widget'
-          ? 'That preset is missing a required HUD surface and cannot be used.'
-          : 'That preset could not be read.';
+      this.statusMessage = hudEditorImportFailureMessage(failure.reason);
       return;
     }
     this.statusMessage = 'Preset imported';
@@ -663,81 +772,11 @@ class HudLayoutEditorViewModel
 
   /** @inheritdoc */
   exportPresetJson(): string {
-    return JSON.stringify(this._hud.exportPreset('Shared layout'), undefined, 2);
-  }
-
-  private _startGamepadPolling(): void {
-    if (typeof window === 'undefined' || this._gamepadPollTimer !== undefined) {
-      return;
-    }
-    this._gamepadPollTimer = window.setInterval(() => this._pollGamepad(), GAMEPAD_POLL_MS);
-  }
-
-  private _stopGamepadPolling(): void {
-    if (this._gamepadPollTimer === undefined) {
-      return;
-    }
-    window.clearInterval(this._gamepadPollTimer);
-    this._gamepadPollTimer = undefined;
-    this._pressedGamepadButtons.clear();
-  }
-
-  private _pollGamepad(): void {
-    const pads = navigator.getGamepads?.() ?? [];
-    const pad = Array.from(pads).find((candidate) => candidate !== null);
-    if (!pad) {
-      this._pressedGamepadButtons.clear();
-      return;
-    }
-    for (const [index, button] of pad.buttons.entries()) {
-      const wasDown = this._pressedGamepadButtons.has(index);
-      if (button.pressed && !wasDown) {
-        this._pressedGamepadButtons.add(index);
-        const action = this._gamepadActionFor(index);
-        if (action) {
-          this.handleGamepadAction(action);
-        }
-      } else if (!button.pressed && wasDown) {
-        this._pressedGamepadButtons.delete(index);
-      }
-    }
-  }
-
-  private _gamepadActionFor(index: number): HudEditorGamepadAction | undefined {
-    switch (index) {
-      case GAMEPAD_BUTTON.dpadLeft:
-        return 'move-left';
-      case GAMEPAD_BUTTON.dpadRight:
-        return 'move-right';
-      case GAMEPAD_BUTTON.dpadUp:
-        return 'reorder-up';
-      case GAMEPAD_BUTTON.dpadDown:
-        return 'reorder-down';
-      case GAMEPAD_BUTTON.rb:
-        return 'next-widget';
-      case GAMEPAD_BUTTON.lb:
-        return 'previous-widget';
-      case GAMEPAD_BUTTON.a:
-        return 'cycle-visibility';
-      case GAMEPAD_BUTTON.b:
-        return 'cancel';
-      case GAMEPAD_BUTTON.start:
-        return 'confirm';
-      case GAMEPAD_BUTTON.back:
-        return 'undo';
-      default:
-        return undefined;
-    }
+    return hudEditorExportPresetJson(this._hud.exportPreset(HUD_EDITOR_EXPORT_NAME));
   }
 }
 
 // ── Module helpers ──
-
-const rowDefinition = (widgetId: string) =>
-  HUD_WIDGET_REGISTRY.find((widget) => widget.id === widgetId);
-
-const allowedAnchorsFor = (widgetId: HudWidgetId): readonly HudSlot[] =>
-  allowedHudAnchors(widgetId);
 
 /**
  * Builds an editor ViewModel from explicit capabilities.

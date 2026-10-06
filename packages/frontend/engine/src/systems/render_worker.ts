@@ -5,7 +5,7 @@
 import type { World } from 'bitecs';
 import { query } from 'bitecs';
 import type { LpcLayerRecipe } from '../components/appearance.ts';
-import { Appearance, getAppearanceLayers } from '../components/appearance.ts';
+import { Appearance, appearanceState } from '../components/appearance.ts';
 import { Velocity } from '../components/velocity.ts';
 import {
   getLpcFrameIndex,
@@ -266,9 +266,7 @@ const syncAppearanceSystem = (options: {
 
   // Detect enters + process existing entities
   for (const eid of entities) {
-    const layerIds = getAppearanceLayers(eid);
-    const layerKey = layerIds.join(',');
-    const recipes = recipeResolver(layerIds);
+    const { layerIds, recipes, extras, key: layerKey } = appearanceState(eid, recipeResolver);
 
     if (!tracked.has(eid)) {
       // Enter: new entity — register in batch pool
@@ -279,6 +277,7 @@ const syncAppearanceSystem = (options: {
           type: 'APPEARANCE_CHANGED',
           eid,
           layerIds: [...layerIds],
+          extraLayers: [...extras],
         });
       }
     } else {
@@ -290,6 +289,7 @@ const syncAppearanceSystem = (options: {
             type: 'APPEARANCE_CHANGED',
             eid,
             layerIds: [...layerIds],
+            extraLayers: [...extras],
           });
         }
       }

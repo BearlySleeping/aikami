@@ -2,7 +2,6 @@
 // apps/frontend/client/src/lib/views/character/npc/list/npc_list_view.svelte
 
 import { BaseViewModelContainer, Image } from '$components';
-import t from '$i18n';
 import type { NpcListViewModelInterface } from './npc_list_view_model.svelte.ts';
 
 type Props = {
@@ -14,7 +13,7 @@ const { viewModel }: Props = $props();
 <BaseViewModelContainer {viewModel}>
   <div class="p-4">
     <header class="mb-6 flex items-center justify-between">
-      <h1 class="text-2xl font-bold">{t.nonPlayerCharacters()}</h1>
+      <h1 class="text-2xl font-bold">Non-Player Characters</h1>
       <button type="button" class="btn btn-primary" onclick={() => viewModel.openCreateModal()}>
         Create NPC
       </button>

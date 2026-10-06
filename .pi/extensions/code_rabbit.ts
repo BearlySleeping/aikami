@@ -1,1032 +1,312 @@
 // .pi/extensions/code_rabbit.ts
-//
-// CodeRabbit native autofix integration — two-phase lifecycle:
-//   Phase 1: Ensure a CodeRabbit review exists (trigger + poll + rate-limit handling)
-//   Phase 2: Post @coderabbitai autofix (now that the review anchors it) + poll for commit
-//
-// Returns the autofix commit SHA so the caller can sync their local worktree.
-//
-// Call from the review session with: code_rabbit_autofix
 
 import type { AgentToolUpdateCallback, ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import { Type } from 'typebox';
-import { abortableSleep } from './lib/async.ts';
-import { resolvePrSelector, runGh, tokenizeArgs } from './lib/gh.ts';
+import { applyCodeRabbitAutofix } from './lib/coderabbit_autofix.ts';
+import {
+  type CodeRabbitSnapshot,
+  codeRabbitFindings,
+  codeRabbitLifecycle,
+} from './lib/coderabbit_evidence.ts';
+import { reviewPrSelector, validateReviewSelector } from './lib/coderabbit_reader.ts';
+import { waitForCodeRabbit } from './lib/coderabbit_wait.ts';
+import { runGh } from './lib/gh.ts';
+import { waitForCheckCompletion } from './lib/review_checks.ts';
+import { reviewFindingsReport } from './lib/review_findings_report.ts';
+import { mergeReviewedHead } from './lib/review_merge.ts';
+import { queryPinnedChecks } from './lib/review_pinned_checks.ts';
+import { pollReviewState } from './lib/review_polling.ts';
+import { readReviewSnapshot } from './lib/review_snapshot.ts';
 import { defineAction, registerNamespace } from './lib/tool_namespace.ts';
 
-const TIMEOUT = 60_000;
-const POLL_INTERVAL = 15_000;
-const MAX_WAIT_MS = 30 * 60 * 1000;
-const CHECKS_POLL_INTERVAL = 10_000;
-const MAX_CHECKS_WAIT_MS = 90 * 1000; // 90s — LLM connection timeout safe
-const TERMINAL_REVIEW_STATES = ['APPROVED', 'COMMENTED', 'CHANGES_REQUESTED', 'DISMISSED'] as const;
-const CODERABBIT_LOGINS = ['coderabbitai', 'coderabbitai[bot]'];
+const MAX_WAIT_MS = 30 * 60_000;
+const POLL_INTERVAL_MS = 15_000;
 
-// ── gh adapter ──────────────────────────────────────────────────────
-//
-// Thin wrapper over the shared runGh that also remembers the last stderr, so
-// tool output can explain WHY a gh call came back empty.
-
-/** stderr of the most recent failed gh call ('' when the last call succeeded). */
-let _lastGhError = '';
-
-const gh = async (args: string, signal?: AbortSignal): Promise<string> => {
-  const result = await runGh(tokenizeArgs(args), { timeoutMs: TIMEOUT, signal });
-  _lastGhError = result.success ? '' : result.text;
-  return result.success ? result.text : '';
-};
-
-const ghJson = async <T>(args: string, signal?: AbortSignal): Promise<T | undefined> => {
-  const result = await runGh(tokenizeArgs(args), {
-    timeoutMs: TIMEOUT,
-    parseJson: true,
-    signal,
-  });
-  _lastGhError = result.success ? '' : result.text;
-  return result.success ? (result.json as T | undefined) : undefined;
-};
-
-/** Diagnostics for the most recent gh failure ('' when the last call succeeded). */
-const ghError = (): string => _lastGhError;
-
-// ── Progress reporting ──────────────────────────────────────────────
-//
-// 🔴 These loops used to console.log. Extensions run inside pi's TUI process,
-// which owns the terminal — writing to stdout corrupts the render. Progress
-// belongs in onUpdate, which pi renders in the tool's own result block.
-
-/** Emits a progress line while a long CodeRabbit poll is running. */
+/** Progress belongs in tool updates, never the TUI's stdout. */
 export type Reporter = (line: string) => void;
 
-const NO_REPORT: Reporter = () => {};
-
-/** Progress lines kept in the live update; older ones scroll off. */
-const PROGRESS_WINDOW = 12;
-
-const makeReporter = (onUpdate: AgentToolUpdateCallback<unknown> | undefined): Reporter => {
-  if (!onUpdate) {
-    return NO_REPORT;
-  }
+const makeReporter = (onUpdate?: AgentToolUpdateCallback<unknown>): Reporter => {
   const lines: string[] = [];
-  return (line: string) => {
+  return (line) => {
     lines.push(line);
-    onUpdate({
-      content: [{ type: 'text', text: lines.slice(-PROGRESS_WINDOW).join('\n') }],
-      details: { progressLines: lines.length },
-    });
+    if (lines.length > 12) {
+      lines.shift();
+    }
+    onUpdate?.({ content: [{ type: 'text', text: lines.join('\n') }], details: undefined });
   };
 };
 
-/** Autofix cycle state — prevents duplicate `@coderabbitai autofix` commands. */
-type AutofixCommentState =
-  | 'none'
-  | 'autofix_requested' // Last comment is `@coderabbitai autofix` — waiting for CodeRabbit reply
-  | 'autofix_in_progress' // CodeRabbit replied — autofix is running
-  | 'autofix_applied' // CodeRabbit autofix completed with changes
-  | 'autofix_skipped' // CodeRabbit autofix skipped — no fixable findings
-  | 'autofix_failed' // CodeRabbit autofix could not resolve findings
-  | 'autofix_rate_limited'; // CodeRabbit is rate-limited or quota-exhausted
+const readySnapshot = async (options: {
+  pr: string;
+  signal?: AbortSignal;
+  head?: string;
+  deadline?: number;
+}) => {
+  const snapshot = await readReviewSnapshot(options);
+  if (snapshot.draft || (options.head && snapshot.head !== options.head)) {
+    throw new Error('PR is draft or its head changed; restart CodeRabbit with fresh evidence');
+  }
+  return snapshot;
+};
 
-/** Graceful cancellation result — returned when the user aborts a poll loop. */
-const cancelledResult = (
-  num: string,
-): {
-  content: Array<{ type: 'text'; text: string }>;
-  details: Record<string, unknown>;
-} => ({
-  content: [
-    {
-      type: 'text' as const,
-      text: `⏹️ Cancelled — CodeRabbit operation on PR #${num} was aborted. No changes made.`,
+const ensureReview = async (options: {
+  initial: CodeRabbitSnapshot;
+  signal?: AbortSignal;
+  report: Reporter;
+}) => {
+  const lifecycle = codeRabbitLifecycle(options.initial).lifecycle;
+  if (lifecycle === 'completed') {
+    return options.initial;
+  }
+  const pr = reviewPrSelector(options.initial);
+  const deadline = Date.now() + MAX_WAIT_MS;
+  if (lifecycle !== 'running' && lifecycle !== 'rate-limited') {
+    await readySnapshot({ pr, head: options.initial.head, signal: options.signal, deadline });
+    const posted = await runGh(['pr', 'comment', pr, '--body', '@coderabbitai review'], {
+      signal: options.signal,
+    });
+    options.signal?.throwIfAborted();
+    if (!posted.success) {
+      throw new Error(`CodeRabbit review request failed: ${posted.text.slice(0, 300)}`);
+    }
+    options.report('Requested CodeRabbit review once; waiting within a fixed deadline');
+  }
+  const result = await waitForCodeRabbit({
+    head: options.initial.head,
+    timeoutMs: Math.max(1, deadline - Date.now()),
+    intervalMs: POLL_INTERVAL_MS,
+    signal: options.signal,
+    report: options.report,
+    readSnapshot: () => readReviewSnapshot({ pr, signal: options.signal, deadline }),
+  });
+  if (result.reason !== 'completed') {
+    throw new Error(`Timed out waiting for CodeRabbit review on PR #${pr}`);
+  }
+  return result.snapshot;
+};
+
+const mergeIfApproved = async (options: {
+  requested?: boolean;
+  snapshot: CodeRabbitSnapshot;
+  report: Reporter;
+  signal?: AbortSignal;
+}) => {
+  const pr = reviewPrSelector(options.snapshot);
+  return mergeReviewedHead({
+    requested: options.requested,
+    pr,
+    head: options.snapshot.head,
+    actionableCount: codeRabbitFindings(options.snapshot).unresolvedCount,
+    report: options.report,
+    signal: options.signal,
+    readReviewState: () => pollReviewState({ pr, signal: options.signal }),
+    queryChecks: () =>
+      queryPinnedChecks({
+        repository: options.snapshot.repository,
+        head: options.snapshot.head,
+        signal: options.signal,
+      }),
+    // Refresh findings together with current approval, never only a stale summary count.
+    readDisposition: async () => {
+      const fresh = await readySnapshot({
+        pr,
+        head: options.snapshot.head,
+        signal: options.signal,
+      });
+      return fresh;
     },
-  ],
-  details: { pr: num, cancelled: true },
-});
-
-type PrViewResult = {
-  headRefOid: string;
-  headRefName: string;
-  reviews: Array<{ author: { login: string }; state: string }>;
+  });
 };
 
-type Params = { pr: string; merge?: boolean };
-
-/** Get the current CodeRabbit review state, or empty string if no review yet. */
-const getReviewState = async (num: string): Promise<string> =>
-  (
-    await gh(
-      `pr view ${num} --json reviews --jq '[.reviews[] | select(.author.login=="coderabbitai" or .author.login=="coderabbitai[bot]") | .state] | join(",")'`,
-    )
-  ).trim();
-
-/**
- * Parse rate-limit wait minutes from the NEWEST CodeRabbit comment only.
- * Scanning the full history would let one stale "available in N minutes"
- * comment pin the PR as rate-limited forever.
- */
-const parseRateLimitMinutes = async (num: string): Promise<number | undefined> => {
-  const latest = await gh(
-    `pr view ${num} --json comments --jq '([.comments[] | select(.author.login=="coderabbitai" or .author.login=="coderabbitai[bot]")] | last | .body) // ""'`,
-  );
-  // CodeRabbit formats: "Next review available in: **4 minutes**"
-  // or "available in: 15 minutes". Match flexibly around markdown.
-  const m = latest.match(/available in[\s\S]*(\d+)\s*min/);
-  return m?.[1] ? Number.parseInt(m[1], 10) + 1 : undefined;
-};
-
-/**
- * Phase 1: Ensure a CodeRabbit review exists.
- * Returns the terminal review state (APPROVED / COMMENTED / CHANGES_REQUESTED / DISMISSED)
- * or undefined if timed out.
- */
-const ensureReview = async (
-  num: string,
-  report: Reporter,
-  signal?: AbortSignal,
-): Promise<string | undefined> => {
-  // Check if review already exists.
-  const existing = await getReviewState(num);
-  if (existing && TERMINAL_REVIEW_STATES.some((s) => existing.includes(s))) {
-    report(`📋 Existing CodeRabbit review: ${existing}`);
-    return existing;
-  }
-
-  // No review yet — trigger one.
-  report('📋 No CodeRabbit review found. Requesting review...');
-  await gh(`pr comment ${num} --body "@coderabbitai review"`);
-
-  let deadline = Date.now() + MAX_WAIT_MS;
-
-  while (Date.now() < deadline) {
-    const state = await getReviewState(num);
-
-    if (state && TERMINAL_REVIEW_STATES.some((s) => state.includes(s))) {
-      report(`✅ CodeRabbit review complete: ${state}`);
-      return state;
-    }
-
-    // Handle rate limits
-    const waitMins = await parseRateLimitMinutes(num);
-    if (waitMins) {
-      report(`  ⏳ Rate limited — waiting ${waitMins} min...`);
-      if (!(await abortableSleep(waitMins * 60_000, signal))) {
-        return undefined;
-      }
-      await gh(`pr comment ${num} --body "@coderabbitai review"`);
-      deadline = Date.now() + MAX_WAIT_MS;
-      continue;
-    }
-
-    report('  ⏳ Waiting for review...');
-    if (!(await abortableSleep(POLL_INTERVAL, signal))) {
-      return undefined;
-    }
-  }
-
-  return undefined;
-};
-
-/**
- * Get the state of the last autofix-related comment thread.
- * This prevents duplicate `@coderabbitai autofix` commands by checking
- * whether the last comment on the PR is already an autofix request that
- * hasn't been answered yet.
- */
-const getAutofixCommentState = async (num: string): Promise<AutofixCommentState> => {
-  // Fetch ALL comments (not just coderabbit's) to see the full timeline.
-  const lastCommentRaw = await gh(
-    `pr view ${num} --json comments --jq '[.comments | sort_by(.createdAt) | .[-1] | {author: .author.login, body: .body}] | .[0]'`,
-  );
-  if (!lastCommentRaw) {
-    return 'none';
-  }
-  try {
-    const last = JSON.parse(lastCommentRaw) as { author: string; body: string };
-    const isAutofixRequest = last.body.includes('@coderabbitai autofix');
-    const isCoderabbit = CODERABBIT_LOGINS.includes(last.author);
-
-    // If the last comment is @coderabbitai autofix from a non-coderabbit user,
-    // and CodeRabbit hasn't replied yet — we're waiting.
-    if (isAutofixRequest && !isCoderabbit) {
-      return 'autofix_requested';
-    }
-
-    // If last comment is from CodeRabbit, check what it says.
-    if (isCoderabbit) {
-      const body = last.body;
-      // 🔴 Rate limit / quota detection — check FIRST so rate-limited
-      // autofix doesn't get stuck in a polling loop.
-      if (
-        body.includes('available in') ||
-        body.includes('quota') ||
-        body.includes('rate limit') ||
-        body.includes('rate-limited') ||
-        body.includes('Next review available') ||
-        body.includes('usage limit')
-      ) {
-        return 'autofix_rate_limited';
-      }
-      if (body.includes('Autofix in progress') || body.includes('autofix in progress')) {
-        return 'autofix_in_progress';
-      }
-      if (
-        body.includes('Autofix applied') ||
-        body.includes('autofix applied') ||
-        body.includes('Fixes Applied') ||
-        body.includes('fixes applied') ||
-        body.includes('autofix-run-id')
-      ) {
-        return 'autofix_applied';
-      }
-      if (body.includes('Autofix skipped') || body.includes('autofix skipped')) {
-        return 'autofix_skipped';
-      }
-      if (
-        body.includes('Actionable comments posted') ||
-        body.includes('could not resolve') ||
-        body.includes('No autofix changes were needed') ||
-        body.includes('unexpected error') ||
-        body.includes('Not Found')
-      ) {
-        return 'autofix_failed';
-      }
-      // CodeRabbit replied but not about autofix — review is in progress
-      return 'none';
-    }
-  } catch {
-    // Fall through
-  }
-  return 'none';
-};
-
-/**
- * Check CodeRabbit's autofix status from comments.
- * Returns 'in_progress', 'skipped', 'completed', or undefined (not started).
- */
-const getAutofixStatus = async (num: string): Promise<string | undefined> => {
-  // Only the newest CodeRabbit comment — a stale "unexpected error" from an
-  // earlier run must not pin this PR as failed forever.
-  const comments = await gh(
-    `pr view ${num} --json comments --jq '([.comments[] | select(.author.login=="coderabbitai" or .author.login=="coderabbitai[bot]")] | last | .body) // ""'`,
-  );
-  if (!comments) {
-    return undefined;
-  }
-  // 🔴 Check for errors FIRST — a comment with autofix-run-id can be a FAILURE.
-  if (
-    comments.includes('unexpected error') ||
-    comments.includes('Not Found') ||
-    comments.includes('could not generate') ||
-    comments.includes('failed to generate')
-  ) {
-    return 'failed';
-  }
-  if (comments.includes('Autofix in progress') || comments.includes('autofix in progress')) {
-    return 'in_progress';
-  }
-  if (comments.includes('Autofix skipped') || comments.includes('autofix skipped')) {
-    return 'skipped';
-  }
-  // Completion markers — only match if no error was detected above.
-  // autofix-run-id alone is ambiguous (present in both success and failure),
-  // so require an explicit success marker alongside it.
-  if (
-    comments.includes('Autofix applied') ||
-    comments.includes('autofix applied') ||
-    comments.includes('Fixes Applied') ||
-    comments.includes('fixes applied')
-  ) {
-    return 'completed';
-  }
-  return undefined;
-};
-
-/**
- * Check if any CI checks are pending on the PR.
- * Returns { pending: boolean, pendingCount: number }.
- */
-const getChecksPending = async (
-  num: string,
-): Promise<{ pending: boolean; pendingCount: number }> => {
-  const checksRaw = await gh(`pr checks ${num}`);
-  if (!checksRaw) {
-    return { pending: false, pendingCount: 0 };
-  }
-  // Parse `gh pr checks` output — lines containing "pending" or "in_progress"
-  const lines = checksRaw.split('\n');
-  let pendingCount = 0;
-  for (const line of lines) {
-    const lower = line.toLowerCase();
-    if (lower.includes('pending') || lower.includes('in_progress') || lower.includes('⏳')) {
-      pendingCount++;
-    }
-  }
-  return { pending: pendingCount > 0, pendingCount };
-};
-
-/**
- * Wait for all CI checks to complete (pass or fail), not just pending.
- * Returns true if all checks completed (none pending), false if timed out.
- */
-const waitForChecks = async (
-  num: string,
-  report: Reporter,
-  signal?: AbortSignal,
-): Promise<boolean> => {
-  const deadline = Date.now() + MAX_CHECKS_WAIT_MS;
-  report('⏳ Waiting for CI checks to complete (max 90s)...');
-  while (Date.now() < deadline) {
-    const { pending, pendingCount } = await getChecksPending(num);
-    if (!pending) {
-      report('✅ All CI checks completed.');
-      return true;
-    }
-    report(`  ⏳ ${pendingCount} check(s) pending...`);
-    if (!(await abortableSleep(CHECKS_POLL_INTERVAL, signal))) {
-      return false;
-    }
-  }
-  report('⚠️  CI checks still running after 90s — bailing out gracefully.');
-  return false;
-};
-
-/**
- * Phase 2: Trigger autofix (review anchors it now)
- * Phase 3: Poll for autofix commit
- * Returns the new commit SHA or undefined.
- */
-const pollForAutofixCommit = async (
-  num: string,
-  baseline: string,
-  report: Reporter,
-  signal?: AbortSignal,
-): Promise<string | undefined> => {
-  report('⏳ Waiting for CodeRabbit autofix commit...');
-  let deadline = Date.now() + MAX_WAIT_MS;
-
-  while (Date.now() < deadline) {
-    // Check for a new commit on the branch (autofix push)
-    const currentHead = (await gh(`pr view ${num} --json headRefOid --jq '.headRefOid'`)).trim();
-    if (currentHead && currentHead !== baseline) {
-      report(`✅ Autofix commit detected: ${currentHead.slice(0, 7)}`);
-      return currentHead;
-    }
-
-    // Check autofix status in comments
-    const status = await getAutofixStatus(num);
-    if (status === 'skipped') {
-      report('📋 Autofix skipped — no fixable findings (clean).');
-      return undefined;
-    }
-    if (status === 'completed') {
-      // Autofix claims completed — check if commit landed.
-      const recheck = (await gh(`pr view ${num} --json headRefOid --jq '.headRefOid'`)).trim();
-      if (recheck && recheck !== baseline) {
-        report(`✅ Autofix commit detected (late): ${recheck.slice(0, 7)}`);
-        return recheck;
-      }
-      report('  No autofix commit after completion — clean.');
-      return undefined;
-    }
-
-    // Handle rate limits — short-circuit instead of waiting.
-    // Rate-limited autofix triggers the circuit breaker.
-    const commentState = await getAutofixCommentState(num);
-    if (commentState === 'autofix_rate_limited') {
-      report('⚠️  CodeRabbit rate-limited during autofix poll — bailing out.');
-      return undefined;
-    }
-
-    const waitMins = await parseRateLimitMinutes(num);
-    if (waitMins) {
-      report(`  ⏳ Rate limited — waiting ${waitMins} min...`);
-      if (!(await abortableSleep(waitMins * 60_000, signal))) {
-        return undefined;
-      }
-      await gh(`pr comment ${num} --body "@coderabbitai autofix"`);
-      deadline = Date.now() + MAX_WAIT_MS;
-      continue;
-    }
-
-    // Re-check review state
-    const currentReview = await getReviewState(num);
-    if (currentReview.includes('APPROVED')) {
-      report('✅ Review approved during autofix wait.');
-      return undefined;
-    }
-
-    report('  ⏳ Waiting for autofix...');
-    if (!(await abortableSleep(POLL_INTERVAL, signal))) {
-      return undefined;
-    }
-  }
-
-  return undefined;
-};
-
-export default function codeRabbitExtension(pi: ExtensionAPI): void {
+/** Interactive tools and detached automation share one lifecycle/findings model. */
+export default (pi: ExtensionAPI): void => {
   registerNamespace(pi, {
     name: 'code_rabbit',
     label: 'CodeRabbit',
-    description: 'Drive CodeRabbit reviews and autofixes on a pull request.',
+    description:
+      'Drive head-specific CodeRabbit reviews and autofixes. Completion is not approval.',
     actions: [
       defineAction({
         action: 'autofix',
-        summary: 'Ensure a review exists, then run autofix and await the commit',
-
+        summary: 'Ensure a review exists, then run autofix and await a verified bot commit',
         parameters: Type.Object({
-          pr: Type.String({ description: 'PR number' }),
+          pr: Type.String({ description: 'PR number or selector' }),
           merge: Type.Optional(
-            Type.Boolean({ default: false, description: 'Auto-merge only if no findings' }),
+            Type.Boolean({
+              default: false,
+              description:
+                'Merge only with formal approval, no unresolved findings, passing CI and a pinned head',
+            }),
           ),
         }),
-        async execute(_toolCallId, params: Params, signal, onUpdate, _ctx) {
+        async execute(_toolCallId, params, signal, onUpdate) {
           const report = makeReporter(onUpdate);
-          const num = resolvePrSelector(params.pr);
-
-          // ── Capture baseline ────────────────────────────────
-          const prInfo = await ghJson<PrViewResult>(
-            `pr view ${num} --json headRefOid,headRefName,reviews`,
-          );
-          if (!prInfo) {
+          const num = validateReviewSelector(params.pr);
+          const initial = await readySnapshot({ pr: num, signal });
+          const pr = String(initial.number);
+          const selector = reviewPrSelector(initial);
+          report(`Pinned head ${initial.head.slice(0, 8)} (${initial.branch})`);
+          if (!(await waitForCheckCompletion({ pr: selector, signal, report }))) {
+            signal?.throwIfAborted();
             return {
               content: [
                 {
                   type: 'text',
-                  text: `❌ Could not read PR #${num}. Check gh auth.\n${ghError()}`,
-                },
-              ],
-              isError: true,
-              details: { pr: num, error: 'pr_unreadable' },
-            };
-          }
-          const baselineCommit = prInfo.headRefOid;
-          const headRefName = prInfo.headRefName;
-          report(`📌 Baseline commit: ${baselineCommit.slice(0, 7)} (${headRefName})`);
-          let autofixCommit: string | undefined;
-
-          // ── Phase 0: Wait for CI checks ───────────────────
-          // Don't trigger CodeRabbit while CI is still running — the review
-          // needs the full code context including build/lint results.
-          const checksReady = await waitForChecks(num, report, signal);
-          if (!checksReady) {
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text: [
-                    `⏳ CI checks are still running on PR #${num}.`,
-                    'Please wait 2 minutes and call `code_rabbit_autofix` again.',
-                  ].join('\n'),
+                  text: `CI is still running on PR #${pr}; autofix was not requested.`,
                 },
               ],
               details: {
-                pr: num,
-                branch: headRefName,
-                baselineCommit,
-                autofixCommit: null,
-                autofixApplied: false,
+                pr,
+                baselineCommit: initial.head,
                 autofixSkipped: true,
                 reason: 'ci_checks_running',
               },
             };
           }
-
-          // ── Phase 1: Ensure review exists ───────────────────
-          const reviewState = await ensureReview(num, report, signal);
-          if (!reviewState) {
+          const ready = await readySnapshot({ pr: selector, head: initial.head, signal });
+          const reviewed = await ensureReview({ initial: ready, signal, report });
+          const evidence = codeRabbitLifecycle(reviewed);
+          const disposition = codeRabbitFindings(reviewed);
+          if (disposition.actionableCount === 0) {
+            const merged = await mergeIfApproved({
+              requested: params.merge,
+              snapshot: reviewed,
+              report,
+              signal,
+            });
             return {
               content: [
                 {
                   type: 'text',
-                  text: `⏰ Timed out waiting for CodeRabbit review on PR #${num}. Check PR manually.`,
-                },
-              ],
-              details: { pr: num, branch: headRefName, baselineCommit, autofixCommit: null },
-            };
-          }
-
-          // If already approved, no autofix needed.
-          if (reviewState.includes('APPROVED')) {
-            report('✅ CodeRabbit approved — no autofix needed.');
-            if (params.merge) {
-              report('🚀 Merging...');
-              const result = await gh(`pr merge ${num} --squash --delete-branch`);
-              report(result ? `✅ Merged PR #${num}` : '❌ Merge failed.');
-            }
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text: `✅ CodeRabbit approved PR #${num}. No autofix needed.`,
+                  text: `CodeRabbit review completed on PR #${pr}; no current actionable threads. Total unresolved: ${disposition.unresolvedCount} (historical/outdated threads still need disposition). GitHub verdict: ${evidence.verdict ?? 'none'}. ${merged ? 'Merged pinned head.' : 'No autofix or merge performed.'}`,
                 },
               ],
               details: {
-                pr: num,
-                branch: headRefName,
-                baselineCommit,
-                autofixCommit: null,
-                reviewState,
-              },
-            };
-          }
-
-          // ── Phase 2: Trigger autofix (review anchors it now) ─
-          // 🔴 SYNC GUARD: Check if autofix is already in flight before posting.
-          const preAutofixState = await getAutofixCommentState(num);
-          let duplicatePrevented = false;
-
-          if (
-            preAutofixState === 'autofix_requested' ||
-            preAutofixState === 'autofix_in_progress'
-          ) {
-            report(
-              `🔍 Autofix already ${preAutofixState === 'autofix_in_progress' ? 'in progress' : 'requested'} — polling instead of re-triggering.`,
-            );
-            duplicatePrevented = true;
-          } else if (preAutofixState === 'autofix_rate_limited') {
-            report('⚠️  CodeRabbit is rate-limited or quota-exhausted — short-circuiting.');
-            // Skip autofix entirely — the circuit breaker will handle this.
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text: [
-                    `⚠️  CodeRabbit is rate-limited on PR #${num}.`,
-                    `**Review state:** \`${reviewState}\``,
-                    '',
-                    'Autofix was skipped because CodeRabbit reported rate limiting',
-                    'or quota exhaustion. The circuit breaker should trigger YOLO',
-                    'degradation to manual review on the next cycle.',
-                  ].join('\n'),
-                },
-              ],
-              details: {
-                pr: num,
-                branch: headRefName,
-                baselineCommit,
-                autofixCommit: null,
-                reviewState,
-                autofixApplied: false,
-                autofixSkipped: true,
-                reason: 'rate_limited',
+                pr,
+                branch: initial.branch,
+                baselineCommit: initial.head,
+                reviewState: evidence.verdict ?? 'COMPLETED',
+                evidence,
                 actionableCount: 0,
-                duplicatePrevented: false,
-              },
-            };
-          } else if (preAutofixState === 'autofix_applied') {
-            // Previous autofix completed, but new commits may have been pushed
-            // since then. Re-trigger to get fresh autofix on the new code.
-            report('📋 Previous autofix completed — re-triggering for fresh code.');
-            await gh(`pr comment ${num} --body "@coderabbitai autofix"`);
-          } else if (preAutofixState === 'autofix_skipped') {
-            report('📋 Previous autofix skipped — re-triggering for fresh code.');
-            await gh(`pr comment ${num} --body "@coderabbitai autofix"`);
-          } else if (preAutofixState === 'autofix_failed') {
-            report('⚠️  Previous autofix failed — re-triggering.');
-            await gh(`pr comment ${num} --body "@coderabbitai autofix"`);
-          } else {
-            // Fresh PR with no autofix history — post the command exactly once.
-            // 🔴 CRITICAL: without this else branch, state 'none' (the dominant
-            // path on a fresh PR) falls through and autofix is never requested,
-            // leaving the poll loop waiting for a commit that will never come.
-            report(`🔍 Posting @coderabbitai autofix on PR #${num}...`);
-            await gh(`pr comment ${num} --body "@coderabbitai autofix"`);
-          }
-
-          // 🔴 Re-capture baseline AFTER posting autofix. If autofix already
-          // ran (from a previous session or manual trigger), the head commit
-          // may have already advanced. We need the post-trigger baseline to
-          // correctly detect the NEXT autofix commit.
-          if (!(await abortableSleep(2000, signal))) {
-            return cancelledResult(num);
-          }
-          const postTriggerHead = (
-            await gh(`pr view ${num} --json headRefOid --jq '.headRefOid'`)
-          ).trim();
-          if (postTriggerHead && postTriggerHead !== baselineCommit) {
-            // Autofix already completed before our trigger — adopt the existing commit.
-            autofixCommit = postTriggerHead;
-            report(`✅ Autofix already completed: ${autofixCommit.slice(0, 7)}`);
-          } else if ((await getAutofixStatus(num)) === 'completed') {
-            // Autofix completed but the commit didn't change from baseline —
-            // the tool was called after autofix already ran. Adopt the existing head.
-            autofixCommit = postTriggerHead || baselineCommit;
-            report(`✅ Autofix completed (commit already on branch): ${autofixCommit.slice(0, 7)}`);
-          } else {
-            // Use the post-trigger head as the new baseline for polling.
-            const activeBaseline = postTriggerHead || baselineCommit;
-            autofixCommit = await pollForAutofixCommit(num, activeBaseline, report, signal);
-          }
-
-          // 🔴 POST-AUTOFIX SYNC: Verify remote HEAD matches local worktree.
-          // If CodeRabbit pushed an autofix commit, the local worktree is stale.
-          // The caller MUST git fetch + reset --hard before proceeding.
-          const finalAutofixState = await getAutofixCommentState(num);
-          const autofixApplied =
-            autofixCommit !== undefined || finalAutofixState === 'autofix_applied';
-          const autofixSkipped =
-            finalAutofixState === 'autofix_skipped' ||
-            finalAutofixState === 'autofix_rate_limited' ||
-            (!autofixCommit && (await getAutofixStatus(num)) === 'skipped');
-          const rateLimited = finalAutofixState === 'autofix_rate_limited';
-
-          if (
-            !autofixCommit &&
-            !(await getAutofixStatus(num)) &&
-            !(await getReviewState(num)).includes('APPROVED') &&
-            !autofixSkipped
-          ) {
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text: `⏰ Timed out waiting for autofix on PR #${num}. Check PR manually.`,
-                },
-              ],
-              details: {
-                pr: num,
-                branch: headRefName,
-                baselineCommit,
-                autofixCommit: null,
-                reviewState,
+                unresolvedCount: disposition.unresolvedCount,
                 autofixApplied: false,
-                autofixSkipped: false,
-                duplicatePrevented,
+                merged,
               },
             };
           }
-
-          // ── Evaluate outcome ────────────────────────────────
-          // Count actionable findings for metadata
-          const commentsBody = await gh(
-            `pr view ${num} --json comments --jq '[.comments[] | select(.author.login=="coderabbitai" or .author.login=="coderabbitai[bot]") | .body] | join(" ")'`,
-          );
-          const hasActionable = commentsBody.includes('Actionable comments posted:');
-          const actionableCount = hasActionable
-            ? Number.parseInt(
-                commentsBody.match(/Actionable comments posted: (\d+)/)?.[1] ?? '0',
-                10,
-              )
-            : 0;
-
-          if (autofixCommit) {
-            report(`🎯 Autofix commit: ${autofixCommit.slice(0, 7)}`);
-
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text: [
-                    `✅ CodeRabbit autofix applied on PR #${num}.`,
-                    `**Autofix commit:** \`${autofixCommit.slice(0, 7)}\``,
-                    `**Branch:** \`${headRefName}\``,
-                    `**Review state:** \`${reviewState}\``,
-                    `**Actionable findings remaining:** ${actionableCount}`,
-                    '',
-                    '🔴 **REQUIRED: Sync your local worktree:**',
-                    '```bash',
-                    `git fetch origin ${headRefName}`,
-                    `git reset --hard origin/${headRefName}`,
-                    '```',
-                  ].join('\n'),
-                },
-              ],
-              details: {
-                pr: num,
-                branch: headRefName,
-                baselineCommit,
-                autofixCommit,
-                reviewState,
-                autofixApplied: true,
-                autofixSkipped: false,
-                actionableCount,
-                duplicatePrevented,
-              },
-            };
-          }
-
-          // No autofix commit — either skipped (clean) or approved mid-wait.
-          if (params.merge && reviewState.includes('APPROVED') && !hasActionable) {
-            report('🚀 No autofix needed — merging...');
-            const result = await gh(`pr merge ${num} --squash --delete-branch`);
-            report(result ? `✅ Merged PR #${num}` : '❌ Merge failed.');
-          }
-
-          const findingsWarning = hasActionable
-            ? [
-                '',
-                '⚠️  **CodeRabbit found actionable comments that autofix could not resolve.**',
-                'Call `code_rabbit_findings` to inspect them. The Captain should decide',
-                'whether these are blocking before merging.',
-              ].join('\n')
-            : '';
-
+          const deadline = Date.now() + MAX_WAIT_MS;
+          const result = await applyCodeRabbitAutofix({
+            initial: reviewed,
+            report,
+            signal,
+            readSnapshot: () => readReviewSnapshot({ pr: selector, signal, deadline }),
+            query: (args, request) => runGh(args, { ...request, parseJson: true }),
+          });
+          const fresh = await readReviewSnapshot({ pr: selector, signal });
+          const freshEvidence = codeRabbitLifecycle(fresh);
+          const freshFindings = codeRabbitFindings(fresh);
           return {
             content: [
               {
                 type: 'text',
                 text: [
-                  `✅ CodeRabbit review complete on PR #${num}: ${reviewState}.`,
-                  (() => {
-                    if (rateLimited) {
-                      return '⚠️  CodeRabbit is rate-limited — autofix could not run.';
-                    }
-                    if (autofixSkipped) {
-                      return 'No autofix changes were needed (clean review).';
-                    }
-                    if (hasActionable) {
-                      return `⚠️  ${actionableCount} actionable comments — autofix could not resolve them.`;
-                    }
-                    return 'No autofix changes were needed (clean review).';
-                  })(),
-                  findingsWarning,
-                  duplicatePrevented
-                    ? '🔍 Duplicate autofix command was prevented (was already in flight).'
-                    : '',
-                ]
-                  .filter(Boolean)
-                  .join('\n'),
+                  `CodeRabbit autofix on PR #${pr}: ${result.status}.`,
+                  result.commit
+                    ? `Signed, provider-attested autofix commit: ${result.commit}. Fetch and fast-forward your worktree, preserving local changes. A new review and CI are required before merge.`
+                    : 'No verified autofix commit; this is not clean-review evidence.',
+                  `Current actionable: ${freshFindings.actionableCount}; total unresolved: ${freshFindings.unresolvedCount}.`,
+                  `Lifecycle on ${fresh.head.slice(0, 8)}: ${freshEvidence.lifecycle}; GitHub verdict: ${freshEvidence.verdict ?? 'none'}.`,
+                ].join('\n'),
               },
             ],
             details: {
-              pr: num,
-              branch: headRefName,
-              baselineCommit,
-              autofixCommit: null,
-              reviewState,
-              autofixApplied,
-              autofixSkipped,
-              reason: rateLimited ? 'rate_limited' : undefined,
-              hasActionableFindings: hasActionable,
-              actionableCount,
-              duplicatePrevented,
+              pr,
+              branch: initial.branch,
+              baselineCommit: initial.head,
+              head: fresh.head,
+              autofixCommit: result.commit,
+              autofixApplied: result.status === 'committed',
+              autofixSkipped: ['skipped', 'rate-limited', 'no-current-findings'].includes(
+                result.status,
+              ),
+              reason: result.status,
+              duplicatePrevented: result.duplicatePrevented,
+              actionableCount:
+                freshEvidence.lifecycle === 'completed' ? freshFindings.actionableCount : undefined,
+              unresolvedCount: freshFindings.unresolvedCount,
+              reviewState: freshEvidence.verdict,
+              evidence: freshEvidence,
             },
           };
         },
       }),
       defineAction({
         action: 'findings',
-        summary: 'Fetch structured review findings for a PR',
-
-        parameters: Type.Object({
-          pr: Type.String({ description: 'PR number' }),
-        }),
-        async execute(_toolCallId, params: Params, _signal, _onUpdate, _ctx) {
-          const num = resolvePrSelector(params.pr);
-
-          // Fetch PR metadata (owner/repo from gh)
-          const prData = await ghJson<{
-            headRepositoryOwner: { login: string };
-            headRepository: { name: string };
-          }>(
-            `pr view ${num} --json headRepositoryOwner,headRepository --jq '{headRepositoryOwner: .headRepositoryOwner, headRepository: .headRepository}'`,
+        summary: 'Fetch paginated current, historical, resolved and outdated review threads',
+        parameters: Type.Object({ pr: Type.String({ description: 'PR number or selector' }) }),
+        async execute(_toolCallId, params, signal) {
+          return reviewFindingsReport(
+            await readReviewSnapshot({ pr: validateReviewSelector(params.pr), signal }),
           );
-          if (!prData) {
-            const diag = ghError();
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text: [
-                    `❌ Could not read PR #${num}.`,
-                    diag
-                      ? `gh error: ${diag.slice(0, 300)}`
-                      : 'Check `gh auth status` — the gh CLI returned no data.',
-                  ].join('\n'),
-                },
-              ],
-              isError: true,
-              details: { pr: num },
-            };
-          }
-          const owner = prData.headRepositoryOwner.login;
-          const repo = prData.headRepository.name;
-
-          // Fetch review state
-          const reviewState = await getReviewState(num);
-
-          // Fetch inline review comments via GitHub API (snake_case from API)
-          const commentsJson = await gh(
-            `api /repos/${owner}/${repo}/pulls/${num}/comments --jq '[.[] | select(.user.login=="coderabbitai" or .user.login=="coderabbitai[bot]") | {id: .id, path: .path, line: .line, body: .body, commitId: .commit_id, createdAt: .created_at}]'`,
-          );
-          type GhComment = {
-            id: number;
-            path: string;
-            line: number | null;
-            body: string;
-            commitId: string;
-            createdAt: string;
-          };
-          let comments: GhComment[] = [];
-          try {
-            comments = commentsJson ? JSON.parse(commentsJson) : [];
-          } catch {
-            comments = [];
-          }
-
-          // Parse severity and fix prompts from comment bodies
-          const findings = comments.map((c) => {
-            // CodeRabbit marks severities with an optional leading underscore in
-            // markdown (_🔴 Critical_, _🟠 Major_, _🟢 Minor_, _🔵 Trivial_).
-            const severityMatch = c.body.match(/🔴|🟠|🟢|🔵/);
-            let severity: string;
-            if (!severityMatch) {
-              severity = 'unknown';
-            } else if (severityMatch[0] === '🔴') {
-              severity = 'critical';
-            } else if (severityMatch[0] === '🟠') {
-              severity = 'major';
-            } else if (severityMatch[0] === '🔵') {
-              severity = 'trivial';
-            } else {
-              severity = 'minor';
-            }
-
-            // Extract the AI fix prompt from CodeRabbit's template
-            const promptMatch = c.body.match(
-              /<summary>🤖 Prompt for AI Agents<\/summary>\s*```\s*([\s\S]*?)```/,
-            );
-            const fixPrompt = promptMatch?.[1]?.trim();
-
-            // Extract description (text before the prompt block)
-            const descMatch = c.body.match(/^([\s\S]*?)(?:<details>|<summary>🤖)/);
-            const description = descMatch?.[1]
-              ?.trim()
-              .replace(/\*\*/g, '')
-              .replace(/_/g, '')
-              .slice(0, 200);
-
-            return {
-              id: c.id,
-              path: c.path,
-              line: c.line,
-              severity,
-              description: description || '(no description)',
-              fixPrompt: fixPrompt || undefined,
-            };
-          });
-
-          const actionableCount = findings.length;
-          const criticalCount = findings.filter((f) => f.severity === 'critical').length;
-
-          return {
-            content: [
-              {
-                type: 'text',
-                text: [
-                  `## CodeRabbit Review — PR #${num}`,
-                  '',
-                  `**State:** \`${reviewState || 'pending'}\``,
-                  `**Actionable comments:** ${actionableCount} (${criticalCount} critical)`,
-                  '',
-                  findings.length === 0
-                    ? 'No findings — review is clean.'
-                    : [
-                        '### Findings',
-                        '',
-                        ...findings.map((f) => {
-                          let emoji: string;
-                          if (f.severity === 'critical') {
-                            emoji = '🔴';
-                          } else if (f.severity === 'major') {
-                            emoji = '🟠';
-                          } else if (f.severity === 'trivial') {
-                            emoji = '🔵';
-                          } else {
-                            emoji = '🟢';
-                          }
-                          return [
-                            `#### ${emoji} \`${f.path}:${f.line ?? '?'}\``,
-                            f.description,
-                            f.fixPrompt
-                              ? `\n<details><summary>🤖 Fix prompt</summary>\n\n\`\`\`\n${f.fixPrompt}\n\`\`\`\n</details>`
-                              : '',
-                            '---',
-                          ].join('\n');
-                        }),
-                      ].join('\n'),
-                ].join('\n'),
-              },
-            ],
-            details: {
-              pr: num,
-              reviewState,
-              actionableCount,
-              criticalCount,
-              findings,
-            },
-          };
         },
       }),
       defineAction({
         action: 'wait',
-        summary: 'Wait for review completion or new actionable comments',
-
+        summary: 'Wait for verified head-specific completion or new current actionable threads',
         parameters: Type.Object({
-          pr: Type.String({ description: 'PR number' }),
+          pr: Type.String({ description: 'PR number or selector' }),
           maxWaitMs: Type.Optional(
-            Type.Number({ default: 30 * 60 * 1000, description: 'Max wait time in ms' }),
+            Type.Integer({ default: MAX_WAIT_MS, minimum: 1, maximum: 3_600_000 }),
           ),
           intervalMs: Type.Optional(
-            Type.Number({ default: 15_000, description: 'Poll interval in ms' }),
+            Type.Integer({ default: POLL_INTERVAL_MS, minimum: 1, maximum: 60_000 }),
           ),
         }),
-        async execute(_toolCallId, params, signal, onUpdate, _ctx) {
-          const report = makeReporter(onUpdate);
-          const num = resolvePrSelector(params.pr);
-          const maxWaitMs = params.maxWaitMs ?? 30 * 60 * 1000;
-          const intervalMs = params.intervalMs ?? 15_000;
-          const deadline = Date.now() + maxWaitMs;
-          let lastCommentCount = -1;
-
-          // Get initial comment count as baseline.
-          const initialComments = (
-            await gh(`pr view ${num} --json comments --jq '.comments | length'`)
-          ).trim();
-          lastCommentCount = initialComments ? Number.parseInt(initialComments, 10) : 0;
-          report(`📊 Baseline: ${lastCommentCount} comments on PR #${num}`);
-
-          while (Date.now() < deadline) {
-            // Check review state
-            const state = await getReviewState(num);
-            if (state && TERMINAL_REVIEW_STATES.some((s) => state.includes(s))) {
-              report(`✅ Review complete: ${state}`);
-              return {
-                content: [
-                  {
-                    type: 'text',
-                    text: `✅ CodeRabbit review complete on PR #${num}: ${state}.`,
-                  },
-                ],
-                details: { pr: num, reviewState: state, newComments: false },
-              };
-            }
-
-            // Check for new comments
-            const currentComments = (
-              await gh(`pr view ${num} --json comments --jq '.comments | length'`)
-            ).trim();
-            const currentCount = currentComments ? Number.parseInt(currentComments, 10) : 0;
-            if (currentCount > lastCommentCount) {
-              const newCount = currentCount - lastCommentCount;
-              report(`📊 New comments: ${newCount} (total: ${currentCount})`);
-              // Fetch the new comments — slice from the previous baseline count.
-              const newComments = await gh(
-                `pr view ${num} --json comments --jq '[.comments[${lastCommentCount}:] | .[] | select(.author.login=="coderabbitai" or .author.login=="coderabbitai[bot]") | .body] | join("\\n---\\n")'`,
-              );
-              lastCommentCount = currentCount;
-              return {
-                content: [
-                  {
-                    type: 'text',
-                    text: [
-                      `📊 ${newCount} new comment(s) on PR #${num}.`,
-                      newComments
-                        ? `\n### Latest CodeRabbit comment:\n${newComments.slice(0, 800)}`
-                        : '',
-                    ].join('\n'),
-                  },
-                ],
-                details: { pr: num, newComments: true, totalComments: currentCount },
-              };
-            }
-
-            // Handle rate limits
-            const waitMins = await parseRateLimitMinutes(num);
-            if (waitMins) {
-              report(`  ⏳ Rate limited — waiting ${waitMins} min...`);
-              if (!(await abortableSleep(waitMins * 60_000, signal))) {
-                return cancelledResult(num);
-              }
-              continue;
-            }
-
-            report(`  ⏳ Waiting... (${Math.round((deadline - Date.now()) / 1000)}s remaining)`);
-            if (!(await abortableSleep(intervalMs, signal))) {
-              return cancelledResult(num);
-            }
+        async execute(_toolCallId, params, signal, onUpdate) {
+          const pr = validateReviewSelector(params.pr);
+          const timeoutMs = params.maxWaitMs ?? MAX_WAIT_MS;
+          const deadline = Date.now() + timeoutMs;
+          const result = await waitForCodeRabbit({
+            timeoutMs,
+            intervalMs: params.intervalMs ?? POLL_INTERVAL_MS,
+            signal,
+            returnOnFindings: true,
+            report: makeReporter(onUpdate),
+            readSnapshot: () => readReviewSnapshot({ pr, signal, deadline }),
+          });
+          if (result.reason === 'timeout') {
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: `Timed out waiting for CodeRabbit on PR #${pr}; no verified completion. Last lifecycle: ${result.snapshot ? codeRabbitLifecycle(result.snapshot).lifecycle : 'unknown'}.`,
+                },
+              ],
+              details: { pr, head: result.snapshot?.head, timedOut: true },
+            };
           }
-
           return {
             content: [
               {
                 type: 'text',
-                text: `⏰ Timed out waiting for CodeRabbit on PR #${num} after ${Math.round(maxWaitMs / 60_000)} min.`,
+                text: `CodeRabbit ${result.reason} on PR #${result.snapshot.number}, head ${result.snapshot.head.slice(0, 8)}. Lifecycle: ${result.evidence.lifecycle}; GitHub verdict: ${result.evidence.verdict ?? 'none'}. Current actionable: ${result.findings.actionableCount}; historical unresolved: ${result.findings.historicalCount}. Completion is not approval.`,
               },
             ],
-            details: { pr: num, timedOut: true },
+            details: {
+              pr: String(result.snapshot.number),
+              head: result.snapshot.head,
+              evidence: result.evidence,
+              reviewState:
+                result.evidence.verdict ??
+                (result.evidence.lifecycle === 'completed' ? 'COMPLETED' : undefined),
+              actionableCount: result.findings.actionableCount,
+              historicalCount: result.findings.historicalCount,
+              newComments: result.reason === 'findings',
+              reason: result.reason,
+            },
           };
         },
       }),
     ],
   });
-
-  // ─────────────────────────────────────────────────────────
-  // Tool 2: code_rabbit_findings — fetch structured findings
-  // ─────────────────────────────────────────────────────────
-
-  // ─────────────────────────────────────────────────────────
-  // Tool 3: code_rabbit_wait — poll for new comments
-  // ─────────────────────────────────────────────────────────
-}
+};

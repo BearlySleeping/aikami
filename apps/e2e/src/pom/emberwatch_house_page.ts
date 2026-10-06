@@ -232,6 +232,7 @@ export class EmberwatchHousePage {
       e2e?: boolean;
       authoring?: boolean;
       authoringLayers?: readonly string[];
+      contentIdentity?: boolean;
       textScale?: number;
     } = {},
   ): Promise<void> {
@@ -247,6 +248,9 @@ export class EmberwatchHousePage {
       if (options.authoringLayers && options.authoringLayers.length > 0) {
         params.set('authoringLayers', options.authoringLayers.join(','));
       }
+    }
+    if (options.contentIdentity) {
+      params.set('contentIdentity', 'true');
     }
     await this.page.goto(`${this.origin}/game?${params.toString()}`, {
       waitUntil: 'domcontentloaded',
@@ -326,9 +330,22 @@ export class EmberwatchHousePage {
     await this.loadMapAt('village', cell);
   }
 
-  /** Dismiss the first-run movement toast when present; no-op on later runs. */
+  /**
+   * Dismiss the first-run movement hint when present; no-op on later runs.
+   *
+   * Scoped to the onboarding hint container and its exact accessible name.
+   * An unscoped `/skip/i` role match also matches the music player's
+   * "Skip to similar song" button, which sits in the same overlay layer and is
+   * usually disabled with no track playing — the click then waits on a
+   * permanently disabled control and the run fails on a timeout that has
+   * nothing to do with the tutorial.
+   */
   async dismissTutorial(): Promise<boolean> {
-    const skip = this.page.getByRole('button', { name: /skip/i }).first();
+    const skip = this.page
+      .getByTestId('onboarding-hint')
+      .getByRole('button', { name: 'Skip tutorial', exact: true });
+    // A non-existent locator resolves immediately, so an absent hint stays a
+    // cheap no-op instead of a probe that waits.
     const visible = await skip.isVisible().catch(() => false);
     if (visible) {
       await skip.click();

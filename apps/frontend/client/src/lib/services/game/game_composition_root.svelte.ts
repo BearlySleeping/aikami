@@ -17,6 +17,7 @@ import { resolveCompanionControlMode } from '@aikami/schemas';
 import type { ContentPackLootEntry } from '@aikami/types';
 import { configureNpcPortraitSource } from '$lib/data/npc_avatar_catalog';
 import { textGenerationService } from '../ai/text_generation_service.svelte';
+import { assetStore } from '../assets/asset_store.svelte';
 import { musicPlayerService } from '../audio/music_player_service.svelte';
 import type { CampaignServiceInterface } from '../campaign/campaign_service.svelte';
 import { campaignService } from '../campaign/campaign_service.svelte';
@@ -29,6 +30,7 @@ import {
 import { buildItemCatalogFromPack } from './content_pack_catalog';
 import type { EquipmentServiceInterface } from './equipment_service.svelte';
 import { equipmentService } from './equipment_service.svelte';
+import { publishLoadedContentIdentity } from './game_content_identity.ts';
 import type { GameEngineServiceInterface } from './game_engine_service.svelte';
 import { gameEngineService } from './game_engine_service.svelte';
 import type { GameModeServiceInterface } from './game_mode_service.svelte';
@@ -266,18 +268,34 @@ export class GameCompositionRoot
     // Phase 5b: Thread contentPackId to engine and ensure campaign service is ready
     const contentPackId = campaignService.activeCampaign?.contentPackId ?? 'emberwatch';
     // ── C-372: actually assign it — the engine default is 'emberwatch', so
-    // every save was stamped packId 'emberwatch' regardless of the campaign.
+    // every save would be stamped 'emberwatch' regardless of the campaign.
     gameEngineService.contentPackId = contentPackId;
     this.debug('initialize:contentPackId', { contentPackId });
-
     // Phase 5c: Wire NPC dialogue orchestrator with content pack + gateway
-    const { djb2Hash, loadContentPack, createEngineBridge } = await import(
+    const { djb2Hash, loadContentPack, createEngineBridge, publishContentIdentity } = await import(
       '@aikami/frontend/engine'
     );
-    const { assetTagResolver } = await import('$lib/services/assets/registry_resolver');
+    const { assetTagResolver, awaitRegistryReady } = await import(
+      '$lib/services/assets/registry_resolver'
+    );
+    await awaitRegistryReady();
     const contentPack = await loadContentPack({
       packId: contentPackId,
       resolveTag: assetTagResolver,
+    });
+    const packLock = assetStore.packLock;
+    publishLoadedContentIdentity({
+      identity: contentPack.identity,
+      metadata: {
+        manifestAssetSha256: assetStore.seed?.rows.find(
+          (row) => row.tag === `${contentPackId}:manifest`,
+        )?.hash,
+        releaseId: assetStore.releaseId ?? undefined,
+        releaseSource: assetStore.releaseSource ?? undefined,
+        packLockSource: assetStore.packLockSource ?? undefined,
+        lockedAssetCount: packLock?.assets.length,
+      },
+      publish: publishContentIdentity,
     });
 
     // ── C-331 AC-1: content pack is the single source of item truth ──
@@ -375,6 +393,7 @@ export class GameCompositionRoot
             id: q.id,
             name: q.name,
             offerDialogueKey: q.offerDialogueKey,
+            offeredByNpcId: q.offeredByNpcId, // C-568: needed for ownership checks
             endings: q.endings,
           };
         },
@@ -383,6 +402,7 @@ export class GameCompositionRoot
             id: q.id,
             name: q.name,
             offerDialogueKey: q.offerDialogueKey,
+            offeredByNpcId: q.offeredByNpcId,
             endings: q.endings,
           })),
         getAllEncounters: () =>
@@ -406,9 +426,11 @@ export class GameCompositionRoot
         getAllItems: () => contentPack.manifest.items,
       },
       textGenerator: async (opts) => {
-        // C-401 two-call split:
-        //   Call 1 (no schema) → streamChat — narrative prose streaming
-        //   Call 2 (schema) → extractStructure — schema-constrained extraction
+        // C-401 two-call split: call 1 (no schema) streams narrative prose,
+        // call 2 (schema) extracts the command envelope. The turn's budget,
+        // identity and campaign scope come from the orchestrator and are
+        // forwarded UNCHANGED to both — one budgeted, campaign-scoped request.
+        const campaignScope = campaignService.activeCampaign?.id ?? 'no-campaign';
         if (opts.schema && opts.schemaName) {
           const systemPrompt = opts.messages.find((m) => m.role === 'system')?.content;
           const userText = opts.messages
@@ -424,6 +446,9 @@ export class GameCompositionRoot
             // Call 2 (schema present) is the structured envelope; call 1 below
             // is the streamed dialogue/narrative.
             task: 'envelope',
+            ...(opts.deadlineAt === undefined ? {} : { deadlineAt: opts.deadlineAt }),
+            ...(opts.requestId === undefined ? {} : { requestId: opts.requestId }),
+            scope: opts.scope ?? campaignScope,
           });
           // Call 2 is extraction — the input prompt is not generated text.
           // Return an empty text value so no caller can mistake it for model output.
@@ -436,6 +461,11 @@ export class GameCompositionRoot
           messages: opts.messages,
           signal: opts.signal,
           task: 'dialogue',
+          // 🔴 The 120 s dialogue budget, as an absolute instant. Without it the
+          // adapter falls back to its own 90 s safety watchdog and cuts a turn
+          // that still had thirty seconds of its own budget left.
+          ...(opts.deadlineAt === undefined ? {} : { deadlineAt: opts.deadlineAt }),
+          ...(opts.requestId === undefined ? {} : { requestId: opts.requestId }),
           onChunk: (chunk) => {
             text += chunk;
             opts.onChunk?.(chunk);
@@ -527,14 +557,14 @@ export class GameCompositionRoot
           if (roster === undefined) {
             return false;
           }
-          gameOverlayService.startCombat({
+          const outcome = gameOverlayService.startCombat({
             enemyName: opts.npcName,
             encounterId,
             // Same seed for the same encounter: a retry reproduces the fight.
             seed: djb2Hash(encounterId ?? ''),
             roster,
           });
-          return true;
+          return outcome.ok;
         },
         recruit: (opts) => {
           // Use partyRosterService to recruit the companion (C-340)
@@ -711,7 +741,11 @@ export class GameCompositionRoot
 
     // Stop BGM — the composition root owns the music player's lifecycle
     // alongside every other game runtime service (mirrors initialize()).
-    musicPlayerService.stop();
+    //
+    // 🔴 Teardown, NOT a player decision: this runs on every page unload, so it
+    // must not persist a `stopped` intent. Unloading mid-song would otherwise
+    // overwrite a real pause and bring the music back on the next visit.
+    musicPlayerService.stopForTeardown();
 
     // C-512: let a queued contextual generation finish writing before the
     // runtime it belongs to is torn down.

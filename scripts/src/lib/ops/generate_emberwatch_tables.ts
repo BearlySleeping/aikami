@@ -26,10 +26,10 @@ import { fileURLToPath } from 'node:url';
  * C-376).
  */
 export const ATLAS_COLS = 16;
-// C-546 grew 8→10 for bridge frames; C-553 grows 10→11 for the two upper door
-// frames plus palette-only slate/thatch roof variants. Existing GIDs and the
-// pinned corner16 terrain block never move.
-export const ATLAS_ROWS = 11;
+// C-546 grew 8→10 for bridge frames; C-553 grows 10→11 for house frames;
+// C-559 grows 11→12 for the append-only pinned path family. Existing GIDs and
+// the original corner16 terrain block never move.
+export const ATLAS_ROWS = 12;
 export const ATLAS_TILE_SIZE = 32;
 
 /** 1px edge extrusion around every frame (C-378 AC-5). */
@@ -40,8 +40,8 @@ export const ATLAS_CELL = ATLAS_TILE_SIZE + ATLAS_PADDING * 2;
 
 export const ATLAS_WIDTH = ATLAS_COLS * ATLAS_CELL; // 544
 
-export const ATLAS_HEIGHT = ATLAS_ROWS * ATLAS_CELL; // 374
-export const ATLAS_TILE_COUNT = ATLAS_COLS * ATLAS_ROWS; // 176
+export const ATLAS_HEIGHT = ATLAS_ROWS * ATLAS_CELL; // 408
+export const ATLAS_TILE_COUNT = ATLAS_COLS * ATLAS_ROWS; // 192
 
 /**
  * First atlas cell (0-based) reserved for the corner16 terrain block.
@@ -346,6 +346,36 @@ const terrainFramePosition = (options: {
   return [col, row];
 };
 
+const registerPinnedTerrainFrames = (options: {
+  frames: Record<string, [number, number]>;
+  occupiedCells: Set<number>;
+  frameBase: string;
+}): boolean => {
+  const pinnedStart = options.frames[options.frameBase];
+  if (!pinnedStart) {
+    return false;
+  }
+  const pinnedCell = pinnedStart[1] * ATLAS_COLS + pinnedStart[0];
+  if (pinnedCell + CORNER16_FRAMES > ATLAS_COLS * ATLAS_ROWS) {
+    throw new Error(
+      `generate_emberwatch: pinned terrain "${options.frameBase}" extends past the final atlas cell`,
+    );
+  }
+  for (let mask = 0; mask < CORNER16_FRAMES; mask++) {
+    const name = cornerFrameName(options.frameBase, mask);
+    const expectedCell = pinnedCell + mask;
+    const position = options.frames[name];
+    const actualCell = position ? position[1] * ATLAS_COLS + position[0] : undefined;
+    if (actualCell !== expectedCell) {
+      throw new Error(
+        `generate_emberwatch: pinned terrain "${name}" must occupy cell ${expectedCell}`,
+      );
+    }
+    options.occupiedCells.add(expectedCell);
+  }
+  return true;
+};
+
 /**
  * Allocates the reserved terrain cells and registers each corner16 mask.
  * Frames stay local to one atlas pack so repeated builds cannot collide.
@@ -355,6 +385,9 @@ export const registerTerrainFrames = (frames: Record<string, [number, number]>):
   let nextCell = ATLAS_TERRAIN_BLOCK_START;
   for (const terrain of readManifestTerrains()) {
     if (terrain.wang !== 'corner16') {
+      continue;
+    }
+    if (registerPinnedTerrainFrames({ frames, occupiedCells, frameBase: terrain.frameBase })) {
       continue;
     }
     for (let mask = 0; mask < CORNER16_FRAMES; mask++) {

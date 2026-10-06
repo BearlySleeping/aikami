@@ -5,7 +5,7 @@
 // an opt-in offer, live progress, a done chip, and a retryable error. The
 // parent decides *when* this renders — the ViewModel holds it back until the
 // pipeline has settled so it never flashes on a warm-cache load.
-import type { AssetDownloadStatus } from '../start_view_model.svelte';
+import type { AssetDownloadStatus } from '../start_asset_download_status.ts';
 
 type Props = {
   status: AssetDownloadStatus;

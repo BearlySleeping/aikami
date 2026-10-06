@@ -17,6 +17,7 @@ import {
   HUD_MANAGEMENT_OVERLAYS,
   type HudResolveInput,
   hudLayoutOverlaps,
+  isHudAnchorAvailable,
   isHudWidgetVisible,
   resolveHudLayout,
 } from './hud_layout_policy.ts';
@@ -30,6 +31,9 @@ const adventure = (overrides: HudUserPreferences['overrides'] = []): HudUserPref
   selectedPresetId: 'adventure',
   overrides,
 });
+
+/** The narrowest non-touch window — the size the editor was actually broken at. */
+const NARROW = { width: 780, height: 437 } as const;
 
 const baseInput = (overrides: Partial<HudResolveInput> = {}): HudResolveInput => ({
   preferences: adventure(),
@@ -62,6 +66,44 @@ describe('C-528 viewport classification', () => {
 
   test('a short desktop window is compact, not desktop', () => {
     expect(classifyHudViewport({ width: 1920, height: 700 })).toBe('compact');
+  });
+
+  test('the bottom-right region exists on every viewport that has room for it', () => {
+    // 🔴 The music player ships anchored to `bottom-end`. Withholding that
+    // region below 1100px did not free any width — the five regions are three
+    // disjoint columns — it only collapsed the widget into the overflow entry
+    // while the editor still drew a `bottom-end` target to aim at.
+    for (const viewport of [DESKTOP, COMPACT, NARROW]) {
+      expect(classifyHudViewport(viewport)).not.toBe('touch');
+      expect(isHudAnchorAvailable(viewport, 'bottom-end')).toBe(true);
+    }
+    expect(isHudAnchorAvailable(TOUCH, 'bottom-end')).toBe(false);
+  });
+
+  test('the music player is placed bottom-right rather than collapsed', () => {
+    const layout = resolveHudLayout({
+      ...baseInput(),
+      preferences: adventure([
+        {
+          widgetId: 'music-player',
+          visibility: 'always',
+          anchor: 'bottom-end',
+          order: 0,
+          density: 'compact',
+          scale: 1,
+        },
+      ]),
+      viewport: NARROW,
+    });
+
+    const music = findResolvedHudWidget(layout, 'music-player');
+    expect(music?.anchor).toBe('bottom-end');
+    expect(music?.visible).toBe(true);
+    expect(music?.collapsed).toBe(false);
+    expect(layout.overflow.some((widget) => widget.widgetId === 'music-player')).toBe(false);
+    // Bottom right: the box is flush with the right edge and the bottom edge.
+    expect(music?.rect.x).toBeGreaterThan(NARROW.width - 300);
+    expect(music?.rect.y).toBeGreaterThan(NARROW.height - 200);
   });
 });
 

@@ -15,6 +15,7 @@ import { appendFileSync } from 'node:fs';
 import { publishWorktree } from '../../herdr/worktree.ts';
 import { runGit } from '../git_worktree.ts';
 import { parseLine, reduceEvent, type StreamState } from './events.ts';
+import { settleSubagentPane } from './pane_completion.ts';
 import { splitTitle } from './prompt.ts';
 import { publishRun } from './publish.ts';
 import {
@@ -44,6 +45,12 @@ const READ_EXCLUDED = [
   'gh_issue',
   'code_rabbit',
   'herdr_session',
+  'gcloud_exec',
+  'direnv',
+  'gh_project',
+  'validate',
+  'moon_run_task',
+  'blackbox_test',
 ];
 /** Write agents never open PRs themselves — the supervisor does. */
 const WRITE_EXCLUDED = ['gh_pr', 'code_rabbit', 'herdr_session'];
@@ -224,7 +231,10 @@ const runPi = (options: {
   });
 };
 
-const finish = (spec: SubagentSpec, patch: Partial<SubagentState>): SubagentState => {
+const finish = async (
+  spec: SubagentSpec,
+  patch: Partial<SubagentState>,
+): Promise<SubagentState> => {
   const next = updateState(spec.repoRoot, spec.id, (current) => ({
     ...current,
     ...patch,
@@ -232,7 +242,11 @@ const finish = (spec: SubagentSpec, patch: Partial<SubagentState>): SubagentStat
     error: current.status === 'killed' ? current.error : patch.error,
     finishedAt: new Date().toISOString(),
   }));
-  reportPane(next.paneId, 'idle', `${next.status}${next.error ? `: ${next.error}` : ''}`);
+  await settleSubagentPane({
+    paneId: next.paneId,
+    message: `${next.status}${next.error ? `: ${next.error}` : ''}`,
+    alerts: spec.completionAlerts,
+  });
   return next;
 };
 
@@ -279,6 +293,15 @@ const publishIfWanted = async (
       }
       patchState(spec.repoRoot, spec.id, {
         pr: { ...existingPr, headCommit },
+        // Resumed agents used to retain the old head's approval after pushing.
+        review:
+          headCommit === existingPr.headCommit
+            ? readState(spec.repoRoot, spec.id)?.review
+            : {
+                decision: 'skip',
+                head: headCommit,
+                reason: 'PR head changed; previous review invalidated; fresh review required',
+              },
         activity: `PR #${existingPr.number} branch updated`,
       });
       return undefined;
@@ -391,13 +414,13 @@ const runRound = async (context: RoundContext): Promise<RoundBoundary> => {
 
   if (state.status === 'killed') {
     print('\n🛑 killed');
-    finish(context.spec, {});
+    await finish(context.spec, {});
     return { kind: 'failed' };
   }
   const roundError = failureOf(context.spec, outcome);
   if (roundError) {
     print(`\n❌ ${roundError}`);
-    finish(context.spec, { status: 'failed', error: roundError });
+    await finish(context.spec, { status: 'failed', error: roundError });
     return { kind: 'failed' };
   }
 
@@ -431,7 +454,7 @@ const runRound = async (context: RoundContext): Promise<RoundBoundary> => {
   const claimed = claimCompletion(context.spec);
   if (claimed.status === 'killed') {
     print('\n🛑 killed');
-    finish(context.spec, {});
+    await finish(context.spec, {});
     return { kind: 'failed' };
   }
   const lateMessages = listSteeringMessages(context.spec.repoRoot, context.spec.id);
@@ -480,7 +503,7 @@ const finishSupervision = async (options: {
   }));
   if (after.status === 'killed') {
     print('\n🛑 killed');
-    finish(spec, {});
+    await finish(spec, {});
     return 1;
   }
   const error =
@@ -488,10 +511,10 @@ const finishSupervision = async (options: {
     (await publishIfWanted(spec, initial.checkoutPath, boundary.result));
   if (error) {
     print(`\n❌ ${error}`);
-    finish(spec, { status: 'failed', error });
+    await finish(spec, { status: 'failed', error });
     return 1;
   }
-  const finished = finish(spec, { status: 'succeeded' });
+  const finished = await finish(spec, { status: 'succeeded' });
   if (finished.status === 'killed') {
     print('\n🛑 killed');
     return 1;

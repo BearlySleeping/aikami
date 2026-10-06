@@ -6,7 +6,7 @@
 // the connection params. This is the single source of truth for "how should
 // this kind of call be configured".
 
-import type { AiRole, TextParams } from '@aikami/types';
+import type { AiReasoning, AiRole, TextParams } from '@aikami/types';
 
 /**
  * Baseline generation params used when a task resolves to a connection that
@@ -75,6 +75,41 @@ export type TextTaskPreset = {
   localFirst: boolean;
   /** Whether this task is a candidate for a batched combined analysis call. */
   batchable: boolean;
+  /**
+   * Whether this task wants the model's reasoning channel.
+   *
+   * `undefined` means "the provider's default", which is what every
+   * player-facing creative task wants — narrative quality is the product, and
+   * reasoning is often part of producing it.
+   *
+   * `'none'` is for bounded MECHANICAL extraction: a task whose entire output
+   * is a short JSON object derived from text the model has already produced.
+   * There the reasoning is pure cost — measured on the local configuration
+   * (issue #382, C-401 call 2), a reasoning model spent 6 000+ ms and 1 500+
+   * tokens on an envelope whose answer is 120 tokens of JSON, and returned
+   * nothing inside the budget. With the channel off the same request returned
+   * valid JSON in a median of 2.4 s.
+   *
+   * The TASK PRESET IS THE ONLY OWNER of this preference. It deliberately is
+   * NOT a connection-level control: #415 removed the persisted
+   * `TextParams.reasoning` field, so there is nothing on a saved connection for
+   * it to override and `mergeTaskPresetParams` never carries it (asserted by
+   * `text_task_params.test.ts`). Changing the product's reasoning behaviour is
+   * therefore a change to this preset, not to a user's stored connection.
+   * The preference is advisory: a provider that cannot honour it ignores it.
+   */
+  reasoning?: AiReasoning;
+  /**
+   * End-to-end budget in ms for ONE logical request, or `undefined` for work
+   * whose deadline is the encounter/campaign lifetime rather than a player's
+   * attention span.
+   *
+   * The budget is absolute and shared: routing, queueing, model load, prefill,
+   * generation, retry and fallback all draw from it, and no layer may restart
+   * it. Latency-sensitive tasks carry one so a cold local attempt cannot
+   * consume the budget the configured gateway path still needs.
+   */
+  budgetMs?: number;
 };
 
 /**
@@ -112,6 +147,9 @@ export const TEXT_TASK_PRESETS: Record<TextTask, TextTaskPreset> = {
     streamable: false,
     localFirst: true,
     batchable: false,
+    // §18 budget: 4,000 ms matches the engine decision fallback window.
+    // A caller-supplied deadline preserves time already spent on the turn.
+    budgetMs: 4_000,
   },
   /**
    * AI combat decisions (C-526). Structured selectors only, so it mirrors
@@ -126,6 +164,10 @@ export const TEXT_TASK_PRESETS: Record<TextTask, TextTaskPreset> = {
     streamable: false,
     localFirst: true,
     batchable: false,
+    // Matches the decision service's §18 hard budget, so the deadline the
+    // engine enforces and the deadline the transport enforces are the same
+    // instant rather than two budgets stacked end to end.
+    budgetMs: 4_000,
   },
   /**
    * Combat outcome narration (C-526 Q6). Bounded prose that rephrases the
@@ -140,6 +182,9 @@ export const TEXT_TASK_PRESETS: Record<TextTask, TextTaskPreset> = {
     streamable: false,
     localFirst: true,
     batchable: false,
+    // Bounded prose shown after the blow lands. Past this the authored
+    // template narration is the better outcome than a truncated sentence.
+    budgetMs: 4_000,
   },
   envelope: {
     role: 'structured',
@@ -149,6 +194,15 @@ export const TEXT_TASK_PRESETS: Record<TextTask, TextTaskPreset> = {
     streamable: false,
     localFirst: true,
     batchable: false,
+    // The player is waiting to see their choices; a late envelope is a stall.
+    budgetMs: 6_000,
+    // This is metadata extraction from a narrative call 1 already streamed and
+    // the client already shows. The reasoning channel is what spent the whole
+    // 6 000 ms: 0 of 5 measured extractions completed before #382 turned it
+    // off, at 1 500+ median completion tokens for a ~120-token answer.
+    // `dialogue` and `narration` deliberately keep the default — this must not
+    // touch player-facing prose.
+    reasoning: 'none',
   },
   summarization: {
     role: 'summarization',
@@ -158,6 +212,17 @@ export const TEXT_TASK_PRESETS: Record<TextTask, TextTaskPreset> = {
     streamable: false,
     localFirst: true,
     batchable: false,
+    // Bounded MECHANICAL extraction, exactly like `envelope`: the whole output
+    // is a short JSON object derived from text the client already holds — a
+    // conversation the player just finished, memory the client already stores,
+    // or a session the client already logged.
+    //
+    // The original P3 measurements used an opener schema for every task and
+    // did not validate complete outputs. Those validity/performance claims
+    // are withdrawn in docs/audits/382-context-reuse-report.md, section 3.
+    // Preserve the existing preference pending a successful rerun with each
+    // task's schema; the corrected probe could not reach the local provider.
+    reasoning: 'none',
   },
   'agent-expression': {
     role: 'structured',

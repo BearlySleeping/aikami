@@ -30,6 +30,7 @@ import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
+import { DEV_ROUTES_BUILD_MARKER_FILE } from '@aikami/constants';
 import type { AppId } from '@aikami/types';
 import { toMode } from '@aikami/utils';
 import {
@@ -253,24 +254,55 @@ export function ensureHeadersFile(config: AppConfig, appRoot: string): void {
  * limit, so it runs unconditionally for apps that provide one.
  *
  * A dev-route build is the one case where the guard's `(dev)` assertion must be
- * relaxed, because the output is exactly what the caller asked for. The
- * decision comes from the same resolver `build_client.ts` and
- * `vite.config.ts` use, so this last gate cannot disagree with the build that
- * actually ran — an opt-in build that passes its own guard must not then be
- * rejected here.
+ * relaxed, because the output is exactly what the caller asked for. The build
+ * records its own decision in `<buildDir>/aikami-build-flags.json`; reading
+ * that record first is what makes this last gate unable to disagree with the
+ * build that actually ran. Re-deriving the value from `process.env` here
+ * cannot work in CI — the mode env file is loaded by the build, not exported
+ * into this process — and used to reject opt-in builds the build had already
+ * accepted. The env resolver stays as the fallback for older artifacts.
  *
  * @returns true when a guard ran (and passed); false when the app has none.
  */
-export function runDeployAssetGuard(config: AppConfig, appRoot: string): boolean {
+function readBuildFlags(markerPath: string): boolean | null {
+  try {
+    const parsed = JSON.parse(readFileSync(markerPath, 'utf-8')) as { includeDevRoutes?: unknown };
+    return typeof parsed.includeDevRoutes === 'boolean' ? parsed.includeDevRoutes : null;
+  } catch {
+    // A missing or unreadable record is not a decision — fall back to the env.
+    return null;
+  }
+}
+
+export type DeployAssetGuardOptions = {
+  readonly config: AppConfig;
+  readonly appRoot: string;
+  /**
+   * The mode being deployed. Only consulted when the build left no readable
+   * decision record, because the dev-route default is mode-derived — passing the
+   * real mode keeps that fallback agreeing with the build it is guarding.
+   */
+  readonly mode: string;
+};
+
+export function runDeployAssetGuard(options: DeployAssetGuardOptions): boolean {
+  const { config, appRoot, mode } = options;
   const guardScript = join(appRoot, 'scripts', 'check_deploy_assets.ts');
   if (!existsSync(guardScript)) {
     return false;
   }
   const buildDir = config.cloudflare?.buildOutputDir ?? 'build';
 
-  const allowDevRoutes = resolveIncludeDevRoutes('build');
+  const markerPath = join(appRoot, buildDir, DEV_ROUTES_BUILD_MARKER_FILE);
+  const recorded = existsSync(markerPath) ? readBuildFlags(markerPath) : null;
+  const allowDevRoutes = recorded ?? resolveIncludeDevRoutes({ command: 'build', mode });
   if (allowDevRoutes) {
-    warn(`  ⚠️  ${DEV_ROUTES_ENV_VAR}=true — this deploy SHIPS the (dev) sandbox routes.`);
+    // Name the source of the decision, not the variable's value: the default is
+    // mode-derived, so a staging deploy ships the sandboxes with
+    // AIKAMI_INCLUDE_DEV_ROUTES unset and "…=true" would be false there.
+    const decidedBy =
+      recorded === null ? `${DEV_ROUTES_ENV_VAR} + mode (default)` : 'the build record';
+    warn(`  ⚠️  this deploy SHIPS the (dev) sandbox routes — decided by ${decidedBy}.`);
   }
 
   log(`  🔎 Checking deployment assets (${buildDir}) before upload...`);
@@ -559,7 +591,7 @@ export async function deployCloudflareWorker(
 
   // 2b. Deployment-asset guard — runs even when the build was reused/cached.
   //     A stale or invalid output must never reach Wrangler.
-  runDeployAssetGuard(config, appRoot);
+  runDeployAssetGuard({ config, appRoot, mode });
 
   // 3. Write the per-mode wrangler.jsonc.
   const configPath = writeWranglerConfig(config, appRoot, mode);

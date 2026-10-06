@@ -26,6 +26,7 @@
 //           C-523 Emberwatch asset pilot and offline integration
 
 import type { AssetEntry } from '@aikami/types';
+import { isBgmSuppressedByPlayer } from '$lib/utils/music_playback_intent.ts';
 import { assetStore } from '../assets/asset_store.svelte';
 import { arbitrateAudioCue, createAudioCueArbiterState } from './audio_cue_arbiter.ts';
 import { localAudioSource } from './audio_local_source.ts';
@@ -52,6 +53,9 @@ let _bgmRequestId = 0;
  * request can never cancel valid pending resolution or playback.
  */
 let _playbackId = 0;
+
+/** An admitted cue that has not started because the player suppressed music. */
+let _pendingPlaybackId: number | undefined;
 
 /**
  * The pack/map the game is currently in.
@@ -89,6 +93,7 @@ export const resetAudioCueAuthority = (): void => {
   _activeCueContext = { packId: '', mapId: '' };
   _bgmRequestId += 1;
   _playbackId += 1;
+  _pendingPlaybackId = undefined;
 };
 
 /** Manifest category names consumed by this resolver. */
@@ -351,10 +356,23 @@ const _playBgm = async (
   durationMs: number | undefined,
   playbackId: number,
 ): Promise<void> => {
+  if (playbackId !== _playbackId) {
+    return;
+  }
+  if (isBgmSuppressedByPlayer()) {
+    _pendingPlaybackId = playbackId;
+    return;
+  }
   const { audioService } = await import('$services');
   if (playbackId !== _playbackId) {
     return;
   }
+  // Stop may have been pressed while the service import was in flight.
+  if (isBgmSuppressedByPlayer()) {
+    _pendingPlaybackId = playbackId;
+    return;
+  }
+  _pendingPlaybackId = undefined;
   await audioService.transitionToBgm(url, durationMs);
 };
 
@@ -408,8 +426,13 @@ const _submitCue = async (options: {
   // that is what keeps a rejected DJ dispatch from cancelling a valid pending
   // map transition.
   if (!decision.play && !decision.stop) {
+    // A deduplicated cue may still be silent: suppression is not playback.
+    if (decision.reason === 'no-change' && _pendingPlaybackId === _playbackId && options.url) {
+      await _playBgm(options.url, options.durationMs, _playbackId);
+    }
     return decision;
   }
+  _pendingPlaybackId = undefined;
   const playbackId = ++_playbackId;
 
   if (decision.stop) {
@@ -464,6 +487,7 @@ const releaseAudioCueSource = async (source: 'map' | 'combat' | 'scripted') => {
 
   const url = decision.play?.url;
   if (url) {
+    _pendingPlaybackId = undefined;
     await _playBgm(url, undefined, ++_playbackId);
   }
   return decision;
@@ -485,6 +509,14 @@ export const playSceneBgm = async (
   scene: 'explore' | 'combat',
   durationMs?: number,
 ): Promise<void> => {
+  // 🔴 A player who pressed Stop is not overruled by a map change. Returning
+  // here — before any pack, catalog or lock work — also keeps a suppressed
+  // player from paying for a cue resolve and a network fetch on every map
+  // entry. `_playBgm` still re-checks, because that is the funnel every BGM
+  // start actually shares and this is only the cheap way in.
+  if (isBgmSuppressedByPlayer()) {
+    return;
+  }
   // Claim the newest-request slot *before* any await. Resolution is async (pack
   // load, catalog, lock fetch), so two map loads in flight can finish out of
   // order; without this token the slower lookup would be admitted last and the
