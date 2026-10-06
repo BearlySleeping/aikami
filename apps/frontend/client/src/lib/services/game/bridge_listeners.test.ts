@@ -405,6 +405,38 @@ describe('setupBridgeListeners (AC-5)', () => {
     expect(mockGameOverlayService.rejectCombatStart).toHaveBeenCalledTimes(1);
   });
 
+  test.each([
+    [{}, 17, 30],
+    [{ enemyHp: 0 }, 0, 30],
+    [{ enemyMaxHp: 0 }, 17, 0],
+    [{ enemyHp: 12, enemyMaxHp: 20 }, 12, 20],
+  ])('COMBAT_STARTED preserves only omitted HP fields: %j', async (hp, enemyHp, enemyMaxHp) => {
+    mockGameOverlayService.activeOverlay = 'DIALOGUE';
+    mockCombatService.enemyHp = 17;
+    mockCombatService.enemyMaxHp = 30;
+    await setupBridgeListeners({
+      gameOverlayService: mockGameOverlayService as never,
+      npcDialogueService: mockNpcDialogueService as never,
+      gameEngineService: mockGameEngineService as never,
+      combatService: mockCombatService as never,
+      timeService: mockTimeService as never,
+      audioService: mockAudioService as never,
+      inputActionService: mockInputActionService as never,
+      onboardingHintService: mockOnboardingHintService as never,
+      partyFollowService: mockPartyFollowService as never,
+    });
+
+    bridgeListeners.get('COMBAT_STARTED')?.({
+      ...hp,
+      participantIds: [1, 2],
+      firstTurnEntityId: 1,
+    });
+
+    expect(mockCombatService.startCombat).toHaveBeenCalledWith(
+      expect.objectContaining({ enemyHp, enemyMaxHp }),
+    );
+  });
+
   // ── All events registered ──
 
   test('should register all expected bridge events', async () => {

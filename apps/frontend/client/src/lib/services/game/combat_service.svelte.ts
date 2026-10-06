@@ -61,6 +61,9 @@ export type CombatServiceInterface = BaseFrontendClassInterface & {
     allowNonCombatResolution?: boolean;
   }): void;
 
+  /** Keeps live HP and retry options aligned with the engine's authoritative state. */
+  updateEnemyHp(options: { enemyHp: number; enemyMaxHp: number }): void;
+
   /** Retries the last encounter with the same seed (C-330 AC-5). */
   retryEncounter(options: { setActive: (overlay: GameOverlayType) => void }): void;
 };
@@ -156,6 +159,14 @@ class CombatService
     // COMBAT mode gates exploration input. Keep renderer/worker ticks alive:
     // pausing here froze legacy turns and the tactical stage after entry.
     gameEngineService.resumeEngine();
+  }
+
+  updateEnemyHp(options: { enemyHp: number; enemyMaxHp: number }): void {
+    this._enemyHp = options.enemyHp;
+    this._enemyMaxHp = options.enemyMaxHp;
+    if (this._lastCombatOptions) {
+      this._lastCombatOptions = { ...this._lastCombatOptions, ...options };
+    }
   }
 
   retryEncounter(options: { setActive: (overlay: GameOverlayType) => void }): void {

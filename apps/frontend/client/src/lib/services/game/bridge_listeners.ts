@@ -270,12 +270,9 @@ export const setupBridgeListeners = async (params: SetupBridgeListenersParams): 
         dialogueNpc?.npcName ??
         (sameEncounter ? combatService.enemyName : 'Unknown Enemy'),
       enemyNpcId: dialogueNpc?.npcId ?? (sameEncounter ? combatService.enemyNpcId : undefined),
-      // No invented HP: the legacy funnel reports the enemy's HP on the event,
-      // the v2 funnel reports it through COMBAT_STATE_UPDATE (which the driver
-      // and the sync snapshot both emit). A placeholder here showed an 80-HP
-      // enemy in a 20-HP fight.
-      enemyHp: event.enemyHp ?? 0,
-      enemyMaxHp: event.enemyMaxHp ?? 0,
+      // Preserve known HP until COMBAT_STATE_UPDATE supplies authoritative values.
+      enemyHp: event.enemyHp ?? combatService.enemyHp,
+      enemyMaxHp: event.enemyMaxHp ?? combatService.enemyMaxHp,
       participantIds: event.participantIds,
       firstTurnEntityId: event.firstTurnEntityId,
       combatSeed: event.combatSeed,
