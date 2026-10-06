@@ -43,12 +43,14 @@ const cliMode =
 const buildMode = cliMode || process.env.AIKAMI_BUILD_MODE || 'production';
 
 // This script only ever runs on the build path (scripts/build_client.ts step 1),
-// so it resolves the shared decision for `command: 'build'`. Normal
-// distributable builds (including staging) ship the production route graph;
-// development sandboxes require an explicit AIKAMI_INCLUDE_DEV_ROUTES=true
-// opt-in. Going through the shared resolver — rather than re-deriving the rule
+// so it resolves the shared decision for `command: 'build'`. While
+// dev_routes_gate.ts's temporary default stands, that means a `staging` build
+// also ships the development sandboxes and every other build — production
+// included — does not; AIKAMI_INCLUDE_DEV_ROUTES is the explicit opt-in/opt-out
+// either way. `buildMode` above is resolved the same way vite.config.ts resolves
+// it, and going through the shared resolver — rather than re-deriving the rule
 // here — is what keeps this script and vite.config.ts from ever disagreeing.
-const includeDevRoutes = resolveIncludeDevRoutes('build');
+const includeDevRoutes = resolveIncludeDevRoutes({ command: 'build', mode: buildMode });
 
 // Publish the resolved mode so vite.config.ts's `??=` sees the real build mode.
 process.env.AIKAMI_BUILD_MODE = buildMode;

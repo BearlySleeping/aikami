@@ -30,7 +30,9 @@
 //
 // `--update` rewrites the baseline after an intentional change (review the diff).
 // `--expect-dev-routes` reports the metrics but skips the ratchet, for a build
-// that deliberately includes the `(dev)` sandbox routes (see the CLI docs below).
+// whose route graph is deliberately NOT the one the baseline measures (see the
+// CLI docs below). scripts/build_client.ts does not pass it while the baseline
+// measures the staging dev-route graph.
 
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
@@ -438,12 +440,18 @@ export const findAppEntrySource = (buildDir: string): string | undefined => {
  * Hard gates are enforced elsewhere (check_deploy_assets / check_bundle); this
  * script reports the tracked metrics and fails only on a tracked regression.
  *
- * `--expect-dev-routes` reports the metrics without ratcheting. The committed
- * baseline measures the production route graph, so a build that deliberately
- * includes the `(dev)` sandbox routes is not comparable to it and would always
- * look like a ~20% regression. `scripts/build_client.ts` passes this flag
- * exactly when `resolveIncludeDevRoutes('build')` says the sandboxes were
- * requested, so the ratchet still guards every ordinary build.
+ * `--expect-dev-routes` reports the metrics without ratcheting. It exists for
+ * the case where a build's route graph is deliberately NOT the one the
+ * committed baseline measures, which makes the two incomparable.
+ *
+ * While `scripts/dev_routes_gate.ts` excludes `(dev)` from every build, that
+ * case is the default: the baseline measures the production route graph and a
+ * sandbox build looks like a ~20% regression, so `scripts/build_client.ts`
+ * passed this flag. Under the current staging-only exception the ordering is
+ * inverted — the baseline measures the STAGING graph, which is the larger one, so
+ * staging ratchets meaningfully and production (smaller) clears it without help.
+ * The flag is retained for a manual escape hatch and for that revert; nothing
+ * passes it automatically today.
  */
 export const runCli = (argv: string[] = process.argv.slice(2)): number => {
   const flag = (name: string): string | undefined => {
@@ -456,14 +464,16 @@ export const runCli = (argv: string[] = process.argv.slice(2)): number => {
   const manifestPath = resolve(flag('--manifest') ?? DEFAULT_MANIFEST);
   const baselinePath = resolve(flag('--baseline') ?? DEFAULT_BASELINE);
 
-  // Refuse rather than silently corrupt the ratchet: a dev-route build's numbers
-  // describe the sandbox route graph, and writing them into the production
-  // baseline would permanently raise the budget for every ordinary build.
+  // Refuse rather than silently corrupt the ratchet. --expect-dev-routes is a
+  // declaration that this build's numbers describe a graph the baseline does NOT
+  // measure; --update would then make that incomparable graph the reference every
+  // later build is compared against. The two together are self-contradictory
+  // whichever graph the baseline currently holds, so this stays a hard refusal.
   if (update && expectDevRoutes) {
     // biome-ignore lint/suspicious/noConsole: build script reports to stdout/stderr
     console.error(
       'report_bundle_budget: --update and --expect-dev-routes are mutually exclusive —\n' +
-        'a dev-route build must never be written into the production baseline.',
+        'a build declared incomparable to the baseline must never become the baseline.',
     );
     return 1;
   }
@@ -496,10 +506,9 @@ export const runCli = (argv: string[] = process.argv.slice(2)): number => {
     console.log(
       [
         'report_bundle_budget: --expect-dev-routes — ratchet skipped.',
-        '  This build deliberately includes the `(dev)` sandbox routes, and the committed',
-        '  baseline measures the production route graph. The numbers above are therefore',
-        '  informational only; they are not comparable to the baseline and are not',
-        '  written to it.',
+        '  This build\'s route graph is not the one the committed baseline measures, so',
+        '  the numbers above are informational only; they are not comparable to the',
+        '  baseline and are not written to it.',
         '',
       ].join('\n'),
     );

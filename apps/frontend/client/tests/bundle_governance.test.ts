@@ -258,11 +258,16 @@ describe('formatBudget', () => {
   });
 });
 
-// The ratchet must not fire on a build that deliberately includes the `(dev)`
-// sandbox routes: the committed baseline measures the production route graph,
-// so a sandbox build always looks like a large regression. These pin both
-// halves — that the flag is what suppresses it, and that the flag can never be
-// used to launder those numbers into the baseline.
+// `--expect-dev-routes` suppresses the ratchet for a build whose route graph is
+// not the one the committed baseline measures — the two are incomparable and the
+// numbers would look like a large regression. These pin both halves — that the
+// flag is what suppresses it, and that the flag can never be used to launder
+// those numbers into the baseline.
+//
+// No build task passes the flag today: the baseline is measured against the
+// staging dev-route graph, so staging ratchets normally and production clears it
+// without help. The flag is exercised directly here as the manual escape hatch
+// and as the path the revert restores.
 describe('runCli dev-route opt-in', () => {
   /**
    * Writes a minimal measurable build, then derives the baseline from a real

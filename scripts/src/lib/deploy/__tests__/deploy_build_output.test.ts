@@ -22,7 +22,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DEV_ROUTES_BUILD_MARKER_FILE } from '@aikami/constants';
 import { cleanBuildOutput } from '../build_output';
-import { runDeployAssetGuard } from '../cloudflare';
+import { type DeployAssetGuardOptions, runDeployAssetGuard } from '../cloudflare';
 import type { AppConfig } from '../deployment_config';
 
 const temporaryDirectories: string[] = [];
@@ -71,8 +71,13 @@ describe('runDeployAssetGuard', () => {
   /**
    * Builds a fixture app whose guard script records the argv it was called with,
    * so the test asserts the real command line rather than a mocked one.
+   *
+   * The default mode is `production` because that is the case where being wrong
+   * is expensive — a production deploy must not ship the sandboxes.
    */
-  const guardFixture = (): { appRoot: string; argvPath: string; config: AppConfig } => {
+  const guardFixture = (
+    mode = 'production',
+  ): { argvPath: string; options: DeployAssetGuardOptions } => {
     const appRoot = temporaryRoot();
     const argvPath = join(appRoot, 'argv.txt');
     mkdirSync(join(appRoot, 'scripts'), { recursive: true });
@@ -84,75 +89,96 @@ describe('runDeployAssetGuard', () => {
       ].join('\n'),
     );
     process.env.GUARD_ARGV_OUT = argvPath;
-    return {
-      appRoot,
-      argvPath,
-      config: { cloudflare: { buildOutputDir: 'build' } } as unknown as AppConfig,
-    };
+    const config = { cloudflare: { buildOutputDir: 'build' } } as unknown as AppConfig;
+    return { argvPath, options: { config, appRoot, mode } };
   };
 
   test('passes --allow-dev-routes when the opt-in is set', () => {
-    const { appRoot, argvPath, config } = guardFixture();
+    const { argvPath, options } = guardFixture();
     process.env.AIKAMI_INCLUDE_DEV_ROUTES = 'true';
 
-    expect(runDeployAssetGuard(config, appRoot)).toBe(true);
+    expect(runDeployAssetGuard(options)).toBe(true);
     expect(readFileSync(argvPath, 'utf-8')).toContain('--allow-dev-routes');
   });
 
-  test('does not pass --allow-dev-routes for an ordinary deploy', () => {
-    const { appRoot, argvPath, config } = guardFixture();
+  // 🔴 TEMPORARY: staging defaults to shipping the `(dev)` sandboxes with no
+  // configuration. Un-merge with the production case below when the escape hatch
+  // is reverted — see apps/frontend/client/scripts/dev_routes_gate.ts.
+  test('defaults to shipping dev routes on staging when the env is unset', () => {
+    const { argvPath, options } = guardFixture('staging');
 
-    expect(runDeployAssetGuard(config, appRoot)).toBe(true);
+    expect(runDeployAssetGuard(options)).toBe(true);
+    expect(readFileSync(argvPath, 'utf-8')).toContain('--allow-dev-routes');
+  });
+
+  test('does not pass --allow-dev-routes for a production deploy when the env is unset', () => {
+    const { argvPath, options } = guardFixture();
+
+    expect(runDeployAssetGuard(options)).toBe(true);
     expect(readFileSync(argvPath, 'utf-8')).not.toContain('--allow-dev-routes');
   });
 
   test('treats an explicit false as an ordinary deploy', () => {
-    const { appRoot, argvPath, config } = guardFixture();
+    const { argvPath, options } = guardFixture('staging');
     process.env.AIKAMI_INCLUDE_DEV_ROUTES = 'false';
 
-    expect(runDeployAssetGuard(config, appRoot)).toBe(true);
+    expect(runDeployAssetGuard(options)).toBe(true);
     expect(readFileSync(argvPath, 'utf-8')).not.toContain('--allow-dev-routes');
   });
 
   test('returns false when the app has no guard script', () => {
     const appRoot = temporaryRoot();
-    expect(runDeployAssetGuard({} as AppConfig, appRoot)).toBe(false);
+    const config = { cloudflare: { buildOutputDir: 'build' } } as unknown as AppConfig;
+    expect(runDeployAssetGuard({ config, appRoot, mode: 'production' })).toBe(false);
   });
 
   test("honors the build's own record when the env is not loaded", () => {
     // The real CI shape: the build read `.env.<mode>`, this process did not,
     // so `process.env` says nothing about the route graph that was produced.
-    const { appRoot, argvPath, config } = guardFixture();
-    mkdirSync(join(appRoot, 'build'), { recursive: true });
+    // The mode default must not override what the build actually recorded.
+    const { argvPath, options } = guardFixture('production');
+    mkdirSync(join(options.appRoot, 'build'), { recursive: true });
     writeFileSync(
-      join(appRoot, 'build', DEV_ROUTES_BUILD_MARKER_FILE),
+      join(options.appRoot, 'build', DEV_ROUTES_BUILD_MARKER_FILE),
       JSON.stringify({ includeDevRoutes: true }),
     );
 
-    expect(runDeployAssetGuard(config, appRoot)).toBe(true);
+    expect(runDeployAssetGuard(options)).toBe(true);
     expect(readFileSync(argvPath, 'utf-8')).toContain('--allow-dev-routes');
   });
 
-  test('an explicit false record overrides a stale opt-in env', () => {
-    const { appRoot, argvPath, config } = guardFixture();
-    mkdirSync(join(appRoot, 'build'), { recursive: true });
+  test('an explicit false record overrides a stale opt-in env on staging', () => {
+    const { argvPath, options } = guardFixture('staging');
+    mkdirSync(join(options.appRoot, 'build'), { recursive: true });
     writeFileSync(
-      join(appRoot, 'build', DEV_ROUTES_BUILD_MARKER_FILE),
+      join(options.appRoot, 'build', DEV_ROUTES_BUILD_MARKER_FILE),
       JSON.stringify({ includeDevRoutes: false }),
     );
     process.env.AIKAMI_INCLUDE_DEV_ROUTES = 'true';
 
-    expect(runDeployAssetGuard(config, appRoot)).toBe(true);
+    expect(runDeployAssetGuard(options)).toBe(true);
     expect(readFileSync(argvPath, 'utf-8')).not.toContain('--allow-dev-routes');
   });
 
   test('an unreadable record falls back to the env rather than guessing', () => {
-    const { appRoot, argvPath, config } = guardFixture();
-    mkdirSync(join(appRoot, 'build'), { recursive: true });
-    writeFileSync(join(appRoot, 'build', DEV_ROUTES_BUILD_MARKER_FILE), 'not json');
+    const { argvPath, options } = guardFixture('production');
+    mkdirSync(join(options.appRoot, 'build'), { recursive: true });
+    writeFileSync(join(options.appRoot, 'build', DEV_ROUTES_BUILD_MARKER_FILE), 'not json');
     process.env.AIKAMI_INCLUDE_DEV_ROUTES = 'true';
 
-    expect(runDeployAssetGuard(config, appRoot)).toBe(true);
+    expect(runDeployAssetGuard(options)).toBe(true);
+    expect(readFileSync(argvPath, 'utf-8')).toContain('--allow-dev-routes');
+  });
+
+  test('an unreadable record on staging falls back to the mode, not to a guess', () => {
+    // The mode default is only consulted when the record is missing/unreadable,
+    // so a staging deploy with a corrupt record relaxes the guard (matching the
+    // build it is guarding) instead of failing on a build that did include them.
+    const { argvPath, options } = guardFixture('staging');
+    mkdirSync(join(options.appRoot, 'build'), { recursive: true });
+    writeFileSync(join(options.appRoot, 'build', DEV_ROUTES_BUILD_MARKER_FILE), 'not json');
+
+    expect(runDeployAssetGuard(options)).toBe(true);
     expect(readFileSync(argvPath, 'utf-8')).toContain('--allow-dev-routes');
   });
 });

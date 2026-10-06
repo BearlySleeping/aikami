@@ -1,55 +1,60 @@
 {
   "version": 1,
   "budget": {
-    "jsChunkCount": 104,
-    "largestJsChunkBytes": 2310823,
-    "largestJsChunkGzipBytes": 973237,
-    "largestJsChunk": "_app/immutable/workers/kokoro_worker-eJ8z1B7m.js",
-    "totalJsBytes": 8573784,
-    "totalCssBytes": 193434,
+    "jsChunkCount": 200,
+    "largestJsChunkBytes": 2320715,
+    "largestJsChunkGzipBytes": 975585,
+    "largestJsChunk": "_app/immutable/workers/kokoro_worker-B9dVBDym.js",
+    "totalJsBytes": 10678805,
+    "totalCssBytes": 194948,
     "totalWasmBytes": 1719608,
     "workerBundles": [
       {
         "id": "kokoro_worker.js",
-        "file": "_app/immutable/workers/kokoro_worker-eJ8z1B7m.js",
-        "bytes": 2310823
+        "file": "_app/immutable/workers/kokoro_worker-B9dVBDym.js",
+        "bytes": 2320715
       },
       {
         "id": "ecs_worker_bootstrap.js",
-        "file": "_app/immutable/workers/ecs_worker_bootstrap-ZZyMiqu0.js",
-        "bytes": 949581
+        "file": "_app/immutable/workers/ecs_worker_bootstrap-Dgl__wi5.js",
+        "bytes": 962570
       },
       {
         "id": "text_llm_worker.js",
-        "file": "_app/immutable/workers/text_llm_worker-DcQVU2Vd.js",
-        "bytes": 934077
+        "file": "_app/immutable/workers/text_llm_worker-BdzX9YuT.js",
+        "bytes": 943247
+      },
+      {
+        "id": "ecs_worker.js",
+        "file": "_app/immutable/workers/ecs_worker-BHNUtE5I.js",
+        "bytes": 918984
       },
       {
         "id": "sqlite3-worker1.js",
-        "file": "_app/immutable/workers/sqlite3-worker1-DBy133Ez.js",
-        "bytes": 209296
+        "file": "_app/immutable/workers/sqlite3-worker1-CE7sr5JJ.js",
+        "bytes": 210072
       },
       {
         "id": "sqlite3-opfs-async-proxy.js",
-        "file": "_app/immutable/workers/sqlite3-opfs-async-proxy-DMfyAKdZ.js",
-        "bytes": 11304
+        "file": "_app/immutable/workers/sqlite3-opfs-async-proxy-BhxrX58i.js",
+        "bytes": 11320
       }
     ],
     "routeClosures": [
       {
         "route": "/",
-        "files": 54,
-        "rawBytes": 2139300
+        "files": 64,
+        "rawBytes": 2618691
       },
       {
         "route": "/game",
-        "files": 61,
-        "rawBytes": 2826596
+        "files": 89,
+        "rawBytes": 3292441
       },
       {
         "route": "/settings",
-        "files": 54,
-        "rawBytes": 2326332
+        "files": 71,
+        "rawBytes": 2829441
       }
     ]
   }
