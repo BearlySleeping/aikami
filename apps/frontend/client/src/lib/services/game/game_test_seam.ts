@@ -218,6 +218,27 @@ export const installGameTestSeam = (deps: GameTestSeamOptions): void => {
         triggerAutoSave: async (): Promise<void> => {
           await gameOverlayService.triggerAutoSave();
         },
+        // Deterministic authored opening/chip only. The real dialogue VM,
+        // action dispatch, close lifecycle and device recorder remain intact.
+        openJournalRecapDialogue: (): void => {
+          npcDialogueService.startDialogue({
+            npcData: {
+              npcId: 'rollo_grasper',
+              npcName: 'Rollo the Grasper',
+              dialog: 'There is a tavern near the road.',
+              initialSuggestions: [
+                {
+                  id: 'recap_attack',
+                  label: 'Attack',
+                  intentType: 'combat',
+                  prefillText: 'I draw my weapon.',
+                },
+              ],
+            },
+            setOverlay: () => gameOverlayService.setActive('DIALOGUE'),
+            pauseEngine: () => gameEngineService.pauseEngine(),
+          });
+        },
         seedManagementContent: async (options: { scenario: 'empty' | 'populated' }) => {
           const campaignId = activeCampaignId();
           if (!campaignId) {
