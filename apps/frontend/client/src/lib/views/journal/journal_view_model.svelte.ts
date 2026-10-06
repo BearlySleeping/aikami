@@ -120,6 +120,8 @@ export type JournalViewModelInterface = BaseViewModelInterface & {
   readonly recapWhenLabel: string | undefined;
   readonly diaryVoice: boolean;
   setDiaryVoice(value: boolean): void;
+  readonly conversationRecapCount: number;
+  readonly hasNoMatchingRecaps: boolean;
   readonly conversationRecaps: ReadonlyArray<{
     id: string;
     title: string;
@@ -342,6 +344,20 @@ class JournalViewModel
 
   setDiaryVoice(value: boolean): void {
     this._diary?.setDiaryVoice(value);
+  }
+
+  get conversationRecapCount(): number {
+    return this._notes.entries.filter(
+      (entry) =>
+        entry.campaignId === this._campaign.campaignId &&
+        readConversationRecap(entry) !== undefined,
+    ).length;
+  }
+
+  get hasNoMatchingRecaps(): boolean {
+    return (
+      this.hasSearchQuery && this.conversationRecapCount > 0 && this.conversationRecaps.length === 0
+    );
   }
 
   get conversationRecaps(): ReadonlyArray<{

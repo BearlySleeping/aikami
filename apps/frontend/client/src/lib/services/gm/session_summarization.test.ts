@@ -42,7 +42,7 @@ describe('SessionSummaryService — AC-5', () => {
 
   test('generateSummary returns a summary with all fields', async () => {
     const service = SessionSummaryService.create({ className: 'TestSessionSummary' });
-    const summary = await service.generateSummary(45);
+    const summary = await service.generateSummary({ playtimeMinutes: 45, sessionNumber: 1 });
     expect(summary).toHaveProperty('id');
     expect(summary).toHaveProperty('synopsis');
     expect(summary).toHaveProperty('keyEvents');
@@ -53,13 +53,13 @@ describe('SessionSummaryService — AC-5', () => {
 
   test('resumePoint is non-empty', async () => {
     const service = SessionSummaryService.create({ className: 'TestSessionSummary' });
-    const summary = await service.generateSummary(30);
+    const summary = await service.generateSummary({ playtimeMinutes: 30, sessionNumber: 1 });
     expect(summary.resumePoint.length).toBeGreaterThan(0);
   });
 
   test('generateSummary sets isGenerating during call', async () => {
     const service = SessionSummaryService.create({ className: 'TestSessionSummary' });
-    const promise = service.generateSummary(10);
+    const promise = service.generateSummary({ playtimeMinutes: 10, sessionNumber: 1 });
     expect(service.isGenerating).toBe(true);
     await promise;
     expect(service.isGenerating).toBe(false);
@@ -67,7 +67,7 @@ describe('SessionSummaryService — AC-5', () => {
 
   test('clearSummary resets currentSummary to null', async () => {
     const service = SessionSummaryService.create({ className: 'TestSessionSummary' });
-    await service.generateSummary(15);
+    await service.generateSummary({ playtimeMinutes: 15, sessionNumber: 1 });
     expect(service.currentSummary).not.toBeNull();
     service.clearSummary();
     expect(service.currentSummary).toBeNull();
@@ -75,7 +75,7 @@ describe('SessionSummaryService — AC-5', () => {
 
   test('serialize returns summary snapshot', async () => {
     const service = SessionSummaryService.create({ className: 'TestSessionSummary' });
-    await service.generateSummary(20);
+    await service.generateSummary({ playtimeMinutes: 20, sessionNumber: 1 });
     const state = service.serialize();
     expect(state).toHaveProperty('summary');
     expect(state.summary).not.toBeNull();
@@ -83,7 +83,7 @@ describe('SessionSummaryService — AC-5', () => {
 
   test('hydrate restores summary', async () => {
     const service = SessionSummaryService.create({ className: 'TestSessionSummary' });
-    await service.generateSummary(25);
+    await service.generateSummary({ playtimeMinutes: 25, sessionNumber: 1 });
     const state = service.serialize();
     const newService = SessionSummaryService.create({ className: 'TestSessionSummary2' });
     newService.hydrate(state);

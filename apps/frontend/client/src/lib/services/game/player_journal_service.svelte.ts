@@ -101,7 +101,6 @@ class PlayerJournalService
     tags?: readonly string[];
   }): Promise<PlayerJournalEntry> {
     const { campaignId, sessionNumber, title, content, tags = [] } = options;
-    this._campaignId ??= campaignId;
     const generation = this._generation;
 
     // Validate
@@ -143,7 +142,10 @@ class PlayerJournalService
       ],
     });
 
-    if (generation === this._generation && (!this._campaignId || this._campaignId === campaignId)) {
+    if (
+      generation === this._generation &&
+      (this._campaignId === undefined || this._campaignId === campaignId)
+    ) {
       this.entries = [entry, ...this.entries];
     }
     this.debug('journal:created', { id: entry.id, title: trimmedTitle });

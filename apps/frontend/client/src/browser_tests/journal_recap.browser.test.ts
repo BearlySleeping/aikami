@@ -33,6 +33,12 @@ test('compiled Journal reacts to conversation arrival and diary choice, preservi
   const component = mount(JournalView, { target, props: { viewModel, embedded: true } });
   const { prose, cleanup } = state.observe(() => viewModel.conversationRecaps[0]?.prose ?? '');
   flushSync();
+  expect(target.textContent).toContain('No session recap yet');
+  viewModel.setSearchQuery('unmatched');
+  flushSync();
+  expect(target.textContent).toContain('No session recap yet');
+  expect(viewModel.conversationRecapCount).toBe(0);
+  viewModel.setSearchQuery('');
   const recap = buildConversationRecap({
     npcName: 'Ana',
     messages: [
@@ -65,6 +71,18 @@ test('compiled Journal reacts to conversation arrival and diary choice, preservi
   expect(prose.at(-1)).toContain('I talked with Ana.');
   expect(viewModel.conversationRecaps[0]?.objective).toContain('The player said:');
   expect(viewModel.conversationRecaps[0]?.prose).toContain('Ana said: “Near the road.”');
+  expect(viewModel.conversationRecapCount).toBe(1);
+  viewModel.setSearchQuery('unmatched');
+  flushSync();
+  expect(viewModel.conversationRecaps).toHaveLength(0);
+  expect(viewModel.conversationRecapCount).toBe(1);
+  expect(target.textContent).toContain('No matching recaps');
+  expect(target.textContent).toContain('Clear the search');
+  expect(target.textContent).not.toContain('No session recap yet');
+  viewModel.setSearchQuery('   ');
+  flushSync();
+  expect(target.textContent).not.toContain('No matching recaps');
+  expect(target.textContent).toContain('I talked with Ana.');
   cleanup();
   await unmount(component);
   target.remove();

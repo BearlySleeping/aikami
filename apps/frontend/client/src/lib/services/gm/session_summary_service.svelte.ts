@@ -38,12 +38,15 @@ export type SessionSummaryServiceInterface = BaseFrontendClassInterface & {
    * No provider call is required; unrecorded events are never invented.
    * The result includes a resumePoint for GameSaveService.
    *
-   * The generated summary is guaranteed to be under 2 KB.
+   * Synopsis prose is bounded; key events include every matching recap.
    *
-   * @param playtimeMinutes - Total playtime for this session.
+   * @param options - Session number and total playtime for this session.
    * @returns The generated SessionSummary.
    */
-  generateSummary(playtimeMinutes: number): Promise<SessionSummary>;
+  generateSummary(options: {
+    playtimeMinutes: number;
+    sessionNumber: number;
+  }): Promise<SessionSummary>;
 
   /**
    * Clears the current summary (e.g., when starting a new session).
@@ -98,7 +101,11 @@ class SessionSummaryService
   }
 
   /** @inheritdoc */
-  async generateSummary(playtimeMinutes: number): Promise<SessionSummary> {
+  async generateSummary(options: {
+    playtimeMinutes: number;
+    sessionNumber: number;
+  }): Promise<SessionSummary> {
+    const { playtimeMinutes, sessionNumber } = options;
     if (this._isGenerating) {
       throw new Error('SessionSummaryService: summary generation already in progress');
     }
@@ -110,7 +117,11 @@ class SessionSummaryService
 
     try {
       const worldName = worldStateService.worldGenOutput?.worldName ?? 'Unknown';
-      const synopsisResult = await this._generateSynopsis({ worldName, playtimeMinutes });
+      const synopsisResult = await this._generateSynopsis({
+        worldName,
+        playtimeMinutes,
+        sessionNumber,
+      });
       if (generation !== this._generation || campaignId !== campaignService.activeCampaign?.id) {
         throw new Error('Session summary invalidated by campaign change or hydration');
       }
@@ -168,10 +179,11 @@ class SessionSummaryService
 
   // ── Private helpers ─────────────────────────────────────────────────
 
-  /** Projects recent device records, keeping quotes attributed and prose bounded. */
+  /** Projects session device records, keeping quotes attributed and prose bounded. */
   private async _generateSynopsis(options: {
     worldName: string;
     playtimeMinutes: number;
+    sessionNumber: number;
   }): Promise<{
     synopsis: string;
     keyEvents: string[];
@@ -181,13 +193,12 @@ class SessionSummaryService
       .filter(
         (entry) =>
           entry.campaignId === campaignService.activeCampaign?.id &&
-          Date.parse(entry.createdAt) >= Date.now() - Math.max(1, options.playtimeMinutes) * 60_000,
+          entry.sessionNumber === options.sessionNumber,
       )
       .flatMap((entry) => {
         const recap = readConversationRecap(entry);
         return recap ? [recap] : [];
-      })
-      .slice(0, 3);
+      });
     // The former prompt contained only world name and duration, no events.
     // Never ask a model to invent a session: use recorded, attributed evidence.
     return {

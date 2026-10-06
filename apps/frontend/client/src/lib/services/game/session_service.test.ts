@@ -105,6 +105,7 @@ describe('SessionService', () => {
         });
       }
       const pending = service.endSession({ playtimeMinutes: 5 });
+      expect(generation).toHaveBeenCalledWith({ playtimeMinutes: 5, sessionNumber: 1 });
       await service.startSession({ gameId: 'new-game' });
       rejectSummary?.(new Error('retired generation'));
       await pending;

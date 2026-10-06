@@ -53,10 +53,13 @@ test('session summaries use recorded evidence without a provider and reject stal
   const recorder = createConversationRecapService({ className: 'ConversationRecapService' });
   await recorder.recordConversation(conversation);
   expect(sessionSummaryService.hasDialogue).toBe(true);
-  const summary = await sessionSummaryService.generateSummary(10);
+  const summary = await sessionSummaryService.generateSummary({
+    playtimeMinutes: 10,
+    sessionNumber: 4,
+  });
   expect(summary.synopsis).toContain('A tavern stands near the road.');
   expect(summary.keyEvents).toEqual(['Conversation with Ana']);
-  const pending = sessionSummaryService.generateSummary(10);
+  const pending = sessionSummaryService.generateSummary({ playtimeMinutes: 10, sessionNumber: 4 });
   campaign.activeCampaign = { id: 'campaign-b' };
   await expect(pending).rejects.toThrow('invalidated');
   expect(sessionSummaryService.currentSummary).toBeNull();
@@ -84,4 +87,59 @@ test('a pending old-campaign write persists there but does not contaminate newly
   expect(playerJournalService.entries).toEqual([]);
   await playerJournalService.loadEntries({ campaignId: 'campaign-a' });
   expect(playerJournalService.entries).toHaveLength(1);
+});
+
+test('recap writes do not choose the campaign scope, but loaded scope rejects other campaigns', async () => {
+  const recorder = createConversationRecapService({ className: 'ConversationRecapService' });
+  await recorder.recordConversation(conversation);
+  campaign.activeCampaign = { id: 'campaign-b' };
+  await recorder.recordConversation({ ...conversation, npcName: 'Bea' });
+  expect(playerJournalService.entries.map((entry) => entry.campaignId)).toEqual([
+    'campaign-b',
+    'campaign-a',
+  ]);
+
+  await playerJournalService.loadEntries({ campaignId: 'campaign-b' });
+  campaign.activeCampaign = { id: 'campaign-a' };
+  await recorder.recordConversation({ ...conversation, npcName: 'Cal' });
+  expect(playerJournalService.entries.map((entry) => entry.title)).toEqual([
+    'Conversation with Bea',
+  ]);
+  await playerJournalService.loadEntries({ campaignId: 'campaign-a' });
+  expect(playerJournalService.entries).toHaveLength(2);
+});
+
+test('summaries include every recap from the requested session regardless of timestamp', async () => {
+  const recorder = createConversationRecapService({ className: 'ConversationRecapService' });
+  for (const npcName of ['Ana', 'Bea', 'Cal', 'Dan']) {
+    await recorder.recordConversation({ ...conversation, npcName });
+  }
+  const sessionEntries = playerJournalService.entries.map((entry) => ({
+    ...entry,
+    createdAt: '2000-01-01T00:00:00.000Z',
+  }));
+  await recorder.recordConversation({
+    ...conversation,
+    npcName: 'Wrong session',
+    sessionNumber: 3,
+  });
+  const otherSession = playerJournalService.entries[0];
+  campaign.activeCampaign = { id: 'campaign-b' };
+  await recorder.recordConversation({ ...conversation, npcName: 'Wrong campaign' });
+  const otherCampaign = playerJournalService.entries[0];
+  campaign.activeCampaign = { id: 'campaign-a' };
+  playerJournalService.hydrate({ entries: [...sessionEntries, otherSession, otherCampaign] });
+
+  const summary = await sessionSummaryService.generateSummary({
+    playtimeMinutes: 0,
+    sessionNumber: 4,
+  });
+  expect(summary.keyEvents).toEqual([
+    'Conversation with Dan',
+    'Conversation with Cal',
+    'Conversation with Bea',
+    'Conversation with Ana',
+  ]);
+  expect(summary.synopsis).toContain('Talked with Ana.');
+  expect(summary.synopsis).not.toContain('Wrong');
 });

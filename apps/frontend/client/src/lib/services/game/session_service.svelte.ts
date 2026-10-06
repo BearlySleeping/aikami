@@ -242,7 +242,10 @@ class SessionService
       // NPC conversations count even when the separate GM chat is empty.
       if (messageCount >= MIN_MESSAGES_FOR_SUMMARY || sessionSummaryService.hasDialogue) {
         try {
-          summary = await sessionSummaryService.generateSummary(playtimeMinutes);
+          summary = await sessionSummaryService.generateSummary({
+            playtimeMinutes,
+            sessionNumber: endingSession.sessionNumber,
+          });
         } catch (error) {
           this.warn('endSession:summary-failed', { error: String(error) });
           // Proceed without summary — session still ends

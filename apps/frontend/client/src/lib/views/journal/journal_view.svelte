@@ -427,6 +427,12 @@ const presentation = createJournalPresentationState({
               Generated at session end. The Journal never rewrites this record.
             </p>
           </section>
+        {:else if viewModel.hasNoMatchingRecaps}
+          <div class="game-empty" data-testid="journal-recap-no-matches">
+            <span class="text-4xl" aria-hidden="true">☾</span>
+            <p class="game-section-title">No matching recaps</p>
+            <p class="game-metadata max-w-md">Clear the search to see your conversation recaps.</p>
+          </div>
         {:else if viewModel.conversationRecaps.length === 0}
           <div class="game-empty" data-testid="journal-recap-empty">
             <span class="text-4xl" aria-hidden="true">☾</span>
