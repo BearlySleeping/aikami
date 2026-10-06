@@ -82,11 +82,13 @@ Two surfaces:
 
 - **The hub catalog** at [the community hub](https://hub.bearlysleeping.com) —
   browse published assets by category with licence and attribution for each.
-  This is the one available in a shipped build.
+  This is the player-facing surface.
 - **`/dev/asset-browser`** — a development-only route with a folder tree, file
-  grid, and category tabs. It is compiled out of production builds, so it is
-  available only when running from source or with
-  `AIKAMI_INCLUDE_DEV_ROUTES=true`.
+  grid, and category tabs. It is compiled out of production builds and is
+  reached when running from source. It is currently compiled **in** to `staging`
+  builds as well — a temporary escape hatch — and can be stripped from any build
+  with `AIKAMI_INCLUDE_DEV_ROUTES=false`. See
+  `apps/frontend/client/.env.example`.
 
 ## Source
 
