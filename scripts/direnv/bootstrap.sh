@@ -24,6 +24,11 @@ fi
 AIKAMI_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || echo "$PWD")"
 export AIKAMI_ROOT
 
+# The OpenRouter key comes from the user's global direnv environment. Keep it
+# across `use flake`, which otherwise drops environment values not declared by
+# the devShell, then restore it before the mode secrets loader runs.
+_AIKAMI_GLOBAL_OPENROUTER_API_KEY="${OPENROUTER_API_KEY:-}"
+
 # ── 0.1 SOPS age key (C-441) ────────────────────────────────────────────
 # Dedicated aikami-only maintainer key, kept separate from any personal
 # dotfiles-managed default at ~/.config/sops/age/keys.txt — losing or
@@ -73,6 +78,11 @@ _aikami_setup_nix_direnv
 
 # ── 2. Load Nix flake devShell ─────────────────────────────────────────
 use flake
+
+if [ -n "$_AIKAMI_GLOBAL_OPENROUTER_API_KEY" ]; then
+  export OPENROUTER_API_KEY="$_AIKAMI_GLOBAL_OPENROUTER_API_KEY"
+fi
+unset _AIKAMI_GLOBAL_OPENROUTER_API_KEY
 
 # ── 2.1 Bun version drift guard ────────────────────────────────────────
 # .bun-version is the source of truth CI's setup-bun action and moon's
