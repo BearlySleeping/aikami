@@ -15,7 +15,7 @@ import {
 } from '@aikami/backend/svelte-kit/hooks_helpers';
 import { SSRLogSink } from '@aikami/backend/svelte-kit/log_sink';
 import type { LogContext, UserSessionData } from '@aikami/types';
-import type { Handle, HandleServerError } from '@sveltejs/kit';
+import type { Handle, HandleServerError } from '@sveltejs/kit/hooks';
 import { getBetterAuth, setBetterAuthEnv } from '$lib/server/api/better_auth.ts';
 import { getWorkerEnv } from '$lib/server/worker_env.ts';
 import { logger } from '$logger';

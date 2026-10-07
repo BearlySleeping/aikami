@@ -10,6 +10,7 @@ export type {
   NpcDialogueChoice,
   NpcDialogueCommand,
   NpcDialogueCommandKind,
+  NpcDialogueExtraction,
   NpcDialogueSkill,
   NpcDialogueTurn,
   NpcDialogueTurnSource,

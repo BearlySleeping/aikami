@@ -2,6 +2,20 @@
   "sortPackages": true,
   "semverGroups": [
     {
+      "label": "pin @biomejs/biome (2.5.14 regresses Svelte formatting)",
+      "range": "2.5.13",
+      "dependencyTypes": ["prod", "dev"],
+      "dependencies": ["@biomejs/biome"],
+      "packages": ["**"]
+    },
+    {
+      "label": "pin typescript (TS 7 breaks vtsls and the AST guard)",
+      "range": "6.0.3",
+      "dependencyTypes": ["prod", "dev"],
+      "dependencies": ["typescript"],
+      "packages": ["**"]
+    },
+    {
       "label": "enforce versions to match",
       "range": "",
       "dependencyTypes": ["prod", "dev"],

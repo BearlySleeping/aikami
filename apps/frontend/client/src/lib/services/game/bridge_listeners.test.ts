@@ -17,7 +17,6 @@ describe('setupBridgeListeners (AC-5)', () => {
   let mockCombatService: Record<string, unknown>;
   let mockTimeService: Record<string, unknown>;
   let mockAudioService: Record<string, unknown>;
-  let mockInputActionService: Record<string, unknown>;
   let mockOnboardingHintService: Record<string, unknown>;
   let mockPartyFollowService: Record<string, unknown>;
   let mockContextualTriggerService: { fireTrigger: ReturnType<typeof mock> };
@@ -50,6 +49,8 @@ describe('setupBridgeListeners (AC-5)', () => {
       clearActive: mock(() => {}),
       closeCombat: mock(() => {}),
       setCameraZoom: mock(() => {}),
+      setInteractionPrompt: mock(() => {}),
+      clearInteractionPrompt: mock(() => {}),
       setInteractionPromptPosition: mock(() => {}),
       openVendor: mock(() => {}),
       setTransitioning: mock(() => {}),
@@ -61,6 +62,7 @@ describe('setupBridgeListeners (AC-5)', () => {
       getInteractableStates: mock(() => ({})),
       startCombat: mock(() => {}),
       endDialogue: mock(() => {}),
+      rejectCombatStart: mock(() => {}),
     };
 
     mockNpcDialogueService = {
@@ -91,10 +93,8 @@ describe('setupBridgeListeners (AC-5)', () => {
       playSfx: mock(async (_url: string) => {}),
     };
 
-    mockInputActionService = {
-      actionDisplayLabel: mock((_actionId: string) => 'E'),
-    };
-
+    // Retired: the bridge records only the engine's target. The key label is
+    // resolved by GameOverlayService, which owns the input bindings.
     mockOnboardingHintService = {
       onInteractionTargetChanged: mock(() => {}),
       onEventPerformed: mock(() => {}),
@@ -145,7 +145,6 @@ describe('setupBridgeListeners (AC-5)', () => {
       combatService: mockCombatService as never,
       timeService: mockTimeService as never,
       audioService: mockAudioService as never,
-      inputActionService: mockInputActionService as never,
       onboardingHintService: mockOnboardingHintService as never,
       partyFollowService: mockPartyFollowService as never,
     });
@@ -163,7 +162,6 @@ describe('setupBridgeListeners (AC-5)', () => {
       combatService: mockCombatService as never,
       timeService: mockTimeService as never,
       audioService: mockAudioService as never,
-      inputActionService: mockInputActionService as never,
       onboardingHintService: mockOnboardingHintService as never,
       partyFollowService: mockPartyFollowService as never,
     });
@@ -180,7 +178,6 @@ describe('setupBridgeListeners (AC-5)', () => {
       combatService: mockCombatService as never,
       timeService: mockTimeService as never,
       audioService: mockAudioService as never,
-      inputActionService: mockInputActionService as never,
       onboardingHintService: mockOnboardingHintService as never,
       partyFollowService: mockPartyFollowService as never,
     });
@@ -198,7 +195,6 @@ describe('setupBridgeListeners (AC-5)', () => {
       combatService: mockCombatService as never,
       timeService: mockTimeService as never,
       audioService: mockAudioService as never,
-      inputActionService: mockInputActionService as never,
       onboardingHintService: mockOnboardingHintService as never,
       partyFollowService: mockPartyFollowService as never,
     });
@@ -227,7 +223,6 @@ describe('setupBridgeListeners (AC-5)', () => {
       combatService: mockCombatService as never,
       timeService: mockTimeService as never,
       audioService: mockAudioService as never,
-      inputActionService: mockInputActionService as never,
       onboardingHintService: mockOnboardingHintService as never,
       partyFollowService: mockPartyFollowService as never,
     });
@@ -253,7 +248,6 @@ describe('setupBridgeListeners (AC-5)', () => {
       combatService: mockCombatService as never,
       timeService: mockTimeService as never,
       audioService: mockAudioService as never,
-      inputActionService: mockInputActionService as never,
       onboardingHintService: mockOnboardingHintService as never,
       partyFollowService: mockPartyFollowService as never,
     });
@@ -282,7 +276,6 @@ describe('setupBridgeListeners (AC-5)', () => {
       combatService: mockCombatService as never,
       timeService: mockTimeService as never,
       audioService: mockAudioService as never,
-      inputActionService: mockInputActionService as never,
       onboardingHintService: mockOnboardingHintService as never,
       partyFollowService: mockPartyFollowService as never,
     });
@@ -318,7 +311,6 @@ describe('setupBridgeListeners (AC-5)', () => {
       combatService: mockCombatService as never,
       timeService: mockTimeService as never,
       audioService: mockAudioService as never,
-      inputActionService: mockInputActionService as never,
       onboardingHintService: mockOnboardingHintService as never,
       partyFollowService: mockPartyFollowService as never,
     });
@@ -362,7 +354,9 @@ describe('setupBridgeListeners (AC-5)', () => {
 
   // ── Combat Events ──
 
-  test('COMBAT_STARTED should call combatService.startCombat', async () => {
+  test('COMBAT_STARTED acknowledges dialogue and preserves NPC identity', async () => {
+    mockGameOverlayService.activeOverlay = 'DIALOGUE';
+    mockNpcDialogueService.activeNpc = { npcId: 'rollo_grasper', npcName: 'Rollo the Grasper' };
     await setupBridgeListeners({
       gameOverlayService: mockGameOverlayService as never,
       npcDialogueService: mockNpcDialogueService as never,
@@ -370,7 +364,6 @@ describe('setupBridgeListeners (AC-5)', () => {
       combatService: mockCombatService as never,
       timeService: mockTimeService as never,
       audioService: mockAudioService as never,
-      inputActionService: mockInputActionService as never,
       onboardingHintService: mockOnboardingHintService as never,
       partyFollowService: mockPartyFollowService as never,
     });
@@ -387,7 +380,50 @@ describe('setupBridgeListeners (AC-5)', () => {
     });
 
     const startCombat = mockCombatService.startCombat as ReturnType<typeof mock>;
-    expect(startCombat).toHaveBeenCalled();
+    expect(startCombat).toHaveBeenCalledWith(
+      expect.objectContaining({ enemyNpcId: 'rollo_grasper', participantIds: [1, 2] }),
+    );
+    expect(mockGameOverlayService.endDialogue).toHaveBeenCalledTimes(1);
+
+    mockGameOverlayService.activeOverlay = 'DIALOGUE';
+    bridgeListeners.get('COMBAT_START_REJECTED')?.({
+      encounterId: 'inn_wand_encounter',
+      reasonCode: 'invalidStateShape',
+    });
+    expect(mockGameOverlayService.activeOverlay).toBe('DIALOGUE');
+    expect(mockGameOverlayService.closeCombat).not.toHaveBeenCalled();
+    expect(mockGameOverlayService.rejectCombatStart).toHaveBeenCalledTimes(1);
+  });
+
+  test.each([
+    [{}, 17, 30],
+    [{ enemyHp: 0 }, 0, 30],
+    [{ enemyMaxHp: 0 }, 17, 0],
+    [{ enemyHp: 12, enemyMaxHp: 20 }, 12, 20],
+  ])('COMBAT_STARTED preserves only omitted HP fields: %j', async (hp, enemyHp, enemyMaxHp) => {
+    mockGameOverlayService.activeOverlay = 'DIALOGUE';
+    mockCombatService.enemyHp = 17;
+    mockCombatService.enemyMaxHp = 30;
+    await setupBridgeListeners({
+      gameOverlayService: mockGameOverlayService as never,
+      npcDialogueService: mockNpcDialogueService as never,
+      gameEngineService: mockGameEngineService as never,
+      combatService: mockCombatService as never,
+      timeService: mockTimeService as never,
+      audioService: mockAudioService as never,
+      onboardingHintService: mockOnboardingHintService as never,
+      partyFollowService: mockPartyFollowService as never,
+    });
+
+    bridgeListeners.get('COMBAT_STARTED')?.({
+      ...hp,
+      participantIds: [1, 2],
+      firstTurnEntityId: 1,
+    });
+
+    expect(mockCombatService.startCombat).toHaveBeenCalledWith(
+      expect.objectContaining({ enemyHp, enemyMaxHp }),
+    );
   });
 
   // ── All events registered ──
@@ -400,7 +436,6 @@ describe('setupBridgeListeners (AC-5)', () => {
       combatService: mockCombatService as never,
       timeService: mockTimeService as never,
       audioService: mockAudioService as never,
-      inputActionService: mockInputActionService as never,
       onboardingHintService: mockOnboardingHintService as never,
       partyFollowService: mockPartyFollowService as never,
     });
@@ -434,7 +469,6 @@ describe('setupBridgeListeners (AC-5)', () => {
       combatService: mockCombatService as never,
       timeService: mockTimeService as never,
       audioService: mockAudioService as never,
-      inputActionService: mockInputActionService as never,
       onboardingHintService: mockOnboardingHintService as never,
       partyFollowService: mockPartyFollowService as never,
     });
@@ -461,7 +495,6 @@ describe('setupBridgeListeners (AC-5)', () => {
       combatService: mockCombatService as never,
       timeService: mockTimeService as never,
       audioService: mockAudioService as never,
-      inputActionService: mockInputActionService as never,
       onboardingHintService: mockOnboardingHintService as never,
       partyFollowService: mockPartyFollowService as never,
       contextualTriggerService: mockContextualTriggerService as never,
@@ -495,7 +528,6 @@ describe('setupBridgeListeners (AC-5)', () => {
       combatService: mockCombatService as never,
       timeService: mockTimeService as never,
       audioService: mockAudioService as never,
-      inputActionService: mockInputActionService as never,
       onboardingHintService: mockOnboardingHintService as never,
       partyFollowService: mockPartyFollowService as never,
       contextualTriggerService: mockContextualTriggerService as never,
@@ -546,7 +578,6 @@ describe('setupBridgeListeners (AC-5)', () => {
         combatService: mockCombatService as never,
         timeService: mockTimeService as never,
         audioService: mockAudioService as never,
-        inputActionService: mockInputActionService as never,
         onboardingHintService: mockOnboardingHintService as never,
         partyFollowService: mockPartyFollowService as never,
       });

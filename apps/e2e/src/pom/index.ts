@@ -16,10 +16,19 @@ export { GamePage } from './game_page';
 export { HudCustomizationPage } from './hud_customization_page';
 export { ImageGenPage } from './image_gen_page';
 export { InventoryPage } from './inventory_page';
+export { JournalRecapPage } from './journal_recap_page';
 export { MacroSystemPage } from './macro_system_page';
 export { MapSandboxPage } from './map_sandbox_page';
 export { OnboardingPage } from './onboarding_page';
 export { PartyRosterPage } from './party_roster_page';
+export {
+  isFocusInsidePauseMenu,
+  pauseMenuCustomizeHudButton,
+  pauseMenuDialog,
+  pauseMenuResumeButton,
+  pauseMenuSaveButton,
+  pauseMenuSaveStatus,
+} from './pause_menu';
 export { PlayShellPage } from './play_shell_page';
 export { ReactiveLifecyclePage } from './reactive_lifecycle_page';
 export { SandboxPage } from './sandbox_page';

@@ -21,6 +21,8 @@ import type {
   AiTextAdapter,
   AiTextGenerationOptions,
   AiTextGenerationResult,
+  AiTransportAttemptDraft,
+  AiTransportAttemptEvent,
   AiVoiceGenerationOptions,
   AiVoiceGenerationResult,
 } from './gateway_types.ts';
@@ -39,6 +41,143 @@ export type AiProviderGatewayOptions = {
   onDispatch?: (resolution: AiModeResolution) => void;
 };
 
+/** The collaborators {@link selectTextRoute} needs, bundled so it takes one argument. */
+type TextRouteSelectionDeps = {
+  registry: AiAdapterRegistry;
+  resolveNormalized: (options: {
+    capability: AiCapability;
+    model?: string;
+    endpoint?: string;
+    task?: TextTask;
+  }) => AiModeResolution;
+  resolveOverride: (options: {
+    capability: AiCapability;
+    mode: AiMode;
+    provider?: string;
+    model?: string;
+    endpoint?: string;
+  }) => AiModeResolution;
+  missingAdapterError: (options: { capability: AiCapability; mode: AiMode }) => Error;
+};
+
+/** The adapter for a resolution, or the typed failure saying there is none. */
+const requireTextAdapter = (deps: TextRouteSelectionDeps, mode: AiMode): AiTextAdapter => {
+  const adapter = deps.registry.getText(mode);
+  if (!adapter) {
+    throw deps.missingAdapterError({ capability: 'text', mode });
+  }
+  return adapter;
+};
+
+/**
+ * The one resolution a text call will dispatch to, and the adapter for it.
+ *
+ * Three inputs, in strict precedence, and each one is a complete statement
+ * about where the call goes:
+ *
+ *   1. `route` — a snapshot the caller already resolved, because it had to
+ *      decide something before spending money. Dispatched VERBATIM, and the
+ *      resolver is not consulted at all.
+ *   2. `mode` — an explicit adapter-family override for `service`-mode callers.
+ *   3. neither — resolve from the configuration, once, here.
+ *
+ * A pre-resolved route and an explicit mode that disagree are REPORTED, not
+ * silently half-honoured: two statements about the same destination that
+ * contradict each other is a caller bug, and picking one quietly makes the
+ * other a lie nothing can see.
+ */
+const selectTextRoute = (
+  deps: TextRouteSelectionDeps & { options: AiTextGenerationOptions },
+): { resolution: AiModeResolution; adapter: AiTextAdapter } => {
+  const { route, mode, model, endpoint, task } = deps.options;
+  if (route !== undefined) {
+    if (mode !== undefined && mode !== route.mode) {
+      throw createAiGatewayError({
+        code: 'mode_unavailable',
+        capability: 'text',
+        mode,
+        message: `Conflicting routing: mode override "${mode}" but the supplied route resolves to "${route.mode}"`,
+      });
+    }
+    return {
+      // Copied, not aliased: the snapshot is the caller's object, and a
+      // dispatch that read it twice must not see it change underneath.
+      resolution: { ...route },
+      adapter: requireTextAdapter(deps, route.mode),
+    };
+  }
+  if (mode !== undefined) {
+    const adapter = requireTextAdapter(deps, mode);
+    return {
+      adapter,
+      resolution: deps.resolveOverride({
+        capability: 'text',
+        mode,
+        provider: adapter.provider,
+        model,
+        endpoint,
+      }),
+    };
+  }
+  const resolution = deps.resolveNormalized({ capability: 'text', model, endpoint, task });
+  return { resolution, adapter: requireTextAdapter(deps, resolution.mode) };
+};
+
+/**
+ * 🔴 Refuses a call whose end-to-end budget is already spent.
+ *
+ * Sits ABOVE `onResolve` and `onDispatch` on purpose: both are observable
+ * "a provider call is starting" signals, and a caller counting dispatches — or a
+ * diagnostics view listing them — would otherwise record an attempt for a
+ * request that never left the process. The adapter refuses too, but by then
+ * both hooks have already spoken.
+ *
+ * A non-finite deadline is NOT spent: it is a caller that supplied no budget,
+ * and it keeps the adapter's own finite safety limit rather than inheriting a
+ * rule written for a bounded request.
+ */
+const refuseSpentBudget = (options: {
+  resolution: AiModeResolution;
+  deadlineAt: number | undefined;
+}): void => {
+  const { resolution, deadlineAt } = options;
+  if (deadlineAt === undefined || !Number.isFinite(deadlineAt) || Date.now() < deadlineAt) {
+    return;
+  }
+  throw createAiGatewayError({
+    code: 'timeout',
+    capability: 'text',
+    mode: resolution.mode,
+    provider: resolution.provider,
+    timeoutKind: 'total_budget',
+    message: `[${resolution.mode}/${resolution.provider}] total request budget exhausted before dispatch`,
+  });
+};
+
+/**
+ * Numbers this logical request's attempts and stamps the identity onto each.
+ *
+ * The counter is per request id, so one provider bill looks like one bill no
+ * matter how many callers were waiting on it, and a retry inside one request
+ * looks like a retry rather than a second request. Returns `undefined` when the
+ * caller asked for no accounting, so the adapter pays nothing for a hook nobody
+ * reads.
+ */
+const wrapAttemptHook = (options: {
+  onAttempt: ((event: AiTransportAttemptEvent) => void) | undefined;
+  counter: { ordinal: number; activeCalls: number };
+  requestId: string;
+}): ((event: AiTransportAttemptDraft) => void) | undefined => {
+  const { onAttempt, counter, requestId } = options;
+  if (onAttempt === undefined) {
+    return undefined;
+  }
+  return (event: AiTransportAttemptDraft): void => {
+    counter.ordinal += 1;
+    onAttempt({ ...event, attemptId: `${requestId}#${counter.ordinal}`, requestId });
+  };
+};
+
 /**
  * Creates the default AiProviderGateway.
  */
@@ -52,6 +191,41 @@ export const createAiProviderGateway = (options: AiProviderGatewayOptions): AiPr
   } = options;
 
   const activeControllers = new Set<AbortController>();
+  let requestSequence = 0;
+  /**
+   * Attempt ordinals, per LOGICAL request.
+   *
+   * `AiTransportAttemptEvent.attemptId` must be unique per DISPATCHED attempt,
+   * including the retries inside one logical request, and must be STABLE for
+   * every consumer of one provider bill. Both properties are needed: an id that
+   * restarts per subscriber makes one bill look like N, and an id that treats a
+   * retry as a new request makes one request look like N. The counter is
+   * therefore per logical request id, and the adapter increments it once per
+   * dispatch — including empty-body retries and structured fallbacks.
+   */
+  const attemptCounters = new Map<string, { ordinal: number; activeCalls: number }>();
+
+  const releaseAttemptCounter = (requestId: string): void => {
+    const counter = attemptCounters.get(requestId);
+    if (counter === undefined) {
+      return;
+    }
+    counter.activeCalls -= 1;
+    if (counter.activeCalls === 0) {
+      attemptCounters.delete(requestId);
+    }
+  };
+
+  /**
+   * Identity for one logical text request.
+   *
+   * A caller that is COALESCING several waiters onto one dispatch passes the
+   * same `requestId` for all of them, so all of their attempt events share one
+   * identity and one bill. Left to mint its own, each subscriber would generate
+   * its own id and measured provider spend would be multiplied by the number of
+   * consumers — the exact distortion #382's accounting criteria forbid.
+   */
+  const resolveRequestId = (supplied?: string): string => supplied ?? `gw-${++requestSequence}`;
 
   /** Creates a controller linked to the caller's signal and tracks it. */
   const linkSignal = (signal?: AbortSignal): AbortController => {
@@ -112,6 +286,10 @@ export const createAiProviderGateway = (options: AiProviderGatewayOptions): AiPr
       return resolveNormalized({ capability });
     },
 
+    resolveText(options2 = {}) {
+      return resolveNormalized({ capability: 'text', ...options2 });
+    },
+
     async detect(capability): Promise<AiDetectionResult> {
       const detector = detectors[capability];
       const checkedAt = new Date().toISOString();
@@ -161,41 +339,39 @@ export const createAiProviderGateway = (options: AiProviderGatewayOptions): AiPr
         onChunk,
         schema,
         schemaName,
-        model,
-        endpoint,
-        task,
         signal,
-        mode,
         onResolve,
+        deadlineAt,
+        onAttempt,
+        requestId: suppliedRequestId,
+        routeRevision: _routeRevision,
       } = options2;
 
-      // Resolution happens exactly once, here at the gateway boundary.
-      let resolution: AiModeResolution;
-      let adapter: AiTextAdapter | undefined;
-      if (mode) {
-        adapter = registry.getText(mode);
-        if (!adapter) {
-          throw missingAdapterError({ capability: 'text', mode });
-        }
-        resolution = resolveOverride({
-          capability: 'text',
-          mode,
-          provider: adapter.provider,
-          model,
-          endpoint,
-        });
-      } else {
-        resolution = resolveNormalized({ capability: 'text', model, endpoint, task });
-        adapter = registry.getText(resolution.mode);
-        if (!adapter) {
-          throw missingAdapterError({ capability: 'text', mode: resolution.mode });
-        }
-      }
+      // 🔴 Resolution happens exactly once, here at the gateway boundary — and
+      // when the caller hands down a snapshot, "here" means the snapshot the
+      // caller already resolved, not a second resolution taken microseconds
+      // later. Re-resolving at dispatch is what let a settings change between
+      // admission and dispatch send a request to an endpoint, under an
+      // identity, and into a contention domain other than the three the caller
+      // had already committed to.
+      const { resolution, adapter } = selectTextRoute({
+        registry,
+        resolveNormalized,
+        resolveOverride,
+        missingAdapterError,
+        options: options2,
+      });
 
+      refuseSpentBudget({ resolution, deadlineAt });
       onResolve?.(resolution);
       onDispatch?.(resolution);
 
       const controller = linkSignal(signal);
+      const requestId = resolveRequestId(suppliedRequestId);
+      const counter = attemptCounters.get(requestId) ?? { ordinal: 0, activeCalls: 0 };
+      counter.activeCalls += 1;
+      attemptCounters.set(requestId, counter);
+      const wrappedAttempt = wrapAttemptHook({ onAttempt, counter, requestId });
       try {
         return await adapter.generateText({
           resolution,
@@ -204,6 +380,8 @@ export const createAiProviderGateway = (options: AiProviderGatewayOptions): AiPr
           onChunk,
           schema,
           schemaName,
+          ...(deadlineAt === undefined ? {} : { deadlineAt }),
+          ...(wrappedAttempt === undefined ? {} : { onAttempt: wrappedAttempt }),
         });
       } catch (error) {
         throw toAiGatewayError({
@@ -214,6 +392,7 @@ export const createAiProviderGateway = (options: AiProviderGatewayOptions): AiPr
         });
       } finally {
         activeControllers.delete(controller);
+        releaseAttemptCounter(requestId);
       }
     },
 

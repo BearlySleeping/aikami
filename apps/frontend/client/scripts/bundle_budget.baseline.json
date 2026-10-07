@@ -1,55 +1,60 @@
 {
   "version": 1,
   "budget": {
-    "jsChunkCount": 101,
-    "largestJsChunkBytes": 2195398,
-    "largestJsChunkGzipBytes": 916318,
-    "largestJsChunk": "_app/immutable/workers/chunks/DLWF5_Qs.js",
-    "totalJsBytes": 9687688,
-    "totalCssBytes": 187758,
+    "jsChunkCount": 200,
+    "largestJsChunkBytes": 2320715,
+    "largestJsChunkGzipBytes": 975585,
+    "largestJsChunk": "_app/immutable/workers/kokoro_worker-B9dVBDym.js",
+    "totalJsBytes": 10678805,
+    "totalCssBytes": 194948,
     "totalWasmBytes": 1719608,
     "workerBundles": [
       {
         "id": "kokoro_worker.js",
-        "file": "_app/immutable/workers/kokoro_worker-B1hmYVuo.js",
-        "bytes": 901891
-      },
-      {
-        "id": "text_llm_worker.js",
-        "file": "_app/immutable/workers/text_llm_worker-Cmk2mvGC.js",
-        "bytes": 898380
-      },
-      {
-        "id": "sqlite3-worker1.js",
-        "file": "_app/immutable/workers/sqlite3-worker1-DBy133Ez.js",
-        "bytes": 209296
-      },
-      {
-        "id": "sqlite3-opfs-async-proxy.js",
-        "file": "_app/immutable/workers/sqlite3-opfs-async-proxy-DMfyAKdZ.js",
-        "bytes": 11304
+        "file": "_app/immutable/workers/kokoro_worker-B9dVBDym.js",
+        "bytes": 2320715
       },
       {
         "id": "ecs_worker_bootstrap.js",
-        "file": "_app/immutable/workers/ecs_worker_bootstrap-B7f0xyRh.js",
-        "bytes": 996
+        "file": "_app/immutable/workers/ecs_worker_bootstrap-Dgl__wi5.js",
+        "bytes": 962570
+      },
+      {
+        "id": "text_llm_worker.js",
+        "file": "_app/immutable/workers/text_llm_worker-BdzX9YuT.js",
+        "bytes": 943247
+      },
+      {
+        "id": "ecs_worker.js",
+        "file": "_app/immutable/workers/ecs_worker-BHNUtE5I.js",
+        "bytes": 918984
+      },
+      {
+        "id": "sqlite3-worker1.js",
+        "file": "_app/immutable/workers/sqlite3-worker1-CE7sr5JJ.js",
+        "bytes": 210072
+      },
+      {
+        "id": "sqlite3-opfs-async-proxy.js",
+        "file": "_app/immutable/workers/sqlite3-opfs-async-proxy-BhxrX58i.js",
+        "bytes": 11320
       }
     ],
     "routeClosures": [
       {
         "route": "/",
-        "files": 55,
-        "rawBytes": 2074517
+        "files": 64,
+        "rawBytes": 2618691
       },
       {
         "route": "/game",
-        "files": 60,
-        "rawBytes": 2687273
+        "files": 89,
+        "rawBytes": 3292441
       },
       {
         "route": "/settings",
-        "files": 55,
-        "rawBytes": 2258894
+        "files": 71,
+        "rawBytes": 2829441
       }
     ]
   }

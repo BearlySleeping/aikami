@@ -7,7 +7,13 @@
 import { describe, expect, jest, test } from 'bun:test';
 import type { AiModeResolution } from '@aikami/types';
 import { createOpenAiCompatibleTextAdapter, isAiGatewayError } from '../src/index.ts';
-import { createJsonFetchMock, createSseFetchMock, SSE_DONE, sseChunk } from './helpers.ts';
+import {
+  createJsonFetchMock,
+  createNativeNdjsonFetchMock,
+  createSseFetchMock,
+  SSE_DONE,
+  sseChunk,
+} from './helpers.ts';
 
 const resolution = (overrides?: Partial<AiModeResolution>): AiModeResolution => ({
   capability: 'text',
@@ -113,7 +119,7 @@ describe('OpenAI-compatible text adapter — streaming', () => {
   });
 
   test('uses the injected runtime default endpoint for local providers', async () => {
-    const { fetchFn, calls } = createJsonFetchMock();
+    const { fetchFn, calls } = createNativeNdjsonFetchMock();
     const adapter = createOpenAiCompatibleTextAdapter({
       fetchFn,
       // C-389: local endpoints resolve from runtime config via this hook.
@@ -167,11 +173,22 @@ describe('OpenAI-compatible text adapter — streaming', () => {
     }
   });
 
-  // Updated for C-320: Ollama native /api/chat no longer sends VRAM eviction
-  // params — the endpoint uses stream: false which naturally releases VRAM.
-  test('Ollama native endpoint does not send VRAM eviction params', async () => {
-    const { fetchFn, calls } = createJsonFetchMock();
-    const adapter = createOpenAiCompatibleTextAdapter({ fetchFn });
+  // Residency policy is deliberately NOT changed by this lane.
+  //
+  // The old rationale ("`stream: false` naturally releases VRAM") is gone with
+  // the buffered route, and replacing it with an explicit `keep_alive: 0` would
+  // be worse: on a STREAMING request the eviction would fire while the stream is
+  // still being read, pulling the model out from under the call. So the field
+  // stays absent, and the assertion below is that adding streaming did not
+  // quietly start evicting models mid-generation.
+  test('a STREAMING native request carries no VRAM eviction params', async () => {
+    const native = createNativeNdjsonFetchMock();
+    const cloud = createSseFetchMock();
+    let seen = 0;
+    const adapter = createOpenAiCompatibleTextAdapter({
+      fetchFn: ((input: string | URL | Request, init?: RequestInit) =>
+        seen++ === 0 ? native.fetchFn(input, init) : cloud.fetchFn(input, init)) as typeof fetch,
+    });
 
     await adapter.generateText({
       resolution: resolution({
@@ -188,7 +205,12 @@ describe('OpenAI-compatible text adapter — streaming', () => {
       messages: [{ role: 'user', content: 'Hi' }],
     });
 
-    // Ollama native endpoint should NOT include VRAM eviction params.
+    // Read the recordings AFTER both calls — a snapshot taken up front is
+    // empty, and an empty capture asserts nothing.
+    const calls = [...native.calls, ...cloud.calls];
+    // The native call is now genuinely streaming, which is the condition under
+    // which eviction would be harmful.
+    expect(calls[0].body.stream).toBe(true);
     expect(calls[0].body.keep_alive).toBeUndefined();
     expect(calls[0].body.options).toBeUndefined();
     // Non-Ollama providers also skip them.
@@ -245,7 +267,7 @@ describe('OpenAI-compatible text adapter — streaming', () => {
   });
 
   test('does not forward OpenAI-shaped params to Ollama native /api/chat', async () => {
-    const { fetchFn, calls } = createJsonFetchMock();
+    const { fetchFn, calls } = createNativeNdjsonFetchMock();
     const adapter = createOpenAiCompatibleTextAdapter({ fetchFn });
 
     await adapter.generateText({
@@ -323,6 +345,63 @@ describe('OpenAI-compatible text adapter — streaming', () => {
         expect(error.message).toContain('HTTP 401');
       }
     }
+  });
+});
+
+describe('OpenAI-compatible text adapter — custom endpoint resolution', () => {
+  test('a bare-host custom base URL gets the /v1 segment', async () => {
+    const { fetchFn, calls } = createSseFetchMock();
+    const adapter = createOpenAiCompatibleTextAdapter({ fetchFn });
+
+    await adapter.generateText({
+      resolution: resolution({ provider: 'custom', endpoint: 'https://api.example.test' }),
+      signal: signal(),
+      messages: [{ role: 'user', content: 'Hi' }],
+    });
+
+    expect(calls[0].url).toBe('https://api.example.test/v1/chat/completions');
+  });
+
+  test('a custom base URL that already names a path is used verbatim', async () => {
+    const { fetchFn, calls } = createSseFetchMock();
+    const adapter = createOpenAiCompatibleTextAdapter({ fetchFn });
+
+    await adapter.generateText({
+      resolution: resolution({ provider: 'custom', endpoint: 'https://api.example.test/api/v1' }),
+      signal: signal(),
+      messages: [{ role: 'user', content: 'Hi' }],
+    });
+
+    expect(calls[0].url).toBe('https://api.example.test/api/v1/chat/completions');
+  });
+
+  test('a trailing slash on a bare host does not produce a double /v1', async () => {
+    const { fetchFn, calls } = createSseFetchMock();
+    const adapter = createOpenAiCompatibleTextAdapter({ fetchFn });
+
+    await adapter.generateText({
+      resolution: resolution({ provider: 'custom', endpoint: 'https://api.example.test/' }),
+      signal: signal(),
+      messages: [{ role: 'user', content: 'Hi' }],
+    });
+
+    expect(calls[0].url).toBe('https://api.example.test/v1/chat/completions');
+  });
+
+  test('a custom endpoint sends the stored key as a bearer token', async () => {
+    const { fetchFn, calls } = createSseFetchMock();
+    const adapter = createOpenAiCompatibleTextAdapter({
+      fetchFn,
+      getApiKey: (provider) => (provider === 'custom' ? 'custom-key' : undefined),
+    });
+
+    await adapter.generateText({
+      resolution: resolution({ provider: 'custom', endpoint: 'https://api.example.test/v1' }),
+      signal: signal(),
+      messages: [{ role: 'user', content: 'Hi' }],
+    });
+
+    expect(calls[0].headers.Authorization).toBe('Bearer custom-key');
   });
 });
 
@@ -636,7 +715,12 @@ describe('OpenAI-compatible text adapter — structured extraction', () => {
       });
 
       await backoffStarted;
-      expect(jest.getTimerCount()).toBe(1);
+      // Two timers, not one: the retry backoff AND the request's total-budget
+      // timer. The budget timer is the point of this change — a request with no
+      // caller deadline still gets a finite safety limit — so its presence here
+      // is the correct new state, and the assertion is on the SUM because what
+      // matters is that the backoff is among them and is cleared below.
+      expect(jest.getTimerCount()).toBe(2);
       controller.abort();
 
       let error: unknown;
@@ -654,5 +738,201 @@ describe('OpenAI-compatible text adapter — structured extraction', () => {
     } finally {
       jest.useRealTimers();
     }
+  });
+});
+
+describe('OpenAI-compatible text adapter — reasoning control', () => {
+  const params: AiModeResolution['params'] = {
+    temperature: 0.3,
+    topP: 0.9,
+    topK: 40,
+    repetitionPenalty: 1.1,
+    presencePenalty: 0,
+    maxTokens: 800,
+    contextSize: 4096,
+  };
+
+  /** An Ollama resolution, which resolves to native `/api/chat`. */
+  const ollamaResolution = (overrides?: Partial<AiModeResolution>): AiModeResolution =>
+    resolution({
+      mode: 'offline',
+      provider: 'ollama',
+      endpoint: 'http://10.0.0.5:11434/v1',
+      params,
+      reasoning: 'none',
+      ...overrides,
+    });
+
+  /** An OpenAI-compatible provider, which resolves to `/v1/chat/completions`. */
+  const compatResolution = (overrides?: Partial<AiModeResolution>): AiModeResolution =>
+    resolution({ provider: 'openrouter', params, reasoning: 'none', ...overrides });
+
+  test('sends `think: false` for Ollama, the spelling its NATIVE surface honours', async () => {
+    const { fetchFn, calls } = createNativeNdjsonFetchMock();
+    const adapter = createOpenAiCompatibleTextAdapter({
+      fetchFn,
+      getReasoningControl: () => 'ollama-native-think',
+    });
+
+    await adapter.generateText({
+      resolution: ollamaResolution(),
+      signal: signal(),
+      messages: [{ role: 'user', content: 'Extract the envelope' }],
+    });
+
+    expect(calls[0].url).toBe('http://10.0.0.5:11434/api/chat');
+    expect(calls[0].body.think).toBe(false);
+    expect(calls[0].body.reasoning_effort).toBeUndefined();
+  });
+
+  test('sends `reasoning_effort: "none"` for an OpenAI-compatible provider', async () => {
+    const { fetchFn, calls } = createSseFetchMock();
+    const adapter = createOpenAiCompatibleTextAdapter({
+      fetchFn,
+      getReasoningControl: (provider) =>
+        provider === 'openrouter' ? 'openai-compat-reasoning-effort' : undefined,
+    });
+
+    await adapter.generateText({
+      resolution: compatResolution(),
+      signal: signal(),
+      messages: [{ role: 'user', content: 'Extract the envelope' }],
+    });
+
+    expect(calls[0].url).toBe('https://openrouter.ai/api/v1/chat/completions');
+    expect(calls[0].body.reasoning_effort).toBe('none');
+    expect(calls[0].body.think).toBeUndefined();
+  });
+
+  test('DROPS a control measured on a surface the provider is not being sent over', async () => {
+    // The drift hazard this guards: `reasoningControl` names a (provider,
+    // SURFACE) pairing. If `ollama` is ever routed through `/v1`, the native
+    // spelling would be accepted with a 200 and silently ignored — reintroducing
+    // exactly the 6-second failure this measures. Dropping is the safe answer.
+    const { fetchFn, calls } = createSseFetchMock();
+    const adapter = createOpenAiCompatibleTextAdapter({
+      fetchFn,
+      getReasoningControl: () => 'ollama-native-think',
+    });
+
+    await adapter.generateText({
+      // A non-ollama provider that nonetheless declares the native control.
+      resolution: compatResolution(),
+      signal: signal(),
+      messages: [{ role: 'user', content: 'Extract the envelope' }],
+    });
+
+    expect(calls[0].url).toBe('https://openrouter.ai/api/v1/chat/completions');
+    expect('think' in calls[0].body).toBe(false);
+    expect('reasoning_effort' in calls[0].body).toBe(false);
+  });
+
+  test('DROPS the compat control when the provider resolves to the native surface', async () => {
+    const { fetchFn, calls } = createNativeNdjsonFetchMock();
+    const adapter = createOpenAiCompatibleTextAdapter({
+      fetchFn,
+      getReasoningControl: () => 'openai-compat-reasoning-effort',
+    });
+
+    await adapter.generateText({
+      resolution: ollamaResolution(),
+      signal: signal(),
+      messages: [{ role: 'user', content: 'Extract the envelope' }],
+    });
+
+    expect(calls[0].url).toBe('http://10.0.0.5:11434/api/chat');
+    expect('reasoning_effort' in calls[0].body).toBe(false);
+    expect('think' in calls[0].body).toBe(false);
+  });
+
+  test('omits the field entirely for a provider that declares no control', async () => {
+    const { fetchFn, calls } = createNativeNdjsonFetchMock();
+    // No getReasoningControl at all — the default is "no provider can be asked".
+    const adapter = createOpenAiCompatibleTextAdapter({ fetchFn });
+
+    await adapter.generateText({
+      resolution: ollamaResolution(),
+      signal: signal(),
+      messages: [{ role: 'user', content: 'Extract the envelope' }],
+    });
+
+    // Deterministic unsupported fallback: byte-identical to the old body.
+    expect('think' in calls[0].body).toBe(false);
+    expect('reasoning_effort' in calls[0].body).toBe(false);
+  });
+
+  test('a provider without a control keeps its generation params intact', async () => {
+    const { fetchFn, calls } = createSseFetchMock();
+    const adapter = createOpenAiCompatibleTextAdapter({
+      fetchFn,
+      getReasoningControl: () => undefined,
+    });
+
+    await adapter.generateText({
+      resolution: compatResolution(),
+      signal: signal(),
+      messages: [{ role: 'user', content: 'Hi' }],
+    });
+
+    expect(calls[0].body.max_tokens).toBe(800);
+    expect(calls[0].body.temperature).toBe(0.3);
+  });
+
+  test('leaves reasoning entirely alone unless the call asked for it', async () => {
+    const { fetchFn, calls } = createNativeNdjsonFetchMock();
+    const adapter = createOpenAiCompatibleTextAdapter({
+      fetchFn,
+      getReasoningControl: () => 'ollama-native-think',
+    });
+
+    // No `reasoning` on the resolution — the player-facing dialogue case.
+    await adapter.generateText({
+      resolution: ollamaResolution({ reasoning: undefined }),
+      signal: signal(),
+      messages: [{ role: 'user', content: 'Tell me a story about the mill' }],
+    });
+
+    // Absence is the point. `think: true` is NOT semantically equivalent to
+    // leaving the provider alone, and sending it would change model behaviour.
+    expect('think' in calls[0].body).toBe(false);
+    expect('reasoning_effort' in calls[0].body).toBe(false);
+  });
+
+  test('an explicit `default` on the call also means "send nothing"', async () => {
+    const { fetchFn, calls } = createNativeNdjsonFetchMock();
+    const adapter = createOpenAiCompatibleTextAdapter({
+      fetchFn,
+      getReasoningControl: () => 'ollama-native-think',
+    });
+
+    await adapter.generateText({
+      resolution: ollamaResolution({ reasoning: 'default' }),
+      signal: signal(),
+      messages: [{ role: 'user', content: 'Hi' }],
+    });
+
+    expect('think' in calls[0].body).toBe(false);
+  });
+
+  test('the preference cannot be smuggled in through the connection params', async () => {
+    // `TextParams` is the persisted connection record and has no `reasoning`
+    // key. Even if a stored connection somehow carried the value, it must not
+    // reach the wire — the call's own task preset is the only owner.
+    const { fetchFn, calls } = createNativeNdjsonFetchMock();
+    const adapter = createOpenAiCompatibleTextAdapter({
+      fetchFn,
+      getReasoningControl: () => 'ollama-native-think',
+    });
+
+    await adapter.generateText({
+      resolution: ollamaResolution({
+        reasoning: undefined,
+        params: { ...params, reasoning: 'none' } as AiModeResolution['params'],
+      }),
+      signal: signal(),
+      messages: [{ role: 'user', content: 'Hi' }],
+    });
+
+    expect('think' in calls[0].body).toBe(false);
   });
 });

@@ -274,7 +274,19 @@ function readBuildFlags(markerPath: string): boolean | null {
   }
 }
 
-export function runDeployAssetGuard(config: AppConfig, appRoot: string): boolean {
+export type DeployAssetGuardOptions = {
+  readonly config: AppConfig;
+  readonly appRoot: string;
+  /**
+   * The mode being deployed. Only consulted when the build left no readable
+   * decision record, because the dev-route default is mode-derived — passing the
+   * real mode keeps that fallback agreeing with the build it is guarding.
+   */
+  readonly mode: string;
+};
+
+export function runDeployAssetGuard(options: DeployAssetGuardOptions): boolean {
+  const { config, appRoot, mode } = options;
   const guardScript = join(appRoot, 'scripts', 'check_deploy_assets.ts');
   if (!existsSync(guardScript)) {
     return false;
@@ -283,9 +295,14 @@ export function runDeployAssetGuard(config: AppConfig, appRoot: string): boolean
 
   const markerPath = join(appRoot, buildDir, DEV_ROUTES_BUILD_MARKER_FILE);
   const recorded = existsSync(markerPath) ? readBuildFlags(markerPath) : null;
-  const allowDevRoutes = recorded ?? resolveIncludeDevRoutes('build');
+  const allowDevRoutes = recorded ?? resolveIncludeDevRoutes({ command: 'build', mode });
   if (allowDevRoutes) {
-    warn(`  ⚠️  ${DEV_ROUTES_ENV_VAR}=true — this deploy SHIPS the (dev) sandbox routes.`);
+    // Name the source of the decision, not the variable's value: the default is
+    // mode-derived, so a staging deploy ships the sandboxes with
+    // AIKAMI_INCLUDE_DEV_ROUTES unset and "…=true" would be false there.
+    const decidedBy =
+      recorded === null ? `${DEV_ROUTES_ENV_VAR} + mode (default)` : 'the build record';
+    warn(`  ⚠️  this deploy SHIPS the (dev) sandbox routes — decided by ${decidedBy}.`);
   }
 
   log(`  🔎 Checking deployment assets (${buildDir}) before upload...`);
@@ -574,7 +591,7 @@ export async function deployCloudflareWorker(
 
   // 2b. Deployment-asset guard — runs even when the build was reused/cached.
   //     A stale or invalid output must never reach Wrangler.
-  runDeployAssetGuard(config, appRoot);
+  runDeployAssetGuard({ config, appRoot, mode });
 
   // 3. Write the per-mode wrangler.jsonc.
   const configPath = writeWranglerConfig(config, appRoot, mode);

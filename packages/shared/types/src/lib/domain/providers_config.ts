@@ -11,8 +11,12 @@
 import type {
   AiConnectionSchema,
   AiProviderSchema,
+  AiReasoningSchema,
   AiRoleSchema,
   ConnectionCapabilitySchema,
+  DecisionGameplayModeSchema,
+  DecisionParamsSchema,
+  DecisionRuntimeSchema,
   ImageParamsSchema,
   ProviderSourceSchema,
   RoleAssignmentsSchema,
@@ -50,11 +54,29 @@ export type AiRole = Static<typeof AiRoleSchema>;
 /** Generation parameters for text connections. */
 export type TextParams = Static<typeof TextParamsSchema>;
 
+/** Reasoning-channel preference for one request. See {@link AiReasoningSchema}. */
+export type AiReasoning = Static<typeof AiReasoningSchema>;
+
 /** Image-generation-specific connection options. */
 export type ImageParams = Static<typeof ImageParamsSchema>;
 
 /** Voice/TTS-specific connection options. */
 export type VoiceParams = Static<typeof VoiceParamsSchema>;
+
+/**
+ * Decision-connection options: checkpoint, runtime and declared languages.
+ *
+ * Not generation parameters — a decision checkpoint has none, and exposing
+ * temperature or a context window here would invite configuring a chat model as
+ * if it were a decision model.
+ */
+export type DecisionParams = Static<typeof DecisionParamsSchema>;
+
+/** Which runtime serves a decision endpoint. */
+export type DecisionRuntime = Static<typeof DecisionRuntimeSchema>;
+
+/** Persisted Off/Shadow/On for a decision connection. */
+export type DecisionGameplayMode = Static<typeof DecisionGameplayModeSchema>;
 
 /** A credential + host. Created once per account. */
 export type AiProvider = Static<typeof AiProviderSchema>;

@@ -39,15 +39,39 @@ import {
   MODEL_ORIGIN,
   type OrtConfigurableEnv,
 } from '@aikami/frontend/local-runtime';
-import { env } from '@huggingface/transformers';
+// Deep import, not the barrel: this worker bundle is inlined with
+// `inlineDynamicImports` and size-checked by `check_bundle.ts`, and the
+// utils barrel drags in the API client + logger. The probe itself is the
+// single source of truth shared with the text LLM worker and the start menu.
+import { isWebGPUSupported } from '@aikami/frontend/utils/browser/webgpu';
+import { env, PreTrainedTokenizer, StyleTextToSpeech2Model } from '@huggingface/transformers';
+import { createKokoroFetch, kokoroLoadPlan } from './kokoro_runtime.ts';
+import type {
+  ErrorResponse,
+  InitializeMessage,
+  InitializeResponse,
+  KokoroDevice,
+  SynthesizeResponse,
+  WorkerErrorPayload,
+  WorkerMessage,
+} from './kokoro_worker_protocol.ts';
 
 // Model files resolve through their canonical HuggingFace URLs, pinned to the
-// same revision the download control caches under. The bytes still come from
-// the app-controlled Cache Storage — a network fetch only happens for files
-// the bundle does not carry (e.g. tokenizer_config.json).
+// same revision the download control caches under. local_files_only forbids
+// model network requests, including optional tokenizer_config.json.
 configurePinnedRemoteModelResolution(env as OrtConfigurableEnv, {
   revision: KOKORO_REVISION,
 });
+// Transformers requires this flag with local_files_only. The owned cache still
+// refuses relative keys; only canonical pinned remote cache keys can answer.
+env.allowLocalModels = true;
+globalThis.fetch = createKokoroFetch({
+  fetch: globalThis.fetch.bind(globalThis),
+  match: async (cache, key) => (await caches.open(cache)).match(key),
+});
+// Transformers 4 captures fetch at import time; Kokoro's voice loader uses
+// the global instead. Both must enforce the same cache-only boundary.
+env.fetch = globalThis.fetch;
 
 // Own the cache. `useCustomCache` is only consulted when `useBrowserCache` is
 // off, so both are set; without this the relative `/models/...` lookup hits
@@ -85,87 +109,118 @@ pinnedEnv.customCache = createPinnedModelCache(createCacheStorageBackend(), {
 
 type KokoroSession = Awaited<ReturnType<typeof import('kokoro-js').KokoroTTS.from_pretrained>>;
 let session: KokoroSession | null = null;
-let activeBackend: 'webgpu' | 'wasm' = 'wasm';
+let activeBackend: KokoroDevice = 'wasm';
+
+/**
+ * Identifies this module instance, so a response can prove which worker
+ * produced it. `session` lives in module scope, so "session not initialized"
+ * can only mean the request reached an instance whose handleInitialize never
+ * finished — two live instances, not a lost session.
+ */
+const INSTANCE_ID = `w${Math.random().toString(36).slice(2, 8)}`;
+
+/**
+ * Tripwire for a re-evaluated worker entry.
+ *
+ * A code-split worker whose module graph closes a cycle through a dynamic
+ * import can evaluate this module twice inside one worker global. The second
+ * pass would install a fresh `self.onmessage` over the first, bound to an
+ * empty `session` — so the worker that reported `ready` is no longer the one
+ * answering requests, and every synthesis fails with "Kokoro session not
+ * initialized". WebKitGTK (Linux Tauri) does not dedupe the re-imported entry;
+ * Chromium does, so this only ever bit the Linux desktop build.
+ *
+ * The bundling is fixed by `worker.rolldownOptions.output.inlineDynamicImports`
+ * and enforced by `check_bundle.ts`. This guard exists so that if the shape
+ * ever comes back, it fails LOUDLY and leaves the first (working) instance in
+ * charge instead of silently hijacking the message router.
+ */
+const PRIOR_INSTANCE = (globalThis as { __aikamiKokoroWorker?: string }).__aikamiKokoroWorker;
+(globalThis as { __aikamiKokoroWorker?: string }).__aikamiKokoroWorker = INSTANCE_ID;
+
+const duplicateEvaluation = (): boolean => {
+  if (PRIOR_INSTANCE === undefined) {
+    return false;
+  }
+  self.postMessage({
+    type: 'error',
+    name: 'DuplicateModuleEvaluation',
+    instanceId: INSTANCE_ID,
+    message:
+      `kokoro_worker entry evaluated twice in one worker global ` +
+      `(${PRIOR_INSTANCE} then ${INSTANCE_ID}). This means the worker bundle ` +
+      'was code-split into a cyclic module graph; keep every worker ' +
+      'self-contained (vite.config.ts → worker.rolldownOptions.output.inlineDynamicImports).',
+  });
+  return true;
+};
 
 // ---------------------------------------------------------------------------
 // Message types
 // ---------------------------------------------------------------------------
 
-type InitializeMessage = {
-  action: 'initialize';
-  /**
-   * Optional override for the ORT runtime base URL (ends in '/'). Normally
-   * omitted — the shared seam resolves the version-pinned distribution URL.
-   */
-  wasmPath?: string;
-  /** Preferred device; WebGPU falls back to WASM when unavailable. */
-  device: 'webgpu' | 'wasm';
-  /** HF model id — pinned by the main thread. */
-  modelId: string;
-};
-
-type SynthesizeMessage = {
-  action: 'synthesize';
-  text: string;
-  voice: string;
-  /**
-   * Correlates this request with its response. The main thread starts a new
-   * synthesis before the previous one finishes (every speak() calls stop()
-   * first), so an untagged 'complete' cannot be told apart from a stale one.
-   */
-  requestId: number;
-};
-
-type WorkerMessage = InitializeMessage | SynthesizeMessage;
-
-type InitializeResponse = {
-  type: 'ready';
-  /** Which backend actually loaded. */
-  backend: 'webgpu' | 'wasm';
-};
-
-type SynthesizeResponse = {
-  type: 'complete';
-  pcmData: Float32Array;
-  sampleRate: number;
-  /** Echoes the requesting {@link SynthesizeMessage.requestId}. */
-  requestId: number;
-};
-
-type ErrorResponse = {
-  type: 'error';
-  message: string;
-  /** Echoes the requesting {@link SynthesizeMessage.requestId}, when the failure belongs to one. */
-  requestId?: number;
+/**
+ * Flattens a thrown value into text that survives structured cloning.
+ *
+ * `error.message` alone is routinely useless for a failure inside
+ * transformers/onnxruntime ("null function or function signature mismatch"
+ * names neither the model nor the tensor). ORT failures in particular are
+ * frequently `null` rejections, where there is no message at all. Keeping the
+ * name and the first stack frames is what makes the cause identifiable.
+ */
+const describeError = (error: unknown): WorkerErrorPayload => {
+  if (error instanceof Error) {
+    return {
+      name: error.name,
+      message: error.message || `${error.name} (no message)`,
+      stack: error.stack?.split('\n').slice(0, 6).join(' | '),
+    };
+  }
+  if (error === null) {
+    return { name: 'NullRejection', message: 'Rejected with null (no error object thrown)' };
+  }
+  if (typeof error === 'object') {
+    try {
+      return { name: 'NonError', message: JSON.stringify(error) };
+    } catch {
+      return { name: 'NonError', message: String(error) };
+    }
+  }
+  return { name: 'Primitive', message: String(error) };
 };
 
 // ---------------------------------------------------------------------------
 // Backend detection
 // ---------------------------------------------------------------------------
 
-/** True when a WebGPU adapter can actually be requested. */
-const hasWebGpu = async (): Promise<boolean> => {
-  try {
-    const gpu = (navigator as Navigator & { gpu?: { requestAdapter?: () => Promise<unknown> } })
-      .gpu;
-    if (!gpu?.requestAdapter) {
-      return false;
-    }
-    const adapter = await Promise.race([
-      gpu.requestAdapter(),
-      new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), 3000)),
-    ]);
-    return adapter !== undefined && adapter !== null;
-  } catch {
-    // Headless CI, blocklisted driver, or adapter request failure — treat
-    // WebGPU as absent rather than letting the promise hang.
-    return false;
-  }
-};
+// The adapter probe lives in `@aikami/frontend/utils` (`isWebGPUSupported`) —
+// this worker's context is the one that matters, so it is decided here, but
+// the probe itself is never re-implemented.
 
 // ---------------------------------------------------------------------------
 // Handlers
 // ---------------------------------------------------------------------------
+
+/**
+ * True once a load has been started, successful or not.
+ *
+ * Makes 'initialize' idempotent: the main thread resolves its in-flight
+ * promise against a single 'ready', but a duplicate message (a retrying
+ * client, a second lifecycle owner) must not pay for a second 92 MB load.
+ * `handleInitialize` handles its own failures, so the promise itself is not
+ * retained.
+ */
+let initStarted = false;
+/**
+ * Serialized synthesis queue.
+ *
+ * Two concurrent `session.generate` calls on one ORT session interleave
+ * tensor writes and produce garbage; running them one at a time also means a
+ * superseded utterance can be dropped before it costs a forward pass.
+ */
+let queue: Promise<void> = Promise.resolve();
+/** Requests cancelled before they were dequeued. */
+const cancelled = new Set<number>();
 
 const handleInitialize = async (message: InitializeMessage): Promise<void> => {
   try {
@@ -177,32 +232,54 @@ const handleInitialize = async (message: InitializeMessage): Promise<void> => {
     // the distribution plane — never a hashed `_app/immutable` path.
     const { wasmPaths } = configureOrtRuntime(env as OrtConfigurableEnv, wasmPath);
 
+    // The two heavy imports and the adapter probe all run concurrently: the
+    // probe used to sit on the caller's critical path for up to 3s before
+    // the imports even started. Deciding the backend here (rather than on the
+    // main thread) is also the only correct place — it is the worker's own
+    // context that matters.
+    const [ort, { KokoroTTS }, gpuOk] = await Promise.all([
+      import('onnxruntime-web/webgpu'),
+      import('kokoro-js'),
+      device === 'wasm' ? Promise.resolve(false) : isWebGPUSupported(),
+    ]);
     // The standalone `onnxruntime-web` instance the Worker controls directly
-    // must agree with the transformers env. Importing it here (rather than
-    // relying on transformers' inlined copy) lets us pin its env as well.
-    const ort = await import('onnxruntime-web/webgpu');
+    // must agree with the transformers env.
     ort.env.wasm.wasmPaths = wasmPaths;
 
-    // Decide the effective backend: WebGPU when requested and available,
-    // WASM otherwise (single-threaded since COEP was dropped — C-389).
-    const useWebGpu = device === 'webgpu' && (await hasWebGpu());
+    if (modelId !== KOKORO_MODEL_ID || message.revision !== KOKORO_REVISION) {
+      throw new Error('Kokoro model/revision does not match the downloaded bundle.');
+    }
+    const plan = kokoroLoadPlan({ device, gpuSupported: gpuOk });
+    // Kokoro 1.2.1's from_pretrained drops revision/local_files_only options.
+    // Its public constructor accepts explicitly loaded model and tokenizer.
+    const [model, tokenizerJson] = await Promise.all([
+      StyleTextToSpeech2Model.from_pretrained(modelId, plan.model),
+      (await fetch(plan.tokenizer.key)).json(),
+    ]);
+    // Transformers 4's AutoTokenizer probes tokenizer_config.json before
+    // forwarding local_files_only. This bundle predates that required file;
+    // use its public constructor and the pinned metadata shipped in the plan.
+    session = new KokoroTTS(model, new PreTrainedTokenizer(tokenizerJson, plan.tokenizer.config));
+    activeBackend = plan.model.device;
 
-    const { KokoroTTS } = await import('kokoro-js');
-
-    session = await KokoroTTS.from_pretrained(modelId, {
-      dtype: 'q8',
-      device: useWebGpu ? 'webgpu' : 'wasm',
-      ...(useWebGpu ? { enableGraphCapture: true } : {}),
-    });
-    activeBackend = useWebGpu ? 'webgpu' : 'wasm';
-
-    const response: InitializeResponse = { type: 'ready', backend: activeBackend };
+    const response: InitializeResponse = {
+      type: 'ready',
+      backend: activeBackend,
+      fallbackReason: plan.fallbackReason,
+      instanceId: INSTANCE_ID,
+    };
     self.postMessage(response);
   } catch (error: unknown) {
     const base = error instanceof Error ? error.message : 'Unknown initialization error';
+    const detail = describeError(error);
     const rejected =
       rejectedCacheKeys.length > 0 ? ` (refused cache keys: ${rejectedCacheKeys.join(', ')})` : '';
-    const response: ErrorResponse = { type: 'error', message: `${base}${rejected}` };
+    const response: ErrorResponse = {
+      type: 'error',
+      ...detail,
+      instanceId: INSTANCE_ID,
+      message: `${base}${rejected}`,
+    };
     self.postMessage(response);
   }
 };
@@ -234,6 +311,7 @@ const handleSynthesize = async (options: {
     const response: ErrorResponse = {
       type: 'error',
       message: 'Kokoro session not initialized. Call initialize first.',
+      instanceId: INSTANCE_ID,
       requestId,
     };
     self.postMessage(response);
@@ -243,7 +321,9 @@ const handleSynthesize = async (options: {
   if (!text.trim()) {
     const response: ErrorResponse = {
       type: 'error',
+      name: 'EmptyText',
       message: 'Empty text — nothing to synthesize.',
+      instanceId: INSTANCE_ID,
       requestId,
     };
     self.postMessage(response);
@@ -251,6 +331,11 @@ const handleSynthesize = async (options: {
   }
 
   try {
+    // `session.generate()` is one opaque call that hides four distinct
+    // failure modes: voice validation, espeak phonemization, the voice
+    // embedding load, and the ONNX forward pass. The active backend is
+    // attached to the failure because the forward pass is the one that
+    // differs per platform (WebGPU vs WASM).
     const result = await session.generate(
       text,
       // kokoro-js voice type is a union of known presets; cast the
@@ -266,11 +351,26 @@ const handleSynthesize = async (options: {
     const pcmData = Array.isArray(rawAudio) ? concatChunks(rawAudio) : rawAudio;
     const sampleRate = result.sampling_rate;
 
-    const response: SynthesizeResponse = { type: 'complete', pcmData, sampleRate, requestId };
+    const response: SynthesizeResponse = {
+      type: 'complete',
+      pcmData,
+      sampleRate,
+      requestId,
+      instanceId: INSTANCE_ID,
+    };
     self.postMessage(response, { transfer: [pcmData.buffer] });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Synthesis failed';
-    const response: ErrorResponse = { type: 'error', message, requestId };
+    const detail = describeError(error);
+    // The backend prefix is the single most useful discriminator here: a
+    // WASM-only failure on a machine where WebGPU was selected points at the
+    // graph-capture/ORT path, not at the model or the voice.
+    const response: ErrorResponse = {
+      type: 'error',
+      ...detail,
+      instanceId: INSTANCE_ID,
+      message: `[${activeBackend}] ${detail.message}`,
+      requestId,
+    };
     self.postMessage(response);
   }
 };
@@ -279,19 +379,40 @@ const handleSynthesize = async (options: {
 // Message router
 // ---------------------------------------------------------------------------
 
-self.onmessage = (event: MessageEvent<WorkerMessage>) => {
-  const { data } = event;
+// A second evaluation must NOT take over the router: the first instance owns
+// a fully-initialized `session`, and replacing it is what breaks synthesis.
+if (duplicateEvaluation()) {
+  // Module intentionally inert — see `duplicateEvaluation`.
+} else {
+  self.onmessage = (event: MessageEvent<WorkerMessage>) => {
+    const { data } = event;
 
-  switch (data.action) {
-    case 'initialize':
-      handleInitialize(data);
-      break;
+    switch (data.action) {
+      case 'initialize':
+        // Idempotent: a duplicate joins the first load rather than paying for
+        // the 92 MB model twice.
+        if (!initStarted) {
+          initStarted = true;
+          void handleInitialize(data);
+        }
+        break;
 
-    case 'synthesize':
-      handleSynthesize({ text: data.text, voice: data.voice, requestId: data.requestId });
-      break;
+      case 'synthesize':
+        queue = queue.then(() =>
+          cancelled.delete(data.requestId)
+            ? undefined
+            : handleSynthesize({ text: data.text, voice: data.voice, requestId: data.requestId }),
+        );
+        break;
 
-    default:
-      break;
-  }
-};
+      case 'cancel':
+        // Recorded even when the request is still queued, so a superseded
+        // utterance is never generated just to be thrown away.
+        cancelled.add(data.requestId);
+        break;
+
+      default:
+        break;
+    }
+  };
+}

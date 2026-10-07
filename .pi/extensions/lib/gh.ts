@@ -146,6 +146,8 @@ export type GhResult = {
   success: boolean;
   /** stdout on success, stderr (falling back to stdout) on failure. */
   text: string;
+  /** Preserve diagnostics even for allowed nonzero exits (e.g. no CI checks). */
+  stderr?: string;
   json?: unknown;
   code: number | null;
 };
@@ -158,6 +160,7 @@ export const runGh = async (args: string[], options: GhOptions = {}): Promise<Gh
     signal: options.signal,
   });
 
+  const stderr = result.stderr.trim() || undefined;
   const allowed = options.allowExitCodes ?? [];
   const ok = result.code === 0 || (result.code !== null && allowed.includes(result.code));
 
@@ -166,20 +169,21 @@ export const runGh = async (args: string[], options: GhOptions = {}): Promise<Gh
       success: false,
       text: result.stderr || result.stdout || `gh exited with code ${result.code}`,
       code: result.code,
+      stderr,
     };
   }
 
   const text = result.stdout.trim();
   if (options.parseJson && text) {
     try {
-      return { success: true, text, json: JSON.parse(text), code: result.code };
+      return { success: true, text, json: JSON.parse(text), code: result.code, stderr };
     } catch {
       // Non-JSON output is legitimate for some gh subcommands.
-      return { success: true, text, code: result.code };
+      return { success: true, text, code: result.code, stderr };
     }
   }
 
-  return { success: true, text, code: result.code };
+  return { success: true, text, code: result.code, stderr };
 };
 
 /** Convenience: runs gh from a single argument string and returns stdout ('' on failure). */

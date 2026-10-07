@@ -1,10 +1,14 @@
 // apps/frontend/client/src/lib/services/game/game_overlay_service.test.ts
 
 import { afterAll, beforeEach, describe, expect, mock, spyOn, test } from 'bun:test';
-import type { EngineBridge } from '@aikami/frontend/engine';
+import { createEngineBridge, type EngineBridge } from '@aikami/frontend/engine';
+import { setDialogCapabilities } from '@aikami/frontend/services/base';
 import type { GameOverlayType, OverlayStackEntry } from '$types';
 import { createRealLocalDatabase } from '../__tests__/local_database_fixture.ts';
+import { campaignService } from '../campaign/campaign_service.svelte.ts';
+import { gameSaveService } from './game_save_service.svelte.ts';
 import { onboardingHintService } from './onboarding_hint_service.svelte.ts';
+import * as saveMapBlock from './save_map_block.ts';
 
 // $state, $derived are polyfilled by test_setup.ts
 
@@ -231,6 +235,38 @@ describe('GameOverlayService', () => {
     expect(send).toHaveBeenCalledTimes(1);
   });
 
+  test('dialogue survives dispatch and worker rejection with a visible error', () => {
+    const bridge = createEngineBridge();
+    const send = spyOn(bridge, 'send').mockImplementation(() => {});
+    const showSnackbar = mock(() => {});
+    const previous = setDialogCapabilities({
+      showSnackbar,
+      showConditionalSnackbar: () => {},
+      setAppLoading: () => {},
+      open: async () => undefined,
+    });
+    try {
+      service.setBridge(bridge);
+      service.setActive('DIALOGUE');
+      const outcome = service.startCombat({
+        enemyName: 'Rollo',
+        encounterId: 'inn_wand_encounter',
+      });
+      expect(outcome.ok).toBe(true);
+      expect(send).toHaveBeenCalledTimes(1);
+      expect(service.activeOverlay).toBe('DIALOGUE');
+      service.rejectCombatStart();
+      expect(service.activeOverlay).toBe('DIALOGUE');
+      expect(showSnackbar).toHaveBeenCalledWith({
+        text: 'Combat could not start. Please try again.',
+        type: 'error',
+      });
+    } finally {
+      setDialogCapabilities(previous);
+      send.mockRestore();
+    }
+  });
+
   // ── Keyboard handler ──
 
   test('should open pause menu on Escape when no overlay active', () => {
@@ -320,6 +356,79 @@ describe('GameOverlayService', () => {
     service.resumeGame();
 
     expect(service.activeOverlay).toBe('NONE');
+  });
+
+  // ── Interaction prompt (C-327 AC-2) ──
+  //
+  // The prompt has exactly ONE input: the target the engine published. These
+  // cover the failure the derived flag exists to prevent — a prompt restored
+  // from a remembered target, which the dirty-checked engine can never correct.
+
+  const guardTarget = { verb: 'Talk to', targetName: 'Bram the Guard' };
+
+  test('shows the prompt only while the engine reports a target', () => {
+    expect(service.interactionPromptVisible).toBe(false);
+    expect(service.interactionPromptLabel).toBe('');
+
+    service.setInteractionPrompt({ target: guardTarget, targetScreenX: 10, targetScreenY: 20 });
+
+    expect(service.interactionPromptVisible).toBe(true);
+    expect(service.interactionPromptLabel).toMatch(/Talk to Bram the Guard$/);
+    expect(service.interactionPromptScreenX).toBe(10);
+    expect(service.interactionPromptScreenY).toBe(20);
+
+    service.clearInteractionPrompt();
+
+    expect(service.interactionPromptVisible).toBe(false);
+    expect(service.interactionPromptLabel).toBe('');
+    expect(service.interactionPromptScreenX).toBeUndefined();
+  });
+
+  test('withdraws the prompt for any overlay and hands it back on close', () => {
+    service.setInteractionPrompt({ target: guardTarget });
+    expect(service.interactionPromptVisible).toBe(true);
+
+    service.setActive('DIALOGUE');
+    expect(service.interactionPromptVisible).toBe(false);
+
+    service.clearActive();
+    expect(service.interactionPromptVisible).toBe(true);
+  });
+
+  test('a cleared target is NOT resurrected by closing an overlay', () => {
+    // The regression: the overlay router used to restore visibility from
+    // remembered metadata. `INTERACTION_TARGET_CHANGED` is dirty-checked, so
+    // once the engine had published the clear there was no later event to undo
+    // the stale restore — the prompt stayed until a map transition or a reload.
+    service.setInteractionPrompt({ target: guardTarget });
+    service.setActive('PAUSE_MENU');
+    service.clearInteractionPrompt();
+
+    service.popOverlay();
+
+    expect(service.interactionPromptVisible).toBe(false);
+    expect(service.interactionPromptLabel).toBe('');
+  });
+
+  test('a map load drops the previous map target', () => {
+    service.setInteractionPrompt({ target: guardTarget, targetScreenX: 5, targetScreenY: 5 });
+
+    service.onMapLoaded();
+
+    expect(service.interactionPromptVisible).toBe(false);
+    expect(service.interactionPromptScreenX).toBeUndefined();
+  });
+
+  test('a retained target keeps tracking the camera while overlays open and close', () => {
+    service.setInteractionPrompt({ target: guardTarget, targetScreenX: 5, targetScreenY: 5 });
+    service.setActive('INVENTORY');
+
+    service.setInteractionPromptPosition({ targetScreenX: 40, targetScreenY: 60 });
+    service.popOverlay();
+
+    expect(service.interactionPromptVisible).toBe(true);
+    expect(service.interactionPromptScreenX).toBe(40);
+    expect(service.interactionPromptScreenY).toBe(60);
   });
 
   // ── Overlay Stack (C-332 AC-2) ──
@@ -509,6 +618,73 @@ describe('GameOverlayService', () => {
     }
     // Verify the service's internal stack was not affected
     expect(service.stackDepth).toBe(originalLength);
+  });
+
+  test('manual save reports failure when the durable resume pointer fails', async () => {
+    service.setBridge(createEngineBridge());
+    const map = spyOn(saveMapBlock, 'buildSaveMapBlock').mockResolvedValue({
+      packId: 'emberwatch',
+      mapId: 'village',
+      playerX: 1024,
+      playerY: 1440,
+    });
+    const name = spyOn(saveMapBlock, 'getCurrentMapName').mockResolvedValue('Emberwatch');
+    const slot = spyOn(gameSaveService, 'saveGame').mockResolvedValue(undefined);
+    const pointer = spyOn(campaignService, 'saveCampaign').mockRejectedValue(
+      new Error('IndexedDB snapshot commit failed'),
+    );
+    try {
+      await service.saveGame();
+      expect(slot).toHaveBeenCalledTimes(1);
+      expect(pointer).toHaveBeenCalledWith({ slotId: 'manual-1' });
+      expect(service.saveMessage).toBe('Save failed');
+      expect(service.isSaving).toBe(false);
+    } finally {
+      map.mockRestore();
+      name.mockRestore();
+      slot.mockRestore();
+      pointer.mockRestore();
+    }
+  });
+
+  test('manual save waits for durable resume metadata before reporting success', async () => {
+    service.setBridge(createEngineBridge());
+    const map = spyOn(saveMapBlock, 'buildSaveMapBlock').mockResolvedValue({
+      packId: 'emberwatch',
+      mapId: 'village',
+      playerX: 1024,
+      playerY: 1440,
+    });
+    const name = spyOn(saveMapBlock, 'getCurrentMapName').mockResolvedValue('Emberwatch');
+    const slot = spyOn(gameSaveService, 'saveGame').mockResolvedValue(undefined);
+    let releasePointer: (() => void) | undefined;
+    let startedPointer: (() => void) | undefined;
+    const pointerStarted = new Promise<void>((resolve) => {
+      startedPointer = resolve;
+    });
+    const pendingPointer = new Promise<void>((resolve) => {
+      releasePointer = resolve;
+    });
+    const pointer = spyOn(campaignService, 'saveCampaign').mockImplementation(async () => {
+      startedPointer?.();
+      await pendingPointer;
+    });
+    try {
+      const save = service.saveGame();
+      await pointerStarted;
+      expect(service.saveMessage).toBeUndefined();
+      expect(service.isSaving).toBe(true);
+      releasePointer?.();
+      await save;
+      expect(service.saveMessage).toBe('Game Saved!');
+      expect(service.isSaving).toBe(false);
+    } finally {
+      releasePointer?.();
+      map.mockRestore();
+      name.mockRestore();
+      slot.mockRestore();
+      pointer.mockRestore();
+    }
   });
 
   // ── Focus restore tracking (C-332 AC-4) ──

@@ -138,7 +138,10 @@ import { updateGoapCombatTactics } from '../systems/goap_combat_tactics_system.t
 import { updateGoapMovement } from '../systems/goap_movement_executor.ts';
 import { updateGoapScheduler } from '../systems/goap_scheduler_system.ts';
 import { syncGridPositions } from '../systems/grid_position_sync_system.ts';
-import { updateInteractionProximity } from '../systems/interaction_proximity_system.ts';
+import {
+  clearInteractionProximityState,
+  updateInteractionProximity,
+} from '../systems/interaction_proximity_system.ts';
 import { handleInteract } from '../systems/interaction_system.ts';
 import {
   dehydrateZone,
@@ -1999,6 +2002,14 @@ self.onmessage = (event: MessageEvent): void => {
         try {
           // ── C-172: Set engine state to TRANSITIONING ──
           setSimulationState(world, SimulationState.transitioning);
+
+          // The retained interaction target belongs to the world being torn
+          // down, and the tick loop stops below before the TRANSITIONING state
+          // can publish its clear. Entity ids are reused by the next map, so a
+          // surviving target can compare EQUAL to the new map's nearest
+          // interactable and the dirty check then never republishes — the
+          // client would keep a prompt for a neighbour who is no longer there.
+          clearInteractionProximityState();
 
           // ── RC-3 FIX: Route through stopTickLoop for consistency ──
           wasRunning = running;

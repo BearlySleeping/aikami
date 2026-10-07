@@ -163,11 +163,13 @@ export const findDuplicateBinaries = (
 /**
  * Finds emitted dev-route output directories.
  *
- * Aikami's `(dev)` route group (development sandboxes) is excluded from normal
- * distributable builds by `scripts/gate_dev_routes.ts`. When it leaks back in,
- * SvelteKit emits the routes under a real URL prefix (today `/dev/...`). This
- * detects those directories in the final output so a production build can
- * assert zero dev-route entries.
+ * Aikami's `(dev)` route group (development sandboxes) is normally excluded from
+ * distributable builds by `scripts/gate_dev_routes.ts`. SvelteKit emits the
+ * routes under a real URL prefix (today `/dev/...`) whenever they are present,
+ * so this detects those directories in the final output. Whether their presence
+ * is a violation is the caller's decision (`allowDevRoutes`, which
+ * `scripts/build_client.ts` derives from the same shared resolver the gate uses),
+ * so a build that asked for the sandboxes is never rejected by this check.
  *
  * Detection is deliberately prefix-based on the emitted tree: the `(dev)` group
  * maps one-to-one onto a URL path, so the first non-group segment under

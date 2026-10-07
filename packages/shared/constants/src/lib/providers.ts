@@ -15,6 +15,14 @@
 // and typed helper functions so that locality, URL/key rules, verification
 // strategy and model-discovery support are read from one definition rather
 // than re-derived in connection_verifier.ts and ai_settings_view_model.
+//
+// Issue #381: `providerAcceptsKey` also accepts the separate decision registry.
+// The descriptor below is a CHAT descriptor — verification strategy, CSP
+// origin, reasoning control and generation parameters are all meaningless for a
+// backend that scores closed questions — so the decision registry is consulted
+// directly rather than widening this type.
+
+import { decisionProviderEntry } from './decision_providers.ts';
 
 // ---------------------------------------------------------------------------
 // Verification strategy
@@ -37,6 +45,16 @@ export type VerificationStrategy =
   /** No verification strategy defined */
   | 'none';
 
+/**
+ * The (provider, surface) pairing a text provider was MEASURED to honour when
+ * asked for no reasoning.
+ *
+ * The surface qualifier is load-bearing — see `reasoningControl`. The adapter
+ * mirrors this union so it can stay independent of the provider registry; the
+ * two are structurally identical string unions.
+ */
+export type TextReasoningControl = 'ollama-native-think' | 'openai-compat-reasoning-effort';
+
 /** A provider descriptor shared by text, voice, and image provider registries. */
 type ProviderDescriptor = {
   id: string;
@@ -44,6 +62,14 @@ type ProviderDescriptor = {
   description: string;
   needsKey: boolean;
   needsUrl?: boolean;
+  /**
+   * Whether this provider ACCEPTS a credential without requiring one. The
+   * user-supplied-endpoint entries (`custom`, `openai-compat`) serve both a
+   * local keyless server and a hosted API behind a key, and nothing in the
+   * registry can tell them apart ahead of time — so the key field is shown
+   * and left optional instead of being hidden from every custom endpoint.
+   */
+  optionalKey?: boolean;
   isLocal: boolean;
   /** Fixed cloud API origin, e.g. 'https://api.openai.com'. Omitted for local/custom-URL and region-varying providers. */
   apiBaseUrl?: string;
@@ -51,6 +77,31 @@ type ProviderDescriptor = {
   verificationStrategy: VerificationStrategy;
   /** Whether this provider supports model discovery/listing. C-481 */
   supportsModelDiscovery: boolean;
+  /**
+   * The (provider, surface) pairing this provider was MEASURED to honour when
+   * asked for no reasoning, and nothing else.
+   *
+   * Additive and measured, not assumed. A claim that a provider honours a
+   * field is not evidence: Ollama 0.34.3 accepts `reasoning_effort` on
+   * `/v1/chat/completions` and honours it, accepts `think` on the same
+   * endpoint and silently ignores it, accepts `reasoning_effort` on native
+   * `/api/chat` and ignores it there, and ignores
+   * `chat_template_kwargs.enable_thinking` on both (issue #382, n=11 each).
+   * Only the two spellings below are verified.
+   *
+   * The value is deliberately surface-qualified, because the pairing is what
+   * was measured. The adapter checks the surface it is about to use against
+   * this declaration and DROPS the control on a mismatch, so a provider that
+   * is later rerouted onto an unmeasured surface keeps the old
+   * byte-identical request body rather than sending a field the provider will
+   * accept with a 200 and ignore.
+   *
+   * Absent means the provider cannot be asked, and the preference is dropped:
+   * the request goes out exactly as it did before, and the task degrades on
+   * its own deadline rather than the call failing because of an unsupported
+   * option.
+   */
+  reasoningControl?: TextReasoningControl;
   /** Which AI capabilities this provider supports. C-481 */
   capabilities: ReadonlyArray<'text' | 'image' | 'voice'>;
 };
@@ -127,6 +178,17 @@ export const TEXT_PROVIDERS = [
     capabilities: ['text'],
   },
   {
+    id: 'nanogpt',
+    label: 'NanoGPT',
+    description: 'Pay-per-prompt OpenAI-compatible gateway to many models',
+    needsKey: true,
+    isLocal: false,
+    apiBaseUrl: 'https://api.nano-gpt.com',
+    verificationStrategy: 'cloud_header_auth',
+    supportsModelDiscovery: true,
+    capabilities: ['text'],
+  },
+  {
     id: 'ollama',
     label: 'Ollama (local)',
     description: 'Local LLM server',
@@ -135,6 +197,13 @@ export const TEXT_PROVIDERS = [
     isLocal: true,
     verificationStrategy: 'ollama',
     supportsModelDiscovery: true,
+    // Measured on Ollama 0.34.3, native `/api/chat`, `ornith-1.5:9b`:
+    // `think: false` → 0 reasoning characters, 11/11 answers within the
+    // 6 000 ms envelope budget, 11/11 schema-valid. `reasoning_effort` is
+    // accepted on the same endpoint and does nothing. The surface qualifier is
+    // load-bearing: the adapter will not send this if `ollama` is ever routed
+    // through `/v1`, where the same field is ignored.
+    reasoningControl: 'ollama-native-think',
     capabilities: ['text'],
   },
   {
@@ -162,8 +231,9 @@ export const TEXT_PROVIDERS = [
   {
     id: 'custom',
     label: 'Custom API',
-    description: 'OpenAI-compatible endpoint',
+    description: 'Any OpenAI-compatible endpoint — key optional',
     needsKey: false,
+    optionalKey: true,
     needsUrl: true,
     isLocal: false,
     verificationStrategy: 'openai_compat',
@@ -174,6 +244,21 @@ export const TEXT_PROVIDERS = [
 
 /** Provider identifier extracted from TEXT_PROVIDERS union. */
 export type TextProvider = (typeof TEXT_PROVIDERS)[number]['id'];
+
+/**
+ * The reasoning control a text provider honours, or `undefined`.
+ *
+ * An accessor rather than a `find` at each call site: `TEXT_PROVIDERS` is
+ * `as const`, so a direct lookup yields a union of the individual entry types
+ * and every caller would have to re-derive "absent means unsupported". This
+ * makes the unsupported case explicit and total — a provider id that is not in
+ * the registry simply has no control, exactly like one that is in it and
+ * declares none.
+ */
+export const getTextReasoningControl = (providerId: string): TextReasoningControl | undefined =>
+  (TEXT_PROVIDERS as ReadonlyArray<ProviderDescriptor>).find(
+    (provider) => provider.id === providerId,
+  )?.reasoningControl;
 
 // ---------------------------------------------------------------------------
 // Voice (TTS) providers
@@ -327,8 +412,9 @@ export const IMAGE_PROVIDERS = [
   {
     id: 'openai-compat',
     label: 'OpenAI Compatible',
-    description: 'OpenAI-compatible image API',
+    description: 'OpenAI-compatible image API — key optional',
     needsKey: false,
+    optionalKey: true,
     needsUrl: true,
     isLocal: false,
     verificationStrategy: 'openai_compat',
@@ -412,6 +498,31 @@ export const providerNeedsUrl = (registryId: string): boolean => {
  */
 export const providerNeedsKey = (registryId: string): boolean =>
   findProviderDescriptor(registryId)?.needsKey ?? false;
+
+/**
+ * Whether the connection editor should show an API key field for a provider —
+ * required (`needsKey`) or accepted-but-optional (`optionalKey`). Asking for
+ * "does this provider need a key?" and rendering the field from the answer
+ * hides the field on every custom endpoint, which is how a user with a valid
+ * key for their own API ends up with nowhere to paste it.
+ */
+export const providerAcceptsKey = (
+  registryId: string,
+  capability?: ProviderCapability | 'decision',
+): boolean => {
+  // The decision registry is separate (see decision_providers.ts): none of the
+  // chat descriptor fields mean anything for a backend that only scores closed
+  // questions, but "does this one need a key" is still a real question about it.
+  if (capability === 'decision') {
+    const decision = decisionProviderEntry(registryId);
+    return decision?.needsKey === true || decision?.optionalKey === true;
+  }
+  const descriptor = findProviderDescriptor(registryId, capability);
+  if (!descriptor) {
+    return false;
+  }
+  return descriptor.needsKey || ('optionalKey' in descriptor && descriptor.optionalKey === true);
+};
 
 /**
  * Get the verification strategy for a provider. C-481.

@@ -14,6 +14,7 @@ import { getAiActivityViewModel } from './ai/ai_activity_composition.ts';
 import { getAiCapabilityBadgeViewModel } from './ai/ai_capability_badge_composition.ts';
 import { createAiConnectionStatus } from './ai/ai_connection_status.svelte';
 import { getCapabilityDetailViewModel } from './ai/capability_detail_composition.ts';
+import { getDecisionSettingsViewModel } from './ai/decision/decision_settings_composition.ts';
 import { getSettingsAudioViewModel } from './audio/settings_audio_composition.ts';
 import { getAutonomousSettingsViewModel } from './autonomous/autonomous_settings_view_model.svelte';
 import { getSettingsControlsViewModel } from './controls/settings_controls_view_model.svelte';
@@ -55,6 +56,7 @@ export const getSettingsViewModel = (options: BaseViewModelOptions): SettingsVie
     createCapabilityDetail: (subOptions) =>
       getCapabilityDetailViewModel(subOptions, connectionStatus),
     createAiActivity: (subOptions) => getAiActivityViewModel(subOptions),
+    createDecisionSettings: (subOptions) => getDecisionSettingsViewModel(subOptions),
     createAgentList: (subOptions) => getAgentListViewModel(subOptions),
     createAgentEditor: (subOptions) => getAgentEditorViewModel(subOptions),
   });

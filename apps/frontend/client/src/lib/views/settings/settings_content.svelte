@@ -9,6 +9,7 @@ import AgentListView from '../agent/list/agent_list_view.svelte';
 import AccountView from './account/account_view.svelte';
 import AiActivityView from './ai/ai_activity_view.svelte';
 import CapabilityDetailView from './ai/capability_detail_view.svelte';
+import DecisionSettingsView from './ai/decision/decision_settings_view.svelte';
 import SettingsAudioView from './audio/settings_audio_view.svelte';
 import AutonomousSettingsView from './autonomous/autonomous_settings_view.svelte';
 import SettingsControlsView from './controls/settings_controls_view.svelte';
@@ -77,6 +78,8 @@ const { viewModel }: Props = $props();
       <SettingsInterfaceView viewModel={viewModel.interfaceViewModel} />
     {:else if viewModel.activeSectionId === 'story-dialogue'}
       <CapabilityDetailView viewModel={viewModel.storyDialogueViewModel} />
+    {:else if viewModel.activeSectionId === 'decisions'}
+      <DecisionSettingsView viewModel={viewModel.decisionSettingsViewModel} />
     {:else if viewModel.activeSectionId === 'artwork'}
       <CapabilityDetailView viewModel={viewModel.artworkViewModel} />
     {:else if viewModel.activeSectionId === 'read-aloud'}

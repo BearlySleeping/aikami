@@ -10,6 +10,7 @@ import type { EngineBridge } from '@aikami/frontend/engine';
 import { resolveCompanionControlMode } from '@aikami/schemas';
 import {
   audioService,
+  combatService,
   diceService,
   getCombatAiService,
   getCombatIntentService,
@@ -88,6 +89,7 @@ export const getCombatViewModel = (
 
   return createCombatViewModel({
     ...options,
+    combatState: combatService,
     engine: {
       createBridge: async () => {
         if (bridgeFactory) {

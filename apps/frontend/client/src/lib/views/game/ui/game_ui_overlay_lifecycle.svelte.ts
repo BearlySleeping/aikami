@@ -173,6 +173,9 @@ export const registerGameUIOverlayLifecycle = (options: GameUIOverlayLifecycleOp
   };
 
   options.registerEffectRoot(() => {
+    // Dispose may occur without an overlay transition (navigation/teardown).
+    // A dependency-free cleanup captures that final transcript exactly once.
+    $effect(() => () => clearDialogueViewModel());
     // ── Dialogue ──
     // Inventory can be a temporary surface above an active conversation. Keep
     // the dialogue ViewModel alive while DIALOGUE remains anywhere in the
@@ -197,12 +200,13 @@ export const registerGameUIOverlayLifecycle = (options: GameUIOverlayLifecycleOp
         npcData: untrack(() => options.npcMemory?.resolveGreeting(npc) ?? npc),
         onEndChat: () => overlays.endDialogue(),
         npcDialogueService: npcDialogue,
-        onStartCombat: (combatNpcData) => {
-          overlays.startCombat({
-            enemyName: combatNpcData.npcName,
-            enemyNpcId: combatNpcData.npcId,
-          });
-        },
+        onStartCombat: (combatNpcData) =>
+          npcDialogue.executeCommand({
+            kind: 'startCombat',
+            npcId: combatNpcData.npcId,
+            npcName: combatNpcData.npcName,
+            command: { kind: 'startCombat' },
+          }),
       });
       dialogueNpcId = npc.npcId;
       options.setDialogueViewModel(dialogueViewModel);

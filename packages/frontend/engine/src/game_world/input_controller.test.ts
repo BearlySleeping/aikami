@@ -208,6 +208,92 @@ describe('InputController — lock, interact, flush, blur', () => {
   });
 });
 
+describe('InputController — lock must not resurrect held keys', () => {
+  test('releasing one key after a lock never dispatches the surviving key', () => {
+    // Hold W+D → lock (pause/overlay/transition) → release D. The engine is
+    // locked, so the only legal dispatch is zero. Keeping the pre-lock held
+    // set alive made this recompute and dispatch W while input was locked.
+    const harness = makeHarness();
+    harness.target.dispatch('keydown', keyEvent('ArrowUp'));
+    harness.target.dispatch('keydown', keyEvent('ArrowRight'));
+    expect(lastVelocity(harness)?.x).toBeGreaterThan(0);
+
+    harness.controller.setLocked(true);
+    harness.velocities.length = 0;
+
+    harness.target.dispatch('keyup', keyEvent('ArrowRight'));
+    expect(harness.velocities.every((velocity) => velocity.x === 0 && velocity.y === 0)).toBe(true);
+    // The lock already forgot both keys, so the release has nothing to
+    // recompute from and dispatches nothing at all.
+    expect(harness.velocities).toHaveLength(0);
+
+    // Unlocking must not resurrect ArrowUp either: the keyup already happened,
+    // so nothing is held and nothing is dispatched.
+    harness.controller.setLocked(false);
+    harness.velocities.length = 0;
+    harness.target.dispatch('keyup', keyEvent('ArrowUp'));
+    expect(harness.velocities).toHaveLength(0);
+  });
+
+  test('a lock forgets the held set so unlocking does not restart movement', () => {
+    const harness = makeHarness();
+    harness.target.dispatch('keydown', keyEvent('ArrowRight'));
+    harness.controller.setLocked(true);
+    harness.controller.setLocked(false);
+    // No further keydown: the player must be standing still.
+    expect(lastVelocity(harness)).toEqual({ x: 0, y: 0 });
+    expect(harness.movementStarts).toBe(1);
+  });
+
+  test('a release routed to a focused control still releases the held key', () => {
+    // Focus moved between keydown and keyup (the player clicked a control
+    // mid-walk). The keyup's target is the control, but the game still owns
+    // the held key and must not keep walking.
+    const harness = makeHarness();
+    harness.target.dispatch('keydown', keyEvent('ArrowRight'));
+    let prevented = false;
+    harness.target.dispatch(
+      'keyup',
+      keyEvent('ArrowRight', {
+        target: { tagName: 'BUTTON', isContentEditable: false },
+        preventDefault: () => {
+          prevented = true;
+        },
+      }),
+    );
+
+    expect(lastVelocity(harness)).toEqual({ x: 0, y: 0 });
+    // The control keeps its own default action (Enter activation etc.).
+    expect(prevented).toBe(false);
+
+    // And a later keydown has to register as a fresh press.
+    harness.target.dispatch('keydown', keyEvent('ArrowRight'));
+    expect(lastVelocity(harness)).toEqual({ x: 150, y: 0 });
+    expect(harness.movementStarts).toBe(2);
+  });
+
+  test('a release into a control that never pressed the key stays a no-op', () => {
+    const harness = makeHarness();
+    harness.target.dispatch(
+      'keyup',
+      keyEvent('ArrowRight', { target: { tagName: 'INPUT', isContentEditable: false } }),
+    );
+    expect(harness.velocities).toHaveLength(0);
+  });
+
+  test('blur cancels the click path when movement was in flight', () => {
+    const harness = makeHarness();
+    harness.target.dispatch('keydown', keyEvent('ArrowRight'));
+
+    harness.target.dispatch('blur', {});
+    expect(harness.movementStarts).toBe(2);
+
+    // A blur with nothing held must not post a redundant stop.
+    harness.target.dispatch('blur', {});
+    expect(harness.movementStarts).toBe(2);
+  });
+});
+
 describe('InputController — listener lifecycle', () => {
   test('detach removes listeners; reattach restores them', () => {
     const harness = makeHarness();

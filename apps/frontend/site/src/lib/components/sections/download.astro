@@ -155,6 +155,8 @@ const downloadUrl = (ext: string): string =>
       href={downloadUrl(p.ext)}
       class="download-link inline-flex items-center justify-center rounded-sm bg-rune px-5 py-2.5 text-sm font-medium text-white transition-all hover:opacity-90 no-underline w-full shadow-rune"
       data-platform={p.id}
+      target="_blank"
+      rel="noopener"
       aria-label={`Download Aikami desktop client for ${p.label}`}
     >
       <span class="download-label">{p.buttonLabel}</span>

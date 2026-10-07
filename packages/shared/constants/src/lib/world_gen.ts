@@ -12,5 +12,5 @@ export const STEP_LABELS: Record<WizardStep, string> = {
   goals: 'Goals',
   generating: 'Generating...',
   preview: 'Preview',
-  character_creation: 'Character Creation',
+  draft_saved: 'Draft Saved',
 } as const;

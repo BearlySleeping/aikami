@@ -8,6 +8,7 @@
 // Contract: C-142 Inventory Item Pickups
 
 import type { Page } from '@playwright/test';
+import { pauseMenuResumeButton } from './pause_menu';
 
 export class InventoryPage {
   readonly page: Page;
@@ -70,7 +71,7 @@ export class InventoryPage {
   }
 
   get pauseMenuResumeButton() {
-    return this.page.getByRole('button', { name: 'Resume Game', exact: true });
+    return pauseMenuResumeButton(this.page);
   }
 
   get emptyMessage() {

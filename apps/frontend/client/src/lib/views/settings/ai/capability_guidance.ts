@@ -4,6 +4,7 @@
 // projection so the unconfigured state explains the feature without loading
 // provider details or implying that unavailable AI is active.
 
+import { DECISION_SECTION_LABELS } from '@aikami/constants';
 import type { ConnectionCapability } from '$types';
 import type { CapabilityStatus } from './ai_connection_status.svelte';
 
@@ -33,6 +34,14 @@ const GUIDANCE: Record<ConnectionCapability, Omit<CapabilityGuidance, 'availabil
     description: 'Speaks dialogue and narration with a configured voice connection.',
     setupActionLabel: 'Set up a voice connection',
     playableWithout: 'Text dialogue, exploration, combat and journal content remain playable.',
+  },
+  decision: {
+    title: DECISION_SECTION_LABELS.title,
+    description:
+      'Bounded scoring for closed gameplay questions. Optional: leaving this unset changes nothing about how the game plays.',
+    setupActionLabel: 'Set up a decision backend',
+    playableWithout:
+      'Every part of the game. A decision backend is optional; nothing is routed to it automatically.',
   },
 };
 

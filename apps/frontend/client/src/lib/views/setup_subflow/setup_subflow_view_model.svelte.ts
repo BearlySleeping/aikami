@@ -73,7 +73,7 @@ export type DiscoveredProvider = {
 
 /** A capability toggle for the feature selection step. */
 export type CapabilityToggle = {
-  readonly id: ConnectionCapability;
+  readonly id: 'text' | 'image' | 'voice'; // decision is configured in Settings (#381)
   readonly label: string;
   readonly required: boolean;
   enabled: boolean;
@@ -1182,7 +1182,7 @@ class SetupSubflowViewModel
    * same-origin /api/image proxy for a local image engine.
    */
   private async _detectSingleCapability(
-    capability: ConnectionCapability,
+    capability: 'text' | 'image' | 'voice',
   ): Promise<CapabilitySnapshot | null> {
     const operationId = ++this._discoveryOperationId;
     this.isDetecting = true;

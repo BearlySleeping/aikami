@@ -75,13 +75,21 @@ const buildEnv = { ...process.env, ...fileEnv };
 /**
  * Whether this build's route graph contains `(dev)`.
  *
- * `buildEnv` — not `process.env` — is the authority: the override normally
- * arrives from `.env.<mode>`, which is loaded here and is not otherwise
- * exported into this process. Desktop builds always opt in, because the
- * desktop QA surface is the reason this flag exists.
+ * `buildEnv` — not `process.env` — is the authority for the override: it
+ * normally arrives from `.env.<mode>`, which is loaded here and is not
+ * otherwise exported into this process. `mode ?? 'production'` matches Vite's
+ * own default for a bare invocation, so this agrees with what vite.config.ts
+ * and scripts/gate_dev_routes.ts resolve for the same build.
+ *
+ * Desktop builds always opt in, because the desktop QA surface is the reason
+ * this flag exists.
  */
 const allowDevRoutesForBuild =
-  resolveIncludeDevRoutes('build', buildEnv) || process.env.AIKAMI_DESKTOP_BUILD === 'true';
+  resolveIncludeDevRoutes({
+    command: 'build',
+    mode: mode ?? 'production',
+    env: buildEnv,
+  }) || process.env.AIKAMI_DESKTOP_BUILD === 'true';
 
 // 1. Dev-route gate — must see the same mode and .env file vite.config.ts will.
 run('gate dev routes', 'bun', ['scripts/gate_dev_routes.ts', ...modeArgs], { env: buildEnv });
@@ -138,7 +146,16 @@ run('check service worker', 'bun', ['scripts/check_service_worker.ts', 'build'])
 //    guard can never disagree with the route graph that was actually built.
 const allowDevRoutes = allowDevRoutesForBuild;
 if (allowDevRoutes) {
-  logger.info(`[build-client] ${DEV_ROUTES_ENV_VAR}=true — dev routes are expected in this build.`);
+  // Report the route graph, not the variable's value: the staging default
+  // includes `(dev)` with the variable unset, so "…=true" would misreport the
+  // most common case.
+  const desktopOverride = process.env.AIKAMI_DESKTOP_BUILD === 'true';
+  const envOverride = buildEnv[DEV_ROUTES_ENV_VAR] === 'true';
+  const decidedBy =
+    desktopOverride || envOverride
+      ? `${DEV_ROUTES_ENV_VAR}/desktop override`
+      : `${DEV_ROUTES_ENV_VAR} unset + mode '${mode ?? 'production'}'`;
+  logger.info(`[build-client] dev routes are expected in this build — decided by ${decidedBy}.`);
 }
 run('check deploy assets', 'bun', [
   'scripts/check_deploy_assets.ts',
@@ -155,12 +172,12 @@ run('check ineffective dynamic imports', 'bun', ['scripts/check_ineffective_dyna
 //    ratchet tracked metrics. Kept after the guards so the report reflects an
 //    output that already passed the hard gates.
 //
-//    When dev routes were deliberately included, the ratchet is skipped: the
-//    committed baseline measures the production route graph, so a sandbox build
-//    would otherwise always report a ~20% regression and fail the build. The
-//    flag comes from the same resolver the gate itself uses, so a normal build
-//    can never skip the ratchet by accident.
-run('report bundle budget', 'bun', [
-  'scripts/report_bundle_budget.ts',
-  ...(allowDevRoutes ? ['--expect-dev-routes'] : []),
-]);
+//    The committed baseline measures the STAGING route graph — the larger one,
+//    with the `(dev)` sandboxes — so the ratchet is meaningful there. A
+//    production build emits fewer bytes against that baseline and therefore
+//    clears it without help, which is why `--expect-dev-routes` is NOT passed:
+//    suppressing the ratchet for a smaller graph would only hide regressions.
+//    Passing it becomes correct again only once the baseline measures a
+//    production-graph build, which is part of reverting the staging exception
+//    in scripts/dev_routes_gate.ts.
+run('report bundle budget', 'bun', ['scripts/report_bundle_budget.ts']);

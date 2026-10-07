@@ -51,6 +51,7 @@ import {
   TASK_BRANCH_PREFIX,
   TASK_WORKSPACE_PREFIX,
   type TaskWorktree,
+  worktreeRepoRoot,
 } from './worktree.ts';
 
 // ── Constants ──────────────────────────────────────────────
@@ -96,7 +97,19 @@ const positionalArgs = (args: string[]): string[] => {
 const resolveRepoRoot = (): string => {
   const cwd = resolve(process.cwd());
   try {
-    return runGit('rev-parse --show-toplevel', { cwd });
+    runGit('rev-parse --show-toplevel', { cwd });
+  } catch {
+    return cwd;
+  }
+  // 🔴 `rev-parse --show-toplevel` returns the LINKED WORKTREE's path when the
+  // command runs from inside one — not the main checkout. Every worktree
+  // command is then scoped to the worktree instead of the repo, which herdr
+  // rejects outright (`linked_worktree_source`: "New and open worktree actions
+  // start from the repo parent workspace"), and which would otherwise aim the
+  // duplicate/collision checks at the wrong tree. worktreeRepoRoot resolves the
+  // main checkout from the worktree's `.git` file and is a no-op at the root.
+  try {
+    return worktreeRepoRoot(cwd);
   } catch {
     return cwd;
   }
@@ -134,9 +147,15 @@ const resolveTask = async (args: string[]): Promise<{ slug: string; w: TaskWorkt
   }
   if (!checkoutPath) {
     const wsId = await findTaskWorkspace(slug);
+    // 🔴 Scope every lookup to repoRoot. `listWorktrees()` with no repoRoot
+    // makes herdr resolve against the server's currently FOCUSED workspace, so
+    // a session whose neighbouring workspace is a different project on this
+    // machine would find — and then adopt, publish, or delete — that
+    // project's worktree under this task's name.
+    const worktrees = await listWorktrees(repoRoot);
     const entry = wsId
-      ? (await listWorktrees()).find((w) => w.openWorkspaceId === wsId)
-      : (await listWorktrees()).find((w) => w.branch === `${TASK_BRANCH_PREFIX}${slug}`);
+      ? worktrees.find((w) => w.openWorkspaceId === wsId)
+      : worktrees.find((w) => w.branch === `${TASK_BRANCH_PREFIX}${slug}`);
     if (!entry) {
       throw new Error(
         `No open worktree for task "${slug}". Start one with: bun herdr:task new ${slug}`,
@@ -190,10 +209,13 @@ const cmdNew = async (args: string[]): Promise<void> => {
   const doContent = !hasFlag(args, '--no-content');
   const withServices = hasFlag(args, '--with-services');
 
-  // Guard: reject if a worktree for this slug already exists.
+  // Guard: reject if a worktree for this slug already exists. Scoped to
+  // repoRoot for the same reason as the lookups in resolveTask — an unscoped
+  // list resolves against the focused workspace and would report a sibling
+  // project's identically-named branch as a collision.
   if (
     (await findTaskWorkspace(slug)) ||
-    (await listWorktrees()).some((wt) => wt.branch === `${TASK_BRANCH_PREFIX}${slug}`)
+    (await listWorktrees(repoRoot)).some((wt) => wt.branch === `${TASK_BRANCH_PREFIX}${slug}`)
   ) {
     throw new Error(`Task "${slug}" already exists. Use a different slug or remove it first.`);
   }

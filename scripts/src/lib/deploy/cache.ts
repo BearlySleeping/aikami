@@ -177,7 +177,9 @@ export function computeAppChecksum(
   // change produces the SAME checksum as the previous deploy, so the cache
   // reports "up to date" and skips the rebuild — the opt-in silently does
   // nothing. `AIKAMI_INCLUDE_DEV_ROUTES` changes the emitted route graph (see
-  // resolveIncludeDevRoutes), so it must be part of the identity.
+  // resolveIncludeDevRoutes), so it must be part of the identity. The resolver's
+  // other input, the build mode, is already covered twice over: the cache key
+  // carries `${mode}` (cacheKey) and `modeEnvHash` above is that mode's env file.
   const buildFlags = [
     `AIKAMI_INCLUDE_DEV_ROUTES=${process.env.AIKAMI_INCLUDE_DEV_ROUTES ?? ''}`,
   ].join(',');

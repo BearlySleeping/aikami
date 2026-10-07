@@ -11,12 +11,6 @@
       "worst": 52
     }
   },
-  ".pi/extensions/code_rabbit.ts": {
-    "counts": {
-      "excessive": 5,
-      "worst": 52
-    }
-  },
   ".pi/extensions/contract_factory.ts": {
     "counts": {
       "excessive": 3,
@@ -49,7 +43,7 @@
   },
   ".pi/extensions/herdr_orchestrator.ts": {
     "counts": {
-      "excessive": 6,
+      "excessive": 3,
       "worst": 140
     }
   },
@@ -308,7 +302,7 @@
   "apps/e2e/tests/client/release_gate.spec.ts": {
     "counts": {
       "excessive": 2,
-      "worst": 36
+      "worst": 33
     }
   },
   "apps/frontend/client/scripts/check_bundle.ts": {
@@ -425,12 +419,6 @@
       "worst": 37
     }
   },
-  "apps/frontend/client/src/lib/services/audio/tts_service.svelte.ts": {
-    "counts": {
-      "excessive": 2,
-      "worst": 24
-    }
-  },
   "apps/frontend/client/src/lib/services/character/character_book_mapper.ts": {
     "counts": {
       "excessive": 1,
@@ -517,8 +505,8 @@
   },
   "apps/frontend/client/src/lib/services/game/game_boot_service.svelte.ts": {
     "counts": {
-      "excessive": 5,
-      "worst": 41
+      "excessive": 4,
+      "worst": 39
     }
   },
   "apps/frontend/client/src/lib/services/game/game_overlay_service.svelte.ts": {
@@ -545,12 +533,6 @@
       "worst": 16
     }
   },
-  "apps/frontend/client/src/lib/services/game/game_test_seam.ts": {
-    "counts": {
-      "excessive": 1,
-      "worst": 25
-    }
-  },
   "apps/frontend/client/src/lib/services/game/input_action_service.svelte.ts": {
     "counts": {
       "excessive": 2,
@@ -559,7 +541,7 @@
   },
   "apps/frontend/client/src/lib/services/game/npc_dialogue_service.svelte.ts": {
     "counts": {
-      "excessive": 9,
+      "excessive": 8,
       "worst": 67
     }
   },
@@ -725,12 +707,6 @@
       "worst": 16
     }
   },
-  "apps/frontend/client/src/lib/views/settings/ai/ai_settings_view_model.svelte.ts": {
-    "counts": {
-      "excessive": 1,
-      "worst": 56
-    }
-  },
   "apps/frontend/client/src/lib/views/studio/studio_view_model.svelte.ts": {
     "counts": {
       "excessive": 2,
@@ -884,19 +860,13 @@
   "packages/frontend/ai-gateway/src/lib/sse.ts": {
     "counts": {
       "excessive": 1,
-      "worst": 24
+      "worst": 20
     }
   },
   "packages/frontend/ai-gateway/src/lib/structured.ts": {
     "counts": {
       "excessive": 2,
       "worst": 23
-    }
-  },
-  "packages/frontend/ai-gateway/src/lib/text_adapter_openai_compatible.ts": {
-    "counts": {
-      "excessive": 1,
-      "worst": 25
     }
   },
   "packages/frontend/engine/src/__tests__/emberwatch_content_audit.test.ts": {
@@ -2012,7 +1982,7 @@
   "scripts/src/lib/herdr/session.ts": {
     "counts": {
       "excessive": 4,
-      "worst": 84
+      "worst": 80
     }
   },
   "scripts/src/lib/herdr/start_autofix.ts": {
@@ -2030,7 +2000,7 @@
   "scripts/src/lib/herdr/worktree.ts": {
     "counts": {
       "excessive": 4,
-      "worst": 130
+      "worst": 48
     }
   },
   "scripts/src/lib/ops/audit_lpc_coverage.ts": {

@@ -60,6 +60,9 @@ const makeInterruptedOperation = (): GameOperation => ({
 const createVm = (options?: {
   omitOperations?: boolean;
   resolveRoll?: () => Promise<unknown>;
+  onStartCombat?: DialogueOverlayViewModelOptions['onStartCombat'];
+  onEndChat?: () => void;
+  npcData?: DialogueOverlayViewModelOptions['npcData'];
 }): {
   vm: DialogueOverlayViewModelInterface;
   operations: ReturnType<typeof createOperationLedger>;
@@ -76,8 +79,9 @@ const createVm = (options?: {
 
   const vm = createDialogueOverlayViewModel({
     className: 'DialogueOverlayProvenanceTest',
-    npcData: { npcId: 'npc-001', npcName: 'Elder Thrain', dialog: '' },
-    onEndChat: () => {},
+    npcData: options?.npcData ?? { npcId: 'npc-001', npcName: 'Elder Thrain', dialog: '' },
+    onEndChat: options?.onEndChat ?? (() => {}),
+    onStartCombat: options?.onStartCombat,
     npcDialogueService,
     ...(options?.omitOperations ? {} : { operations, campaign: { campaignId: 'camp-1' } }),
     combat: { lastCombatOptions: undefined },
@@ -153,6 +157,39 @@ afterEach(() => {
 });
 
 describe('DialogueOverlayViewModel — check provenance', () => {
+  test.each([true, false])(
+    'combat chip dispatches once without destroying dialogue (accepted=%s)',
+    async (accepted) => {
+      const onEndChat = mock(() => {});
+      const onStartCombat = mock((_npc: DialogueOverlayViewModelOptions['npcData']) => accepted);
+      const { vm } = createVm({
+        onEndChat,
+        onStartCombat,
+        npcData: {
+          npcId: 'rollo_grasper',
+          npcName: 'Rollo the Grasper',
+          dialog: 'Hands off!',
+          initialSuggestions: [
+            {
+              id: 'fight_back_punch',
+              label: 'Fight back',
+              prefillText: 'Fight back',
+              intentType: 'combat',
+            },
+          ],
+        },
+      });
+      vm.handleChipTap('fight_back_punch');
+      await new Promise((resolve) => setTimeout(resolve, 1250));
+      expect(onStartCombat).toHaveBeenCalledTimes(1);
+      expect(onStartCombat.mock.calls[0]?.[0]).toMatchObject({ npcId: 'rollo_grasper' });
+      expect(onEndChat).not.toHaveBeenCalled();
+      expect(vm.streamError).toBe(
+        accepted ? null : 'Combat could not start. Your conversation is still open.',
+      );
+      await vm.dispose();
+    },
+  );
   test('rollDice opens and completes a durable skill-check operation', async () => {
     const { vm, operations } = createVm();
     setAwaitingCheck(vm);

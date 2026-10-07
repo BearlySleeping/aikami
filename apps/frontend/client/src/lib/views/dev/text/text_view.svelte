@@ -365,6 +365,123 @@ const SCHEMA_PLACEHOLDER = 'Paste a JSON Schema here...';
       {/if}
 
       <!-- ═══════════════════════════════════════════════════════════════
+           DIAGNOSTICS (issue #382)
+           Content-free metadata for the calls this page made: latency
+           percentiles, token counts WITH their provenance, deadline outcome
+           and cache layer. A percentile is shown only when the sample count
+           supports it — an absent one is unknown, not zero.
+           ═══════════════════════════════════════════════════════════════ -->
+      <div class="card bg-base-200 shadow" data-testid="text-diagnostics">
+        <div class="card-body p-4">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-semibold text-base-content/60 uppercase tracking-wider"
+              >Diagnostics</span
+            >
+            <button
+              type="button"
+              class="btn btn-ghost btn-xs"
+              data-testid="text-diagnostics-clear"
+              onclick={() => viewModel.clearDiagnostics()}
+            >
+              Clear
+            </button>
+          </div>
+
+          <div class="grid grid-cols-4 gap-2 text-xs">
+            <div class="stat bg-base-100 p-2">
+              <span class="text-base-content/50">Calls</span>
+              <span class="font-mono" data-testid="diag-calls">{viewModel.diagnostics.count}</span>
+            </div>
+            <div class="stat bg-base-100 p-2">
+              <span class="text-base-content/50">p50</span>
+              <span class="font-mono" data-testid="diag-p50"
+                >{viewModel.diagnostics.latency.p50Ms}ms</span
+              >
+            </div>
+            <div class="stat bg-base-100 p-2">
+              <span class="text-base-content/50">p95</span>
+              <span class="font-mono" data-testid="diag-p95"
+                >{viewModel.diagnostics.latency.p95Ms ?? '—'}</span
+              >
+            </div>
+            <div class="stat bg-base-100 p-2">
+              <span class="text-base-content/50">p99</span>
+              <span class="font-mono" data-testid="diag-p99"
+                >{viewModel.diagnostics.latency.p99Ms ?? '—'}</span
+              >
+            </div>
+          </div>
+
+          <div class="grid grid-cols-4 gap-2 text-xs">
+            <div class="stat bg-base-100 p-2">
+              <span class="text-base-content/50">Over budget</span>
+              <span class="font-mono" data-testid="diag-deadline"
+                >{viewModel.diagnostics.counters.deadlineExceeded}</span
+              >
+            </div>
+            <div class="stat bg-base-100 p-2">
+              <span class="text-base-content/50">Errors</span>
+              <span class="font-mono" data-testid="diag-errors"
+                >{viewModel.diagnostics.errorCount}</span
+              >
+            </div>
+            <div class="stat bg-base-100 p-2">
+              <span class="text-base-content/50">Cache hits</span>
+              <span class="font-mono" data-testid="diag-cache">{viewModel.cacheHitTotal}</span>
+            </div>
+            <div class="stat bg-base-100 p-2">
+              <span class="text-base-content/50">Est. cost</span>
+              <span class="font-mono" data-testid="diag-cost">
+                {#if viewModel.diagnostics.estimatedCostUsd !== undefined}
+                  ${viewModel.diagnostics.estimatedCostUsd.toFixed(4)}
+                {:else}
+                  unknown ({viewModel.diagnostics.unpricedCount})
+                {/if}
+              </span>
+            </div>
+          </div>
+
+          <p class="text-base-content/50 text-xs">
+            Token counts are labelled <span class="font-mono">provider</span> when they come from
+            the provider's own accounting and <span class="font-mono">est</span> when they are a
+            character-count estimate. Cost stays <span class="font-mono">unknown</span> while any
+            model in the buffer is unpriced. Prompts, replies and credentials are never recorded.
+          </p>
+
+          <div class="overflow-x-auto" data-testid="diag-rows">
+            {#if viewModel.diagnosticRows.length === 0}
+              <p class="text-base-content/40 text-xs italic">No calls recorded yet.</p>
+            {:else}
+              <table class="table table-xs">
+                <thead>
+                  <tr class="text-base-content/50">
+                    <th>task</th>
+                    <th>route</th>
+                    <th>total</th>
+                    <th>tokens</th>
+                    <th>source</th>
+                    <th>outcome</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {#each viewModel.diagnosticRows as row (row.id)}
+                    <tr data-testid="diag-row">
+                      <td class="font-mono">{row.taskLabel}</td>
+                      <td class="font-mono max-w-40 truncate">{row.routeLabel}</td>
+                      <td class="font-mono">{row.totalLabel}</td>
+                      <td class="font-mono">{row.tokenLabel}</td>
+                      <td class="font-mono">{row.tokenSourceLabel}</td>
+                      <td class="font-mono">{row.outcomeLabel}</td>
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
+            {/if}
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════════════════════
            OUTPUT (shared)
            ═══════════════════════════════════════════════════════════════ -->
       <div class="card bg-base-300 shadow">

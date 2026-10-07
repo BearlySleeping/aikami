@@ -457,8 +457,11 @@ describe('C-518 AC-5: legacy compatibility', () => {
 });
 
 describe('C-518 AC-6: a failed migration leaves old assets usable', () => {
-  test('the production migration list is contiguous and v7 is the last entry', () => {
-    expect(AIKAMI_MIGRATIONS).toHaveLength(7);
+  test('the production migration list is contiguous and still ends on C-518 v7', () => {
+    // G01 appended v8 (private world-gen drafts) after this slice; the C-518
+    // intent — v7 exists, is named, and the whole list stays contiguous — is
+    // unchanged, only the total moved.
+    expect(AIKAMI_MIGRATIONS.length).toBeGreaterThanOrEqual(7);
     expect(AIKAMI_MIGRATIONS[6]?.version).toBe(7);
     expect(AIKAMI_MIGRATIONS[6]?.name).toBe('generation-provenance-and-candidates');
   });
@@ -517,9 +520,11 @@ describe('C-518 AC-6: a failed migration leaves old assets usable', () => {
     // A clean retry with the real migration list succeeds.
     await applyMigrations(db);
     const finalVersion = await db.query({ sql: 'SELECT * FROM pragma_user_version', args: [] });
+    // Referenced from the list rather than hard-coded: G01 appended v8, and a
+    // literal here is a tripwire for every future migration.
     expect(
       (finalVersion.rows[0]?.user_version ?? finalVersion.rows[0]?.pragma_user_version) as number,
-    ).toBe(7);
+    ).toBe(AIKAMI_MIGRATIONS.length);
     const stillThere = await db.query({
       sql: 'SELECT hash FROM assets WHERE id = ?',
       args: ['portraits:legacy'],

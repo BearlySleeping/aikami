@@ -37,6 +37,36 @@
 // files regardless of `skipLibCheck` or `exclude` since they're
 // resolved through `moduleResolution: "bundler"`. Upgrading starlight
 // may introduce new type errors from upstream .ts changes.
+//
+// ── @biomejs/biome ───────────────────────────────────────────────
+// Pinned to 2.5.13. Biome 2.5.14 regressed the Svelte formatter's
+// *fix-application re-print path*: `biome check --write` re-prints
+// every .svelte file it modifies, and that re-print
+//   1. rewrites `{@const x = y}` into the parenthesized pattern
+//      `{@const (x = y)}`, which Svelte 5 rejects with
+//      "Expected identifier or destructure pattern" (plus a
+//      cascading "has no default export"), and
+//   2. collapses continuation-line indentation in attribute and
+//      handler expressions, and joins lines past `lineWidth: 100`.
+//
+// Bisected against 2.5.13 to confirm the regression. `biome format
+// --write` is unaffected — only the `check --write` path — so damage
+// is silent: no diagnostic is emitted, the file is just rewritten.
+//
+// There is no config-level escape hatch. The only reachable lever is
+// `overrides[].html.formatter.enabled: false` for `**/*.svelte`,
+// which also disables formatting of the embedded <script> blocks;
+// those then fall back to Biome's built-in defaults instead of the
+// repo's `javascript.formatter` (single quotes, 2-space indent
+// became double quotes, tabs) — 330 files churned, far worse than
+// the bug. The configuration schema exposes no narrower knob (there
+// is no top-level `svelte` section; only `html`/`javascript`/`css`).
+//
+// 2.5.14 was the newest published release at the time of writing, so
+// there is no version to upgrade *to*. Remove this pin once a Biome
+// release past 2.5.14 fixes Svelte template expression formatting,
+// then re-run `biome check --write` and review the resulting .svelte
+// diff before trusting it.
 
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
@@ -285,6 +315,37 @@ for (const { dir, name } of tsDirs) {
   } catch (err) {
     console.error(
       `⚠️  Failed to pin typescript in ${dir}:`,
+      err instanceof Error ? err.message : String(err),
+    );
+    hasError = true;
+  }
+}
+
+// ── @biomejs/biome ──────────────────────────────────────────────
+
+const BIOME_VERSION = '2.5.13';
+const biomeDirs: WorkspaceInfo[] = [{ dir: '.', name: '@aikami/monorepo' }].filter(({ dir }) => {
+  const pkgPath = resolve(MONOREPO_ROOT, dir, 'package.json');
+  if (!existsSync(pkgPath)) {
+    return false;
+  }
+  try {
+    const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
+    return '@biomejs/biome' in (pkg.devDependencies || {});
+  } catch {
+    return false;
+  }
+});
+
+console.log(`🔒 Pinning @biomejs/biome to ${BIOME_VERSION}`);
+
+for (const { dir, name } of biomeDirs) {
+  try {
+    bunAddInWorkspace(name, dir, `-d @biomejs/biome@${BIOME_VERSION} --exact`);
+    console.log(`✅ Pinned @biomejs/biome@${BIOME_VERSION} in ${dir}`);
+  } catch (err) {
+    console.error(
+      `⚠️  Failed to pin @biomejs/biome in ${dir}:`,
       err instanceof Error ? err.message : String(err),
     );
     hasError = true;

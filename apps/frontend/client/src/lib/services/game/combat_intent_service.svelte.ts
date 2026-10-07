@@ -10,12 +10,37 @@
 // from the caller's request, so a model cannot forge it; the model only fills
 // the closed `CombatIntentDraft` shape.
 //
+// 🔴 REQUEST LIFETIME (issue #382)
+//
+// The service previously raced each attempt against a FRESH soft deadline,
+// resolved the race as a timeout, and then walked away — leaving the provider
+// call running with nothing to abort it. The player fell back to the
+// deterministic parser immediately, so the failure looked correct, while the
+// runtime kept generating a response nobody would ever read. On a local runtime
+// that is real GPU time; on a BYOK provider it is a real bill.
+//
+// Four properties this now guarantees, each covered by a regression in
+// `combat_intent_service.test.ts`:
+//
+//   - ONE soft budget across all attempts, measured from the moment the
+//     interpretation started. A retry draws from what is left rather than
+//     restarting the clock, so a slow first attempt plus a retry cannot exceed
+//     the budget the player is waiting on.
+//   - The losing attempt is ABORTED the instant the race is lost, and its
+//     resources are released. No orphaned provider call survives a fallback.
+//   - A LATE response is never usable. The race settles once; a provider that
+//     ignores its abort signal and answers afterwards cannot turn a fallback
+//     into a model-driven result.
+//   - Every live operation is OWNED. A second `interpret` with the same
+//     `requestId` supersedes the first deterministically rather than
+//     overwriting its controller in a map and orphaning it, and `cancel` /
+//     `cancelAll` abort every operation still running.
+//
 // Reliability policy (AC-2, AC-6, AC-8):
 //   - bounded retry (2 attempts) on an invalid/partial response;
 //   - soft deadline → typed failure immediately (the caller's deterministic
 //     fallback keeps combat playable), hard deadline → abort;
-//   - cancellable and idempotent by `requestId`; a cancelled or superseded
-//     request never yields a usable answer;
+//   - cancellable and idempotent by `requestId`;
 //   - oversized text is refused before any provider call.
 //
 // Contract: C-525 AC-2, AC-6, AC-8
@@ -45,6 +70,8 @@ export type CombatIntentServiceOptions = BaseFrontendClassOptions & {
       prompt: string;
       systemPrompt?: string;
       signal?: AbortSignal;
+      /** Absolute epoch ms by which the call must finish. */
+      deadlineAt?: number;
     }): Promise<unknown>;
   };
   /** Soft deadline in ms — defaults to the §18 budget (1.5 s). */
@@ -69,7 +96,7 @@ export type CombatIntentServiceInterface = BaseFrontendClassInterface & {
    */
   interpretWithFallback(request: CombatIntentRequest): Promise<IntentInterpreterResult>;
 
-  /** Cancels one outstanding request by id (idempotent). */
+  /** Cancels one outstanding request by id, including every attempt of it. */
   cancel(requestId: string): void;
 
   /** Cancels every outstanding request (e.g. combat ended). */
@@ -84,8 +111,88 @@ const DEFAULT_HARD_DEADLINE_MS = 4000;
 const MAX_ATTEMPTS = 2;
 const SCHEMA_NAME = 'CombatIntentDraft';
 
-/** Sentinel for "the provider did not answer inside the soft deadline". */
-const TIMED_OUT: unique symbol = Symbol('combat-intent-timeout');
+/**
+ * One live interpretation, and the controller every attempt of it draws from.
+ *
+ * Attempts get their own child controllers so a soft timeout can release ONE
+ * attempt without tearing down the operation, while a cancellation reaches all
+ * of them.
+ */
+class InterpretationOperation {
+  readonly requestId: string;
+  /** Aborted on cancellation, on the hard deadline, or on supersession. */
+  readonly controller = new AbortController();
+  /** Live attempt controllers, so cleanup can reach every one of them. */
+  private readonly _liveAttempts = new Set<AbortController>();
+  private _finished = false;
+
+  constructor(requestId: string) {
+    this.requestId = requestId;
+  }
+
+  get aborted(): boolean {
+    return this.controller.signal.aborted;
+  }
+
+  /** Creates a controller for one attempt, linked to this operation. */
+  attemptController(): AbortController {
+    const controller = new AbortController();
+    this._liveAttempts.add(controller);
+    const onAbort = (): void => {
+      controller.abort(this.controller.signal.reason);
+    };
+    if (this.controller.signal.aborted) {
+      onAbort();
+    } else {
+      this.controller.signal.addEventListener('abort', onAbort, { once: true });
+    }
+    controller.signal.addEventListener(
+      'abort',
+      () => this.controller.signal.removeEventListener('abort', onAbort),
+      { once: true },
+    );
+    return controller;
+  }
+
+  /** Releases one attempt. Idempotent, and always called. */
+  releaseAttempt(controller: AbortController): void {
+    this._liveAttempts.delete(controller);
+    if (!controller.signal.aborted) {
+      controller.abort(new Error('Attempt settled'));
+    }
+  }
+
+  /**
+   * Aborts the operation and every attempt still running.
+   *
+   * Called on the hard deadline, on cancellation, and on the way out of
+   * `interpret` — so a settled interpretation leaves nothing behind that could
+   * still be generating.
+   */
+  finish(): void {
+    if (this._finished) {
+      return;
+    }
+    this._finished = true;
+    for (const controller of this._liveAttempts) {
+      if (!controller.signal.aborted) {
+        controller.abort(new Error('Interpretation finished'));
+      }
+    }
+    this._liveAttempts.clear();
+    if (!this.controller.signal.aborted) {
+      this.controller.abort(new Error('Interpretation finished'));
+    }
+  }
+
+  /** Aborts one attempt, so a lost race releases the provider call at once. */
+  abortAttempt(controller: AbortController, reason: string): void {
+    this._liveAttempts.delete(controller);
+    if (!controller.signal.aborted) {
+      controller.abort(new Error(reason));
+    }
+  }
+}
 
 class CombatIntentService
   extends BaseFrontendClass<CombatIntentServiceOptions>
@@ -94,7 +201,17 @@ class CombatIntentService
   private readonly _maxAttempts = MAX_ATTEMPTS;
   private readonly _softDeadlineMs: number;
   private readonly _hardDeadlineMs: number;
-  private readonly _controllers = new Map<string, AbortController>();
+  /**
+   * Every live operation, keyed by `requestId`.
+   *
+   * A SET per id, not a single controller: two interpretations sharing a
+   * request id are two operations, and storing one controller per id orphaned
+   * the other — it kept running, could not be cancelled, and its result could
+   * not be reasoned about. The newest interpretation still wins the identity;
+   * the older one is SUPERSEDED and aborted, which is deterministic rather than
+   * dependent on which one finished first.
+   */
+  private readonly _operations = new Map<string, Set<InterpretationOperation>>();
 
   constructor(options: CombatIntentServiceOptions) {
     super(options);
@@ -104,7 +221,11 @@ class CombatIntentService
 
   /** @inheritdoc */
   get activeRequestCount(): number {
-    return this._controllers.size;
+    let total = 0;
+    for (const operations of this._operations.values()) {
+      total += operations.size;
+    }
+    return total;
   }
 
   /** @inheritdoc */
@@ -122,10 +243,17 @@ class CombatIntentService
       return { ok: false, reason: 'unknown_capability' };
     }
 
-    const controller = new AbortController();
-    this._controllers.set(requestId, controller);
+    // ONE soft budget and ONE hard budget, both measured from here. A retry
+    // draws from what is left; it never restarts either clock.
+    const startedAt = Date.now();
+    const softDeadlineAt = startedAt + this._softDeadlineMs;
+    const deadlineAt = startedAt + this._hardDeadlineMs;
+
+    const operation = new InterpretationOperation(requestId);
+    this._register(operation);
+
     const hardTimer = setTimeout(() => {
-      controller.abort();
+      operation.controller.abort(new Error('Combat intent hard deadline expired'));
     }, this._hardDeadlineMs);
 
     try {
@@ -133,11 +261,23 @@ class CombatIntentService
       let lastFailure: IntentInterpreterResult = { ok: false, reason: 'unparseable' };
 
       for (let attempt = 1; attempt <= this._maxAttempts; attempt++) {
-        const raw = await this._requestDraft(prompt, controller);
-        if (raw === TIMED_OUT || raw === undefined) {
+        if (Date.now() >= softDeadlineAt) {
+          // The ONE soft budget is spent. A second attempt would be starting
+          // work the player is no longer waiting for.
+          this.debug('interpret:soft-budget-spent', { requestId, attempt });
+          return lastFailure;
+        }
+        const raw = await this._requestDraft({
+          prompt,
+          operation,
+          attempt,
+          deadlineAt,
+          softDeadlineAt,
+        });
+        if (raw === undefined) {
           // A timeout, an abort or a provider error: fall back immediately
           // rather than making the player wait out the hard deadline.
-          this.debug(controller.signal.aborted ? 'interpret:cancelled' : 'interpret:timeout', {
+          this.debug(operation.aborted ? 'interpret:cancelled' : 'interpret:timeout', {
             requestId,
             attempt,
           });
@@ -174,9 +314,10 @@ class CombatIntentService
       return { ok: false, reason: 'unparseable' };
     } finally {
       clearTimeout(hardTimer);
-      if (this._controllers.get(requestId) === controller) {
-        this._controllers.delete(requestId);
-      }
+      // Releases every attempt controller and the operation's own. Without this
+      // an abandoned provider call keeps generating behind a settled request.
+      operation.finish();
+      this._unregister(operation);
     }
   }
 
@@ -210,63 +351,144 @@ class CombatIntentService
 
   /** @inheritdoc */
   cancel(requestId: string): void {
-    const controller = this._controllers.get(requestId);
-    if (controller === undefined) {
+    const operations = this._operations.get(requestId);
+    if (operations === undefined || operations.size === 0) {
       return;
     }
-    this.debug('cancel', { requestId });
-    controller.abort();
-    this._controllers.delete(requestId);
+    this.debug('cancel', { requestId, operations: operations.size });
+    // EVERY live operation under this id, not just the newest.
+    for (const operation of [...operations]) {
+      operation.controller.abort(new Error('Cancelled by caller'));
+    }
+    this._operations.delete(requestId);
   }
 
   /** @inheritdoc */
   cancelAll(): void {
-    this.debug('cancelAll', { count: this._controllers.size });
-    for (const controller of this._controllers.values()) {
-      controller.abort();
+    this.debug('cancelAll', { count: this.activeRequestCount });
+    for (const operations of this._operations.values()) {
+      for (const operation of operations) {
+        operation.controller.abort(new Error('Cancelled by caller'));
+      }
     }
-    this._controllers.clear();
+    this._operations.clear();
+  }
+
+  /** Adds an operation to its id's set, superseding any predecessor. */
+  private _register(operation: InterpretationOperation): void {
+    const existing = this._operations.get(operation.requestId);
+    if (existing === undefined) {
+      this._operations.set(operation.requestId, new Set([operation]));
+      return;
+    }
+    // Deterministic duplicate handling: the newest interpretation owns the
+    // identity and any earlier one is aborted rather than left running with
+    // nothing able to cancel it.
+    for (const previous of existing) {
+      this.debug('interpret:superseded', { requestId: operation.requestId });
+      previous.controller.abort(new Error('Superseded by a newer request with the same id'));
+    }
+    existing.add(operation);
+  }
+
+  /** Removes one operation, dropping the id once it holds none. */
+  private _unregister(operation: InterpretationOperation): void {
+    const existing = this._operations.get(operation.requestId);
+    if (existing === undefined) {
+      return;
+    }
+    existing.delete(operation);
+    if (existing.size === 0) {
+      this._operations.delete(operation.requestId);
+    }
   }
 
   /**
-   * One provider call raced against the soft deadline.
+   * One provider attempt, raced against what is LEFT of the soft budget.
    *
-   * Returns {@link TIMED_OUT} for a timeout, an abort, or any provider error —
-   * the caller treats all three identically (deterministic fallback).
+   * The race is bounded by `min(soft remaining, hard remaining)`, so neither a
+   * soft budget that has already been partly spent by an earlier attempt nor an
+   * exhausted hard budget can buy more provider time.
+   *
+   * Returns `undefined` for a timeout, an abort, or a provider error — the
+   * caller treats all three identically (deterministic fallback). The promise
+   * settles once, so a provider that IGNORES its abort signal and answers
+   * afterwards cannot produce a usable late result.
    */
-  private async _requestDraft(
-    prompt: string,
-    controller: AbortController,
-  ): Promise<unknown | typeof TIMED_OUT> {
-    const call = this._text.extractStructure({
-      // guard-ignore lint/type-safety/casting: TypeBox schema handed to the AI gateway as its JSON-schema record.
-      schema: CombatIntentDraftSchema as unknown as Record<string, unknown>,
-      schemaName: SCHEMA_NAME,
-      prompt,
-      systemPrompt: buildCombatIntentSystemPrompt(),
-      signal: controller.signal,
-    });
-    return await new Promise<unknown | typeof TIMED_OUT>((resolve) => {
-      const timer = setTimeout(() => {
-        resolve(TIMED_OUT);
-      }, this._softDeadlineMs);
-      const onAbort = (): void => {
+  private async _requestDraft(options2: {
+    prompt: string;
+    operation: InterpretationOperation;
+    attempt: number;
+    deadlineAt: number;
+    softDeadlineAt: number;
+  }): Promise<unknown | undefined> {
+    const { prompt, operation, attempt, deadlineAt, softDeadlineAt } = options2;
+
+    const now = Date.now();
+    const softRemaining = Math.max(0, softDeadlineAt - now);
+    const hardRemaining = Math.max(0, deadlineAt - now);
+    const window = Math.min(softRemaining, hardRemaining);
+    if (window <= 0) {
+      return undefined;
+    }
+
+    const controller = operation.attemptController();
+
+    return await new Promise<unknown | undefined>((resolve) => {
+      // Declared inside the executor so `settle` closes over the live bindings
+      // rather than a not-yet-initialised temporal dead zone.
+      const settle = (value: unknown | undefined): void => {
         clearTimeout(timer);
-        resolve(TIMED_OUT);
+        controller.signal.removeEventListener('abort', onAbort);
+        // Released either way, and ABORTED if it is still running: a losing
+        // attempt must not keep the provider generating.
+        operation.releaseAttempt(controller);
+        resolve(value);
       };
+
+      const call = this._text.extractStructure({
+        // guard-ignore lint/type-safety/casting: TypeBox schema handed to the AI gateway as its JSON-schema record.
+        schema: CombatIntentDraftSchema as unknown as Record<string, unknown>,
+        schemaName: SCHEMA_NAME,
+        prompt,
+        systemPrompt: buildCombatIntentSystemPrompt(),
+        signal: controller.signal,
+        // ONE clock: the remaining soft window and the hard deadline are both
+        // already reflected in `window`, and the absolute hard deadline is passed
+        // down so no layer below mints a fresh budget (issue #382 P0).
+        deadlineAt: Math.min(deadlineAt, Date.now() + window),
+      });
+
+      const onAbort = (): void => {
+        settle(undefined);
+      };
+      const timer = setTimeout(() => {
+        this.debug('requestDraft:soft-timeout', { attempt, window });
+        // Abort the LOSING attempt immediately. Before, the race simply
+        // resolved and the provider call kept running with nothing to stop it.
+        operation.abortAttempt(controller, 'Soft deadline expired');
+        settle(undefined);
+      }, window);
       controller.signal.addEventListener('abort', onAbort, { once: true });
+      if (controller.signal.aborted) {
+        onAbort();
+        return;
+      }
       call.then(
         (value) => {
-          clearTimeout(timer);
-          controller.signal.removeEventListener('abort', onAbort);
-          resolve(controller.signal.aborted ? TIMED_OUT : value);
+          // A late answer after the race was lost is not usable. The promise
+          // has already settled; this branch only exists so a provider that
+          // ignores its abort cannot be mistaken for a fresh result.
+          if (controller.signal.aborted) {
+            settle(undefined);
+            return;
+          }
+          settle(value);
         },
         (error: unknown) => {
-          clearTimeout(timer);
-          controller.signal.removeEventListener('abort', onAbort);
-          this.debug('requestDraft:rejected', { aborted: controller.signal.aborted });
+          this.debug('requestDraft:rejected', { attempt, aborted: controller.signal.aborted });
           void error;
-          resolve(TIMED_OUT);
+          settle(undefined);
         },
       );
     });

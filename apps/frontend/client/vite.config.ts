@@ -5,7 +5,6 @@ import { dirname, join, resolve } from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import type { Mode } from '@aikami/types';
-import { paraglideVitePlugin } from '@inlang/paraglide-js';
 import adapter from '@sveltejs/adapter-static';
 import { sveltekit } from '@sveltejs/kit/vite';
 import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
@@ -78,40 +77,50 @@ const toSrcPath = (path: string) => toPosixPath(join(projectDirectory, 'src', pa
 // ---------------------------------------------------------------------------
 // Dev-route build gate (C-418 Feature B)
 //
-// Production builds must not ship the `(dev)` route group. SvelteKit 2.70 has
-// no `kit.routes` filter, so the gate points `files.routes` at a filtered
-// copy of the routes directory (`.svelte-kit/routes-prod`), materialized by
-// scripts/gate_dev_routes.ts before every build (M3). The decision is made
+// SvelteKit 2.70 has no `kit.routes` filter, so the gate points `files.routes`
+// either at `src/routes` or at a filtered copy of it
+// (`.svelte-kit/routes-prod`), materialized by scripts/gate_dev_routes.ts
+// before every build that excludes the sandboxes (M3). The decision is made
 // while resolving the config, never as a runtime check:
 //
-//   AIKAMI_INCLUDE_DEV_ROUTES=true   → always include `(dev)` (test builds)
+//   AIKAMI_INCLUDE_DEV_ROUTES=true   → always include `(dev)`
 //   AIKAMI_INCLUDE_DEV_ROUTES=false  → always exclude `(dev)`
-//   unset                            → include when serving, exclude when building
+//   unset + serving                  → include (dev server)
+//   unset + `--mode staging`         → include
+//   unset + anything else            → exclude (production included)
 //
-// The unset default is derived from Vite's `command`, so a dev server started
-// straight from source keeps the sandboxes with no configuration, while every
-// distributable build — staging included — ships the production route graph.
-// A developer who wants sandboxes in a build opts in explicitly with
-// AIKAMI_INCLUDE_DEV_ROUTES=true; the moon test/typecheck tasks set that flag
-// too. The decision itself lives in scripts/dev_routes_gate.ts, shared with
+// 🔴 TEMPORARY. Staging is the one deployed mode that ships the sandboxes with
+// no configuration, because it is the mode QA reviews. Every other build —
+// production above all — strips `(dev)`, so a release cannot publish the
+// sandboxes by accident. `AIKAMI_INCLUDE_DEV_ROUTES=true` still opts any build
+// in explicitly, which is what the moon `typecheck`/`test*` tasks and
+// `build:emulator` do. Reverting the staging exception is a one-line change in
+// scripts/dev_routes_gate.ts: the decision lives there and is shared with
 // scripts/gate_dev_routes.ts so the two can never disagree.
+//
+// Because the decision is mode-derived, the mode must be the authoritative one
+// (AIKAMI_BUILD_MODE) rather than whatever Vite's probe passes in — see the
+// `buildMode` resolution in the config callback below.
 //
 // NODE_ENV is deliberately NOT consulted: moon sets NODE_ENV=production for
 // every build task regardless of target mode, so using it here would strip
-// the (dev) sandbox routes from test/QA builds (M4). Vite's own `command` is
-// the signal, and scripts/dev_routes_gate.ts is its single interpreter.
+// the (dev) sandbox routes from test/QA builds (M4). The signals are Vite's
+// `command` and the build mode, and scripts/dev_routes_gate.ts is their single
+// interpreter.
 // ---------------------------------------------------------------------------
 const FILTERED_ROUTES_DIR = join(projectDirectory, '.svelte-kit', 'routes-prod');
 
 /**
  * Resolves `files.routes` for one Vite invocation.
  *
- * Deliberately called from inside the config callback rather than at module
- * scope: only there is Vite's real `command` known, and the serve/build split
- * is what keeps sandboxes in the dev server without leaking them into builds.
+ * Called from inside the config callback rather than at module scope: only there
+ * is Vite's real `command` and `mode` known.
+ *
+ * @param mode The AUTHORITATIVE build mode, resolved by the caller. See the
+ *   `AIKAMI_BUILD_MODE` note below — this must not read Vite's `mode` directly.
  */
-const resolveRoutesDir = (command: ViteCommand): string => {
-  if (resolveIncludeDevRoutes(command)) {
+const resolveRoutesDir = (command: ViteCommand, mode: string): string => {
+  if (resolveIncludeDevRoutes({ command, mode })) {
     return 'src/routes';
   }
   // Guard (M3): a bare `vite build` without the gate script would point
@@ -121,14 +130,26 @@ const resolveRoutesDir = (command: ViteCommand): string => {
     throw new Error(
       '[dev-route gate] the filtered routes copy (.svelte-kit/routes-prod) is missing. ' +
         'Run the build through the package scripts (bun run build:production) or execute ' +
-        'scripts/gate_dev_routes.ts --mode production first.',
+        `scripts/gate_dev_routes.ts --mode ${mode} first.`,
     );
   }
   return '.svelte-kit/routes-prod';
 };
 
 export default defineConfig(({ command, mode }) => {
-  const routesDir = resolveRoutesDir(command);
+  // 🔴 Resolve the mode BEFORE the dev-route decision. SvelteKit probes this
+  // config via `load_config_from_vite` with its OWN default mode (production)
+  // before the real build mode is known, so Vite's `mode` is not trustworthy on
+  // its own. `AIKAMI_BUILD_MODE` — published by scripts/build_client.ts and
+  // scripts/gate_dev_routes.ts — is authoritative when the runner exported it,
+  // and the `?? mode` fallback covers a bare `vite build`/`vite dev`.
+  //
+  // Order matters: `files.routes` is chosen from this value, so resolving the
+  // decision first would let the probe and the real build configure different
+  // route graphs — the exact divergence scripts/dev_routes_gate.ts exists to
+  // make impossible.
+  const buildMode = process.env.AIKAMI_BUILD_MODE ?? mode;
+  const routesDir = resolveRoutesDir(command, buildMode);
 
   // Expose the Vite mode to vite.config.ts (loaded later by the SvelteKit
   // plugin) so the dev-route build gate (C-418 Feature B) can exclude the
@@ -182,7 +203,6 @@ export default defineConfig(({ command, mode }) => {
         $appCss: toSrcPath('app.css'),
         $components: toSrcPath('lib/components'),
         '$components/*': toSrcPath('lib/components/*'),
-        $i18n: toSrcPath('lib/utils/i18n'),
         $lib: toPackagesPath('lib'),
         '$lib/*': toSrcPath('lib/*'),
         $router: toPackagesPath('frontend/services/src/lib/router/router_utils'),
@@ -247,10 +267,6 @@ export default defineConfig(({ command, mode }) => {
         '@aikami/types': toPackagesPath('shared/types/src'),
         '@aikami/utils': toPackagesPath('shared/utils/src'),
       },
-    }) as PluginOption,
-    paraglideVitePlugin({
-      project: './project.inlang',
-      outdir: './src/lib/paraglide',
     }) as PluginOption,
     {
       name: 'internal-logging-endpoint',
@@ -399,6 +415,29 @@ export default defineConfig(({ command, mode }) => {
       // ES module format. IIFE/UMD worker builds do not support code-splitting
       // dynamic imports.
       format: 'es',
+      rolldownOptions: {
+        // Each worker must be ONE self-contained file. Code-splitting a
+        // worker produces a module graph inside the worker global, and that
+        // graph can close a cycle: kokoro_worker statically imports the
+        // transformers chunk, and the chunk holding kokoro-js (reached via
+        // `await import('kokoro-js')`) statically imports BACK into the
+        // worker entry. The entry body then evaluates a second time, which
+        // re-runs `self.onmessage = ...` with a FRESH module-scope `session`
+        // that is still null. Symptom: the worker that reported `ready` is not
+        // the worker that answers `synthesize`, and every request fails with
+        // "Kokoro session not initialized".
+        //
+        // Chromium (web + WebView2) dedupes the re-imported entry; WebKitGTK
+        // (Linux Tauri, served from `tauri://localhost`) does not, so the bug
+        // only reproduces on Linux desktop. Inlining removes the back-edge
+        // entirely, on every platform.
+        //
+        // Cost is nil: these workers exist only to load their engine
+        // immediately, so the lazy split bought nothing. Inlined
+        // `import('onnxruntime-web/webgpu')` / `import('kokoro-js')` still
+        // code-split in the MAIN app build, where that matters.
+        output: { inlineDynamicImports: true },
+      },
       // Worker bundles use their own plugin pipeline (`worker.plugins`), NOT
       // the top-level `config.plugins`. The ORT externalization must be
       // registered here as well or worker-owned ORT assets (kokoro_worker,

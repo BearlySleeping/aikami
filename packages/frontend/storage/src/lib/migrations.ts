@@ -401,6 +401,29 @@ export const AIKAMI_MIGRATIONS: readonly Migration[] = [
         ON generation_artifacts(candidate_id)`,
     ],
   },
+  {
+    version: 8,
+    name: 'worldgen-private-drafts',
+    statements: [
+      // Private narrative-world drafts (G01). Device-local, NOT scoped to a
+      // campaign and NOT scoped to an account: a draft must be writable with
+      // no sign-in, so there is deliberately no owner/campaign foreign key
+      // here. "Delete all local data" wipes this table (export_service).
+      `CREATE TABLE IF NOT EXISTS worldgen_drafts (
+    draft_id        TEXT PRIMARY KEY,
+    schema_version  INTEGER NOT NULL,
+    status          TEXT NOT NULL CHECK(status IN ('in_progress', 'complete', 'accepted_preview', 'failed')),
+    run_id          TEXT NOT NULL,
+    revision        INTEGER NOT NULL,
+    input_json      TEXT NOT NULL,
+    blueprint_json  TEXT,
+    created_at      TEXT NOT NULL,
+    updated_at      TEXT NOT NULL
+  )`,
+      `CREATE INDEX IF NOT EXISTS idx_worldgen_drafts_updated
+        ON worldgen_drafts(updated_at)`,
+    ],
+  },
 ];
 
 // ---------------------------------------------------------------------------

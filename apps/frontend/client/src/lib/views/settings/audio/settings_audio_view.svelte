@@ -244,9 +244,15 @@ const { viewModel }: Props = $props();
                 <button
                   type="button"
                   class="btn btn-primary flex-1"
+                  disabled={viewModel.isTtsBusy}
                   onclick={() => viewModel.testTts()}
                 >
-                  🔊 Test TTS
+                  {#if viewModel.isTtsBusy}
+                    <span class="loading loading-spinner loading-xs"></span>
+                    Loading…
+                  {:else}
+                    🔊 Test TTS
+                  {/if}
                 </button>
                 <button
                   type="button"
@@ -264,8 +270,8 @@ const { viewModel }: Props = $props();
             resumable and verifies a checksum before use.
           </p>
 
-          {#if viewModel.feedback && viewModel.voiceModelState.status === 'ready'}
-            <p class="text-sm font-mono text-base-content/70">{viewModel.feedback}</p>
+          {#if viewModel.voiceModelFeedback}
+            <p class="text-sm font-mono text-base-content/70">{viewModel.voiceModelFeedback}</p>
           {/if}
         </div>
       </div>

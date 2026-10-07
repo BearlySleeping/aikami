@@ -187,6 +187,61 @@ export const NpcDialogueAiEnvelopeSchema = Type.Object(
 
 export type NpcDialogueAiEnvelope = Static<typeof NpcDialogueAiEnvelopeSchema>;
 
+/**
+ * C-401 call 2: the shape requested from the model when extracting metadata
+ * from an ALREADY-SPOKEN narrative.
+ *
+ * This is deliberately NOT {@link NpcDialogueAiEnvelopeSchema}. That schema was
+ * introduced for the earlier single-call design, where the model produced the
+ * narrative itself and `narrative` was the primary payload. Under C-401 the
+ * narrative is produced and streamed by call 1, and `_generateAiTurn` already
+ * treats it as authoritative (`the player already read it`). Asking the model to
+ * return it again made call 2 regenerate prose the client already holds.
+ *
+ * Removing the echo avoids unnecessary output; it does not control the model's
+ * reasoning behavior or guarantee that extraction fits the call-2 budget.
+ * Follow-up measurements in issue #382 still hit the 6 000 ms deadline with
+ * this schema, with reasoning accounting for most of the completion tokens.
+ *
+ * The legacy envelope is kept unchanged for compatibility; this is additive.
+ */
+export const NpcDialogueExtractionSchema = Type.Object(
+  {
+    command: Type.Optional(NpcDialogueCommandSchema),
+    choices: Type.Optional(Type.Array(NpcDialogueChoiceSchema, { maxItems: 4 })),
+  },
+  { additionalProperties: false },
+);
+
+export type NpcDialogueExtraction = Static<typeof NpcDialogueExtractionSchema>;
+
+/**
+ * C-568 (issue #381): call 2 with the `command` field REMOVED.
+ *
+ * When an already-authorized candidate set has been enumerated for this turn
+ * and a decision backend has supplied the action, asking a text model for
+ * `command` again is asking it to redo work that has already been done — and to
+ * do it worse, because it must invent a content-pack id out of prose rather than
+ * choose from options the game has already validated.
+ *
+ * This schema is that narrower request. `choices` remains generative — labels
+ * and authored dialogue keys are prose, and no decision model produces them — so
+ * call 2 still runs. What disappears is the reasoning budget spent re-deriving a
+ * field that is already decided, which is the workload this lane measured.
+ *
+ * It is used ONLY when a decision actually answered. When it abstained, call 2
+ * keeps the full {@link NpcDialogueExtractionSchema} so the existing path can
+ * supply the command itself — one fallback, never two calls.
+ */
+export const NpcDialogueChoicesExtractionSchema = Type.Object(
+  {
+    choices: Type.Optional(Type.Array(NpcDialogueChoiceSchema, { maxItems: 4 })),
+  },
+  { additionalProperties: false },
+);
+
+export type NpcDialogueChoicesExtraction = Static<typeof NpcDialogueChoicesExtractionSchema>;
+
 // ---------------------------------------------------------------------------
 // Suggestion Chip — rendered below NPC messages (C-371)
 // ---------------------------------------------------------------------------

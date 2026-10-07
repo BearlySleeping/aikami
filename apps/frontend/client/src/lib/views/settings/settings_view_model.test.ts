@@ -91,8 +91,10 @@ describe('SettingsViewModel — group/section selection', () => {
     vm.setActiveGroup('ai');
     expect(vm.activeGroupId).toBe('ai');
     expect(vm.activeSectionId).toBe('story-dialogue');
-    expect(vm.sectionsInActiveGroup.length).toBe(4);
+    // The AI group gained Decisions / System One in #381.
+    expect(vm.sectionsInActiveGroup.length).toBe(5);
     expect(vm.sectionsInActiveGroup[0].id).toBe('story-dialogue');
+    expect(vm.sectionsInActiveGroup.map((section) => section.id)).toContain('decisions');
   });
 
   test('setActiveSection changes only the section, not the group', () => {

@@ -139,18 +139,18 @@ describe('resolveOrtBaseUrl', () => {
 });
 
 describe('ortWasmPaths', () => {
-  test('maps the jsep mjs/wasm pair under the resolved base', () => {
+  test('maps the native-WebGPU asyncify mjs/wasm pair under the resolved base', () => {
     const base = resolveOrtBaseUrl();
     expect(ortWasmPaths()).toEqual({
-      mjs: `${base}ort-wasm-simd-threaded.jsep.mjs`,
-      wasm: `${base}ort-wasm-simd-threaded.jsep.wasm`,
+      mjs: `${base}ort-wasm-simd-threaded.asyncify.mjs`,
+      wasm: `${base}ort-wasm-simd-threaded.asyncify.wasm`,
     });
   });
 
   test('honours an override base', () => {
     expect(ortWasmPaths('https://cdn.example.com/o')).toEqual({
-      mjs: 'https://cdn.example.com/o/ort-wasm-simd-threaded.jsep.mjs',
-      wasm: 'https://cdn.example.com/o/ort-wasm-simd-threaded.jsep.wasm',
+      mjs: 'https://cdn.example.com/o/ort-wasm-simd-threaded.asyncify.mjs',
+      wasm: 'https://cdn.example.com/o/ort-wasm-simd-threaded.asyncify.wasm',
     });
   });
 });
@@ -174,7 +174,7 @@ describe('configureOrtRuntime', () => {
     const result = configureOrtRuntime(env);
     const wasmPaths = env.backends.onnx.wasm.wasmPaths;
     expect(typeof wasmPaths).toBe('object');
-    expect((wasmPaths as { wasm: string }).wasm).toContain('ort-wasm-simd-threaded.jsep.wasm');
+    expect((wasmPaths as { wasm: string }).wasm).toContain('ort-wasm-simd-threaded.asyncify.wasm');
     expect(result.baseUrl).toBe(resolveOrtBaseUrl());
   });
 

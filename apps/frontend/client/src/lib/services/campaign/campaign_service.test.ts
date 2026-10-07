@@ -109,6 +109,7 @@ describe('CampaignService', () => {
       campaigns: Campaign[];
       activeCampaign: Campaign | undefined;
       refreshCampaigns: () => Promise<void>;
+      activateResolvedCampaign: (options: { campaign: Campaign }) => void;
     };
 
   beforeEach(async () => {
@@ -124,6 +125,12 @@ describe('CampaignService', () => {
     }
     if ('_campaigns' in svc) {
       (svc as Record<string, unknown>)._campaigns = [];
+    }
+    // The cached list is a public $state field, not `_campaigns`; reset it
+    // explicitly so a test that publishes a campaign cannot leak into the
+    // next test's counts.
+    if ('campaigns' in svc) {
+      (svc as Record<string, unknown>).campaigns = [];
     }
     // Default: a local text provider is configured so the gate passes
     _connections = [
@@ -310,6 +317,70 @@ describe('CampaignService', () => {
   test('startNewCampaign accepts custom contentPackId', async () => {
     const campaign = await getSvc().startNewCampaign({ contentPackId: 'stormreach' });
     expect(campaign.contentPackId).toBe('stormreach');
+  });
+
+  // ── activateResolvedCampaign: boot-published campaign identity ────────
+
+  test('activateResolvedCampaign publishes the resolved record verbatim', () => {
+    const resolved: Campaign = {
+      id: 'restored-campaign',
+      name: 'Restored',
+      state: 'playing',
+      contentPackId: 'emberwatch',
+      seed: 7,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-02T00:00:00.000Z',
+      lastSavedAt: '2026-01-02T00:00:00.000Z',
+      lastSaveSlotId: 'manual-3',
+      capabilityProfile: { textProvider: true, imageProvider: false, voiceProvider: false },
+    };
+
+    getSvc().activateResolvedCampaign({ campaign: resolved });
+
+    // The publisher that drives the pause overlay's "Last saved" label reads
+    // activeCampaign.lastSavedAt (game_overlay_service.svelte.ts).
+    expect(getSvc().activeCampaign?.id).toBe('restored-campaign');
+    expect(getSvc().activeCampaign?.lastSavedAt).toBe('2026-01-02T00:00:00.000Z');
+    expect(getSvc().activeCampaign?.lastSaveSlotId).toBe('manual-3');
+  });
+
+  test('activateResolvedCampaign keeps the cached list coherent without a DB read', () => {
+    const first: Campaign = {
+      id: 'older',
+      name: 'Older',
+      state: 'paused',
+      contentPackId: 'emberwatch',
+      seed: 1,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      capabilityProfile: { textProvider: true, imageProvider: false, voiceProvider: false },
+    };
+    const resolved: Campaign = {
+      ...first,
+      id: 'newer',
+      state: 'loading',
+      updatedAt: '2026-01-03T00:00:00.000Z',
+    };
+
+    getSvc().activateResolvedCampaign({ campaign: first });
+    getSvc().activateResolvedCampaign({ campaign: resolved });
+
+    expect(getSvc().campaigns.map((c) => c.id)).toEqual(['newer', 'older']);
+    expect(getSvc().getLatestCampaign()?.id).toBe('newer');
+  });
+
+  test('activateResolvedCampaign re-publishes an existing id in place', async () => {
+    const campaign = await getSvc().startNewCampaign();
+    await getSvc().refreshCampaigns();
+    const countBefore = getSvc().campaigns.length;
+
+    getSvc().activateResolvedCampaign({
+      campaign: { ...campaign, state: 'playing', lastSavedAt: '2026-01-04T00:00:00.000Z' },
+    });
+
+    expect(getSvc().campaigns.length).toBe(countBefore);
+    expect(getSvc().activeCampaign?.state).toBe('playing');
+    expect(getSvc().campaigns[0]?.lastSavedAt).toBe('2026-01-04T00:00:00.000Z');
   });
 
   test.todo('startNewCampaign rejects unknown contentPackId (not in registry)');

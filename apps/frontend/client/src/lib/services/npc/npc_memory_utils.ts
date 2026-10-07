@@ -3,6 +3,11 @@
 // Pure helpers for per-NPC conversational memory: transcript capture,
 // bounded compaction, prompt projection and digest/opener prompt building.
 // No state, no I/O — the service owns both and calls into these.
+//
+// The bounds here (summary, notes, last exchange, transcript tail) are NOT
+// new in issue #382's context-reuse lane; they predate it and are preserved
+// deliberately. What that lane adds lives in `npc_prompt_projection.ts`: a
+// compiled-prompt cache and a background-specific world-state projection.
 
 import { NPC_MEMORY_LIMITS } from '@aikami/constants';
 import type {
@@ -78,14 +83,23 @@ export const fallbackSummary = (options: {
   lines: readonly NpcMemoryLine[];
 }): string => {
   const playerLines = options.lines.filter((line) => line.role === 'player');
-  if (playerLines.length === 0) {
+  const replies = options.lines
+    .slice(options.lines[0]?.role === 'npc' ? 1 : 0)
+    .filter((line) => line.role === 'npc');
+  if (playerLines.length === 0 && replies.length === 0) {
     return options.previous;
   }
   const topics = clampText({
     text: playerLines.map((line) => line.content).join(' / '),
     max: 220,
   });
-  const entry = `The player talked with me about: ${topics}.`;
+  const response = clampText({ text: replies.map((line) => line.content).join(' / '), max: 300 });
+  const entry = [
+    topics ? `The player talked with me about: ${topics}.` : '',
+    response ? `I said: ${response}` : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
   return clampSummary(options.previous ? `${options.previous} ${entry}` : entry);
 };
 
@@ -108,6 +122,61 @@ export const sanitizeChips = (chips: readonly NpcSuggestionChip[]): NpcSuggestio
     }
   }
   return result;
+};
+
+/**
+ * Merges a failed digest's claimed lines back into the carry-forward buffer.
+ *
+ * 🔴 CHRONOLOGY IS THE WHOLE ARGUMENT. A digest claims its transcript lines at
+ * DISPATCH and gives them back if it fails, is superseded, or returns something
+ * that does not validate. Between the claim and the give-back the player may
+ * have finished ANOTHER conversation with the same NPC, whose lines are already
+ * in the buffer and are strictly NEWER.
+ *
+ * Appending the claimed lines after them — which is what the previous
+ * `[...existing, ...lines]` did — produces a buffer whose last lines are the
+ * OLDEST conversation in it. The next digest is then told, in order, about a
+ * conversation that has not happened yet and about nothing that has. Under the
+ * cap it is worse than merely reordered: the slice keeps the newest `limit`
+ * entries of a list whose tail is stale, so the buffer evicts real recent
+ * conversation to make room for a conversation the player has already moved
+ * past.
+ *
+ * So the claimed lines go FIRST. They are older; chronology is the property
+ * that makes the buffer mean what it says.
+ *
+ * RETENTION, EXPLICITLY. Overflow drops the OLDEST lines, keeping the newest
+ * `limit`. That is a deliberate, bounded loss: a player who talks to one NPC
+ * more than `limit` lines' worth between two successful digests loses the
+ * beginning of that burst from the next digest's transcript — though the
+ * deterministic `fallbackSummary` and `lastExchange` written at
+ * `recordConversation` time still carry the gist, and nothing here is
+ * lossless. What the merge guarantees is not completeness; it is that whatever
+ * IS retained is in the order it happened.
+ */
+export const mergeRestoredDigestLines = (options: {
+  /** Lines the failed digest had claimed, oldest first. */
+  readonly claimed: readonly NpcMemoryLine[];
+  /** Lines already buffered, all of them newer than `claimed`. */
+  readonly accumulated: readonly NpcMemoryLine[];
+  /** Ceiling on the merged buffer. */
+  readonly limit: number;
+}): NpcMemoryLine[] => {
+  // `slice(-0)` is `slice(0)` — it keeps everything. A zero (or negative)
+  // limit therefore has to be handled before the slice, or "retain nothing"
+  // silently becomes "retain everything", which is the opposite instruction
+  // and the more expensive one.
+  const limit = Math.max(0, options.limit);
+  if (limit === 0) {
+    return [];
+  }
+  if (options.claimed.length === 0) {
+    return [...options.accumulated].slice(-limit);
+  }
+  if (options.accumulated.length === 0) {
+    return [...options.claimed].slice(-limit);
+  }
+  return [...options.claimed, ...options.accumulated].slice(-limit);
 };
 
 /** Evicts least-recently-talked-to records beyond the cap. Mutates `records`. */
@@ -177,9 +246,19 @@ export const buildDigestUserPrompt = (options: {
   record: NpcMemoryRecord | undefined;
   npcName: string;
   lines: readonly NpcMemoryLine[];
+  /**
+   * The world-state facts, ALREADY projected for a bounded background task.
+   *
+   * The projection happens in the caller (`npc_prompt_projection.ts`), not
+   * here, so that the classification of "dialogue-only" versus "background"
+   * lives in one place and can be tested against the live fact builder. This
+   * function only renders.
+   */
   gameStateFacts: readonly string[];
+  /** Rendered via `renderBackgroundFacts`, so the bound is observable. */
+  renderFacts: (facts: readonly string[]) => string;
 }): string => {
-  const { record, npcName, lines, gameStateFacts } = options;
+  const { record, npcName, lines, gameStateFacts, renderFacts } = options;
   const transcript = lines
     .slice(-NPC_MEMORY_LIMITS.digestTranscriptLines)
     .map((line) => `${line.role === 'player' ? 'Player' : npcName}: ${line.content}`);
@@ -191,7 +270,7 @@ export const buildDigestUserPrompt = (options: {
     record?.notes.length ? record.notes.map((note) => `- ${note}`).join('\n') : '(none)',
     '',
     '[CURRENT WORLD STATE]',
-    gameStateFacts.length > 0 ? gameStateFacts.join('\n') : '(unknown)',
+    renderFacts(gameStateFacts),
     '',
     '[CONVERSATION JUST FINISHED]',
     ...transcript,
@@ -213,7 +292,10 @@ export const buildOpenerSystemPrompt = (options: { persona: string; npcName: str
 /** User prompt for an opener-only refresh. */
 export const buildOpenerUserPrompt = (options: {
   record: NpcMemoryRecord;
+  /** Already projected for a bounded background task; see the digest builder. */
   gameStateFacts: readonly string[];
+  /** Rendered via `renderBackgroundFacts`, so the bound is observable. */
+  renderFacts: (facts: readonly string[]) => string;
 }): string =>
   [
     ...buildMemoryPromptFacts(options.record),
@@ -222,7 +304,7 @@ export const buildOpenerUserPrompt = (options: {
       : '',
     '',
     '[CURRENT WORLD STATE]',
-    options.gameStateFacts.length > 0 ? options.gameStateFacts.join('\n') : '(unknown)',
+    options.renderFacts(options.gameStateFacts),
   ]
     .filter((line, index, all) => line.length > 0 || index < all.length - 1)
     .join('\n');

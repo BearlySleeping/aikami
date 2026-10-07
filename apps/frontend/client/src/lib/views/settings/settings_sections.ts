@@ -117,6 +117,15 @@ export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
     searchTags: ['text', 'chat', 'narrative', 'story generation', 'dialog'],
   },
   {
+    id: 'decisions',
+    label: 'Decisions',
+    group: 'ai',
+    contexts: ['page'],
+    icon: 'adjustments',
+    capabilityKey: 'decision',
+    searchTags: ['decision', 'system one', 'jev', 'nimble', 'laya', 'classifier', 'scoring'],
+  },
+  {
     id: 'artwork',
     label: 'Artwork',
     group: 'ai',

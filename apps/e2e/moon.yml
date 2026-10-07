@@ -94,6 +94,31 @@ tasks:
     inputs:
       - '@group(tests)'
       - '@group(sources)'
+  # Issue #382 AC-1: the reproducible before/after AI baseline. Needs a running
+  # client and a reachable text provider, so it is never in the CI graph.
+  #
+  # The committed artifact is docs/audits/382-ai-baseline-report.md. Each run
+  # writes raw per-call data to .evidence/382-baseline/<label>/, which is
+  # gitignored and never published.
+  bench-ai-baseline:
+    command: 'bun run scripts/ai_baseline_bench.ts'
+    options:
+      runInCI: false
+    inputs:
+      - '@group(tests)'
+      - '@group(sources)'
+      - 'scripts/ai_baseline_bench.ts'
+  # Asks the provider directly what the C-401 call-2 budget is spent on, and
+  # whether the reasoning channel can be disabled on the route the client uses.
+  # No browser and no client: the wire log cannot answer this, because a call
+  # that is cut off at its deadline never receives a body to read tokens from.
+  probe-ai-envelope-thinking:
+    command: 'bun run probe:ai-envelope-thinking'
+    options:
+      runInCI: false
+    inputs:
+      - '@group(sources)'
+      - 'scripts/ai_envelope_thinking_probe.ts'
   test-site:
     command: 'bun run test:site'
     options:

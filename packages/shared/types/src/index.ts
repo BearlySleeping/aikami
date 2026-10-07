@@ -89,6 +89,7 @@ export * from './lib/local_ai/model_manifest.ts';
 export * from './lib/local_ai/stack_backend.ts';
 export * from './lib/local_ai/stack_plan.ts';
 export * from './lib/local_ai/stt.ts';
+export * from './lib/local_ai/webgpu_support.ts';
 export * from './lib/media/audio_cue_binding.ts';
 export * from './lib/media/audio_rendition.ts';
 export * from './lib/media/generation.ts';
@@ -101,3 +102,5 @@ export * from './lib/project/project.ts';
 export * from './lib/runtime/runtime_engine_config.ts';
 export * from './lib/storage_seam.ts';
 export * from './lib/studio/studio.ts';
+
+export type * from './lib/text_telemetry.ts';

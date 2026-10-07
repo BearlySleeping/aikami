@@ -9,6 +9,7 @@ import {
   chatService,
   combatService,
   configService,
+  conversationRecapService,
   type GameEngineServiceInterface,
   gameEngineService,
   gameOverlayService,
@@ -61,7 +62,17 @@ export const getGameUIViewModel = (options: BaseViewModelOptions): GameUIViewMod
     overlays: gameOverlayService,
     inputAction: inputActionService,
     npcDialogue: npcDialogueService,
-    npcMemory: npcMemoryService,
+    npcMemory: {
+      resolveGreeting: (npc) => npcMemoryService.resolveGreeting(npc),
+      recordConversation: async (conversation) => {
+        // Persist the factual device record independently of the optional AI digest.
+        const persisted = conversationRecapService.recordConversation({
+          ...conversation,
+          sessionNumber: sessionService.activeSession?.sessionNumber ?? 1,
+        });
+        await Promise.all([persisted, npcMemoryService.recordConversation(conversation)]);
+      },
+    },
     onboarding: onboardingHintService,
     playerState: playerStateService,
     party: partyRosterService,

@@ -45,7 +45,15 @@ const mockFeatureExtraction = mock(async () => ({
   data: new Float32Array(EMBEDDING_DIMENSION).fill(0.5),
 }));
 const mockTransformerPipeline = mock(async () => mockFeatureExtraction);
-const mockTransformersEnvironment = {
+/** `env.backends.onnx.wasm.wasmPaths`: a bare filename or a per-kind file map. */
+type MockWasmPaths = string | { readonly mjs: string; readonly wasm: string };
+
+const mockTransformersEnvironment: {
+  allowLocalModels: boolean;
+  allowRemoteModels: boolean;
+  backends: { onnx: { wasm: { wasmPaths: MockWasmPaths } } };
+  localModelPath: string;
+} = {
   allowLocalModels: false,
   allowRemoteModels: true,
   backends: { onnx: { wasm: { wasmPaths: '' } } },
@@ -299,15 +307,19 @@ describe('LocalEmbeddingBackend', () => {
     expect(mockTransformersEnvironment.allowLocalModels).toBe(true);
     expect(mockTransformersEnvironment.allowRemoteModels).toBe(false);
     expect(mockTransformersEnvironment.localModelPath).toBe('/models/');
-    // ORT now resolves to the version-pinned distribution plane, never a
-    // bundled/hashed `_app/immutable` path or a bare `/ort/` directory.
-    const wasmPaths = mockTransformersEnvironment.backends.onnx.wasm.wasmPaths as {
-      mjs: string;
-      wasm: string;
-    };
+    // ORT resolves to the version-pinned distribution plane, never a bundled/
+    // hashed `_app/immutable` path or a bare `/ort/` directory — and it gets the
+    // glue the pinned runtime can actually call. ORT 1.31's NATIVE WebGPU EP,
+    // which transformers 4.3 drives through `webgpuInit`, ships in the asyncify
+    // build; the legacy jsep build exports `jsepInit` instead and is a different
+    // ABI (see packages/frontend/local-runtime/src/lib/ort_runtime.test.ts).
+    const wasmPaths = mockTransformersEnvironment.backends.onnx.wasm.wasmPaths;
+    if (typeof wasmPaths === 'string') {
+      throw new Error(`expected an object wasmPaths mapping, got ${wasmPaths}`);
+    }
     expect(wasmPaths.wasm).toContain('/models/ort/');
-    expect(wasmPaths.wasm).toContain('ort-wasm-simd-threaded.jsep.wasm');
-    expect(wasmPaths.mjs).toContain('ort-wasm-simd-threaded.jsep.mjs');
+    expect(wasmPaths.wasm).toContain('ort-wasm-simd-threaded.asyncify.wasm');
+    expect(wasmPaths.mjs).toContain('ort-wasm-simd-threaded.asyncify.mjs');
     expect(wasmPaths.wasm).not.toContain('_app/immutable');
   });
 });

@@ -415,6 +415,8 @@ export const migrateVaultV2ToV3 = (
   // connection in roles that matches that capability
   const capDefaults: Record<string, string | null> = {};
   const roleToCap: Record<AiRole, ConnectionCapability> = {
+    // Added after the v1→v2 shape was frozen; a v1 payload has no decision
+    // role, so mapping it here only keeps the record exhaustive.
     narration: 'text',
     dialogue: 'text',
     summarization: 'text',
@@ -423,6 +425,9 @@ export const migrateVaultV2ToV3 = (
     scene: 'image',
     'narrator-voice': 'voice',
     'npc-voice': 'voice',
+    // A v1 payload predates decision backends entirely, so this row exists only
+    // to keep the map exhaustive over the current role union.
+    decisions: 'decision',
   };
 
   // Cross-capability assignments cannot resolve safely. Remove them before
@@ -444,7 +449,7 @@ export const migrateVaultV2ToV3 = (
   };
   for (const [role, connId] of Object.entries(roles)) {
     const cap = roleToCap[role as AiRole];
-    if (!cap || !connId) {
+    if (!cap || cap === 'decision' || !connId) {
       continue;
     }
     const connCap = getCapabilityForConnection(connId);

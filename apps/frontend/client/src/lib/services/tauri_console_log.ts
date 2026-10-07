@@ -53,31 +53,45 @@ const init = async (): Promise<void> => {
     return;
   }
 
-  const { debug, error, info, trace, warn } = await import('@tauri-apps/plugin-log');
+  try {
+    const { debug, error, info, trace, warn } = await import('@tauri-apps/plugin-log');
 
-  const forward = (
-    name: 'log' | 'debug' | 'info' | 'warn' | 'error',
-    logger: (message: string) => Promise<void>,
-  ): void => {
-    const original = console[name];
-    console[name] = (...args: unknown[]): void => {
-      original?.(...args);
-      try {
-        logger(args.map(stringifyArg).join(' ')).catch(() => {
+    const forward = (
+      name: 'log' | 'debug' | 'info' | 'warn' | 'error',
+      logger: (message: string) => Promise<void>,
+    ): void => {
+      const original = console[name];
+      console[name] = (...args: unknown[]): void => {
+        original?.(...args);
+        try {
+          logger(args.map(stringifyArg).join(' ')).catch(() => {
+            // Forwarding must never break app code.
+          });
+        } catch {
           // Forwarding must never break app code.
-        });
-      } catch {
-        // Forwarding must never break app code.
-      }
+        }
+      };
     };
-  };
-  forward('log', trace);
-  forward('debug', debug);
-  forward('info', info);
-  forward('warn', warn);
-  forward('error', error);
+    forward('log', trace);
+    forward('debug', debug);
+    forward('info', info);
+    forward('warn', warn);
+    forward('error', error);
 
-  void info('[tauri-console-log] console forwarding installed');
+    // Best-effort confirmation, deliberately not awaited and deliberately
+    // guarded: this is diagnostics, and a failure here must not reject.
+    try {
+      void info('[tauri-console-log] console forwarding installed')?.catch(() => {});
+    } catch {
+      // Ignored — forwarding is a convenience, never a dependency.
+    }
+  } catch (error) {
+    // `init()` runs at module scope, so a rejection here became an
+    // "Unhandled Promise Rejection" that surfaced as app-level noise on every
+    // launch (and, before the AIKAMI_DESKTOP_BUILD fix, was the only trace
+    // that the Tauri log plugin had been stubbed out of the bundle).
+    console.warn('[tauri-console-log] forwarding unavailable:', error);
+  }
 };
 
 init();

@@ -213,6 +213,7 @@ const viewModel: DialogueDevViewModelInterface = DialogueDevViewModel.create({
       allowedCommands: ['trade', 'offerQuest', 'skillCheck', 'giveItem'],
       companionWitnessed: [],
     }),
+    buildNpcPersonaForPrompt: () => 'You are a dev sandbox NPC.',
     executeCommand: () => true,
     /** Turn state owned by the dev mock (C-401) — mirrors the real service. */
     get turnState() {
@@ -430,6 +431,7 @@ const viewModel: DialogueDevViewModelInterface = DialogueDevViewModel.create({
   },
   onStartCombat: () => {
     goBack();
+    return true;
   },
   initialDiceOutcome: 'always_succeed',
   initialUseMockAi: true,

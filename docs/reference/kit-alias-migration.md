@@ -44,7 +44,7 @@ and
 Read it from there rather than trusting a copy — it changes. The two groups are:
 
 - **`$`-style, local to the app** (safe to convert to `#`-prefixed subpath
-  imports): `$appCss`, `$components`, `$i18n`, `$lib`, `$logger`, `$router`,
+  imports): `$appCss`, `$components`, `$lib`, `$logger`, `$router`,
   `$routes`, `$services`, `$types`, `$utils`, `$views`; the hub additionally has
   `$loggerServer` and `$logger/*`.
 - **`@aikami/*`-style** (needs the decision above).

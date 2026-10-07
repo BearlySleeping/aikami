@@ -35,12 +35,17 @@ import {
   type CombatStartOutcome,
   type GameOverlayServiceInterface as GameOverlayServiceContract,
   type GameOverlayServiceOptions as GameOverlayServiceContractOptions,
+  type InteractionPromptTarget,
   type OverlayEventHandlers,
 } from './game_overlay_types.ts';
 import { parseSavePayloadEnvelope, validateEnvelopeChecksum } from './game_save_envelope.ts';
 import type { GameSaveServiceInterface } from './game_save_service.svelte.ts';
 import { gameSaveService } from './game_save_service.svelte.ts';
 import { inputActionService } from './input_action_service.svelte.ts';
+import {
+  createInteractionPromptState,
+  type InteractionPromptState,
+} from './interaction_prompt_state.svelte.ts';
 import { npcDialogueService } from './npc_dialogue_service.svelte';
 import { onboardingHintService } from './onboarding_hint_service.svelte.ts';
 import { applyOverlayModeTransition } from './overlay_combat_mode.ts';
@@ -133,7 +138,6 @@ export class GameOverlayService
       combatService,
       timeService,
       audioService,
-      inputActionService,
       onboardingHintService,
       partyFollowService,
       contextualTriggerService,
@@ -203,11 +207,10 @@ export class GameOverlayService
     this._overlayStack.push({ type, previousFocus });
     this.debug('overlay:push', { type, stackDepth: this.stackDepth });
 
-    // Hide interaction prompt whenever an overlay opens — avoids the
-    // "E — Talk to NPC" prompt rendering on top of dialogues/menus.
-    // Keep target metadata so prompt can be restored when overlay closes.
-    this.interactionPromptVisible = false;
-
+    // No interaction-prompt bookkeeping here: `interactionPromptVisible` derives
+    // from `activeOverlay`, so opening an overlay already withdraws the
+    // "E — Talk to NPC" prompt and closing it hands it back — but only for as
+    // long as the engine still reports that target.
     // ── C-332: Flush stale key state when overlay opens ──
     // Prevents key-state poisoning where the browser's key-repeat survives
     // the overlay transition and subsequent keyDown events are silently dropped.
@@ -229,13 +232,6 @@ export class GameOverlayService
 
     // Restore focus to the element that was focused before this overlay opened
     this._restoreFocus(entry.previousFocus);
-
-    // Restore interaction prompt when returning to NONE overlay state
-    if (this.stackDepth === 0 && this._interactionTargetMetadata) {
-      const keyLabel = inputActionService.actionDisplayLabel('interact');
-      this.interactionPromptLabel = `${keyLabel} — ${this._interactionTargetMetadata.verb} ${this._interactionTargetMetadata.targetName}`;
-      this.interactionPromptVisible = true;
-    }
 
     // ── C-332: Flush stale key state when overlay closes ──
     // If the user was holding keys when the overlay opened, the keyUp
@@ -296,13 +292,6 @@ export class GameOverlayService
     const bottomEntry = this._overlayStack[0];
     this._overlayStack = [];
     this._restoreFocus(bottomEntry.previousFocus);
-
-    // Restore interaction prompt when stack becomes empty
-    if (this._interactionTargetMetadata) {
-      const keyLabel = inputActionService.actionDisplayLabel('interact');
-      this.interactionPromptLabel = `${keyLabel} — ${this._interactionTargetMetadata.verb} ${this._interactionTargetMetadata.targetName}`;
-      this.interactionPromptVisible = true;
-    }
 
     // ── C-332: Flush stale key state when stack clears ──
     gameEngineService.flushInput();
@@ -442,29 +431,40 @@ export class GameOverlayService
     { vendorId: string; vendorName: string; vendorInventory: string } | undefined
   >(undefined);
   talkToPartyOptions = $state<{ npcId: string; name: string } | undefined>(undefined);
-  interactionPromptLabel = $state<string>('');
-  interactionPromptVisible = $state<boolean>(false);
-  interactionPromptScreenX = $state<number | undefined>(undefined);
-  interactionPromptScreenY = $state<number | undefined>(undefined);
-  private _interactionTargetMetadata = $state<{ verb: string; targetName: string } | undefined>(
-    undefined,
-  );
+  readonly _interactionPrompt: InteractionPromptState = createInteractionPromptState({
+    isWorldFocused: () => this.activeOverlay === 'NONE',
+  });
+  /** @inheritdoc */
+  get interactionPromptLabel(): string {
+    return this._interactionPrompt.label;
+  }
+  /** @inheritdoc */
+  get interactionPromptVisible(): boolean {
+    return this._interactionPrompt.visible;
+  }
+  /** @inheritdoc */
+  get interactionPromptScreenX(): number | undefined {
+    return this._interactionPrompt.screenX;
+  }
+  /** @inheritdoc */
+  get interactionPromptScreenY(): number | undefined {
+    return this._interactionPrompt.screenY;
+  }
+  /** @inheritdoc */
   setInteractionPrompt(options: {
-    label: string;
-    visible: boolean;
-    targetMetadata?: { verb: string; targetName: string };
+    target: InteractionPromptTarget;
     targetScreenX?: number;
     targetScreenY?: number;
   }): void {
-    this.interactionPromptLabel = options.label;
-    this.interactionPromptVisible = options.visible;
-    this.interactionPromptScreenX = options.targetScreenX;
-    this.interactionPromptScreenY = options.targetScreenY;
-    this._interactionTargetMetadata = options.targetMetadata;
+    this._interactionPrompt.setTarget(options);
   }
+  /** @inheritdoc */
+  clearInteractionPrompt(): void {
+    this._interactionPrompt.clear();
+  }
+  /** @inheritdoc */
   setInteractionPromptPosition(options: { targetScreenX?: number; targetScreenY?: number }): void {
-    this.interactionPromptScreenX = options.targetScreenX;
-    this.interactionPromptScreenY = options.targetScreenY;
+    this._interactionPrompt.setPosition(options);
   }
   async triggerAutoSave(): Promise<void> {
     await this._triggerAutoSave();
@@ -478,6 +478,11 @@ export class GameOverlayService
 
   /** Called by bridge_listeners when a map has finished loading. */
   onMapLoaded(): void {
+    // The previous map's target cannot survive the scene: its entity is gone,
+    // and the engine's own clear is published from a transition the tick loop may
+    // already have stopped. The new map's first selection repaints the prompt.
+    this.clearInteractionPrompt();
+
     // Start auto-save scheduler on first map load (C-334)
     if (!this._firstMapLoaded) {
       this.startAutoSaveScheduler();
@@ -848,13 +853,10 @@ export class GameOverlayService
       // Point the campaign at this slot so Continue/refresh resumes here.
       // Without this, the boot pipeline finds no lastSaveSlotId and fresh-
       // spawns at the starting map (C-334).
-      try {
-        await campaignService.saveCampaign({ slotId: 'manual-1' });
-      } catch (campaignError) {
-        this.warn('saveGame:campaign-slot-update-failed', {
-          error: String(campaignError),
-        });
-      }
+      // A durable slot alone is not a completed save: Continue must also
+      // have a durable resume pointer. Let metadata/flush failures reach the
+      // failure surface instead of reporting success for a partial write.
+      await campaignService.saveCampaign({ slotId: 'manual-1' });
       this.saveMessage = 'Game Saved!';
     } catch (error) {
       this.warn('saveGame:error', { error: String(error) });
@@ -1126,11 +1128,8 @@ export class GameOverlayService
   /**
    * Starts a production encounter through the ENGINE (C-516 AC-2).
    *
-   * The overlay opens immediately and the engine answers with a real
-   * `COMBAT_STARTED` (real participants, real HP), which the bridge listener
-   * forwards to the combat service — there is no hardcoded roster here any
-   * more. `engine` is the resolved `combatEngine` flag, read ONCE here and
-   * pinned on the encounter.
+   * Dialogue remains open until the engine acknowledges real participants.
+   * Other callers open immediately. Engine preference is pinned per encounter.
    */
   startCombat(options: {
     enemyName: string;
@@ -1145,15 +1144,10 @@ export class GameOverlayService
     const encounterId = options.encounterId ?? options.enemyNpcId ?? '';
     const engine = options.engine ?? featureFlags.combatEngine;
 
-    // Open the combat overlay first: `COMBAT_STARTED` is ignored when another
-    // overlay is active, and the overlay must own the screen while the engine
-    // spawns the roster.
-    this.setActive('COMBAT');
-    if (this.activeOverlay !== 'COMBAT') {
-      // The overlay router refused the activation (an incompatible overlay is
-      // on screen). Starting the engine here would spawn a fight the player
-      // cannot see, so NOTHING is dispatched and the caller gets a typed
-      // reason instead of silence (C-525 R-5).
+    // Dialogue stays intact until COMBAT_STARTED acknowledges a valid roster.
+    const fromDialogue = this.activeOverlay === 'DIALOGUE';
+    if (!this._bridge || (!this.canOpenOverlay('COMBAT') && this.activeOverlay !== 'COMBAT')) {
+      // No dispatch without a bridge and an available combat surface (C-525).
       this.debug('startCombat:overlay-unavailable', { encounterId });
       return {
         ok: false,
@@ -1161,7 +1155,10 @@ export class GameOverlayService
         messageKey: COMBAT_START_OVERLAY_UNAVAILABLE_KEY,
       };
     }
-    this._bridge?.send({
+    if (!fromDialogue) {
+      this.setActive('COMBAT');
+    }
+    this._bridge.send({
       type: 'COMBAT_START_ENCOUNTER',
       encounterId,
       seed: options.seed ?? 0,
@@ -1177,11 +1174,13 @@ export class GameOverlayService
     return { ok: true };
   }
 
-  /**
-   * Dismisses the combat overlay and restores engine input (C-500). Combat
-   * entry pauses the engine, so the first cleanup clears the stack, restores
-   * EXPLORE, and resumes input. Repeated delayed cleanup is a no-op.
-   */
+  /** Surfaces worker rejection without closing an active conversation. */
+  rejectCombatStart(): void {
+    this.showSnackbar({ text: 'Combat could not start. Please try again.', type: 'error' });
+    this.closeCombat();
+  }
+
+  /** Dismisses combat and restores exploration; delayed cleanup is a no-op. */
   closeCombat(): void {
     if (this.activeOverlay !== 'COMBAT') {
       return;

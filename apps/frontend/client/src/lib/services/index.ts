@@ -18,6 +18,7 @@ export {
 } from './agent/index.ts';
 export * from './ai/ai_gateway_service.svelte.ts';
 export * from './ai/connection_verifier';
+export * from './ai/decision_backend_service.svelte.ts';
 export * from './ai/local_ai_probe_executor';
 export * from './ai/local_task_pool_service.svelte.ts';
 export * from './ai/sentence_boundary_chunker';
@@ -54,6 +55,7 @@ export * from './backup/backup_service.svelte.ts';
 export * from './campaign/campaign_service.svelte.ts';
 export * from './campaign/pack_registry_service.svelte.ts';
 export * from './capability/capability_service.svelte.ts';
+export * from './capability/webgpu_support_service.svelte.ts';
 export * from './character/card_compiler.ts';
 export * from './character/character.svelte.ts';
 export * from './character/character_importer.ts';
@@ -130,6 +132,11 @@ export * from './lorebook/keyword_scanner';
 export { lorebookStore } from './lorebook/lorebook_store.svelte.ts';
 export * from './memory/index.ts';
 export * from './npc/autonomous_message_service.svelte.ts';
+export { conversationRecapService } from './npc/conversation_recap_composition.ts';
+export type {
+  ConversationRecapServiceInterface,
+  ConversationRecapServiceOptions,
+} from './npc/conversation_recap_service.svelte.ts';
 export * from './npc/npc_awareness_service.svelte.ts';
 export * from './npc/npc_memory_service.svelte.ts';
 export * from './npc/npc_schedule_service.svelte.ts';

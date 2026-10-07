@@ -49,6 +49,11 @@ class CampaignStorage
       args: [campaign.id, data, campaign.updatedAt],
     });
 
+    // A campaign record must survive an immediate reload: the browser adapter
+    // batches writes into a debounced IndexedDB snapshot, so resolving before
+    // the flush reports a campaign the next page load cannot see.
+    await db.flush?.();
+
     return campaign;
   }
 
@@ -106,6 +111,11 @@ class CampaignStorage
     if (verification.rows.length === 0) {
       throw new Error(`Campaign not found: ${campaign.id}`);
     }
+
+    // Save metadata is only truthful once it is durable. Awaiting the flush
+    // makes a failed snapshot a failed save, instead of a "Game Saved" toast
+    // followed by a reload that shows the previous timestamp.
+    await db.flush?.();
 
     return campaign;
   }

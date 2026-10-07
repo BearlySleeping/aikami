@@ -126,6 +126,28 @@ export const createDeferred = <T>(): Deferred<T> => {
   return { promise, resolve, reject };
 };
 
+/**
+ * A fake authoritative world behind the checkpoint seam.
+ *
+ * `captureCheckpoint` serialises whatever the test has mutated, and
+ * `restoreCheckpoint` deserialises it back into `world` — so an assertion can
+ * state that a moved, damaged, re-equipped player and a changed NPC survived a
+ * failed replacement, instead of only asserting call ordering.
+ */
+export type FakeWorld = {
+  playerX: number;
+  playerY: number;
+  playerHealth: number;
+  equipped: string;
+  npcMood: string;
+  loadCount: number;
+};
+
+/** Rehydrates `world` from a serialized checkpoint (the harness's LOAD_GAME). */
+export const applyCheckpoint = (world: FakeWorld, payload: string): void => {
+  Object.assign(world, JSON.parse(payload) as FakeWorld);
+};
+
 /** Recorded state + call log produced by a harness run. */
 export type SceneTransitionHarness = {
   runner: SceneTransitionRunner;
@@ -134,6 +156,10 @@ export type SceneTransitionHarness = {
   calls: string[];
   /** Bridge events emitted in order (`MAP_LOADED`, `MAP_ENTERED:…`, `GAME_ERROR:…`). */
   emitted: string[];
+  /** Checkpoints handed back by `restoreCheckpoint`, in order. */
+  restoredCheckpoints: string[];
+  /** The live fake world; mutation between calls simulates player progress. */
+  world: FakeWorld;
   state: {
     running: boolean;
     inputLocked: boolean;
@@ -164,6 +190,17 @@ export const createSceneTransitionHarness = (
     discontinuityCount: 0,
     rendered: 0,
   };
+  const restoredCheckpoints: string[] = [];
+  const world: FakeWorld = {
+    playerX: 64,
+    playerY: 64,
+    playerHealth: 100,
+    equipped: 'iron-sword',
+    npcMood: 'neutral',
+    loadCount: 0,
+  };
+  // A worker LOAD_MAP reseeds the world from the map; a LOAD_GAME overwrites
+  // it wholesale from the snapshot. That ordering is the whole point.
 
   const deps: SceneTransitionDeps = {
     prepare: async () => makePreparedScene(),
@@ -174,6 +211,20 @@ export const createSceneTransitionHarness = (
     },
     async postLoadMap() {
       calls.push('postLoadMap');
+      world.loadCount++;
+      world.playerX = 16;
+      world.playerY = 16;
+      world.playerHealth = 100;
+      world.equipped = 'fists';
+      world.npcMood = 'neutral';
+    },
+    async captureCheckpoint() {
+      return JSON.stringify(world);
+    },
+    async restoreCheckpoint(payload) {
+      calls.push('restoreCheckpoint');
+      restoredCheckpoints.push(payload);
+      applyCheckpoint(world, payload);
     },
     resetSurface: () => {
       state.resetCount++;
@@ -213,6 +264,8 @@ export const createSceneTransitionHarness = (
     deps,
     calls,
     emitted,
+    restoredCheckpoints,
+    world,
     state,
     resetCalls: () => {
       calls.length = 0;

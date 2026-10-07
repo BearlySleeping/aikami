@@ -1,6 +1,7 @@
 <script lang="ts">
 import { BaseViewModelContainer } from '$components';
 // apps/frontend/client/src/lib/views/game/ui/overlays/pause_menu/pause_menu_view.svelte
+import { pauseDialogFocus } from './pause_menu_focus';
 import type { PauseMenuViewModelInterface } from './pause_menu_view_model.svelte';
 
 type Props = {
@@ -10,32 +11,17 @@ type Props = {
 const { viewModel }: Props = $props();
 </script>
 <BaseViewModelContainer {viewModel}>
+  <!-- The action owns DOM focus/key consumption; the ViewModel owns dismissal. -->
   <div
     class="game-pause-scrim pointer-events-auto absolute inset-0 z-[60] flex items-center justify-center"
     role="dialog"
     aria-modal="true"
     aria-label="Pause Menu"
     tabindex="-1"
-    onkeydown={(e: KeyboardEvent) => {
-  if (e.key === 'Escape') {
-    viewModel.resumeGame();
-    return;
-  }
-  // Focus trap — Tab/Shift+Tab cycle within the dialog
-  if (e.key === 'Tab') {
-    e.preventDefault();
-    const focusable = (e.currentTarget as HTMLElement).querySelectorAll<HTMLElement>(
-      'button:not([disabled]), [tabindex]:not([tabindex="-1"])',
-    );
-    if (focusable.length === 0) {
-      return;
-    }
-    const currentIndex = Array.from(focusable).indexOf(document.activeElement as HTMLElement);
-    const direction = e.shiftKey ? -1 : 1;
-    const nextIndex = (currentIndex + direction + focusable.length) % focusable.length;
-    focusable[nextIndex].focus();
-  }
-}}
+    use:pauseDialogFocus={{
+      focusKey: viewModel.confirmingQuit,
+      onEscape: () => viewModel.resumeGame(),
+    }}
   >
     <div
       class="game-surface game-pause-panel w-full max-w-sm p-5 shadow-xl"
@@ -72,6 +58,7 @@ const { viewModel }: Props = $props();
           <button
             type="button"
             class="btn game-control--accent btn-block"
+            data-pause-menu-initial-focus
             onclick={() => viewModel.resumeGame()}
           >
             Resume

@@ -312,7 +312,7 @@ describe('coercion', () => {
   ];
 
   for (const [input, expected] of BOOLEAN_VOCABULARY) {
-    test('reads the string "' + input + '" as boolean ' + String(expected), async () => {
+    test(`reads the string "${input}" as boolean ${String(expected)}`, async () => {
       expect(await call({ watch: input })).toMatchObject({ watch: expected });
     });
   }
@@ -361,7 +361,7 @@ describe('coercion', () => {
   ];
 
   for (const [label, input] of UNCOERCIBLE) {
-    test('still rejects ' + label + ' in a number field', async () => {
+    test(`still rejects ${label} in a number field`, async () => {
       const { tool } = build([probe]);
       const result = await tool.execute('t1', { action: 'probe', params: { limit: input } });
       expect(result.isError).toBe(true);

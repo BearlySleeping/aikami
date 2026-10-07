@@ -3,7 +3,13 @@
 // Pure provider-registry lookups shared by the AI settings projections, the
 // connection-status store, and the ViewModel. No state, no services.
 
-import { IMAGE_PROVIDERS, TEXT_PROVIDERS, VOICE_PROVIDERS } from '@aikami/constants';
+import {
+  DECISION_PROVIDERS,
+  decisionProviderEntry,
+  IMAGE_PROVIDERS,
+  TEXT_PROVIDERS,
+  VOICE_PROVIDERS,
+} from '@aikami/constants';
 import type { ConnectionCapability } from '$types';
 
 /** Registry ids that run locally (no cloud auth). */
@@ -19,13 +25,23 @@ export const LOCAL_PROVIDER_IDS: ReadonlySet<string> = new Set([
   'fish-speech',
 ]);
 
-/** Returns the provider registry for a capability (text is the fallback). */
+/**
+ * Returns the provider registry for a capability (text is the fallback).
+ *
+ * `decision` resolves to {@link DECISION_PROVIDERS}, which is a separate
+ * registry because none of the text/image/voice descriptor fields — verification
+ * strategy, CSP origin, generation parameters, reasoning control — mean anything
+ * for a backend that only scores closed questions.
+ */
 export const registryForCapability = (capability: ConnectionCapability) => {
   if (capability === 'image') {
     return IMAGE_PROVIDERS;
   }
   if (capability === 'voice') {
     return VOICE_PROVIDERS;
+  }
+  if (capability === 'decision') {
+    return DECISION_PROVIDERS;
   }
   return TEXT_PROVIDERS;
 };
@@ -36,6 +52,11 @@ export const registryEntryFor = (capability: ConnectionCapability, registryId: s
 
 /** Whether a provider needs an editable server URL for its capability. */
 export const registryNeedsUrl = (capability: ConnectionCapability, registryId: string): boolean => {
+  if (capability === 'decision') {
+    // Every decision backend is a server the player already runs or already has
+    // an account with; none of them has a fixed origin Aikami can assume.
+    return decisionProviderEntry(registryId)?.needsUrl ?? true;
+  }
   if (capability === 'image') {
     return ['comfyui', 'webui', 'sdcpp', 'openai-compat'].includes(registryId);
   }
@@ -47,7 +68,7 @@ export const registryNeedsUrl = (capability: ConnectionCapability, registryId: s
 
 /** Resolves a provider's display label by registry id across all registries. */
 export const registryLabel = (registryId: string): string | undefined => {
-  for (const registry of [TEXT_PROVIDERS, VOICE_PROVIDERS, IMAGE_PROVIDERS]) {
+  for (const registry of [TEXT_PROVIDERS, VOICE_PROVIDERS, IMAGE_PROVIDERS, DECISION_PROVIDERS]) {
     const found = registry.find((provider) => provider.id === registryId);
     if (found) {
       return found.label;

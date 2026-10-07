@@ -2,7 +2,6 @@
 import { REDIRECT_TO_URL_SEARCH_PARAM_KEY } from '@aikami/constants';
 import type { Listener } from '@aikami/types';
 import { BaseClass, toAppError } from '@aikami/utils';
-import type { Page, Navigation as SvelteKitNavigation } from '@sveltejs/kit';
 import { untrack } from 'svelte';
 import {
   type AllRoutes,
@@ -16,8 +15,27 @@ import {
 import { defaultRoute } from '$routes';
 import type { BaseFrontendClassInterface } from '../base/base_frontend_class.ts';
 
-type Navigation =
-  | SvelteKitNavigation
+/**
+ * Structural subset of SvelteKit's reactive `page` (`$app/state`) that
+ * {@link RouterService} reads.
+ *
+ * SvelteKit 3 stopped re-exporting `Page`/`Navigation` from `@sveltejs/kit`,
+ * and the `$app/*` module types only exist inside an app's generated tsconfig
+ * — neither is resolvable when this package is typechecked on its own. The
+ * Client hands in its real `page`/`navigating` values, so these stay the
+ * fields the service actually touches.
+ */
+export type RouterPage = {
+  readonly url: URL;
+  readonly route: { readonly id: string | null };
+};
+
+/** Structural subset of SvelteKit's `navigating` (`$app/navigation`). */
+export type RouterNavigation =
+  | {
+      readonly type: string | null;
+      readonly to: { readonly url: URL; readonly route: { readonly id: string | null } } | null;
+    }
   | {
       from: null;
       to: null;
@@ -63,7 +81,7 @@ export type RouterServiceInterface = BaseFrontendClassInterface & {
   readonly navigatingToRoute: RouteName | undefined;
   readonly isNavigating: boolean;
   readonly currentPathName: string | undefined;
-  readonly previousPage: Page | undefined;
+  readonly previousPage: RouterPage | undefined;
 
   toRouteHref<T extends RouteName>(
     route: T,
@@ -98,14 +116,14 @@ export type RouterServiceInterface = BaseFrontendClassInterface & {
   goBack(): Promise<void>;
 
   /** Stores the SvelteKit goto function and marks the service as initialized. */
-  initialize(options: { goto: GoTo; page: Page }): void;
+  initialize(options: { goto: GoTo; page: RouterPage }): void;
 
   /**
    * Must be called from a reactive context (inside $effect) so Svelte
    * tracks changes to `navigating` and `page` from `$app/state`.
    * Updates internal navigation state accordingly.
    */
-  syncNavigation(navigating: Navigation | null, page: Page): void;
+  syncNavigation(navigating: RouterNavigation | null, page: RouterPage): void;
 
   /**
    * Navigate to the app. This is used when the user comes from
@@ -118,21 +136,21 @@ export type RouterServiceInterface = BaseFrontendClassInterface & {
 
   setCurrentRoute(route?: RouteName): void;
 
-  onPageChanged(listener: Listener<Page | undefined>): void;
+  onPageChanged(listener: Listener<RouterPage | undefined>): void;
 
-  getRouteFromPage(page: Page): RouteName | undefined;
+  getRouteFromPage(page: RouterPage): RouteName | undefined;
 };
 
 export class RouterService extends BaseClass implements RouterServiceInterface {
-  history = $state<Page[]>([]);
+  history = $state<RouterPage[]>([]);
   initialized = $state(false);
   currentPathName = $state<string | undefined>();
 
-  private readonly _pageChangedListener = this.createLiteObserver<Page | undefined>();
+  private readonly _pageChangedListener = this.createLiteObserver<RouterPage | undefined>();
 
   private _goto: GoTo | undefined;
-  private _pageValue = $state<Page | undefined>();
-  private _navigating = $state<Navigation | undefined>();
+  private _pageValue = $state<RouterPage | undefined>();
+  private _navigating = $state<RouterNavigation | undefined>();
   private _currentRoute = $state<RouteName | undefined>();
   private _lastSyncedUrl = '';
   private _lastNavType: string | undefined = undefined;
@@ -202,11 +220,11 @@ export class RouterService extends BaseClass implements RouterServiceInterface {
     }
   }
 
-  onPageChanged(listener: Listener<Page | undefined>): void {
+  onPageChanged(listener: Listener<RouterPage | undefined>): void {
     this._pageChangedListener.subscribe(listener);
   }
 
-  get previousPage(): Page | undefined {
+  get previousPage(): RouterPage | undefined {
     return this.history[this.history.length - 2];
   }
 
@@ -323,7 +341,7 @@ export class RouterService extends BaseClass implements RouterServiceInterface {
     this._isNavigatingToApp = false;
   }
 
-  initialize(options: { goto: GoTo; page: Page }): void {
+  initialize(options: { goto: GoTo; page: RouterPage }): void {
     this.log('initialize', options);
     this._goto = options.goto;
     this.initialized = true;
@@ -333,7 +351,7 @@ export class RouterService extends BaseClass implements RouterServiceInterface {
     }
   }
 
-  getRouteFromPage(page: Page): RouteName | undefined {
+  getRouteFromPage(page: RouterPage): RouteName | undefined {
     return page.route.id
       ? this.toRoutePathFromRouteId(page.route.id)
       : toRoutePathFromURL(page.url);
@@ -347,7 +365,7 @@ export class RouterService extends BaseClass implements RouterServiceInterface {
    * captured parameter — so the $effect re-runs when navigation
    * starts and ends.
    */
-  syncNavigation(navigating: Navigation | null, page: Page): void {
+  syncNavigation(navigating: RouterNavigation | null, page: RouterPage): void {
     // Guard: skip if page URL hasn't changed. Prevents infinite loops
     // during SSR hydration where $app/state may return new page references
     // for the same route, triggering this effect repeatedly.
@@ -399,7 +417,7 @@ export class RouterService extends BaseClass implements RouterServiceInterface {
     });
   }
 
-  private _pushPageToHistory(route: Page): void {
+  private _pushPageToHistory(route: RouterPage): void {
     this.history.push(route);
     if (this.history.length > 50) {
       this.history.shift();
