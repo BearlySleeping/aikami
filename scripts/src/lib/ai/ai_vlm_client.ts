@@ -435,7 +435,9 @@ const _buildFallbackChain = (
 /**
  * Resolves the active VLM runtime configuration from environment.
  *
- * Reads VLM_PROVIDER, VLM_MODEL, VLM_TEMPERATURE, VLM_NUM_PREDICT env vars.
+ * Reads VLM_PROVIDER, VLM_MODEL, VLM_TEMPERATURE, and VLM_NUM_PREDICT
+ * from the active environment. OPENROUTER_API_KEY is supplied only by the
+ * user's global environment; mode files cannot provide or override it.
  *
  * Contract: C-200 AC-2
  */

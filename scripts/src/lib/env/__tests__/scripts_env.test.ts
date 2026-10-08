@@ -32,6 +32,7 @@ const MODE_B = 'aikami-test-env-b';
 
 /** The mode the loader was on before this file ran, for restoration. */
 const ORIGINAL_MODE = loadedScriptsEnvMode();
+const ORIGINAL_OPENROUTER_KEY = process.env.OPENROUTER_API_KEY;
 
 let root: string;
 
@@ -43,10 +44,16 @@ const writeModeEnv = (mode: string, value: string): void => {
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), 'aikami-scripts-env-'));
   delete process.env[KEY];
+  delete process.env.OPENROUTER_API_KEY;
 });
 
 afterEach(() => {
   delete process.env[KEY];
+  if (ORIGINAL_OPENROUTER_KEY === undefined) {
+    delete process.env.OPENROUTER_API_KEY;
+  } else {
+    process.env.OPENROUTER_API_KEY = ORIGINAL_OPENROUTER_KEY;
+  }
   rmSync(root, { recursive: true, force: true });
   // Put the loader back where we found it — leaving it on a scratch mode would
   // make the next test in this process read these temp files.
@@ -75,6 +82,23 @@ describe('scripts env loader — mode switching', () => {
 
     initScriptsEnv(MODE_B, root);
     expect(getScriptsEnv(KEY)).toBe('from-direnv');
+  });
+
+  test('OpenRouter credentials come only from the global process environment', () => {
+    mkdirSync(join(root, 'scripts'), { recursive: true });
+    writeFileSync(join(root, 'scripts', `.env.${MODE_A}`), 'OPENROUTER_API_KEY=project-mode\n');
+    process.env.OPENROUTER_API_KEY = 'global-environment';
+
+    initScriptsEnv(MODE_A, root);
+    expect(getScriptsEnv('OPENROUTER_API_KEY')).toBe('global-environment');
+  });
+
+  test('a project mode file cannot provide the OpenRouter credential', () => {
+    mkdirSync(join(root, 'scripts'), { recursive: true });
+    writeFileSync(join(root, 'scripts', `.env.${MODE_A}`), 'OPENROUTER_API_KEY=project-mode\n');
+
+    initScriptsEnv(MODE_A, root);
+    expect(getScriptsEnv('OPENROUTER_API_KEY')).toBeUndefined();
   });
 
   test('a value overwritten by someone else is not undone by a mode change', () => {

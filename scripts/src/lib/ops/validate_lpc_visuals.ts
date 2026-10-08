@@ -20,7 +20,7 @@
 //   index.html   — Human-readable visual report with screenshots and scores
 //
 // Prerequisites:
-//   1. OPENROUTER_API_KEY environment variable must be set.
+//   1. OPENROUTER_API_KEY must be supplied by the user's global environment.
 //   2. Playwright lpc_visual.spec.ts must have been run first.
 //   3. ImageMagick 'convert' must be available in PATH.
 //

@@ -76,7 +76,10 @@ function readEnvFile(modeLabel: string): Map<string, string> {
       value = value.slice(1, -1);
     }
 
-    if ((SECRET_KEYS as readonly string[]).includes(key)) {
+    // Hosted vision credentials belong to the caller's global environment, not
+    // an Aikami deployment mode. In particular, a decrypted project file must
+    // never replace the OpenRouter key supplied by the user's shell.
+    if (key !== 'OPENROUTER_API_KEY' && (SECRET_KEYS as readonly string[]).includes(key)) {
       result.set(key, value);
     }
   }

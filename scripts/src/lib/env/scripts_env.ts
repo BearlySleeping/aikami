@@ -88,6 +88,11 @@ const loadEnvFile = (envPath: string): void => {
       continue;
     }
     const [key, value] = pair;
+    // OpenRouter is a personal/global vision provider credential. Its value
+    // must come from the caller environment, never this checkout's mode file.
+    if (key === 'OPENROUTER_API_KEY') {
+      continue;
+    }
     _envCache.set(key, value);
     if (process.env[key] === undefined) {
       process.env[key] = value;
