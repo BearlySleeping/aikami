@@ -1,0 +1,56 @@
+---
+// apps/frontend/site/src/lib/components/sections/development_roadmap.astro
+import { discordInviteLink, site } from '$data/site_content';
+---
+
+<section id="roadmap" class="scroll-mt-24">
+  <div class="mx-auto max-w-6xl px-6 py-16 md:py-20">
+    <div class="grid gap-8 md:grid-cols-2 md:gap-16">
+      <div>
+        <p class="text-sm font-medium text-brand dark:text-brand-soft">Built in the open</p>
+        <h2 class="mt-4 text-4xl leading-[1.08] md:text-5xl">
+          Help write<br><em>the next chapter.</em>
+        </h2>
+        <p class="mt-5 max-w-md leading-relaxed text-muted-foreground">
+          We’re starting small: make the authored adventure reliable, then connect resident lives,
+          meaningful consequences, and playable campaign creation. Community-made adventures are
+          part of that longer journey.
+        </p>
+      </div>
+      <div class="self-center">
+        <h3 class="font-sans text-base font-medium">What we’re working toward</h3>
+        <ol class="mt-4 divide-y divide-border border-y border-border">
+          <li class="flex gap-4 py-4">
+            <span class="font-mono text-sm text-muted-foreground" aria-hidden="true">01</span
+            ><span>A better first adventure</span>
+          </li>
+          <li class="flex gap-4 py-4">
+            <span class="font-mono text-sm text-muted-foreground" aria-hidden="true">02</span
+            ><span>Residents and towns that respond</span>
+          </li>
+          <li class="flex gap-4 py-4">
+            <span class="font-mono text-sm text-muted-foreground" aria-hidden="true">03</span
+            ><span>Campaigns made playable</span>
+          </li>
+        </ol>
+      </div>
+    </div>
+    <div class="mt-10 flex flex-wrap items-center gap-x-8 gap-y-2 border-t border-border pt-6">
+      <a
+        href={site.social.github}
+        class="inline-flex min-h-11 items-center gap-2 font-medium text-brand dark:text-brand-soft no-underline hover:underline"
+        >Follow development <span aria-hidden="true">↗</span></a
+      >
+      <a
+        href={discordInviteLink}
+        class="inline-flex min-h-11 items-center text-sm text-foreground underline decoration-border underline-offset-4 hover:decoration-brand"
+        >Join Discord</a
+      >
+      <a
+        href={`${site.social.github}/blob/main/CONTRIBUTING.md`}
+        class="inline-flex min-h-11 items-center text-sm text-foreground underline decoration-border underline-offset-4 hover:decoration-brand"
+        >Contribute</a
+      >
+    </div>
+  </div>
+</section>

@@ -791,18 +791,6 @@
       "worst": 16
     }
   },
-  "apps/frontend/site/src/lib/components/sections/hero_d20.ts": {
-    "counts": {
-      "excessive": 1,
-      "worst": 32
-    }
-  },
-  "apps/frontend/site/src/lib/components/sections/hero.astro": {
-    "counts": {
-      "excessive": 1,
-      "worst": 31
-    }
-  },
   "packages/backend/chat/src/lib/base_ai_service.ts": {
     "counts": {
       "excessive": 1,

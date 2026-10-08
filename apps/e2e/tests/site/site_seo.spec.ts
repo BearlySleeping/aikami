@@ -11,9 +11,6 @@ const SEO_PAGES = [
   {
     path: '/',
     title: /Aikami/,
-    // Updated to match the current landing page meta description
-    // (the description was rewritten in the interactive showcase rework).
-    description: 'AI RPG engine',
   },
 ];
 
@@ -26,11 +23,12 @@ test.describe('SEO — meta tags', () => {
         await expect(page).toHaveTitle(pageDef.title);
       }
 
-      if (pageDef.description) {
-        const metaDesc = page.locator('meta[name="description"]');
-        const content = await metaDesc.getAttribute('content');
-        expect(content).toContain(pageDef.description);
-      }
+      const content = await page.locator('meta[name="description"]').getAttribute('content');
+      expect(content?.length).toBeGreaterThan(50);
+      await expect(page.locator('meta[property="og:description"]')).toHaveAttribute(
+        'content',
+        content ?? '',
+      );
 
       // Open Graph
       await expect(page.locator('meta[property="og:title"]')).toHaveAttribute('content', /.+/);
@@ -62,7 +60,7 @@ test.describe('SEO — meta tags', () => {
     await page.waitForLoadState('networkidle');
 
     const h1Count = await page.locator('h1').count();
-    expect(h1Count).toBeGreaterThanOrEqual(1);
+    expect(h1Count).toBe(1);
   });
 
   test('heading hierarchy is valid (no skipped levels)', async ({ page }) => {
@@ -91,7 +89,8 @@ test.describe('SEO — sitemap and robots', () => {
 
     const text = await response?.text();
     expect(text).toContain('User-agent');
-    expect(text).not.toContain('Disallow: /');
+    // Blocking individual routes (e.g. /404) must not be confused with blocking all crawling.
+    expect(text).not.toMatch(/^Disallow:\s*\/\s*$/m);
   });
 
   test('sitemap-index.xml exists', async ({ page }) => {

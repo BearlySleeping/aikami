@@ -1,40 +1,16 @@
 ---
 // apps/frontend/site/src/lib/views/home.astro
-
-import AdventurersGuildSection from '$sections/adventurers_guild.astro';
-import AudienceForkSection from '$sections/audience_fork.astro';
-import ContentPacksSection from '$sections/content_packs.astro';
-import DownloadSection from '$sections/download.astro';
-import GameMasterSection from '$sections/game_master.astro';
+import CampaignCreationSection from '$sections/campaign_creation.astro';
+import CurrentBuildSection from '$sections/current_build.astro';
+import DevelopmentRoadmapSection from '$sections/development_roadmap.astro';
 import HeroSection from '$sections/hero.astro';
-import LivingWorldSection from '$sections/living_world.astro';
-import NpcsRememberSection from '$sections/npcs_remember.astro';
-import WipBanner from '$sections/wip_banner.astro';
+import MeaningfulChoicesSection from '$sections/meaningful_choices.astro';
+import YourAiSection from '$sections/your_ai.astro';
 ---
 
-<!-- Early-WIP notice — sets expectations before the pitch -->
-<WipBanner />
-
-<!-- Hero — the hook in one screen, one primary CTA -->
 <HeroSection />
-
-<!-- Audience fork — self-routing for players, self-hosters, contributors -->
-<AudienceForkSection />
-
-<!-- "NPCs that remember" — memory graph demo + branching/factions -->
-<NpcsRememberSection />
-
-<!-- "A Game Master that runs the rules" — D&D mechanics + NPC generator demo -->
-<GameMasterSection />
-
-<!-- "A living world" — equipment/LPC, expressions, music DJ, image gen, world gen, inventory -->
-<LivingWorldSection />
-
-<!-- Content Packs & the Hub -->
-<ContentPacksSection />
-
-<!-- Desktop download -->
-<DownloadSection />
-
-<!-- Closing CTA Guildhall -->
-<AdventurersGuildSection />
+<CampaignCreationSection />
+<MeaningfulChoicesSection />
+<CurrentBuildSection />
+<YourAiSection />
+<DevelopmentRoadmapSection />

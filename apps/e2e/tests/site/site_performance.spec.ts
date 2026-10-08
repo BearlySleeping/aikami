@@ -78,7 +78,8 @@ test.describe('Performance — page load', () => {
         const src = el.getAttribute('src') || el.getAttribute('href') || '';
         if (src?.includes('_astro/')) {
           total++;
-          if (/[_-][A-Za-z0-9]{6,}[_-]/.test(src)) {
+          // Astro/Vite use name.hash.ext; hashes can include URL-safe hyphens/underscores.
+          if (/\.[A-Za-z0-9_-]{6,}\.(?:js|css)(?:[?#]|$)/.test(src)) {
             hashed++;
           }
         }

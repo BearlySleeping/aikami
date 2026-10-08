@@ -1,0 +1,46 @@
+---
+// apps/frontend/site/src/lib/components/sections/your_ai.astro
+---
+
+<section id="your-ai" class="scroll-mt-24 border-b border-border/70 bg-card/40">
+  <div
+    class="mx-auto grid max-w-6xl gap-8 px-6 py-16 md:py-20 lg:grid-cols-[.85fr_1.15fr] lg:gap-20"
+  >
+    <div>
+      <p class="text-sm font-medium text-brand dark:text-brand-soft">Your campaign. Your setup.</p>
+      <h2 class="mt-4 text-4xl leading-[1.08] md:text-5xl">
+        Choose your AI.<br><em>Keep your saves.</em>
+      </h2>
+      <p class="mt-5 max-w-sm leading-relaxed text-muted-foreground">
+        No account required for local play. Your saves stay on your device.
+      </p>
+      <a
+        href="/faq"
+        class="mt-4 inline-flex min-h-11 items-center text-sm text-foreground underline decoration-border underline-offset-4 hover:decoration-brand"
+        >Setup &amp; privacy questions <span class="ml-2" aria-hidden="true">→</span></a
+      >
+    </div>
+    <dl class="divide-y divide-border">
+      <div class="pb-5">
+        <dt class="font-medium">Local AI</dt>
+        <dd class="mt-2 leading-relaxed text-muted-foreground">
+          Run a text model on your hardware. Offline play requires installed local AI and cached
+          content; initial downloads need a connection.
+        </dd>
+      </div>
+      <div class="py-5">
+        <dt class="font-medium">Cloud AI</dt>
+        <dd class="mt-2 leading-relaxed text-muted-foreground">
+          Use your own provider and key. Dialogue is sent to that provider; internet access and
+          possible provider charges apply.
+        </dd>
+      </div>
+      <div class="pt-5">
+        <dt class="font-medium">Image &amp; voice</dt>
+        <dd class="mt-2 leading-relaxed text-muted-foreground">
+          Optional ways to enrich the experience. Text AI is the only required AI service.
+        </dd>
+      </div>
+    </dl>
+  </div>
+</section>

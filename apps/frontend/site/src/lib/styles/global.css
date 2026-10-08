@@ -50,6 +50,8 @@
 
   --color-brand: var(--brand);
   --color-brand-soft: var(--brand-soft);
+  /* Text on purple actions stays light in both themes. */
+  --color-brand-foreground: oklch(0.985 0.006 270);
 
   /* Dark fantasy tone tokens */
   --color-slate: var(--slate);
@@ -95,9 +97,30 @@
     letter-spacing: -0.018em;
   }
 
+  a:focus-visible,
+  button:focus-visible {
+    outline: 2px solid var(--color-ring);
+    outline-offset: 4px;
+  }
+
   ::selection {
     background-color: var(--brand);
     color: white;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.scroll-smooth {
+    scroll-behavior: auto;
+  }
+
+  [class*="transition-"] {
+    transition-duration: 0.01ms;
+  }
+
+  .rune-border::before,
+  .terminal-cursor::after {
+    animation: none;
   }
 }
 

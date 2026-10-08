@@ -4,23 +4,13 @@ category: "gameplay"
 order: 1
 ---
 
-Yes — after the first launch.
+It can, once the required content is cached and a local text AI model is installed and
+configured. Image and voice models are optional.
 
-Aikami ships without its art library, which is what keeps the download small. The
-first time you open it, the client fetches the sprites, maps, and audio it needs and
-pins them in a local cache, verifying each file as it goes. You'll see that download
-in the startup progress. **Every launch after that plays with no network connection
-at all** — that includes the native desktop app.
+First-time content and model acquisition can require network access. Fully offline play
+depends on keeping the content and local model available on your device.
 
-Campaigns, saves, and chat history live in a local Turso (libSQL) database on your
-machine and never require a connection. Signing in is optional and is never needed to
-boot or play.
+Campaigns and saves are device-local. No account is required for local play or saves.
 
-For a fully offline setup, run local AI too — the Docker stack (llama.cpp for text,
-sd-server for images, sherpa-onnx/Kokoro for voice) means nothing leaves your machine
-once the images and models are pulled. If you're using BYOK with a cloud provider
-instead, you'll obviously need a connection to reach that provider, but your saves
-stay local either way.
-
-**Planning to play somewhere without a connection?** Launch it once beforehand. That
-single successful startup is all it takes.
+Cloud AI requires an internet connection and sends requests to the provider you choose.
+Your saves remain local either way. See the [local setup guide](/tech) for model details.

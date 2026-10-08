@@ -301,6 +301,7 @@ Aikami-x86_64.AppImage
 # .pi/prompts/contract-verify.md Phase 3 for the evidence-save rule.
 .evidence/
 artifacts/
+.worktrees/
 /*.png
 /*.jpg
 /*.jpeg

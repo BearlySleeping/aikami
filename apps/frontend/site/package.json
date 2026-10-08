@@ -42,7 +42,7 @@
     "@astrojs/sitemap": "3.7.4",
     "@tailwindcss/vite": "4.3.3",
     "@unlighthouse/cli": "0.19.1",
-    "astro": "7.3.5",
+    "astro": "7.3.6",
     "astro-compress": "2.4.3",
     "astro-robots-txt": "1.0.0",
     "lighthouse": "13.5.0",

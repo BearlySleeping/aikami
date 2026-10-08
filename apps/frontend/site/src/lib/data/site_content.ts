@@ -6,7 +6,7 @@ export const site = {
   shortName: 'Aikami',
   url: 'https://bearlysleeping.com',
   description:
-    'Aikami is a free, open-source, self-hosted AI-native 2D RPG engine. Every NPC thinks, remembers, and adapts — driven by local AI models you control. BYOK, run offline, or deploy anywhere.',
+    'Your next adventure is yours to shape. Aikami is an open-source AI-powered 2D RPG in early development. Download for Windows, macOS, or Linux, or play in your browser.',
   author: 'Aikami Team',
   email: 'hello@aikami.dev',
   telephone: '',
@@ -36,12 +36,11 @@ export const hubUrl = 'https://hub.bearlysleeping.com';
 export const siteContent = {
   site,
   nav: [
-    { label: 'Play', href: webClientUrl },
-    { label: 'Content Packs', href: '/#content-packs' },
-    { label: 'Tech', href: '/tech' },
-    { label: 'Blog', href: '/blog' },
+    { label: 'The game', href: '/#campaign' },
+    { label: 'Current build', href: '/#current-build' },
+    { label: 'Download', href: '/#download' },
+    { label: 'What’s next', href: '/#roadmap' },
     { label: 'FAQ', href: '/faq' },
-    { label: 'Community', href: '/#adventurers-guild' },
   ],
   footer: {
     copyright: `© ${new Date().getFullYear()} Aikami — AI-powered 2D RPG.`,
