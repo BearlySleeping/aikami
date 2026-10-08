@@ -6,7 +6,7 @@ test.describe('Editorial homepage navigation', () => {
   test('desktop download CTA reaches the platform downloads with the keyboard', async ({
     page,
   }) => {
-    await page.setViewportSize({ width: 360, height: 800 });
+    await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/');
     const desktopLink = page.getByRole('link', { name: 'Download for desktop', exact: true });
     await desktopLink.focus();
@@ -55,10 +55,10 @@ test.describe('Editorial homepage navigation', () => {
   });
 
   for (const theme of ['light', 'dark'] as const) {
-    test(`strict reflow in ${theme} mode, including 200% CSS zoom`, async ({ page }) => {
+    test(`strict reflow in ${theme} mode, including a 320px viewport`, async ({ page }) => {
       await page.emulateMedia({ colorScheme: theme, reducedMotion: 'reduce' });
       await page.goto('/');
-      for (const width of [360, 768, 1440]) {
+      for (const width of [320, 360, 768, 1440]) {
         await page.setViewportSize({ width, height: 900 });
         await page.evaluate(() => document.fonts.ready);
         expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
@@ -70,12 +70,6 @@ test.describe('Editorial homepage navigation', () => {
         .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
         .analyze();
       expect(audit.violations).toEqual([]);
-      await page.evaluate(() => {
-        document.documentElement.style.zoom = '2';
-      });
-      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
-        1440,
-      );
     });
   }
 });
