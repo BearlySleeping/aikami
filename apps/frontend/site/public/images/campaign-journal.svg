@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <title>Aikami — Your next adventure is yours to shape.</title>
+  <desc>Typographic brand artwork for an open-source AI-powered 2D RPG in early development. Not gameplay.</desc>
+  <rect width="1200" height="630" fill="#0a0b10"/>
+  <g font-family="Inter, sans-serif">
+    <text x="80" y="105" fill="#e4e3ea" font-family="Instrument Serif, Georgia, serif" font-size="44">Aikami.</text>
+    <text x="1120" y="99" text-anchor="end" fill="#a8a4b4" font-size="19">Open-source RPG · Early development</text>
+  </g>
+  <path d="M80 145H1120M80 509H1120" stroke="#292731"/>
+  <g font-family="Instrument Serif, Georgia, serif" font-size="86" fill="#e4e3ea">
+    <text x="80" y="294">Your next adventure</text>
+    <text x="80" y="399">is yours to <tspan fill="#b8a4ef" font-style="italic">shape.</tspan></text>
+  </g>
+  <g font-family="Inter, sans-serif" font-size="21" fill="#a8a4b4">
+    <text x="80" y="562">Windows · macOS · Linux · Browser</text>
+    <text x="1120" y="562" text-anchor="end">bearlysleeping.com</text>
+  </g>
+</svg>

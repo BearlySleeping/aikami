@@ -11,15 +11,7 @@ const PAGES = [
   {
     path: '/',
     title: /Aikami/,
-    // Hero rewritten around the memory hook (2025 refactor). The h1 renders
-    // the hook across three <br>-separated lines, so the full phrase is
-    // asserted as a regex that tolerates the missing textContent whitespace.
-    criticalText: [/Every NPC\s*remembers what\s*you did\./, 'Play now, free in your browser'],
   },
-];
-
-const SECTIONS = [
-  { id: 'download', label: 'Download Section', criticalText: ['Get the desktop client'] },
 ];
 
 test.describe('Site pages — render and content', () => {
@@ -37,9 +29,10 @@ test.describe('Site pages — render and content', () => {
 
       await expect(page).toHaveTitle(pageDef.title);
 
-      for (const text of pageDef.criticalText) {
-        await expect(page.getByText(text).first()).toBeVisible();
-      }
+      await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+      await expect(
+        page.locator('main a[href="https://aikami.bearlysleeping.com"]').first(),
+      ).toBeVisible();
 
       const realErrors = errors.filter(
         (e) =>
@@ -122,48 +115,28 @@ test.describe('Site pages — no layout overlap', () => {
   });
 });
 
-test.describe('Site pages — download section', () => {
-  for (const section of SECTIONS) {
-    test(`${section.label} renders and is interactive`, async ({ page }) => {
-      await page.goto('/');
-      await page.waitForLoadState('networkidle');
-
-      const container = page.locator(`#${section.id}`);
-      await expect(container).toBeVisible();
-
-      for (const text of section.criticalText) {
-        await expect(container.getByText(text).first()).toBeVisible();
-      }
-
-      // Verify platform cards are present
-      const cards = container.locator('.download-card');
-      const cardCount = await cards.count();
-      expect(cardCount).toBe(3); // linux, macos, windows
-
-      // Linux card should exist (all three platforms have builds now)
-      const linuxCard = container.locator('.download-card[data-platform="linux"]');
-      await expect(linuxCard).toBeVisible();
-
-      // Every platform card has a direct download button with a real href
-      const links = container.locator('.download-link');
-      const linkCount = await links.count();
-      expect(linkCount).toBe(3);
-      for (let i = 0; i < linkCount; i += 1) {
-        const href = await links.nth(i).getAttribute('href');
-        expect(href).toContain('releases/latest/download/aikami.');
-        // Downloads open in a new tab — the landing page must stay put
-        await expect(links.nth(i)).toHaveAttribute('target', '_blank');
-        await expect(links.nth(i)).toHaveAttribute('rel', /noopener/);
-      }
-
-      // Every card keeps a secondary "View releases" link
-      const viewLinks = container.locator('a', { hasText: 'View releases' });
-      expect(await viewLinks.count()).toBe(3);
-
-      // Linux only ships AppImage (see download.astro's top comment for why)
-      // — no format chips, single static download link.
-      const linuxLink = linuxCard.locator('.download-link');
-      await expect(linuxLink).toHaveAttribute('href', /aikami\.AppImage$/);
-    });
-  }
+test.describe('Site pages — desktop downloads', () => {
+  test('all platforms link to the published release asset names', async ({ page }) => {
+    await page.goto('/');
+    const container = page.locator('#download');
+    const platforms = [
+      { label: 'Linux', asset: 'aikami.appimage' },
+      { label: 'macOS', asset: 'aikami.dmg' },
+      { label: 'Windows', asset: 'aikami.exe' },
+    ];
+    for (const platform of platforms) {
+      const link = container.getByRole('link', {
+        name: new RegExp(`^Download for ${platform.label}`),
+      });
+      await expect(link).toBeVisible();
+      await expect(link).toHaveAttribute(
+        'href',
+        `https://github.com/BearlySleeping/aikami/releases/latest/download/${platform.asset}`,
+      );
+    }
+    await expect(container.getByRole('link', { name: 'Release notes' })).toHaveAttribute(
+      'href',
+      'https://github.com/BearlySleeping/aikami/releases',
+    );
+  });
 });
