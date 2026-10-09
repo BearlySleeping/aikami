@@ -98,7 +98,7 @@ deterministic baseline — fails the predeclared quality gate at 0.500 held-out
 accuracy against a 0.85 requirement.
 
 Full evidence, per-schema inventory, and the frozen API for step E are in
-[`docs/audits/381-decision-evaluation.md`](../audits/381-decision-evaluation.md).
+[`docs/audits/381-decision-evaluation.md`](../research/audits/381-decision-evaluation.md).
 
 ## Why this is not #381 implemented end-to-end
 

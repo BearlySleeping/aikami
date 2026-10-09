@@ -89,7 +89,7 @@ type ManifestWithProvenance = Manifest & {
   >;
 };
 
-const DEFAULT_OUT = join(repository, 'docs/reference/emberwatch-visual-report.json');
+const DEFAULT_OUT = join(repository, 'docs/research/reports/emberwatch-visual-report.json');
 
 const generatedAt = (): string =>
   process.env.SOURCE_DATE_EPOCH

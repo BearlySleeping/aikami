@@ -1,5 +1,9 @@
 # Engine runtime integrity — execution report
 
+> **🔴 Live, unmerged work — do not delete.** Branch
+> `task/sa-polish-runtime-integrity-6577` holds **9 commits not in `main`**
+> (last 2026-10-04). This report is the only record of that work.
+
 Bounded spec + execution report for the engine runtime-integrity pass
 (`packages/frontend/engine/**`). No new contracts; no status-file churn.
 

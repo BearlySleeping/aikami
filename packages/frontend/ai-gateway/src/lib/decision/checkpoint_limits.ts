@@ -65,7 +65,7 @@ export type CheckpointLimits = {
  *
  * Only families upstream actually names appear here. julia-1, lev and kev are
  * absent on purpose: upstream publishes no number for them, and nothing in this
- * repository has measured one either. The runs in `docs/audits/` exercised
+ * repository has measured one either. The runs in `docs/research/audits/` exercised
  * small option sets — they established what these models ANSWER, not how many
  * options they can be asked about — so writing 255 down for them would be a
  * number with no experiment behind it, presented as though it had one. They

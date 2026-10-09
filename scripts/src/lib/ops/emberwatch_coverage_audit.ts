@@ -11,7 +11,7 @@
 //
 // This script only READS. It never writes to the pack, the atlas build output
 // or R2. `--out <path>` writes the report itself (default:
-// docs/reference/emberwatch-coverage-audit.json).
+// docs/research/reports/emberwatch-coverage-audit.json).
 //
 // The rules live in `emberwatch_coverage_rules.ts`; this file is the CLI shell
 // that indexes the pack, runs every rule, aggregates and reports.
@@ -74,7 +74,7 @@ const generatedAt = (): string =>
 const outputPath = (): string => {
   const outFlag = process.argv.indexOf('--out');
   const explicit = outFlag >= 0 ? process.argv[outFlag + 1] : undefined;
-  return explicit ?? join(repository, 'docs/reference/emberwatch-coverage-audit.json');
+  return explicit ?? join(repository, 'docs/research/reports/emberwatch-coverage-audit.json');
 };
 
 const buildReport = (

@@ -1,0 +1,212 @@
+---
+// apps/frontend/site/src/lib/components/sections/concept_previews.astro
+import ImagePreview from '$components/common/image_preview.astro';
+import combatAction from '$concept/combat_1.webp';
+import combatOutcome from '$concept/combat_2.webp';
+import dialogue from '$concept/dialogue.webp';
+import characterSheet from '$concept/menu.webp';
+import characterCreation from '$concept/persona_gen.webp';
+import campaignCreation from '$concept/world_gen.webp';
+
+const previews = [
+  {
+    title: 'Dialogue in the world',
+    image: dialogue,
+    alt: 'Lyra speaks with Elder Thalia in a pixel-art tavern, with a persuasion check beside the conversation.',
+    description:
+      'Meet people where they live. Talk, negotiate, and let the rules decide the outcome.',
+  },
+  {
+    title: 'Create a campaign',
+    image: campaignCreation,
+    alt: 'A campaign prompt beside The Lantern Coast, a coastal village with residents, quests, and reusable assets.',
+    description: 'The vision: turn a place and a problem into a world you can explore.',
+  },
+  {
+    title: 'Shape your character',
+    image: characterCreation,
+    alt: 'Lyra’s character creation screen with appearance presets, clothing layers, colors, and a backstory.',
+    description: 'Build a hero with a look, a history, and a way of approaching the adventure.',
+  },
+  {
+    title: 'Know your hero',
+    image: characterSheet,
+    alt: 'Lyra’s character sheet with hit points, ability scores, saving throws, and equipment.',
+    description: 'A tabletop-inspired character sheet, right beside the world you inhabit.',
+  },
+  {
+    title: 'Plan your next move',
+    image: combatAction,
+    alt: 'Lyra plans a move through a forest ambush, with a tactical grid, party turn order, and action preview.',
+    description: 'Read the battlefield, consider your options, and choose where to move.',
+  },
+  {
+    title: 'Change the battlefield',
+    image: combatOutcome,
+    alt: 'A forest battle concept previews a risky brazier interaction, fire spread, and tactical combat positions.',
+    description: 'Use the environment to shape an encounter, with visible risks and consequences.',
+  },
+];
+---
+
+<section id="concepts" aria-labelledby="concepts-title" class="border-b border-border/70">
+  <div class="mx-auto max-w-6xl px-6 py-16 md:py-20">
+    <div class="max-w-2xl">
+      <p class="text-sm font-medium text-brand dark:text-brand-soft">Visual direction</p>
+      <h2 id="concepts-title" class="mt-4 text-4xl leading-[1.08] md:text-5xl">
+        A glimpse of the <em>adventure.</em>
+      </h2>
+      <p class="mt-5 leading-relaxed text-muted-foreground">
+        Design concepts, not screenshots of the current build. These previews show the look and flow
+        we’re working toward.
+      </p>
+    </div>
+    <section
+      data-concept-carousel
+      aria-roledescription="carousel"
+      aria-label="Aikami concept previews"
+      class="mt-10"
+    >
+      <div class="relative overflow-hidden rounded-sm border border-border bg-card">
+        {previews.map((preview, index) => (
+          <article
+            data-carousel-slide
+            aria-roledescription="slide"
+            aria-label={`${index + 1} of ${previews.length}: ${preview.title}`}
+            class="m-0"
+          >
+            <ImagePreview
+              id={`concept-preview-${index}`}
+              image={preview.image}
+              title={preview.title}
+              alt={preview.alt}
+              description={preview.description}
+            />
+          </article>
+        ))}
+        <button
+          type="button"
+          data-carousel-previous
+          aria-label="Previous concept"
+          class="absolute left-3 top-1/2 z-20 inline-flex size-11 -translate-y-1/2 items-center justify-center rounded-sm border border-border bg-card/95 text-foreground shadow-sm hover:bg-secondary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+          hidden
+        >
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path
+              d="m15 18-6-6 6-6"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+        </button>
+        <button
+          type="button"
+          data-carousel-next
+          aria-label="Next concept"
+          class="absolute right-3 top-1/2 z-20 inline-flex size-11 -translate-y-1/2 items-center justify-center rounded-sm border border-border bg-card/95 text-foreground shadow-sm hover:bg-secondary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+          hidden
+        >
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path
+              d="m9 18 6-6-6-6"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+        </button>
+      </div>
+      <div class="mt-4 flex flex-wrap items-center justify-between gap-4">
+        <p
+          data-carousel-status
+          aria-live="polite"
+          aria-atomic="true"
+          class="text-sm text-muted-foreground"
+        >
+          Slide 1 of {previews.length}: {previews[0]?.title}
+        </p>
+        <nav
+          data-carousel-controls
+          class="flex items-center gap-2"
+          aria-label="Choose a concept slide"
+          hidden
+        >
+          {previews.map((preview, index) => (
+            <button
+              type="button"
+              data-carousel-index={index}
+              aria-label={`Show slide ${index + 1}: ${preview.title}`}
+              aria-current={index === 0 ? 'true' : undefined}
+              class="size-3 rounded-full border border-brand bg-transparent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand aria-[current=true]:bg-brand"
+            ></button>
+          ))}
+        </nav>
+      </div>
+    </section>
+  </div>
+</section>
+
+<script>
+import { logger } from '$logger';
+
+const carousel = document.querySelector('[data-concept-carousel]');
+if (carousel instanceof HTMLElement) {
+  const slides = Array.from(carousel.querySelectorAll<HTMLElement>('[data-carousel-slide]'));
+  const previousButton = carousel.querySelector<HTMLButtonElement>('[data-carousel-previous]');
+  const nextButton = carousel.querySelector<HTMLButtonElement>('[data-carousel-next]');
+  const controls = carousel.querySelector<HTMLElement>('[data-carousel-controls]');
+  const status = carousel.querySelector<HTMLElement>('[data-carousel-status]');
+  const indexButtons = Array.from(
+    carousel.querySelectorAll<HTMLButtonElement>('[data-carousel-index]'),
+  );
+
+  if (slides.length > 0 && previousButton && nextButton && controls && status) {
+    let activeIndex = 0;
+    const showSlide = (requestedIndex: number): void => {
+      activeIndex = (requestedIndex + slides.length) % slides.length;
+      for (const [index, slide] of slides.entries()) {
+        slide.hidden = index !== activeIndex;
+      }
+      for (const [index, button] of indexButtons.entries()) {
+        if (index === activeIndex) {
+          button.setAttribute('aria-current', 'true');
+        } else {
+          button.removeAttribute('aria-current');
+        }
+      }
+      const activeSlide = slides[activeIndex];
+      if (activeSlide) {
+        status.textContent = `Slide ${activeIndex + 1} of ${slides.length}: ${activeSlide.getAttribute('aria-label')?.split(': ').slice(1).join(': ') ?? ''}`;
+      }
+    };
+
+    previousButton.hidden = false;
+    nextButton.hidden = false;
+    controls.hidden = false;
+    showSlide(activeIndex);
+    logger.debug('ConceptCarousel:initialize', { slides: slides.length });
+
+    previousButton.addEventListener('click', () => showSlide(activeIndex - 1));
+    nextButton.addEventListener('click', () => showSlide(activeIndex + 1));
+    for (const [index, button] of indexButtons.entries()) {
+      button.addEventListener('click', () => showSlide(index));
+    }
+    carousel.addEventListener('keydown', (event) => {
+      if (event.target instanceof Element && event.target.closest('dialog')) {
+        return;
+      }
+      if (event.key === 'ArrowLeft') {
+        event.preventDefault();
+        showSlide(activeIndex - 1);
+      }
+      if (event.key === 'ArrowRight') {
+        event.preventDefault();
+        showSlide(activeIndex + 1);
+      }
+    });
+  }
+}
+</script>

@@ -1,8 +1,8 @@
 # Contract Implementation Progress
 
-## Status Summary (Auto-generated: 2026-09-29)
+## Status Summary (Auto-generated: 2026-10-09)
 
-**319 active (10 without contract file), 119 archived, 0 duplicates**
+**321 active (10 without contract file), 119 archived, 0 duplicates**
 
 ### Active Contracts
 
@@ -327,6 +327,8 @@
 | C-563 | Emberwatch Final Acceptance | 🔄 in_progress | — | v2 | thin |
 | C-564 | Ai Critical Path Deadline Telemetry | 🛠️ implemented | — | v1 | thin |
 | C-565 | In Flight Structured Request Coalescing | 🛠️ implemented | — | v1 | thin |
+| C-566 | Decision Contract Foundation | 🛠️ implemented | — | v1 | thin |
+| C-567 | Decision Runtime Readiness | ❓ implemented (NO-GO branch of #381: foundation only, no live routing) | — | v1 | thin |
 
 ---
 

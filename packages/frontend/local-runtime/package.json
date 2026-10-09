@@ -16,6 +16,6 @@
     "@aikami/logger": "workspace:*",
     "@aikami/schemas": "workspace:*",
     "@aikami/types": "workspace:*",
-    "@huggingface/transformers": "4.3.0"
+    "@huggingface/transformers": "4.3.1"
   }
 }

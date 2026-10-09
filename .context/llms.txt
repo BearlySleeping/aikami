@@ -1,8 +1,8 @@
 # Aikami Knowledge Index
 
 > **AI-first entry point.** Read this file first.
-> Generated: 2026-10-01
-> Files: 511 across 11 categories
+> Generated: 2026-10-09
+> Files: 534 across 11 categories
 
 ## Quick Start (Read These First)
 
@@ -25,16 +25,6 @@ Monorepo: SvelteKit Client × Cloudflare Workers backend (D1 + R2 + Better Auth)
 - [Known Limitations & TODOs](architecture/limitations.md)
 - [Object Storage Layout — Buckets, Keys, and Enforcement](architecture/object-storage-layout.md)
 - [Semantic map authoring — foundation and deferred compiler design](architecture/semantic_map_authoring.md)
-## audits/
-
-- [Issue #382 — Priority-aware inference admission, measured on the production path](audits/382-admission-control-report.md)
-- [Issue #382 — reproducible AI baseline (AC-1)](audits/382-ai-baseline-report.md)
-- [Issue #382 — `MAP_LOADED` contention, re-measured after the envelope fix](audits/382-contention-remeasure-report.md)
-- [Issue #382 — C-401 call-2 envelope extraction: schema reduction and result](audits/382-envelope-extraction-report.md)
-- [Issue #382 — C-401 call-2 envelope: reasoning control](audits/382-envelope-reasoning-control-report.md)
-- [Where #382's next slice should go — measurement-first triage](audits/382-next-slice-proposal.md)
-- [Issue #382 — where the production critical path actually goes](audits/382-production-path-report.md)
-- [Agent-pipeline reachability audit — issue #382 P1 slice 3](audits/agent-trigger-usage.md)
 ## contracts/
 
 - [AI vendor directories](contracts/archived/C-001-remove-ai-vendor-dirs.md)
@@ -469,6 +459,8 @@ Monorepo: SvelteKit Client × Cloudflare Workers backend (D1 + R2 + Better Auth)
 - [Contract C-563: Emberwatch final acceptance review](contracts/C-563-emberwatch-final-acceptance.md)
 - [C-564 — One critical path: shared deadlines, readiness-aware local execution, and honest telemetry](contracts/C-564-ai-critical-path-deadline-telemetry.md)
 - [C-565 — In-flight coalescing of identical structured requests](contracts/C-565-in-flight-structured-request-coalescing.md)
+- [C-566 — Decision-contract foundation and evaluation](contracts/C-566-decision-contract-foundation.md)
+- [C-567 — Optional decision runtime: readiness foundation](contracts/C-567-decision-runtime-readiness.md)
 - [Contracts — Aikami Feature Development](contracts/INDEX.md)
 - [MVP Contract Backlog — C-400 … C-419](contracts/MVP_BACKLOG.md)
 - [Contract Implementation Archive](contracts/PROGRESS_ARCHIVE.md)
@@ -493,6 +485,7 @@ Monorepo: SvelteKit Client × Cloudflare Workers backend (D1 + R2 + Better Auth)
 - [Contract Pipeline — Primary Development Flow](guides/contract-pipeline.md)
 - [Cross-Origin Isolation & SharedArrayBuffer — Gotchas & Lessons Learned](guides/cross-origin-isolation.md)
 - [Database — The Server Data Plane](guides/database.md)
+- [Decision backends: setup → sample → qualification](guides/decision-backends-setup.md)
 - [Developer Workflow](guides/dev-workflow.md)
 - [Emberwatch authoring guide](guides/emberwatch-authoring.md)
 - [Emberwatch release runbook](guides/emberwatch-release.md)
@@ -521,6 +514,10 @@ Monorepo: SvelteKit Client × Cloudflare Workers backend (D1 + R2 + Better Auth)
 - [Combat 2.0 completion — durable progress record](plans/combat/combat-completion-progress.md)
 - [Emberwatch polish brief (Astra handoff)](plans/emberwatch_polish_brief.md)
 - [Emberwatch rebuild — art, maps, cast and quest](plans/emberwatch_rebuild.md)
+- [Engine runtime integrity — execution report](plans/engine_runtime_integrity.md)
+- [Playable UX + Production Acceptance](plans/playable_ux_acceptance.md)
+- [G01 — Private narrative world drafts](plans/private_world_generation_drafts.md)
+- [Plans](plans/README.md)
 - [Visual asset foundation — remaining verification](plans/visual_asset_foundation.md)
 ## README.md/
 
@@ -528,19 +525,45 @@ Monorepo: SvelteKit Client × Cloudflare Workers backend (D1 + R2 + Better Auth)
 ## reference/
 
 - [Agent platform hardening — execution plan](reference/agent-platform-hardening.md)
-- [Asset generation review and recommendations (2026-09-13)](reference/asset-generation-review-2026-09.md)
-- [Executive verdict](reference/astra-game-review.md)
 - [Contract-Ready Backlog Format](reference/backlog-format.md)
-- [Aikami Data Layer — Review & Recommendation](reference/database-architecture-recommendation.md)
 - [Definition of Done](reference/definition-of-done.md)
 - [Design Rationale](reference/design-rationale.md)
-- [Distribution & Onboarding Strategy — 2026-08-19](reference/distribution-and-onboarding-2026-08-19.md)
-- [Emberwatch 5.0 — visual coherence and UX recovery plan](reference/emberwatch-polish-review-and-plan.md)
-- [Emberwatch release-path repair — implementation notes (2026-09-16)](reference/emberwatch-release-repair-2026-09.md)
-- [Game Engine / World Setup — Critical Review](reference/game_engine_architecture_review.md)
 - [Migration recipe: `#`-prefixed subpath imports](reference/kit-alias-migration.md)
-- [MVP Assessment — 2026-08-16](reference/mvp-assessment-2026-08-16.md)
-- [Project Review: Adopt vs Avoid](reference/project-review.md)
+- [Reference](reference/README.md)
+## research/
+
+- [#381 — Do decision models help Aikami? Audit, evidence and recommendation](research/audits/381-decision-evaluation.md)
+- [#381 — Optional decision runtime: rollout report (readiness foundation)](research/audits/381-decision-runtime-rollout.md)
+- [#381 — Visible decision settings and a trustworthy live evaluator](research/audits/381-decision-settings-and-evaluation.md)
+- [#381 lane C — one measured gameplay decision: **NO-GO for live routing**](research/audits/381-gameplay-decision-pilot.md)
+- [Lane plan — #381 decision-contract foundation and evaluation](research/audits/381-lane-plan.md)
+- [Native llama.cpp decision models — #381 follow-up](research/audits/381-native-llamacpp-decisions.md)
+- [Lane plan — #381 optional decision runtime (readiness foundation)](research/audits/381-runtime-lane-plan.md)
+- [Issue #382 — Priority-aware inference admission, measured on the production path](research/audits/382-admission-control-report.md)
+- [Issue #382 — reproducible AI baseline (AC-1)](research/audits/382-ai-baseline-report.md)
+- [Issue #382 — `MAP_LOADED` contention, re-measured after the envelope fix](research/audits/382-contention-remeasure-report.md)
+- [Lane plan — measured context reuse, prompt projection and background request size](research/audits/382-context-reuse-plan.md)
+- [Issue #382 — measured context reuse, prompt projection and background request size](research/audits/382-context-reuse-report.md)
+- [Issue #382 — C-401 call-2 envelope extraction: schema reduction and result](research/audits/382-envelope-extraction-report.md)
+- [Issue #382 — C-401 call-2 envelope: reasoning control](research/audits/382-envelope-reasoning-control-report.md)
+- [Issue #382 — gameplay integration acceptance report](research/audits/382-gameplay-integration-report.md)
+- [Lane plan — native transport, deadlines and attempt accounting](research/audits/382-native-transport-plan.md)
+- [#382 — Native transport, deadlines and attempt accounting](research/audits/382-native-transport-report.md)
+- [Where #382's next slice should go — measurement-first triage](research/audits/382-next-slice-proposal.md)
+- [Issue #382 — where the production critical path actually goes](research/audits/382-production-path-report.md)
+- [#382 — Request identity and deferred NPC memory: lane plan and findings](research/audits/382-request-identity-background-report.md)
+- [Agent-pipeline reachability audit — issue #382 P1 slice 3](research/audits/agent-trigger-usage.md)
+- [Research](research/README.md)
+- [Asset generation review and recommendations (2026-09-13)](research/reviews/asset-generation-review-2026-09.md)
+- [Executive verdict](research/reviews/astra-game-review.md)
+- [Aikami Data Layer — Review & Recommendation](research/reviews/database-architecture-recommendation.md)
+- [Distribution & Onboarding Strategy — 2026-08-19](research/reviews/distribution-and-onboarding-2026-08-19.md)
+- [Emberwatch 5.0 — visual coherence and UX recovery plan](research/reviews/emberwatch-polish-review-and-plan.md)
+- [Emberwatch release-path repair — implementation notes (2026-09-16)](research/reviews/emberwatch-release-repair-2026-09.md)
+- [Game Engine / World Setup — Critical Review](research/reviews/game_engine_architecture_review.md)
+- [MVP Assessment — 2026-08-16](research/reviews/mvp-assessment-2026-08-16.md)
+- [Project Review: Adopt vs Avoid](research/reviews/project-review.md)
+- [Reviews](research/reviews/README.md)
 ## TODO.md/
 
 - [Aikami TODO](TODO.md)

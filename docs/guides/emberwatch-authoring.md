@@ -30,8 +30,8 @@ For the pipeline audit behind these rules, read
 | `apps/frontend/client/static/game-data/sprites/tilesets/atlas.*` | `generate_emberwatch_atlas.ts` |
 | `apps/frontend/client/static/game-data/sprites/tilesets/props*.*` | `generate_emberwatch_props_atlas.ts` |
 | `static/game-data/asset_seed.json` | `generate_asset_seed.ts --write` |
-| `docs/reference/emberwatch-map-validation.json` | `emberwatch_map_validation.ts` |
-| `docs/reference/emberwatch-visual-report.json` | `emberwatch_visual_report.ts` |
+| `docs/research/reports/emberwatch-map-validation.json` | `emberwatch_map_validation.ts` |
+| `docs/research/reports/emberwatch-visual-report.json` | `emberwatch_visual_report.ts` |
 
 `content/packs/emberwatch/maps/*.json` **is** committed, but it is output: edit
 the builder, regenerate, and commit the regenerated JSON.
@@ -206,7 +206,7 @@ collision layer + **solid prop origin cells** (the runtime's tile-granular
 rule), then checks transition landings, bounce-back, overlapping triggers,
 blocked doorways, NPC placement, evidence reachability, prop-blocked routes,
 water partitions and route width. It never infers collision from PNG alpha.
-Its report is `docs/reference/emberwatch-map-validation.json`.
+Its report is `docs/research/reports/emberwatch-map-validation.json`.
 
 ## 8. Debug overlays (development only)
 

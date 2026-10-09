@@ -58,7 +58,7 @@ export type EmberwatchMapValidation = {
   maps: MapSummary[];
 };
 
-const DEFAULT_OUT = join(repository, 'docs/reference/emberwatch-map-validation.json');
+const DEFAULT_OUT = join(repository, 'docs/research/reports/emberwatch-map-validation.json');
 
 const generatedAt = (): string =>
   process.env.SOURCE_DATE_EPOCH

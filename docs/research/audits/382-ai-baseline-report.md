@@ -259,7 +259,7 @@ this contention?**
 
 A dialogue turn issues one `dialogue` call and one `envelope` call. That is 2,
 not 6. The eight agents that could have produced a fan-out are not wired
-([audit](../audits/agent-trigger-usage.md) — experimental by design). So the
+([audit](agent-trigger-usage.md) — experimental by design). So the
 measured 6-way contention may have **no production analogue at all**, and
 building bounded concurrency or priority queues to fix it would be optimizing a
 workload that does not occur.
@@ -274,7 +274,7 @@ item of the proposed next PR.
 
 ## Finding: the agent pipeline is experimental and never was player-facing
 
-Full detail in [`docs/audits/agent-trigger-usage.md`](../audits/agent-trigger-usage.md).
+Full detail in [`docs/audits/agent-trigger-usage.md`](agent-trigger-usage.md).
 
 `chat_composition.ts` — the production capability set — does not supply
 `agentPipelineViewModel`, so the branch that runs the agents is never taken. The

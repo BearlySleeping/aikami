@@ -1,5 +1,12 @@
 # Combat 2.0 repair — progress record (review F1–F11)
 
+> **🔴 Outstanding verification — do not delete.** All fixes are on `main`, but
+> this record ends at **Status: Partial**: the production `/game` re-run that
+> would promote it to *Fixed* has not been executed. Its source review and
+> execution prompt (`tmp/aikami-combat-review.md`,
+> `tmp/aikami-combat-repair-prompt.md`) are already deleted, so this file is the
+> only remaining record of the F1–F11 findings.
+
 > **Read this file on resume.** It records the repair of the 16 September 2026
 > combat review against `main` at `617f22a01dc80fdf9303ed466f9ab5aa860a2ccb`
 > (repair base: `cc8043f10`). It is a **working record**, not an acceptance

@@ -25,6 +25,8 @@ fileGroups:
     - 'src/**/*'
     - 'public/**/*'
     - 'scripts/**/*'
+    # Shared visual concepts imported by Astro; changing one must invalidate the build.
+    - '/assets/concept/*.webp'
   configs:
     - 'package.json'
     - 'tsconfig.json'

@@ -105,7 +105,7 @@ guided setup → C-484 capability-first settings and programme close-out.
 
 ### Asset generation (C-510 … C-524)
 
-Derived from [`../reference/asset-generation-review-2026-09.md`](../reference/asset-generation-review-2026-09.md).
+Derived from [`../reference/asset-generation-review-2026-09.md`](../research/reviews/asset-generation-review-2026-09.md).
 Engine-agnostic generation seam, registry write, local audio, creator studio,
 provenance and durable jobs, versioned workflows, Emberwatch pilot.
 

@@ -2,7 +2,7 @@
 //
 // Native schema-constrained output for Ollama's `/api/chat`.
 //
-// Measured on Ollama 0.34.3 (`docs/audits/382-native-transport-plan.md`):
+// Measured on Ollama 0.34.3 (`docs/research/audits/382-native-transport-plan.md`):
 // passing a JSON Schema object as `format` returned a 200 whose whole body
 // parsed and conformed to the schema. The native structured path is therefore
 // real on the measured surface, and the previous code — which sent the schema

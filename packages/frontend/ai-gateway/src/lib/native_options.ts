@@ -3,7 +3,7 @@
 // Effective `TextParams` → Ollama native `options`.
 //
 // Two facts from the wire make this module the shape it is (both measured on
-// Ollama 0.34.3, `docs/audits/382-native-transport-plan.md`):
+// Ollama 0.34.3, `docs/research/audits/382-native-transport-plan.md`):
 //
 //   1. `buildGenerationParams` used to return `{}` for Ollama, so every one of
 //      these settings was silently UNHONOURED on the native route. A

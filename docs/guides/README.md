@@ -2,7 +2,8 @@
 
 Contributor workflows and operational runbooks. For formats and interfaces, see
 [`../reference/`](../reference/); for the system design, see
-[`../architecture/`](../architecture/).
+[`../architecture/`](../architecture/); for dated assessments and superseded
+reviews, see [`../research/`](../research/).
 
 ## Getting running
 

@@ -252,7 +252,7 @@ batch, since they're unrelated failures.
 | **Docs impact** | internal |
 
 Full seed (problem evidence, acceptance gate) already written — see
-[`distribution-and-onboarding-2026-08-19.md`](../reference/distribution-and-onboarding-2026-08-19.md#c-42x--publish-local-stack-images-on-release-not-by-hand).
+[`distribution-and-onboarding-2026-08-19.md`](../research/reviews/distribution-and-onboarding-2026-08-19.md#c-42x--publish-local-stack-images-on-release-not-by-hand).
 Copy it in verbatim; do not re-derive.
 
 ---

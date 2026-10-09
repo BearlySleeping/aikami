@@ -217,7 +217,7 @@ These are already owned by a contract file, a backlog seed document, or an
 issue. Link them; do not restate them.
 
 - **Distribution and onboarding rollout** — seed questions and ordering live in
-  [`reference/distribution-and-onboarding-2026-08-19.md`](reference/distribution-and-onboarding-2026-08-19.md).
+  [`reference/distribution-and-onboarding-2026-08-19.md`](research/reviews/distribution-and-onboarding-2026-08-19.md).
   Prioritise the `publish-local-stack.yml` release trigger.
 - **C-452 onward backlog seeds** —
   [`contracts/BACKLOG_C452_PLUS.md`](contracts/BACKLOG_C452_PLUS.md). ⚠️ That

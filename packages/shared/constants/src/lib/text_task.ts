@@ -219,7 +219,7 @@ export const TEXT_TASK_PRESETS: Record<TextTask, TextTaskPreset> = {
     //
     // The original P3 measurements used an opener schema for every task and
     // did not validate complete outputs. Those validity/performance claims
-    // are withdrawn in docs/audits/382-context-reuse-report.md, section 3.
+    // are withdrawn in docs/research/audits/382-context-reuse-report.md, section 3.
     // Preserve the existing preference pending a successful rerun with each
     // task's schema; the corrected probe could not reach the local provider.
     reasoning: 'none',

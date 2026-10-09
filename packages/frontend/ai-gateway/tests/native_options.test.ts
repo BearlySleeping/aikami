@@ -3,7 +3,7 @@
 // Effective `TextParams` → Ollama native `options` (issue #382).
 //
 // The two properties under test both come from measured facts, not from taste
-// (see `docs/audits/382-native-transport-plan.md`):
+// (see `docs/research/audits/382-native-transport-plan.md`):
 //
 //   1. Before this, `buildGenerationParams` returned `{}` for Ollama, so every
 //      configured limit was silently UNHONOURED on the native route.

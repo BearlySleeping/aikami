@@ -27,7 +27,7 @@
 // work while player-visible work is imminent. That is what this does, and the
 // residual case (a background request already running when dialogue arrives) is
 // a real limitation that admission cannot remove; it is characterised in
-// `docs/audits/382-admission-control-report.md` rather than papered over.
+// `docs/research/audits/382-admission-control-report.md` rather than papered over.
 //
 // THE RACE THAT FORCES DEFERRED ADMISSION
 //
@@ -240,7 +240,7 @@ type DomainState = {
  * dispatched and the player's first interactive call in the production
  * scenario, or it would not have prevented the measured collision. It must not
  * be so long that idle background refresh is starved. Both bounds are
- * measured in `docs/audits/382-admission-control-report.md`; this constant is
+ * measured in `docs/research/audits/382-admission-control-report.md`; this constant is
  * the value those measurements selected.
  */
 const DEFAULT_QUIET_WINDOW_MS = 1_500;

@@ -22,6 +22,7 @@ what work remains.
 | Find a day-to-day workflow | [`guides/`](guides/) |
 | Look up a format, interface, or decision rationale | [`reference/`](reference/) |
 | Read a product/UX spec | [`design/`](design/) |
+| Re-examine a past decision or measurement | [`research/`](research/) |
 | See what work is active or outstanding | [`plans/`](plans/) · [`TODO.md`](TODO.md) · [`contracts/PROGRESS.md`](contracts/PROGRESS.md) |
 | Trace a `C-xxx` contract comment in the code | [`contracts/`](contracts/) |
 
@@ -32,13 +33,21 @@ what work remains.
 | [`intro/`](intro/) | Project overview, vision, non-negotiable directives, setup, onboarding, deferred scope |
 | [`architecture/`](architecture/) | Current system architecture, technical invariants, and active specifications (including `combat_2.md`) |
 | [`guides/`](guides/) | Contributor workflows: development, testing, CI, database, contract pipeline, engine/UI lessons, troubleshooting |
-| [`reference/`](reference/) | Precise formats, interfaces, and the rationale records behind current constraints |
+| [`reference/`](reference/) | Canonical formats, interfaces, and the rationale records behind current constraints |
 | [`design/`](design/) | Current product/UX specifications and clearly labelled proposals |
-| [`plans/`](plans/) | Active initiatives with genuinely unfinished work (and functional inputs such as asset briefs) |
+| [`plans/`](plans/) | Unfinished work only, each with an explicit release condition. Ships ⇒ deleted |
+| [`research/`](research/) | Dated assessments, one-off reviews, and measured evidence. Never canonical |
 | [`contracts/`](contracts/) | Feature specifications, lifecycle tooling, backlogs, and generated dashboards |
 | [`verification/`](verification/) | Generated performance/regression evidence referenced by contracts |
 | [`themes/`](themes/) | Functional theme examples consumed by the theme tooling and tests |
 | [`TODO.md`](TODO.md) | The structured intake for outstanding, contract-sized work |
+
+## The one rule that resolves most questions
+
+**Current truth lives in `architecture/`. Current decisions live in
+`contracts/`. Everything dated, superseded, or measured lives in `research/` and
+is labelled as such.** A doc that is not current truth does not belong in
+`reference/`, and work that has shipped does not belong in `plans/`.
 
 Only folders with a real consumer exist. Categories are not preserved for their
 own sake; material is folded into the closest home and linked, never copied.
