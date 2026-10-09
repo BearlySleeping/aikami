@@ -14,6 +14,6 @@
     "@aikami/constants": "workspace:*"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "5.20261004.1"
+    "@cloudflare/workers-types": "5.20261008.1"
   }
 }
