@@ -34,3 +34,4 @@ export { ReactiveLifecyclePage } from './reactive_lifecycle_page';
 export { SandboxPage } from './sandbox_page';
 export { SessionMgmtPage } from './session_mgmt_page';
 export { SettingsPage } from './settings_page';
+export { SiteConceptPage } from './site_concept_page';

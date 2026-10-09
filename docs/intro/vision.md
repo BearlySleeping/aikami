@@ -2,6 +2,39 @@
 
 Aikami is an AI-powered platform for creating and experiencing immersive 2D RPG adventures, built by **BearlySleeping**.
 
+## Visual Direction
+
+These concept images illustrate the intended spatial RPG and creation flow. They are
+**design concepts, not screenshots of the current build**. See the
+[root README](../../README.md#project-status) for current capabilities.
+
+### Dialogue in the world
+
+![Dialogue concept: a tavern conversation with Elder Thalia and a persuasion check.](../../assets/concept/dialogue.webp)
+
+### Campaign creation
+
+![Campaign concept: The Lantern Coast with a campaign prompt, village, residents, quests, and assets.](../../assets/concept/world_gen.webp)
+
+### Character creation
+
+![Character concept: appearance presets, clothing layers, colors, and Lyra’s backstory.](../../assets/concept/persona_gen.webp)
+
+### Character sheet
+
+![Character sheet concept: Lyra’s hit points, abilities, saving throws, and equipment.](../../assets/concept/menu.webp)
+
+### Combat planning
+
+![Combat concept: Lyra’s planned move across a tactical forest battlefield.](../../assets/concept/combat_1.webp)
+
+### Environmental combat
+
+![Combat concept: a risky brazier action previews possible fire spread during a forest ambush.](../../assets/concept/combat_2.webp)
+
+The [optimized WebP assets](../../assets/concept/README.md) are shared with the README
+and marketing homepage slideshow.
+
 ## Core Vision
 
 An AI-driven living world where every NPC has a personality, memory, and agenda. Users create and manage characters (Personas), interact with AI-driven NPCs through natural dialogue, and participate in dynamic storytelling that evolves based on their choices. It is a **game first** — the player launches into a spatial world, not a chat dashboard — and it is **offline-first**: campaigns, saves, and chat history live in a local Turso (libSQL) database and work with zero network. A community **Hub** (SvelteKit SSR on Cloudflare Workers) hosts shared assets, maps, mods, and your own characters/personas.
@@ -11,7 +44,7 @@ An AI-driven living world where every NPC has a personality, memory, and agenda.
 - **AI-Driven NPCs**: Every NPC has a unique personality, system prompt, and first message. AI generates dynamic responses based on the character's traits and the conversation context.
 - **D&D-Style Character Sheets**: Full ability scores, skills, saving throws, appearance, hit points — the complete tabletop RPG experience in a chat interface.
 - **Rich World Building**: Lorebooks, knowledge graphs, character relationships, and world state that persist and evolve.
-- **Cross-Platform**: PWA for web/mobile, desktop via Tauri, SSR Hub on Cloud Run.
+- **Cross-Platform**: PWA for web/mobile, desktop via Tauri, SSR Hub on Cloudflare Workers.
 - **Offline-First**: Campaigns, saves, and chat history live in a local Turso (libSQL) database — play with zero network; cloud is an optional sync layer, never a boot dependency.
 - **Local AI by Default**: Text, image, and voice generation run locally via Docker microservices (llama.cpp, sd-server, sherpa-onnx/Kokoro — Ollama/ComfyUI as opt-in swaps); BYOK cloud keys are an option.
 

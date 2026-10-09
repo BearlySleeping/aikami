@@ -19,7 +19,7 @@ created_at: "2026-09-13T00:00:00Z"
 
 | Field | Value |
 |---|---|
-| **Source** | User request; [Asset generation review](../reference/asset-generation-review-2026-09.md) |
+| **Source** | User request; [Asset generation review](../research/reviews/asset-generation-review-2026-09.md) |
 | **Target** | shared local-ai engines/recipes; local-stack model manifest; deterministic media processors; existing prop/LPC previews |
 | **Type** | full |
 | **Priority** | P1 — production asset pipeline |

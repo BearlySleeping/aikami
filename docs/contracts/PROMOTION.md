@@ -1,10 +1,10 @@
 # Feature Promotion Matrix
 
-> Auto-generated: 2026-09-29
+> Auto-generated: 2026-10-09
 
 Tracks which features have progressed from dev sandboxes through production integration to release readiness.
 
-**Summary**: 9 sandbox, 32 integrated, 2 release_verified, 214 unassessed (active only; 119 archived contracts excluded)
+**Summary**: 9 sandbox, 32 integrated, 2 release_verified, 216 unassessed (active only; 119 archived contracts excluded)
 
 ## 🚀 Release Verified
 
@@ -282,4 +282,6 @@ Tracks which features have progressed from dev sandboxes through production inte
 | C-563 | Emberwatch Final Acceptance | 🔄 in_progress | v2 | thin |
 | C-564 | Ai Critical Path Deadline Telemetry | 🛠️ implemented | v1 | thin |
 | C-565 | In Flight Structured Request Coalescing | 🛠️ implemented | v1 | thin |
+| C-566 | Decision Contract Foundation | 🛠️ implemented | v1 | thin |
+| C-567 | Decision Runtime Readiness | ❓ implemented (NO-GO branch of #381: foundation only, no live routing) | v1 | thin |
 

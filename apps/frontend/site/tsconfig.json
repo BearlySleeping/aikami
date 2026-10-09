@@ -14,6 +14,7 @@
 
     "paths": {
       "$assets/*": ["./src/lib/assets/*"],
+      "$concept/*": ["../../../assets/concept/*"],
       "$components/*": ["./src/lib/components/*"],
       "$layouts/*": ["./src/lib/layouts/*"],
       "$views/*": ["./src/lib/views/*"],

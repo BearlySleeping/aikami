@@ -19,7 +19,7 @@ created_at: "2026-09-13T00:00:00Z"
 
 | Field | Value |
 |---|---|
-| **Source** | User request; [Asset generation review](../reference/asset-generation-review-2026-09.md) |
+| **Source** | User request; [Asset generation review](../research/reviews/asset-generation-review-2026-09.md) |
 | **Target** | `packages/shared/schemas/src/lib/generation/` + `packages/shared/types/` (brief/job/run-lock/budget schemas); `packages/shared/local-ai/src/lib/` (portable plan, spec-hash, blocker and state-transition core); `apps/backend/local-stack/` (host runner: job store adapter, resource scheduler, leases); `apps/backend/image/scripts/` + `apps/backend/image/package.json` (batch CLI); `apps/frontend/docs/src/content/docs/guides/generating-assets.mdx` |
 | **Type** | full |
 | **Priority** | P1 — production asset pipeline |

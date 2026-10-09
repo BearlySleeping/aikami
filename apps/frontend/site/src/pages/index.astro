@@ -1,5 +1,6 @@
 ---
 // apps/frontend/site/src/pages/index.astro
+import dialogueConcept from '$concept/dialogue.webp';
 import Layout from '$layouts/layout.astro';
 import Home from '$views/home.astro';
 ---
@@ -7,7 +8,7 @@ import Home from '$views/home.astro';
 <Layout
   title="Your next adventure is yours to shape."
   description="An open-source AI-powered 2D RPG in early development. Download for Windows, macOS, or Linux, or play in your browser. Your campaign, your choice of AI."
-  image="/images/campaign-journal.png"
+  image={dialogueConcept.src}
 >
   <Home />
 </Layout>
