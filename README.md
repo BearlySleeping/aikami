@@ -14,6 +14,7 @@ meet its people, and make choices that can change their lives.
 [![Discord](https://img.shields.io/badge/Discord-Join-5865F2?logo=discord&logoColor=white)](https://discord.gg/XuuhWvSxHH)
 
 **[Try the early build](https://aikami.bearlysleeping.com)** ·
+**[Staging build](https://aikami.stg.bearlysleeping.com)** ·
 **[Follow development](https://github.com/BearlySleeping/aikami)** ·
 **[Discord](https://discord.gg/XuuhWvSxHH)** ·
 **[Contributing](CONTRIBUTING.md)**
@@ -24,9 +25,11 @@ meet its people, and make choices that can change their lives.
 
 ## What an Aikami adventure aims to feel like
 
-![Vision illustration: a campaign journal with a village map linking a home, inn, shop, and ward grove.](apps/frontend/site/public/images/campaign-journal.png)
+![Dialogue concept: Lyra speaks with Elder Thalia in a pixel-art tavern, with a persuasion check beside the conversation.](assets/concept/dialogue.webp)
 
-*Vision illustration · planned experience*
+*Dialogue concept · visual direction, not a screenshot of the current build. The full
+concept set is catalogued in [asset notes](assets/concept/README.md); see the
+[product vision](docs/intro/vision.md#visual-direction) for the visual direction.*
 
 Start with a place and a problem:
 
@@ -66,6 +69,30 @@ No account is required for local play and saves. Saves are device-local. Fully o
 requires a configured local text model and cached content; first-time content or model
 downloads can require network access. Cloud-provider dialogue is sent to the provider you
 configure.
+
+## Try the staging build
+
+[**aikami.stg.bearlysleeping.com**](https://aikami.stg.bearlysleeping.com) is the preview
+deploy. It follows the `staging` branch and redeploys on every push, so it shows work in
+progress that has not reached the public build yet.
+
+The interesting part is the [**Dev Console**](https://aikami.stg.bearlysleeping.com/dev) —
+a set of isolated sandboxes for driving individual systems on their own, without playing
+through a whole adventure to reach them. The **Combat Debug Workspace** exercises the
+tactical resolver directly, **Creator Studio** and **World Gen** drive character and world
+authoring, the **LPC** tools cover sprite import and animation, and the **Sandbox** group
+holds the smaller map, camera, party-follow, and dialogue scenes.
+
+A few things to know before you open it:
+
+| | |
+| --- | --- |
+| **It is not stable.** | Expect rough edges and breaking changes — it is a preview, not a release. |
+| **It is staging only.** | The console is compiled into staging builds and stripped from production, so `/dev` on the public build is a 404. |
+| **Your data is separate.** | Staging runs against its own D1 database and its own R2 buckets, so it cannot read or write production accounts or the published asset catalog. |
+| **Your saves stay yours.** | Campaigns, saves, and chat history are device-local either way. |
+
+Bring your own text AI key, exactly as with the public build.
 
 ## Develop Aikami
 
