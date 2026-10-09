@@ -1,6 +1,7 @@
 # Design
 
-Current product/UX specifications and clearly labelled proposals.
+Current product/UX specifications and clearly labelled proposals. Dated
+assessments and superseded reviews live in [`../research/reviews/`](../research/reviews/).
 
 | File | Status |
 |---|---|

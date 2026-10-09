@@ -70,9 +70,9 @@ dependencies** is enforced rather than aspired to. The manifest is
 
 ## Audit locations
 
-- `docs/reference/emberwatch-visual-report.json` — per-prop + per-map report.
-- `docs/reference/emberwatch-map-validation.json` — navigation/identity rules.
-- `docs/reference/emberwatch-coverage-audit.json` — coverage blockers.
+- `docs/research/reports/emberwatch-visual-report.json` — per-prop + per-map report.
+- `docs/research/reports/emberwatch-map-validation.json` — navigation/identity rules.
+- `docs/research/reports/emberwatch-coverage-audit.json` — coverage blockers.
 - `.local/releases/evidence/emberwatch-visual-audit/contact_sheet.png` — human
   contact sheet.
 

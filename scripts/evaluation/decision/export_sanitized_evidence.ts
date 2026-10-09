@@ -26,7 +26,7 @@
 //
 //   bun scripts/evaluation/decision/export_sanitized_evidence.ts \
 //     --in .evidence/381/npc-action-selection-corrected.json \
-//     --out docs/audits/381-evidence/<run>.json
+//     --out docs/research/audits/381-evidence/<run>.json
 
 import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -132,7 +132,7 @@ const expectedByCase = new Map<string, string | null>(
 const options = args(process.argv.slice(2));
 
 const input = resolve(options.in ?? '.evidence/381/npc-action-selection-decision-arms.json');
-const output = resolve(options.out ?? 'docs/audits/381-evidence/measurement.json');
+const output = resolve(options.out ?? 'docs/research/audits/381-evidence/measurement.json');
 
 const artifact = JSON.parse(readFileSync(input, 'utf8')) as Artifact;
 

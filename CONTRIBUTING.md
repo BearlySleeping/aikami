@@ -195,6 +195,7 @@ Where new material belongs:
 | Precise formats, interfaces, config, rationale records | `docs/reference/` |
 | Architecture claims and invariants | `docs/architecture/` |
 | Product/UX specifications and proposals | `docs/design/` |
+| Dated assessments, superseded reviews, measured evidence | `docs/research/` |
 | Outstanding, contract-sized work | `docs/TODO.md` (see [`docs/reference/backlog-format.md`](docs/reference/backlog-format.md)) |
 | A feature's durable spec | `docs/contracts/C-xxx-*.md` |
 | Player/creator instructions | `apps/frontend/docs/src/content/docs/` |

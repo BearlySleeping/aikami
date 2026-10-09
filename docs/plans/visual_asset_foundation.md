@@ -23,7 +23,7 @@ gate.
 The manual batch prompts that drove this programme remain in
 [`.pi/prompts/assets-*.md`](../../.pi/prompts/) because the verify session is
 still owed. Once AC-5 is recorded, fold any remaining art-direction decisions
-into [`../reference/asset-generation-review-2026-09.md`](../reference/asset-generation-review-2026-09.md)
+into [`../reference/asset-generation-review-2026-09.md`](../research/reviews/asset-generation-review-2026-09.md)
 and delete this plan and those prompts.
 
 ## Execution protocol (retained)

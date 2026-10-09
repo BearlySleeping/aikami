@@ -28,7 +28,7 @@
 // MEASUREMENT GAP (not closed here): no measurement in this repository
 // separates "same GPU behind two ports" from "two GPUs behind two ports" on one
 // host. The residual risk is recorded in
-// `docs/audits/382-request-identity-background-report.md` rather than papered
+// `docs/research/audits/382-request-identity-background-report.md` rather than papered
 // over with a guess.
 //
 // Contract: issue #382, "Add bounded concurrency and priority queues per

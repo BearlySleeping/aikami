@@ -219,7 +219,7 @@ export { pathKeyFor, questionKeyFor, stableStringify, utf8ByteLength } from './u
 // ---------------------------------------------------------------------------
 // C-567 — readiness, experimental preference, diagnostics, live measurement.
 //
-// Additive to the C-566 API frozen in docs/audits/381-decision-evaluation.md
+// Additive to the C-566 API frozen in docs/research/audits/381-decision-evaluation.md
 // §2.3. Nothing here is wired into a shipping call site: the experimental
 // preference ships disabled and there is no decision routing in the game.
 // ---------------------------------------------------------------------------

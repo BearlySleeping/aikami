@@ -84,7 +84,7 @@ is good at that. It stops being a liability the moment it is not the front door.
 > `maxId + 1` from contract filenames on disk, so it does not know about IDs
 > reserved here. Treat `C-42x` below as indicative only and re-check at
 > authoring time — see the ID allocation caveat in
-> [`../contracts/MVP_BACKLOG.md`](../contracts/MVP_BACKLOG.md).
+> [`../contracts/MVP_BACKLOG.md`](../../contracts/MVP_BACKLOG.md).
 
 ## C-42x — Publish local-stack images on release, not by hand
 

@@ -105,7 +105,7 @@ The web client must stay **non-cross-origin-isolated**: `COOP: same-origin-allow
 ## Observed MVP Defects (playthrough 2026-08-16)
 
 Confirmed by a full walkthrough of the Emberwatch slice. Full analysis in
-`docs/reference/mvp-assessment-2026-08-16.md` §6; specifications in
+`docs/research/reviews/mvp-assessment-2026-08-16.md` §6; specifications in
 `docs/contracts/MVP_BACKLOG.md`.
 
 | Defect | Severity | Contract |

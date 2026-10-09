@@ -30,7 +30,7 @@ Phase 1:
   is deleted rather than scheduled. Revisit only if a paying user base
   sustains near-continuous GPU utilization or a single-hosted-model quality
   gap becomes product-limiting. See
-  `docs/reference/mvp-assessment-2026-08-16.md` §2.4 and
+  `docs/research/reviews/mvp-assessment-2026-08-16.md` §2.4 and
   `docs/architecture/data-layer-target-architecture.md` D-16;
 - Data Connect migration for NPC/chat/items — **removed from the codebase
   (C-385)**; Turso is the campaign-runtime source of truth (C-321) and the

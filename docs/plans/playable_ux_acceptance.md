@@ -1,5 +1,9 @@
 # Playable UX + Production Acceptance
 
+> **🔴 Live, unmerged work — do not delete.** Branch
+> `task/sa-polish-playable-ux-98a3` holds **4 commits not in `main`**
+> (last 2026-10-04). This record is the only description of that work.
+
 Branch: `task/sa-polish-playable-ux-98a3` · base: `main` @ `67ff50f5d23766176614e2766bc4d4b4c13c1971`
 
 Scope is deliberately narrow: the game HUD/overlay **views** under

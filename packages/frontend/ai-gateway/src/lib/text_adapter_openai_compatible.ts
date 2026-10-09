@@ -10,7 +10,7 @@
 //
 // Ollama's `/api/chat` used to be sent with `stream: false`, the whole body was
 // awaited, and a single `onChunk` fired at the end. Measured on Ollama 0.34.3
-// (`docs/audits/382-native-transport-plan.md`), warm and uncontended: response
+// (`docs/research/audits/382-native-transport-plan.md`), warm and uncontended: response
 // headers at 6 386 ms against a total of 6 387 ms. That route had NO
 // first-content time at all — not a slow one, none — and no tuning could
 // produce one, because no byte of the answer existed before the byte that ended

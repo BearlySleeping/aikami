@@ -12,7 +12,7 @@
 // heuristic, and a heuristic in an accounting path is how a fabricated zero gets
 // into a cost column.
 //
-// Measured on Ollama 0.34.3 (see `docs/audits/382-native-transport-plan.md`):
+// Measured on Ollama 0.34.3 (see `docs/research/audits/382-native-transport-plan.md`):
 // `prompt_eval_cached_count` IS present, and it is NOT always zero — a warm
 // streamed call reported 18 against `prompt_eval_count 22`. Current official
 // documentation for newer releases describes capabilities this pinned runtime

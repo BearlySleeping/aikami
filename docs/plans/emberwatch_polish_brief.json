@@ -94,9 +94,9 @@
     "note": "Met: crate/table/bed/counter/bookshelf/anvil now have accepted standalone art (prop_crate/prop_table/prop_bed/prop_counter/prop_bookshelf/prop_anvil). The legacy allowlist is empty and any future legacy-grid placement is a hard violation."
   },
   "visualAuditLocations": {
-    "agentReport": "docs/reference/emberwatch-visual-report.json",
-    "validationReport": "docs/reference/emberwatch-map-validation.json",
-    "coverageAudit": "docs/reference/emberwatch-coverage-audit.json",
+    "agentReport": "docs/research/reports/emberwatch-visual-report.json",
+    "validationReport": "docs/research/reports/emberwatch-map-validation.json",
+    "coverageAudit": "docs/research/reports/emberwatch-coverage-audit.json",
     "contactSheet": ".local/releases/evidence/emberwatch-visual-audit/contact_sheet.png",
     "screenshotHook": "/?map=<mapId>&screenshot=true&e2e=true"
   },

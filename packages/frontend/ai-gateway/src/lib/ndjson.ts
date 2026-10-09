@@ -5,7 +5,7 @@
 // The native `/api/chat` route is not SSE. `stream:true` returns one JSON object
 // per LINE, with no `data:` prefix and no `[DONE]` sentinel; the last line
 // carries `done:true`. Measured on Ollama 0.34.3 (see
-// `docs/audits/382-native-transport-plan.md`): 312 frames for a 146-character
+// `docs/research/audits/382-native-transport-plan.md`): 312 frames for a 146-character
 // answer, headers at 94 ms and first *visible* content at 5 616 ms — because
 // the first frames are `{"message":{"role":"assistant","content":"","thinking":"…"}}`.
 //
