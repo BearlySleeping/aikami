@@ -13,7 +13,7 @@
 
 services:
   text:
-    image: ghcr.io/ggml-org/llama.cpp:server-intel@sha256:b883ef703dddaaa4d55520e358f62ab636a5ccd2358dae58bf1490899c1844a5
+    image: ghcr.io/ggml-org/llama.cpp:server-intel@sha256:f4403052793454df3df7ab300e0eca27eeed3c31b718b8f0f8bb07c17253dade
 
   image:
-    image: ghcr.io/leejet/stable-diffusion.cpp:master-sycl@sha256:bc7e5af2f9a32423e8707774abebfa8d2d049a7fa93efcfd0cbe8f7c84538d24
+    image: ghcr.io/leejet/stable-diffusion.cpp:master-sycl@sha256:751a5b12bba1b211607845be7542a19a282f1bc09cd1ba2832be01d23cd4521d
