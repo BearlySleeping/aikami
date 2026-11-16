@@ -80,7 +80,7 @@ services:
   # ── Text engine — llama.cpp server (OpenAI-compatible /v1) ─────────────
   text:
     profiles: ["text"]
-    image: ghcr.io/ggml-org/llama.cpp:server@sha256:87ee5d122fe7645ce3ae169aa1b5b0633e4e392b0d90459c4aee06fbaaf101ff
+    image: ghcr.io/ggml-org/llama.cpp:server@sha256:d7bdf2f8d8abe71bd37462530a09dc2640227d97f25ea3b54601825c23841a6d
     ports:
       - "127.0.0.1:${TEXT_PORT:-11434}:11434"
     command:
@@ -346,7 +346,7 @@ services:
   # ── Advanced: ComfyUI (drop-in on the image port) ──────────────────────
   comfyui:
     profiles: ["comfyui"]
-    image: yanwk/comfyui-boot:cu130-slim-v2@sha256:32efcc9d6d5ea9d6b73794cd658c9c09524ba932f7aa105580003c9b69d30bbc
+    image: yanwk/comfyui-boot:cu130-slim-v2@sha256:61d776ed2a643b8bf993e9ba41b2ac04a3db7a79ba3fde993520b0ac313cef75
     ports:
       - "127.0.0.1:${IMAGE_PORT:-8188}:8188"
     volumes:
