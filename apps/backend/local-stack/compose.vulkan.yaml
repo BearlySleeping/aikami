@@ -14,7 +14,7 @@
 
 services:
   text:
-    image: ghcr.io/ggml-org/llama.cpp:server-vulkan@sha256:be04f50201092935fdd080fd5389208c8e823b4d51bcfbb44bfa4b8a788d4bd7
+    image: ghcr.io/ggml-org/llama.cpp:server-vulkan@sha256:cf4fb1e0e1f7ed925613b6b2163746db083f258e96299d108b9fbeef75f8ff56
 
   image:
-    image: ghcr.io/leejet/stable-diffusion.cpp:master-vulkan@sha256:306a437e2c1ee6c9d0fe3954606f085484edeab4e87b3c531b1169551a59205b
+    image: ghcr.io/leejet/stable-diffusion.cpp:master-vulkan@sha256:04e2acaf8fe59e6be02d07e39fd0462646dc8819b6f4fb08521b366044dcf0fb
